@@ -1,0 +1,187 @@
+import Qt 4.7
+import "Navigation.js" as NavigationHandler
+
+NavigationRectangle {
+    id: dataBox
+
+    property alias dataValue: dataTextInput.text
+    property alias dataValidator: dataTextInput.validator
+    property variant dataObject //For hooking up signals and slots in subclasses
+
+    border.color: "lightgray"
+    border.width: 1
+
+    color : "white"
+
+    Rectangle {
+        id: interalHighlight
+        border.color: "black"; //dataBox.border.color;
+        anchors.fill: parent;
+        anchors.margins: 1;
+        border.width: 1;
+        color: Qt.rgba(0, 0, 0, 0);
+        visible: dataBox.focus || dataTextInput.focus
+    }
+
+    ShadowRectangle {
+        id: edittor
+        color: "white"
+        anchors.centerIn: parent;
+        width: dataTextInput.width > parent.width ? dataTextInput.width + 5 : parent.width + 5;
+        height: parent.height + 5;
+        visible: false;
+
+        TextInput {
+            id: dataTextInput
+            anchors.centerIn: parent
+            selectByMouse: true;         
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        onPressed: {
+            dataBox.focus = true;
+        }
+
+        onDoubleClicked: {
+            dataTextInput.focus = true;
+            var coords = mapToItem(dataTextInput, mouse.x, mouse.y);
+            var cursorPosition = dataTextInput.positionAt(coords.x);
+            dataTextInput.cursorPosition = cursorPosition;
+            dataBox.state = 'MiddleTyping';
+        }
+    }
+
+    Text {
+        id: dataText
+        anchors.centerIn: parent
+        text: dataValue
+    }
+
+    Keys.onPressed: {
+        NavigationHandler.HandleTabEvent(event, dataBox);
+        NavigationHandler.HandleArrowEvent(event, dataBox);
+
+        if(!event.accepted) {
+            if(event.key >= Qt.Key_Space && event.key <= Qt.Key_AsciiTilde) {
+                dataValue = dataValue + event.text;
+                dataBox.state = 'EndTyping'
+                dataTextInput.focus = true
+            }
+
+            if(event.key == Qt.Key_Backspace) {
+                console.log("Back pressed")
+                state = 'EndTyping';
+                dataTextInput.focus = true;
+                dataValue = dataValue.substring(0, dataValue.length - 1);
+            }
+        }
+    }
+
+    Keys.onEnterPressed: {
+        state = 'MiddleTyping';
+        dataTextInput.focus = true;
+        console.log("middelTyping enter");
+    }
+
+    Keys.onReturnPressed: {
+        state = 'MiddleTyping';
+        dataTextInput.focus = true;
+         console.log("middelTyping return");
+    }
+
+    Keys.onDeletePressed: {
+        console.log("Delete pressed")
+        state = 'EndTyping';
+        dataValue = '';
+        dataTextInput.focus = true;
+    }
+
+
+
+    states: [
+
+        State {
+            name: "MiddleTyping"
+            PropertyChanges {
+                target: edittor
+                visible: true
+            }
+
+            PropertyChanges {
+                target: dataText
+                visible: false
+            }
+
+            PropertyChanges {
+                target: dataTextInput
+                Keys.onPressed: {
+                    NavigationHandler.HandleTabEvent(event, dataBox);
+                    NavigationHandler.EnterNavigation(event, dataBox);
+                    if(event.accepted) {
+                        dataBox.state = ''; //Default state
+                    }
+                }
+
+                onFocusChanged: {
+                    if(!focus) {
+                        dataBox.state = '';
+                    }
+                }
+            }
+
+            PropertyChanges {
+                target: dataBox
+                z: 1
+            }
+
+        },
+
+        State {
+            name: "EndTyping"
+            extend: "MiddleTyping"
+            PropertyChanges {
+                target: edittor
+                visible: true
+            }
+
+            PropertyChanges {
+                target: dataText
+                visible: false
+            }
+
+            PropertyChanges {
+                target: dataTextInput
+
+                Keys.onPressed: {
+                    NavigationHandler.HandleTabEvent(event, dataBox);
+                    NavigationHandler.HandleArrowEvent(event, dataBox);
+                    NavigationHandler.EnterNavigation(event, dataBox);
+                    if(event.accepted) {
+                        dataBox.state = ''; //Default state
+                    }
+                }
+
+                onFocusChanged: {
+                    if(!focus) {
+                        dataBox.state = '';
+                    }
+                }
+
+                cursorPosition: text.length
+            }
+
+            PropertyChanges {
+                target: dataBox
+                z: 1
+            }
+        }
+
+
+
+
+
+    ]
+
+}
