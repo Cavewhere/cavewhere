@@ -44,6 +44,9 @@ void cwSurveyChuckView::setModel(cwSurveyChunk* chunk) {
         AddStations(0, Model->StationCount() - 1);
         AddShots(0, Model->ShotCount() - 1);
 
+        connect(Model, SIGNAL(ShotsAdded(int,int)), SLOT(AddShots(int,int)));
+        connect(Model, SIGNAL(StationsAdded(int,int)), SLOT(AddStations(int,int)));
+
         emit modelChanged();
     }
 }
@@ -89,6 +92,9 @@ void cwSurveyChuckView::AddStations(int beginIndex, int endIndex) {
         //Hock up the signals and slots with the models data
         cwStation* station = Model->Station(i);
         ConnectStation(station, row);
+
+        //For testing
+        connect(row->station(), SIGNAL(focusChanged(bool)), SLOT(StationFocusChanged(bool)));
     }
 }
 
@@ -295,5 +301,20 @@ void cwSurveyChuckView::ConnectShot(cwShot* shot, ShotRow* row) {
     row->backCompass()->setProperty("dataObject", shotObject);
     row->frontClino()->setProperty("dataObject", shotObject);
     row->backClino()->setProperty("dataObject", shotObject);
+}
+
+void cwSurveyChuckView::StationFocusChanged(bool focus) {
+    qDebug() << "Focus changed:" << focus;
+    if(!Model || Model->StationCount() == 0) { return; }
+    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(sender());
+    if(item == NULL) { return; }
+    cwStation* station = qobject_cast<cwStation*>(item->property("dataObject").value<QObject*>());
+    if(station == NULL) { return; }
+
+    int lastIndex = Model->StationCount() - 1;
+    if(station == Model->Station(lastIndex)) {
+        Model->AddNewShot();
+    }
+
 }
 

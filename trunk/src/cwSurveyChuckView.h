@@ -31,6 +31,9 @@ public slots:
 
     void Clear();
 
+private slots:
+    void StationFocusChanged(bool focus);
+
 private:
 
     class StationRow {

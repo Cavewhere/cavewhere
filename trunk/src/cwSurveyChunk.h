@@ -22,8 +22,10 @@ public:
     bool CanAddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
 
 signals:
-    void StationAdded(); //cwStation* station, int index);
-    void ShotAdded(); //cwShot* shot, int index);
+    void StationsAdded(int beginIndex, int endIndex);
+    void ShotsAdded(int beginIndex, int endIndex);
+//    void StationAdded(); //cwStation* station, int index);
+//    void ShotAdded(); //cwShot* shot, int index);
 
 public slots:
     int StationCount();

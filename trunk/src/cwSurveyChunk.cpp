@@ -83,18 +83,19 @@ void cwSurveyChunk::AddShot(cwStation* fromStation, cwStation* toStation, cwShot
     qDebug() << "Trying to add shot";
     if(!CanAddShot(fromStation, toStation, shot)) { return; }
 
+    int index;
+    int firstIndex = Stations.size();
     if(Stations.empty()) {
         Stations.push_back(fromStation);
-        emit StationAdded();
     }
 
+    index = Shots.size();
     Shots.push_back(shot);
-    emit ShotAdded();
+    emit ShotsAdded(index, index);
 
+    index = Stations.size();
     Stations.push_back(toStation);
-    emit StationAdded();
-
-    qDebug() << "Adding shot";
+    emit StationsAdded(firstIndex, index);
 }
 
 /**
