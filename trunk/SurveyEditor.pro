@@ -18,7 +18,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwShot.cpp \
     src/cwStationModel.cpp \
     src/cwSurveyImporter.cpp \
-    src/cwSurveryChunkGroup.cpp
+    src/cwSurveryChunkGroup.cpp \
+    src/cwSurveyChuckView.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -26,7 +27,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwShot.h \
     src/cwStationModel.h \
     src/cwSurveyImporter.h \
-    src/cwSurveryChunkGroup.h
+    src/cwSurveryChunkGroup.h \
+    src/cwSurveyChuckView.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui

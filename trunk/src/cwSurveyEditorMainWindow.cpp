@@ -5,6 +5,7 @@
 #include "cwShot.h"
 #include "cwSurveyImporter.h"
 #include "cwSurveryChunkGroup.h"
+#include "cwSurveyChuckView.h"
 
 
 //Qt includes
@@ -23,6 +24,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
     qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
+    qmlRegisterType<cwSurveyChuckView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroup>();
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
@@ -36,7 +38,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     chunks.append(chunk);
 
     ChunkGroup->setChucks(chunks);
-
+    ReloadQML();
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -80,6 +82,7 @@ void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
 void cwSurveyEditorMainWindow::ReloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setContextProperty("survey", ChunkGroup);
+    context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
 }

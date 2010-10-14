@@ -5,6 +5,13 @@ ClinoReadBox {
 
     onDataValueChanged: dataObject ? dataObject.BackClino = dataValue : ""
 
+    onDataObjectChanged: {
+        if(dataObject != null) {
+            dataValue = dataObject.BackClino;
+            dataObject.BackClinoChanged.connect(updateView);
+        }
+    }
+
     function updateView() {
         dataObject ? dataValue = dataObject.BackClino : ""
     }

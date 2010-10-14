@@ -6,7 +6,14 @@ DataBox {
         regExp: /\w+(\.\w+)*/;
     }
 
-    onDataValueChanged: dataObject ? dataObject.Name = dataValue : ""
+    onDataValueChanged: dataObject.Name = dataObject ? dataValue : ""
+
+    onDataObjectChanged: {
+        if(dataObject != null) {
+            dataValue = dataObject.Name;
+            dataObject.NameChanged.connect(updateView);
+        }
+    }
 
     function updateView() {
         dataObject ? dataValue = dataObject.Name : ""

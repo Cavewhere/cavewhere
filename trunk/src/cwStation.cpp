@@ -12,7 +12,11 @@ cwStation::cwStation() {
 }
 
 cwStation::cwStation(QString name) :
-    Name(name)
+    Name(name),
+    Left(""),
+    Right(""),
+    Up(""),
+    Down("")
 {
 }
 
