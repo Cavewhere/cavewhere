@@ -10,14 +10,14 @@ class cwSurveyChunk;
 class cwStation;
 class cwShot;
 
-class cwSurveyChuckView : public QDeclarativeItem
+class cwSurveyChunkView : public QDeclarativeItem
 {
     Q_OBJECT
 
     Q_PROPERTY(cwSurveyChunk* model READ model WRITE setModel NOTIFY modelChanged)
 
 public:
-    explicit cwSurveyChuckView(QDeclarativeItem *parent = 0);
+    explicit cwSurveyChunkView(QDeclarativeItem *parent = 0);
 
     cwSurveyChunk* model();
     void setModel(cwSurveyChunk* chunk);
@@ -39,7 +39,7 @@ private:
     class StationRow {
     public:
 
-        StationRow(cwSurveyChuckView* Chunk);
+        StationRow(cwSurveyChunkView* Chunk);
 
         QDeclarativeItem* station() { return Station; }
         QDeclarativeItem* left() { return Left; }
@@ -58,7 +58,7 @@ private:
 
     class ShotRow {
     public:
-        ShotRow(cwSurveyChuckView* Chunk);
+        ShotRow(cwSurveyChunkView* Chunk);
 
         QDeclarativeItem* distance() { return Distance; }
         QDeclarativeItem* frontCompass() { return FrontCompass; }
@@ -81,6 +81,12 @@ private:
     cwSurveyChunk* Model;
     QList<StationRow*> StationRows;
     QList<ShotRow*> ShotRows;
+
+    //Stations and shots are added to the navigation queue
+    //When the are added and remove.  The navigation queue
+    //The navigation queues are checked by UpdateNavigation()
+    QList<int> StationNavigationQueue;
+    QList<int> ShotNavigationQueue;
 
     QDeclarativeComponent* StationDelegate;
     QDeclarativeComponent* TitleDelegate;
@@ -114,6 +120,12 @@ private:
 
     void PositionShotRow(ShotRow* row, int index);
     void ConnectShot(cwShot* shot, ShotRow* row);
+
+    void UpdateNavigation();
+    void UpdateStationTabNavigation(int index);
+    void UpdateShotTabNavigation(int index);
+    void LRUDTabNavigation(StationRow* row, QDeclarativeItem* previous, QDeclarativeItem* next);
+    void SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next);
 
 };
 

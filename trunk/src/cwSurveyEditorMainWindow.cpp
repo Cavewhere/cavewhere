@@ -24,7 +24,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
     qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
-    qmlRegisterType<cwSurveyChuckView>("Cavewhere", 1, 0, "SurveyChunkView");
+    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroup>();
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
