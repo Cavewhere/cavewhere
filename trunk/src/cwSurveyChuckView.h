@@ -39,6 +39,7 @@ private:
     class StationRow {
     public:
 
+        StationRow();
         StationRow(cwSurveyChunkView* Chunk);
 
         QDeclarativeItem* station() { return Station; }
@@ -58,6 +59,7 @@ private:
 
     class ShotRow {
     public:
+        ShotRow();
         ShotRow(cwSurveyChunkView* Chunk);
 
         QDeclarativeItem* distance() { return Distance; }
@@ -79,8 +81,8 @@ private:
     friend class ShotRow;
 
     cwSurveyChunk* Model;
-    QList<StationRow*> StationRows;
-    QList<ShotRow*> ShotRows;
+    QList<StationRow> StationRows;
+    QList<ShotRow> ShotRows;
 
     //Stations and shots are added to the navigation queue
     //When the are added and remove.  The navigation queue
@@ -114,18 +116,24 @@ private:
     void CreateTitlebar();
     void SetupDelegates();
 
-    void PositionStationRow(StationRow* row, int index);
+    void PositionStationRow(StationRow row, int index);
     void PositionElement(QDeclarativeItem* item, QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
-    void ConnectStation(cwStation* station, StationRow* row);
+    void ConnectStation(cwStation* station, StationRow row);
 
-    void PositionShotRow(ShotRow* row, int index);
-    void ConnectShot(cwShot* shot, ShotRow* row);
+    void PositionShotRow(ShotRow row, int index);
+    void ConnectShot(cwShot* shot, ShotRow row);
 
     void UpdateNavigation();
     void UpdateStationTabNavigation(int index);
     void UpdateShotTabNavigation(int index);
-    void LRUDTabNavigation(StationRow* row, QDeclarativeItem* previous, QDeclarativeItem* next);
+    void LRUDTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next);
     void SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next);
+    void UpdateStationArrowNavigation(int index);
+    void UpdateShotArrowNavigaton(int index);
+    void SetArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down);
+
+    ShotRow GetShotRow(int index);
+    StationRow GetStationRow(int index);
 
 };
 
