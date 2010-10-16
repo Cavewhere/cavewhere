@@ -26,13 +26,13 @@ Rectangle {
         model: testChunk //From the c++
    }
 
-    SurveyChunkView {
-        x: 500
-        y: 0
+//    SurveyChunkView {
+//        x: 500
+//        y: 0
 
-       // stationDelegate: stationRow
-        model: testChunk //From the c++
-   }
+//       // stationDelegate: stationRow
+//        model: testChunk //From the c++
+//   }
 
 //    Flickable {
 //        id: flickableArea;

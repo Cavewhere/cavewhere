@@ -341,7 +341,7 @@ void cwSurveyImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
     }
 
     if(chunk->CanAddShot(fromStation, toStation, shot)) {
-        chunk->AddShot(fromStation, toStation, shot);
+        chunk->AppendShot(fromStation, toStation, shot);
     } else {
         if(!chunk->IsValid()) {
             //error
@@ -352,7 +352,7 @@ void cwSurveyImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
         chunk = new cwSurveyChunk();
         Chunks.append(chunk);
         if(chunk->CanAddShot(fromStation, toStation, shot)) {
-            chunk->AddShot(fromStation, toStation, shot);
+            chunk->AppendShot(fromStation, toStation, shot);
         } else {
             //error
             qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation << toStation << shot;

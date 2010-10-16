@@ -26,14 +26,19 @@ signals:
     void modelChanged();
 
 public slots:
-    void AddStations(int beginIndex, int endIndex);
-    void AddShots(int beginIndex, int endIndex);
 
-    void Clear();
 
 private slots:
     void StationFocusChanged(bool focus);
+    void StationValueHasChanged();
 
+    void AddStations(int beginIndex, int endIndex);
+    void AddShots(int beginIndex, int endIndex);
+
+    void RemoveStations(int beginIndex, int endIndex);
+    void RemoveShots(int beginIndex, int endIndex);
+
+    void Clear();
 private:
 
     class StationRow {

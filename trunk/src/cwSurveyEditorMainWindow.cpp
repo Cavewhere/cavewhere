@@ -32,7 +32,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     //Initial chunk
     cwSurveyChunk* chunk = new cwSurveyChunk(ChunkGroup);
-    chunk->AddNewShot(); //Add the first shot
+    chunk->AppendNewShot(); //Add the first shot
 
     QList<cwSurveyChunk*> chunks;
     chunks.append(chunk);

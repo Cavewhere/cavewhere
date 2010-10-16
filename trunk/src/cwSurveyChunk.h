@@ -16,6 +16,11 @@ class cwSurveyChunk : public QObject {
 //    Q_PROPERTY(QDeclarativeListProperty<cwStation> Stations READ qmlStations);
 
 public:
+    enum Direction {
+        Above,
+        Below
+    };
+
     cwSurveyChunk(QObject *parent = 0);
 
     bool IsValid();
@@ -24,8 +29,9 @@ public:
 signals:
     void StationsAdded(int beginIndex, int endIndex);
     void ShotsAdded(int beginIndex, int endIndex);
-//    void StationAdded(); //cwStation* station, int index);
-//    void ShotAdded(); //cwShot* shot, int index);
+
+    void StationsRemoved(int beginIndex, int endIndex);
+    void ShotsRemoved(int beginIndex, int endIndex);
 
 public slots:
     int StationCount();
@@ -34,8 +40,14 @@ public slots:
     int ShotCount();
     cwShot* Shot(int index);
 
-    void AddNewShot();
-    void AddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
+    void AppendNewShot();
+    void AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
+
+    void RemoveStation(int stationIndex, Direction shot);
+    bool CanRemoveStation(int stationIndex, Direction shot);
+
+    void RemoveShot(int shotIndex, Direction station);
+    bool CanRemoveShot(int shotIndex, Direction station);
 
 private:
     QList<cwStation*> Stations;
@@ -43,6 +55,10 @@ private:
 
     bool ShotIndexCheck(int index) { return index >= 0 && index < Shots.count();  }
     bool StationIndexCheck(int index) { return index >= 0 && index < Stations.count(); }
+
+    void Remove(int stationIndex, int shotIndex);
+    int Index(int index, Direction direction);
+
 
 };
 

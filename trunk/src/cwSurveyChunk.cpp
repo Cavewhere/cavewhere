@@ -50,9 +50,9 @@ cwShot* cwSurveyChunk::Shot(int index) {
   This will add the station to the end of the list.
   This will also add a shot to the suvey chunk.
   */
-void cwSurveyChunk::AddNewShot() {
+void cwSurveyChunk::AppendNewShot() {
     cwStation* fromStation;
-    if(Stations.empty()) {
+    if(Stations.isEmpty()) {
         fromStation = new cwStation();
     } else {
         fromStation = Stations.last();
@@ -64,7 +64,7 @@ void cwSurveyChunk::AddNewShot() {
     cwStation* toStation = new cwStation();
     cwShot* shot = new cwShot();
 
-    AddShot(fromStation, toStation, shot);
+    AppendShot(fromStation, toStation, shot);
 }
 
 /**
@@ -79,7 +79,7 @@ void cwSurveyChunk::AddNewShot() {
   isn't equal to the last station in the chunk.  If toStation isn't the last station,
   you need to create a new cwSurveyChunk and call this function again
   */
-void cwSurveyChunk::AddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
+void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
     qDebug() << "Trying to add shot";
     if(!CanAddShot(fromStation, toStation, shot)) { return; }
 
@@ -107,3 +107,96 @@ bool cwSurveyChunk::CanAddShot(cwStation* fromStation, cwStation* toStation, cwS
     return fromStation != NULL && toStation != NULL && shot != NULL &&
             (Stations.empty() || Stations.last() == fromStation);
 }
+
+/**
+  \brief Removes a shot and a station from the chunk
+
+  This will do nothing if the stationIndex is out of bounds.
+  \param stationIndex - The station that'll be removed from the model
+  \param shot - The shot that'll be removed.  The shot above the station or
+  below the station will be remove.  If the shot direction is invalid, ie. can't
+  remove the shot, this function will do nothing.
+  */
+void cwSurveyChunk::RemoveStation(int stationIndex, Direction shot) {
+    if(!CanRemoveStation(stationIndex, shot)) { return; }
+
+    //The index to the shot that'll be removed
+    int shotIndex = Index(stationIndex, shot);
+
+    //Remove them
+    Remove(stationIndex, shotIndex);
+}
+
+/**
+  \brief Checks to see if the model can remove the station with the shot direction
+  \return true if it can and false if it can't
+  */
+bool cwSurveyChunk::CanRemoveStation(int stationIndex, Direction shot) {
+    if(StationCount() <= 2) { return false; }
+    if(stationIndex < 0 || stationIndex >= StationCount()) { return false; }
+    int shotIndex = Index(stationIndex, shot);
+    if(shotIndex < 0 || shotIndex >= ShotCount()) { return false; }
+
+    return true;
+}
+
+/**
+  \brief Removes a shot and a station from the chunk
+
+  This will do nothing if the shotIndex is out of bounds.
+  \param shotIndex - The station that'll be removed from the model
+  \param station - The station that'll be removed.  The station above the shot or
+  below the shot will be remove.  If the shot direction is invalid, ie. can't
+  remove the station, this function will do nothing.
+  */
+void cwSurveyChunk::RemoveShot(int shotIndex, Direction station) {
+    if(!CanRemoveShot(shotIndex, station)) {
+        return;
+    }
+
+    //The index of the station that'll be removed
+    int stationIndex = Index(shotIndex, station);
+
+    //Remove them
+    Remove(stationIndex, shotIndex);
+}
+
+/**
+  \brief Checks to see if the model can remove the shot with the station direction
+  \return true if it can and false if it can't
+  */
+bool cwSurveyChunk::CanRemoveShot(int shotIndex, Direction station) {
+    if(ShotCount() <= 1) { return false; }
+    if(shotIndex < 0 || shotIndex >= ShotCount()) { return false; }
+    int stationIndex = Index(shotIndex, station);
+    if(stationIndex < 0 || stationIndex >= StationCount()) { return false; }
+
+    return true;
+}
+
+/**
+  \brief Removes a station and a shot from the chunk
+
+  This does no bounds checking!!!
+  */
+void cwSurveyChunk::Remove(int stationIndex, int shotIndex) {
+    Stations.removeAt(stationIndex);
+    emit StationsRemoved(stationIndex, stationIndex);
+
+    Shots.removeAt(shotIndex);
+    emit ShotsRemoved(shotIndex, shotIndex);
+}
+
+/**
+  \brief Helper to the remove functions.
+  */
+int cwSurveyChunk::Index(int index, Direction direction) {
+    switch(direction) {
+    case Above:
+        return index - 1;
+    case Below:
+        return index;
+    }
+    return -1;
+}
+
