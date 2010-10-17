@@ -18,6 +18,9 @@ NavigationRectangle {
 
     color : "white"
 
+    //Behavior on x { PropertyAnimation { duration: 100 } }
+    Behavior on y { PropertyAnimation { duration: 250 } }
+    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
 
     Rectangle {

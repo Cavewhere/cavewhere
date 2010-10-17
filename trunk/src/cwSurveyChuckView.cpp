@@ -457,7 +457,20 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
     QRectF titleRect = mapRectFromItem(titleItem, titleItem->boundingRect());
     size = !size.isValid() ? titleRect.size() + QSizeF(-2, 0) : size;
     float y = titleRect.bottom() + titleRect.height() * index;
-    item->setPos(titleRect.left() + 1, yOffset + y - 1);
+    QPointF position(titleRect.left() + 1, yOffset + y -1);
+    //item->setPos(position - QPointF(0.0, size.height()));
+    if(item->pos() == QPointF(0.0, 0.0)) {
+        //Not position yet
+        item->setOpacity(0.0);
+        item->setPos(position);
+        item->setProperty("opacity", 1.0);
+    } else {
+        //Animate the change in position
+        //item->setProperty("x", position.x());
+        item->setX(position.x());
+        item->setProperty("y", position.y());
+    }
+
     item->setSize(size);
 }
 
