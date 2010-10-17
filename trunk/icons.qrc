@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/AddArrowDown.png</file>
+        <file>icons/AddArrowUp.png</file>
+        <file>icons/RemoveArrowDown.png</file>
+        <file>icons/RemoveArrowUp.png</file>
+    </qresource>
+</RCC>

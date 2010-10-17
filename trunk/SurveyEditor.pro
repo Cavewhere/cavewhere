@@ -59,4 +59,5 @@ qml/ClinoReadBox.qml \
     qml/SurveyChunkList.qml \
     qml/ScrollBar.qml
 
-RESOURCES +=
+RESOURCES += \
+    icons.qrc

@@ -9,6 +9,10 @@
 #include <QDeclarativeEngine>
 #include <QDeclarativeContext>
 #include <QVariant>
+#include <QMenu>
+#include <QGraphicsSceneMouseEvent>
+#include <QGraphicsScene>
+#include <QCursor>
 
 cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     QDeclarativeItem(parent),
@@ -20,7 +24,6 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     UpDelegate(NULL),
     DownDelegate(NULL)
 {
-
 
 }
 
@@ -53,6 +56,10 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
     }
 }
 
+QRectF cwSurveyChunkView::boundingRect() const {
+    return childrenBoundingRect();
+}
+
 /**
   \brief Re-initializes the view
   */
@@ -68,6 +75,61 @@ void cwSurveyChunkView::Clear() {
 }
 
 /**
+  \brief User right clicks on station
+  */
+void cwSurveyChunkView::RightClickOnStation(int index) {
+
+    QMenu menu;
+
+    QAction* insertAbove = menu.addAction(QIcon(":icons/AddArrowUp.png"), "Insert Above");
+    QAction* insertBelow = menu.addAction(QIcon(":icons/AddArrowDown.png"),"Insert Below");
+    menu.addSeparator();
+    QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
+    QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
+
+    removeAbove->setEnabled(Model->CanRemoveStation(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(Model->CanRemoveStation(index, cwSurveyChunk::Below));
+
+    QAction* selected = menu.exec(QCursor::pos());
+    if(selected == insertAbove) {
+        Model->InsertStation(index, cwSurveyChunk::Above);
+    } else if(selected == insertBelow) {
+        Model->InsertStation(index, cwSurveyChunk::Below);
+    } else if(selected == removeAbove) {
+        Model->RemoveStation(index, cwSurveyChunk::Above);
+    } else if(selected == removeBelow) {
+        Model->RemoveStation(index, cwSurveyChunk::Below);
+    }
+}
+
+/**
+  \brief User right clicks on station
+  */
+void cwSurveyChunkView::RightClickOnShot(int index) {
+    QMenu menu;
+
+    QAction* insertAbove = menu.addAction(QIcon(":icons/AddArrowUp.png"), "Insert Above");
+    QAction* insertBelow = menu.addAction(QIcon(":icons/AddArrowDown.png"),"Insert Below");
+    menu.addSeparator();
+    QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
+    QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
+
+    removeAbove->setEnabled(Model->CanRemoveShot(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(Model->CanRemoveShot(index, cwSurveyChunk::Below));
+
+    QAction* selected = menu.exec(QCursor::pos());
+    if(selected == insertAbove) {
+        Model->InsertShot(index, cwSurveyChunk::Above);
+    } else if(selected == insertBelow) {
+        Model->InsertShot(index, cwSurveyChunk::Below);
+    } else if(selected == removeAbove) {
+        Model->RemoveShot(index, cwSurveyChunk::Above);
+    } else if(selected == removeBelow) {
+        Model->RemoveShot(index, cwSurveyChunk::Below);
+    }
+}
+
+/**
   \brief Add stations to the view
 
   This inserts new stations found in the model at and between beginIndex and endIndex.
@@ -75,6 +137,9 @@ void cwSurveyChunkView::Clear() {
 void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
     //Make sure the model has data
     if(Model->StationCount() == 0) { return; }
+
+    //Alert the scene graph that we're changing
+    prepareGeometryChange();
 
     //Disconnect stations that were watched
     disconnect(this, SLOT(StationValueHasChanged()));
@@ -85,7 +150,7 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
-        StationRow row(this);
+        StationRow row(this, i);
 
         //Insert the row
         StationRows.insert(i, row);
@@ -103,23 +168,21 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
 
     //Add previous station and next station to the navigation queue
     StationNavigationQueue.append(beginIndex - 1);
-    StationNavigationQueue.append(endIndex - 1);
+    StationNavigationQueue.append(endIndex + 1);
+
+    //Update the navigation
+    UpdateNavigation();
 
     //Connect the last station's in the view
-    int lastIndex = StationRows.size() - 1;
-    int secondToLastIndex = StationRows.size() - 2;
-    StationRow lastRow = GetStationRow(lastIndex);
-    StationRow secondLastRow = GetStationRow(secondToLastIndex);
+    UpdateLastRowBehaviour();
 
-    if(lastRow.station() != NULL) {
-        connect(lastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
-    }
+    //Update the positions for all rows after endIndex
+    UpdatePositionsAfterIndex(endIndex + 1);
 
-    if(secondLastRow.station() != NULL) {
-        connect(secondLastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
-    }
+    //Update the id's on effected rows
+    UpdateIndexes(endIndex + 1);
 
-    UpdateNavigation();
+    qDebug() << boundingRect();
 }
 
 /**
@@ -131,13 +194,16 @@ void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
     //Make sure the model has data
     if(Model->ShotCount() == 0) { return; }
 
+    //Alert the scene graph that we're changing
+    prepareGeometryChange();
+
     //Make sure thes are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
     endIndex = qMin(Model->ShotCount() - 1, endIndex);
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
-        ShotRow row(this);
+        ShotRow row(this, i);
 
         //Insert the row
         ShotRows.insert(i, row);
@@ -155,9 +221,15 @@ void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
 
     //Add previous station and next station to the navigation queue
     ShotNavigationQueue.append(beginIndex - 1);
-    ShotNavigationQueue.append(endIndex - 1);
-
+    ShotNavigationQueue.append(endIndex + 1);
     UpdateNavigation();
+
+    //Update the positions for all rows after endIndex
+    UpdatePositionsAfterIndex(endIndex + 1);
+
+    //Update the id's on effected rows
+    UpdateIndexes(endIndex + 1);
+
 }
 
 /**
@@ -172,12 +244,11 @@ void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
     for(int i = endIndex; i >= beginIndex; i--) {
         StationRow row = GetStationRow(i);
 
-        //Delete all the children of the row
-        if(row.station()) { delete row.station(); }
-        if(row.left()) { delete row.left(); }
-        if(row.right()) { delete row.right(); }
-        if(row.up()) { delete row.up(); }
-        if(row.down()) { delete row.down(); }
+        foreach(QDeclarativeItem* item, row.items()) {
+            if(item) {
+                item->deleteLater();
+            }
+        }
 
         //Remove the row from the station rows
         StationRows.removeAt(i);
@@ -185,9 +256,15 @@ void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
 
     //Update the navigation for the remaining rows
     StationNavigationQueue.append(beginIndex - 1);
-    StationNavigationQueue.append(endIndex - 1);
-
+    StationNavigationQueue.append(beginIndex);
+    StationNavigationQueue.append(beginIndex + 1);
     UpdateNavigation();
+
+    //Update the positions for all rows after endIndex
+    UpdatePositionsAfterIndex(beginIndex);
+
+    //Update the id's on effected rows
+    UpdateIndexes(beginIndex);
 }
 
 /**
@@ -201,12 +278,11 @@ void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
     for(int i = endIndex; i >= beginIndex; i--) {
         ShotRow row = GetShotRow(i);
 
-        //Delete all the children of the row
-        if(row.distance()) { delete row.distance(); }
-        if(row.frontCompass()) { delete row.frontCompass(); }
-        if(row.backCompass()) { delete row.backCompass(); }
-        if(row.frontClino()) { delete row.frontClino(); }
-        if(row.backClino()) { delete row.backClino(); }
+        foreach(QDeclarativeItem* item, row.items()) {
+            if(item) {
+                item->deleteLater();
+            }
+        }
 
         //Remove the row from the station rows
         ShotRows.removeAt(i);
@@ -214,9 +290,16 @@ void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
 
     //Update the navigation for the remaining rows
     ShotNavigationQueue.append(beginIndex - 1);
-    ShotNavigationQueue.append(endIndex - 1);
+    ShotNavigationQueue.append(beginIndex);
+    ShotNavigationQueue.append(beginIndex + 1);
 
     UpdateNavigation();
+
+    //Update the positions for all rows after endIndex
+    UpdatePositionsAfterIndex(beginIndex);
+
+    //Update the id's on effected rows
+    UpdateIndexes(beginIndex);
 }
 
 
@@ -300,12 +383,7 @@ void cwSurveyChunkView::SetupDelegates() {
 /**
   \brief Constructor for a station row
   */
-cwSurveyChunkView::StationRow::StationRow() :
-    Station(NULL),
-    Left(NULL),
-    Right(NULL),
-    Up(NULL),
-    Down(NULL)
+cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
 {
 
 }
@@ -313,30 +391,32 @@ cwSurveyChunkView::StationRow::StationRow() :
 /**
   \brief Constructor to the StationRow
   */
-cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view) {
-    Station = qobject_cast<QDeclarativeItem*>(view->StationDelegate->create());
-    Left = qobject_cast<QDeclarativeItem*>(view->LeftDelegate->create());
-    Right = qobject_cast<QDeclarativeItem*>(view->RightDelegate->create());
-    Up = qobject_cast<QDeclarativeItem*>(view->UpDelegate->create());
-    Down = qobject_cast<QDeclarativeItem*>(view->DownDelegate->create());
+cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
+    Items[Station] = qobject_cast<QDeclarativeItem*>(view->StationDelegate->create());
+    Items[Left] = qobject_cast<QDeclarativeItem*>(view->LeftDelegate->create());
+    Items[Right] = qobject_cast<QDeclarativeItem*>(view->RightDelegate->create());
+    Items[Up] = qobject_cast<QDeclarativeItem*>(view->UpDelegate->create());
+    Items[Down] = qobject_cast<QDeclarativeItem*>(view->DownDelegate->create());
 
-    Station->setParentItem(view);
-    Left->setParentItem(view);
-    Right->setParentItem(view);
-    Up->setParentItem(view);
-    Down->setParentItem(view);
+    foreach(QDeclarativeItem* item, items()) {
+        item->setParentItem(view);
+    }
+}
 
+cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
+    RowIndex = rowIndex;
+
+    Items.reserve(numberOfItems);
+    Items.resize(numberOfItems);
+    for(int i = 0; i < Items.size(); i++) {
+        Items[i] = NULL;
+    }
 }
 
 /**
   \brief Constructor for a shot row
   */
-cwSurveyChunkView::ShotRow::ShotRow() :
-    Distance(NULL),
-    FrontCompass(NULL),
-    BackCompass(NULL),
-    FrontClino(NULL),
-    BackClino(NULL)
+cwSurveyChunkView::ShotRow::ShotRow() : Row(-1, NumberItems)
 {
 
 }
@@ -344,18 +424,16 @@ cwSurveyChunkView::ShotRow::ShotRow() :
 /**
   \brief Constructor to the ShotRow
   */
-cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view) {
-    Distance = qobject_cast<QDeclarativeItem*>(view->DistanceDelegate->create());
-    FrontCompass = qobject_cast<QDeclarativeItem*>(view->FrontCompassDelegate->create());
-    BackCompass = qobject_cast<QDeclarativeItem*>(view->BackCompassDelegate->create());
-    FrontClino = qobject_cast<QDeclarativeItem*>(view->FrontClinoDelegate->create());
-    BackClino = qobject_cast<QDeclarativeItem*>(view->BackClinoDelegate->create());
+cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row(rowIndex, NumberItems) {
+    Items[Distance] = qobject_cast<QDeclarativeItem*>(view->DistanceDelegate->create());
+    Items[FrontCompass] = qobject_cast<QDeclarativeItem*>(view->FrontCompassDelegate->create());
+    Items[BackCompass] = qobject_cast<QDeclarativeItem*>(view->BackCompassDelegate->create());
+    Items[FrontClino] = qobject_cast<QDeclarativeItem*>(view->FrontClinoDelegate->create());
+    Items[BackClino] = qobject_cast<QDeclarativeItem*>(view->BackClinoDelegate->create());
 
-    Distance->setParentItem(view);
-    FrontCompass->setParentItem(view);
-    BackCompass->setParentItem(view);
-    FrontClino->setParentItem(view);
-    BackClino->setParentItem(view);
+    foreach(QDeclarativeItem* item, items()) {
+        item->setParentItem(view);
+    }
 }
 
 /**
@@ -389,11 +467,12 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
 void cwSurveyChunkView::ConnectStation(cwStation* station, StationRow row) {
     QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
 
-    row.station()->setProperty("dataObject", stationObject);
-    row.left()->setProperty("dataObject", stationObject);
-    row.right()->setProperty("dataObject", stationObject);
-    row.up()->setProperty("dataObject", stationObject);
-    row.down()->setProperty("dataObject", stationObject);
+    QVector<QDeclarativeItem*> items = row.items();
+    foreach(QDeclarativeItem* item, items) {
+        item->setProperty("dataObject", stationObject);
+        item->setProperty("rowIndex", row.rowIndex());
+        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
+    }
 }
 
 /**
@@ -416,11 +495,12 @@ void cwSurveyChunkView::PositionShotRow(ShotRow row, int index) {
 void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
     QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
 
-    row.distance()->setProperty("dataObject", shotObject);
-    row.frontCompass()->setProperty("dataObject", shotObject);
-    row.backCompass()->setProperty("dataObject", shotObject);
-    row.frontClino()->setProperty("dataObject", shotObject);
-    row.backClino()->setProperty("dataObject", shotObject);
+    QVector<QDeclarativeItem*> items = row.items();
+    foreach(QDeclarativeItem* item, items) {
+        item->setProperty("dataObject", shotObject);
+        item->setProperty("rowIndex", row.rowIndex());
+        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
+    }
 }
 
 void cwSurveyChunkView::StationFocusChanged(bool focus) {
@@ -649,4 +729,69 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::GetStationRow(int index) {
     return index >= 0 && index < StationRows.size() ? StationRows[index] : StationRow();
 }
 
+/**
+  \brief This handles editor behaviour of the last rows
+  */
+void cwSurveyChunkView::UpdateLastRowBehaviour() {
+    int lastIndex = StationRows.size() - 1;
+    int secondToLastIndex = StationRows.size() - 2;
+    StationRow lastRow = GetStationRow(lastIndex);
+    StationRow secondLastRow = GetStationRow(secondToLastIndex);
+
+    if(lastRow.station() != NULL) {
+        connect(lastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
+    }
+
+    if(secondLastRow.station() != NULL) {
+        connect(secondLastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
+    }
+}
+
+/**
+  \brief Updates the position in the view
+
+  If index is 0 then all index's positions are update
+  */
+void cwSurveyChunkView::UpdatePositionsAfterIndex(int index) {
+    //Update the position when we have a valid interface
+    if(!InterfaceValid()) { return; }
+
+    for(int i = index; i < StationRows.size(); i++) {
+        PositionStationRow(StationRows[i], i);
+    }
+
+    for(int i = index; i < ShotRows.size(); i++) {
+        PositionShotRow(ShotRows[i], i);
+    }
+}
+
+/**
+  Updates all the indexes for the gui elements, this is so
+  the right click works correctly
+  */
+void cwSurveyChunkView::UpdateIndexes(int index) {
+    if(!InterfaceValid()) { return; }
+
+    for(int i = index; i < StationRows.size(); i++) {
+        foreach(QDeclarativeItem* item, StationRows[i].items()) {
+            item->setProperty("rowIndex", i);
+        }
+    }
+
+    for(int i = index; i < ShotRows.size(); i++) {
+        foreach(QDeclarativeItem* item, ShotRows[i].items()) {
+            item->setProperty("rowIndex", i);
+        }
+    }
+
+}
+
+/**
+  \brief Test to see if the interface is valid
+  */
+bool cwSurveyChunkView::InterfaceValid() {
+    if(StationRows.empty() || ShotRows.empty()) { return false; }
+    if(StationRows.size() - 1 != ShotRows.size()) { return false; }
+    return true;
+}
 

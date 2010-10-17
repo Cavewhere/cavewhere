@@ -43,6 +43,9 @@ public slots:
     void AppendNewShot();
     void AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
 
+    void InsertStation(int stationIndex, Direction direction);
+    void InsertShot(int stationIndex, Direction direction);
+
     void RemoveStation(int stationIndex, Direction shot);
     bool CanRemoveStation(int stationIndex, Direction shot);
 

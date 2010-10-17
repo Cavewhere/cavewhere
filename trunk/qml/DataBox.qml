@@ -6,16 +6,23 @@ NavigationRectangle {
 
     property alias dataValue: dataTextInput.text
     property alias dataValidator: dataTextInput.validator
+    property alias edittorOpen: edittor.visible
     property variant dataObject //For hooking up signals and slots in subclasses
+    property int rowIndex: -1
+
+
+    signal rightClicked(int index)
 
     border.color: "lightgray"
     border.width: 1
 
     color : "white"
 
+
+
     Rectangle {
         id: interalHighlight
-        border.color: "black"; //dataBox.border.color;
+        border.color: "black";
         anchors.fill: parent;
         anchors.margins: 1;
         border.width: 1;
@@ -40,8 +47,13 @@ NavigationRectangle {
 
     MouseArea {
         anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: {
             dataBox.focus = true;
+
+            if(mouse.button == Qt.RightButton) {
+                dataBox.rightClicked(rowIndex);
+            }
         }
 
         onDoubleClicked: {
@@ -177,11 +189,7 @@ NavigationRectangle {
                 z: 1
             }
         }
-
-
-
-
-
     ]
+
 
 }

@@ -4,7 +4,7 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
-    height: 1000
+    height: 600
     width: 600
 
 
@@ -24,6 +24,19 @@ Rectangle {
     SurveyChunkView {
        // stationDelegate: stationRow
         model: testChunk //From the c++
+
+        Rectangle {
+            anchors.fill: parent;
+            color: 'red'
+        }
+
+//        MouseArea {
+//            anchors.fill: parent;
+//            onPressed: {
+//                console.log("Pressed!");
+//            }
+//        }
+
    }
 
 //    SurveyChunkView {

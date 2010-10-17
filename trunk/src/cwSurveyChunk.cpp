@@ -86,17 +86,70 @@ void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwS
     int index;
     int firstIndex = Stations.size();
     if(Stations.empty()) {
-        Stations.push_back(fromStation);
+        Stations.append(fromStation);
     }
 
     index = Shots.size();
-    Shots.push_back(shot);
+    Shots.append(shot);
     emit ShotsAdded(index, index);
 
     index = Stations.size();
-    Stations.push_back(toStation);
+    Stations.append(toStation);
     emit StationsAdded(firstIndex, index);
 }
+
+/**
+  Inserts a station a index stationIndex.
+
+  If direction is above, it's inserted at index, if it's below, then this is insert
+  at index + 1.  A shot will also be added as well
+  */
+void cwSurveyChunk::InsertStation(int stationIndex, Direction direction) {
+    if(Stations.empty()) { AppendNewShot(); return; }
+    if(stationIndex < 0 || stationIndex >= Stations.size()) { return; }
+
+    int shotIndex = stationIndex;
+
+    if(direction == Below) {
+        stationIndex++;
+    }
+
+    cwStation* station = new cwStation();
+    cwShot* shot = new cwShot();
+
+    Stations.insert(stationIndex, station);
+    emit StationsAdded(stationIndex, stationIndex);
+
+    Shots.insert(shotIndex, shot);
+    emit ShotsAdded(shotIndex, shotIndex);
+}
+
+/**
+  Inserts a shot at index stationIndex
+
+  If direction is above, it's inserted at index, if it's below, then this is insert
+  at index + 1.  A station will also be added as well
+  */
+void cwSurveyChunk::InsertShot(int shotIndex, Direction direction) {
+    if(Stations.empty()) { AppendNewShot(); return; }
+    if(shotIndex < 0 || shotIndex >= Stations.size()) { return; }
+
+    int stationIndex = shotIndex + 1;
+
+    if(direction == Below) {
+        shotIndex++;
+    }
+
+    cwStation* station = new cwStation();
+    cwShot* shot = new cwShot();
+
+    Stations.insert(stationIndex, station);
+    emit StationsAdded(stationIndex, stationIndex);
+
+    Shots.insert(shotIndex, shot);
+    emit ShotsAdded(shotIndex, shotIndex);
+}
+
 
 /**
   \brief Checks if a shot can be added to the chunk

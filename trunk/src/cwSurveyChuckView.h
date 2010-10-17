@@ -4,6 +4,8 @@
 //Qt includes
 #include <QObject>
 #include <QDeclarativeItem>
+#include <QList>
+#include <QVector>
 
 //Our includes
 class cwSurveyChunk;
@@ -22,10 +24,14 @@ public:
     cwSurveyChunk* model();
     void setModel(cwSurveyChunk* chunk);
 
+    QRectF boundingRect() const;
+
 signals:
     void modelChanged();
 
 public slots:
+
+protected:
 
 
 private slots:
@@ -39,47 +45,68 @@ private slots:
     void RemoveShots(int beginIndex, int endIndex);
 
     void Clear();
+
+    void RightClickOnStation(int index);
+    void RightClickOnShot(int index);
+
 private:
 
-    class StationRow {
+    class Row {
+    public:
+        Row(int rowIndex, int numberOfItems);
+
+        int rowIndex() { return RowIndex; }
+        QVector<QDeclarativeItem*> items() { return Items; }
+
+    protected:
+        QVector<QDeclarativeItem*> Items;
+        int RowIndex;
+    };
+
+    class StationRow : public Row {
     public:
 
         StationRow();
-        StationRow(cwSurveyChunkView* Chunk);
+        StationRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* station() { return Station; }
-        QDeclarativeItem* left() { return Left; }
-        QDeclarativeItem* right() { return Right; }
-        QDeclarativeItem* up() { return Up; }
-        QDeclarativeItem* down() { return Down; }
+        QDeclarativeItem* station() { return Items[Station]; }
+        QDeclarativeItem* left() { return Items[Left]; }
+        QDeclarativeItem* right() { return Items[Right]; }
+        QDeclarativeItem* up() { return Items[Up]; }
+        QDeclarativeItem* down() { return Items[Down]; }
 
         private:
-        QDeclarativeItem* Station;
-        QDeclarativeItem* Left;
-        QDeclarativeItem* Right;
-        QDeclarativeItem* Up;
-        QDeclarativeItem* Down;
 
+        enum {
+            Station,
+            Left,
+            Right,
+            Up,
+            Down,
+            NumberItems
+        };
     };
 
-    class ShotRow {
+    class ShotRow : public Row {
     public:
         ShotRow();
-        ShotRow(cwSurveyChunkView* Chunk);
+        ShotRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* distance() { return Distance; }
-        QDeclarativeItem* frontCompass() { return FrontCompass; }
-        QDeclarativeItem* backCompass() { return BackCompass; }
-        QDeclarativeItem* frontClino() { return FrontClino; }
-        QDeclarativeItem* backClino() { return BackClino; }
+        QDeclarativeItem* distance() { return Items[Distance]; }
+        QDeclarativeItem* frontCompass() { return Items[FrontCompass]; }
+        QDeclarativeItem* backCompass() { return Items[BackCompass]; }
+        QDeclarativeItem* frontClino() { return Items[FrontClino]; }
+        QDeclarativeItem* backClino() { return Items[BackClino]; }
 
     private:
-        QDeclarativeItem* Distance;
-        QDeclarativeItem* FrontCompass;
-        QDeclarativeItem* BackCompass;
-        QDeclarativeItem* FrontClino;
-        QDeclarativeItem* BackClino;
-
+        enum {
+            Distance,
+            FrontCompass,
+            BackCompass,
+            FrontClino,
+            BackClino,
+            NumberItems
+        };
     };
 
     friend class StationRow;
@@ -117,6 +144,7 @@ private:
     QDeclarativeItem* UpTitle;
     QDeclarativeItem* DownTitle;
 
+    QMenu* RightClickMenu;
 
     void CreateTitlebar();
     void SetupDelegates();
@@ -140,6 +168,11 @@ private:
     ShotRow GetShotRow(int index);
     StationRow GetStationRow(int index);
 
+    void UpdateLastRowBehaviour();
+    void UpdatePositionsAfterIndex(int index);
+    void UpdateIndexes(int index);
+
+    bool InterfaceValid();
 };
 
 
