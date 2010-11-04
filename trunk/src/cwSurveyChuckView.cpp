@@ -28,6 +28,18 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
 }
 
 /**
+  \brief Get's the elements height
+  */
+float cwSurveyChunkView::elementHeight() { return 40; }
+
+/**
+  \brief Estimates the height of the view with numberElements
+  */
+float cwSurveyChunkView::heightHint(int numberElements) {
+    return (numberElements + 1) * elementHeight(); //Plus 1 for the title
+}
+
+/**
   \brief Get's the model from the view
   */
 cwSurveyChunk* cwSurveyChunkView::model() {
@@ -182,7 +194,9 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
     //Update the id's on effected rows
     UpdateIndexes(endIndex + 1);
 
-    qDebug() << boundingRect();
+    UpdateDimensions();
+
+    //qDebug() << boundingRect();
 }
 
 /**
@@ -230,6 +244,8 @@ void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
     //Update the id's on effected rows
     UpdateIndexes(endIndex + 1);
 
+    UpdateDimensions();
+
 }
 
 /**
@@ -265,6 +281,8 @@ void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
 
     //Update the id's on effected rows
     UpdateIndexes(beginIndex);
+
+    UpdateDimensions();
 }
 
 /**
@@ -300,6 +318,8 @@ void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
 
     //Update the id's on effected rows
     UpdateIndexes(beginIndex);
+
+    UpdateDimensions();
 }
 
 
@@ -335,7 +355,16 @@ void cwSurveyChunkView::CreateTitlebar() {
     UpTitle->setProperty("text", "U");
     DownTitle->setProperty("text", "D");
 
-    StationTitle->setPos(10, 10);
+    StationTitle->setProperty("height", elementHeight());
+    DistanceTitle->setProperty("height", elementHeight());
+    AzimuthTitle->setProperty("height", elementHeight());
+    ClinoTitle->setProperty("height", elementHeight());
+    LeftTitle->setProperty("height", elementHeight());
+    RightTitle->setProperty("height", elementHeight());
+    UpTitle->setProperty("height", elementHeight());
+    DownTitle->setProperty("height", elementHeight());
+
+    StationTitle->setPos(0, 0);
     DistanceTitle->setX(mapRectFromItem(StationTitle, StationTitle->boundingRect()).right() - 1);
     DistanceTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).center().y() + 1);
     AzimuthTitle->setX(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).right() - 1);
@@ -400,6 +429,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
+        item->setParent(this);
     }
 }
 
@@ -808,3 +838,10 @@ bool cwSurveyChunkView::InterfaceValid() {
     return true;
 }
 
+void cwSurveyChunkView::UpdateDimensions() {
+    if(!InterfaceValid()) { return; }
+
+    QRectF rect = boundingRect();
+    setWidth(rect.width());
+    setHeight(rect.height());
+}

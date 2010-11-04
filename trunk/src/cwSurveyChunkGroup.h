@@ -7,23 +7,32 @@ class cwSurveyChunk;
 //Qt include
 #include <QObject>
 #include <QList>
+#include <QAbstractListModel>
 
-class cwSurveyChunkGroup : public QObject
+class cwSurveyChunkGroup : public QAbstractListModel
 {
     Q_OBJECT
 public:
+    enum Roles {
+        ChunkRole = Qt::UserRole + 1,
+    };
+
+
     explicit cwSurveyChunkGroup(QObject *parent = 0);
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    QVariant data(const QModelIndex &index, int role) const;
 
 signals:
     void dataChanged();
 
 public slots:
-    int chunkCount() const;
-    cwSurveyChunk* chunk(int index) const;
     void setChucks(QList<cwSurveyChunk*> chunks);
 
 
 protected:
+
+
     QList<cwSurveyChunk*> Chunks;
 
 };

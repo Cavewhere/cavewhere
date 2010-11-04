@@ -4,40 +4,89 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
-    height: 600
-    width: 600
-
 
     border.width: 2
     border.color: "green"
 
-    Component {
-        id: stationComponent
-        StationBox {
-            id: stationBox
-            width: 20
-            height: 20
+    Rectangle {
+
+        border.width: 1
+        border.color: "red"
+
+        Flickable {
+            id: flickArea
+
+            contentHeight: view.contentHeight
+            contentWidth: view.contentWidth
+
+            width: 600;
+            height: 200;
+
+            clip: true;
+
+            SurveyChunkGroupView {
+                id: view
+
+                viewportX: flickArea.contentX;
+                viewportY: flickArea.contentY;
+                viewportWidth: flickArea.width;
+                viewportHeight: flickArea.height;
+
+                chunkGroup: surveyData
+            }
         }
     }
 
 
-    SurveyChunkView {
-       // stationDelegate: stationRow
-        model: testChunk //From the c++
 
-        Rectangle {
-            anchors.fill: parent;
-            color: 'red'
-        }
+//    Component {
+//        id: surveyChunkViewComponent
 
-//        MouseArea {
-//            anchors.fill: parent;
-//            onPressed: {
-//                console.log("Pressed!");
+//        FocusScope {
+//            width: childrenRect.width
+//            height: childrenRect.height
+
+//            SurveyChunkView {
+//                id: view
+//                model: chunk
+
+//                onXChanged: {
+//                    console.log("X change:" + x + chunk + view);
+//                }
+
+//                Component.onCompleted: {
+//                    console.log("Dim:" + width + height);
+//                }
+
 //            }
 //        }
 
-   }
+//    }
+
+//    ListView {
+//        id: listView
+
+//        anchors.fill: parent
+
+//        highlightFollowsCurrentItem: false
+
+//        model:  surveyData
+//        delegate: surveyChunkViewComponent
+
+//    }
+
+//    SurveyChunkView {
+//       // stationDelegate: stationRow
+//        model: testChunk //From the c++
+
+////        MouseArea {
+////            anchors.fill: parent;
+////            onPressed: {
+////                console.log("Pressed!");
+////            }
+////        }
+
+//   }
 
 //    SurveyChunkView {
 //        x: 500

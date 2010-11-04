@@ -4,8 +4,9 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyImporter.h"
-#include "cwSurveryChunkGroup.h"
+#include "cwSurveyChunkGroup.h"
 #include "cwSurveyChuckView.h"
+#include "cwSurveyChunkGroupView.h"
 
 
 //Qt includes
@@ -20,11 +21,13 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     ChunkGroup(new cwSurveyChunkGroup(this))
 {
     setupUi(this);
+    DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
 
     qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
     qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
+    qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
     qmlRegisterType<cwSurveyChunkGroup>();
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
@@ -81,8 +84,15 @@ void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
 
 void cwSurveyEditorMainWindow::ReloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
-    context->setContextProperty("survey", ChunkGroup);
-    context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
+
+//    QList<QObject*> objects;
+//    foreach(cwSurveyChunk* chunk, ChunkGroup->chunks()) {
+//        qDebug() << "Chunk" << chunk;
+//        objects.append(chunk);
+//    }
+
+    context->setContextProperty("surveyData", ChunkGroup);
+    //context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
 }

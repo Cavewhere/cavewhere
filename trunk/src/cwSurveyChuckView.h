@@ -12,6 +12,7 @@ class cwSurveyChunk;
 class cwStation;
 class cwShot;
 
+
 class cwSurveyChunkView : public QDeclarativeItem
 {
     Q_OBJECT
@@ -25,6 +26,9 @@ public:
     void setModel(cwSurveyChunk* chunk);
 
     QRectF boundingRect() const;
+
+    static float elementHeight();
+    static float heightHint(int numberElements);
 
 signals:
     void modelChanged();
@@ -171,6 +175,7 @@ private:
     void UpdateLastRowBehaviour();
     void UpdatePositionsAfterIndex(int index);
     void UpdateIndexes(int index);
+    void UpdateDimensions();
 
     bool InterfaceValid();
 };

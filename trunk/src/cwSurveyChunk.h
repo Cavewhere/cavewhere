@@ -13,8 +13,6 @@ class cwShot;
 class cwSurveyChunk : public QObject {
     Q_OBJECT
 
-//    Q_PROPERTY(QDeclarativeListProperty<cwStation> Stations READ qmlStations);
-
 public:
     enum Direction {
         Above,
