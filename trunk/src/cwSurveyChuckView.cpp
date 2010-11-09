@@ -36,7 +36,7 @@ float cwSurveyChunkView::elementHeight() { return 40; }
   \brief Estimates the height of the view with numberElements
   */
 float cwSurveyChunkView::heightHint(int numberElements) {
-    return (numberElements + 1) * elementHeight(); //Plus 1 for the title
+    return (numberElements + 1) * (elementHeight() + 2) - 2; //Plus 1 for the title
 }
 
 /**
@@ -429,7 +429,6 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
-        item->setParent(this);
     }
 }
 
@@ -554,10 +553,12 @@ void cwSurveyChunkView::StationFocusChanged(bool focus) {
     cwStation* station = qobject_cast<cwStation*>(item->property("dataObject").value<QObject*>());
     if(station == NULL) { return; }
 
+    //If this is the last station
     int lastIndex = Model->StationCount() - 1;
     if(station == Model->Station(lastIndex)) {
         Model->AppendNewShot();
     }
+
 
 }
 

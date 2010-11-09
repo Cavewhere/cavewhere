@@ -10,7 +10,6 @@ NavigationRectangle {
     property variant dataObject //For hooking up signals and slots in subclasses
     property int rowIndex: -1
 
-
     signal rightClicked(int index)
 
     border.color: "lightgray"

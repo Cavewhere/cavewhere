@@ -52,7 +52,7 @@ void cwSurveyChunkGroupView::setviewportX(float x) {
   */
 void cwSurveyChunkGroupView::setviewportY(float y) {
     if(ViewportArea.y() != y) {
-        qDebug() << "Set viewport y:" << y;
+        //qDebug() << "Set viewport y:" << y;
         ViewportArea.moveTop(y);
         UpdateActiveChunkViews();
         emit viewportYChanged();
@@ -74,7 +74,7 @@ void cwSurveyChunkGroupView::setviewportWidth(float width) {
   */
 void cwSurveyChunkGroupView::setviewportHeight(float height) {
     if(ViewportArea.height() != height) {
-        qDebug() << "Set viewport height: " << height;
+        //qDebug() << "Set viewport height: " << height;
         ViewportArea.setHeight(height);
         UpdateActiveChunkViews();
         emit viewportHeightChanged();
@@ -103,7 +103,7 @@ void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
     if(range.first < 0 || range.first >= ChunkViews.size()) { return; }
     if(range.second < 0 || range.second >= ChunkViews.size()) { return; }
 
-    qDebug() << "Range: " << range;
+    //qDebug() << "Range: " << range;
     //Remove views going in the negative direction
     for(int i = range.first - 1; i >= 0; i--) {
         DeleteChunkView(i);
@@ -137,10 +137,10 @@ QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
     QList<QRectF>::iterator lastIter = qLowerBound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.bottomLeft(), QSize(1, 1)), lessThanChunkRect);
 
 
-    qDebug() << "First: " << firstIter - ChunkBoundingRects.begin() << " Second: " << lastIter - ChunkBoundingRects.begin();
-    if(firstIter != ChunkBoundingRects.end()) {
-        qDebug() << "Viewport:" << ViewportArea << "Chunk" << *firstIter;
-    }
+    //qDebug() << "First: " << firstIter - ChunkBoundingRects.begin() << " Second: " << lastIter - ChunkBoundingRects.begin();
+//    if(firstIter != ChunkBoundingRects.end()) {
+//        qDebug() << "Viewport:" << ViewportArea << "Chunk" << *firstIter;
+//    }
 
     if(firstIter <= lastIter) {
         if(firstIter != ChunkBoundingRects.begin()) { firstIter--; }
@@ -181,6 +181,7 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //UpdatePosition(index);
 
         ChunkViews[index] = chunkView;
+        qDebug() << "Chunk Bounding box:" << index << chunkView->boundingRect();
     }
 }
 
@@ -325,7 +326,7 @@ void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
   */
 float cwSurveyChunkGroupView::contentHeight() const {
     if(ChunkBoundingRects.isEmpty()) { return 0.0; }
-    return ChunkBoundingRects.last().bottom() - ChunkBoundingRects.first().top();
+    return ChunkBoundingRects.last().bottom() - ChunkBoundingRects.first().top() + 1;
 }
 
 float cwSurveyChunkGroupView::contentWidth() const {
