@@ -23,6 +23,11 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
 
+    bool insertRows ( int row, int count, const QModelIndex & parent = QModelIndex() );
+
+    void insertRow(int row, cwSurveyChunk* chunk);
+
+
 signals:
     void dataChanged();
 

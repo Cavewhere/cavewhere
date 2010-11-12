@@ -9,6 +9,7 @@
 #include <QDeclarativeComponent>
 #include <QDeclarativeItem>
 #include <QDeclarativeContext>
+#include <QKeyEvent>
 
 cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
@@ -28,8 +29,10 @@ void cwSurveyChunkGroupView::setChunkGroup(cwSurveyChunkGroup* chunkGroup) {
         AddChunks(0, ChunkGroup->rowCount() - 1);
 
 
-
         emit chunkGroupChanged();
+
+        connect(ChunkGroup, SIGNAL(rowsInserted(QModelIndex, int, int)), SLOT(InsertRows(QModelIndex,int,int)));
+
     }
 }
 
@@ -40,7 +43,7 @@ cwSurveyChunkGroup* cwSurveyChunkGroupView::chunkGroup() const {
 /**
   Sets the viewports x position
   */
-void cwSurveyChunkGroupView::setviewportX(float x) {
+void cwSurveyChunkGroupView::setViewportX(float x) {
     if(ViewportArea.x() != x) {
         ViewportArea.moveLeft(x);
         emit viewportXChanged();
@@ -50,7 +53,7 @@ void cwSurveyChunkGroupView::setviewportX(float x) {
 /**
   Sets the viewports y position
   */
-void cwSurveyChunkGroupView::setviewportY(float y) {
+void cwSurveyChunkGroupView::setViewportY(float y) {
     if(ViewportArea.y() != y) {
         //qDebug() << "Set viewport y:" << y;
         ViewportArea.moveTop(y);
@@ -62,7 +65,7 @@ void cwSurveyChunkGroupView::setviewportY(float y) {
 /**
   Sets the viewports width
   */
-void cwSurveyChunkGroupView::setviewportWidth(float width) {
+void cwSurveyChunkGroupView::setViewportWidth(float width) {
     if(ViewportArea.width() != width) {
         ViewportArea.setWidth(width);
         emit viewportWidthChanged();
@@ -72,13 +75,29 @@ void cwSurveyChunkGroupView::setviewportWidth(float width) {
 /**
   Sets the viewports height
   */
-void cwSurveyChunkGroupView::setviewportHeight(float height) {
+void cwSurveyChunkGroupView::setViewportHeight(float height) {
     if(ViewportArea.height() != height) {
         //qDebug() << "Set viewport height: " << height;
         ViewportArea.setHeight(height);
         UpdateActiveChunkViews();
         emit viewportHeightChanged();
     }
+}
+
+/**
+  The key event that's pressed
+  */
+void cwSurveyChunkGroupView::keyPressEvent(QKeyEvent *event) {
+    if(event->key() == Qt::Key_Space) {
+        //Add a new survey chunk
+        //Split current item
+
+
+
+        //ChunkGroup->insertRow(ChunkGroup->rowCount());
+    }
+
+    event->accept();
 }
 
 /**
@@ -144,7 +163,7 @@ QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
 
     if(firstIter <= lastIter) {
         if(firstIter != ChunkBoundingRects.begin()) { firstIter--; }
-       // if(lastIter != ChunkBoundingRects.begin()) { lastIter--; }
+        if(lastIter == ChunkBoundingRects.end()) { lastIter--; }
         return QPair<int, int>(firstIter - ChunkBoundingRects.begin(), lastIter - ChunkBoundingRects.begin());
     } else {
         return QPair<int, int>(-1, -1);
@@ -176,6 +195,9 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //Make sure we update when the chunkHasChanged
         connect(chunkView, SIGNAL(heightChanged()), SLOT(UpdateChunkHeight()));
 
+        //Updates th`e model when items are split
+        connect(chunkView, SIGNAL(createdNewChunk(cwSurveyChunk*)), SLOT(HandleSplitChunk(cwSurveyChunk*)));
+
         //Update the position of the view at index i
 
         //UpdatePosition(index);
@@ -198,6 +220,14 @@ void cwSurveyChunkGroupView::DeleteChunkView(int index) {
     }
 }
 
+/**
+  \brief Insert rows
+  */
+void cwSurveyChunkGroupView::InsertRows(const QModelIndex &parent, int start, int end) {
+    qDebug() << "Insert Rows:" << parent << start << end;
+    if(parent != QModelIndex()) { return; }
+    AddChunks(start, end);
+}
 
 /**
   Adds new chunks to the view from beginIndex to endIndex
@@ -213,34 +243,10 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
 
         ChunkViews.insert(i, NULL);
         ChunkBoundingRects.insert(i, QRectF());
-
-//        //Create a chunkView object
-//        cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
-//        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-//        QDeclarativeEngine::setContextForObject(chunkView, context);
-
-//        //Set the model for the view
-//        chunkView->setModel(chunk);
-
-//        //Append the view
-//        ChunkViews.insert(i, chunkView);
-
-//        //Update the position of the view at index i
-//        UpdatePosition(i);
     }
 
     UpdateContentArea(beginIndex, endIndex);
     UpdateActiveChunkViews();
-
-//    float height = 0;
-//    foreach(QDeclarativeItem* chunk, ChunkViews) {
-//        height += chunk->height();
-//    }
-
-//    ContentArea.setHeight(height);
-
-//    emit contentHeightChanged();
-//    emit contentWidthChanged();
 
 }
 
@@ -256,6 +262,24 @@ void cwSurveyChunkGroupView::UpdateChunkHeight() {
         UpdateContentArea(index, index);
         UpdateActiveChunkViews();
     }
+}
+
+/**
+  \brief This adds split chunk into the model
+
+  newChunk is the new chunk that needs to be added to the model.  This happens when
+  the chunk has been split into two chunks, by the user
+  */
+void cwSurveyChunkGroupView::HandleSplitChunk(cwSurveyChunk *newChunk) {
+
+    cwSurveyChunkView* chunkView = qobject_cast<cwSurveyChunkView*>(sender());
+    if(chunkView == NULL) { return; }
+
+    //Find the chunk
+    int firstIndex = VisableRange().first; //Only the visible range is valid
+    int insertIndex = ChunkViews.indexOf(chunkView, firstIndex) + 1;
+
+    ChunkGroup->insertRow(insertIndex, newChunk);
 }
 
 /**
@@ -290,7 +314,16 @@ void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
     if(endIndex < 0 || endIndex >= ChunkGroup->rowCount()) { return; }
     if(beginIndex > endIndex) { return; }
 
-    float yOffset = ChunkBoundingRects[beginIndex].y();
+    //Calc the yOffset
+    float yOffset;
+    int beforeIndex = beginIndex - 1;
+    if(beforeIndex >= 0) {
+        QRectF beforeRect = ChunkBoundingRects[beforeIndex];
+        yOffset = beforeRect.bottom();
+    } else {
+        yOffset = 0;
+    }
+
     for(int i = beginIndex; i <= endIndex; i++) {
         QModelIndex currentIndex = ChunkGroup->index(i);
         cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyChunkGroup::ChunkRole).value<QObject*>());

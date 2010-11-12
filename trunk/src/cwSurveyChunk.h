@@ -41,6 +41,9 @@ public slots:
     void AppendNewShot();
     void AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
 
+
+    cwSurveyChunk* SplitAtStation(int stationIndex);
+
     void InsertStation(int stationIndex, Direction direction);
     void InsertShot(int stationIndex, Direction direction);
 

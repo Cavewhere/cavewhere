@@ -3,10 +3,12 @@
 
 //Qt includes
 #include <QDeclarativeItem>
+class QModelIndex;
 
 //Our includes
 class cwSurveyChunkGroup;
 class cwSurveyChunkView;
+class cwSurveyChunk;
 
 class cwSurveyChunkGroupView : public QDeclarativeItem
 {
@@ -15,10 +17,10 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
     Q_PROPERTY(cwSurveyChunkGroup* chunkGroup READ chunkGroup WRITE setChunkGroup NOTIFY chunkGroupChanged)
     Q_PROPERTY(float contentHeight READ contentHeight NOTIFY contentHeightChanged )
     Q_PROPERTY(float contentWidth READ contentWidth NOTIFY contentWidthChanged )
-    Q_PROPERTY(float viewportX READ viewportX WRITE setviewportX NOTIFY viewportXChanged)
-    Q_PROPERTY(float viewportY READ viewportY WRITE setviewportY NOTIFY viewportYChanged)
-    Q_PROPERTY(float viewportWidth READ viewportWidth WRITE setviewportWidth NOTIFY viewportWidthChanged)
-    Q_PROPERTY(float viewportHeight READ viewportHeight WRITE setviewportHeight NOTIFY viewportHeightChanged)
+    Q_PROPERTY(float viewportX READ viewportX WRITE setViewportX NOTIFY viewportXChanged)
+    Q_PROPERTY(float viewportY READ viewportY WRITE setViewportY NOTIFY viewportYChanged)
+    Q_PROPERTY(float viewportWidth READ viewportWidth WRITE setViewportWidth NOTIFY viewportWidthChanged)
+    Q_PROPERTY(float viewportHeight READ viewportHeight WRITE setViewportHeight NOTIFY viewportHeightChanged)
 
 
 public:
@@ -35,10 +37,10 @@ public:
     Q_INVOKABLE float viewportWidth() const;
     Q_INVOKABLE float viewportHeight() const;
 
-    Q_INVOKABLE void setviewportX(float x);
-    Q_INVOKABLE void setviewportY(float y);
-    Q_INVOKABLE void setviewportWidth(float width);
-    Q_INVOKABLE void setviewportHeight(float height);
+    Q_INVOKABLE void setViewportX(float x);
+    Q_INVOKABLE void setViewportY(float y);
+    Q_INVOKABLE void setViewportWidth(float width);
+    Q_INVOKABLE void setViewportHeight(float height);
 
 signals:
     void chunkGroupChanged();
@@ -51,6 +53,9 @@ signals:
     void viewportHeightChanged();
 
 public slots:
+
+protected:
+    void keyPressEvent(QKeyEvent *event);
 
 private:
     //The model
@@ -76,9 +81,12 @@ private:
     void DeleteChunkView(int index);
 
 private slots:
+    void InsertRows(const QModelIndex& parent, int start, int end);
     void AddChunks(int beginIndex, int endIndex);
 
     void UpdateChunkHeight();
+
+    void HandleSplitChunk(cwSurveyChunk* newChunk);
 
 };
 

@@ -36,7 +36,8 @@ float cwSurveyChunkView::elementHeight() { return 40; }
   \brief Estimates the height of the view with numberElements
   */
 float cwSurveyChunkView::heightHint(int numberElements) {
-    return (numberElements + 1) * (elementHeight() + 2) - 2; //Plus 1 for the title
+    const int buffer = 10;
+    return (numberElements + 1) * (elementHeight() + 2) - 2 + buffer; //Plus 1 for the title
 }
 
 /**
@@ -140,6 +141,39 @@ void cwSurveyChunkView::RightClickOnShot(int index) {
         Model->RemoveShot(index, cwSurveyChunk::Below);
     }
 }
+
+
+/**
+  \brief Splits the chunk into two pieces on a station
+
+  \param int - The station index where the station will be
+  split
+
+  This will emit a InsertNewChunk()
+  */
+void cwSurveyChunkView::SplitOnStation(int index) {
+    qDebug() << "cwSurveyChunkView: split on station" << index;
+
+    //Make sure the index is good
+    if(index < 0 || index >= Model->StationCount()) {
+        return; //Can't split on a bad index
+    }
+
+    cwSurveyChunk* newChunk = Model->SplitAtStation(index);
+    emit createdNewChunk(newChunk);
+}
+
+/**
+  \brief Splits the chunk into two pieces on a station
+
+  \param int - The shot index where the chunk will be split
+*/
+void cwSurveyChunkView::SplitOnShot(int index) {
+
+
+
+}
+
 
 /**
   \brief Add stations to the view
@@ -291,7 +325,7 @@ void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
 void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
     //Make sure the index are good
     beginIndex = qMax(0, beginIndex);
-    endIndex = qMin(StationRows.size() - 1, endIndex);
+    endIndex = qMin(ShotRows.size() - 1, endIndex);
 
     for(int i = endIndex; i >= beginIndex; i--) {
         ShotRow row = GetShotRow(i);
@@ -514,6 +548,7 @@ void cwSurveyChunkView::ConnectStation(cwStation* station, StationRow row) {
         item->setProperty("dataObject", stationObject);
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
+        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
     }
 }
 
@@ -542,25 +577,26 @@ void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
         item->setProperty("dataObject", shotObject);
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
+        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
     }
 }
 
-void cwSurveyChunkView::StationFocusChanged(bool focus) {
-    qDebug() << "Focus changed:" << focus;
-    if(!Model || Model->StationCount() == 0) { return; }
-    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(sender());
-    if(item == NULL) { return; }
-    cwStation* station = qobject_cast<cwStation*>(item->property("dataObject").value<QObject*>());
-    if(station == NULL) { return; }
+//void cwSurveyChunkView::StationFocusChanged(bool focus) {
+//    qDebug() << "Focus changed:" << focus;
+//    if(!Model || Model->StationCount() == 0) { return; }
+//    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(sender());
+//    if(item == NULL) { return; }
+//    cwStation* station = qobject_cast<cwStation*>(item->property("dataObject").value<QObject*>());
+//    if(station == NULL) { return; }
 
-    //If this is the last station
-    int lastIndex = Model->StationCount() - 1;
-    if(station == Model->Station(lastIndex)) {
-        Model->AppendNewShot();
-    }
+//    //If this is the last station
+//    int lastIndex = Model->StationCount() - 1;
+//    if(station == Model->Station(lastIndex)) {
+//        Model->AppendNewShot();
+//    }
 
 
-}
+//}
 
 /**
   \brief Called when the station's value has changed
@@ -843,6 +879,8 @@ void cwSurveyChunkView::UpdateDimensions() {
     if(!InterfaceValid()) { return; }
 
     QRectF rect = boundingRect();
+    qDebug() << "BoundingRect:" << rect;
+
     setWidth(rect.width());
     setHeight(rect.height());
 }

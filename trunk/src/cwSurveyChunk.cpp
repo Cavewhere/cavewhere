@@ -99,10 +99,63 @@ void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwS
 }
 
 /**
+  \brief Splits the current survey chunk at stationIndex
+
+  This will split the this chunk into two pieces, if it's valid to split there, ie
+  the station Index, is valid.
+
+  This will create a new chunk, that the caller is responsible for deleting
+  */
+cwSurveyChunk* cwSurveyChunk::SplitAtStation(int stationIndex) {
+    if(stationIndex < 0 || stationIndex >= Stations.size()) { return NULL; }
+
+    cwSurveyChunk* newChunk = new cwSurveyChunk(this);
+    newChunk->Stations.append(new cwStation()); //Add an empty station to the front
+
+    //Copy the points from one chunk to another
+    for(int i = stationIndex; i < Stations.size(); i++) {
+
+        //Get the current stations and shots
+        cwStation* station = Stations[i];
+        cwShot* shot = Shot(i - 1);
+
+        newChunk->Stations.append(station);
+        if(shot != NULL) {
+            newChunk->Shots.append(shot);
+        }
+    }
+
+    int stationEnd = Stations.size() - 1;
+    int shotEnd = Shots.size() - 1;
+
+
+    //Remove the stations and shots from the list
+    int shotIndex = stationIndex - 1;
+    QList<cwStation*>::iterator stationIter = Stations.begin() + stationIndex;
+    QList<cwShot*>::iterator shotIter = Shots.begin() + shotIndex;
+    Stations.erase(stationIter, Stations.end());
+    Shots.erase(shotIter, Shots.end());
+
+    emit StationsRemoved(stationIndex, stationEnd);
+    emit ShotsRemoved(shotIndex, shotEnd);
+
+    //Append a new last station
+    AppendNewShot();
+
+    return newChunk;
+}
+
+
+/**
   Inserts a station a index stationIndex.
 
   If direction is above, it's inserted at index, if it's below, then this is insert
   at index + 1.  A shot will also be added as well
+
+  \brief stationIndex - The index where station and shots will be inserted
+  \brief direction - The directon that the stations will be inserted in
+  \param count - The number of station and shots that'll be inserted
+
   */
 void cwSurveyChunk::InsertStation(int stationIndex, Direction direction) {
     if(Stations.empty()) { AppendNewShot(); return; }
@@ -118,9 +171,9 @@ void cwSurveyChunk::InsertStation(int stationIndex, Direction direction) {
     cwShot* shot = new cwShot();
 
     Stations.insert(stationIndex, station);
-    emit StationsAdded(stationIndex, stationIndex);
-
     Shots.insert(shotIndex, shot);
+
+    emit StationsAdded(stationIndex, stationIndex);
     emit ShotsAdded(shotIndex, shotIndex);
 }
 

@@ -11,6 +11,7 @@ NavigationRectangle {
     property int rowIndex: -1
 
     signal rightClicked(int index)
+    signal splitOn(int index)
 
     border.color: "lightgray"
     border.width: 1
@@ -55,7 +56,7 @@ NavigationRectangle {
             dataBox.focus = true;
 
             if(mouse.button == Qt.RightButton) {
-                dataBox.rightClicked(rowIndex);
+                dataBox.rightClicked(rowIndex); //Emit signal
             }
         }
 
@@ -75,14 +76,21 @@ NavigationRectangle {
     }
 
     Keys.onPressed: {
+        console.log("Key has been pressed");
+
         NavigationHandler.HandleTabEvent(event, dataBox);
         NavigationHandler.HandleArrowEvent(event, dataBox);
 
         if(!event.accepted) {
-            if(event.key >= Qt.Key_Space && event.key <= Qt.Key_AsciiTilde) {
+            if(event.key > Qt.Key_Space && event.key <= Qt.Key_AsciiTilde) {
+                var oldDataValue = dataValue;
                 dataValue = dataValue + event.text;
-                dataBox.state = 'EndTyping'
-                dataTextInput.focus = true
+                if(dataTextInput.acceptableInput) {
+                    dataBox.state = 'EndTyping'
+                    dataTextInput.focus = true
+                } else {
+                    dataValue = oldDataValue;
+                }
             }
 
             if(event.key == Qt.Key_Backspace) {
@@ -92,6 +100,11 @@ NavigationRectangle {
                 dataValue = dataValue.substring(0, dataValue.length - 1);
             }
         }
+    }
+
+    Keys.onSpacePressed: {
+        console.log("Split on " + rowIndex);
+        dataBox.splitOn(rowIndex); //Emit signal
     }
 
     Keys.onEnterPressed: {

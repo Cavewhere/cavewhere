@@ -33,13 +33,15 @@ public:
 signals:
     void modelChanged();
 
+    void createdNewChunk(cwSurveyChunk* chunk);
+
 public slots:
 
 protected:
 
 
 private slots:
-    void StationFocusChanged(bool focus);
+    //void StationFocusChanged(bool focus);
     void StationValueHasChanged();
 
     void AddStations(int beginIndex, int endIndex);
@@ -52,6 +54,9 @@ private slots:
 
     void RightClickOnStation(int index);
     void RightClickOnShot(int index);
+
+    void SplitOnStation(int index);
+    void SplitOnShot(int index);
 
 private:
 

@@ -8,19 +8,19 @@ Rectangle {
     border.width: 2
     border.color: "green"
 
-    Rectangle {
 
-        border.width: 1
-        border.color: "red"
 
         Flickable {
             id: flickArea
+
+
 
             contentHeight: view.contentHeight
             contentWidth: view.contentWidth
 
             width: 600;
-            height: 600;
+            height: area.height;
+
 
             clip: true;
 
@@ -35,7 +35,7 @@ Rectangle {
                 chunkGroup: surveyData
             }
         }
-    }
+
 
 
 
