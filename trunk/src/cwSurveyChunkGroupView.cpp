@@ -229,7 +229,10 @@ void cwSurveyChunkGroupView::DeleteChunkView(int index) {
   This will cause a view to become focused
   */
 void cwSurveyChunkGroupView::SetFocus(int index) {
-
+    if(index < 0 || index >= ChunkViews.size()) { return; }
+    CreateChunkView(index); //Make sure the chunk exists;
+    cwSurveyChunkView* surveyChunk = ChunkViews.at(index);
+    surveyChunk->setFocus(true);
 }
 
 /**

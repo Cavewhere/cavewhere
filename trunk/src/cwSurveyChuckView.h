@@ -30,6 +30,7 @@ public:
     static float elementHeight();
     static float heightHint(int numberElements);
 
+
 signals:
     void modelChanged();
 
@@ -42,7 +43,8 @@ protected:
 
 
 private slots:
-    void SetActiveFocus(bool focus);
+    void SetFocusForFirstStation(bool focus);
+    void SetChildActiveFocus(bool focus);
     void StationValueHasChanged();
 
     void AddStations(int beginIndex, int endIndex);

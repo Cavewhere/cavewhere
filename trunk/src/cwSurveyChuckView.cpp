@@ -25,6 +25,7 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     DownDelegate(NULL),
     FocusedItem(NULL)
 {
+    connect(this, SIGNAL(focusChanged(bool)), SLOT(SetFocusForFirstStation(bool)));
 
 }
 
@@ -550,7 +551,7 @@ void cwSurveyChunkView::ConnectStation(cwStation* station, StationRow row) {
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
         connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
-        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetActiveFocus(bool)));
+        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
     }
 }
 
@@ -580,7 +581,7 @@ void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
         connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
-        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetActiveFocus(bool)));
+        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
     }
 }
 
@@ -602,9 +603,20 @@ void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
 //}
 
 /**
-  \brief Called when the focus has changed
+  \brief Called when this item get's focus
   */
-void cwSurveyChunkView::SetActiveFocus(bool focus) {
+void cwSurveyChunkView::SetFocusForFirstStation(bool focus) {
+    //If this view has focus
+    if(focus && !StationRows.isEmpty()) {
+        StationRow row = StationRows.first();
+        row.station()->setFocus(true); //Focus the first station
+    }
+}
+
+/**
+  \brief Called when the children focus has changed
+  */
+void cwSurveyChunkView::SetChildActiveFocus(bool focus) {
     if(sender() == FocusedItem && !focus) {
         //Losted focus
         FocusedItem = NULL;
