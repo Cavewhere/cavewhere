@@ -19,7 +19,7 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
   \brief Checks if the survey Chunk is valid
   */
 bool cwSurveyChunk::IsValid() {
-    return (Stations.size() - 1) == Shots.size() && !Stations.empty();
+    return (Stations.size() - 1) == Shots.size() && !Stations.empty() && !Shots.empty();
 }
 
 int cwSurveyChunk::StationCount() {
@@ -51,6 +51,22 @@ cwShot* cwSurveyChunk::Shot(int index) {
   This will also add a shot to the suvey chunk.
   */
 void cwSurveyChunk::AppendNewShot() {
+    //Check for special case
+    if(!IsValid() && Stations.size() <= 2 && Shots.size() <= 1) {
+        //Make valid
+        for(int i = Stations.size(); i < 2; i++) {
+            Stations.append(new cwStation());
+            emit StationsAdded(i, i);
+        }
+
+        if(Shots.size() != 1) {
+            Shots.append(new cwShot());
+            emit ShotsAdded(0, 0);
+        }
+        return;
+    }
+
+
     cwStation* fromStation;
     if(Stations.isEmpty()) {
         fromStation = new cwStation();
@@ -107,7 +123,7 @@ void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwS
   This will create a new chunk, that the caller is responsible for deleting
   */
 cwSurveyChunk* cwSurveyChunk::SplitAtStation(int stationIndex) {
-    if(stationIndex < 0 || stationIndex >= Stations.size()) { return NULL; }
+    if(stationIndex < 1 || stationIndex >= Stations.size()) { return NULL; }
 
     cwSurveyChunk* newChunk = new cwSurveyChunk(this);
     newChunk->Stations.append(new cwStation()); //Add an empty station to the front

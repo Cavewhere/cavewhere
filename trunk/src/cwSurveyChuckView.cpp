@@ -22,7 +22,8 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     LeftDelegate(NULL),
     RightDelegate(NULL),
     UpDelegate(NULL),
-    DownDelegate(NULL)
+    DownDelegate(NULL),
+    FocusedItem(NULL)
 {
 
 }
@@ -549,6 +550,7 @@ void cwSurveyChunkView::ConnectStation(cwStation* station, StationRow row) {
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
         connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
+        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetActiveFocus(bool)));
     }
 }
 
@@ -578,6 +580,7 @@ void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
         item->setProperty("rowIndex", row.rowIndex());
         connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
         connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
+        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetActiveFocus(bool)));
     }
 }
 
@@ -597,6 +600,26 @@ void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
 
 
 //}
+
+/**
+  \brief Called when the focus has changed
+  */
+void cwSurveyChunkView::SetActiveFocus(bool focus) {
+    if(sender() == FocusedItem && !focus) {
+        //Losted focus
+        FocusedItem = NULL;
+    } else if (sender() != FocusedItem) {
+        //Gained focus
+        FocusedItem = qobject_cast<QDeclarativeItem*>(sender());
+    }
+
+    if(FocusedItem != NULL) {
+        QRectF localRect = FocusedItem->mapRectToParent(FocusedItem->childrenBoundingRect());
+        QRectF parentRect = mapRectToParent(localRect);
+        ensureVisibleChanged(parentRect);
+    }
+}
+
 
 /**
   \brief Called when the station's value has changed
@@ -637,6 +660,8 @@ void cwSurveyChunkView::StationValueHasChanged() {
         Model->AppendNewShot();
     }
 }
+
+
 
 /**
   \brief Updates the navigation

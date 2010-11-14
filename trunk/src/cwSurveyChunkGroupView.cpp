@@ -195,8 +195,11 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //Make sure we update when the chunkHasChanged
         connect(chunkView, SIGNAL(heightChanged()), SLOT(UpdateChunkHeight()));
 
-        //Updates th`e model when items are split
+        //Updates the model when items are split
         connect(chunkView, SIGNAL(createdNewChunk(cwSurveyChunk*)), SLOT(HandleSplitChunk(cwSurveyChunk*)));
+
+        //Make sure the chunkView keeps the visiblity for items when focused
+        connect(chunkView, SIGNAL(ensureVisibleChanged(QRectF)), SLOT(SetEnsureVisibleRect(QRectF)));
 
         //Update the position of the view at index i
 
@@ -218,6 +221,15 @@ void cwSurveyChunkGroupView::DeleteChunkView(int index) {
         ChunkViews[index]->deleteLater();
         ChunkViews[index] = NULL;
     }
+}
+
+/**
+  \brief Sets the focus for a view at index
+
+  This will cause a view to become focused
+  */
+void cwSurveyChunkGroupView::SetFocus(int index) {
+
 }
 
 /**
@@ -248,6 +260,10 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
     UpdateContentArea(beginIndex, endIndex);
     UpdateActiveChunkViews();
 
+    //If only one chunk is added set the focus on it
+    if(beginIndex == endIndex) {
+        SetFocus(beginIndex);
+    }
 }
 
 /**
@@ -262,6 +278,17 @@ void cwSurveyChunkGroupView::UpdateChunkHeight() {
         UpdateContentArea(index, index);
         UpdateActiveChunkViews();
     }
+}
+
+/**
+  \brief Ensure that rect is visible
+
+  This emit a signal such that, qml flickable area will scroll such that the rect
+  will be in the visible area
+  */
+void cwSurveyChunkGroupView::SetEnsureVisibleRect(QRectF rect) {
+    EnsureVisibleArea = rect;
+    emit ensureVisibleRectChanged();
 }
 
 /**

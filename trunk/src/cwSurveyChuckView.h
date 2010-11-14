@@ -34,6 +34,7 @@ signals:
     void modelChanged();
 
     void createdNewChunk(cwSurveyChunk* chunk);
+    void ensureVisibleChanged(QRectF rect);
 
 public slots:
 
@@ -41,7 +42,7 @@ protected:
 
 
 private slots:
-    //void StationFocusChanged(bool focus);
+    void SetActiveFocus(bool focus);
     void StationValueHasChanged();
 
     void AddStations(int beginIndex, int endIndex);
@@ -143,7 +144,6 @@ private:
     QDeclarativeComponent* FrontClinoDelegate;
     QDeclarativeComponent* BackClinoDelegate;
 
-
     QDeclarativeItem* StationTitle;
     QDeclarativeItem* DistanceTitle;
     QDeclarativeItem* AzimuthTitle;
@@ -154,6 +154,8 @@ private:
     QDeclarativeItem* DownTitle;
 
     QMenu* RightClickMenu;
+
+    QDeclarativeItem* FocusedItem;
 
     void CreateTitlebar();
     void SetupDelegates();

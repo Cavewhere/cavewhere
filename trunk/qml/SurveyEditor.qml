@@ -4,16 +4,11 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
-
     border.width: 2
     border.color: "green"
 
-
-
         Flickable {
             id: flickArea
-
-
 
             contentHeight: view.contentHeight
             contentWidth: view.contentWidth
@@ -21,8 +16,23 @@ Rectangle {
             width: 600;
             height: area.height;
 
-
             clip: true;
+
+            /**
+              Moves the flickable such that r is always shown
+              */
+            function ensureVisible(r){
+                console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
+                if (contentX >= r.x) {
+                    contentX = r.x;
+                } else if (contentX+width <= r.x+r.width) {
+                    contentX = r.x+r.width-width;
+                } if (contentY >= r.y) {
+                    contentY = r.y;
+                } else if (contentY+height <= r.y+r.height) {
+                    contentY = r.y+r.height-height;
+                }
+            }
 
             SurveyChunkGroupView {
                 id: view
@@ -33,6 +43,8 @@ Rectangle {
                 viewportHeight: flickArea.height;
 
                 chunkGroup: surveyData
+
+                onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
             }
         }
 
