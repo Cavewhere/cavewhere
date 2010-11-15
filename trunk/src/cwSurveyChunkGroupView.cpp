@@ -139,8 +139,26 @@ void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
     }
 
     //Update the positions off all the visible elements
+    //and the navigation
     for(int i = range.first; i <= range.second; i++) {
         ChunkViews[i]->setY(ChunkBoundingRects[i].top());
+
+        //Update the navigation for the chunk
+        cwSurveyChunkView* aboveChunk = NULL;
+        cwSurveyChunkView* belowChunk = NULL;
+
+        int aboveIndex = i - 1;
+        int belowIndex = i + 1;
+
+        if(aboveIndex >= 0 && aboveIndex < ChunkViews.size()) {
+            aboveChunk = ChunkViews[aboveIndex];
+        }
+
+        if(belowIndex >= 0 && belowIndex < ChunkViews.size()) {
+            belowChunk = ChunkViews[belowIndex];
+        }
+
+        ChunkViews[i]->SetNavigation(aboveChunk, belowChunk);
     }
 }
 

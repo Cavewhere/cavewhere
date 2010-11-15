@@ -6,6 +6,7 @@
 #include <QDeclarativeItem>
 #include <QList>
 #include <QVector>
+#include <QDebug>
 
 //Our includes
 class cwSurveyChunk;
@@ -21,6 +22,7 @@ class cwSurveyChunkView : public QDeclarativeItem
 
 public:
     explicit cwSurveyChunkView(QDeclarativeItem *parent = 0);
+    ~cwSurveyChunkView();
 
     cwSurveyChunk* model();
     void setModel(cwSurveyChunk* chunk);
@@ -30,6 +32,9 @@ public:
     static float elementHeight();
     static float heightHint(int numberElements);
 
+    void SetNavigationBelow(const cwSurveyChunkView* below);
+    void SetNavigationAbove(const cwSurveyChunkView* above);
+    void SetNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below);
 
 signals:
     void modelChanged();
@@ -81,11 +86,11 @@ private:
         StationRow();
         StationRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* station() { return Items[Station]; }
-        QDeclarativeItem* left() { return Items[Left]; }
-        QDeclarativeItem* right() { return Items[Right]; }
-        QDeclarativeItem* up() { return Items[Up]; }
-        QDeclarativeItem* down() { return Items[Down]; }
+        QDeclarativeItem* station() const { return Items[Station]; }
+        QDeclarativeItem* left() const { return Items[Left]; }
+        QDeclarativeItem* right() const { return Items[Right]; }
+        QDeclarativeItem* up() const { return Items[Up]; }
+        QDeclarativeItem* down() const { return Items[Down]; }
 
         private:
 
@@ -104,11 +109,11 @@ private:
         ShotRow();
         ShotRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* distance() { return Items[Distance]; }
-        QDeclarativeItem* frontCompass() { return Items[FrontCompass]; }
-        QDeclarativeItem* backCompass() { return Items[BackCompass]; }
-        QDeclarativeItem* frontClino() { return Items[FrontClino]; }
-        QDeclarativeItem* backClino() { return Items[BackClino]; }
+        QDeclarativeItem* distance() const { return Items[Distance]; }
+        QDeclarativeItem* frontCompass() const { return Items[FrontCompass]; }
+        QDeclarativeItem* backCompass() const { return Items[BackCompass]; }
+        QDeclarativeItem* frontClino() const { return Items[FrontClino]; }
+        QDeclarativeItem* backClino() const { return Items[BackClino]; }
 
     private:
         enum {
@@ -157,7 +162,12 @@ private:
 
     QMenu* RightClickMenu;
 
+    //For keeping the current object visible
     QDeclarativeItem* FocusedItem;
+
+    //For setting the navigation for the last and first object
+    const cwSurveyChunkView* ChunkBelow;
+    const cwSurveyChunkView* ChunkAbove;
 
     void CreateTitlebar();
     void SetupDelegates();
@@ -179,7 +189,9 @@ private:
     void SetArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down);
 
     ShotRow GetShotRow(int index);
+    ShotRow GetNavigationShotRow(int index);
     StationRow GetStationRow(int index);
+    StationRow GetNavigationStationRow(int index);
 
     void UpdateLastRowBehaviour();
     void UpdatePositionsAfterIndex(int index);

@@ -189,7 +189,13 @@ NavigationRectangle {
                     if(event.accepted) {
                         dataBox.state = ''; //Default state
                     }
-                }
+                }//    for(int i = 0; i < StationRows.size(); i++) {
+                //        StationRow& row = StationRows[i];
+                //        foreach(QDeclarativeItem* item, row.items()) {
+                //            qDebug() << "Deleting:" << item;
+                //            delete item;
+                //        }
+                //    }
 
                 onFocusChanged: {
                     if(!focus) {

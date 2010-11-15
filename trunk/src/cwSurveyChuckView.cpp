@@ -23,10 +23,15 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     RightDelegate(NULL),
     UpDelegate(NULL),
     DownDelegate(NULL),
-    FocusedItem(NULL)
+    FocusedItem(NULL),
+    ChunkAbove(NULL),
+    ChunkBelow(NULL)
 {
     connect(this, SIGNAL(focusChanged(bool)), SLOT(SetFocusForFirstStation(bool)));
 
+}
+
+cwSurveyChunkView::~cwSurveyChunkView() {
 }
 
 /**
@@ -40,6 +45,52 @@ float cwSurveyChunkView::elementHeight() { return 40; }
 float cwSurveyChunkView::heightHint(int numberElements) {
     const int buffer = 10;
     return (numberElements + 1) * (elementHeight() + 2) - 2 + buffer; //Plus 1 for the title
+}
+
+/**
+  \brief Sets the navigation for this object
+
+  If the user use the keyboard to move the focus, below is the object below this object.
+  This will update the navigation for the object below this
+  */
+void cwSurveyChunkView::SetNavigationBelow(const cwSurveyChunkView* below) {
+    ChunkBelow = below;
+
+    if(StationRows.empty()) { return; }
+
+    //Update first station navigation
+    int lastIndex = StationRows.size() - 1;
+    UpdateStationTabNavigation(lastIndex);
+    UpdateStationArrowNavigation(lastIndex);
+
+    lastIndex = ShotRows.size() - 1;
+    UpdateShotArrowNavigaton(lastIndex);
+}
+
+/**
+  \brief Sets the navigation for this object
+
+  If the user use the keyboard to move the focus, above is the object above this
+  object.  This will update the navigation for the first last object in this view
+  */
+void cwSurveyChunkView::SetNavigationAbove(const cwSurveyChunkView* above) {
+    ChunkAbove = above;
+
+    if(StationRows.empty()) { return; }
+
+    UpdateStationTabNavigation(0);
+    UpdateStationArrowNavigation(0);
+    UpdateShotArrowNavigaton(0);
+}
+
+/**
+  \brief Convenience method
+
+  Equivalent to SetNavigationBelow and SetNavigationAbove
+  */
+void cwSurveyChunkView::SetNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below) {
+    SetNavigationAbove(above);
+    SetNavigationBelow(below);
 }
 
 /**
@@ -465,6 +516,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
+        qDebug() << "Setting parent" << item << view;
     }
 }
 
@@ -498,6 +550,7 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
+        item->setParent(view);
     }
 }
 
@@ -708,16 +761,16 @@ void cwSurveyChunkView::UpdateNavigation() {
   */
 void cwSurveyChunkView::UpdateStationTabNavigation(int index) {
 
-    StationRow previousRow = GetStationRow(index - 1);
-    StationRow currentRow = GetStationRow(index);
-    StationRow nextRow = GetStationRow(index + 1);
+    StationRow previousRow = GetNavigationStationRow(index - 1);
+    StationRow currentRow = GetNavigationStationRow(index);
+    StationRow nextRow = GetNavigationStationRow(index + 1);
 
     ShotRow previousShotRow = GetShotRow(index - 1);
     ShotRow nextShotRow = GetShotRow(index);
 
     if(index == 0) {
         //Special case for this row
-        SetTabOrder(currentRow.station(), NULL, nextRow.station());
+        SetTabOrder(currentRow.station(), previousRow.down(), nextRow.station());
         LRUDTabNavigation(currentRow, nextShotRow.backClino(), nextRow.left());
 
     } else if(index == 1) {
@@ -771,9 +824,9 @@ void cwSurveyChunkView::SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* pr
   \brief Sets the navigation for the station item
   */
 void cwSurveyChunkView::UpdateStationArrowNavigation(int index) {
-    StationRow previousRow = GetStationRow(index - 1);
-    StationRow currentRow = GetStationRow(index);
-    StationRow nextRow = GetStationRow(index + 1);
+    StationRow previousRow = GetNavigationStationRow(index - 1);
+    StationRow currentRow = GetNavigationStationRow(index);
+    StationRow nextRow = GetNavigationStationRow(index + 1);
 
     ShotRow previousShotRow = GetShotRow(index - 1);
     ShotRow nextShotRow = GetShotRow(index);
@@ -786,8 +839,8 @@ void cwSurveyChunkView::UpdateStationArrowNavigation(int index) {
 
     if(index == 0) {
         //Special case
-        SetArrowNavigation(currentRow.station(), NULL, nextShotRow.distance(), NULL, nextRow.station());
-        SetArrowNavigation(currentRow.left(), nextShotRow.frontClino(), currentRow.right(), NULL, nextRow.left());
+        SetArrowNavigation(currentRow.station(), NULL, nextShotRow.distance(), previousRow.station(), nextRow.station());
+        SetArrowNavigation(currentRow.left(), nextShotRow.frontClino(), currentRow.right(), previousRow.left(), nextRow.left());
     }
 }
 
@@ -798,9 +851,9 @@ void cwSurveyChunkView::UpdateShotArrowNavigaton(int index) {
     StationRow fromStationRow = GetStationRow(index);
     StationRow toStationRow = GetStationRow(index + 1);
 
-    ShotRow previousRow = GetShotRow(index - 1);
-    ShotRow row = GetShotRow(index);
-    ShotRow nextRow = GetShotRow(index + 1);
+    ShotRow previousRow = GetNavigationShotRow(index - 1);
+    ShotRow row = GetNavigationShotRow(index);
+    ShotRow nextRow = GetNavigationShotRow(index + 1);
 
     SetArrowNavigation(row.distance(), toStationRow.station(), row.frontCompass(), previousRow.distance(), nextRow.distance());
     SetArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
@@ -827,6 +880,26 @@ void cwSurveyChunkView::SetArrowNavigation(QDeclarativeItem* item, QDeclarativeI
 }
 
 /**
+  \brief Get's the navigation station row for an index
+
+  \param index - If the index is -1 the it'll get the last station in the ChunkAbove
+  If the index is the same size of the the number of stations this will get the ChunkBelow
+  */
+cwSurveyChunkView::ShotRow cwSurveyChunkView::GetNavigationShotRow(int index) {
+    if(index == -1) {
+        if(ChunkAbove != NULL && !ChunkAbove->ShotRows.isEmpty()) {
+            return ChunkAbove->ShotRows.last();
+        }
+    } else if(index == ShotRows.size()) {
+        if(ChunkBelow != NULL && !ChunkBelow->ShotRows.isEmpty()) {
+            return ChunkBelow->ShotRows.first();
+        }
+    }
+
+    return GetShotRow(index);
+}
+
+/**
   \brief This creates a shot row for the index
 
   If the index is out of range then the ShotRow will invalid
@@ -837,13 +910,37 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::GetShotRow(int index) {
 }
 
 /**
+  \brief Get's the navigation station row for an index
+
+  \param index - If the index is -1 the it'll get the last station in the ChunkAbove
+  If the index is the same size of the the number of stations this will get the ChunkBelow
+  */
+cwSurveyChunkView::StationRow cwSurveyChunkView::GetNavigationStationRow(int index) {
+    if(index == -1) {
+        if(ChunkAbove != NULL && !ChunkAbove->StationRows.isEmpty()) {
+            return ChunkAbove->StationRows.last();
+        }
+    } else if(index == StationRows.size()) {
+        if(ChunkBelow != NULL && !ChunkBelow->StationRows.isEmpty()) {
+            return ChunkBelow->StationRows.first();
+        }
+    }
+
+    return GetStationRow(index);
+}
+
+/**
   \brief This creates a station row for the index
 
   If the index is out of range then the StationRow will be invalid
   all elements will be null
   */
 cwSurveyChunkView::StationRow cwSurveyChunkView::GetStationRow(int index) {
-    return index >= 0 && index < StationRows.size() ? StationRows[index] : StationRow();
+    if(index >= 0 && index < StationRows.size()) {
+        return StationRows[index];
+    } else {
+        return StationRow();
+    }
 }
 
 /**
