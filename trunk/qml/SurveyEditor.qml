@@ -22,7 +22,7 @@ Rectangle {
               Moves the flickable such that r is always shown
               */
             function ensureVisible(r){
-                console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
+                //console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
                 if (contentX >= r.x) {
                     contentX = r.x;
                 } else if (contentX+width <= r.x+r.width) {

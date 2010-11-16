@@ -1,10 +1,9 @@
 import Qt 4.7
+import Cavewhere 1.0
 
 DataBox {
     id: stationBox
-    dataValidator: RegExpValidator {
-        regExp: /\w+(\.\w+)*/;
-    }
+    dataValidator: StationValidator { }
 
     onDataValueChanged: dataObject.Name = dataObject ? dataValue : ""
 

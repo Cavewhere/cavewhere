@@ -18,6 +18,7 @@ NavigationRectangle {
 
     color : "white"
 
+
     //Behavior on x { PropertyAnimation { duration: 100 } }
     Behavior on y { PropertyAnimation { duration: 250 } }
     Behavior on opacity  { PropertyAnimation { duration: 250 } }
@@ -75,48 +76,51 @@ NavigationRectangle {
         text: dataValue
     }
 
+//    Keys.forwardTo: [dataTextInput]
+//    Keys.priority: Keys.AfterItem
+
     Keys.onPressed: {
-        console.log("Key has been pressed");
+        //console.log("Key has been pressed");
 
         NavigationHandler.HandleTabEvent(event, dataBox);
         NavigationHandler.HandleArrowEvent(event, dataBox);
 
         if(!event.accepted) {
-            if(event.key > Qt.Key_Space && event.key <= Qt.Key_AsciiTilde) {
-                var oldDataValue = dataValue;
-                dataValue = dataValue + event.text;
-                if(dataTextInput.acceptableInput) {
-                    dataBox.state = 'EndTyping'
-                    dataTextInput.focus = true
-                } else {
-                    dataValue = oldDataValue;
-                }
-            }
-
             if(event.key == Qt.Key_Backspace) {
                 console.log("Back pressed")
                 state = 'EndTyping';
                 dataTextInput.focus = true;
                 dataValue = dataValue.substring(0, dataValue.length - 1);
+                return;
+            }
+
+            //dataBox.state = 'EndTyping';
+
+            //dataTextInput.Keys.onPressed(event);
+
+            var oldDataValue = dataValue;
+            dataValue = event.text;
+            if(dataTextInput.validator.validate(dataValue) > 0) {
+                dataBox.state = 'EndTyping'
+                dataTextInput.focus = true
+            } else {
+                dataValue = oldDataValue;
             }
         }
     }
 
     Keys.onSpacePressed: {
-        console.log("Split on " + rowIndex);
         dataBox.splitOn(rowIndex); //Emit signal
     }
 
     Keys.onEnterPressed: {
         state = 'MiddleTyping';
         dataTextInput.focus = true;
-        console.log("middelTyping enter");
     }
 
     Keys.onReturnPressed: {
         state = 'MiddleTyping';
         dataTextInput.focus = true;
-         console.log("middelTyping return");
     }
 
     Keys.onDeletePressed: {
@@ -125,8 +129,6 @@ NavigationRectangle {
         dataValue = '';
         dataTextInput.focus = true;
     }
-
-
 
     states: [
 
@@ -150,6 +152,10 @@ NavigationRectangle {
                     if(event.accepted) {
                         dataBox.state = ''; //Default state
                     }
+                }
+
+                Keys.onEscapePressed: {
+                    dataBox.state = ''; //Default state
                 }
 
                 onFocusChanged: {
@@ -183,19 +189,15 @@ NavigationRectangle {
                 target: dataTextInput
 
                 Keys.onPressed: {
+                    //console.log("Get key" + event.key);
                     NavigationHandler.HandleTabEvent(event, dataBox);
                     NavigationHandler.HandleArrowEvent(event, dataBox);
                     NavigationHandler.EnterNavigation(event, dataBox);
                     if(event.accepted) {
                         dataBox.state = ''; //Default state
+
                     }
-                }//    for(int i = 0; i < StationRows.size(); i++) {
-                //        StationRow& row = StationRows[i];
-                //        foreach(QDeclarativeItem* item, row.items()) {
-                //            qDebug() << "Deleting:" << item;
-                //            delete item;
-                //        }
-                //    }
+                }
 
                 onFocusChanged: {
                     if(!focus) {

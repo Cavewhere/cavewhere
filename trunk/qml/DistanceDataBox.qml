@@ -1,8 +1,6 @@
 import Qt 4.7
+import Cavewhere 1.0
 
 DataBox {
-    dataValidator: DoubleValidator {
-        bottom: 0
-        decimals: 2
-    }
+    dataValidator: DistanceValidator { }
 }

@@ -96,7 +96,7 @@ void cwSurveyChunk::AppendNewShot() {
   you need to create a new cwSurveyChunk and call this function again
   */
 void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
-    qDebug() << "Trying to add shot";
+    //qDebug() << "Trying to add shot";
     if(!CanAddShot(fromStation, toStation, shot)) { return; }
 
     int index;

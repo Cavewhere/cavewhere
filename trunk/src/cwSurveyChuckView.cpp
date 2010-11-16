@@ -516,7 +516,6 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
-        qDebug() << "Setting parent" << item << view;
     }
 }
 
@@ -1013,7 +1012,7 @@ void cwSurveyChunkView::UpdateDimensions() {
     if(!InterfaceValid()) { return; }
 
     QRectF rect = boundingRect();
-    qDebug() << "BoundingRect:" << rect;
+    //qDebug() << "BoundingRect:" << rect;
 
     setWidth(rect.width());
     setHeight(rect.height());

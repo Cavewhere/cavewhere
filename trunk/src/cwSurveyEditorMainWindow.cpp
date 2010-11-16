@@ -7,7 +7,10 @@
 #include "cwSurveyChunkGroup.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunkGroupView.h"
-
+#include "cwClinoValidator.h"
+#include "cwStationValidator.h"
+#include "cwCompassValidator.h"
+#include "cwDistanceValidator.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -29,6 +32,10 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
     qmlRegisterType<cwSurveyChunkGroup>();
+    qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
+    qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
+    qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
+    qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(ReloadQML()));

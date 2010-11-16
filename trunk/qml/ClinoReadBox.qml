@@ -1,9 +1,6 @@
 import Qt 4.7
+import Cavewhere 1.0
 
 ReadingBox {
-    dataValidator: DoubleValidator {
-        top:90
-        bottom:-90
-        decimals:2
-    }
+    dataValidator: ClinoValidator { }
 }

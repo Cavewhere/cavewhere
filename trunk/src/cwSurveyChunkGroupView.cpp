@@ -224,7 +224,7 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //UpdatePosition(index);
 
         ChunkViews[index] = chunkView;
-        qDebug() << "Chunk Bounding box:" << index << chunkView->boundingRect();
+        //qDebug() << "Chunk Bounding box:" << index << chunkView->boundingRect();
     }
 }
 
@@ -257,7 +257,7 @@ void cwSurveyChunkGroupView::SetFocus(int index) {
   \brief Insert rows
   */
 void cwSurveyChunkGroupView::InsertRows(const QModelIndex &parent, int start, int end) {
-    qDebug() << "Insert Rows:" << parent << start << end;
+    //qDebug() << "Insert Rows:" << parent << start << end;
     if(parent != QModelIndex()) { return; }
     AddChunks(start, end);
 }
@@ -267,7 +267,7 @@ void cwSurveyChunkGroupView::InsertRows(const QModelIndex &parent, int start, in
   */
 void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
     if(ChunkGroup == NULL) { return; }
-    qDebug() << "Adding chunks " << beginIndex << endIndex;
+    ///qDebug() << "Adding chunks " << beginIndex << endIndex;
 
     for(int i = beginIndex; i <= endIndex; i++) {
         QModelIndex currentIndex = ChunkGroup->index(i);

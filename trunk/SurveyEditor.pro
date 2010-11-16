@@ -20,7 +20,12 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyImporter.cpp \
     src/cwSurveyChunkGroup.cpp \
     src/cwSurveyChuckView.cpp \
-    src/cwSurveyChunkGroupView.cpp
+    src/cwSurveyChunkGroupView.cpp \
+    cwClinoValidator.cpp \
+    cwStationValidator.cpp \
+    cwValidator.cpp \
+    cwCompassValidator.cpp \
+    cwDistanceValidator.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -30,7 +35,12 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyImporter.h \
     src/cwSurveyChunkGroup.h \
     src/cwSurveyChuckView.h \
-    src/cwSurveyChunkGroupView.h
+    src/cwSurveyChunkGroupView.h \
+    cwClinoValidator.h \
+    cwStationValidator.h \
+    cwValidator.h \
+    cwCompassValidator.h \
+    cwDistanceValidator.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui
