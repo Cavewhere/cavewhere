@@ -25,7 +25,8 @@ src/cwSurveyEditorMainWindow.cpp \
     cwStationValidator.cpp \
     cwValidator.cpp \
     cwCompassValidator.cpp \
-    cwDistanceValidator.cpp
+    cwDistanceValidator.cpp \
+    src/cwSurvexExporter.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -40,7 +41,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     cwStationValidator.h \
     cwValidator.h \
     cwCompassValidator.h \
-    cwDistanceValidator.h
+    cwDistanceValidator.h \
+    src/cwSurvexExporter.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui

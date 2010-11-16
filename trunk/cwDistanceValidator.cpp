@@ -13,6 +13,7 @@ cwDistanceValidator::cwDistanceValidator(QObject *parent) :
 QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) const {
     QDoubleValidator validator;
     validator.setBottom(0);
+    validator.setNotation(QDoubleValidator::StandardNotation);
     return validator.validate(input, pos);
 }
 

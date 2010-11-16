@@ -87,7 +87,7 @@ NavigationRectangle {
 
         if(!event.accepted) {
             if(event.key == Qt.Key_Backspace) {
-                console.log("Back pressed")
+                //console.log("Back pressed")
                 state = 'EndTyping';
                 dataTextInput.focus = true;
                 dataValue = dataValue.substring(0, dataValue.length - 1);
@@ -124,7 +124,7 @@ NavigationRectangle {
     }
 
     Keys.onDeletePressed: {
-        console.log("Delete pressed")
+        //console.log("Delete pressed")
         state = 'EndTyping';
         dataValue = '';
         dataTextInput.focus = true;

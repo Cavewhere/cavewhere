@@ -4,6 +4,7 @@
 //Our includes
 #include "ui_cwSurveyEditorMainWindow.h"
 class cwSurveyImporter;
+class cwSurvexExporter;
 class cwSurveyChunkGroup;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
@@ -15,6 +16,7 @@ public:
 
 protected:
     cwSurveyImporter* SurvexImporter;
+    cwSurvexExporter* SurvexExporter;
     cwSurveyChunkGroup* ChunkGroup;
 
     void changeEvent(QEvent *e);
@@ -22,6 +24,7 @@ protected:
 
 
 protected slots:
+    void ExportSurvex();
     void ImportSurvex();
     void UpdateSurveyEditor();
     void ReloadQML();

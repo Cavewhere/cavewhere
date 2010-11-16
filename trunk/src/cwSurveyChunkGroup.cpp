@@ -79,3 +79,10 @@ void cwSurveyChunkGroup::setChucks(QList<cwSurveyChunk*> chunks) {
     endResetModel();
 }
 
+/**
+  \brief Gets all the chunks
+  */
+QList<cwSurveyChunk*> cwSurveyChunkGroup::chunks() const {
+    return Chunks;
+}
+

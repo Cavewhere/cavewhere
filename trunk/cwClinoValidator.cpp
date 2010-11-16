@@ -14,6 +14,7 @@ QValidator::State cwClinoValidator::validate ( QString & input, int & pos ) cons
     QDoubleValidator doubleValidator;
     doubleValidator.setTop(90);
     doubleValidator.setBottom(-90);
+    doubleValidator.setNotation(QDoubleValidator::StandardNotation);
     QValidator::State state = doubleValidator.validate(input, pos);
 
     if(state == QValidator::Invalid) {

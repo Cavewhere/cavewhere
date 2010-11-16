@@ -27,6 +27,8 @@ public:
 
     void insertRow(int row, cwSurveyChunk* chunk);
 
+    QList<cwSurveyChunk*> chunks() const;
+
 
 signals:
     void dataChanged();
@@ -36,8 +38,6 @@ public slots:
 
 
 protected:
-
-
     QList<cwSurveyChunk*> Chunks;
 
 };

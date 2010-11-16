@@ -13,6 +13,7 @@ QValidator::State cwCompassValidator::validate( QString & input, int & pos ) con
     QDoubleValidator validator;
     validator.setTop(360);
     validator.setBottom(0);
+    validator.setNotation(QDoubleValidator::StandardNotation);
     return validator.validate(input, pos);
 }
 

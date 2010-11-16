@@ -18,7 +18,7 @@ class cwSurveyImporter : public QObject
 Q_OBJECT
 
 public:
-    cwSurveyImporter();
+    cwSurveyImporter(QObject* parent);
 
     bool hasErrors();
     QStringList errors();

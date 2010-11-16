@@ -33,6 +33,7 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionSurvexExport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
     <addaction name="actionReloadQML"/>
@@ -54,6 +55,11 @@
   <action name="actionReloadQML">
    <property name="text">
     <string>Reload QML</string>
+   </property>
+  </action>
+  <action name="actionSurvexExport">
+   <property name="text">
+    <string>Export Survex</string>
    </property>
   </action>
  </widget>

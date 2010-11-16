@@ -9,7 +9,8 @@
 #include <QDebug>
 #include <QSettings>
 
-cwSurveyImporter::cwSurveyImporter()
+cwSurveyImporter::cwSurveyImporter(QObject* parent) :
+    QObject(parent)
 {
 }
 

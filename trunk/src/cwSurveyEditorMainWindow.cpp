@@ -4,6 +4,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyImporter.h"
+#include "cwSurvexExporter.h"
 #include "cwSurveyChunkGroup.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunkGroupView.h"
@@ -21,6 +22,7 @@
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexImporter(NULL),
+    SurvexExporter(NULL),
     ChunkGroup(new cwSurveyChunkGroup(this))
 {
     setupUi(this);
@@ -38,6 +40,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
+    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(ReloadQML()));
 
     //Initial chunk
@@ -64,11 +67,26 @@ void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
 }
 
 /**
+  \brief Opens the survex exporter
+  */
+void cwSurveyEditorMainWindow::ExportSurvex() {
+    if(SurvexExporter == NULL) {
+        SurvexExporter = new cwSurvexExporter(this);
+    }
+
+    SurvexExporter->setChunks(ChunkGroup);
+    QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    dialog->open(SurvexExporter, SLOT(exportSurvex(QString)));
+
+}
+
+/**
   \brief Opens the suvrex import dialog
   */
 void cwSurveyEditorMainWindow::ImportSurvex() {
     if(SurvexImporter == NULL) {
-        SurvexImporter = new cwSurveyImporter();
+        SurvexImporter = new cwSurveyImporter(this);
         connect(SurvexImporter, SIGNAL(finishedImporting()), SLOT(UpdateSurveyEditor()));
     }
 
