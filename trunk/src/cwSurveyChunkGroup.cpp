@@ -6,6 +6,7 @@ cwSurveyChunkGroup::cwSurveyChunkGroup(QObject *parent) :
     QAbstractListModel(parent)
 {
     QHash<int, QByteArray> roles;
+    roles.reserve(1);
     roles[ChunkRole] = "chunk";
     setRoleNames(roles);
 }

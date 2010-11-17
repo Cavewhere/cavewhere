@@ -24,8 +24,9 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     UpDelegate(NULL),
     DownDelegate(NULL),
     FocusedItem(NULL),
-    ChunkAbove(NULL),
-    ChunkBelow(NULL)
+    ChunkBelow(NULL),
+    ChunkAbove(NULL)
+
 {
     connect(this, SIGNAL(focusChanged(bool)), SLOT(SetFocusForFirstStation(bool)));
 
@@ -221,7 +222,7 @@ void cwSurveyChunkView::SplitOnStation(int index) {
 
   \param int - The shot index where the chunk will be split
 */
-void cwSurveyChunkView::SplitOnShot(int index) {
+void cwSurveyChunkView::SplitOnShot(int /*index*/) {
 
 
 

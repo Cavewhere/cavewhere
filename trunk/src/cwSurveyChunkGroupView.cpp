@@ -342,7 +342,7 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
     }
 
     cwSurveyChunkView* previousView = ChunkViews[previousIndex];
-    const float buffer = 10.0;
+    //const float buffer = 10.0;
     float x = 0.0;
     float y = mapRectFromItem(previousView, previousView->boundingRect()).bottom(); //height(); // + buffer;
 

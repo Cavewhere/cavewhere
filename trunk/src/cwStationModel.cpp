@@ -27,7 +27,7 @@ cwStationModel::cwStationModel(QObject *parent) :
     }
 }
 
-int cwStationModel::rowCount(const QModelIndex & parent) const {
+int cwStationModel::rowCount(const QModelIndex & /*parent*/) const {
     return Stations.size();
 }
 
@@ -98,6 +98,6 @@ bool cwStationModel::setData ( const QModelIndex & index, const QVariant & value
     return false;
 }
 
-Qt::ItemFlags cwStationModel::flags ( const QModelIndex & index ) const {
+Qt::ItemFlags cwStationModel::flags ( const QModelIndex & /*index*/ ) const {
     return Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled;
 }

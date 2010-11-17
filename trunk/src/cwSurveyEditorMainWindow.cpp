@@ -12,6 +12,7 @@
 #include "cwStationValidator.h"
 #include "cwCompassValidator.h"
 #include "cwDistanceValidator.h"
+#include "cwSurveyNoteModel.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -23,7 +24,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexImporter(NULL),
     SurvexExporter(NULL),
-    ChunkGroup(new cwSurveyChunkGroup(this))
+    ChunkGroup(new cwSurveyChunkGroup(this)),
+    NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
@@ -38,6 +40,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
+    qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
@@ -116,6 +119,7 @@ void cwSurveyEditorMainWindow::ReloadQML() {
 //        objects.append(chunk);
 //    }
 
+    context->setContextProperty("surveyNoteModel", NoteModel);
     context->setContextProperty("surveyData", ChunkGroup);
     //context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
 

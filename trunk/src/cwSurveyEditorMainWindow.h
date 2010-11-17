@@ -6,6 +6,7 @@
 class cwSurveyImporter;
 class cwSurvexExporter;
 class cwSurveyChunkGroup;
+class cwSurveyNoteModel;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
 {
@@ -18,6 +19,7 @@ protected:
     cwSurveyImporter* SurvexImporter;
     cwSurvexExporter* SurvexExporter;
     cwSurveyChunkGroup* ChunkGroup;
+    cwSurveyNoteModel* NoteModel;
 
     void changeEvent(QEvent *e);
 

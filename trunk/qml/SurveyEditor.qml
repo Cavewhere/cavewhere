@@ -7,46 +7,53 @@ Rectangle {
     border.width: 2
     border.color: "green"
 
-        Flickable {
-            id: flickArea
 
-            contentHeight: view.contentHeight
-            contentWidth: view.contentWidth
+    Flickable {
+        id: flickArea
 
-            width: 600;
-            height: area.height;
+        contentHeight: view.contentHeight
+        contentWidth: view.contentWidth
 
-            clip: true;
+        width: 600;
+        height: area.height;
 
-            /**
+        clip: true;
+
+        /**
               Moves the flickable such that r is always shown
               */
-            function ensureVisible(r){
-                //console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
-                if (contentX >= r.x) {
-                    contentX = r.x;
-                } else if (contentX+width <= r.x+r.width) {
-                    contentX = r.x+r.width-width;
-                } if (contentY >= r.y) {
-                    contentY = r.y;
-                } else if (contentY+height <= r.y+r.height) {
-                    contentY = r.y+r.height-height;
-                }
-            }
-
-            SurveyChunkGroupView {
-                id: view
-
-                viewportX: flickArea.contentX;
-                viewportY: flickArea.contentY;
-                viewportWidth: flickArea.width;
-                viewportHeight: flickArea.height;
-
-                chunkGroup: surveyData
-
-                onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
+        function ensureVisible(r){
+            //console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
+            if (contentX >= r.x) {
+                contentX = r.x;
+            } else if (contentX+width <= r.x+r.width) {
+                contentX = r.x+r.width-width;
+            } if (contentY >= r.y) {
+                contentY = r.y;
+            } else if (contentY+height <= r.y+r.height) {
+                contentY = r.y+r.height-height;
             }
         }
+
+        SurveyChunkGroupView {
+            id: view
+
+            viewportX: flickArea.contentX;
+            viewportY: flickArea.contentY;
+            viewportWidth: flickArea.width;
+            viewportHeight: flickArea.height;
+
+            chunkGroup: surveyData
+
+            onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
+        }
+    }
+
+
+    NotesGallery {
+        anchors.left: flickArea.right
+        anchors.top: flickArea.top
+    }
 
 
 

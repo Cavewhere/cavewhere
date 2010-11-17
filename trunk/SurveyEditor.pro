@@ -26,7 +26,10 @@ src/cwSurveyEditorMainWindow.cpp \
     cwValidator.cpp \
     cwCompassValidator.cpp \
     cwDistanceValidator.cpp \
-    src/cwSurvexExporter.cpp
+    src/cwSurvexExporter.cpp \
+    src/cwImageModel.cpp \
+    src/cwSurveyNoteModel.cpp \
+    src/cwNote.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -42,7 +45,10 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     cwValidator.h \
     cwCompassValidator.h \
     cwDistanceValidator.h \
-    src/cwSurvexExporter.h
+    src/cwSurvexExporter.h \
+    src/cwImageModel.h \
+    src/cwSurveyNoteModel.h \
+    src/cwNote.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui
@@ -71,7 +77,10 @@ qml/ClinoReadBox.qml \
     qml/FrontCompassReadBox.qml \
     qml/BackCompassReadBox.qml \
     qml/SurveyChunkList.qml \
-    qml/ScrollBar.qml
+    qml/ScrollBar.qml \
+    qml/NotesGallery.qml
 
 RESOURCES += \
     icons.qrc
+
+INCLUDEPATH += src .
