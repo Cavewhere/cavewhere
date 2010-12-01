@@ -7,16 +7,26 @@
 #include <QGraphicsPixmapItem>
 #include <QLabel>
 #include <QUrl>
+#include <QtConcurrentRun>
+#include <QFuture>
 
 cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
-    ImageItem(NULL)
+    ImageItem(NULL),
+    PixmapItem(new QGraphicsPixmapItem(this)),
+    SmoothPixmapItem(new QGraphicsPixmapItem(this)),
+    PixmapFutureWatcher(new QFutureWatcher<QImage>(this)),
+    LODTimer(new QTimer(this))
 {
-   // setFlag(QGraphicsItem::ItemHasNoContents, false);
-    setAcceptedMouseButtons(Qt::LeftButton);
-//    PixmapItem = new QGraphicsPixmapItem(this);
-//    PixmapItem->setTransformationMode(Qt::SmoothTransformation);
+    // setFlag(QGraphicsItem::ItemHasNoContents, false);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
+    //    PixmapItem->setTransformationMode(Qt::SmoothTransformation);
     //setSmooth(true);
+
+    LODTimer->setInterval(100); //100ms
+
+    connect(PixmapFutureWatcher, SIGNAL(finished()), SLOT(SetSmoothPixmap()));
+    connect(LODTimer, SIGNAL(timeout()), SLOT(RenderSmooth()));
 }
 
 //void cwNoteItem::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
@@ -31,14 +41,16 @@ cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
 //}
 
 void cwNoteItem::mouseMoveEvent ( QGraphicsSceneMouseEvent * event ) {
-    if(!LastPanPoint.isNull() && ImageItem != NULL) {
+    if(!LastPanPoint.isNull()) { // && ImageItem != NULL) {
         //For panning
-        QPointF delta = ((QGraphicsItem*)ImageItem)->mapFromItem(this, event->pos()) - ((QGraphicsItem*)ImageItem)->mapFromItem(this, LastPanPoint); //mapToScene(event->pos());
-        //        QPointF delta = PixmapItem->mapFromItem(this, event->pos()) - PixmapItem->mapFromItem(this, LastPanPoint); //mapToScene(event->pos());
+        //QPointF delta = ((QGraphicsItem*)ImageItem)->mapFromItem(this, event->pos()) - ((QGraphicsItem*)ImageItem)->mapFromItem(this, LastPanPoint); //mapToScene(event->pos());
+        QPointF pixmapItemDelta = PixmapItem->mapFromItem(this, event->pos()) - PixmapItem->mapFromItem(this, LastPanPoint); //mapToScene(event->pos());
+        QPointF smoothItemDelta = SmoothPixmapItem->mapFromItem(this, event->pos()) - SmoothPixmapItem->mapFromItem(this, LastPanPoint);
         LastPanPoint = event->pos();
 
-        ImageItem->translate(delta.x(), delta.y());
-        // PixmapItem->translate(delta.x(), delta.y());
+        //ImageItem->translate(delta.x(), delta.y());
+        PixmapItem->translate(pixmapItemDelta.x(), pixmapItemDelta.y());
+        SmoothPixmapItem->translate(smoothItemDelta.x(), smoothItemDelta.y());
         update();
     }
 }
@@ -47,9 +59,9 @@ void cwNoteItem::mousePressEvent ( QGraphicsSceneMouseEvent * event ) {
     qDebug() << "Mouse pressed: " << event;
 
     //For panning the view
-    if(event->button() == Qt::LeftButton) {
+    //if(event->button() == (Qt::LeftButton | Qt::RightButton) ) {
         LastPanPoint = event->pos();
-    }
+    //}
 
     event->accept();
 }
@@ -59,10 +71,14 @@ void cwNoteItem::mouseReleaseEvent ( QGraphicsSceneMouseEvent * event ) {
 }
 
 void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
-    if(ImageItem == NULL) { return; }
+    LODTimer->start();
+    PixmapItem->show();
+    SmoothPixmapItem->hide();
+
+    //if(ImageItem == NULL) { return; }
     //Get the mouse coordianate in scene coords
-    ScaleCenter = ((QGraphicsItem*)ImageItem)->mapFromItem(this, event->pos());
-    //  ScaleCenter = PixmapItem->mapFromItem(this, event->pos());
+    //ScaleCenter = ((QGraphicsItem*)ImageItem)->mapFromItem(this, event->pos());
+    ScaleCenter = PixmapItem->mapFromItem(this, event->pos());
 
     //Calc the scaleFactor
     float scaleFactor = 1.1;
@@ -71,15 +87,46 @@ void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
         scaleFactor = 1.0 / scaleFactor;
     }
 
-//    else {
-//        //Zoom in
-//    }
+    //    else {
+    //        //Zoom in
+    //    }
 
-//    //Update our scale
-//    float startScale = 1.0;
-//    float endingScale = scaleFactor;
+    //    //Update our scale
+    //    float startScale = 1.0;
+    //    float endingScale = scaleFactor;
 
     SetScale(scaleFactor);
+
+//    QSizeF area = PixmapItem->mapRectToScene(PixmapItem->boundingRect()).size();
+
+//    //if(!PixmapFutureWatcher->isRunning()) {
+//        QFuture<QImage> scaledFuture = QtConcurrent::run(OriginalNote, &QImage::scaled, area.toSize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
+//        PixmapFutureWatcher->setFuture(scaledFuture);
+//    //}
+}
+
+void cwNoteItem::RenderSmooth() {
+    LODTimer->stop();
+
+    QSize area = PixmapItem->mapRectToScene(PixmapItem->boundingRect()).size().toSize();
+
+    if(area.width() >= OriginalNote.size().width() &&
+            area.height() >= OriginalNote.height()) { return; }
+
+    //if(!PixmapFutureWatcher->isRunning()) {
+    QFuture<QImage> scaledFuture = QtConcurrent::run(OriginalNote, &QImage::scaled, area, Qt::IgnoreAspectRatio, Qt::SmoothTransformation );
+    PixmapFutureWatcher->setFuture(scaledFuture);
+}
+
+void cwNoteItem::SetSmoothPixmap() {
+    QSize area = PixmapItem->mapRectToScene(PixmapItem->boundingRect()).size().toSize();
+    if(area.width() >= OriginalNote.size().width() &&
+            area.height() >= OriginalNote.height()) { return; }
+
+    PixmapItem->hide();
+    SmoothPixmapItem->show();
+    QImage scaledImage = PixmapFutureWatcher->future().result();
+    SmoothPixmapItem->setPixmap(QPixmap::fromImage(scaledImage));
 }
 
 //void cwNoteItem::mousePressEvent(QMouseEvent* event) {
@@ -106,18 +153,21 @@ void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
   \brief Sets the image source for the the note item
   */
 void cwNoteItem::setImageSource(QString imageSource) {
-//    if(imageSource != NoteSource) {
-//        //Transform.reset();
+    if(imageSource != NoteSource) {
+        //Transform.reset();
 
-//        NoteSource = imageSource;
-//        QPixmap note = QPixmap::fromImage(QImage(QUrl(imageSource).toLocalFile()));
-//        PixmapItem->setPixmap(note);
+        NoteSource = imageSource;
+        OriginalNote = QImage(QUrl(imageSource).toLocalFile());
+        QPixmap note = QPixmap::fromImage(OriginalNote);
+        PixmapItem->setPixmap(note);
 
-//        PixmapItem->setTransform(QTransform());
+        RenderSmooth();
 
-////        emit noteChanged();
-//        emit imageSourceChanged();
-//    }
+        //PixmapItem->setTransform(QTransform());
+
+        //        emit noteChanged();
+        emit imageSourceChanged();
+    }
 }
 
 void cwNoteItem::setImageItem(QDeclarativeItem* item) {
@@ -133,12 +183,18 @@ void cwNoteItem::setImageItem(QDeclarativeItem* item) {
   \see SetScaleCenter()
   */
 void cwNoteItem::SetScale(float newScale) {
-    if(ImageItem == NULL) { return; }
+    //if(ImageItem == NULL) { return; }
 
     QTransform matrix;
     matrix.translate(ScaleCenter.x(), ScaleCenter.y());
     matrix.scale(newScale, newScale);
     matrix.translate(-ScaleCenter.x(), -ScaleCenter.y());
-   // PixmapItem->setTransform(matrix, true);
-    ImageItem->setTransform(matrix, true);
+    PixmapItem->setTransform(matrix, true);
+
+    QPointF pixmapItemPosition = PixmapItem->mapToItem(this, QPointF(0.0, 0.0));
+    QPointF smoothItemPosition = SmoothPixmapItem->mapToItem(this, QPointF(0.0, 0.0));
+    QPointF differance = pixmapItemPosition - smoothItemPosition;
+    SmoothPixmapItem->translate(differance.x(), differance.y());
+
+    // ImageItem->setTransform(matrix, true);
 }

@@ -3,6 +3,8 @@
 
 #include <QDeclarativeItem>
 #include <QTransform>
+#include <QFutureWatcher>
+#include <QTimer>
 
 class cwNoteItem : public QDeclarativeItem
 {
@@ -39,9 +41,15 @@ protected:
     //virtual void wheelEvent(QWheelEvent* event);
 
     QDeclarativeItem* ImageItem;
-    //QGraphicsPixmapItem* PixmapItem;
+    QGraphicsPixmapItem* PixmapItem;
+    QGraphicsPixmapItem* SmoothPixmapItem;
+    QFutureWatcher<QImage>* PixmapFutureWatcher;
+
+    //LOD timer
+    QTimer* LODTimer;
 
 //    QPixmap Note;
+    QImage OriginalNote;
     QString NoteSource;
 
     //For interaction
@@ -54,6 +62,11 @@ protected:
     virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 
     void SetScale(float scaleFactor);
+
+protected slots:
+    void RenderSmooth();
+    void SetSmoothPixmap();
+
 };
 
 ///**

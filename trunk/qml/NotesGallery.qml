@@ -75,7 +75,7 @@ Rectangle {
         onCurrentIndexChanged: {
             console.log(currentItem.imageSource);
             noteArea.imageSource = currentItem.imageSource;
-            fullSizeImage.source = currentItem.imageSource;
+//            fullSizeImage.source = currentItem.imageSource;
         }
 
     }
@@ -89,20 +89,20 @@ Rectangle {
 
         clip: true
 
-        image: fullSizeImage
+        //image: fullSizeImage
 
-        Rectangle {
-            border.width: 1
-            border.color: 'red'
-            anchors.fill: parent
-        }
+//        Rectangle {
+//            border.width: 1
+//            border.color: 'red'
+//            anchors.fill: parent
+//        }
 
-        Image {
-            id: fullSizeImage
-            anchors.fill: parent
-            smooth: true
-            fillMode: Image.PreserveAspectFit
-        }
+//        Image {
+//            id: fullSizeImage
+//            anchors.fill: parent
+//            smooth: true
+//            fillMode: Image.PreserveAspectFit
+//        }
 
     }
 
