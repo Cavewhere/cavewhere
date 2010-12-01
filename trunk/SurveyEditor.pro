@@ -29,7 +29,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurvexExporter.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
-    src/cwNote.cpp
+    src/cwNote.cpp \
+    src/cwNoteItem.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -48,7 +49,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurvexExporter.h \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \
-    src/cwNote.h
+    src/cwNote.h \
+    src/cwNoteItem.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui

@@ -13,6 +13,7 @@
 #include "cwCompassValidator.h"
 #include "cwDistanceValidator.h"
 #include "cwSurveyNoteModel.h"
+#include "cwNoteItem.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -29,6 +30,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 {
     setupUi(this);
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
+    DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
 
     qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
     qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
@@ -41,6 +43,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
     qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
+    qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
@@ -124,5 +127,6 @@ void cwSurveyEditorMainWindow::ReloadQML() {
     //context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
+
 }
 

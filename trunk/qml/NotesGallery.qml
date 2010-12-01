@@ -1,4 +1,5 @@
 import Qt 4.7
+import Cavewhere 1.0
 
 Rectangle {
     width: 640
@@ -64,7 +65,7 @@ Rectangle {
         MouseArea {
             anchors.fill: parent
 
-            onPressed: {
+            onClicked: {
                var index = galleryView.indexAt(mouseX, mouseY);
                 galleryView.currentIndex = index;
             }
@@ -73,11 +74,41 @@ Rectangle {
 
         onCurrentIndexChanged: {
             console.log(currentItem.imageSource);
+            noteArea.imageSource = currentItem.imageSource;
             fullSizeImage.source = currentItem.imageSource;
         }
 
     }
 
+    NoteItem {
+        id: noteArea
+        anchors.top: galleryView.bottom
+
+        width:750
+        height:750
+
+        clip: true
+
+        image: fullSizeImage
+
+        Rectangle {
+            border.width: 1
+            border.color: 'red'
+            anchors.fill: parent
+        }
+
+        Image {
+            id: fullSizeImage
+            anchors.fill: parent
+            smooth: true
+            fillMode: Image.PreserveAspectFit
+        }
+
+    }
+
+
+
+    /*
     Flickable {
         id: imageArea
         anchors.top: galleryView.bottom
@@ -113,6 +144,7 @@ Rectangle {
             }
         }
     }
+    */
 
 
 }
