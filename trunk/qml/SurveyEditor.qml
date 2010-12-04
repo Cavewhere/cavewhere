@@ -14,8 +14,12 @@ Rectangle {
         contentHeight: view.contentHeight
         contentWidth: view.contentWidth
 
-        width: 600;
-        height: area.height;
+        width: 425; //childrenRect.width;
+
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom;
+        anchors.left: parent.left;
+
 
         clip: true;
 
@@ -24,11 +28,13 @@ Rectangle {
               */
         function ensureVisible(r){
             //console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
-            if (contentX >= r.x) {
-                contentX = r.x;
-            } else if (contentX+width <= r.x+r.width) {
-                contentX = r.x+r.width-width;
-            } if (contentY >= r.y) {
+//            if (contentX >= r.x) {
+//                contentX = r.x;
+//            } else if (contentX+width <= r.x+r.width) {
+//                contentX = r.x+r.width-width;
+//            }
+
+            if (contentY >= r.y) {
                 contentY = r.y;
             } else if (contentY+height <= r.y+r.height) {
                 contentY = r.y+r.height-height;
@@ -37,6 +43,9 @@ Rectangle {
 
         SurveyChunkGroupView {
             id: view
+
+            anchors.fill: parent
+            anchors.margins: 10;
 
             viewportX: flickArea.contentX;
             viewportY: flickArea.contentY;
@@ -52,94 +61,9 @@ Rectangle {
 
     NotesGallery {
         anchors.left: flickArea.right
-        anchors.top: flickArea.top
+        anchors.right: parent.right
+        anchors.top: area.top
+        anchors.bottom: area.bottom
     }
-
-
-
-
-//    Component {
-//        id: surveyChunkViewComponent
-
-//        FocusScope {
-//            width: childrenRect.width
-//            height: childrenRect.height
-
-//            SurveyChunkView {
-//                id: view
-//                model: chunk
-
-//                onXChanged: {
-//                    console.log("X change:" + x + chunk + view);
-//                }
-
-//                Component.onCompleted: {
-//                    console.log("Dim:" + width + height);
-//                }
-
-//            }
-//        }
-
-//    }
-
-//    ListView {
-//        id: listView
-
-//        anchors.fill: parent
-
-//        highlightFollowsCurrentItem: false
-
-//        model:  surveyData
-//        delegate: surveyChunkViewComponent
-
-//    }
-
-//    SurveyChunkView {
-//       // stationDelegate: stationRow
-//        model: testChunk //From the c++
-
-////        MouseArea {
-////            anchors.fill: parent;
-////            onPressed: {
-////                console.log("Pressed!");
-////            }
-////        }
-
-//   }
-
-//    SurveyChunkView {
-//        x: 500
-//        y: 0
-
-//       // stationDelegate: stationRow
-//        model: testChunk //From the c++
-//   }
-
-//    Flickable {
-//        id: flickableArea;
-
-//        anchors.fill:parent;
-
-//        contentHeight: chunkList.height
-//        //contentWidth: childrenRect.width
-
-//        clip: true;
-
-
-
-//        SurveyChunkList {
-//            id: chunkList
-//            chunkGroup: survey
-//        }
-
-//    }
-
-//    ScrollBar {
-//        scrollArea: flickableArea
-//        anchors.top: flickableArea.top
-//        anchors.left: flickableArea.right
-//        height: flickableArea.height
-//        width: 7
-//    }
-
 }
+

@@ -18,10 +18,7 @@ cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     PixmapFutureWatcher(new QFutureWatcher<QImage>(this)),
     LODTimer(new QTimer(this))
 {
-    // setFlag(QGraphicsItem::ItemHasNoContents, false);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
-    //    PixmapItem->setTransformationMode(Qt::SmoothTransformation);
-    //setSmooth(true);
 
     LODTimer->setInterval(250); //100ms
 
@@ -29,16 +26,23 @@ cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     connect(LODTimer, SIGNAL(timeout()), SLOT(RenderSmooth()));
 }
 
-//void cwNoteItem::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
-//    qDebug() << "Painting";
+/**
+  \brief Fits the note item to the view
+  */
+void cwNoteItem::fitToView() {
+    ScaleCenter = QPointF();
+    FastPixmapTransform.reset();
+    SmoothTransform.reset();
 
-//    //painter->setTransform(Transform);
-//    QPointF imagePosition = Transform.map(QPointF(0.0, 0.0));
-//    painter->drawPixmap(imagePosition, Note);
+    //Find the scale of the item to
+    float scaleX = width() / OriginalNote.width();
+    float scaleY = height() / OriginalNote.height();
 
-//    painter->drawRect(boundingRect());
+    float scale = qMin(scaleX, scaleY);
+    SetScale(scale);
+    RenderSmooth();
+}
 
-//}
 
 void cwNoteItem::mouseMoveEvent ( QGraphicsSceneMouseEvent * event ) {
     if(!LastPanPoint.isNull()) { // && ImageItem != NULL) {

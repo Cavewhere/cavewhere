@@ -2,29 +2,16 @@ import Qt 4.7
 import Cavewhere 1.0
 
 Rectangle {
-    width: 640
-    height: 480
+//    width: 640
+//    height: 480
 
-    border.width: 1
+    border.width: 5
     border.color: "blue"
 
-    //clip: true
+
 
     Component {
         id: listDelegate
-
-
-
-//        Rectangle {
-//            width:  100;
-//            height: 50;
-//            border.width: 1
-
-//            Text {
-//                anchors.fill: parent
-//                text: imagePath
-//            }
-//        }
 
         Item {
             id: container
@@ -50,13 +37,16 @@ Rectangle {
 
     ListView {
         id: galleryView
-        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.top:  parent.top
+        anchors.right: parent.right
 
-        height: 300
-        width: 750
+        height: 210
 
         delegate: listDelegate
         model: surveyNoteModel
+
+        clip: true
 
         orientation: ListView.Horizontal
 
@@ -66,6 +56,7 @@ Rectangle {
             anchors.fill: parent
 
             onClicked: {
+                console.log("Clicked!");
                var index = galleryView.indexAt(mouseX, mouseY);
                 galleryView.currentIndex = index;
             }
@@ -75,7 +66,6 @@ Rectangle {
         onCurrentIndexChanged: {
             console.log(currentItem.imageSource);
             noteArea.imageSource = currentItem.imageSource;
-//            fullSizeImage.source = currentItem.imageSource;
         }
 
     }
@@ -83,68 +73,16 @@ Rectangle {
     NoteItem {
         id: noteArea
         anchors.top: galleryView.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
 
-        width:750
-        height:750
+        anchors.margins: 5
 
         clip: true
 
-        //image: fullSizeImage
-
-//        Rectangle {
-//            border.width: 1
-//            border.color: 'red'
-//            anchors.fill: parent
-//        }
-
-//        Image {
-//            id: fullSizeImage
-//            anchors.fill: parent
-//            smooth: true
-//            fillMode: Image.PreserveAspectFit
-//        }
+        onImageSourceChanged: fitToView();
 
     }
-
-
-
-    /*
-    Flickable {
-        id: imageArea
-        anchors.top: galleryView.bottom
-
-        width: 750
-        height: 750
-
-        clip:  true
-
-        contentHeight: fullSizeImage.sourceSize.height
-        contentWidth: fullSizeImage.sourceSize.width
-
-        Image {
-            id: fullSizeImage
-            smooth: false
-
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-            onDoubleClicked: {
-                var scale = 1.0
-                if(mouse.button == Qt.LeftButton) {
-                    scale = 1.1;
-                } else if(mouse.button == Qt.RightButton) {
-                    scale = 0.9;
-                }
-
-                fullSizeImage.sourceSize.height = fullSizeImage.sourceSize.height * scale;
-                fullSizeImage.sourceSize.width = fullSizeImage.sourceSize.width * scale;
-            }
-        }
-    }
-    */
-
 
 }

@@ -18,6 +18,9 @@ public:
     QString imageSource() const;
     void setImageSource(QString imageSource);
 
+public slots:
+    void fitToView();
+
 signals:
     void imageSourceChanged();
     void imageChanged();
