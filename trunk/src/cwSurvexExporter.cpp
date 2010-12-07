@@ -19,7 +19,7 @@ cwSurvexExporter::cwSurvexExporter(QObject *parent) :
 /**
   \brief Set
   */
-void cwSurvexExporter::setChunks(cwSurveyChunkGroup* chunks) {
+void cwSurvexExporter::setChunks(cwSurveyTrip* chunks) {
     if(ChunkGroup != chunks) {
         ChunkGroup = chunks;
     }

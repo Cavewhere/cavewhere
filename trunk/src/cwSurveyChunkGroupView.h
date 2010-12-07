@@ -6,7 +6,7 @@
 class QModelIndex;
 
 //Our includes
-class cwSurveyChunkGroup;
+class cwSurveyTrip;
 class cwSurveyChunkView;
 class cwSurveyChunk;
 
@@ -14,7 +14,7 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwSurveyChunkGroup* chunkGroup READ chunkGroup WRITE setChunkGroup NOTIFY chunkGroupChanged)
+    Q_PROPERTY(cwSurveyTrip* chunkGroup READ chunkGroup WRITE setChunkGroup NOTIFY chunkGroupChanged)
     Q_PROPERTY(float contentHeight READ contentHeight NOTIFY contentHeightChanged )
     Q_PROPERTY(float contentWidth READ contentWidth NOTIFY contentWidthChanged )
     Q_PROPERTY(float viewportX READ viewportX WRITE setViewportX NOTIFY viewportXChanged)
@@ -26,8 +26,8 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
 public:
     explicit cwSurveyChunkGroupView(QDeclarativeItem *parent = 0);
 
-    void setChunkGroup(cwSurveyChunkGroup* chunkGroup);
-    cwSurveyChunkGroup* chunkGroup() const;
+    void setChunkGroup(cwSurveyTrip* chunkGroup);
+    cwSurveyTrip* chunkGroup() const;
 
     Q_INVOKABLE float contentHeight() const;
     Q_INVOKABLE float contentWidth() const;
@@ -66,7 +66,7 @@ protected:
 
 private:
     //The model
-    cwSurveyChunkGroup* ChunkGroup;
+    cwSurveyTrip* ChunkGroup;
 
     //GUI elements
     QList<cwSurveyChunkView*> ChunkViews; //The active chunks

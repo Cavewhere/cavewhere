@@ -6,7 +6,7 @@
 class QTextStream;
 
 //Our includes
-class cwSurveyChunkGroup;
+class cwSurveyTrip;
 class cwSurveyChunk;
 
 class cwSurvexExporter : public QObject
@@ -15,7 +15,7 @@ class cwSurvexExporter : public QObject
 public:
     explicit cwSurvexExporter(QObject *parent = 0);
 
-    void setChunks(cwSurveyChunkGroup* Chunks);
+    void setChunks(cwSurveyTrip* Chunks);
 
 signals:
 
@@ -23,7 +23,7 @@ public slots:
     void exportSurvex(QString filename);
 
 private:
-    cwSurveyChunkGroup* ChunkGroup;
+    cwSurveyTrip* ChunkGroup;
 
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 

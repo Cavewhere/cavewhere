@@ -5,7 +5,7 @@
 #include "ui_cwSurveyEditorMainWindow.h"
 class cwSurveyImporter;
 class cwSurvexExporter;
-class cwSurveyChunkGroup;
+class cwSurveyTrip;
 class cwSurveyNoteModel;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
@@ -18,7 +18,7 @@ public:
 protected:
     cwSurveyImporter* SurvexImporter;
     cwSurvexExporter* SurvexExporter;
-    cwSurveyChunkGroup* ChunkGroup;
+    cwSurveyTrip* ChunkGroup;
     cwSurveyNoteModel* NoteModel;
 
     void changeEvent(QEvent *e);

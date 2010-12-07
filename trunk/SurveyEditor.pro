@@ -30,7 +30,9 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
     src/cwNote.cpp \
-    src/cwNoteItem.cpp
+    src/cwNoteItem.cpp \
+    src/cwSurveyTrip.cpp \
+    src/cwCave.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -50,7 +52,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \
     src/cwNote.h \
-    src/cwNoteItem.h
+    src/cwNoteItem.h \
+    src/cwSurveyTrip.h \
+    src/cwCave.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui

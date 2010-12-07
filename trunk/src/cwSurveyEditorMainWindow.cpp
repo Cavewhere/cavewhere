@@ -25,7 +25,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexImporter(NULL),
     SurvexExporter(NULL),
-    ChunkGroup(new cwSurveyChunkGroup(this)),
+    ChunkGroup(new cwSurveyTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
@@ -37,7 +37,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
-    qmlRegisterType<cwSurveyChunkGroup>();
+    qmlRegisterType<cwSurveyTrip>();
     qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
     qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
@@ -106,7 +106,7 @@ void cwSurveyEditorMainWindow::ImportSurvex() {
 void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
     QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
     if(ChunkGroup == NULL) {
-        ChunkGroup = new cwSurveyChunkGroup(this);
+        ChunkGroup = new cwSurveyTrip(this);
     }
     ChunkGroup->setChucks(chunks);
 

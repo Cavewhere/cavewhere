@@ -18,7 +18,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
 {
 }
 
-void cwSurveyChunkGroupView::setChunkGroup(cwSurveyChunkGroup* chunkGroup) {
+void cwSurveyChunkGroupView::setChunkGroup(cwSurveyTrip* chunkGroup) {
     if(ChunkGroup != chunkGroup) {
         ChunkGroup = chunkGroup;
 
@@ -36,7 +36,7 @@ void cwSurveyChunkGroupView::setChunkGroup(cwSurveyChunkGroup* chunkGroup) {
     }
 }
 
-cwSurveyChunkGroup* cwSurveyChunkGroupView::chunkGroup() const {
+cwSurveyTrip* cwSurveyChunkGroupView::chunkGroup() const {
     return ChunkGroup;
 }
 
@@ -199,7 +199,7 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
     if(index < 0 || index >= ChunkViews.size()) { return; }
     if(ChunkViews[index] == NULL) {
         QModelIndex currentIndex = ChunkGroup->index(index);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyChunkGroup::ChunkRole).value<QObject*>());
+        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyTrip::ChunkRole).value<QObject*>());
         if(chunk == NULL) { return; }
 
         //Create a chunkView object
@@ -271,7 +271,7 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         QModelIndex currentIndex = ChunkGroup->index(i);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyChunkGroup::ChunkRole).value<QObject*>());
+        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyTrip::ChunkRole).value<QObject*>());
         if(chunk == NULL) { continue; }
 
         ChunkViews.insert(i, NULL);
@@ -374,7 +374,7 @@ void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         QModelIndex currentIndex = ChunkGroup->index(i);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyChunkGroup::ChunkRole).value<QObject*>());
+        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(ChunkGroup->data(currentIndex, cwSurveyTrip::ChunkRole).value<QObject*>());
         if(chunk == NULL) { continue; }
 
         float height = cwSurveyChunkView::heightHint(chunk->StationCount());

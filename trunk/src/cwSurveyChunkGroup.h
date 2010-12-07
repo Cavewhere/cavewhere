@@ -9,7 +9,7 @@ class cwSurveyChunk;
 #include <QList>
 #include <QAbstractListModel>
 
-class cwSurveyChunkGroup : public QAbstractListModel
+class cwSurveyTrip : public QAbstractListModel
 {
     Q_OBJECT
 public:
@@ -18,7 +18,7 @@ public:
     };
 
 
-    explicit cwSurveyChunkGroup(QObject *parent = 0);
+    explicit cwSurveyTrip(QObject *parent = 0);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
