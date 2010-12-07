@@ -1,8 +1,8 @@
 //Our includes
-#include "cwSurveyChunkGroup.h"
+#include "cwSurveyTrip.h"
 #include "cwSurveyChunk.h"
 
-cwSurveyChunkGroup::cwSurveyChunkGroup(QObject *parent) :
+cwSurveyTrip::cwSurveyTrip(QObject *parent) :
     QAbstractListModel(parent)
 {
     QHash<int, QByteArray> roles;
@@ -11,11 +11,11 @@ cwSurveyChunkGroup::cwSurveyChunkGroup(QObject *parent) :
     setRoleNames(roles);
 }
 
-int cwSurveyChunkGroup::rowCount(const QModelIndex &/*parent*/) const {
+int cwSurveyTrip::rowCount(const QModelIndex &/*parent*/) const {
     return Chunks.size();
 }
 
-QVariant cwSurveyChunkGroup::data(const QModelIndex &index, int role) const {
+QVariant cwSurveyTrip::data(const QModelIndex &index, int role) const {
     if(!index.isValid()) { return QVariant(); }
     if(role == ChunkRole) {
         return QVariant::fromValue(qobject_cast<QObject*>(Chunks[index.row()]));
@@ -30,7 +30,7 @@ QVariant cwSurveyChunkGroup::data(const QModelIndex &index, int role) const {
 
   Rows must always be added to the root item
   */
-bool cwSurveyChunkGroup::insertRows ( int row, int count, const QModelIndex & parent) {
+bool cwSurveyTrip::insertRows ( int row, int count, const QModelIndex & parent) {
     if(parent != QModelIndex()) { return false; }
     if(row < 0 || row > rowCount()) { return false; }
 
@@ -50,7 +50,7 @@ bool cwSurveyChunkGroup::insertRows ( int row, int count, const QModelIndex & pa
 
   The chunk must be valid
   */
-void cwSurveyChunkGroup::insertRow(int row, cwSurveyChunk* chunk) {
+void cwSurveyTrip::insertRow(int row, cwSurveyChunk* chunk) {
     if(chunk == NULL) { return; }
     if(row < 0) { row = 0; }
     if(row > rowCount()) { row = rowCount(); }
@@ -68,7 +68,7 @@ void cwSurveyChunkGroup::insertRow(int row, cwSurveyChunk* chunk) {
 
   This will reparent all the chunks to this object
   */
-void cwSurveyChunkGroup::setChucks(QList<cwSurveyChunk*> chunks) {
+void cwSurveyTrip::setChucks(QList<cwSurveyChunk*> chunks) {
     beginResetModel();
 
     Chunks = chunks;
@@ -83,7 +83,7 @@ void cwSurveyChunkGroup::setChucks(QList<cwSurveyChunk*> chunks) {
 /**
   \brief Gets all the chunks
   */
-QList<cwSurveyChunk*> cwSurveyChunkGroup::chunks() const {
+QList<cwSurveyChunk*> cwSurveyTrip::chunks() const {
     return Chunks;
 }
 

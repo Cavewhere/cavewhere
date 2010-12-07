@@ -17,15 +17,14 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
     src/cwStationModel.cpp \
-    src/cwSurveyImporter.cpp \
-    src/cwSurveyChunkGroup.cpp \
+    src/cwSurvexImporter.cpp \
     src/cwSurveyChuckView.cpp \
     src/cwSurveyChunkGroupView.cpp \
-    cwClinoValidator.cpp \
-    cwStationValidator.cpp \
-    cwValidator.cpp \
-    cwCompassValidator.cpp \
-    cwDistanceValidator.cpp \
+    src/cwClinoValidator.cpp \
+    src/cwStationValidator.cpp \
+    src/cwValidator.cpp \
+    src/cwCompassValidator.cpp \
+    src/cwDistanceValidator.cpp \
     src/cwSurvexExporter.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
@@ -39,15 +38,14 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwStation.h \
     src/cwShot.h \
     src/cwStationModel.h \
-    src/cwSurveyImporter.h \
-    src/cwSurveyChunkGroup.h \
+    src/cwSurvexImporter.h \
     src/cwSurveyChuckView.h \
     src/cwSurveyChunkGroupView.h \
-    cwClinoValidator.h \
-    cwStationValidator.h \
-    cwValidator.h \
-    cwCompassValidator.h \
-    cwDistanceValidator.h \
+    src/cwClinoValidator.h \
+    src/cwStationValidator.h \
+    src/cwValidator.h \
+    src/cwCompassValidator.h \
+    src/cwDistanceValidator.h \
     src/cwSurvexExporter.h \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \

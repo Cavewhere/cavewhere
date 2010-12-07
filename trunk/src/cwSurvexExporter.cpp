@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurvexExporter.h"
-#include "cwSurveyChunkGroup.h"
+#include "cwSurveyTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwShot.h"

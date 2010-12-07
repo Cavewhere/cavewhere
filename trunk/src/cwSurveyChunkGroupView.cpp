@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurveyChunkGroupView.h"
-#include "cwSurveyChunkGroup.h"
+#include "cwSurveyTrip.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunk.h"
 
