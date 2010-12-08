@@ -6,7 +6,14 @@ cwCave::cwCave() {
 
 }
 
-cwCave::~cwCave() {
+/**
+  \brief Sets the name of the cwCave
+  */
+void cwCave::setName(QString name) {
+    if(Name != name) {
+        Name = name;
+        emit nameChanged(Name);
+    }
 }
 
 /**
@@ -27,7 +34,7 @@ void cwCave::insertTrip(int i, cwSurveyTrip* trip) {
     if(i < 0 || i > Trips.size()) { return; }
 
     //Reparent the trip, if already in another cave
-    cwCave* parentCave = dynamic_cast<cwCave*>(trip->parent());
+    cwCave* parentCave = dynamic_cast<cwCave*>(((QObject*)trip)->parent());
     if(parentCave != NULL) {
         int index = parentCave->Trips.indexOf(trip);
         parentCave->removeTrip(index);
@@ -36,7 +43,7 @@ void cwCave::insertTrip(int i, cwSurveyTrip* trip) {
     Trips.insert(i, trip);
     trip->setParent(this);
 
-    insertedTrips(i, i);
+    emit insertedTrips(i, i);
 }
 
 /**
@@ -53,7 +60,5 @@ void cwCave::removeTrip(int i) {
     currentTrip->setParent(NULL);
 
     Trips.removeAt(i);
-    removedTrips(i, i);
-
-
+    emit removedTrips(i, i);
 }

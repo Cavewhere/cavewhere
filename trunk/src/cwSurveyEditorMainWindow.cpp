@@ -14,6 +14,9 @@
 #include "cwDistanceValidator.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNoteItem.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwRegionTreeModel.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -25,7 +28,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexImporter(NULL),
     SurvexExporter(NULL),
-    ChunkGroup(new cwSurveyTrip(this)),
+    Trip(new cwSurveyTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
@@ -49,15 +52,57 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(ReloadQML()));
 
-    //Initial chunk
-    cwSurveyChunk* chunk = new cwSurveyChunk(ChunkGroup);
+    //Initial chunk - for qml testing
+    cwSurveyChunk* chunk = new cwSurveyChunk(Trip);
     chunk->AppendNewShot(); //Add the first shot
 
     QList<cwSurveyChunk*> chunks;
     chunks.append(chunk);
 
-    ChunkGroup->setChucks(chunks);
+    Trip->setChucks(chunks);
     ReloadQML();
+
+    //Trips
+    cwSurveyTrip* trip1 = new cwSurveyTrip();
+    cwSurveyTrip* trip2 = new cwSurveyTrip();
+    cwSurveyTrip* trip3 = new cwSurveyTrip();
+    cwSurveyTrip* trip4 = new cwSurveyTrip();
+    cwSurveyTrip* trip5 = new cwSurveyTrip();
+    cwSurveyTrip* trip6 = new cwSurveyTrip();
+
+    cwCave* cave1 = new cwCave();
+    cwCave* cave2 = new cwCave();
+    cwCave* cave3 = new cwCave();
+
+    trip1->setName("trip 1");
+    trip2->setName("trip 2");
+    trip3->setName("trip 3");
+    trip4->setName("Sauce trip 1");
+    trip5->setName("Sauce trip 2");
+    trip6->setName("Me trip 1");
+
+    cave1->setName("Cave 1");
+    cave2->setName("Cave 2");
+    cave3->setName("Cave 3");
+
+    cave1->addTrip(trip1);
+    cave1->addTrip(trip2);
+    cave1->addTrip(trip3);
+
+    cave2->addTrip(trip4);
+    cave2->addTrip(trip5);
+
+    cave3->addTrip(trip6);
+
+    cwCavingRegion* region = new cwCavingRegion(this);
+    region->addCave(cave1);
+    region->addCave(cave2);
+    region->addCave(cave3);
+
+    cwRegionTreeModel* regionTree = new cwRegionTreeModel(this);
+    regionTree->setCavingRegion(region);
+
+    DataTreeView->setModel(regionTree);
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -80,7 +125,7 @@ void cwSurveyEditorMainWindow::ExportSurvex() {
         SurvexExporter = new cwSurvexExporter(this);
     }
 
-    SurvexExporter->setChunks(ChunkGroup);
+    SurvexExporter->setChunks(Trip);
     QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     dialog->open(SurvexExporter, SLOT(exportSurvex(QString)));
@@ -105,10 +150,10 @@ void cwSurveyEditorMainWindow::ImportSurvex() {
   */
 void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
     QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
-    if(ChunkGroup == NULL) {
-        ChunkGroup = new cwSurveyTrip(this);
+    if(Trip == NULL) {
+        Trip = new cwSurveyTrip(this);
     }
-    ChunkGroup->setChucks(chunks);
+    Trip->setChucks(chunks);
 
     ReloadQML();
 }
@@ -123,7 +168,7 @@ void cwSurveyEditorMainWindow::ReloadQML() {
 //    }
 
     context->setContextProperty("surveyNoteModel", NoteModel);
-    context->setContextProperty("surveyData", ChunkGroup);
+    context->setContextProperty("surveyData", Trip);
     //context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));

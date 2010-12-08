@@ -11,6 +11,17 @@ cwSurveyTrip::cwSurveyTrip(QObject *parent) :
     setRoleNames(roles);
 }
 
+/**
+  \brief Set's the name of the survey trip
+  */
+void cwSurveyTrip::setName(QString name) {
+    if(name != Name) {
+        Name = name;
+        emit nameChanged(Name);
+    }
+}
+
+
 int cwSurveyTrip::rowCount(const QModelIndex &/*parent*/) const {
     return Chunks.size();
 }

@@ -17,8 +17,10 @@ public:
         ChunkRole = Qt::UserRole + 1,
     };
 
-
     explicit cwSurveyTrip(QObject *parent = 0);
+
+    QString name() const;
+    void setName(QString name);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
@@ -32,6 +34,7 @@ public:
 
 signals:
     void dataChanged();
+    void nameChanged(QString name);
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -39,7 +42,14 @@ public slots:
 
 protected:
     QList<cwSurveyChunk*> Chunks;
-
+    QString Name;
 };
+
+/**
+  \brief Get's the name of the survey trip
+  */
+inline QString cwSurveyTrip::name() const {
+    return Name;
+}
 
 #endif // CWSURVERYCHUNKGROUP_H

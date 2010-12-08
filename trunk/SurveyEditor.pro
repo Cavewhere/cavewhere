@@ -31,7 +31,9 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwNote.cpp \
     src/cwNoteItem.cpp \
     src/cwSurveyTrip.cpp \
-    src/cwCave.cpp
+    src/cwCave.cpp \
+    src/cwCavingRegion.cpp \
+    src/cwRegionTreeModel.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -52,7 +54,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwNote.h \
     src/cwNoteItem.h \
     src/cwSurveyTrip.h \
-    src/cwCave.h
+    src/cwCave.h \
+    src/cwCavingRegion.h \
+    src/cwRegionTreeModel.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui

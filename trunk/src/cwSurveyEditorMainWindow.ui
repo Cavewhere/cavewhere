@@ -16,7 +16,13 @@
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QDeclarativeView" name="DeclarativeView"/>
+     <widget class="QSplitter" name="splitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QTreeView" name="DataTreeView"/>
+      <widget class="QDeclarativeView" name="DeclarativeView"/>
+     </widget>
     </item>
    </layout>
   </widget>

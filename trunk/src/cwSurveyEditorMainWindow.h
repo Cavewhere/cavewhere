@@ -18,7 +18,7 @@ public:
 protected:
     cwSurveyImporter* SurvexImporter;
     cwSurvexExporter* SurvexExporter;
-    cwSurveyTrip* ChunkGroup;
+    cwSurveyTrip* Trip;
     cwSurveyNoteModel* NoteModel;
 
     void changeEvent(QEvent *e);

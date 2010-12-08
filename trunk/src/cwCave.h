@@ -14,7 +14,9 @@ class cwCave : public QObject
 
 public:
     cwCave();
-    ~cwCave();
+
+    QString name() const;
+    void setName(QString name);
 
     int tripCount() const;
     cwSurveyTrip* trip(int index) const;
@@ -22,14 +24,26 @@ public:
     void insertTrip(int i, cwSurveyTrip* trip);
     void removeTrip(int i);
 
-protected:
-    QList<cwSurveyTrip*> Trips;
-
 signals:
     void insertedTrips(int begin, int end);
     void removedTrips(int begin, int end);
 
+    void nameChanged(QString name);
+
+protected:
+    QList<cwSurveyTrip*> Trips;
+    QString Name;
+
+
+
 };
+
+/**
+  \brief Get's the name of the cave
+  */
+inline QString cwCave::name() const {
+    return Name;
+}
 
 /**
   \brief Get's the number of survey trips in the cave
