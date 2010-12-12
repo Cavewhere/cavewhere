@@ -49,11 +49,35 @@ private:
         Compass,
         BackCompass,
         Clino,
-        BackClino
+        BackClino,
+        Ignore,
+        IgnoreAll
+    };
+
+    class Include {
+    public:
+        Include(QString file) :
+            File(file),
+            CurrentLine(0)
+        {
+        }
+
+        QString File;
+        int CurrentLine;
+    };
+
+    class BeginEndState {
+    public:
+        QMap<DataFormatType, int> DataFormat;
     };
 
     //File state to handle includes
-    QStringList IncludeStack;
+    QList<Include> IncludeStack;
+
+    //Handles block state
+    QList<BeginEndState> BeginEndStateStack;
+
+   // QStringList IncludeStack;
 
     //The data that'll be populated
     cwSurvexBlockData* RootBlock; //All blocks are child of this object
@@ -65,7 +89,7 @@ private:
     QStringList Errors;
 
     State CurrentState;
-    int CurrentLine;
+//    int CurrentLine;
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
@@ -82,7 +106,7 @@ private:
 
     //Parsing the data format
     void importDataFormat(QString line);
-    void useDefaultDataFormat();
+
     void importData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
     cwStation* createOrLookupStation(QString stationName);
@@ -95,6 +119,16 @@ private:
 
     QString fullStationName(QString name);
 
+    QMap<DataFormatType, int> useDefaultDataFormat();
+    QMap<DataFormatType, int> currentDataFormat() const;
+    void setCurrentDataFormat(QMap<DataFormatType, int> format);
+
+    QString currentFile() const;
+    int currentLineNumber() const;
+    void increamentLineNumber();
+
+    bool compare(QString s1, QString s2) const;
+
 };
 
 /**
@@ -103,6 +137,14 @@ private:
 inline cwSurvexGlobalData* cwSurvexImporter::data() {
     return GlobalData;
 }
+
+/**
+  \brief compares the to strings with case insensitive
+  */
+inline bool cwSurvexImporter::compare(QString s1, QString s2) const {
+    return s1.compare(s2, Qt::CaseInsensitive) == 0;
+}
+
 
 
 #endif // CWSURVEYIMPORTER_H

@@ -80,7 +80,7 @@ cwSurveyChunk* cwShot::parentChunk() const {
 cwStation* cwShot::toStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
-        return chunk->ToFromStations(this).first;
+        return chunk->ToFromStations(this).second;
     }
 }
 
@@ -90,6 +90,6 @@ cwStation* cwShot::toStation() const {
 cwStation* cwShot::fromStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
-        return chunk->ToFromStations(this).second;
+        return chunk->ToFromStations(this).first;
     }
 }

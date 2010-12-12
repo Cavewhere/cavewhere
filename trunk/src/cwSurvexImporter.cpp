@@ -23,10 +23,17 @@ cwSurvexImporter::cwSurvexImporter(QObject* parent) :
 
 void cwSurvexImporter::importSurvex(QString filename) {
     clear();
-    useDefaultDataFormat();
 
+    //Setup inital state data
+    QMap<DataFormatType, int> defaultFormat = useDefaultDataFormat();
+    BeginEndState rootBlock; //Should never be poped off
+    rootBlock.DataFormat = defaultFormat;
+    BeginEndStateStack.append(rootBlock);
+
+    //The block state
     CurrentState = FirstBegin;
 
+    //
     CurrentBlock = RootBlock;
 
     loadFile(filename);
@@ -37,6 +44,10 @@ void cwSurvexImporter::importSurvex(QString filename) {
     //if(!hasErrors()) {
     saveLastImport(filename);
     //}
+
+    foreach(QString error, Errors) {
+        qDebug() << error;
+    }
 
     emit finishedImporting();
 
@@ -71,6 +82,8 @@ QStringList cwSurvexImporter::errors() {
 void cwSurvexImporter::clear() {
     RootBlock->clear(); //Chunks.clear();
     Errors.clear();
+    IncludeStack.clear();
+    BeginEndStateStack.clear();
 }
 
 /**
@@ -81,9 +94,21 @@ void cwSurvexImporter::loadFile(QString filename) {
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
         //This maybe a relative path to the rootFile
-        QFileInfo rootFileInfo(IncludeStack.last());
-        QString rootFileDir = rootFileInfo.absoluteDir().path();
-        QString fixedUpFile = rootFileDir + "/" + filename;
+        QFileInfo rootFileInfo(currentFile());
+        QDir rootFileDir = rootFileInfo.absoluteDir().path();
+
+        rootFileDir.setNameFilters(QStringList("*.svx"));
+        QStringList entries = rootFileDir.entryList();
+
+        //Find the filename, this is needed because, filename case insensitive
+        foreach(QString entry, entries) {
+            if(entry.contains(filename, Qt::CaseInsensitive)) {
+                filename = entry;
+                break;
+            }
+        }
+
+        QString fixedUpFile = rootFileDir.path() + "/" + filename;
         if(!QFileInfo(fixedUpFile).exists()) {
             //Try to add the .svx extension
             fixedUpFile += ".svx";
@@ -97,20 +122,22 @@ void cwSurvexImporter::loadFile(QString filename) {
         return;
     }
 
-    IncludeStack.append(filename);
+
+    IncludeStack.append(Include(filename));
 
     //QString line;
-    CurrentLine = 0;
+    //CurrentLine = 0;
     while(!file.atEnd()) {
         QString line = file.readLine();
-        CurrentLine++;
+
+        //The last includ file
+        increamentLineNumber();
+
         parseLine(line);
         //qDebug() << "Is open" << file.isOpen();
     }
 
-    foreach(QString error, Errors) {
-        qDebug() << error;
-    }
+
 
     IncludeStack.removeLast();
 
@@ -140,7 +167,8 @@ void cwSurvexImporter::parseLine(QString line) {
     //Skip empty lines
     if(line.isEmpty()) { return; }
 
-    QRegExp exp("^\\s*\\*begin\\s*(\\w*)");
+    QRegExp exp("^\\s*\\*begin\\s*((?:\\w|-|_)*)");
+    exp.setCaseSensitivity(Qt::CaseInsensitive);
     if(line.contains(exp)) {
        // qDebug() << "Has begin" << line;
         CurrentState = InsideBegin;
@@ -148,7 +176,8 @@ void cwSurvexImporter::parseLine(QString line) {
 
         //Create a new block
         cwSurvexBlockData* newBlock = new cwSurvexBlockData();
-        newBlock->setBlockName(exp.cap(1));
+        QString blockName = exp.cap(1).trimmed();
+        newBlock->setBlockName(blockName);
 
         qDebug() << "Adding" << newBlock << "to" << CurrentBlock;
 
@@ -156,7 +185,9 @@ void cwSurvexImporter::parseLine(QString line) {
         CurrentBlock->addChildBlock(newBlock);
         CurrentBlock = newBlock;
 
-
+        //Copy the last state variables
+        BeginEndState state = BeginEndStateStack.last();
+        BeginEndStateStack.append(state);
 
         return;
     }
@@ -169,15 +200,23 @@ void cwSurvexImporter::parseLine(QString line) {
             QString command = exp.cap(1);
             QString args = exp.cap(2).trimmed();
 
-            if(command == "end") {
+            if(compare(command, "end")) {
                 cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
                 if(parentBlock != NULL) {
                     qDebug() << "Popping" << CurrentBlock << " to " << parentBlock;
                     CurrentBlock = parentBlock;
                 }
-            } else if(command == "data") {
+
+                //Remove the current state valiable
+                if(BeginEndStateStack.size() > 1) {
+                    BeginEndStateStack.removeLast();
+                } else {
+                    addError("Too many *end");
+                }
+
+            } else if(compare(command, "data")) {
                 importDataFormat(line);
-            } else if(command == "include") {
+            } else if(compare(command, "include")) {
                 loadFile(args);
             }  else {
                 addWarning(QString("Unknown survex keyword:") + command);
@@ -240,6 +279,7 @@ QString cwSurvexImporter::removeComment(QString& line) {
 void cwSurvexImporter::importDataFormat(QString line) {
     //Remove *data from the line
     QRegExp regExp("^\\s*\\*data\\s*(.*)");
+    regExp.setCaseSensitivity(Qt::CaseInsensitive);
     if(line.contains(regExp)) {
         line = regExp.cap(1);
     }
@@ -254,13 +294,14 @@ void cwSurvexImporter::importDataFormat(QString line) {
     }
 
     //Check for normal data
-    if(dataFormatList.front() != "normal") {
-        addWarning("Normal data is only currently excepted, using default format");
-        useDefaultDataFormat();
+    if(!compare(dataFormatList.front(), "normal")) {
+        addError("Normal data is only currently excepted, using default format");
+        setCurrentDataFormat(useDefaultDataFormat());
         return;
     }
 
-    DataFormat.clear();
+    QMap<DataFormatType, int> dataFormat;
+    dataFormat.clear();
 
     for(int i = 1; i < dataFormatList.size(); i++) {
         QString format = dataFormatList.at(i);
@@ -268,26 +309,32 @@ void cwSurvexImporter::importDataFormat(QString line) {
         int index = i - 1;
         //qDebug() << format << index;
 
-        if(format == "to") {
-            DataFormat[To] = index;
-        } else if(format == "from") {
-            DataFormat[From] = index;
-        } else if(format == "tape") {
-            DataFormat[Distance] = index;
-        } else if(format == "compass") {
-            DataFormat[Compass] = index;
-        } else if(format == "backcompass") {
-            DataFormat[BackCompass] = index;
-        } else if(format == "clino") {
-            DataFormat[Clino] = index;
-        } else if(format == "backclino") {
-            DataFormat[BackClino] = index;
+        if(compare(format, "to")) {
+            dataFormat[To] = index;
+        } else if(compare(format, "from")) {
+            dataFormat[From] = index;
+        } else if(compare(format, "tape") || compare(format, "length")) {
+            dataFormat[Distance] = index;
+        } else if(compare(format, "compass") || compare(format, "bearing")) {
+            dataFormat[Compass] = index;
+        } else if(compare(format, "backcompass")) {
+            dataFormat[BackCompass] = index;
+        } else if(compare(format, "clino") || compare(format, "gradient")) {
+            dataFormat[Clino] = index;
+        } else if(compare(format, "backclino")) {
+            dataFormat[BackClino] = index;
+        } else if(compare(format, "ignore")) {
+            dataFormat[Ignore] = index;
+        } else if(compare(format, "ignoreall")) {
+            dataFormat[IgnoreAll] = index;
         } else {
             addError(QString("Unknown *data keyword: ") + format + " Using default format");
-            useDefaultDataFormat();
-            return;
+            dataFormat = useDefaultDataFormat();
+            break;
         }
     }
+
+    setCurrentDataFormat(dataFormat);
 }
 
 void cwSurvexImporter::addError(QString error) {
@@ -301,18 +348,19 @@ void cwSurvexImporter::addWarning(QString error) {
 void cwSurvexImporter::addToErrors(QString prefix, QString errorMessage) {
     QString currentFilename;
     if(!IncludeStack.isEmpty()) {
-        currentFilename = IncludeStack.last();
+        currentFilename = currentFile();
     }
-    Errors.append(QString("%1: %2::Line %3::%4").arg(prefix).arg(currentFilename).arg(CurrentLine).arg(errorMessage));
+    Errors.append(QString("%1: %2::Line %3::%4").arg(prefix).arg(currentFilename).arg(currentLineNumber()).arg(errorMessage));
 }
 
-void cwSurvexImporter::useDefaultDataFormat() {
-    DataFormat.clear();
-    DataFormat[To] = 0;
-    DataFormat[From] = 1;
-    DataFormat[Distance] = 2;
-    DataFormat[Compass] = 3;
-    DataFormat[Clino] = 4;
+QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::useDefaultDataFormat() {
+    QMap<DataFormatType, int> dataFormat;
+    dataFormat[To] = 0;
+    dataFormat[From] = 1;
+    dataFormat[Distance] = 2;
+    dataFormat[Compass] = 3;
+    dataFormat[Clino] = 4;
+    return dataFormat;
 }
 
 /**
@@ -322,11 +370,17 @@ void cwSurvexImporter::importData(QString line) {
     QStringList data = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
     data.removeAll(""); //Remove all empty ones
 
-    if(DataFormat.size() != data.size()) {
-        addError("Can't extract shot data. To many or few data columns, skipping data");
-        //qDebug() << data;
-        //qDebug() << DataFormat;
+    QMap<DataFormatType, int> dataFormat = currentDataFormat();
+
+    //Make sure the there's the same number of columns as needed
+    if(dataFormat.size() != data.size() && !dataFormat.contains(IgnoreAll)) {
+        addError("Can't extract shot data. To many or not enough data columns, skipping data");
         return;
+    }
+
+    //Make sure there's enough columns
+    if(dataFormat.contains(IgnoreAll) && dataFormat[IgnoreAll] < data.size()) {
+        addError("Can't extract shot data. Not enough data columns, skipping data");
     }
 
     QString fromStationName = extractData(data, From);
@@ -359,8 +413,9 @@ void cwSurvexImporter::importData(QString line) {
   \param type - The which piece of the line data that needs to be extracted
   */
 QString cwSurvexImporter::extractData(const QStringList data, DataFormatType type) {
-    if(DataFormat.contains(type)) {
-        int index = DataFormat[type];
+    QMap<DataFormatType, int> dataFormat = currentDataFormat();
+    if(dataFormat.contains(type)) {
+        int index = dataFormat[type];
         if(index >= 0 && index < data.size()) {
             return data[index];
         }
@@ -443,11 +498,12 @@ QString cwSurvexImporter::fullStationName(QString name) {
     QLinkedList<QString> fullNameList;
 
     //While not the root element of the importer
-    while(current->parent() != NULL) {
+    while(current->parentBlock() != NULL) {
         QString blockName = current->name();
         if(!blockName.isEmpty()) {
             fullNameList.prepend(blockName);
         }
+        current = current->parentBlock();
     }
 
     QString fullName;
@@ -459,3 +515,31 @@ QString cwSurvexImporter::fullStationName(QString name) {
     return fullName;
 }
 
+/**
+  \brief Get's the current data format for the importer
+
+  This uses the current state in the BeginEndStateStack
+  */
+QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::currentDataFormat() const {
+    if(BeginEndStateStack.isEmpty()) { return QMap<DataFormatType, int>(); }
+    return BeginEndStateStack.last().DataFormat;
+}
+
+void cwSurvexImporter::setCurrentDataFormat(QMap<DataFormatType, int> format) {
+    Q_ASSERT(!BeginEndStateStack.isEmpty());
+    BeginEndStateStack.last().DataFormat = format;
+}
+
+QString cwSurvexImporter::currentFile() const {
+    if(IncludeStack.isEmpty()) { return QString(); }
+    return IncludeStack.last().File;
+}
+
+int cwSurvexImporter::currentLineNumber() const {
+    if(IncludeStack.isEmpty()) { return -1; }
+    return IncludeStack.last().CurrentLine;
+}
+void cwSurvexImporter::increamentLineNumber() {
+    Q_ASSERT(!IncludeStack.isEmpty());
+    IncludeStack.last().CurrentLine++;
+}
