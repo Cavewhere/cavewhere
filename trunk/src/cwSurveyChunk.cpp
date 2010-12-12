@@ -18,26 +18,26 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 /**
   \brief Checks if the survey Chunk is valid
   */
-bool cwSurveyChunk::IsValid() {
+bool cwSurveyChunk::IsValid() const {
     return (Stations.size() - 1) == Shots.size() && !Stations.empty() && !Shots.empty();
 }
 
-int cwSurveyChunk::StationCount() {
+int cwSurveyChunk::StationCount() const {
     return Stations.count();
 }
 
-cwStation* cwSurveyChunk::Station(int index) {
+cwStation* cwSurveyChunk::Station(int index) const {
     if(StationIndexCheck(index)) {
         return Stations[index];
     }
     return NULL;
 }
 
-int cwSurveyChunk::ShotCount() {
+int cwSurveyChunk::ShotCount() const {
     return Shots.size();
 }
 
-cwShot* cwSurveyChunk::Shot(int index) {
+cwShot* cwSurveyChunk::Shot(int index) const {
     if(ShotIndexCheck(index)) {
         return Shots[index];
     }
@@ -107,6 +107,7 @@ void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwS
 
     index = Shots.size();
     Shots.append(shot);
+    shot->setParent(this);
     emit ShotsAdded(index, index);
 
     index = Stations.size();
@@ -229,6 +230,25 @@ bool cwSurveyChunk::CanAddShot(cwStation* fromStation, cwStation* toStation, cwS
     return fromStation != NULL && toStation != NULL && shot != NULL &&
             (Stations.empty() || Stations.last() == fromStation);
 }
+
+/**
+  \brief Returns the two and from stations at shot
+
+  This first find the shot and the get's the to and from station.
+  */
+QPair<cwStation*, cwStation*> cwSurveyChunk::ToFromStations(const cwShot* shot) const {
+    if(!IsValid()) { return QPair<cwStation*, cwStation*>(NULL, NULL); }
+    if(shot->parent() != this) { return QPair<cwStation*, cwStation*>(NULL, NULL); }
+
+    for(int i = 0; i < Shots.size(); i++) {
+        if(Shots[i] == shot) {
+            return QPair<cwStation*, cwStation*>(Stations[i], Stations[i + 1]);
+        }
+    }
+
+    return QPair<cwStation*, cwStation*>(NULL, NULL);
+}
+
 
 /**
   \brief Removes a shot and a station from the chunk

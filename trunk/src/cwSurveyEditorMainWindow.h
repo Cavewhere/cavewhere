@@ -3,10 +3,11 @@
 
 //Our includes
 #include "ui_cwSurveyEditorMainWindow.h"
-class cwSurveyImporter;
+class cwSurvexImporter;
 class cwSurvexExporter;
 class cwSurveyTrip;
 class cwSurveyNoteModel;
+class cwImportSurvexDialog;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
 {
@@ -16,7 +17,7 @@ public:
     explicit cwSurveyEditorMainWindow(QWidget *parent = 0);
 
 protected:
-    cwSurveyImporter* SurvexImporter;
+    cwImportSurvexDialog* SurvexImporterDialog;
     cwSurvexExporter* SurvexExporter;
     cwSurveyTrip* Trip;
     cwSurveyNoteModel* NoteModel;

@@ -3,24 +3,36 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
+#include "cwSurvexBlockData.h"
+#include "cwSurvexGlobalData.h"
 
 //Qt includes
 #include <QFile>
 #include <QDebug>
 #include <QSettings>
+#include <QLinkedList>
+#include <QFileInfo>
+#include <QDir>
 
-cwSurveyImporter::cwSurveyImporter(QObject* parent) :
-    QObject(parent)
+cwSurvexImporter::cwSurvexImporter(QObject* parent) :
+    QObject(parent),
+    RootBlock(new cwSurvexBlockData(this)),
+    GlobalData(new cwSurvexGlobalData(this))
 {
 }
 
-void cwSurveyImporter::importSurvex(QString filename) {
+void cwSurvexImporter::importSurvex(QString filename) {
     clear();
     useDefaultDataFormat();
 
     CurrentState = FirstBegin;
 
+    CurrentBlock = RootBlock;
+
     loadFile(filename);
+
+    //Add the rootBlocks to GlobalData
+    GlobalData->setBlocks(RootBlock->childBlocks());
 
     //if(!hasErrors()) {
     saveLastImport(filename);
@@ -34,7 +46,7 @@ void cwSurveyImporter::importSurvex(QString filename) {
   \brief Returns true if errors have accured.
   \returns The list of errors
   */
-bool cwSurveyImporter::hasErrors() {
+bool cwSurvexImporter::hasErrors() {
     return !Errors.isEmpty();
 }
 
@@ -42,35 +54,50 @@ bool cwSurveyImporter::hasErrors() {
   \brief Gets the errors of the importer
   \return Returns the errors if any.  Will be empty if HasErrors() returns false
   */
-QStringList cwSurveyImporter::errors() {
+QStringList cwSurvexImporter::errors() {
     return Errors;
 }
 
-/**
-  \brief Gets all the survey chunks from the file
-  */
-QList<cwSurveyChunk*> cwSurveyImporter::chunks() {
-    return Chunks;
-}
+///**
+//  \brief Gets all the survey chunks from the file
+//  */
+//QList<cwSurveyChunk*> cwSurvexImporter::chunks() {
+//    return Chunks;
+//}
 
 /**
   \brief Clears all the current data in the object
   */
-void cwSurveyImporter::clear() {
-    Chunks.clear();
+void cwSurvexImporter::clear() {
+    RootBlock->clear(); //Chunks.clear();
     Errors.clear();
 }
 
 /**
   \brief Loads the file
   */
-void cwSurveyImporter::loadFile(QString filename) {
+void cwSurvexImporter::loadFile(QString filename) {
+
+    QFileInfo fileInfo(filename);
+    if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
+        //This maybe a relative path to the rootFile
+        QFileInfo rootFileInfo(IncludeStack.last());
+        QString rootFileDir = rootFileInfo.absoluteDir().path();
+        QString fixedUpFile = rootFileDir + "/" + filename;
+        if(!QFileInfo(fixedUpFile).exists()) {
+            //Try to add the .svx extension
+            fixedUpFile += ".svx";
+        }
+        filename = fixedUpFile;
+    }
 
     QFile file(filename);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Errors.append(QString("Error: Couldn't open ") + filename);
         return;
     }
+
+    IncludeStack.append(filename);
 
     //QString line;
     CurrentLine = 0;
@@ -84,6 +111,8 @@ void cwSurveyImporter::loadFile(QString filename) {
     foreach(QString error, Errors) {
         qDebug() << error;
     }
+
+    IncludeStack.removeLast();
 
     //Chunks
 //    foreach(cwSurveyChunk* chunk, Chunks) {
@@ -104,7 +133,7 @@ void cwSurveyImporter::loadFile(QString filename) {
 /**
   \brief Parses a survex line
   */
-void cwSurveyImporter::parseLine(QString line) {
+void cwSurvexImporter::parseLine(QString line) {
     //Remove comments
     line = removeComment(line);
 
@@ -115,25 +144,46 @@ void cwSurveyImporter::parseLine(QString line) {
     if(line.contains(exp)) {
        // qDebug() << "Has begin" << line;
         CurrentState = InsideBegin;
-        BeginNames.append(exp.cap(1));
+        //BeginNames.append(exp.cap(1));
+
+        //Create a new block
+        cwSurvexBlockData* newBlock = new cwSurvexBlockData();
+        newBlock->setBlockName(exp.cap(1));
+
+        qDebug() << "Adding" << newBlock << "to" << CurrentBlock;
+
+        //Add the block to the structure
+        CurrentBlock->addChildBlock(newBlock);
+        CurrentBlock = newBlock;
+
+
+
         return;
     }
 
     if(InsideBegin) {
 
         //Parse command
-        exp = QRegExp("^\\s*\\*(\\w+)");
+        exp = QRegExp("^\\s*\\*(\\w+)\\s*(.*)");
         if(line.contains(exp)) {
             QString command = exp.cap(1);
+            QString args = exp.cap(2).trimmed();
+
             if(command == "end") {
-                BeginNames.removeLast();
+                cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
+                if(parentBlock != NULL) {
+                    qDebug() << "Popping" << CurrentBlock << " to " << parentBlock;
+                    CurrentBlock = parentBlock;
+                }
             } else if(command == "data") {
                 importDataFormat(line);
+            } else if(command == "include") {
+                loadFile(args);
             }  else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
 
-            if(BeginNames.isEmpty()) {
+            if(CurrentBlock == RootBlock) {
                 CurrentState = FirstBegin;
             }
 
@@ -154,7 +204,7 @@ void cwSurveyImporter::parseLine(QString line) {
 /**
   \brief Saves the last import to the qsettings
   */
-void cwSurveyImporter::saveLastImport(QString filename) {
+void cwSurvexImporter::saveLastImport(QString filename) {
     QSettings settings;
     settings.setValue("surveyImporter", filename);
     settings.sync();
@@ -163,7 +213,7 @@ void cwSurveyImporter::saveLastImport(QString filename) {
 /**
   \brief Get's the last survex import
   */
-QString cwSurveyImporter::lastImport() {
+QString cwSurvexImporter::lastImport() {
     QSettings settings;
     QVariant filename;
     settings.value("surveyImporter", filename);
@@ -173,7 +223,7 @@ QString cwSurveyImporter::lastImport() {
 /**
   \brief Remove comments from the line
   */
-QString cwSurveyImporter::removeComment(QString& line) {
+QString cwSurvexImporter::removeComment(QString& line) {
     QString removeCommentLine;
     removeCommentLine = line.trimmed();
 
@@ -187,7 +237,7 @@ QString cwSurveyImporter::removeComment(QString& line) {
 /**
   \brief Tries to load the data formate
   */
-void cwSurveyImporter::importDataFormat(QString line) {
+void cwSurvexImporter::importDataFormat(QString line) {
     //Remove *data from the line
     QRegExp regExp("^\\s*\\*data\\s*(.*)");
     if(line.contains(regExp)) {
@@ -240,15 +290,23 @@ void cwSurveyImporter::importDataFormat(QString line) {
     }
 }
 
-void cwSurveyImporter::addError(QString error) {
-    Errors.append(QString("Error: Line ") + QString("%1 ").arg(CurrentLine) + error);
+void cwSurvexImporter::addError(QString error) {
+    addToErrors("Error", error);
 }
 
-void cwSurveyImporter::addWarning(QString error) {
-    Errors.append(QString("Warning: Line ") + QString("%1 ").arg(CurrentLine) + error);
+void cwSurvexImporter::addWarning(QString error) {
+    addToErrors("Warning", error);
 }
 
-void cwSurveyImporter::useDefaultDataFormat() {
+void cwSurvexImporter::addToErrors(QString prefix, QString errorMessage) {
+    QString currentFilename;
+    if(!IncludeStack.isEmpty()) {
+        currentFilename = IncludeStack.last();
+    }
+    Errors.append(QString("%1: %2::Line %3::%4").arg(prefix).arg(currentFilename).arg(CurrentLine).arg(errorMessage));
+}
+
+void cwSurvexImporter::useDefaultDataFormat() {
     DataFormat.clear();
     DataFormat[To] = 0;
     DataFormat[From] = 1;
@@ -260,7 +318,7 @@ void cwSurveyImporter::useDefaultDataFormat() {
 /**
   \brief Imports a line of survey data
   */
-void cwSurveyImporter::importData(QString line) {
+void cwSurvexImporter::importData(QString line) {
     QStringList data = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
     data.removeAll(""); //Remove all empty ones
 
@@ -300,7 +358,7 @@ void cwSurveyImporter::importData(QString line) {
   \param data - The line data
   \param type - The which piece of the line data that needs to be extracted
   */
-QString cwSurveyImporter::extractData(const QStringList data, DataFormatType type) {
+QString cwSurvexImporter::extractData(const QStringList data, DataFormatType type) {
     if(DataFormat.contains(type)) {
         int index = DataFormat[type];
         if(index >= 0 && index < data.size()) {
@@ -315,12 +373,20 @@ QString cwSurveyImporter::extractData(const QStringList data, DataFormatType typ
   \param stationName - The name of the station
   \returns A new station of a station that's already exists
   */
-cwStation* cwSurveyImporter::createOrLookupStation(QString stationName) {
-    if(StationLookup.contains(stationName)) {
-        return StationLookup[stationName];
+cwStation* cwSurvexImporter::createOrLookupStation(QString stationName) {
+    if(stationName.isEmpty()) { return NULL; }
+
+    //Create the survex prefix
+    QString fullName = fullStationName(stationName);
+
+    //See if the station already exist
+    if(StationLookup.contains(fullName)) {
+        return StationLookup[fullName];
     }
+
+    //Create the stations
     cwStation* station = new cwStation(stationName);
-    StationLookup[stationName] = station;
+    StationLookup[fullName] = station;
     return station;
 }
 
@@ -331,14 +397,14 @@ cwStation* cwSurveyImporter::createOrLookupStation(QString stationName) {
   is the last station in the chunk or will create a new survey chunk.  If a
   new survey chunk is created, it'll be added to the end of the list of chunks.
   */
-void cwSurveyImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
+void cwSurvexImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
     cwSurveyChunk* chunk;
-    if(Chunks.empty()) {
+    if(CurrentBlock->chunkCount() == 0) {
         //Create a new chunk
         chunk = new cwSurveyChunk();
-        Chunks.append(chunk);
+        CurrentBlock->addChunk(chunk);
     } else {
-        chunk = Chunks.last();
+        chunk = CurrentBlock->chunks().last(); //Chunks.last();
     }
 
     if(chunk->CanAddShot(fromStation, toStation, shot)) {
@@ -351,7 +417,8 @@ void cwSurveyImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
         }
 
         chunk = new cwSurveyChunk();
-        Chunks.append(chunk);
+        CurrentBlock->addChunk(chunk);
+        //Chunks.append(chunk);
         if(chunk->CanAddShot(fromStation, toStation, shot)) {
             chunk->AppendShot(fromStation, toStation, shot);
         } else {
@@ -360,5 +427,35 @@ void cwSurveyImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
             return;
         }
     }
+}
+
+/**
+  \brief Get's the full station name
+
+  \param The short name of the station
+
+  This will return all the survex block name prefixes to create a full name
+  */
+QString cwSurvexImporter::fullStationName(QString name) {
+    if(name.isEmpty()) { return QString(); }
+
+    cwSurvexBlockData* current = CurrentBlock;
+    QLinkedList<QString> fullNameList;
+
+    //While not the root element of the importer
+    while(current->parent() != NULL) {
+        QString blockName = current->name();
+        if(!blockName.isEmpty()) {
+            fullNameList.prepend(blockName);
+        }
+    }
+
+    QString fullName;
+    foreach(QString blockName, fullNameList) {
+        fullName.append(blockName).append(".");
+    }
+    fullName.append(name);
+
+    return fullName;
 }
 

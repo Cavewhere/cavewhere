@@ -21,7 +21,7 @@ public:
 
     cwSurveyChunk(QObject *parent = 0);
 
-    bool IsValid();
+    bool IsValid() const;
     bool CanAddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
 
 signals:
@@ -32,11 +32,13 @@ signals:
     void ShotsRemoved(int beginIndex, int endIndex);
 
 public slots:
-    int StationCount();
-    cwStation* Station(int index);
+    int StationCount() const;
+    cwStation* Station(int index) const;
 
-    int ShotCount();
-    cwShot* Shot(int index);
+    int ShotCount() const;
+    cwShot* Shot(int index) const;
+
+    QPair<cwStation*, cwStation*> ToFromStations(const cwShot* shot) const;
 
     void AppendNewShot();
     void AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
@@ -57,8 +59,8 @@ private:
     QList<cwStation*> Stations;
     QList<cwShot*> Shots;
 
-    bool ShotIndexCheck(int index) { return index >= 0 && index < Shots.count();  }
-    bool StationIndexCheck(int index) { return index >= 0 && index < Stations.count(); }
+    bool ShotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
+    bool StationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
 
     void Remove(int stationIndex, int shotIndex);
     int Index(int index, Direction direction);

@@ -33,7 +33,11 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyTrip.cpp \
     src/cwCave.cpp \
     src/cwCavingRegion.cpp \
-    src/cwRegionTreeModel.cpp
+    src/cwRegionTreeModel.cpp \
+    src/cwSurvexGlobalData.cpp \
+    src/cwSurvexBlockData.cpp \
+    src/cwSurvexImporterModel.cpp \
+    src/cwImportSurvexDialog.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -56,10 +60,15 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyTrip.h \
     src/cwCave.h \
     src/cwCavingRegion.h \
-    src/cwRegionTreeModel.h
+    src/cwRegionTreeModel.h \
+    src/cwSurvexGlobalData.h \
+    src/cwSurvexBlockData.h \
+    src/cwSurvexImporterModel.h \
+    src/cwImportSurvexDialog.h
 
 
-FORMS    += src/cwSurveyEditorMainWindow.ui
+FORMS    += src/cwSurveyEditorMainWindow.ui \
+    src/cwImportSurvexDialog.ui
 
 OTHER_FILES += qml/DataBox.qml \
 qml/Navigation.js \

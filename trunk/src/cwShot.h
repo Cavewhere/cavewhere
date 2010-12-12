@@ -1,6 +1,11 @@
 #ifndef CSHOT_H
 #define CSHOT_H
 
+//Our includes
+class cwSurveyChunk;
+class cwStation;
+
+//Qt includes
 #include <QObject>
 #include <QVariant>
 
@@ -32,6 +37,10 @@ public:
 
     QVariant GetBackClino() const;
     void SetBackClino(QVariant backClino);
+
+    cwSurveyChunk* parentChunk() const;
+    cwStation* toStation() const;
+    cwStation* fromStation() const;
 
 
 signals:

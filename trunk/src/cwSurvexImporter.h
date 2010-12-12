@@ -9,23 +9,25 @@
 #include <QMap>
 
 //Our includes
+class cwSurvexBlockData;
+class cwSurvexGlobalData;
 class cwSurveyChunk;
 class cwStation;
 class cwShot;
 
-class cwSurveyImporter : public QObject
+class cwSurvexImporter : public QObject
 {
 Q_OBJECT
 
 public:
-    cwSurveyImporter(QObject* parent);
+    cwSurvexImporter(QObject* parent);
 
     bool hasErrors();
     QStringList errors();
 
-    QList<cwSurveyChunk*> chunks();
-
     QString lastImport();
+
+    cwSurvexGlobalData* data();
 
 public slots:
     void importSurvex(QString filename);
@@ -50,17 +52,24 @@ private:
         BackClino
     };
 
-    QList<cwSurveyChunk*> Chunks;
+    //File state to handle includes
+    QStringList IncludeStack;
+
+    //The data that'll be populated
+    cwSurvexBlockData* RootBlock; //All blocks are child of this object
+    cwSurvexBlockData* CurrentBlock; //The current block
+    cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
+
+
+
     QStringList Errors;
 
     State CurrentState;
-    QStringList BeginNames;
     int CurrentLine;
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
     QMap<QString, cwStation*> StationLookup;
-
 
     void clear();
 
@@ -82,7 +91,18 @@ private:
     //Error Messages
     void addError(QString error);
     void addWarning(QString error);
+    void addToErrors(QString prefix, QString errorMessage);
+
+    QString fullStationName(QString name);
 
 };
+
+/**
+  \brief Gets all the data from the importer
+  */
+inline cwSurvexGlobalData* cwSurvexImporter::data() {
+    return GlobalData;
+}
+
 
 #endif // CWSURVEYIMPORTER_H

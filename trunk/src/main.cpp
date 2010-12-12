@@ -10,17 +10,12 @@
 
 int main(int argc, char *argv[])
 {
-
-
     QApplication a(argc, argv);
-    //a.setGraphicsSystem("opengl");
 
-    QCoreApplication::setOrganizationName("Vadose Solutions");
-    QCoreApplication::setOrganizationDomain("cavewhere.com");
+    QApplication::setOrganizationName("Vadose Solutions");
+    QApplication::setOrganizationDomain("cavewhere.com");
     QApplication::setApplicationName("Cavewhere");
     QApplication::setApplicationVersion("0.1");
-
-
 
     cwSurveyEditorMainWindow w;
     w.show();

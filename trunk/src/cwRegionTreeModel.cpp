@@ -45,7 +45,6 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
 }
 
 QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
-
     cwCave* cave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
     if(cave != NULL) {
         return QModelIndex(); //Caves don't have parents

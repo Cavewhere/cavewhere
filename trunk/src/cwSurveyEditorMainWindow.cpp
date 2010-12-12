@@ -17,6 +17,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
+#include "cwImportSurvexDialog.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -26,12 +27,13 @@
 
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
-    SurvexImporter(NULL),
+    SurvexImporterDialog(NULL),
     SurvexExporter(NULL),
     Trip(new cwSurveyTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
+    splitter->setStretchFactor(1, 7);
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -136,24 +138,26 @@ void cwSurveyEditorMainWindow::ExportSurvex() {
   \brief Opens the suvrex import dialog
   */
 void cwSurveyEditorMainWindow::ImportSurvex() {
-    if(SurvexImporter == NULL) {
-        SurvexImporter = new cwSurveyImporter(this);
-        connect(SurvexImporter, SIGNAL(finishedImporting()), SLOT(UpdateSurveyEditor()));
+
+
+    if(SurvexImporterDialog == NULL) {
+        SurvexImporterDialog = new cwImportSurvexDialog(this);
+//        connect(SurvexImporterDialog, SIGNAL(finishedImporting()), SLOT(UpdateSurveyEditor()));
     }
 
-    QFileDialog* dialog = new QFileDialog(NULL, "Import Survex", SurvexImporter->lastImport(), "Survex *.svx");
-    dialog->open(SurvexImporter, SLOT(importSurvex(QString)));
+    QFileDialog* dialog = new QFileDialog(NULL, "Import Survex", QString(), "Survex *.svx");
+    dialog->open(SurvexImporterDialog, SLOT(setSurvexFile(QString)));
 }
 
 /**
   \brief Updates the survey editor
   */
 void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
-    QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
+//    QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
     if(Trip == NULL) {
         Trip = new cwSurveyTrip(this);
     }
-    Trip->setChucks(chunks);
+//    Trip->setChucks(chunks);
 
     ReloadQML();
 }
