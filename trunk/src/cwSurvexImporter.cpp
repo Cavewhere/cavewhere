@@ -45,9 +45,9 @@ void cwSurvexImporter::importSurvex(QString filename) {
     saveLastImport(filename);
     //}
 
-    foreach(QString error, Errors) {
-        qDebug() << error;
-    }
+//    foreach(QString error, Errors) {
+//        qDebug() << error;
+//    }
 
     emit finishedImporting();
 
@@ -177,9 +177,7 @@ void cwSurvexImporter::parseLine(QString line) {
         //Create a new block
         cwSurvexBlockData* newBlock = new cwSurvexBlockData();
         QString blockName = exp.cap(1).trimmed();
-        newBlock->setBlockName(blockName);
-
-        qDebug() << "Adding" << newBlock << "to" << CurrentBlock;
+        newBlock->setName(blockName);
 
         //Add the block to the structure
         CurrentBlock->addChildBlock(newBlock);
@@ -203,7 +201,6 @@ void cwSurvexImporter::parseLine(QString line) {
             if(compare(command, "end")) {
                 cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
                 if(parentBlock != NULL) {
-                    qDebug() << "Popping" << CurrentBlock << " to " << parentBlock;
                     CurrentBlock = parentBlock;
                 }
 

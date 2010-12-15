@@ -82,6 +82,7 @@ cwStation* cwShot::toStation() const {
     if(chunk != NULL) {
         return chunk->ToFromStations(this).second;
     }
+    return NULL;
 }
 
 /**
@@ -92,4 +93,5 @@ cwStation* cwShot::fromStation() const {
     if(chunk != NULL) {
         return chunk->ToFromStations(this).first;
     }
+    return NULL;
 }

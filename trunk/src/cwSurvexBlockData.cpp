@@ -5,7 +5,8 @@
 
 cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
     QObject(parent),
-    ParentBlock(NULL)
+    ParentBlock(NULL),
+    Type(NoImport)
 {
 }
 
@@ -26,8 +27,35 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Sets the name of the block data
    */
- void cwSurvexBlockData::setBlockName(QString name) {
-     Name = name;
+ void cwSurvexBlockData::setName(QString name) {
+     if(Name != name) {
+         Name = name;
+         emit nameChanged();
+     }
+ }
+
+ /**
+   \brief Sets how this block will be exported
+   */
+ void cwSurvexBlockData::setImportType(ImportType type) {
+     if(Type != type) {
+         Type = type;
+         emit importTypeChanged();
+     }
+ }
+
+ /**
+   \brief Converts the export type to a string
+   */
+ QString cwSurvexBlockData::importTypeToString(ImportType type) {
+     switch(type) {
+     case NoImport:
+         return QString("Don't Import");
+     case Cave:
+         return QString("Cave");
+     case Trip:
+         return QString("Trip");
+     }
  }
 
  /**
@@ -59,7 +87,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Get's all the station for this survex block
    */
- int cwSurvexBlockData::stationCount() {
+ int cwSurvexBlockData::stationCount() const {
      int numStations = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
          numStations += chunk->StationCount();
@@ -73,7 +101,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    Returns null if the index is out of bounds. The index is out of bound when index >=
    stationCount()
    */
- cwStation* cwSurvexBlockData::station(int index) {
+ cwStation* cwSurvexBlockData::station(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(index < chunk->StationCount()) {
              return chunk->Station(index);
@@ -86,7 +114,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
 /**
   \brief Gets the number of shots in the block
   */
- int cwSurvexBlockData::shotCount() {
+ int cwSurvexBlockData::shotCount() const {
      int numShots = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
          numShots += chunk->ShotCount();
@@ -99,7 +127,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
 
    \param index - the index of the shot
    */
- cwShot* cwSurvexBlockData::shot(int index) {
+ cwShot* cwSurvexBlockData::shot(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(index < chunk->ShotCount()) {
              return chunk->Shot(index);
@@ -107,5 +135,24 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
          index -= chunk->ShotCount();
      }
      return NULL;
+ }
+
+ /**
+   \brief Get's the index of the shot
+
+   If the shot doesn't in this block, then -1 is return
+   */
+ int cwSurvexBlockData::indexOfShot(cwShot* shot) const {
+     int index = 0;
+     foreach(cwSurveyChunk* chunk, Chunks) {
+         for(int i = 0; i < chunk->ShotCount(); i++) {
+             cwShot* chunkShot = chunk->Shot(i);
+             if(shot = chunkShot) {
+                 return index;
+             }
+             index++;
+         }
+     }
+     return -1;
  }
 

@@ -3,6 +3,8 @@
 
 //Our includes
 class cwSurvexGlobalData;
+class cwSurvexBlockData;
+class cwShot;
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -21,12 +23,34 @@ public:
 
     void setSurvexData(cwSurvexGlobalData* data);
 
+    cwSurvexBlockData* toBlockData(const QModelIndex& index) const;
+    cwShot* toShot(const QModelIndex& index) const;
+
+    QModelIndex toIndex(cwSurvexBlockData* block);
+    QModelIndex toIndex(cwShot* shot);
+
 signals:
 
 public slots:
 
 private:
+
+    enum Columns {
+        Name,
+        NumberOfColumns
+    };
+
     cwSurvexGlobalData* GlobalData;
+
+    QVariant NameColumnData(const QModelIndex & index, int role) const;
+    QVariant NameColumnDisplayData(const QModelIndex& index) const;
+    QVariant NameColumnIconData(const QModelIndex& index) const;
+
+    void connectBlock(cwSurvexBlockData* block);
+
+private slots:
+    void blockDataChanged();
+    void shotDataChanged();
 
 };
 

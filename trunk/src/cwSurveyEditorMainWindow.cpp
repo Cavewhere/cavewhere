@@ -24,10 +24,12 @@
 #include <QDeclarativeComponent>
 #include <QFileDialog>
 #include <QDebug>
+#include <QSettings>
+
+
 
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
-    SurvexImporterDialog(NULL),
     SurvexExporter(NULL),
     Trip(new cwSurveyTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
@@ -138,15 +140,9 @@ void cwSurveyEditorMainWindow::ExportSurvex() {
   \brief Opens the suvrex import dialog
   */
 void cwSurveyEditorMainWindow::ImportSurvex() {
-
-
-    if(SurvexImporterDialog == NULL) {
-        SurvexImporterDialog = new cwImportSurvexDialog(this);
-//        connect(SurvexImporterDialog, SIGNAL(finishedImporting()), SLOT(UpdateSurveyEditor()));
-    }
-
-    QFileDialog* dialog = new QFileDialog(NULL, "Import Survex", QString(), "Survex *.svx");
-    dialog->open(SurvexImporterDialog, SLOT(setSurvexFile(QString)));
+    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog();
+    survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    survexImportDialog->import();
 }
 
 /**

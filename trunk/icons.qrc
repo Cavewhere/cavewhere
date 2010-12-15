@@ -4,5 +4,8 @@
         <file>icons/AddArrowUp.png</file>
         <file>icons/RemoveArrowDown.png</file>
         <file>icons/RemoveArrowUp.png</file>
+        <file>icons/cave.png</file>
+        <file>icons/dontImport.png</file>
+        <file>icons/trip.png</file>
     </qresource>
 </RCC>

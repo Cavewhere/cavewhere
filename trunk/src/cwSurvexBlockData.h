@@ -19,6 +19,12 @@ class cwSurvexBlockData : public QObject
     friend class cwSurvexGlobalData;
 
 public:
+    enum ImportType {
+        NoImport,
+        Cave,
+        Trip
+    };
+
     cwSurvexBlockData(QObject* parent = 0);
 
     int childBlockCount();
@@ -29,33 +35,43 @@ public:
 
     cwSurvexBlockData* parentBlock() const;
 
+    void setName(QString name);
     QString name() const;
+
+    void setImportType(ImportType type);
+    ImportType importType() const;
+    static QString importTypeToString(ImportType type);
 
     QList<cwSurveyChunk*> chunks();
     QList<cwSurvexBlockData*> childBlocks();
 
-    int stationCount();
-    cwStation* station(int index);
+    int stationCount() const;
+    cwStation* station(int index) const;
 
-    int shotCount();
-    cwShot* shot(int index);
+    int shotCount() const;
+    cwShot* shot(int index) const;
+    int indexOfShot(cwShot* shot) const;
+
+signals:
+    void nameChanged();
+    void importTypeChanged();
 
 private:
     QList<cwSurveyChunk*> Chunks;
     QList<cwSurvexBlockData*> ChildBlocks;
     cwSurvexBlockData* ParentBlock;
-    QString Name;
 
-    void setBlockName(QString name);
+    //Mutible elements
+    QString Name;
+    ImportType Type;
+
+
     void addChildBlock(cwSurvexBlockData* blockData);
     void addChunk(cwSurveyChunk* chunk);
 
     void setParentBlock(cwSurvexBlockData* parentBlock);
 
     void clear();
-
-
-
 };
 
 /**
@@ -105,6 +121,10 @@ inline cwSurvexBlockData* cwSurvexBlockData::parentBlock() const {
   */
 inline void cwSurvexBlockData::setParentBlock(cwSurvexBlockData* parentBlock) {
     ParentBlock = parentBlock;
+}
+
+inline cwSurvexBlockData::ImportType cwSurvexBlockData::importType() const {
+    return Type;
 }
 
 
