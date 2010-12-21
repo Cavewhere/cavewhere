@@ -39,9 +39,37 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    */
  void cwSurvexBlockData::setImportType(ImportType type) {
      if(Type != type) {
+         //Go through children and update thier type
          Type = type;
          emit importTypeChanged();
+
+         foreach(cwSurvexBlockData* child, ChildBlocks) {
+             if(Type != NoImport) {
+                 if(child->isTrip()) {
+                     child->setImportType(Trip);
+                 } else {
+                     child->setImportType(Structure);
+                 }
+             } else {
+                 child->setImportType(NoImport);
+             }
+         }
      }
+ }
+
+ /**
+   \brief Checks to see if this is a trip
+   */
+ bool cwSurvexBlockData::isTrip() const {
+     cwSurvexBlockData* parent = parentBlock();
+     while(parent != NULL) {
+         if(parent->importType() == Trip) {
+             return false;
+         }
+         parent = parent->parentBlock();
+     }
+
+     return !Chunks.isEmpty();
  }
 
  /**

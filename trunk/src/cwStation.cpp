@@ -11,6 +11,22 @@ cwStation::cwStation() {
     Down = "";
 }
 
+/**
+  \brief Make a copy of the station
+
+  This doesn't copy the parent
+  */
+cwStation::cwStation(const cwStation& station) :
+    Name(station.Name),
+    Left(station.Left),
+    Right(station.Right),
+    Up(station.Up),
+    Down(station.Down)
+{
+
+
+}
+
 cwStation::cwStation(QString name) :
     Name(name),
     Left(""),

@@ -8,6 +8,7 @@ class cwSurvexExporter;
 class cwSurveyTrip;
 class cwSurveyNoteModel;
 class cwImportSurvexDialog;
+class cwCavingRegion;
 
 //Qt includes
 #include <QString>
@@ -23,6 +24,9 @@ protected:
     cwSurvexExporter* SurvexExporter;
     cwSurveyTrip* Trip;
     cwSurveyNoteModel* NoteModel;
+
+    //Survey data
+    cwCavingRegion* Region;
 
     void changeEvent(QEvent *e);
 

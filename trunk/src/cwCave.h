@@ -13,7 +13,7 @@ class cwCave : public QObject
     Q_OBJECT
 
 public:
-    cwCave();
+    cwCave(QObject* parent = NULL);
 
     QString name() const;
     void setName(QString name);

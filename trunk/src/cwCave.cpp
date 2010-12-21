@@ -2,7 +2,9 @@
 #include "cwCave.h"
 #include "cwSurveyTrip.h"
 
-cwCave::cwCave() {
+cwCave::cwCave(QObject* parent) :
+    QObject(parent)
+{
 
 }
 

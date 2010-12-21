@@ -28,6 +28,7 @@ public:
     bool insertRows ( int row, int count, const QModelIndex & parent = QModelIndex() );
 
     void insertRow(int row, cwSurveyChunk* chunk);
+    void addChunk(cwSurveyChunk* chunk);
 
     QList<cwSurveyChunk*> chunks() const;
 

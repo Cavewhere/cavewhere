@@ -17,6 +17,7 @@ public:
     int caveCount() const;
     cwCave* cave(int index) const;
     void addCave(cwCave* cave);
+    void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     void removeCave(int index);
 
@@ -30,6 +31,8 @@ public slots:
 
 protected:
     QList<cwCave*> Caves;
+
+    void insertHelper(int index, cwCave* cave);
 
 
 

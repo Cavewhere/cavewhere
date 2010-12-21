@@ -20,9 +20,10 @@ class cwSurvexBlockData : public QObject
 
 public:
     enum ImportType {
-        NoImport,
-        Cave,
-        Trip
+        NoImport, //!< Don't import this block
+        Cave, //!< This block is a cave
+        Trip, //!< This block is a trip
+        Structure, //!< This is neither a Cave nor a Trip, but a imported survex block
     };
 
     cwSurvexBlockData(QObject* parent = 0);
@@ -72,6 +73,8 @@ private:
     void setParentBlock(cwSurvexBlockData* parentBlock);
 
     void clear();
+
+    bool isTrip() const;
 };
 
 /**

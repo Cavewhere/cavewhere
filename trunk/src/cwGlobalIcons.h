@@ -14,10 +14,12 @@ public:
     static QPixmapCache::Key Cave;
     static QPixmapCache::Key NoImport;
     static QPixmapCache::Key Trip;
+    static QPixmapCache::Key Plus;
 
     static const QString CaveFilename;
     static const QString NoImportFilename;
     static const QString TripFilename;
+    static const QString PlusFilename;
 
 };
 

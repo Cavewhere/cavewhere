@@ -5,6 +5,7 @@
 #include "ui_cwImportSurvexDialog.h"
 class cwSurvexImporterModel;
 class cwSurvexImporter;
+class cwCavingRegion;
 
 //Qt includes
 class QItemSelectionModel;
@@ -16,9 +17,9 @@ class cwImportSurvexDialog : public QDialog, private Ui::cwImportSurvexDialog
     Q_OBJECT
 
 public:
-    explicit cwImportSurvexDialog(QWidget *parent = 0);
+    explicit cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent = 0);
 
-    void import();
+    void open();
 
 public slots:
     void setSurvexFile(QString filename);
@@ -38,6 +39,9 @@ private:
         NumberOfItems
     };
 
+    //Where the data will be exported to
+    cwCavingRegion* Region;
+
     //Data stuff
     QString FullFilename;
     cwSurvexImporterModel* Model;
@@ -46,12 +50,16 @@ private:
 
     void setupTypeComboBox();
 
+    void updateImportErrors();
+
 private slots:
     void updateCurrentItem(QItemSelection selected, QItemSelection deselected);
     void setType(int index);
 
-    TypeItem ImportTypeToTypeItem(int type) const;
-    int TypeItemToImportType(TypeItem typeItem) const;
+    TypeItem importTypeToTypeItem(int type) const;
+    int typeItemToImportType(TypeItem typeItem) const;
+
+    void import();
 
 };
 

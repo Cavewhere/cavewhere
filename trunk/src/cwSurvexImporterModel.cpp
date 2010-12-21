@@ -127,6 +127,11 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
                  cwGlobalIcons::Cave = QPixmapCache::insert(icon);
              }
              break;
+         case cwSurvexBlockData::Structure:
+             if(!QPixmapCache::find(cwGlobalIcons::Plus, &icon)) {
+                 icon = QPixmap(cwGlobalIcons::PlusFilename);
+                 cwGlobalIcons::Plus = QPixmapCache::insert(icon);
+             }
          }
 
          return QVariant(icon);

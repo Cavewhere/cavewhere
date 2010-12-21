@@ -31,6 +31,15 @@ cwShot::cwShot(QVariant distance,
     BackClino = backClino;
 }
 
+cwShot::cwShot(const cwShot& shot) {
+    Distance = shot.Distance;
+    Compass = shot.Compass;
+    BackCompass = shot.BackCompass;
+    Clino = shot.Clino;
+    BackClino = shot.Clino;
+}
+
+
 void cwShot::SetDistance(QVariant distance) {
     if(Distance != distance) {
         Distance = distance;

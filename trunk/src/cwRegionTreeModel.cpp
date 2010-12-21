@@ -3,6 +3,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwSurveyTrip.h"
+#include "cwGlobalIcons.h"
 
 //Qt include
 #include <QDebug>
@@ -16,6 +17,7 @@ cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
     beginResetModel();
     Region = region;
+    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(insertCaves(int,int)));
     endResetModel();
 }
 
@@ -91,6 +93,14 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         switch(role) {
         case Qt::DisplayRole:
             return QVariant(cave->name());
+        case Qt::DecorationRole: {
+            QPixmap icon;
+            if(!QPixmapCache::find(cwGlobalIcons::Cave, &icon)) {
+                icon = QPixmap(cwGlobalIcons::CaveFilename);
+                cwGlobalIcons::Cave = QPixmapCache::insert(icon);
+            }
+            return QVariant(icon);
+        }
         default:
             return QVariant();
         }
@@ -101,6 +111,14 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         switch(role) {
         case Qt::DisplayRole:
             return QVariant(trip->name());
+        case Qt::DecorationRole: {
+            QPixmap icon;
+            if(!QPixmapCache::find(cwGlobalIcons::Trip, &icon)) {
+                icon = QPixmap(cwGlobalIcons::TripFilename);
+                cwGlobalIcons::Trip = QPixmapCache::insert(icon);
+            }
+            return QVariant(icon);
+        }
         default:
             return QVariant();
         }
@@ -108,3 +126,12 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
 
     return QVariant();
 }
+
+/**
+  \brief New caves inserted
+  */
+void cwRegionTreeModel::insertCaves(int beginIndex, int endIndex) {
+    beginInsertRows(QModelIndex(), beginIndex, endIndex);
+    endInsertRows();
+}
+

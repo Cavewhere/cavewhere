@@ -3,10 +3,13 @@
 
 //Our includes
 class cwSurvexBlockData;
+class cwCave;
+class cwSurveyTrip;
 
 //Qt includes
 #include <QObject>
 #include <QList>
+#include <QStringList>
 
 class cwSurvexGlobalData : public QObject
 {
@@ -17,14 +20,17 @@ public:
 
     QList<cwSurvexBlockData*> blocks() const;
 
+    QList<cwCave*> caves();
+    QStringList erros();
 
 private:
     QList<cwSurvexBlockData*> RootBlocks;
 
-    void AddFixSatation();
-    void AddEquate();
+    QStringList ImportErrors;
 
     void setBlocks(QList<cwSurvexBlockData*> blocks);
+
+    void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwSurveyTrip* trip);
 };
 
 inline QList<cwSurvexBlockData*> cwSurvexGlobalData::blocks() const {

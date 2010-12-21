@@ -75,6 +75,13 @@ void cwSurveyTrip::insertRow(int row, cwSurveyChunk* chunk) {
 }
 
 /**
+  \brief Adds the chunk to the trip
+  */
+ void cwSurveyTrip::addChunk(cwSurveyChunk* chunk) {
+     insertRow(rowCount(), chunk);
+ }
+
+/**
   \brief Set chunks for the group
 
   This will reparent all the chunks to this object

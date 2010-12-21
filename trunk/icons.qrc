@@ -7,5 +7,6 @@
         <file>icons/cave.png</file>
         <file>icons/dontImport.png</file>
         <file>icons/trip.png</file>
+        <file>icons/plus.png</file>
     </qresource>
 </RCC>

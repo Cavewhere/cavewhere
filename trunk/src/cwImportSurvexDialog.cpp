@@ -4,6 +4,8 @@
 #include "cwSurvexImporter.h"
 #include "cwGlobalIcons.h"
 #include "cwSurvexBlockData.h"
+#include "cwSurvexGlobalData.h"
+#include "cwCavingRegion.h"
 
 //Qt includes
 #include <QFileSystemModel>
@@ -11,24 +13,29 @@
 #include <QFileDialog>
 #include <QItemSelectionModel>
 #include <QPixmapCache>
+#include <QMessageBox>
 #include <QDebug>
+
 
 const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
 
-cwImportSurvexDialog::cwImportSurvexDialog(QWidget *parent) :
+cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
     Model(new cwSurvexImporterModel(this)),
     Importer(new cwSurvexImporter(this)),
-    SurvexSelectionModel(new QItemSelectionModel(Model, this))
+    SurvexSelectionModel(new QItemSelectionModel(Model, this)),
+  Region(region)
 {
     setupUi(this);
     setupTypeComboBox();
 
     connect(SurvexSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(updateCurrentItem(QItemSelection,QItemSelection)));
+    connect(ImportButton, SIGNAL(clicked()), SLOT(import()));
 
     SurvexTreeView->setModel(Model);
     SurvexTreeView->setSelectionModel(SurvexSelectionModel);
     SurvexTreeView->setHeaderHidden(true);
+    SurvexTreeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
     TypeComboBox->setEnabled(false);
 
@@ -40,7 +47,13 @@ cwImportSurvexDialog::cwImportSurvexDialog(QWidget *parent) :
 /**
   \brief Start to the dialog to import
   */
-void cwImportSurvexDialog::import() {
+void cwImportSurvexDialog::open() {
+    if(Region == NULL) {
+        QMessageBox box(QMessageBox::Critical, "Broke Sauce!", "Oops, the programer has made a mistake and Cavewhere can't open Survex Import Dialog.");
+        box.exec();
+        return;
+    }
+
     QSettings settings;
     QString lastFile = settings.value(ImportSurvexKey).toString();
 
@@ -69,6 +82,7 @@ void cwImportSurvexDialog::setSurvexFile(QString filename) {
 
     show();
 }
+
 
 void cwImportSurvexDialog::changeEvent(QEvent *e)
 {
@@ -131,6 +145,15 @@ void cwImportSurvexDialog::setupTypeComboBox() {
     connect(TypeComboBox, SIGNAL(activated(int)), SLOT(setType(int)));
 }
 
+/**
+  \brief This will go through the cwSurvexGlobalData and see if it's possible to import it
+
+  The main purpose of this dialog is to check for name collision for stations in a cave
+  */
+void cwImportSurvexDialog::updateImportErrors() {
+
+}
+
 
 /**
   \brief Updates this view with the current items that are selected
@@ -144,7 +167,7 @@ void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelec
         if(block != NULL) {
 
             //Set the index of the combo box
-            TypeItem item = ImportTypeToTypeItem(block->importType());
+            TypeItem item = importTypeToTypeItem(block->importType());
             TypeComboBox->setCurrentIndex(item);
 
             //Set the text for the combo box
@@ -178,7 +201,7 @@ void cwImportSurvexDialog::setType(int index) {
         cwSurvexBlockData* block = Model->toBlockData(currentIndex);
 
         if(block != NULL) {
-            cwSurvexBlockData::ImportType importType = (cwSurvexBlockData::ImportType)TypeItemToImportType((TypeItem)index);
+            cwSurvexBlockData::ImportType importType = (cwSurvexBlockData::ImportType)typeItemToImportType((TypeItem)index);
             block->setImportType(importType);
         }
     }
@@ -188,7 +211,7 @@ void cwImportSurvexDialog::setType(int index) {
 /**
   \brief Converts a typeItem to a cwSurvexBlockData::ImportType
   */
-int cwImportSurvexDialog::TypeItemToImportType(TypeItem typeItem) const {
+int cwImportSurvexDialog::typeItemToImportType(TypeItem typeItem) const {
     switch(typeItem) {
     case NoImportItem:
         return cwSurvexBlockData::NoImport;
@@ -204,7 +227,7 @@ int cwImportSurvexDialog::TypeItemToImportType(TypeItem typeItem) const {
     /**
       \brief Converts a cwSurvexBlockData::ImportType to a typeItem
       */
-cwImportSurvexDialog::TypeItem cwImportSurvexDialog::ImportTypeToTypeItem(int type) const {
+cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int type) const {
     switch(type) {
     case cwSurvexBlockData::NoImport:
         return NoImportItem;
@@ -214,4 +237,12 @@ cwImportSurvexDialog::TypeItem cwImportSurvexDialog::ImportTypeToTypeItem(int ty
         return TripItem;
     }
     return (cwImportSurvexDialog::TypeItem)-1;
+}
+
+/**
+  \brief Tries to import
+  */
+void cwImportSurvexDialog::import() {
+    cwSurvexGlobalData* globalData = Importer->data();
+    Region->addCaves(globalData->caves());
 }

@@ -98,13 +98,13 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     cave3->addTrip(trip6);
 
-    cwCavingRegion* region = new cwCavingRegion(this);
-    region->addCave(cave1);
-    region->addCave(cave2);
-    region->addCave(cave3);
+    Region = new cwCavingRegion(this);
+    Region->addCave(cave1);
+    Region->addCave(cave2);
+    Region->addCave(cave3);
 
     cwRegionTreeModel* regionTree = new cwRegionTreeModel(this);
-    regionTree->setCavingRegion(region);
+    regionTree->setCavingRegion(Region);
 
     DataTreeView->setModel(regionTree);
 }
@@ -140,9 +140,9 @@ void cwSurveyEditorMainWindow::ExportSurvex() {
   \brief Opens the suvrex import dialog
   */
 void cwSurveyEditorMainWindow::ImportSurvex() {
-    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog();
+    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Region, this);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    survexImportDialog->import();
+    survexImportDialog->open();
 }
 
 /**

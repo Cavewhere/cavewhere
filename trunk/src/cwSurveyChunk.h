@@ -20,6 +20,7 @@ public:
     };
 
     cwSurveyChunk(QObject *parent = 0);
+    cwSurveyChunk(const cwSurveyChunk& chunk);
 
     bool IsValid() const;
     bool CanAddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);

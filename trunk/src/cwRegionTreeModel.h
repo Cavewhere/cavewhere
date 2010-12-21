@@ -28,6 +28,9 @@ signals:
 
 public slots:
 
+private slots:
+    void insertCaves(int beginIndex, int endIndex);
+
 private:
 
     cwCavingRegion* Region;

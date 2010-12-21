@@ -16,6 +16,7 @@ class cwStation : public QObject {
 
 public:
     cwStation();
+    cwStation(const cwStation& station);
     cwStation(QString name);
     cwStation(QString name, float left, float right, float up, float down);
 

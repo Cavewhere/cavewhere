@@ -16,6 +16,29 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 }
 
 /**
+  \brief Makes a deap copy of the chunk
+
+  All station will be copied into new stations, with the same data.
+  */
+cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) : QObject() {
+
+    //Copy all the stations
+    Stations.reserve(chunk.Stations.size());
+    foreach(cwStation* station, chunk.Stations) {
+        cwStation* newStation = new cwStation(*station);
+        Stations.append(newStation);
+    }
+
+    //Copy all the shots
+    Shots.reserve(chunk.Shots.size());
+    foreach(cwShot* shot, chunk.Shots) {
+        cwShot* newShot = new cwShot(*shot);
+        newShot->setParent(this);
+        Shots.append(newShot);
+    }
+}
+
+/**
   \brief Checks if the survey Chunk is valid
   */
 bool cwSurveyChunk::IsValid() const {

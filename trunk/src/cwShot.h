@@ -22,6 +22,7 @@ public:
     explicit cwShot(QObject *parent = 0);
 
     cwShot(QVariant distance, QVariant compass, QVariant backCompass, QVariant clino, QVariant backClino, QObject* parent = 0);
+    cwShot(const cwShot& shot);
 
     QVariant GetDistance() const;
     void SetDistance(QVariant distance);
