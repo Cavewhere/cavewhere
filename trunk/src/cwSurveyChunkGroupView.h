@@ -9,6 +9,7 @@ class QModelIndex;
 class cwSurveyTrip;
 class cwSurveyChunkView;
 class cwSurveyChunk;
+class cwSurveyChunkViewComponents;
 
 class cwSurveyChunkGroupView : public QDeclarativeItem
 {
@@ -66,15 +67,14 @@ protected:
 
 private:
     //The model
-    cwSurveyTrip* ChunkGroup;
+    cwSurveyTrip* Trip;
 
     //GUI elements
+    cwSurveyChunkViewComponents* ChunkQMLComponents; //The components for creating a chunk
     QList<cwSurveyChunkView*> ChunkViews; //The active chunks
     QList<QRectF> ChunkBoundingRects;  //Sorted in ascending order by y position
    // QList<float> ChunkYPositions; //All the chunk y positions, should be sorted ascending
 
-    //The content height and width, all the content
-    QSizeF ContentArea;
 
     //The viewport area, what is seen by the user
     QRectF ViewportArea;

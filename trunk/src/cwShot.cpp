@@ -31,12 +31,12 @@ cwShot::cwShot(QVariant distance,
     BackClino = backClino;
 }
 
-cwShot::cwShot(const cwShot& shot) {
+cwShot::cwShot(const cwShot& shot) : QObject() {
     Distance = shot.Distance;
     Compass = shot.Compass;
     BackCompass = shot.BackCompass;
     Clino = shot.Clino;
-    BackClino = shot.Clino;
+    BackClino = shot.BackClino;
 }
 
 

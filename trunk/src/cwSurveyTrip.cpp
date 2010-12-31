@@ -2,7 +2,7 @@
 #include "cwSurveyTrip.h"
 #include "cwSurveyChunk.h"
 
-cwSurveyTrip::cwSurveyTrip(QObject *parent) :
+cwTrip::cwTrip(QObject *parent) :
     QAbstractListModel(parent)
 {
     QHash<int, QByteArray> roles;
@@ -14,7 +14,7 @@ cwSurveyTrip::cwSurveyTrip(QObject *parent) :
 /**
   \brief Set's the name of the survey trip
   */
-void cwSurveyTrip::setName(QString name) {
+void cwTrip::setName(QString name) {
     if(name != Name) {
         Name = name;
         emit nameChanged(Name);
@@ -22,11 +22,11 @@ void cwSurveyTrip::setName(QString name) {
 }
 
 
-int cwSurveyTrip::rowCount(const QModelIndex &/*parent*/) const {
+int cwTrip::rowCount(const QModelIndex &/*parent*/) const {
     return Chunks.size();
 }
 
-QVariant cwSurveyTrip::data(const QModelIndex &index, int role) const {
+QVariant cwTrip::data(const QModelIndex &index, int role) const {
     if(!index.isValid()) { return QVariant(); }
     if(role == ChunkRole) {
         return QVariant::fromValue(qobject_cast<QObject*>(Chunks[index.row()]));
@@ -41,7 +41,7 @@ QVariant cwSurveyTrip::data(const QModelIndex &index, int role) const {
 
   Rows must always be added to the root item
   */
-bool cwSurveyTrip::insertRows ( int row, int count, const QModelIndex & parent) {
+bool cwTrip::insertRows ( int row, int count, const QModelIndex & parent) {
     if(parent != QModelIndex()) { return false; }
     if(row < 0 || row > rowCount()) { return false; }
 
@@ -61,7 +61,7 @@ bool cwSurveyTrip::insertRows ( int row, int count, const QModelIndex & parent) 
 
   The chunk must be valid
   */
-void cwSurveyTrip::insertRow(int row, cwSurveyChunk* chunk) {
+void cwTrip::insertRow(int row, cwSurveyChunk* chunk) {
     if(chunk == NULL) { return; }
     if(row < 0) { row = 0; }
     if(row > rowCount()) { row = rowCount(); }
@@ -77,7 +77,7 @@ void cwSurveyTrip::insertRow(int row, cwSurveyChunk* chunk) {
 /**
   \brief Adds the chunk to the trip
   */
- void cwSurveyTrip::addChunk(cwSurveyChunk* chunk) {
+ void cwTrip::addChunk(cwSurveyChunk* chunk) {
      insertRow(rowCount(), chunk);
  }
 
@@ -86,7 +86,7 @@ void cwSurveyTrip::insertRow(int row, cwSurveyChunk* chunk) {
 
   This will reparent all the chunks to this object
   */
-void cwSurveyTrip::setChucks(QList<cwSurveyChunk*> chunks) {
+void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
     beginResetModel();
 
     Chunks = chunks;
@@ -101,7 +101,7 @@ void cwSurveyTrip::setChucks(QList<cwSurveyChunk*> chunks) {
 /**
   \brief Gets all the chunks
   */
-QList<cwSurveyChunk*> cwSurveyTrip::chunks() const {
+QList<cwSurveyChunk*> cwTrip::chunks() const {
     return Chunks;
 }
 

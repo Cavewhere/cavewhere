@@ -6,12 +6,17 @@ class cwCavingRegion;
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QtGlobal>
 
 class cwRegionTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
 
 public:
+    enum RoleItem {
+        ObjectRole = Qt::UserRole + 1
+    };
+
     explicit cwRegionTreeModel(QObject *parent = 0);
 
     void setCavingRegion(cwCavingRegion* region);

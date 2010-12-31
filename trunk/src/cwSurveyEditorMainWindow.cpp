@@ -18,6 +18,8 @@
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
 #include "cwImportSurvexDialog.h"
+#include "cwTreeView.h"
+#include "cwQMLWidget.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -25,17 +27,17 @@
 #include <QFileDialog>
 #include <QDebug>
 #include <QSettings>
+#include <QTreeView>
 
 
 
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexExporter(NULL),
-    Trip(new cwSurveyTrip(this)),
+    Trip(new cwTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
-    splitter->setStretchFactor(1, 7);
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
 
@@ -44,13 +46,19 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
-    qmlRegisterType<cwSurveyTrip>();
+    qmlRegisterType<cwTrip>();
     qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
     qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
     qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
     qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
+    qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
+    qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
+    qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
+    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
+
+    //qmlRegisterExtendedType<cwRegionTreeModel, QAbstractItemModel>("Cavewhere", 1, 0, "AbstractItemModel");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
@@ -64,49 +72,20 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     chunks.append(chunk);
 
     Trip->setChucks(chunks);
-    ReloadQML();
 
-    //Trips
-    cwSurveyTrip* trip1 = new cwSurveyTrip();
-    cwSurveyTrip* trip2 = new cwSurveyTrip();
-    cwSurveyTrip* trip3 = new cwSurveyTrip();
-    cwSurveyTrip* trip4 = new cwSurveyTrip();
-    cwSurveyTrip* trip5 = new cwSurveyTrip();
-    cwSurveyTrip* trip6 = new cwSurveyTrip();
-
-    cwCave* cave1 = new cwCave();
-    cwCave* cave2 = new cwCave();
-    cwCave* cave3 = new cwCave();
-
-    trip1->setName("trip 1");
-    trip2->setName("trip 2");
-    trip3->setName("trip 3");
-    trip4->setName("Sauce trip 1");
-    trip5->setName("Sauce trip 2");
-    trip6->setName("Me trip 1");
-
-    cave1->setName("Cave 1");
-    cave2->setName("Cave 2");
-    cave3->setName("Cave 3");
-
-    cave1->addTrip(trip1);
-    cave1->addTrip(trip2);
-    cave1->addTrip(trip3);
-
-    cave2->addTrip(trip4);
-    cave2->addTrip(trip5);
-
-    cave3->addTrip(trip6);
 
     Region = new cwCavingRegion(this);
-    Region->addCave(cave1);
-    Region->addCave(cave2);
-    Region->addCave(cave3);
+    RegionTreeModel = new cwRegionTreeModel(this);
+    RegionTreeModel->setCavingRegion(Region);
+    RegionTreeView = new QTreeView();
+    RegionTreeView->setModel(RegionTreeModel);
 
-    cwRegionTreeModel* regionTree = new cwRegionTreeModel(this);
-    regionTree->setCavingRegion(Region);
+    ReloadQML();
 
-    DataTreeView->setModel(regionTree);
+    //Setup interaction for selection
+    QItemSelectionModel* regionSelectionModel = RegionTreeView->selectionModel();
+    connect(regionSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(SetSurveyData(QItemSelection,QItemSelection)));
+
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -151,7 +130,7 @@ void cwSurveyEditorMainWindow::ImportSurvex() {
 void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
 //    QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
     if(Trip == NULL) {
-        Trip = new cwSurveyTrip(this);
+        Trip = new cwTrip(this);
     }
 //    Trip->setChucks(chunks);
 
@@ -160,18 +139,44 @@ void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
 
 void cwSurveyEditorMainWindow::ReloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
-
-//    QList<QObject*> objects;
-//    foreach(cwSurveyChunk* chunk, ChunkGroup->chunks()) {
-//        qDebug() << "Chunk" << chunk;
-//        objects.append(chunk);
-//    }
+    context->setParent(this);
 
     context->setContextProperty("surveyNoteModel", NoteModel);
     context->setContextProperty("surveyData", Trip);
-    //context->setContextProperty("testChunk", ChunkGroup->chunk(0)); //set the first chunk
+    context->setContextProperty("regionTreeView", RegionTreeView);
+    //context->setContextProperty("regionModel", RegionTreeModel);
+
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
 
+
+//    RegionView  = context->findChild<cwTreeView*>("regionTree");
+//    //qDebug() << "TreeVariant" << treeVariant << treeVariant.isNull();
+//    //RegionView = qobject_cast<cwTreeView*>(treeVariant.value<QObject*>());
+//    if(RegionView == NULL) {
+//        qWarning() << "WTF mate: Can't find \"regionTree\" in qml/SurveyEditor.qml";
+//    }
+
+}
+
+/**
+  \brief Set's the survey data for the current editor
+  */
+void cwSurveyEditorMainWindow::SetSurveyData(QItemSelection selected, QItemSelection deselected) {
+
+    QList<QModelIndex> selectedIndexes = selected.indexes();
+    if(!selectedIndexes.isEmpty()) {
+        QModelIndex firstSelected = selectedIndexes.first();
+        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
+        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
+        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
+        if(trip != NULL) {
+            QDeclarativeContext* context = DeclarativeView->rootContext();
+            context->setContextProperty("surveyData", trip);
+
+        } else if(cave != NULL) {
+            //Do nothing for now
+        }
+    }
 }
 

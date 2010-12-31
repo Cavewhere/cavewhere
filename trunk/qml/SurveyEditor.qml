@@ -7,19 +7,45 @@ Rectangle {
     border.width: 2
     border.color: "green"
 
+    ProxyWidget {
+        id: regionTree
+
+        width: 300;
+
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.bottomMargin: 1
+
+        widget: regionTreeView
+
+        Component.onCompleted: {
+            console.debug("Loading Widget: " + widget);
+        }
+
+        Rectangle {
+            border.width: 1
+            border.color: "black"
+
+            anchors.fill: parent
+
+            color: Qt.rgba(0, 0, 0, 0);
+        }
+    }
+
+
 
     Flickable {
         id: flickArea
 
         contentHeight: view.contentHeight
-        contentWidth: view.contentWidth
 
-        width: 425; //childrenRect.width;
+        width: view.contentWidth;
 
         anchors.top: parent.top
         anchors.bottom: parent.bottom;
-        anchors.left: parent.left;
-
+        anchors.left: regionTree.right;
+        anchors.margins: 1;
 
         clip: true;
 

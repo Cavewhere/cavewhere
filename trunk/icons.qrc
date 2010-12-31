@@ -8,5 +8,6 @@
         <file>icons/dontImport.png</file>
         <file>icons/trip.png</file>
         <file>icons/plus.png</file>
+        <file>icons/minus.png</file>
     </qresource>
 </RCC>

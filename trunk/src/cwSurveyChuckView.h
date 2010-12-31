@@ -12,6 +12,7 @@
 class cwSurveyChunk;
 class cwStation;
 class cwShot;
+class cwSurveyChunkViewComponents;
 
 
 class cwSurveyChunkView : public QDeclarativeItem
@@ -35,6 +36,8 @@ public:
     void SetNavigationBelow(const cwSurveyChunkView* below);
     void SetNavigationAbove(const cwSurveyChunkView* above);
     void SetNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below);
+
+    void SetQMLComponents(cwSurveyChunkViewComponents* components);
 
 signals:
     void modelChanged();
@@ -139,17 +142,19 @@ private:
     QList<int> StationNavigationQueue;
     QList<int> ShotNavigationQueue;
 
-    QDeclarativeComponent* StationDelegate;
-    QDeclarativeComponent* TitleDelegate;
-    QDeclarativeComponent* LeftDelegate;
-    QDeclarativeComponent* RightDelegate;
-    QDeclarativeComponent* UpDelegate;
-    QDeclarativeComponent* DownDelegate;
-    QDeclarativeComponent* DistanceDelegate;
-    QDeclarativeComponent* FrontCompassDelegate;
-    QDeclarativeComponent* BackCompassDelegate;
-    QDeclarativeComponent* FrontClinoDelegate;
-    QDeclarativeComponent* BackClinoDelegate;
+    //Where all the survey chunk view's delegates are stored
+    cwSurveyChunkViewComponents* QMLComponents;
+//    QDeclarativeComponent* StationDelegate;
+//    QDeclarativeComponent* TitleDelegate;
+//    QDeclarativeComponent* LeftDelegate;
+//    QDeclarativeComponent* RightDelegate;
+//    QDeclarativeComponent* UpDelegate;
+//    QDeclarativeComponent* DownDelegate;
+//    QDeclarativeComponent* DistanceDelegate;
+//    QDeclarativeComponent* FrontCompassDelegate;
+//    QDeclarativeComponent* BackCompassDelegate;
+//    QDeclarativeComponent* FrontClinoDelegate;
+//    QDeclarativeComponent* BackClinoDelegate;
 
     QDeclarativeItem* StationTitle;
     QDeclarativeItem* DistanceTitle;
@@ -200,6 +205,8 @@ private:
 
     bool InterfaceValid();
 };
+
+ //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)
 
 
 

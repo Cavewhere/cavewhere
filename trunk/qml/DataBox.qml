@@ -6,6 +6,8 @@ NavigationRectangle {
 
     property alias dataValue: dataTextInput.text
     property alias dataValidator: dataTextInput.validator
+   // property string dataValue
+  //  property variant dataValidator: DoubleValidator { }
     property alias edittorOpen: edittor.visible
     property variant dataObject //For hooking up signals and slots in subclasses
     property int rowIndex: -1
@@ -34,6 +36,7 @@ NavigationRectangle {
         visible: dataBox.focus || dataTextInput.focus
     }
 
+
     ShadowRectangle {
         id: edittor
         color: "white"
@@ -45,9 +48,10 @@ NavigationRectangle {
         TextInput {
             id: dataTextInput
             anchors.centerIn: parent
-            selectByMouse: true;         
+            selectByMouse: true;
         }
     }
+
 
 
     MouseArea {
@@ -134,10 +138,12 @@ NavigationRectangle {
 
         State {
             name: "MiddleTyping"
+
             PropertyChanges {
                 target: edittor
                 visible: true
             }
+
 
             PropertyChanges {
                 target: dataText
@@ -175,10 +181,12 @@ NavigationRectangle {
         State {
             name: "EndTyping"
             extend: "MiddleTyping"
+
             PropertyChanges {
                 target: edittor
                 visible: true
             }
+
 
             PropertyChanges {
                 target: dataText

@@ -42,7 +42,7 @@ QStringList cwSurvexGlobalData::erros() {
 /**
   \brief Helper function the caves function
   */
-void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwSurveyTrip* currentTrip) {
+void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* currentTrip) {
 
     switch(currentBlock->importType()) {
     case cwSurvexBlockData::NoImport:
@@ -54,7 +54,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* c
         caves->append(currentCave);
         break;
     case cwSurvexBlockData::Trip: {
-        currentTrip = new cwSurveyTrip(this);
+        currentTrip = new cwTrip(this);
 
         currentTrip->setName(currentBlock->name());
         if(currentCave == NULL) {
@@ -89,7 +89,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* c
             }
 
             //Create the trip
-            currentTrip = new cwSurveyTrip(this);
+            currentTrip = new cwTrip(this);
             currentTrip->setName(QString("Trip %1").arg(currentCave->tripCount() + 1));
             currentCave->addTrip(currentTrip);
         }

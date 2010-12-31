@@ -9,7 +9,7 @@ class cwSurveyChunk;
 #include <QList>
 #include <QAbstractListModel>
 
-class cwSurveyTrip : public QAbstractListModel
+class cwTrip : public QAbstractListModel
 {
     Q_OBJECT
 public:
@@ -17,7 +17,7 @@ public:
         ChunkRole = Qt::UserRole + 1,
     };
 
-    explicit cwSurveyTrip(QObject *parent = 0);
+    explicit cwTrip(QObject *parent = 0);
 
     QString name() const;
     void setName(QString name);
@@ -49,7 +49,7 @@ protected:
 /**
   \brief Get's the name of the survey trip
   */
-inline QString cwSurveyTrip::name() const {
+inline QString cwTrip::name() const {
     return Name;
 }
 

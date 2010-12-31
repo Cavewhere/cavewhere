@@ -83,7 +83,10 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
          return QString("Cave");
      case Trip:
          return QString("Trip");
+     default:
+         break;
      }
+     return QString();
  }
 
  /**
@@ -175,7 +178,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      foreach(cwSurveyChunk* chunk, Chunks) {
          for(int i = 0; i < chunk->ShotCount(); i++) {
              cwShot* chunkShot = chunk->Shot(i);
-             if(shot = chunkShot) {
+             if(shot == chunkShot) {
                  return index;
              }
              index++;

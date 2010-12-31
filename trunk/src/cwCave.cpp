@@ -23,7 +23,7 @@ void cwCave::setName(QString name) {
 
   Once the trip is added to the cave, the cave ownes the trip
   */
-void cwCave::addTrip(cwSurveyTrip* trip) {
+void cwCave::addTrip(cwTrip* trip) {
     insertTrip(Trips.size(), trip);
 }
 
@@ -32,7 +32,7 @@ void cwCave::addTrip(cwSurveyTrip* trip) {
 
   i - The index where the trip will be inserted
   */
-void cwCave::insertTrip(int i, cwSurveyTrip* trip) {
+void cwCave::insertTrip(int i, cwTrip* trip) {
     if(i < 0 || i > Trips.size()) { return; }
 
     //Reparent the trip, if already in another cave
@@ -58,7 +58,7 @@ void cwCave::removeTrip(int i) {
     if(i > 0 || i >= Trips.size()) { return; }
 
     //Unparent the trip
-    cwSurveyTrip* currentTrip = trip(i);
+    cwTrip* currentTrip = trip(i);
     currentTrip->setParent(NULL);
 
     Trips.removeAt(i);

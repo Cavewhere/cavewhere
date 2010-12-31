@@ -38,7 +38,11 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurvexBlockData.cpp \
     src/cwSurvexImporterModel.cpp \
     src/cwImportSurvexDialog.cpp \
-    src/cwGlobalIcons.cpp
+    src/cwGlobalIcons.cpp \
+    src/cwSurveyChunkViewComponents.cpp \
+    src/cwTreeView.cpp \
+    src/cwQMLWidget.cpp \
+    src/cwTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -66,7 +70,11 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurvexBlockData.h \
     src/cwSurvexImporterModel.h \
     src/cwImportSurvexDialog.h \
-    src/cwGlobalIcons.h
+    src/cwGlobalIcons.h \
+    src/cwSurveyChunkViewComponents.h \
+    src/cwTreeView.h \
+    src/cwQMLWidget.h \
+    src/cwTask.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

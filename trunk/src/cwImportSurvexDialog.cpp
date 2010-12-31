@@ -21,10 +21,11 @@ const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
 
 cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
+    Region(region),
     Model(new cwSurvexImporterModel(this)),
     Importer(new cwSurvexImporter(this)),
-    SurvexSelectionModel(new QItemSelectionModel(Model, this)),
-  Region(region)
+    SurvexSelectionModel(new QItemSelectionModel(Model, this))
+
 {
     setupUi(this);
     setupTypeComboBox();
@@ -158,7 +159,7 @@ void cwImportSurvexDialog::updateImportErrors() {
 /**
   \brief Updates this view with the current items that are selected
   */
-void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelection deselected) {
+void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelection /*deselected*/) {
     QModelIndexList selectedIndexes = selected.indexes();
     if(selectedIndexes.size() == 1) {
         //Only one item selected
@@ -245,4 +246,5 @@ cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int ty
 void cwImportSurvexDialog::import() {
     cwSurvexGlobalData* globalData = Importer->data();
     Region->addCaves(globalData->caves());
+    accept();
 }

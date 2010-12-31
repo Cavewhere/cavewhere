@@ -52,7 +52,7 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
         return QModelIndex(); //Caves don't have parents
     }
 
-    cwSurveyTrip* trip = qobject_cast<cwSurveyTrip*>((QObject*)index.internalPointer());
+    cwTrip* trip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
     if(trip != NULL) {
         cwCave* parentCave = qobject_cast<cwCave*>(((QObject*)trip)->parent());
         int row = Region->indexOf(parentCave);
@@ -101,12 +101,14 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             }
             return QVariant(icon);
         }
+        case ObjectRole:
+            return QVariant::fromValue<QObject*>((QObject*)cave);
         default:
             return QVariant();
         }
     }
 
-    cwSurveyTrip* trip = qobject_cast<cwSurveyTrip*>((QObject*)index.internalPointer());
+    cwTrip* trip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
     if(trip != NULL) {
         switch(role) {
         case Qt::DisplayRole:
@@ -119,6 +121,8 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             }
             return QVariant(icon);
         }
+        case ObjectRole:
+                return QVariant::fromValue<QObject*>((QObject*)trip);
         default:
             return QVariant();
         }

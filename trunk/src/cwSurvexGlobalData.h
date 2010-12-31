@@ -4,7 +4,7 @@
 //Our includes
 class cwSurvexBlockData;
 class cwCave;
-class cwSurveyTrip;
+class cwTrip;
 
 //Qt includes
 #include <QObject>
@@ -30,7 +30,7 @@ private:
 
     void setBlocks(QList<cwSurvexBlockData*> blocks);
 
-    void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwSurveyTrip* trip);
+    void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
 };
 
 inline QList<cwSurvexBlockData*> cwSurvexGlobalData::blocks() const {

@@ -16,14 +16,13 @@ cwStation::cwStation() {
 
   This doesn't copy the parent
   */
-cwStation::cwStation(const cwStation& station) :
+cwStation::cwStation(const cwStation& station) : QObject(),
     Name(station.Name),
     Left(station.Left),
     Right(station.Right),
     Up(station.Up),
     Down(station.Down)
 {
-
 
 }
 

@@ -6,24 +6,33 @@
 class QTextStream;
 
 //Our includes
-class cwSurveyTrip;
-class cwSurveyChunk;
+class cwCavingRegion;
+class cwTrip;
+class cwCave;
 
 class cwSurvexExporter : public QObject
 {
     Q_OBJECT
 public:
+
     explicit cwSurvexExporter(QObject *parent = 0);
 
-    void setChunks(cwSurveyTrip* Chunks);
+
 
 signals:
+    void finishedExporting();
 
 public slots:
+    void exportCavingRegion(cwCavingRegion* region, QString filename);
+    void exportCave(cwCave* cave, QString filename);
+    void exportTrip(cwTrip* trip, QString filename);
     void exportSurvex(QString filename);
 
+
+
+
 private:
-    cwSurveyTrip* ChunkGroup;
+    cwCavingRegion* Region;
 
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 

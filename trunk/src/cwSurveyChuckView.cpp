@@ -3,6 +3,7 @@
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwSurveyChunkViewComponents.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -17,12 +18,7 @@
 cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     QDeclarativeItem(parent),
     Model(NULL),
-    StationDelegate(NULL),
-    TitleDelegate(NULL),
-    LeftDelegate(NULL),
-    RightDelegate(NULL),
-    UpDelegate(NULL),
-    DownDelegate(NULL),
+    QMLComponents(NULL),
     FocusedItem(NULL),
     ChunkBelow(NULL),
     ChunkAbove(NULL)
@@ -33,6 +29,7 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
 }
 
 cwSurveyChunkView::~cwSurveyChunkView() {
+
 }
 
 /**
@@ -94,6 +91,10 @@ void cwSurveyChunkView::SetNavigation(const cwSurveyChunkView* above, const cwSu
     SetNavigationBelow(below);
 }
 
+void cwSurveyChunkView::SetQMLComponents(cwSurveyChunkViewComponents* components) {
+    QMLComponents = components;
+}
+
 /**
   \brief Get's the model from the view
   */
@@ -105,10 +106,14 @@ cwSurveyChunk* cwSurveyChunkView::model() {
   \brief Set's the model for the view
   */
 void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
+    if(QMLComponents == NULL) {
+        qDebug() << "QML components need to be set before setting the model";
+    }
+
     if(Model != chunk) {
         Model = chunk;
 
-        SetupDelegates();
+        //SetupDelegates();
 
         Clear();
         AddStations(0, Model->StationCount() - 1);
@@ -416,14 +421,15 @@ void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
   */
 void cwSurveyChunkView::CreateTitlebar() {
 
-    StationTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    DistanceTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    AzimuthTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    ClinoTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    LeftTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    RightTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    UpTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
-    DownTitle = qobject_cast<QDeclarativeItem*>(TitleDelegate->create());
+    QDeclarativeComponent* titleDelegate = QMLComponents->titleDelegate();
+    StationTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    DistanceTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    AzimuthTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    ClinoTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    LeftTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    RightTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    UpTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    DownTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
 
     StationTitle->setParentItem(this);
     DistanceTitle->setParentItem(this);
@@ -475,26 +481,26 @@ void cwSurveyChunkView::CreateTitlebar() {
   this view
   */
 void cwSurveyChunkView::SetupDelegates() {
-    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-    if(context == NULL) { return; }
+//    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+//    if(context == NULL) { return; }
 
-    QDeclarativeEngine* engine = context->engine();
-    if(engine == NULL) { return; }
+//    QDeclarativeEngine* engine = context->engine();
+//    if(engine == NULL) { return; }
 
 
-    if(StationDelegate == NULL) {
-        StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
-        TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
-        LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
-        RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
-        UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
-        DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
-        DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
-        FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
-        BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
-        FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
-        BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
-    }
+//    if(StationDelegate == NULL) {
+//        StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
+//        TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
+//        LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
+//        RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
+//        UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
+//        DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
+//        DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
+//        FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
+//        BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
+//        FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
+//        BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
+//    }
 }
 
 /**
@@ -509,14 +515,16 @@ cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
   \brief Constructor to the StationRow
   */
 cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
-    Items[Station] = qobject_cast<QDeclarativeItem*>(view->StationDelegate->create());
-    Items[Left] = qobject_cast<QDeclarativeItem*>(view->LeftDelegate->create());
-    Items[Right] = qobject_cast<QDeclarativeItem*>(view->RightDelegate->create());
-    Items[Up] = qobject_cast<QDeclarativeItem*>(view->UpDelegate->create());
-    Items[Down] = qobject_cast<QDeclarativeItem*>(view->DownDelegate->create());
+    cwSurveyChunkViewComponents* components = view->QMLComponents;
+    Items[Station] = qobject_cast<QDeclarativeItem*>(components->stationDelegate()->create());
+    Items[Left] = qobject_cast<QDeclarativeItem*>(components->leftDelegate()->create());
+    Items[Right] = qobject_cast<QDeclarativeItem*>(components->rightDelegate()->create());
+    Items[Up] = qobject_cast<QDeclarativeItem*>(components->upDelegate()->create());
+    Items[Down] = qobject_cast<QDeclarativeItem*>(components->downDelegate()->create());
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
+        item->setParent(view);
     }
 }
 
@@ -542,11 +550,12 @@ cwSurveyChunkView::ShotRow::ShotRow() : Row(-1, NumberItems)
   \brief Constructor to the ShotRow
   */
 cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row(rowIndex, NumberItems) {
-    Items[Distance] = qobject_cast<QDeclarativeItem*>(view->DistanceDelegate->create());
-    Items[FrontCompass] = qobject_cast<QDeclarativeItem*>(view->FrontCompassDelegate->create());
-    Items[BackCompass] = qobject_cast<QDeclarativeItem*>(view->BackCompassDelegate->create());
-    Items[FrontClino] = qobject_cast<QDeclarativeItem*>(view->FrontClinoDelegate->create());
-    Items[BackClino] = qobject_cast<QDeclarativeItem*>(view->BackClinoDelegate->create());
+    cwSurveyChunkViewComponents* components = view->QMLComponents;
+    Items[Distance] = qobject_cast<QDeclarativeItem*>(components->distanceDelegate()->create());
+    Items[FrontCompass] = qobject_cast<QDeclarativeItem*>(components->frontCompassDelegate()->create());
+    Items[BackCompass] = qobject_cast<QDeclarativeItem*>(components->backCompassDelegate()->create());
+    Items[FrontClino] = qobject_cast<QDeclarativeItem*>(components->frontClinoDelegate()->create());
+    Items[BackClino] = qobject_cast<QDeclarativeItem*>(components->backClinoDelegate()->create());
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);

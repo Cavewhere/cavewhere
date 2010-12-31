@@ -2,7 +2,7 @@
 #define CWCAVE_H
 
 //Our include
-class cwSurveyTrip;
+class cwTrip;
 
 //Qt includes
 #include <QObject>
@@ -19,9 +19,9 @@ public:
     void setName(QString name);
 
     int tripCount() const;
-    cwSurveyTrip* trip(int index) const;
-    void addTrip(cwSurveyTrip* trip);
-    void insertTrip(int i, cwSurveyTrip* trip);
+    cwTrip* trip(int index) const;
+    void addTrip(cwTrip* trip);
+    void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
 
 signals:
@@ -31,7 +31,7 @@ signals:
     void nameChanged(QString name);
 
 protected:
-    QList<cwSurveyTrip*> Trips;
+    QList<cwTrip*> Trips;
     QString Name;
 
 
@@ -57,7 +57,7 @@ inline int cwCave::tripCount() const {
 
   If the index is out of bounds this return NULL
   */
-inline cwSurveyTrip* cwCave::trip(int index) const {
+inline cwTrip* cwCave::trip(int index) const {
     if(index < 0 || index >= Trips.size()) { return NULL; }
     return Trips[index];
 }
