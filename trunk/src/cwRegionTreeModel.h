@@ -3,6 +3,8 @@
 
 //Our includes
 class cwCavingRegion;
+class cwTrip;
+class cwCave;
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -27,7 +29,8 @@ public:
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
 
-
+    cwTrip* trip(const QModelIndex& index);
+    cwCave* cave(const QModelIndex& index);
 
 signals:
 

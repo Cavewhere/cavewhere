@@ -7,10 +7,14 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
+#include "cwCavingRegion.h"
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
+    qRegisterMetaType<QThread*>("QThread*");
+    qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

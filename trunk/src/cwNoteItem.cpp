@@ -73,7 +73,7 @@ void cwNoteItem::mousePressEvent ( QGraphicsSceneMouseEvent * event ) {
     event->accept();
 }
 
-void cwNoteItem::mouseReleaseEvent ( QGraphicsSceneMouseEvent * event ) {
+void cwNoteItem::mouseReleaseEvent ( QGraphicsSceneMouseEvent * /*event*/ ) {
     LastPanPoint = QPointF();
 }
 

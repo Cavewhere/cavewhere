@@ -7,6 +7,7 @@ Rectangle {
     border.width: 2
     border.color: "green"
 
+
     ProxyWidget {
         id: regionTree
 
@@ -32,8 +33,6 @@ Rectangle {
             color: Qt.rgba(0, 0, 0, 0);
         }
     }
-
-
 
     Flickable {
         id: flickArea

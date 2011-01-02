@@ -3,6 +3,7 @@
 
 #include <QMutex>
 #include <QObject>
+#include <QReadWriteLock>
 
 /**
   \brief A member functions in the class are thread safe
@@ -12,40 +13,57 @@ class cwTask : public QObject
 {
     Q_OBJECT
 public:
+    enum Status {
+        PreparingToStart,
+        Running,
+        Stopped
+    };
+
     explicit cwTask(QObject *parent = 0);
 
+    void setParentTask(cwTask* parentTask);
+    void setThread(QThread* threadToRunOn);
+
     int numberOfSteps() const;
+    Status status() const;
     bool isRunning() const;
 
     void stop();
 
 public slots:
-    void start(QThread* threadToRunOn = NULL);
+    void start();
 
 signals:
     void started();
     void finished();
     void stopped();
-    void progessed(int step);
+    void progressed(int step);
     void numberOfStepsChanged(int numberOfSteps);
 
 protected:
     void setNumberOfSteps(int steps);
     virtual void runTask() = 0;
 
-protected:
+protected slots:
+    void done();
 
 private:
-    QMutex NumberOfStepsMutex;
-    QMutex RunningMutex;
+    QReadWriteLock NumberOfStepsLocker;
+    QReadWriteLock StatusLocker;
 
     int NumberOfSteps;
-    bool Running;
+    Status CurrentStatus;
+    //bool Running;
 
-    QThread* OriginalThread;
+    QList<cwTask*> ChildTasks;
+    cwTask* ParentTask;
 
-private slots:
-    void startCurrentThread();
+    //QThread* RunThread; //The thread that this will run on
+    //QThread* OriginalThread; //Usually main thread
+
+private:
+    Q_INVOKABLE void startOnCurrentThread();
+    Q_INVOKABLE void changeThreads(QThread* thread);
 
 };
 

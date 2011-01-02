@@ -9,33 +9,32 @@ class cwSurveyChunk;
 #include <QList>
 #include <QAbstractListModel>
 
-class cwTrip : public QAbstractListModel
+class cwTrip : public QObject
 {
     Q_OBJECT
 public:
-    enum Roles {
-        ChunkRole = Qt::UserRole + 1,
-    };
-
     explicit cwTrip(QObject *parent = 0);
+    cwTrip(const cwTrip& object);
+    cwTrip& operator=(const cwTrip& object);
 
     QString name() const;
     void setName(QString name);
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant data(const QModelIndex &index, int role) const;
-
-    bool insertRows ( int row, int count, const QModelIndex & parent = QModelIndex() );
-
-    void insertRow(int row, cwSurveyChunk* chunk);
+    void removeChunks(int begin, int end);
+    void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
 
+    int numberOfChunks() const;
+    cwSurveyChunk* chunk(int i) const;
     QList<cwSurveyChunk*> chunks() const;
 
+    //Stats
+    int numberOfStations() const;
 
 signals:
-    void dataChanged();
     void nameChanged(QString name);
+    void chunksInserted(int begin, int end);
+    void chunksRemoved(int begin, int end);
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -44,6 +43,10 @@ public slots:
 protected:
     QList<cwSurveyChunk*> Chunks;
     QString Name;
+
+private:
+    void Copy(const cwTrip& object);
+
 };
 
 /**

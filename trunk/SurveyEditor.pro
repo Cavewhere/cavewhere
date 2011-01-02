@@ -30,7 +30,7 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyNoteModel.cpp \
     src/cwNote.cpp \
     src/cwNoteItem.cpp \
-    src/cwSurveyTrip.cpp \
+    src/cwTrip.cpp \
     src/cwCave.cpp \
     src/cwCavingRegion.cpp \
     src/cwRegionTreeModel.cpp \
@@ -42,7 +42,15 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyChunkViewComponents.cpp \
     src/cwTreeView.cpp \
     src/cwQMLWidget.cpp \
-    src/cwTask.cpp
+    src/cwTask.cpp \
+    src/cwSurvexExporterTask.cpp \
+    src/cwSurvexExporterTripTask.cpp \
+    src/cwTripStatistics.cpp \
+    src/cwSurveExporterCaveTask.cpp \
+    cwSurvexExporterCaveTask.cpp \
+    src/cwSurvexExporterRegionTask.cpp \
+    src/cwLinePlotTask.cpp \
+    src/cwLinePlotManager.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -62,7 +70,7 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyNoteModel.h \
     src/cwNote.h \
     src/cwNoteItem.h \
-    src/cwSurveyTrip.h \
+    src/cwTrip.h \
     src/cwCave.h \
     src/cwCavingRegion.h \
     src/cwRegionTreeModel.h \
@@ -74,7 +82,15 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunkViewComponents.h \
     src/cwTreeView.h \
     src/cwQMLWidget.h \
-    src/cwTask.h
+    src/cwTask.h \
+    src/cwSurvexExporterTask.h \
+    src/cwSurvexExporterTripTask.h \
+    src/cwTripStatistics.h \
+    src/cwSurveExporterCaveTask.h \
+    cwSurvexExporterCaveTask.h \
+    src/cwSurvexExporterRegionTask.h \
+    src/cwLinePlotTask.h \
+    src/cwLinePlotManager.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

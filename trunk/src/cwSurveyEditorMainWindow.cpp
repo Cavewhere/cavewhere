@@ -5,7 +5,7 @@
 #include "cwShot.h"
 #include "cwSurvexImporter.h"
 #include "cwSurvexExporter.h"
-#include "cwSurveyTrip.h"
+#include "cwTrip.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunkGroupView.h"
 #include "cwClinoValidator.h"
@@ -20,6 +20,10 @@
 #include "cwImportSurvexDialog.h"
 #include "cwTreeView.h"
 #include "cwQMLWidget.h"
+#include "cwSurvexExporterTripTask.h"
+#include "cwSurvexExporterCaveTask.h"
+#include "cwSurvexExporterRegionTask.h"
+#include "cwLinePlotManager.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -28,6 +32,8 @@
 #include <QDebug>
 #include <QSettings>
 #include <QTreeView>
+#include <QMessageBox>
+#include <QThread>
 
 
 
@@ -60,9 +66,9 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     //qmlRegisterExtendedType<cwRegionTreeModel, QAbstractItemModel>("Cavewhere", 1, 0, "AbstractItemModel");
 
-    connect(actionSurvexImport, SIGNAL(triggered()), SLOT(ImportSurvex()));
-    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(ExportSurvex()));
-    connect(actionReloadQML, SIGNAL(triggered()), SLOT(ReloadQML()));
+    connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
+    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
+    connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
     //Initial chunk - for qml testing
     cwSurveyChunk* chunk = new cwSurveyChunk(Trip);
@@ -80,11 +86,17 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     RegionTreeView = new QTreeView();
     RegionTreeView->setModel(RegionTreeModel);
 
-    ReloadQML();
+    reloadQML();
 
     //Setup interaction for selection
     QItemSelectionModel* regionSelectionModel = RegionTreeView->selectionModel();
-    connect(regionSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(SetSurveyData(QItemSelection,QItemSelection)));
+    connect(regionSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(setSurveyData(QItemSelection,QItemSelection)));
+
+    ExportThread = new QThread(this);
+
+    //Setup the loop closer
+    LinePlotManager = new cwLinePlotManager(this);
+    LinePlotManager->setRegion(Region);
 
 }
 
@@ -100,25 +112,117 @@ void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
     }
 }
 
+void OpenExportSurvexTripFileDialog();
+
 /**
   \brief Opens the survex exporter
   */
-void cwSurveyEditorMainWindow::ExportSurvex() {
-    if(SurvexExporter == NULL) {
-        SurvexExporter = new cwSurvexExporter(this);
-    }
-
-    SurvexExporter->setChunks(Trip);
+void cwSurveyEditorMainWindow::openExportSurvexTripFileDialog() {
     QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->open(SurvexExporter, SLOT(exportSurvex(QString)));
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->open(this, SLOT(exportSurvexTrip(QString)));
+}
 
+/**
+  \brief Exports the currently selected trip to filename
+  */
+void cwSurveyEditorMainWindow::exportSurvexTrip(QString filename) {
+    if(filename.isEmpty()) { return; }
+
+    QList<QModelIndex> selectedIndexes = RegionTreeView->selectionModel()->selectedIndexes();
+
+    if(selectedIndexes.isEmpty()) {
+        qWarning() << "No elements selected";
+        return;
+    }
+
+    QModelIndex tripIndex = selectedIndexes.first();
+    cwTrip* trip = RegionTreeModel->trip(tripIndex);
+    if(trip != NULL) {
+        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*trip);
+        connect(exportTask, SIGNAL(finished()), SLOT(exportSurvexFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exportSurvexFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
+}
+
+/**
+  \brief Called when the export task has completed
+  */
+void cwSurveyEditorMainWindow::exportSurvexFinished() {
+    if(sender()) {
+        sender()->deleteLater();
+    }
+}
+
+/**
+  \brief Asks the user to choose a file to export the currently selected file
+  */
+void cwSurveyEditorMainWindow::openExportSurvexCaveFileDialog() {
+    QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->open(this, SLOT(exportSurvexCave(QString)));
+}
+
+/**
+  \brief Exports the currently selected cave to a file
+  */
+void cwSurveyEditorMainWindow::exportSurvexCave(QString filename) {
+    if(filename.isEmpty()) { return; }
+
+    QList<QModelIndex> selectedIndexes = RegionTreeView->selectionModel()->selectedIndexes();
+
+    if(selectedIndexes.isEmpty()) {
+        qWarning() << "No elements selected";
+        return;
+    }
+
+    QModelIndex tripIndex = selectedIndexes.first();
+    cwCave* cave = RegionTreeModel->cave(tripIndex);
+    if(cave != NULL) {
+        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*cave);
+        connect(exportTask, SIGNAL(finished()), SLOT(exportSurvexFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exportSurvexFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
+}
+
+/**
+  \brief Open a file dialog for the user to save
+  all the data to survex file
+  */
+void cwSurveyEditorMainWindow::openExportSurvexRegionFileDialog() {
+    QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->open(this, SLOT(exportSurvexRegion(QString)));
+}
+
+/**
+  \brief Exports the survex region to filename
+  */
+void cwSurveyEditorMainWindow::exportSurvexRegion(QString filename) {
+    cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
+    exportTask->setOutputFile(filename);
+    exportTask->setData(*Region);
+    connect(exportTask, SIGNAL(finished()), SLOT(exportSurvexFinished()));
+    connect(exportTask, SIGNAL(stopped()), SLOT(exportSurvexFinished()));
+    exportTask->setThread(ExportThread);
+    exportTask->start();
 }
 
 /**
   \brief Opens the suvrex import dialog
   */
-void cwSurveyEditorMainWindow::ImportSurvex() {
+void cwSurveyEditorMainWindow::importSurvex() {
     cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Region, this);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     survexImportDialog->open();
@@ -127,17 +231,17 @@ void cwSurveyEditorMainWindow::ImportSurvex() {
 /**
   \brief Updates the survey editor
   */
-void cwSurveyEditorMainWindow::UpdateSurveyEditor() {
+void cwSurveyEditorMainWindow::updateSurveyEditor() {
 //    QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
     if(Trip == NULL) {
         Trip = new cwTrip(this);
     }
 //    Trip->setChucks(chunks);
 
-    ReloadQML();
+    reloadQML();
 }
 
-void cwSurveyEditorMainWindow::ReloadQML() {
+void cwSurveyEditorMainWindow::reloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
@@ -162,7 +266,7 @@ void cwSurveyEditorMainWindow::ReloadQML() {
 /**
   \brief Set's the survey data for the current editor
   */
-void cwSurveyEditorMainWindow::SetSurveyData(QItemSelection selected, QItemSelection deselected) {
+void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelection /*deselected*/) {
 
     QList<QModelIndex> selectedIndexes = selected.indexes();
     if(!selectedIndexes.isEmpty()) {

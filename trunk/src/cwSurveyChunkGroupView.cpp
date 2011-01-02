@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurveyChunkGroupView.h"
-#include "cwSurveyTrip.h"
+#include "cwTrip.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyChunkViewComponents.h"
@@ -39,11 +39,11 @@ void cwSurveyChunkGroupView::setChunkGroup(cwTrip* trip) {
 
 
         //Add chunks to the view
-        AddChunks(0, Trip->rowCount() - 1);
+        AddChunks(0, Trip->numberOfChunks() - 1);
 
         emit chunkGroupChanged();
 
-        connect(Trip, SIGNAL(rowsInserted(QModelIndex, int, int)), SLOT(InsertRows(QModelIndex,int,int)));
+        connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
     }
 }
 
@@ -217,9 +217,8 @@ QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
 void cwSurveyChunkGroupView::CreateChunkView(int index) {
     if(index < 0 || index >= ChunkViews.size()) { return; }
     if(ChunkViews[index] == NULL) {
-        QModelIndex currentIndex = Trip->index(index);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(Trip->data(currentIndex, cwTrip::ChunkRole).value<QObject*>());
-        if(chunk == NULL) { return; }
+
+         cwSurveyChunk* chunk = Trip->chunk(index);
 
         //Create a chunkView object
         cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
@@ -276,11 +275,9 @@ void cwSurveyChunkGroupView::SetFocus(int index) {
 /**
   \brief Insert rows
   */
-void cwSurveyChunkGroupView::InsertRows(const QModelIndex &parent, int start, int end) {
-    //qDebug() << "Insert Rows:" << parent << start << end;
-    if(parent != QModelIndex()) { return; }
-    AddChunks(start, end);
-}
+//void cwSurveyChunkGroupView::InsertRows(int start, int end) {
+//    AddChunks(start, end);
+//}
 
 /**
   Adds new chunks to the view from beginIndex to endIndex
@@ -290,8 +287,7 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
     ///qDebug() << "Adding chunks " << beginIndex << endIndex;
 
     for(int i = beginIndex; i <= endIndex; i++) {
-        QModelIndex currentIndex = Trip->index(i);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(Trip->data(currentIndex, cwTrip::ChunkRole).value<QObject*>());
+        cwSurveyChunk* chunk = Trip->chunk(i);
         if(chunk == NULL) { continue; }
 
         ChunkViews.insert(i, NULL);
@@ -347,7 +343,7 @@ void cwSurveyChunkGroupView::HandleSplitChunk(cwSurveyChunk *newChunk) {
     int firstIndex = VisableRange().first; //Only the visible range is valid
     int insertIndex = ChunkViews.indexOf(chunkView, firstIndex) + 1;
 
-    Trip->insertRow(insertIndex, newChunk);
+    Trip->insertChunk(insertIndex, newChunk);
 }
 
 /**
@@ -378,8 +374,8 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
   */
 void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
     //Make sure beginIndex and endIndex are good
-    if(beginIndex < 0 || beginIndex >= Trip->rowCount()) { return; }
-    if(endIndex < 0 || endIndex >= Trip->rowCount()) { return; }
+    if(beginIndex < 0 || beginIndex >= Trip->numberOfChunks()) { return; }
+    if(endIndex < 0 || endIndex >= Trip->numberOfChunks()) { return; }
     if(beginIndex > endIndex) { return; }
 
     //Calc the yOffset
@@ -393,8 +389,7 @@ void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
     }
 
     for(int i = beginIndex; i <= endIndex; i++) {
-        QModelIndex currentIndex = Trip->index(i);
-        cwSurveyChunk* chunk = qobject_cast<cwSurveyChunk*>(Trip->data(currentIndex, cwTrip::ChunkRole).value<QObject*>());
+        cwSurveyChunk* chunk = Trip->chunk(i);;
         if(chunk == NULL) { continue; }
 
         float height = cwSurveyChunkView::heightHint(chunk->StationCount());

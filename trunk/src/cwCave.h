@@ -13,7 +13,9 @@ class cwCave : public QObject
     Q_OBJECT
 
 public:
-    cwCave(QObject* parent = NULL);
+    explicit cwCave(QObject* parent = NULL);
+    cwCave(const cwCave& object);
+    cwCave& operator=(const cwCave& object);
 
     QString name() const;
     void setName(QString name);
@@ -34,7 +36,8 @@ protected:
     QList<cwTrip*> Trips;
     QString Name;
 
-
+private:
+    cwCave& Copy(const cwCave& object);
 
 };
 

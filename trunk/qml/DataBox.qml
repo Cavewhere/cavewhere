@@ -20,10 +20,9 @@ NavigationRectangle {
 
     color : "white"
 
-
-    //Behavior on x { PropertyAnimation { duration: 100 } }
-    Behavior on y { PropertyAnimation { duration: 250 } }
-    Behavior on opacity  { PropertyAnimation { duration: 250 } }
+    //This causes memory leaks in qt 4.7.1!!!
+//    Behavior on y { PropertyAnimation { duration: 250 } }
+//    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
 
     Rectangle {
@@ -104,7 +103,7 @@ NavigationRectangle {
 
             var oldDataValue = dataValue;
             dataValue = event.text;
-            if(dataTextInput.validator.validate(dataValue) > 0) {
+            if(dataTextInput.validator.validate(dataValue) > 0 && event.text.length > 0) {
                 dataBox.state = 'EndTyping'
                 dataTextInput.focus = true
             } else {

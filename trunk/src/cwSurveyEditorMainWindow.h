@@ -10,6 +10,7 @@ class cwSurveyNoteModel;
 class cwImportSurvexDialog;
 class cwCavingRegion;
 class cwRegionTreeModel;
+class cwLinePlotManager;
 
 //Qt includes
 #include <QString>
@@ -22,7 +23,29 @@ class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorM
 public:
     explicit cwSurveyEditorMainWindow(QWidget *parent = 0);
 
-protected:
+
+
+    void changeEvent(QEvent *e);
+
+protected slots:
+    void openExportSurvexTripFileDialog();
+    void exportSurvexTrip(QString filename);
+    void exportSurvexFinished();
+
+    void openExportSurvexCaveFileDialog();
+    void exportSurvexCave(QString filename);
+
+    void openExportSurvexRegionFileDialog();
+    void exportSurvexRegion(QString filename);
+
+    void importSurvex();
+    void updateSurveyEditor();
+    void reloadQML();
+
+    //For changing
+    void setSurveyData(QItemSelection selected, QItemSelection deselected);
+
+private:
     cwSurvexExporter* SurvexExporter;
     cwTrip* Trip;
     cwSurveyNoteModel* NoteModel;
@@ -32,17 +55,10 @@ protected:
     cwRegionTreeModel* RegionTreeModel;
     QTreeView* RegionTreeView;
 
-    void changeEvent(QEvent *e);
+    QThread* ExportThread;
 
-
-protected slots:
-    void ExportSurvex();
-    void ImportSurvex();
-    void UpdateSurveyEditor();
-    void ReloadQML();
-
-    //For changing
-    void SetSurveyData(QItemSelection selected, QItemSelection deselected);
+    //Loop closer manager
+    cwLinePlotManager* LinePlotManager;
 
 };
 

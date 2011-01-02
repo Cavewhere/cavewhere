@@ -2,9 +2,55 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 
+//Qt includes
+#include <QDebug>
+
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QObject(parent)
 {
+}
+
+/**
+  \brief Copy constructor
+  */
+cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
+    QObject(NULL)
+{
+    copy(object);
+}
+
+/**
+  \brief Alignment operator
+  */
+cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
+    return copy(object);
+}
+
+/**
+  \brief Copy's the object into this object
+  */
+cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
+    if(&object == this) {
+        return *this;
+    }
+
+    //Clear old caves
+    int lastIndex = Caves.size() - 1;
+    removeCaves(0, lastIndex);
+
+    //Add new caves
+    Caves.reserve(object.Caves.size());
+    foreach(cwCave* cave, object.Caves) {
+        cwCave* newCave = new cwCave(*cave);
+        newCave->setParent(this);
+        Caves.append(newCave);
+    }
+
+    if(Caves.size() - 1 > 0) {
+        emit insertedCaves(0, Caves.size() -1);
+    }
+
+    return *this;
 }
 
 /**
@@ -39,14 +85,35 @@ void cwCavingRegion::insertCave(int index, cwCave* cave) {
   \brief Removes the cave at index
   */
 void cwCavingRegion::removeCave(int index) {
-    if(index > 0 || index >= Caves.size()) { return; }
+    removeCaves(index, index);
+}
 
-    //Unparent the trip
-    cwCave* currentCave = cave(index);
-    currentCave->setParent(NULL);
+/**
+  \brief Remove all the caves between beginIndex and the endIndex
 
-    Caves.removeAt(index);
-    emit removedCaves(index, index);
+  The caves will be delete at a later time
+  */
+void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
+    //Make sure the indexes are good
+    if(beginIndex < 0 || beginIndex >= Caves.size() ||
+            endIndex < 0 || endIndex >= Caves.size()) {
+        return;
+    }
+
+    //The beginIndex needs to be greater than the end index
+    if(beginIndex > endIndex) {
+        return;
+    }
+
+    for(int i = endIndex; i >= beginIndex; i--) {
+        //Unparent the trip
+        cwCave* currentCave = cave(i);
+        currentCave->deleteLater();
+
+        Caves.removeAt(i);
+    }
+
+    emit removedCaves(beginIndex, endIndex);
 }
 
 /**

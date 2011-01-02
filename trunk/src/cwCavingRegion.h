@@ -13,6 +13,8 @@ class cwCavingRegion : public QObject
     Q_OBJECT
 public:
     explicit cwCavingRegion(QObject *parent = 0);
+    cwCavingRegion(const cwCavingRegion& object);
+    cwCavingRegion& operator=(const cwCavingRegion& object);
 
     int caveCount() const;
     cwCave* cave(int index) const;
@@ -20,6 +22,7 @@ public:
     void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     void removeCave(int index);
+    void removeCaves(int beginIndex, int endIndex);
 
     int indexOf(cwCave* cave);
 
@@ -34,7 +37,8 @@ protected:
 
     void insertHelper(int index, cwCave* cave);
 
-
+private:
+    cwCavingRegion& copy(const cwCavingRegion& object);
 
 };
 

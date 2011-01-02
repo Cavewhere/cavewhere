@@ -1,7 +1,7 @@
 #include "cwSurvexGlobalData.h"
 #include "cwSurvexBlockData.h"
 #include "cwCave.h"
-#include "cwSurveyTrip.h"
+#include "cwTrip.h"
 #include "cwSurveyChunk.h"
 
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :

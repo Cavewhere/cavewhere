@@ -1,10 +1,62 @@
 //Our includes
 #include "cwCave.h"
-#include "cwSurveyTrip.h"
+#include "cwTrip.h"
 
 cwCave::cwCave(QObject* parent) :
     QObject(parent)
 {
+
+}
+
+/**
+  \brief Copy constructor
+  */
+cwCave::cwCave(const cwCave& object) :
+    QObject(NULL)
+{
+    Copy(object);
+}
+
+/**
+  \brief Assignment operator
+  */
+cwCave& cwCave::operator=(const cwCave& object) {
+    return Copy(object);
+}
+
+/**
+  \brief Copies data from one object to another one
+  */
+cwCave& cwCave::Copy(const cwCave& object) {
+    if(&object == this) {
+        return *this;
+    }
+
+    //Set the name of the cave
+    setName(object.name());
+
+    //Remove all the old trips
+    int lastTripIndex = Trips.size() - 1;
+    Trips.clear();
+    if(lastTripIndex > 0) {
+        emit removedTrips(0, lastTripIndex);
+    }
+
+    //Copy all the trips from object
+    Trips.reserve(object.tripCount());
+    for(int i = 0; i < object.tripCount(); i++) {
+        cwTrip* trip = object.trip(i);
+        cwTrip* newTrip = new cwTrip(*trip); //Deap copy of the trip
+        newTrip->setParent(this);
+        Trips.append(newTrip);
+    }
+
+    if(object.tripCount() - 1 > 0) {
+        emit insertedTrips(0, object.tripCount() - 1);
+    }
+
+    return *this;
+
 
 }
 

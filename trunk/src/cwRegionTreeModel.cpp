@@ -2,7 +2,7 @@
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
-#include "cwSurveyTrip.h"
+#include "cwTrip.h"
 #include "cwGlobalIcons.h"
 
 //Qt include
@@ -102,7 +102,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-            return QVariant::fromValue<QObject*>((QObject*)cave);
+            return QVariant::fromValue<QObject*>(static_cast<QObject*>(cave));
         default:
             return QVariant();
         }
@@ -122,7 +122,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-                return QVariant::fromValue<QObject*>((QObject*)trip);
+                return QVariant::fromValue<QObject*>(static_cast<QObject*>(trip));
         default:
             return QVariant();
         }
@@ -137,5 +137,25 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
 void cwRegionTreeModel::insertCaves(int beginIndex, int endIndex) {
     beginInsertRows(QModelIndex(), beginIndex, endIndex);
     endInsertRows();
+}
+
+/**
+  \brief Gets the trip at index
+
+  If index isn't a trip, then this returns null
+  */
+cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) {
+    QVariant tripVariant = data(index, ObjectRole);
+    cwTrip* trip = qobject_cast<cwTrip*>(tripVariant.value<QObject*>());
+    return trip;
+}
+
+/**
+  \brief Gets the cave at inde
+  */
+cwCave* cwRegionTreeModel::cave(const QModelIndex& index) {
+    QVariant caveVariant = data(index, ObjectRole);
+    cwCave* cave = qobject_cast<cwCave*>(caveVariant.value<QObject*>());
+    return cave;
 }
 
