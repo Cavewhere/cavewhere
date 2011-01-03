@@ -5,6 +5,7 @@
 #include "cwTask.h"
 #include "cwCavingRegion.h"
 class cwSurvexExporterRegionTask;
+class cwCavernTask;
 
 //Qt includes
 #include <QTemporaryFile>
@@ -15,9 +16,10 @@ class cwLinePlotTask : public cwTask
 public:
     explicit cwLinePlotTask(QObject *parent = 0);
 
-    virtual void runTask();
-
 signals:
+
+protected:
+    virtual void runTask();
 
 public slots:
     void setData(cwCavingRegion region);
@@ -35,6 +37,8 @@ private:
     //The temparary survex file
     QTemporaryFile* SurvexFile;
     cwSurvexExporterRegionTask* SurvexExporter;
+
+    cwCavernTask* CavernTask;
 
 };
 

@@ -1,6 +1,7 @@
 //Our includes
 #include "cwLinePlotTask.h"
 #include "cwSurvexExporterRegionTask.h"
+#include "cwCavernTask.h"
 #include "cwCavingRegion.h"
 
 //Qt includes
@@ -18,12 +19,17 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
     SurvexExporter = new cwSurvexExporterRegionTask();
     SurvexExporter->setParentTask(this);
-
-    qDebug() << "Output file:" << SurvexFile->fileName();
     SurvexExporter->setOutputFile(SurvexFile->fileName());
 
     connect(SurvexExporter, SIGNAL(finished()), SLOT(runCavern()));
     connect(SurvexExporter, SIGNAL(stopped()), SLOT(done()));
+
+    CavernTask = new cwCavernTask();
+    CavernTask->setParentTask(this);
+    CavernTask->setSurvexFile(SurvexFile->fileName());
+
+    connect(CavernTask, SIGNAL(finished()), SLOT(read3DData()));
+    connect(CavernTask, SIGNAL(stopped()), SLOT(done()));
 }
 
 /**
@@ -77,14 +83,15 @@ void cwLinePlotTask::exportData() {
   */
 void cwLinePlotTask::runCavern() {
     qDebug() << "Running cavern on " << SurvexFile->fileName();
-    done();
+    CavernTask->start();
 }
 
 /**
 
   */
 void cwLinePlotTask::read3DData() {
-
+    qDebug() << "Reading in 3D data";
+    done();
 }
 
 /**

@@ -50,7 +50,8 @@ src/cwSurveyEditorMainWindow.cpp \
     cwSurvexExporterCaveTask.cpp \
     src/cwSurvexExporterRegionTask.cpp \
     src/cwLinePlotTask.cpp \
-    src/cwLinePlotManager.cpp
+    src/cwLinePlotManager.cpp \
+    src/cwCavernTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -90,7 +91,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     cwSurvexExporterCaveTask.h \
     src/cwSurvexExporterRegionTask.h \
     src/cwLinePlotTask.h \
-    src/cwLinePlotManager.h
+    src/cwLinePlotManager.h \
+    src/cwCavernTask.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
