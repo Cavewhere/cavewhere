@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QDebug>
 
+const QString cwCavernTask::Survex3dExtension = ".3d";
+
 cwCavernTask::cwCavernTask(QObject *parent) :
     cwTask(parent)
 {
@@ -21,14 +23,15 @@ cwCavernTask::cwCavernTask(QObject *parent) :
 void cwCavernTask::setSurvexFile(QString inputFile) {
     //Thread safe way to set the data
     QMetaObject::invokeMethod(this, "privateSetSurvexFile",
-                              Qt::AutoConnection, QGenericArgument("QString", &inputFile));
+                              Qt::AutoConnection,
+                              Q_ARG(QString, inputFile));
 }
 
 /**
   \brief Gets the 3d file's output file
   */
 QString cwCavernTask::output3dFileName() const {
-    QFileInfo info(survexFileName().append(".3d"));
+    QFileInfo info(survexFileName().append(Survex3dExtension));
     if(info.exists()) {
         return info.absoluteFilePath();
     } else {
@@ -41,7 +44,7 @@ QString cwCavernTask::output3dFileName() const {
   */
  void cwCavernTask::runTask() {
      QString inputFile = survexFileName();
-     QString outputFile = inputFile + ".3d";
+     QString outputFile = inputFile + Survex3dExtension;
      QString cavernPath = "/usr/local/bin/cavern";
 
      QStringList arguments;
@@ -77,7 +80,7 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
   \brief Called when cavern has finished
   */
 void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus) {
-    qDebug() << "Cavern has finish outputfile:" << output3dFileName();
+    qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
     qDebug() << CavernProcess->readAllStandardOutput();
     done();
 }

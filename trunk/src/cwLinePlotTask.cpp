@@ -3,6 +3,7 @@
 #include "cwSurvexExporterRegionTask.h"
 #include "cwCavernTask.h"
 #include "cwCavingRegion.h"
+#include "cwPlotSauceTask.h"
 
 //Qt includes
 #include <QDebug>
@@ -28,8 +29,14 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     CavernTask->setParentTask(this);
     CavernTask->setSurvexFile(SurvexFile->fileName());
 
-    connect(CavernTask, SIGNAL(finished()), SLOT(read3DData()));
+    connect(CavernTask, SIGNAL(finished()), SLOT(convertToXML()));
     connect(CavernTask, SIGNAL(stopped()), SLOT(done()));
+
+    PlotSauceTask = new cwPlotSauceTask();
+    PlotSauceTask->setParentTask(this);
+
+    connect(PlotSauceTask, SIGNAL(finished()), SLOT(readXML()));
+    connect(PlotSauceTask, SIGNAL(stopped()), SLOT(done()));
 }
 
 /**
@@ -79,7 +86,8 @@ void cwLinePlotTask::exportData() {
 }
 
 /**
-
+  This once the data has been exported this runs
+  cavern on the data
   */
 void cwLinePlotTask::runCavern() {
     qDebug() << "Running cavern on " << SurvexFile->fileName();
@@ -87,10 +95,17 @@ void cwLinePlotTask::runCavern() {
 }
 
 /**
-
+  Once cavern is done running the data, this converts the 3d data
+  into compress xml file
   */
-void cwLinePlotTask::read3DData() {
-    qDebug() << "Reading in 3D data";
+void cwLinePlotTask::convertToXML() {
+    qDebug() << "Covert 3d to xml";
+    PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
+    PlotSauceTask->start();
+}
+
+void cwLinePlotTask::readXML() {
+    qDebug() << "Read xml data";
     done();
 }
 

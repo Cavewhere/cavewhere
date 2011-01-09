@@ -6,6 +6,7 @@
 #include "cwCavingRegion.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
+class cwPlotSauceTask;
 
 //Qt includes
 #include <QTemporaryFile>
@@ -27,7 +28,8 @@ public slots:
 private slots:
     void exportData();
     void runCavern();
-    void read3DData();
+    void convertToXML();
+    void readXML();
     void complete();
 
 private:
@@ -39,6 +41,7 @@ private:
     cwSurvexExporterRegionTask* SurvexExporter;
 
     cwCavernTask* CavernTask;
+    cwPlotSauceTask* PlotSauceTask;
 
 };
 

@@ -28,6 +28,7 @@ protected:
 
 private:
     //The filename of the survex file that'll be used by cavern
+    static const QString Survex3dExtension;
     QString SurvexFileName;
     QReadWriteLock SurvexFileNameLocker;
 

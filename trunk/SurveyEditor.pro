@@ -47,11 +47,12 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurvexExporterTripTask.cpp \
     src/cwTripStatistics.cpp \
     src/cwSurveExporterCaveTask.cpp \
-    cwSurvexExporterCaveTask.cpp \
+    src/cwSurvexExporterCaveTask.cpp \
     src/cwSurvexExporterRegionTask.cpp \
     src/cwLinePlotTask.cpp \
     src/cwLinePlotManager.cpp \
-    src/cwCavernTask.cpp
+    src/cwCavernTask.cpp \
+    src/cwPlotSauceTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -88,11 +89,12 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurvexExporterTripTask.h \
     src/cwTripStatistics.h \
     src/cwSurveExporterCaveTask.h \
-    cwSurvexExporterCaveTask.h \
+    src/cwSurvexExporterCaveTask.h \
     src/cwSurvexExporterRegionTask.h \
     src/cwLinePlotTask.h \
     src/cwLinePlotManager.h \
-    src/cwCavernTask.h
+    src/cwCavernTask.h \
+    src/cwPlotSauceTask.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
