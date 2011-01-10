@@ -16,7 +16,8 @@ public:
     enum Status {
         PreparingToStart,
         Running,
-        Stopped
+        Stopped,
+        Restart
     };
 
     explicit cwTask(QObject *parent = 0);
@@ -32,6 +33,7 @@ public:
 
 public slots:
     void start();
+    void restart();
 
 signals:
     void started();
@@ -39,6 +41,7 @@ signals:
     void stopped();
     void progressed(int step);
     void numberOfStepsChanged(int numberOfSteps);
+    void shouldRerun();
 
 protected:
     void setNumberOfSteps(int steps);
@@ -53,13 +56,11 @@ private:
 
     int NumberOfSteps;
     Status CurrentStatus;
-    //bool Running;
 
     QList<cwTask*> ChildTasks;
     cwTask* ParentTask;
 
-    //QThread* RunThread; //The thread that this will run on
-    //QThread* OriginalThread; //Usually main thread
+    void privateStop();
 
 private:
     Q_INVOKABLE void startOnCurrentThread();

@@ -12,7 +12,7 @@ cwTask(object)
   Does nothing if the exporter is still running
   */
 void cwSurvexExporterTask::setOutputFile(QString outputFile) {
-    if(status() == Stopped) {
+    if(!isRunning()) {
         OutputFileName = outputFile;
     }
 }
@@ -23,7 +23,7 @@ void cwSurvexExporterTask::setOutputFile(QString outputFile) {
   This is useful for reusing survex exporter's to do sub exporting
   */
 void cwSurvexExporterTask::setParentSurvexExporter(cwSurvexExporterTask* parent) {
-    if(status() != Stopped) {
+    if(isRunning()) {
         qWarning("Can't set the survexExportTask's parent when it's running");
         return;
     }
@@ -40,7 +40,7 @@ void cwSurvexExporterTask::setParentSurvexExporter(cwSurvexExporterTask* parent)
 bool cwSurvexExporterTask::parentIsRunning() {
     cwSurvexExporterTask* parentTask = ParentExportTask;
     while(parentTask != NULL) {
-        if(parentTask->status() == Running) {
+        if(parentTask->isRunning()) {
             return true;
         }
 
@@ -57,7 +57,7 @@ bool cwSurvexExporterTask::parentIsRunning() {
   Does nothing if the exporter is still running
   */
 QStringList cwSurvexExporterTask::errors() {
-    if(status() != Stopped) {
+    if(isRunning()) {
         return QStringList();
     }
     return Errors;

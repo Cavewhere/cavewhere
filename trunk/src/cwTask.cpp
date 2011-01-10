@@ -57,7 +57,8 @@ void cwTask::setParentTask(cwTask* parentTask) {
   */
 void cwTask::setThread(QThread* threadToRunOn) {
     threadToRunOn->start();
-    QMetaObject::invokeMethod(this, "changeThreads", Qt::AutoConnection, QGenericArgument("QThread*", &threadToRunOn));
+    QMetaObject::invokeMethod(this, "changeThreads", Qt::AutoConnection,
+                              Q_ARG(QThread*, threadToRunOn));
 }
 
 /**
@@ -84,7 +85,8 @@ cwTask::Status cwTask::status() const {
   This function is thread safe
   */
 bool cwTask::isRunning() const {
-    return status() != Stopped;
+    Status currentStatus = status();
+    return currentStatus == Running || currentStatus == PreparingToStart;
 }
 
 /**
@@ -94,12 +96,7 @@ bool cwTask::isRunning() const {
   */
 void cwTask::stop() {
     QWriteLocker locker(&StatusLocker);
-    CurrentStatus = Stopped;
-
-    //Go through all children and stop them
-    foreach(cwTask* child, ChildTasks) {
-        child->stop();
-    }
+    privateStop();
 }
 
 /**
@@ -136,24 +133,21 @@ void cwTask::start() {
         CurrentStatus = PreparingToStart;
     }
 
-//    if(RunThread != NULL) {
-//        if(this->thread() == QThread::currentThread() || isRunning()) {
-//            //Make sure the thread has an event loop
-//            RunThread->start();
-
-//            //Move this object to another thread
-//            OriginalThread = thread();
-//            moveToThread(RunThread);
-//        }
-//    } else {
-//        OriginalThread = NULL;
-//    }
-
-    //Make sure the thread has an event loop running
-
     //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
     //This is an asycranous call
     QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
+}
+
+/**
+
+  */
+void cwTask::restart() {
+    QWriteLocker locker(&StatusLocker);
+
+    //Stop the tasks, and it's children
+    privateStop();
+
+    CurrentStatus = Restart;
 }
 
 /**
@@ -176,22 +170,19 @@ void cwTask::setNumberOfSteps(int steps) {
   moving the object back it's original thread
   */
 void cwTask::done() {
-    //Moves the task back to the original thread -- WARNING SLOTS WILL CALLED BY ORIGINAL THREAD
-//    if(OriginalThread != NULL) {
-//        moveToThread(OriginalThread);
-//        OriginalThread = NULL;
-//    }
+    QWriteLocker locker(&StatusLocker);
 
     //If the task is still running, this means that the task has finished, without error
-    if(status() != Stopped) {
-        {
-            stop();
-        }
+    if(CurrentStatus == Restart) {
+        emit stopped();
+        emit shouldRerun();
+    } else if(CurrentStatus == Running) {
         emit finished();
     } else {
-        //Else the task has been stopped early
         emit stopped();
     }
+
+    privateStop();
 }
 
 /**
@@ -225,4 +216,19 @@ void cwTask::startOnCurrentThread() {
   */
 void cwTask::changeThreads(QThread* thread) {
     moveToThread(thread);
+}
+
+/**
+  \brief For internal use only
+
+  This isn't thread safe function, make it thread safe by locking StatusLocker, before
+  calling this function
+  */
+void cwTask::privateStop() {
+    CurrentStatus = Stopped;
+
+    //Go through all children and stop them
+    foreach(cwTask* child, ChildTasks) {
+        child->privateStop();
+    }
 }

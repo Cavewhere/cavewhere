@@ -18,7 +18,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 
     LinePlotTask = new cwLinePlotTask();
     LinePlotTask->setThread(LinePlotThread);
-    connect(LinePlotTask, SIGNAL(stopped()), SLOT(reRunSurvex())); //So the task is rerun
+    connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(runSurvex())); //So the task is rerun
 }
 
 /**
@@ -212,16 +212,15 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
         qDebug() << "----Run survex----";
-        if(!LinePlotTask->isRunning()) {
-            Rerun = false;
-            qDebug() << "\tSetting data!";
-            QMetaObject::invokeMethod(LinePlotTask, "setData", Qt::AutoConnection, QGenericArgument("cwCavingRegion", Region));
-            //LinePlotTask->setData(*Region);
+        if(LinePlotTask->status() == cwTask::Stopped) {
+            qDebug() << "\tSetting data!" << LinePlotTask->status();
+            QMetaObject::invokeMethod(LinePlotTask, "setData", Qt::AutoConnection,
+                                      Q_ARG(cwCavingRegion, *Region));
             LinePlotTask->start();
         } else {
-            qDebug() << "\tStopping excution";
-            Rerun = true;
-            LinePlotTask->stop(); //Stop the task
+            //Restart the survex
+            qDebug() << "Restart plot task";
+            LinePlotTask->restart();
         }
     }
 }

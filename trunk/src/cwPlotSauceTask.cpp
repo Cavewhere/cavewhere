@@ -53,7 +53,6 @@ QString cwPlotSauceTask::survex3DFilename() const {
   Runs plotsauce task
   */
 void cwPlotSauceTask::runTask() {
-
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
     QString plotsaucePath = "/home/blitz/documents/projects/plotsauce-build-desktop/plotsauce";
@@ -74,7 +73,7 @@ void cwPlotSauceTask::privateSetSurvex3DFile(QString survex3dFilename) {
 }
 
 void cwPlotSauceTask::plotSauceFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) {
-    //qDebug() << "PlotSauce has finish, outputfile:" << outputXMLFile();
+    qDebug() << "PlotSauce has finish, outputfile:" << outputXMLFile();
     //qDebug() << PlotSauceProcess->readAllStandardOutput();
     done();
 }

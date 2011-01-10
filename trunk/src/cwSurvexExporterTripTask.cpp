@@ -16,7 +16,7 @@ cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
   \brief Sets the trip data
   */
 void cwSurvexExporterTripTask::setData(const cwTrip& trip) {
-    if(status() != Stopped) {
+    if(!isRunning()) {
         *Trip = trip;
     } else {
         qWarning("Can't set trip data will the trip exporter is running");
@@ -60,7 +60,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     QList<cwSurveyChunk*> chunks = trip->chunks();
     for(int i = 0; i < chunks.size(); i++) {
         //Make sure we can still be run
-        if(!parentIsRunning() && status() == Stopped) { return; }
+        if(!parentIsRunning() && !isRunning()) { return; }
 
         cwSurveyChunk* chunk = chunks[i];
 
@@ -83,7 +83,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
     for(int i = 0; i < chunk->StationCount() - 1; i++) {
 
         //Make sure we can still be run
-        if(!parentIsRunning() && status() != Stopped) { return; }
+        if(!parentIsRunning() && !isRunning()) { return; }
 
         cwStation* fromStation = chunk->Station(i);
         cwStation* toStation = chunk->Station(i + 1);
