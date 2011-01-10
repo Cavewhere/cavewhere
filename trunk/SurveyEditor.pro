@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui declarative
+QT       += core gui declarative xml
 
 
 TARGET = SurveyEditor
@@ -52,7 +52,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwLinePlotTask.cpp \
     src/cwLinePlotManager.cpp \
     src/cwCavernTask.cpp \
-    src/cwPlotSauceTask.cpp
+    src/cwPlotSauceTask.cpp \
+    src/cwPlotSauceXMLTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -94,7 +95,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwLinePlotTask.h \
     src/cwLinePlotManager.h \
     src/cwCavernTask.h \
-    src/cwPlotSauceTask.h
+    src/cwPlotSauceTask.h \
+    src/cwPlotSauceXMLTask.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

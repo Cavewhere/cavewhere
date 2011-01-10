@@ -7,9 +7,12 @@
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
 class cwPlotSauceTask;
+class cwPlotSauceXMLTask;
 
 //Qt includes
 #include <QTemporaryFile>
+#include <QVector3D>
+#include <QTime>
 
 class cwLinePlotTask : public cwTask
 {
@@ -32,6 +35,9 @@ private slots:
     void readXML();
     void complete();
 
+    //For testing
+    void setStationPosition(QString name, QVector3D position);
+
 private:
     //The region data
     cwCavingRegion* Region;
@@ -42,7 +48,10 @@ private:
 
     cwCavernTask* CavernTask;
     cwPlotSauceTask* PlotSauceTask;
+    cwPlotSauceXMLTask* PlotSauceParseTask;
 
+    //For performance testing
+    QTime Time;
 };
 
 #endif // CWLINEPLOTTASK_H

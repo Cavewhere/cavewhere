@@ -4,6 +4,7 @@
 #include "cwCavernTask.h"
 #include "cwCavingRegion.h"
 #include "cwPlotSauceTask.h"
+#include "cwPlotSauceXMLTask.h"
 
 //Qt includes
 #include <QDebug>
@@ -37,6 +38,13 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
     connect(PlotSauceTask, SIGNAL(finished()), SLOT(readXML()));
     connect(PlotSauceTask, SIGNAL(stopped()), SLOT(done()));
+
+    PlotSauceParseTask = new cwPlotSauceXMLTask();
+    PlotSauceParseTask->setParentTask(this);
+
+    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(complete()));
+    connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
+    connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(setStationPosition(QString,QVector3D)));
 }
 
 /**
@@ -48,13 +56,8 @@ void cwLinePlotTask::setData(cwCavingRegion region) {
         return;
     }
 
-    QTime time;
-    time.start();
-
     *Region = region;
     Region->setParent(this);
-
-    //qDebug() << "Copy time: " << time.elapsed() << "ms";
 }
 
 /**
@@ -73,7 +76,7 @@ void cwLinePlotTask::runTask() {
 //        done();
 //        return;
 //    }
-
+    Time.start();
     exportData();
 }
 
@@ -105,13 +108,19 @@ void cwLinePlotTask::convertToXML() {
 }
 
 void cwLinePlotTask::readXML() {
-    qDebug() << "Read xml data";
-    done();
+    qDebug() << "Reading xml";
+    PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
+    PlotSauceParseTask->start();
 }
 
 /**
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::complete() {
+    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
+}
+
+void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
+   // qDebug() << "Station:" << name << "Position:" << position;
 }
