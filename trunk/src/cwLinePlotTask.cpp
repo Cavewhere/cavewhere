@@ -84,6 +84,7 @@ void cwLinePlotTask::runTask() {
   \brief Exports the data to
   */
 void cwLinePlotTask::exportData() {
+    qDebug() << "Status" << status();
     SurvexExporter->setData(*Region);
     SurvexExporter->start();
 }
@@ -93,7 +94,7 @@ void cwLinePlotTask::exportData() {
   cavern on the data
   */
 void cwLinePlotTask::runCavern() {
-    qDebug() << "Running cavern on " << SurvexFile->fileName();
+    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();;
     CavernTask->start();
 }
 
@@ -102,13 +103,13 @@ void cwLinePlotTask::runCavern() {
   into compress xml file
   */
 void cwLinePlotTask::convertToXML() {
-    qDebug() << "Covert 3d to xml";
+    qDebug() << "Covert 3d to xml" << "Status" << status();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
 
 void cwLinePlotTask::readXML() {
-    qDebug() << "Reading xml";
+    qDebug() << "Reading xml" << "Status" << status();;
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }

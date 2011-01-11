@@ -61,6 +61,7 @@ private:
     cwTask* ParentTask;
 
     void privateStop();
+    bool isParentsRunning();
 
 private:
     Q_INVOKABLE void startOnCurrentThread();

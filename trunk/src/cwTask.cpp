@@ -85,8 +85,8 @@ cwTask::Status cwTask::status() const {
   This function is thread safe
   */
 bool cwTask::isRunning() const {
-    Status currentStatus = status();
-    return currentStatus == Running || currentStatus == PreparingToStart;
+    QReadLocker locker(const_cast<QReadWriteLock*>(&StatusLocker));
+    return CurrentStatus == Running || CurrentStatus == PreparingToStart;
 }
 
 /**
@@ -123,13 +123,13 @@ If the task is already running or preparing to start, then this function does no
 This function is thread safe
   */
 void cwTask::start() {
-    if(status() != Stopped) {
-        return;
-    }
-
     {
-        //Make sure we are preparing to start
         QWriteLocker locker(&StatusLocker);
+        if(CurrentStatus != Stopped) {
+            return;
+        }
+
+        //Make sure we are preparing to start
         CurrentStatus = PreparingToStart;
     }
 
@@ -144,10 +144,12 @@ void cwTask::start() {
 void cwTask::restart() {
     QWriteLocker locker(&StatusLocker);
 
-    //Stop the tasks, and it's children
-    privateStop();
+    if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
+        //Stop the tasks, and it's children
+        privateStop();
 
-    CurrentStatus = Restart;
+        CurrentStatus = Restart;
+    }
 }
 
 /**
@@ -156,8 +158,8 @@ void cwTask::restart() {
   This function is thread safe
   */
 void cwTask::setNumberOfSteps(int steps) {
-    if(steps != numberOfSteps()) {
-        QWriteLocker locker(&NumberOfStepsLocker);
+    QWriteLocker locker(&NumberOfStepsLocker);
+    if(steps != NumberOfSteps) {
         NumberOfSteps = steps;
         emit numberOfStepsChanged(steps);
     }
@@ -191,6 +193,13 @@ void cwTask::done() {
   THIS should only be called from start()
   */
 void cwTask::startOnCurrentThread() {
+    if(!isParentsRunning()) {
+        //Parent task aren't running
+        stop(); //Stop
+        done(); //We are finished
+        return;
+    }
+
     Status currentStatus = status();
     Q_ASSERT(currentStatus != Running); //The thread should definitally not me running here
     if(currentStatus == Stopped) {
@@ -231,4 +240,23 @@ void cwTask::privateStop() {
     foreach(cwTask* child, ChildTasks) {
         child->privateStop();
     }
+}
+
+/**
+  \brief Check to see if the parents are still running
+
+  This return false if the parent task have stopped and returns true if the parent task are still
+  running.
+
+  If this task doesn't have a parent, this always returns true
+  */
+bool cwTask::isParentsRunning() {
+    cwTask* currentParentTask = ParentTask;
+    while(currentParentTask != NULL) {
+        if(!currentParentTask->isRunning()) {
+            return false;
+        }
+        currentParentTask = currentParentTask->ParentTask;
+    }
+    return true;
 }

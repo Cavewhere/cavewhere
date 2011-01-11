@@ -43,6 +43,10 @@ QString cwCavernTask::output3dFileName() const {
   \brief Runs survex's cavern
   */
  void cwCavernTask::runTask() {
+     if(!isRunning()) {
+         done();
+     }
+
      QString inputFile = survexFileName();
      QString outputFile = inputFile + Survex3dExtension;
      QString cavernPath = "/usr/local/bin/cavern";

@@ -211,9 +211,10 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
-        qDebug() << "----Run survex----";
+        //qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->status() == cwTask::Stopped) {
-            qDebug() << "\tSetting data!" << LinePlotTask->status();
+            qDebug() << "Running the task";
+            //qDebug() << "\tSetting data!" << LinePlotTask->status();
             QMetaObject::invokeMethod(LinePlotTask, "setData", Qt::AutoConnection,
                                       Q_ARG(cwCavingRegion, *Region));
             LinePlotTask->start();
