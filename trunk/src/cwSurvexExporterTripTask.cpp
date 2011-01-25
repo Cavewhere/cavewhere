@@ -89,7 +89,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         cwStation* toStation = chunk->Station(i + 1);
         cwShot* shot = chunk->Shot(i);
 
-        if(!fromStation->IsValid() || !toStation->IsValid()) { continue; }
+        if(!fromStation->isValid() || !toStation->isValid()) { continue; }
 
         QString distance = shot->GetDistance().toString();
         QString compass = shot->GetCompass().toString();
@@ -105,16 +105,16 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
                    backClino.compare("up", Qt::CaseInsensitive) != 0 &&
                    backClino.compare("down", Qt::CaseInsensitive) != 0) {
                Errors.append(QString("Error: No compass reading for %1 to %2")
-                             .arg(fromStation->GetName())
-                             .arg(toStation->GetName()));
+                             .arg(fromStation->name())
+                             .arg(toStation->name()));
                continue;
            }
         }
 
         if(clino.isEmpty() && backClino.isEmpty()) {
             Errors.append(QString("Error: No Clino reading for %1 to %2")
-                          .arg(fromStation->GetName())
-                          .arg(toStation->GetName()));
+                          .arg(fromStation->name())
+                          .arg(toStation->name()));
             continue;
         }
 
@@ -125,8 +125,8 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
 
         QString line = QString("%1 %2 %3 %4 %5 %6 %7")
-                .arg(fromStation->GetName(), TextPadding)
-                .arg(toStation->GetName(), TextPadding)
+                .arg(fromStation->name(), TextPadding)
+                .arg(toStation->name(), TextPadding)
                 .arg(distance, TextPadding)
                 .arg(compass, TextPadding)
                 .arg(backCompass, TextPadding)

@@ -1,16 +1,16 @@
 import Qt 4.7
 
 DistanceDataBox {
-    onDataValueChanged: dataObject ? dataObject.Up = dataValue : ""
+    onDataValueChanged: dataObject ? dataObject.up = dataValue : ""
 
     onDataObjectChanged: {
         if(dataObject != null) {
-            dataValue = dataObject.Up;
-            dataObject.UpChanged.connect(updateView);
+            dataValue = dataObject.up;
+            dataObject.upChanged.connect(updateView);
         }
     }
 
     function updateView() {
-        dataObject ? dataValue = dataObject.Up : ""
+        dataObject ? dataValue = dataObject.up : ""
     }
 }

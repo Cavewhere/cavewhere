@@ -3,10 +3,13 @@
 
 //Our include
 class cwTrip;
+#include <cwStation.h>
 
 //Qt includes
 #include <QObject>
 #include <QList>
+#include <QSharedPointer>
+#include <QWeakPointer>
 
 class cwCave : public QObject
 {
@@ -26,6 +29,11 @@ public:
     void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
 
+    bool hasStation(QString name);
+    QWeakPointer<cwStation> station(QString name);
+    void addStation(QSharedPointer<cwStation> station);
+    void removeStation(QString name);
+
 signals:
     void insertedTrips(int begin, int end);
     void removedTrips(int begin, int end);
@@ -35,6 +43,8 @@ signals:
 protected:
     QList<cwTrip*> Trips;
     QString Name;
+
+    QMap<QString, QWeakPointer<cwStation> > StationLookup;
 
 private:
     cwCave& Copy(const cwCave& object);
@@ -64,5 +74,31 @@ inline cwTrip* cwCave::trip(int index) const {
     if(index < 0 || index >= Trips.size()) { return NULL; }
     return Trips[index];
 }
+
+/**
+  \brief Test if this caves has a station with the name, name.
+
+  Returns true if it has a station with that name
+  */
+inline bool cwCave::hasStation(QString name) {
+    QWeakPointer<cwStation> pointer = station(name);
+    return pointer.isNull();
+}
+
+/**
+  \brief Get's the station from it's name
+  */
+inline QWeakPointer<cwStation> cwCave::station(QString name) {
+    return StationLookup.value(name, QWeakPointer<cwStation>());
+}
+
+/**
+  \brief Adds the station to the cave
+  */
+inline void cwCave::addStation(QSharedPointer<cwStation> station) {
+    StationLookup[station->name()] = station.toWeakRef();
+}
+
+
 
 #endif // CWCAVE_H

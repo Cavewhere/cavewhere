@@ -116,3 +116,15 @@ void cwCave::removeTrip(int i) {
     Trips.removeAt(i);
     emit removedTrips(i, i);
 }
+
+/**
+  \brief Removes a station for the lookup
+
+  If the weak pointer is still valid, then this function does nothing
+  */
+void cwCave::removeStation(QString name) {
+    QWeakPointer<cwStation> pointer = StationLookup[name];
+    if(pointer.isNull()) {
+        StationLookup.remove(name);
+    }
+}

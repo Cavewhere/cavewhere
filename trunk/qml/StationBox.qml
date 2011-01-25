@@ -5,16 +5,16 @@ DataBox {
     id: stationBox
     dataValidator: StationValidator { }
 
-    onDataValueChanged: dataObject.Name = dataObject ? dataValue : ""
+    onDataValueChanged: dataObject.name = dataObject ? dataValue : ""
 
     onDataObjectChanged: {
         if(dataObject != null) {
-            dataValue = dataObject.Name;
-            dataObject.NameChanged.connect(updateView);
+            dataValue = dataObject.name;
+            dataObject.nameChanged.connect(updateView);
         }
     }
 
     function updateView() {
-        dataObject ? dataValue = dataObject.Name : ""
+        dataObject ? dataValue = dataObject.name : ""
     }
 }

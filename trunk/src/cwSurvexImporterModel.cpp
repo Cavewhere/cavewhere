@@ -72,13 +72,13 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
          if(fromStation == NULL) {
              fromStationName = errorStationName;
          } else {
-             fromStationName = fromStation->GetName();
+             fromStationName = fromStation->name();
          }
 
          if(toStation == NULL) {
              toStationName = errorStationName;
          } else {
-             toStationName = toStation->GetName();
+             toStationName = toStation->name();
          }
 
          QString displayText = QString("%1 %2 %3").arg(fromStationName).arg(QString(QChar(0x2192))).arg(toStationName);

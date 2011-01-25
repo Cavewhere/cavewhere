@@ -139,7 +139,7 @@ void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
   \brief Connect to the station
   */
 void cwLinePlotManager::connectStation(cwStation* station) {
-    connect(station, SIGNAL(NameChanged()), SLOT(runSurvex()));
+    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
 }
 
 /**

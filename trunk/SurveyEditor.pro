@@ -16,7 +16,6 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyChunk.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
-    src/cwStationModel.cpp \
     src/cwSurvexImporter.cpp \
     src/cwSurveyChuckView.cpp \
     src/cwSurveyChunkGroupView.cpp \
@@ -53,13 +52,14 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwLinePlotManager.cpp \
     src/cwCavernTask.cpp \
     src/cwPlotSauceTask.cpp \
-    src/cwPlotSauceXMLTask.cpp
+    src/cwPlotSauceXMLTask.cpp \
+    src/cwStationLookup.cpp \
+    src/cwStationReferance.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
     src/cwStation.h \
     src/cwShot.h \
-    src/cwStationModel.h \
     src/cwSurvexImporter.h \
     src/cwSurveyChuckView.h \
     src/cwSurveyChunkGroupView.h \
@@ -96,7 +96,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwLinePlotManager.h \
     src/cwCavernTask.h \
     src/cwPlotSauceTask.h \
-    src/cwPlotSauceXMLTask.h
+    src/cwPlotSauceXMLTask.h \
+    src/cwStationLookup.h \
+    src/cwStationReferance.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

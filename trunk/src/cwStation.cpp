@@ -38,44 +38,51 @@ cwStation::cwStation(QString name) :
 
 cwStation::cwStation(QString name, float left, float right, float up, float down) :
         Name(name),
-        Left(left),
-        Right(right),
-        Up(up),
-        Down(down)
+        Left(QString("%1").arg(left)),
+        Right(QString("%1").arg(right)),
+        Up(QString("%1").arg(up)),
+        Down(QString("%1").arg(down))
 {
 }
 
-void cwStation::SetName(QString name) {
+void cwStation::setName(QString name) {
     if(name != Name) {
         Name = name;
-        emit NameChanged();
+        emit nameChanged();
     }
  }
 
-void cwStation::SetLeft(QVariant left) {
+void cwStation::setLeft(QString left) {
     if(left != Left) {
         Left = left;
-        emit LeftChanged();
+        emit leftChanged();
     }
  }
 
- void cwStation::SetRight(QVariant right) {
+ void cwStation::setRight(QString right) {
      if(Right != right) {
          Right = right;
-         emit RightChanged();
+         emit rightChanged();
      }
  }
 
- void cwStation::SetUp(QVariant up) {
+ void cwStation::setUp(QString up) {
      if(Up != up) {
          Up = up;
-         emit UpChanged();
+         emit upChanged();
      }
  }
 
- void cwStation::SetDown(QVariant down) {
+ void cwStation::setDown(QString down) {
      if(Down != down) {
          Down = down;
-         emit DownChanged();
+         emit downChanged();
+     }
+ }
+
+ void cwStation::setPosition(QVector3D position) {
+     if(Position != position) {
+         Position = position;
+         emit positionChanged();
      }
  }

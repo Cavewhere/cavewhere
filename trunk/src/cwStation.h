@@ -4,15 +4,16 @@
 //Qt includes
 #include <QObject>
 #include <QDebug>
-#include <QVariant>
+#include <QVector3D>
 
 class cwStation : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QString Name READ GetName WRITE SetName NOTIFY NameChanged);
-    Q_PROPERTY(QVariant Left  READ GetLeft WRITE SetLeft NOTIFY LeftChanged);
-    Q_PROPERTY(QVariant Right READ GetRight WRITE SetRight NOTIFY RightChanged);
-    Q_PROPERTY(QVariant Up READ GetUp WRITE SetUp NOTIFY UpChanged);
-    Q_PROPERTY(QVariant Down READ GetDown WRITE SetDown NOTIFY DownChanged);
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
+    Q_PROPERTY(QString left  READ left WRITE setLeft NOTIFY leftChanged);
+    Q_PROPERTY(QString right READ right WRITE setRight NOTIFY rightChanged);
+    Q_PROPERTY(QString up READ up WRITE setUp NOTIFY upChanged);
+    Q_PROPERTY(QString down READ down WRITE setDown NOTIFY downChanged);
+    Q_PROPERTY(QVector3D position READ position WRITE setPosition NOTIFY positionChanged);
 
 public:
     cwStation();
@@ -20,43 +21,47 @@ public:
     cwStation(QString name);
     cwStation(QString name, float left, float right, float up, float down);
 
-    Q_INVOKABLE QString GetName() const;
-    Q_INVOKABLE QVariant GetLeft() const;
-    Q_INVOKABLE QVariant GetRight() const;
-    Q_INVOKABLE QVariant GetUp() const;
-    Q_INVOKABLE QVariant GetDown() const;
+    Q_INVOKABLE QString name() const;
+    Q_INVOKABLE QString left() const;
+    Q_INVOKABLE QString right() const;
+    Q_INVOKABLE QString up() const;
+    Q_INVOKABLE QString down() const;
+    Q_INVOKABLE QVector3D position() const;
 
-    bool IsValid() const { return !Name.isEmpty(); }
+    bool isValid() const { return !Name.isEmpty(); }
 
 public slots:
-    void SetName(QString Name);
-    void SetLeft(QVariant left);
-    void SetRight(QVariant right);
-    void SetUp(QVariant up);
-    void SetDown(QVariant down);
+    void setName(QString Name);
+    void setLeft(QString left);
+    void setRight(QString right);
+    void setUp(QString up);
+    void setDown(QString down);
+    void setPosition(QVector3D position); //This is set by the loop closer
 
 protected:
     QString Name;
 
-    QVariant Left;
-    QVariant Right;
-    QVariant Up;
-    QVariant Down;
+    QString Left;
+    QString Right;
+    QString Up;
+    QString Down;
+
+    QVector3D Position;
 
 signals:
-    void NameChanged();
-    void LeftChanged();
-    void RightChanged();
-    void UpChanged();
-    void DownChanged();
+    void nameChanged();
+    void leftChanged();
+    void rightChanged();
+    void upChanged();
+    void downChanged();
+    void positionChanged();
 };
 
-inline QString cwStation::GetName() const { return Name; }
-inline QVariant cwStation::GetLeft() const { return Left; }
-inline QVariant cwStation::GetRight() const { return Right; }
-inline QVariant cwStation::GetUp() const { return Up; }
-inline QVariant cwStation::GetDown() const { return Down; }
-
-
+inline QString cwStation::name() const { return Name; }
+inline QString cwStation::left() const { return Left; }
+inline QString cwStation::right() const { return Right; }
+inline QString cwStation::up() const { return Up; }
+inline QString cwStation::down() const { return Down; }
+inline QVector3D cwStation::position() const { return Position; }
 
 #endif // cwStation_H

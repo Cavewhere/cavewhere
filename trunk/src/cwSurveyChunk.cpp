@@ -95,7 +95,7 @@ void cwSurveyChunk::AppendNewShot() {
         fromStation = new cwStation();
     } else {
         fromStation = Stations.last();
-        if(!fromStation->IsValid()) {
+        if(!fromStation->isValid()) {
             return;
         }
     }
