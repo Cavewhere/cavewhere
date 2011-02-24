@@ -21,7 +21,8 @@ cwStation::cwStation(const cwStation& station) : QObject(),
     Left(station.Left),
     Right(station.Right),
     Up(station.Up),
-    Down(station.Down)
+    Down(station.Down),
+    Position(station.Position)
 {
 
 }

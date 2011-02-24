@@ -13,6 +13,7 @@ class cwSurveyChunk;
 class cwStation;
 class cwShot;
 class cwSurveyChunkViewComponents;
+class cwStationReference;
 
 
 class cwSurveyChunkView : public QDeclarativeItem
@@ -75,7 +76,7 @@ private:
     public:
         Row(int rowIndex, int numberOfItems);
 
-        int rowIndex() { return RowIndex; }
+        int rowIndex() const { return RowIndex; }
         QVector<QDeclarativeItem*> items() { return Items; }
 
     protected:
@@ -95,7 +96,7 @@ private:
         QDeclarativeItem* up() const { return Items[Up]; }
         QDeclarativeItem* down() const { return Items[Down]; }
 
-        private:
+    private:
 
         enum {
             Station,
@@ -144,17 +145,17 @@ private:
 
     //Where all the survey chunk view's delegates are stored
     cwSurveyChunkViewComponents* QMLComponents;
-//    QDeclarativeComponent* StationDelegate;
-//    QDeclarativeComponent* TitleDelegate;
-//    QDeclarativeComponent* LeftDelegate;
-//    QDeclarativeComponent* RightDelegate;
-//    QDeclarativeComponent* UpDelegate;
-//    QDeclarativeComponent* DownDelegate;
-//    QDeclarativeComponent* DistanceDelegate;
-//    QDeclarativeComponent* FrontCompassDelegate;
-//    QDeclarativeComponent* BackCompassDelegate;
-//    QDeclarativeComponent* FrontClinoDelegate;
-//    QDeclarativeComponent* BackClinoDelegate;
+    //    QDeclarativeComponent* StationDelegate;
+    //    QDeclarativeComponent* TitleDelegate;
+    //    QDeclarativeComponent* LeftDelegate;
+    //    QDeclarativeComponent* RightDelegate;
+    //    QDeclarativeComponent* UpDelegate;
+    //    QDeclarativeComponent* DownDelegate;
+    //    QDeclarativeComponent* DistanceDelegate;
+    //    QDeclarativeComponent* FrontCompassDelegate;
+    //    QDeclarativeComponent* BackCompassDelegate;
+    //    QDeclarativeComponent* FrontClinoDelegate;
+    //    QDeclarativeComponent* BackClinoDelegate;
 
     QDeclarativeItem* StationTitle;
     QDeclarativeItem* DistanceTitle;
@@ -179,7 +180,7 @@ private:
 
     void PositionStationRow(StationRow row, int index);
     void PositionElement(QDeclarativeItem* item, QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
-    void ConnectStation(cwStation* station, StationRow row);
+    void ConnectStation(cwStationReference* station, StationRow row);
 
     void PositionShotRow(ShotRow row, int index);
     void ConnectShot(cwShot* shot, ShotRow row);
@@ -206,7 +207,7 @@ private:
     bool InterfaceValid();
 };
 
- //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)
+//QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)
 
 
 

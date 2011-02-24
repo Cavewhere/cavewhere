@@ -39,7 +39,6 @@ protected slots:
     void exportSurvexRegion(QString filename);
 
     void importSurvex();
-    void updateSurveyEditor();
     void reloadQML();
 
     //For changing
@@ -47,7 +46,6 @@ protected slots:
 
 private:
     cwSurvexExporter* SurvexExporter;
-    cwTrip* Trip;
     cwSurveyNoteModel* NoteModel;
 
     //Survey data

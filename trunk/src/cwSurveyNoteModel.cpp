@@ -11,21 +11,21 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     roles[NoteObjectRole] = "noteObject";
     setRoleNames(roles);
 
-    //Add a few pages of notes
-    cwNote* note1 = new cwNote(this);
-    cwNote* note2 = new cwNote(this);
-    cwNote* note3 = new cwNote(this);
-    cwNote* note4 = new cwNote(this);
+//    //Add a few pages of notes
+//    cwNote* note1 = new cwNote(this);
+//    cwNote* note2 = new cwNote(this);
+//    cwNote* note3 = new cwNote(this);
+//    cwNote* note4 = new cwNote(this);
 
-    note1->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
-    note2->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
-    note3->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
-    note4->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
+//    note1->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
+//    note2->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
+//    note3->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
+//    note4->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
 
-    Notes.append(note1);
-    Notes.append(note2);
-    Notes.append(note3);
-    Notes.append(note4);
+//    Notes.append(note1);
+//    Notes.append(note2);
+//    Notes.append(note3);
+//    Notes.append(note4);
 
 }
 

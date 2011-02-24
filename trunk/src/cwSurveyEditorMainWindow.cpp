@@ -40,7 +40,6 @@
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexExporter(NULL),
-    Trip(new cwTrip(this)),
     NoteModel(new cwSurveyNoteModel(this))
 {
     setupUi(this);
@@ -70,21 +69,25 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
-    //Initial chunk - for qml testing
-    cwSurveyChunk* chunk = new cwSurveyChunk(Trip);
-    chunk->AppendNewShot(); //Add the first shot
-
-    QList<cwSurveyChunk*> chunks;
-    chunks.append(chunk);
-
-    Trip->setChucks(chunks);
-
-
     Region = new cwCavingRegion(this);
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
     RegionTreeView = new QTreeView();
     RegionTreeView->setModel(RegionTreeModel);
+
+    cwCave* cave = new cwCave();
+    cave->setName("Default Cave");
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("Trip 1");
+
+    //Initial chunk - for qml testing
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    chunk->AppendNewShot(); //Add the first shot
+
+    trip->addChunk(chunk);
+    cave->addTrip(trip);
+    Region->addCave(cave);
 
     reloadQML();
 
@@ -95,8 +98,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     ExportThread = new QThread(this);
 
     //Setup the loop closer
-    LinePlotManager = new cwLinePlotManager(this);
-    LinePlotManager->setRegion(Region);
+//    LinePlotManager = new cwLinePlotManager(this);
+//    LinePlotManager->setRegion(Region);
 
 }
 
@@ -228,25 +231,12 @@ void cwSurveyEditorMainWindow::importSurvex() {
     survexImportDialog->open();
 }
 
-/**
-  \brief Updates the survey editor
-  */
-void cwSurveyEditorMainWindow::updateSurveyEditor() {
-//    QList<cwSurveyChunk*> chunks = SurvexImporter->chunks();
-    if(Trip == NULL) {
-        Trip = new cwTrip(this);
-    }
-//    Trip->setChucks(chunks);
-
-    reloadQML();
-}
-
 void cwSurveyEditorMainWindow::reloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
     context->setContextProperty("surveyNoteModel", NoteModel);
-    context->setContextProperty("surveyData", Trip);
+    //context->setContextProperty("surveyData", Trip);
     context->setContextProperty("regionTreeView", RegionTreeView);
     //context->setContextProperty("regionModel", RegionTreeModel);
 

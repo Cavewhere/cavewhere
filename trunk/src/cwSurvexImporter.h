@@ -12,7 +12,7 @@
 class cwSurvexBlockData;
 class cwSurvexGlobalData;
 class cwSurveyChunk;
-class cwStation;
+class cwStationReference;
 class cwShot;
 
 class cwSurvexImporter : public QObject
@@ -93,7 +93,7 @@ private:
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
-    QMap<QString, cwStation*> StationLookup;
+    QMap<QString, cwStationReference*> StationLookup;
 
     void clear();
 
@@ -109,8 +109,10 @@ private:
 
     void importData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
-    cwStation* createOrLookupStation(QString stationName);
-    void addShotToCurrentChunk(cwStation* fromStation, cwStation* toStation, cwShot* shot);
+    cwStationReference* createOrLookupStation(QString stationName);
+    void addShotToCurrentChunk(cwStationReference* fromStation,
+                               cwStationReference* toStation,
+                               cwShot* shot);
 
     //Error Messages
     void addError(QString error);

@@ -3,6 +3,7 @@
 
 //Our includes
 class cwSurveyChunk;
+class cwCave;
 
 //Qt include
 #include <QObject>
@@ -28,6 +29,9 @@ public:
     cwSurveyChunk* chunk(int i) const;
     QList<cwSurveyChunk*> chunks() const;
 
+    void setParentCave(cwCave* parentCave);
+    cwCave* parentCave();
+
     //Stats
     int numberOfStations() const;
 
@@ -43,6 +47,7 @@ public slots:
 protected:
     QList<cwSurveyChunk*> Chunks;
     QString Name;
+    cwCave* ParentCave;
 
 private:
     void Copy(const cwTrip& object);
@@ -54,6 +59,13 @@ private:
   */
 inline QString cwTrip::name() const {
     return Name;
+}
+
+/**
+  \brief Parent's cave
+  */
+inline cwCave* cwTrip::parentCave() {
+    return ParentCave;
 }
 
 #endif // CWSURVERYCHUNKGROUP_H

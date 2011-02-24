@@ -4,6 +4,7 @@
 //Our includes
 class cwSurveyChunk;
 class cwStation;
+class cwStationReference;
 
 //Qt includes
 #include <QObject>
@@ -40,8 +41,8 @@ public:
     void SetBackClino(QVariant backClino);
 
     cwSurveyChunk* parentChunk() const;
-    cwStation* toStation() const;
-    cwStation* fromStation() const;
+    cwStationReference* toStation() const;
+    cwStationReference* fromStation() const;
 
 
 signals:

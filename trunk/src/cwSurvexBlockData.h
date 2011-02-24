@@ -3,7 +3,7 @@
 
 //Our includes
 class cwSurveyChunk;
-class cwStation;
+class cwStationReference;
 class cwShot;
 
 //Qt includes
@@ -47,7 +47,7 @@ public:
     QList<cwSurvexBlockData*> childBlocks();
 
     int stationCount() const;
-    cwStation* station(int index) const;
+    cwStationReference* station(int index) const;
 
     int shotCount() const;
     cwShot* shot(int index) const;

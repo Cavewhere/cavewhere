@@ -7,7 +7,7 @@ class cwCave;
 class cwTrip;
 class cwSurveyChunk;
 class cwShot;
-class cwStation;
+class cwStationReference;
 class cwLinePlotTask;
 
 //Qt includes
@@ -43,7 +43,7 @@ private:
     void connectShots(cwSurveyChunk* chunk);
     void connectShot(cwShot* shot);
     void connectStations(cwSurveyChunk* chunk);
-    void connectStation(cwStation* station);
+    void connectStation(cwStationReference* station);
 
 private slots:
     void regionDestroyed(QObject* region);

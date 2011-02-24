@@ -8,12 +8,6 @@
 
 class cwStation : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
-    Q_PROPERTY(QString left  READ left WRITE setLeft NOTIFY leftChanged);
-    Q_PROPERTY(QString right READ right WRITE setRight NOTIFY rightChanged);
-    Q_PROPERTY(QString up READ up WRITE setUp NOTIFY upChanged);
-    Q_PROPERTY(QString down READ down WRITE setDown NOTIFY downChanged);
-    Q_PROPERTY(QVector3D position READ position WRITE setPosition NOTIFY positionChanged);
 
 public:
     cwStation();

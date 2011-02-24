@@ -1,5 +1,5 @@
 //Our includes
-#include "cwStationReferance.h"
+#include "cwStationReference.h"
 #include "cwCave.h"
 
 cwStationReference::cwStationReference(QObject *parent) :
@@ -8,6 +8,26 @@ cwStationReference::cwStationReference(QObject *parent) :
     SharedStation(new cwStation())
 {
     ConnectStation();
+}
+
+cwStationReference::cwStationReference(QString name, QObject *parent) :
+    QObject(parent),
+    Cave(NULL),
+    SharedStation(new cwStation(name))
+{
+    ConnectStation();
+}
+
+/**
+  \brief Copies the station
+  */
+cwStationReference::cwStationReference(const cwStationReference& object) :
+    QObject(),
+    Cave(NULL)
+{
+    if(!object.SharedStation.isNull()) {
+        SharedStation = QSharedPointer<cwStation>(new cwStation(*(object.SharedStation.data())));
+    }
 }
 
 /**
@@ -36,9 +56,9 @@ void cwStationReference::setCave(cwCave* cave) {
         //Copy the data from this object
         caveStation->setDown(SharedStation->down());
         caveStation->setLeft(SharedStation->left());
-        caveStation->setPosition(SharedStation->position());
         caveStation->setRight(SharedStation->right());
         caveStation->setUp(SharedStation->up());
+        caveStation->setPosition(SharedStation->position());
 
         DisconnectStation();
 
@@ -62,7 +82,7 @@ void cwStationReference::setCave(cwCave* cave) {
 void cwStationReference::setName(QString newName) {
     if(newName == name()) { return; }
 
-    if(Cave == NULL) {
+    if(Cave != NULL) {
         //We have cave
         if(Cave->hasStation(newName)) {
             DisconnectStation();
@@ -78,13 +98,16 @@ void cwStationReference::setName(QString newName) {
             QString oldName = SharedStation->name();
 
             //Copy the old data, this is simlar to detaching the data
-            cwStation* oldStationData = SharedStation.data();
-            cwStation* newStation = new cwStation(*oldStationData);
+            //cwStation* oldStationData = SharedStation.data();
+
+            //Create a new station
+            cwStation* newStation = new cwStation(newName); //*oldStationData);
 
             DisconnectStation();
 
             //Reassign the station
             SharedStation = QSharedPointer<cwStation>(newStation);
+            //SharedStation->setName(newName);
 
             ConnectStation();
 
@@ -94,7 +117,8 @@ void cwStationReference::setName(QString newName) {
             //Try to add the new station
             Cave->addStation(SharedStation);
 
-            SharedStation->setName(newName);
+            //Emit all the data has changed
+            emit reset();
         }
     } else {
         //No cave attached, so just set the sharedStation
@@ -110,8 +134,9 @@ void cwStationReference::ConnectStation() {
     connect(station, SIGNAL(nameChanged()), SIGNAL(nameChanged()));
     connect(station, SIGNAL(downChanged()), SIGNAL(downChanged()));
     connect(station, SIGNAL(leftChanged()), SIGNAL(leftChanged()));
+    connect(station, SIGNAL(upChanged()), SIGNAL(upChanged()));
+    connect(station, SIGNAL(rightChanged()), SIGNAL(rightChanged()));
     connect(station, SIGNAL(positionChanged()), SIGNAL(positionChanged()));
-    connect(station, SIGNAL(rightChanged()), SIGNAL(upChanged()));
 }
 
 

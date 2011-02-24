@@ -4,7 +4,7 @@
 #include "cwSurvexBlockData.h"
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwGlobalIcons.h"
 
 //Qt includes
@@ -62,8 +62,8 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
      //This index is a shot
      cwShot* shot = toShot(index); //qobject_cast<cwShot*>(static_cast<QObject*>(index.internalPointer()));
      if(shot != NULL) {
-         cwStation* fromStation = shot->fromStation();
-         cwStation* toStation = shot->toStation();
+         cwStationReference* fromStation = shot->fromStation();
+         cwStationReference* toStation = shot->toStation();
 
          QString fromStationName;
          QString toStationName;

@@ -86,7 +86,7 @@ cwSurveyChunk* cwShot::parentChunk() const {
 /**
   \brief The to station of this shot
   */
-cwStation* cwShot::toStation() const {
+cwStationReference* cwShot::toStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
         return chunk->ToFromStations(this).second;
@@ -97,7 +97,7 @@ cwStation* cwShot::toStation() const {
 /**
   \brief The from station of these shot
   */
-cwStation* cwShot::fromStation() const {
+cwStationReference* cwShot::fromStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
         return chunk->ToFromStations(this).first;

@@ -82,7 +82,7 @@ inline cwTrip* cwCave::trip(int index) const {
   */
 inline bool cwCave::hasStation(QString name) {
     QWeakPointer<cwStation> pointer = station(name);
-    return pointer.isNull();
+    return !pointer.isNull();
 }
 
 /**
@@ -96,7 +96,10 @@ inline QWeakPointer<cwStation> cwCave::station(QString name) {
   \brief Adds the station to the cave
   */
 inline void cwCave::addStation(QSharedPointer<cwStation> station) {
-    StationLookup[station->name()] = station.toWeakRef();
+    if(!station->name().isEmpty()) {
+        StationLookup[station->name()] = station.toWeakRef();
+        qDebug() << "Station lookup: " << StationLookup;
+    }
 }
 
 

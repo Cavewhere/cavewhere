@@ -1,6 +1,6 @@
 #include "cwSurvexExporterTripTask.h"
 #include "cwTrip.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 
@@ -85,8 +85,8 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         //Make sure we can still be run
         if(!parentIsRunning() && !isRunning()) { return; }
 
-        cwStation* fromStation = chunk->Station(i);
-        cwStation* toStation = chunk->Station(i + 1);
+        cwStationReference* fromStation = chunk->Station(i);
+        cwStationReference* toStation = chunk->Station(i + 1);
         cwShot* shot = chunk->Shot(i);
 
         if(!fromStation->isValid() || !toStation->isValid()) { continue; }

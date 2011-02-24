@@ -53,8 +53,7 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwCavernTask.cpp \
     src/cwPlotSauceTask.cpp \
     src/cwPlotSauceXMLTask.cpp \
-    src/cwStationLookup.cpp \
-    src/cwStationReferance.cpp
+    src/cwStationReference.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -97,8 +96,7 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwCavernTask.h \
     src/cwPlotSauceTask.h \
     src/cwPlotSauceXMLTask.h \
-    src/cwStationLookup.h \
-    src/cwStationReferance.h
+    src/cwStationReference.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

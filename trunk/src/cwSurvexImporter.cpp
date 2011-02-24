@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurvexImporter.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexBlockData.h"
@@ -17,7 +17,9 @@
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     QObject(parent),
     RootBlock(new cwSurvexBlockData(this)),
-    GlobalData(new cwSurvexGlobalData(this))
+    GlobalData(new cwSurvexGlobalData(this)),
+    CurrentState(FirstBegin),
+    CurrentBlock(NULL)
 {
 }
 
@@ -389,8 +391,8 @@ void cwSurvexImporter::importData(QString line) {
     }
 
     //Create the from and to stations
-    cwStation* fromStation = createOrLookupStation(fromStationName);
-    cwStation* toStation = createOrLookupStation(toStationName);
+    cwStationReference* fromStation = createOrLookupStation(fromStationName);
+    cwStationReference* toStation = createOrLookupStation(toStationName);
 
     cwShot* shot = new cwShot();
     shot->SetDistance(extractData(data, Distance));
@@ -425,7 +427,7 @@ QString cwSurvexImporter::extractData(const QStringList data, DataFormatType typ
   \param stationName - The name of the station
   \returns A new station of a station that's already exists
   */
-cwStation* cwSurvexImporter::createOrLookupStation(QString stationName) {
+cwStationReference* cwSurvexImporter::createOrLookupStation(QString stationName) {
     if(stationName.isEmpty()) { return NULL; }
 
     //Create the survex prefix
@@ -437,7 +439,7 @@ cwStation* cwSurvexImporter::createOrLookupStation(QString stationName) {
     }
 
     //Create the stations
-    cwStation* station = new cwStation(stationName);
+    cwStationReference* station = new cwStationReference(stationName);
     StationLookup[fullName] = station;
     return station;
 }
@@ -449,7 +451,9 @@ cwStation* cwSurvexImporter::createOrLookupStation(QString stationName) {
   is the last station in the chunk or will create a new survey chunk.  If a
   new survey chunk is created, it'll be added to the end of the list of chunks.
   */
-void cwSurvexImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
+void cwSurvexImporter::addShotToCurrentChunk(cwStationReference* fromStation,
+                                             cwStationReference* toStation,
+                                             cwShot* shot) {
     cwSurveyChunk* chunk;
     if(CurrentBlock->chunkCount() == 0) {
         //Create a new chunk
@@ -459,10 +463,10 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
         chunk = CurrentBlock->chunks().last(); //Chunks.last();
     }
 
-    if(chunk->CanAddShot(fromStation, toStation, shot)) {
+    if(chunk->canAddShot(fromStation, toStation, shot)) {
         chunk->AppendShot(fromStation, toStation, shot);
     } else {
-        if(!chunk->IsValid()) {
+        if(!chunk->isValid()) {
             //error
             qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation << toStation << shot;
             return;
@@ -471,7 +475,7 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStation* fromStation, cwStation* 
         chunk = new cwSurveyChunk();
         CurrentBlock->addChunk(chunk);
         //Chunks.append(chunk);
-        if(chunk->CanAddShot(fromStation, toStation, shot)) {
+        if(chunk->canAddShot(fromStation, toStation, shot)) {
             chunk->AppendShot(fromStation, toStation, shot);
         } else {
             //error

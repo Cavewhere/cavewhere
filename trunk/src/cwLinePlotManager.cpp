@@ -3,7 +3,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwLinePlotTask.h"
@@ -130,7 +130,7 @@ void cwLinePlotManager::connectShot(cwShot* shot) {
   */
 void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
     for(int i = 0; i < chunk->StationCount(); i++) {
-        cwStation* station = chunk->Station(i);
+        cwStationReference* station = chunk->Station(i);
         connectStation(station);
     }
 }
@@ -138,7 +138,7 @@ void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
 /**
   \brief Connect to the station
   */
-void cwLinePlotManager::connectStation(cwStation* station) {
+void cwLinePlotManager::connectStation(cwStationReference* station) {
     connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
 }
 
@@ -180,7 +180,7 @@ void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
 void cwLinePlotManager::connectAddedStations(int beginIndex, int endIndex) {
     cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwStation* station = chunk->Station(i);
+        cwStationReference* station = chunk->Station(i);
         connectStation(station);
     }
 }

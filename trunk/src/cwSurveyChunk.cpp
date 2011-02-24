@@ -1,8 +1,9 @@
 //Our includes
 #include "cwSurveyChunk.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwShot.h"
-
+#include "cwTrip.h"
+#include "cwCave.h"
 
 //Qt includes
 #include <QHash>
@@ -10,7 +11,8 @@
 #include <QVariant>
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
-        QObject(parent)
+    QObject(parent),
+    ParentTrip(NULL)
 {
 
 }
@@ -24,8 +26,8 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) : QObject() {
 
     //Copy all the stations
     Stations.reserve(chunk.Stations.size());
-    foreach(cwStation* station, chunk.Stations) {
-        cwStation* newStation = new cwStation(*station);
+    foreach(cwStationReference* station, chunk.Stations) {
+        cwStationReference* newStation = new cwStationReference(*station);
         Stations.append(newStation);
     }
 
@@ -41,16 +43,34 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) : QObject() {
 /**
   \brief Checks if the survey Chunk is valid
   */
-bool cwSurveyChunk::IsValid() const {
+bool cwSurveyChunk::isValid() const {
     return (Stations.size() - 1) == Shots.size() && !Stations.empty() && !Shots.empty();
+}
+
+/**
+  \brief Gets the parent cave for this chunk
+  */
+cwCave* cwSurveyChunk::parentCave() const {
+    return parentTrip() != NULL ? parentTrip()->parentCave() : NULL;
 }
 
 int cwSurveyChunk::StationCount() const {
     return Stations.count();
 }
 
-cwStation* cwSurveyChunk::Station(int index) const {
-    if(StationIndexCheck(index)) {
+/**
+  \brief Sets the parent trip for this chunk
+  */
+void cwSurveyChunk::setParentTrip(cwTrip* trip) {
+    if(ParentTrip != trip) {
+        ParentTrip = trip;
+        setParent(trip);
+        updateStationsWithNewCave();
+    }
+}
+
+cwStationReference* cwSurveyChunk::Station(int index) const {
+    if(stationIndexCheck(index)) {
         return Stations[index];
     }
     return NULL;
@@ -61,7 +81,7 @@ int cwSurveyChunk::ShotCount() const {
 }
 
 cwShot* cwSurveyChunk::Shot(int index) const {
-    if(ShotIndexCheck(index)) {
+    if(shotIndexCheck(index)) {
         return Shots[index];
     }
     return NULL;
@@ -75,10 +95,14 @@ cwShot* cwSurveyChunk::Shot(int index) const {
   */
 void cwSurveyChunk::AppendNewShot() {
     //Check for special case
-    if(!IsValid() && Stations.size() <= 2 && Shots.size() <= 1) {
+    if(!isValid() && Stations.size() <= 2 && Shots.size() <= 1) {
         //Make valid
         for(int i = Stations.size(); i < 2; i++) {
-            Stations.append(new cwStation());
+
+            //Create a new station
+            cwStationReference* station = createNewStation();
+
+            Stations.append(station);
             emit StationsAdded(i, i);
         }
 
@@ -90,9 +114,9 @@ void cwSurveyChunk::AppendNewShot() {
     }
 
 
-    cwStation* fromStation;
+    cwStationReference* fromStation;
     if(Stations.isEmpty()) {
-        fromStation = new cwStation();
+        fromStation = createNewStation();
     } else {
         fromStation = Stations.last();
         if(!fromStation->isValid()) {
@@ -100,7 +124,7 @@ void cwSurveyChunk::AppendNewShot() {
         }
     }
 
-    cwStation* toStation = new cwStation();
+    cwStationReference* toStation = createNewStation();
     cwShot* shot = new cwShot();
 
     AppendShot(fromStation, toStation, shot);
@@ -118,9 +142,9 @@ void cwSurveyChunk::AppendNewShot() {
   isn't equal to the last station in the chunk.  If toStation isn't the last station,
   you need to create a new cwSurveyChunk and call this function again
   */
-void cwSurveyChunk::AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
+void cwSurveyChunk::AppendShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot) {
     //qDebug() << "Trying to add shot";
-    if(!CanAddShot(fromStation, toStation, shot)) { return; }
+    if(!canAddShot(fromStation, toStation, shot)) { return; }
 
     int index;
     int firstIndex = Stations.size();
@@ -150,13 +174,13 @@ cwSurveyChunk* cwSurveyChunk::SplitAtStation(int stationIndex) {
     if(stationIndex < 1 || stationIndex >= Stations.size()) { return NULL; }
 
     cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-    newChunk->Stations.append(new cwStation()); //Add an empty station to the front
+    newChunk->Stations.append(createNewStation()); //Add an empty station to the front
 
     //Copy the points from one chunk to another
     for(int i = stationIndex; i < Stations.size(); i++) {
 
         //Get the current stations and shots
-        cwStation* station = Stations[i];
+        cwStationReference* station = Stations[i];
         cwShot* shot = Shot(i - 1);
 
         newChunk->Stations.append(station);
@@ -171,7 +195,7 @@ cwSurveyChunk* cwSurveyChunk::SplitAtStation(int stationIndex) {
 
     //Remove the stations and shots from the list
     int shotIndex = stationIndex - 1;
-    QList<cwStation*>::iterator stationIter = Stations.begin() + stationIndex;
+    QList<cwStationReference*>::iterator stationIter = Stations.begin() + stationIndex;
     QList<cwShot*>::iterator shotIter = Shots.begin() + shotIndex;
     Stations.erase(stationIter, Stations.end());
     Shots.erase(shotIter, Shots.end());
@@ -207,7 +231,7 @@ void cwSurveyChunk::InsertStation(int stationIndex, Direction direction) {
         stationIndex++;
     }
 
-    cwStation* station = new cwStation();
+    cwStationReference* station = createNewStation();
     cwShot* shot = new cwShot();
 
     Stations.insert(stationIndex, station);
@@ -233,7 +257,7 @@ void cwSurveyChunk::InsertShot(int shotIndex, Direction direction) {
         shotIndex++;
     }
 
-    cwStation* station = new cwStation();
+    cwStationReference* station = createNewStation();
     cwShot* shot = new cwShot();
 
     Stations.insert(stationIndex, station);
@@ -249,7 +273,7 @@ void cwSurveyChunk::InsertShot(int shotIndex, Direction direction) {
 
   \returns true if AddShot() will be successfull or will do nothing
   */
-bool cwSurveyChunk::CanAddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot) {
+bool cwSurveyChunk::canAddShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot) {
     return fromStation != NULL && toStation != NULL && shot != NULL &&
             (Stations.empty() || Stations.last() == fromStation);
 }
@@ -259,17 +283,17 @@ bool cwSurveyChunk::CanAddShot(cwStation* fromStation, cwStation* toStation, cwS
 
   This first find the shot and the get's the to and from station.
   */
-QPair<cwStation*, cwStation*> cwSurveyChunk::ToFromStations(const cwShot* shot) const {
-    if(!IsValid()) { return QPair<cwStation*, cwStation*>(NULL, NULL); }
-    if(shot->parent() != this) { return QPair<cwStation*, cwStation*>(NULL, NULL); }
+QPair<cwStationReference*, cwStationReference*> cwSurveyChunk::ToFromStations(const cwShot* shot) const {
+    if(!isValid()) { return QPair<cwStationReference*, cwStationReference*>(NULL, NULL); }
+    if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(NULL, NULL); }
 
     for(int i = 0; i < Shots.size(); i++) {
         if(Shots[i] == shot) {
-            return QPair<cwStation*, cwStation*>(Stations[i], Stations[i + 1]);
+            return QPair<cwStationReference*, cwStationReference*>(Stations[i], Stations[i + 1]);
         }
     }
 
-    return QPair<cwStation*, cwStation*>(NULL, NULL);
+    return QPair<cwStationReference*, cwStationReference*>(NULL, NULL);
 }
 
 
@@ -286,10 +310,10 @@ void cwSurveyChunk::RemoveStation(int stationIndex, Direction shot) {
     if(!CanRemoveStation(stationIndex, shot)) { return; }
 
     //The index to the shot that'll be removed
-    int shotIndex = Index(stationIndex, shot);
+    int shotIndex = index(stationIndex, shot);
 
     //Remove them
-    Remove(stationIndex, shotIndex);
+    remove(stationIndex, shotIndex);
 }
 
 /**
@@ -299,7 +323,7 @@ void cwSurveyChunk::RemoveStation(int stationIndex, Direction shot) {
 bool cwSurveyChunk::CanRemoveStation(int stationIndex, Direction shot) {
     if(StationCount() <= 2) { return false; }
     if(stationIndex < 0 || stationIndex >= StationCount()) { return false; }
-    int shotIndex = Index(stationIndex, shot);
+    int shotIndex = index(stationIndex, shot);
     if(shotIndex < 0 || shotIndex >= ShotCount()) { return false; }
 
     return true;
@@ -320,10 +344,10 @@ void cwSurveyChunk::RemoveShot(int shotIndex, Direction station) {
     }
 
     //The index of the station that'll be removed
-    int stationIndex = Index(shotIndex, station);
+    int stationIndex = index(shotIndex, station);
 
     //Remove them
-    Remove(stationIndex, shotIndex);
+    remove(stationIndex, shotIndex);
 }
 
 /**
@@ -333,7 +357,7 @@ void cwSurveyChunk::RemoveShot(int shotIndex, Direction station) {
 bool cwSurveyChunk::CanRemoveShot(int shotIndex, Direction station) {
     if(ShotCount() <= 1) { return false; }
     if(shotIndex < 0 || shotIndex >= ShotCount()) { return false; }
-    int stationIndex = Index(shotIndex, station);
+    int stationIndex = index(shotIndex, station);
     if(stationIndex < 0 || stationIndex >= StationCount()) { return false; }
 
     return true;
@@ -344,7 +368,7 @@ bool cwSurveyChunk::CanRemoveShot(int shotIndex, Direction station) {
 
   This does no bounds checking!!!
   */
-void cwSurveyChunk::Remove(int stationIndex, int shotIndex) {
+void cwSurveyChunk::remove(int stationIndex, int shotIndex) {
     Stations.removeAt(stationIndex);
     emit StationsRemoved(stationIndex, stationIndex);
 
@@ -355,7 +379,7 @@ void cwSurveyChunk::Remove(int stationIndex, int shotIndex) {
 /**
   \brief Helper to the remove functions.
   */
-int cwSurveyChunk::Index(int index, Direction direction) {
+int cwSurveyChunk::index(int index, Direction direction) {
     switch(direction) {
     case Above:
         return index - 1;
@@ -363,5 +387,34 @@ int cwSurveyChunk::Index(int index, Direction direction) {
         return index;
     }
     return -1;
+}
+
+/**
+  Uses the parent trip and updates all the stations in this chunk
+  with the new cave.
+
+  If the parent trip is null or parent trip's cave is null, this
+  does nothing
+  */
+void cwSurveyChunk::updateStationsWithNewCave() {
+    if(ParentTrip == NULL || ParentTrip->parentCave() == NULL) { return; }
+
+    foreach(cwStationReference* station, Stations) {
+        cwCave* cave = ParentTrip->parentCave();
+        station->setCave(cave);
+    }
+}
+
+/**
+  \brief This creates a new station in the chunk
+
+  The station will be owned by this chunk, and the parent cave will be set
+  for the station
+  */
+cwStationReference* cwSurveyChunk::createNewStation() {
+    //Create a new station
+    cwStationReference* station = new cwStationReference(this);
+    station->setCave(parentCave());
+    return station;
 }
 

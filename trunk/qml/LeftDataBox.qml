@@ -7,6 +7,7 @@ DistanceDataBox {
         if(dataObject != null) {
             dataValue = dataObject.left;
             dataObject.leftChanged.connect(updateView);
+            dataObject.reset.connect(updateView);
         }
     }
 

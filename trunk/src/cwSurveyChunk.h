@@ -2,8 +2,10 @@
 #define CWSurveyChunk_H
 
 //Our includes
-class cwStation;
+class cwStationReference;
 class cwShot;
+class cwTrip;
+class cwCave;
 
 //Qt
 #include <QObject>
@@ -22,8 +24,15 @@ public:
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
 
-    bool IsValid() const;
-    bool CanAddShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
+    bool isValid() const;
+    bool canAddShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot);
+
+    void setParentTrip(cwTrip* trip);
+    cwTrip* parentTrip() const;
+
+    cwCave* parentCave() const;
+
+    void updateStationsWithNewCave();
 
 signals:
     void StationsAdded(int beginIndex, int endIndex);
@@ -34,15 +43,15 @@ signals:
 
 public slots:
     int StationCount() const;
-    cwStation* Station(int index) const;
+    cwStationReference* Station(int index) const;
 
     int ShotCount() const;
     cwShot* Shot(int index) const;
 
-    QPair<cwStation*, cwStation*> ToFromStations(const cwShot* shot) const;
+    QPair<cwStationReference*, cwStationReference*> ToFromStations(const cwShot* shot) const;
 
     void AppendNewShot();
-    void AppendShot(cwStation* fromStation, cwStation* toStation, cwShot* shot);
+    void AppendShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot);
 
 
     cwSurveyChunk* SplitAtStation(int stationIndex);
@@ -57,16 +66,28 @@ public slots:
     bool CanRemoveShot(int shotIndex, Direction station);
 
 private:
-    QList<cwStation*> Stations;
+    QList<cwStationReference*> Stations;
     QList<cwShot*> Shots;
+    cwTrip* ParentTrip;
 
-    bool ShotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
-    bool StationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
+    bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
+    bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
 
-    void Remove(int stationIndex, int shotIndex);
-    int Index(int index, Direction direction);
+    void remove(int stationIndex, int shotIndex);
+    int index(int index, Direction direction);
 
+    void updateStationsCave(cwStationReference* station);
+
+    cwStationReference* createNewStation();
 
 };
+
+/**
+  \brief Gets the parent trip for this chunk
+  */
+inline cwTrip* cwSurveyChunk::parentTrip() const {
+    return ParentTrip;
+}
+
 
 #endif // CWSurveyChunk_H

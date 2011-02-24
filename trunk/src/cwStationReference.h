@@ -7,6 +7,7 @@
 
 //Our includes
 class cwCave;
+//class cwStation;
 #include "cwStation.h"
 
 
@@ -19,8 +20,17 @@ class cwCave;
 class cwStationReference : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
+    Q_PROPERTY(QString left  READ left WRITE setLeft NOTIFY leftChanged);
+    Q_PROPERTY(QString right READ right WRITE setRight NOTIFY rightChanged);
+    Q_PROPERTY(QString up READ up WRITE setUp NOTIFY upChanged);
+    Q_PROPERTY(QString down READ down WRITE setDown NOTIFY downChanged);
+    Q_PROPERTY(QVector3D position READ position WRITE setPosition NOTIFY positionChanged);
+
 public:
-    cwStationReference(QObject* parent);
+    cwStationReference(QObject *parent = NULL);
+    cwStationReference(QString name = QString(), QObject* parent = NULL);
+    cwStationReference(const cwStationReference& object);
 
     void setCave(cwCave* cave);
     cwCave* cave() const;
@@ -31,6 +41,8 @@ public:
     Q_INVOKABLE QString up() const;
     Q_INVOKABLE QString down() const;
     Q_INVOKABLE QVector3D position() const;
+
+    bool isValid() const { return SharedStation->isValid(); }
 
 signals:
     void nameChanged();

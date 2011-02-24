@@ -95,7 +95,7 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
     }
 
     Trips.insert(i, trip);
-    trip->setParent(this);
+    trip->setParentCave(this);
 
     emit insertedTrips(i, i);
 }

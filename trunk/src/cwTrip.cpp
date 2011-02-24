@@ -1,9 +1,11 @@
 //Our includes
 #include "cwTrip.h"
+#include "cwCave.h"
 #include "cwSurveyChunk.h"
 
 cwTrip::cwTrip(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    ParentCave(NULL)
 {
 }
 
@@ -126,7 +128,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
     if(row > Chunks.size()) { row = Chunks.size(); }
 
     //Make this own the chunk
-    chunk->setParent(this);
+    chunk->setParentTrip(this);
 
     Chunks.insert(row, chunk);
 
@@ -152,7 +154,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
     Chunks = chunks;
 
     foreach(cwSurveyChunk* chunk, Chunks) {
-        chunk->setParent(this);
+        chunk->setParentTrip(this);
     }
 
     emit chunksInserted(0, numberOfChunks() - 1);
@@ -186,5 +188,19 @@ int cwTrip::numberOfStations() const {
         stationCount += chunk->StationCount();
     }
     return stationCount;
+}
+
+/**
+  \brief Set's the parent's cave
+  */
+void cwTrip::setParentCave(cwCave* parentCave) {
+    if(ParentCave != parentCave) {
+        ParentCave = parentCave;
+        setParent(parentCave);
+
+        foreach(cwSurveyChunk* chunk, Chunks) {
+            chunk->updateStationsWithNewCave();
+        }
+    }
 }
 

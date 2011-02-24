@@ -1,7 +1,7 @@
 //Our includes
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunk.h"
-#include "cwStation.h"
+#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunkViewComponents.h"
 
@@ -264,7 +264,7 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
         PositionStationRow(row, i);
 
         //Hock up the signals and slots with the models data
-        cwStation* station = Model->Station(i);
+        cwStationReference* station = Model->Station(i);
         ConnectStation(station, row);
 
         //Queue the index for navigation update
@@ -604,7 +604,7 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
 /**
   \brief Hooks up the model to the qml, for the station row
   */
-void cwSurveyChunkView::ConnectStation(cwStation* station, StationRow row) {
+void cwSurveyChunkView::ConnectStation(cwStationReference* station, StationRow row) {
     QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
 
     QVector<QDeclarativeItem*> items = row.items();

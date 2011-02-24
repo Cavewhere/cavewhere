@@ -46,7 +46,7 @@ Rectangle {
         anchors.left: regionTree.right;
         anchors.margins: 1;
 
-        clip: true;
+       // clip: true;
 
         /**
               Moves the flickable such that r is always shown
@@ -83,12 +83,11 @@ Rectangle {
         }
     }
 
-
-    NotesGallery {
-        anchors.left: flickArea.right
-        anchors.right: parent.right
-        anchors.top: area.top
-        anchors.bottom: area.bottom
-    }
+//    NotesGallery {
+//        anchors.left: flickArea.right
+//        anchors.right: parent.right
+//        anchors.top: area.top
+//        anchors.bottom: area.bottom
+//    }
 }
 

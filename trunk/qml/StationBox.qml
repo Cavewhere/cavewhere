@@ -11,6 +11,7 @@ DataBox {
         if(dataObject != null) {
             dataValue = dataObject.name;
             dataObject.nameChanged.connect(updateView);
+            //dataObject.reset.connect(updateView);
         }
     }
 

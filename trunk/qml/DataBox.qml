@@ -6,9 +6,10 @@ NavigationRectangle {
 
     property alias dataValue: dataTextInput.text
     property alias dataValidator: dataTextInput.validator
-   // property string dataValue
-  //  property variant dataValidator: DoubleValidator { }
     property alias edittorOpen: edittor.visible
+//    property string dataValue
+//    property variant dataValidator
+//    property bool edittorOpen
     property variant dataObject //For hooking up signals and slots in subclasses
     property int rowIndex: -1
 
@@ -101,14 +102,14 @@ NavigationRectangle {
 
             //dataTextInput.Keys.onPressed(event);
 
-            var oldDataValue = dataValue;
-            dataValue = event.text;
-            if(dataTextInput.validator.validate(dataValue) > 0 && event.text.length > 0) {
+            //var oldDataValue = dataValue;
+            if(dataTextInput.validator.validate(event.text) > 0 && event.text.length > 0) {
                 dataBox.state = 'EndTyping'
                 dataTextInput.focus = true
-            } else {
-                dataValue = oldDataValue;
-            }
+                dataValue = event.text
+            } //else {
+                //dataValue = oldDataValue;
+            //}
         }
     }
 
