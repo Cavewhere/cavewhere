@@ -70,7 +70,7 @@ private:
 
     QList< QString > StationNames;
 
-    QList<SplitStationName> createSpliteStationNames() const;
+    QList<SplitStationName> createSplitStationNames() const;
     QList<SurveyGroup> createSurveyGroups(QList<SplitStationName> stations) const;
     QList<SurveyGroup> groupGroupsByContinousStationNames(QList<SurveyGroup> ungrouped) const;
     QList<QString> groupStrings(QList<SurveyGroup> groups) const;

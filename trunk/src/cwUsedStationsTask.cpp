@@ -29,7 +29,7 @@ void cwUsedStationsTask::runTask() {
     if(!isRunning()) { done(); return; }
 
     //Split the station names into survey and station number
-    QList<cwUsedStationsTask::SplitStationName> splitStations = createSpliteStationNames();
+    QList<cwUsedStationsTask::SplitStationName> splitStations = createSplitStationNames();
 
     if(!isRunning()) { done(); return; }
 
@@ -57,6 +57,9 @@ void cwUsedStationsTask::runTask() {
 
 }
 
+/**
+  This is a threaded helper function to createSplitStationNames
+  */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(QString stationName) {
     QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\w+)");
     if(splitStationsReg.exactMatch(stationName)) {
@@ -74,29 +77,8 @@ cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(QString stati
 /**
   \brief Splits the StationNames into the survey and StationNamuber
   */
-QList<cwUsedStationsTask::SplitStationName> cwUsedStationsTask::createSpliteStationNames() const {
-
-
-    //QFuture<cwUsedStationsTask::SplitStationName> future =
-
+QList<cwUsedStationsTask::SplitStationName> cwUsedStationsTask::createSplitStationNames() const {
     return QtConcurrent::blockingMapped(StationNames, splitName);
-
-//    QList<cwUsedStationsTask::SplitStationName> splitStations;
-
-//    QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\w+)");
-//    foreach(QString stationName, StationNames) {
-//        if(splitStationsReg.exactMatch(stationName)) {
-//            QString surveyName = splitStationsReg.cap(1);
-//            QString stationName = splitStationsReg.cap(2);
-
-//            cwUsedStationsTask::SplitStationName splitStation(surveyName, stationName);
-//            splitStations.append(splitStation);
-//        } else {
-//            qDebug() << "Can't match: " << stationName;
-//        }
-//    }
-
-   // return splitStations;
 }
 
 /**
@@ -202,19 +184,21 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
 
         for(int i = 1; i < numericStations.size(); i++) {
             QString stationNumber = numericStations.at(i);
-            if(previousStation + 1 != stationNumber.toInt()) {
-                //Add the current group to the continous groups
-                continousGroups.append(currentGroup);
+            if(previousStation != stationNumber.toInt()) {
+                if(previousStation + 1 != stationNumber.toInt()) {
+                    //Add the current group to the continous groups
+                    continousGroups.append(currentGroup);
 
-                //Create a new group
-                currentGroup = SurveyGroup(Name);
-                //currentGroup.addStation(stationNumber);
+                    //Create a new group
+                    currentGroup = SurveyGroup(Name);
+                    currentGroup.addStation(stationNumber);
+                }
+                //Add the station to this group
+                currentGroup.addStation(stationNumber);
             }
-            //Add the station to this group
-            currentGroup.addStation(stationNumber);
+
             previousStation = stationNumber.toInt();
         }
-
         //Add the current group
         continousGroups.append(currentGroup);
     }
