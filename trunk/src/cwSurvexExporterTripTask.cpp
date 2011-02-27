@@ -44,6 +44,19 @@ void cwSurvexExporterTripTask::runTask() {
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
     stream << "*begin ; " << trip->name() << endl;
+
+    writeShotData(stream, trip); stream << endl;
+    writeLRUDData(stream, trip);
+
+    stream << "*end" << endl;
+}
+
+/**
+  \brief Writes the shot data to the stream
+
+  This will write the data as normal data
+  */
+void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) {
     stream << "*data normal from to tape compass backcompass clino backclino" << endl;
 
     QString dataLineComment = QString(";%1%2 %3 %4 %5 %6 %7")
@@ -66,14 +79,35 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 
         //Write the chunk data
         writeChunk(stream, chunk);
-
-        //If this isn't the last line
-        if(i < chunks.size() - 1) {
-            stream << endl;
-        }
     }
+}
 
-    stream << "*end" << endl;
+/**
+  \brief Writes the left right up down for each station in the trip, as
+  a comment
+  */
+void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) {
+    QString dataLineTemplate(";%1%2 %3 %4 %5");
+    QString dataLineComment = dataLineTemplate
+            .arg("Station", TextPadding)
+            .arg("Left", TextPadding)
+            .arg("Right", TextPadding)
+            .arg("Up", TextPadding)
+            .arg("Down", TextPadding);
+
+    stream << dataLineComment << endl;
+
+    QList<cwStationReference*> stations = trip->uniqueStations();
+    foreach(cwStationReference* station, stations) {
+        QString dataLine = dataLineTemplate
+                .arg(station->name(), TextPadding)
+                .arg(station->left(), TextPadding)
+                .arg(station->right(), TextPadding)
+                .arg(station->up(), TextPadding)
+                .arg(station->down(), TextPadding);
+
+        stream << dataLine << endl;
+    }
 }
 
 /**

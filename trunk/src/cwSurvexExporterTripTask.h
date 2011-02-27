@@ -21,6 +21,7 @@ public:
 
     void writeTrip(QTextStream& stream, cwTrip* trip);
 
+
 signals:
 
 protected:
@@ -33,7 +34,8 @@ private:
     static const int TextPadding;
 
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
-
+    void writeShotData(QTextStream& stream, cwTrip* trip);
+    void writeLRUDData(QTextStream& stream, cwTrip* trip);
 };
 
 #endif // CWSURVEXEXPORTERTRIPTASK_H

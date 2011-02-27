@@ -42,8 +42,6 @@
     <addaction name="actionSurvexExport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
-    <addaction name="actionReloadQML"/>
-    <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
    <addaction name="menuFile"/>

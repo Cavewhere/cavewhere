@@ -4,11 +4,13 @@
 //Our includes
 class cwSurveyChunk;
 class cwCave;
+class cwStationReference;
 
 //Qt include
 #include <QObject>
 #include <QList>
 #include <QAbstractListModel>
+#include <QWeakPointer>
 
 class cwTrip : public QObject
 {
@@ -31,6 +33,8 @@ public:
 
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave();
+
+    QList< cwStationReference* > uniqueStations() const;
 
     //Stats
     int numberOfStations() const;

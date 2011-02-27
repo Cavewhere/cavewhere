@@ -2,6 +2,10 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
+#include "cwStationReference.h"
+
+//Qt includes
+#include <QMap>
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
@@ -188,6 +192,24 @@ int cwTrip::numberOfStations() const {
         stationCount += chunk->StationCount();
     }
     return stationCount;
+}
+
+/**
+  \brief Gets all the unique stations for a trip
+
+  A station may come up more than once on a trip, but only returns
+  unique stations for this trip.
+  */
+QList< cwStationReference* > cwTrip::uniqueStations() const {
+    QMap<QString, cwStationReference*> lookup;
+    foreach(cwSurveyChunk* chunk, Chunks) {
+        for(int i = 0; i < chunk->StationCount(); i++) {
+            cwStationReference* station = chunk->Station(i);
+            lookup[station->name()] = station;
+        }
+    }
+
+    return lookup.values();
 }
 
 /**
