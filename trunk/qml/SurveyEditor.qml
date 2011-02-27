@@ -4,9 +4,12 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
+    //property alias currentPage: area.state
+
     border.width: 2
     border.color: "green"
 
+    state: currentPage
 
     ProxyWidget {
         id: regionTree
@@ -37,16 +40,18 @@ Rectangle {
     Flickable {
         id: flickArea
 
+        visible: false
+
         contentHeight: view.contentHeight
 
-        width: view.contentWidth;
+        width: view.contentWidth
 
         anchors.top: parent.top
-        anchors.bottom: parent.bottom;
-        anchors.left: regionTree.right;
+        anchors.bottom: parent.bottom
+        anchors.left: regionTree.right
         anchors.margins: 1;
 
-       // clip: true;
+        clip: true;
 
         /**
               Moves the flickable such that r is always shown
@@ -82,6 +87,55 @@ Rectangle {
             onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
         }
     }
+
+    CavePage {
+        id: cavePage
+
+        visible: false
+
+        anchors.left: regionTree.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+    }
+
+    states:  [
+
+        State {
+            name: "SurveyEditor"
+
+            PropertyChanges {
+                target: flickArea
+                visible: true
+                //restoreEntryValues: true
+            }
+
+            StateChangeScript {
+                script: {
+                    console.debug("Showing SurveyEditor");
+                }
+            }
+
+        },
+
+        State {
+            name: "CavePage"
+
+            PropertyChanges {
+                target: cavePage
+                visible: true
+                //restoreEntryValues: true
+            }
+
+            StateChangeScript {
+                script: {
+                    console.debug("Showing CavePage");
+                }
+            }
+
+        }
+
+    ]
 
 //    NotesGallery {
 //        anchors.left: flickArea.right

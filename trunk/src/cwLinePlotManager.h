@@ -19,6 +19,7 @@ class cwLinePlotManager : public QObject
     Q_OBJECT
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
+    ~cwLinePlotManager();
 
     void setRegion(cwCavingRegion* region);
 
@@ -48,7 +49,6 @@ private:
 private slots:
     void regionDestroyed(QObject* region);
     void runSurvex();
-    void reRunSurvex();
 
     void connectAddedCaves(int beginIndex, int endIndex);
     void connectAddedTrips(int beginIndex, int endIndex);

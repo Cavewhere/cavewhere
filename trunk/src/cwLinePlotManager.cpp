@@ -21,6 +21,13 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(runSurvex())); //So the task is rerun
 }
 
+cwLinePlotManager::~cwLinePlotManager() {
+    LinePlotTask->stop();
+
+    QMetaObject::invokeMethod(LinePlotThread, "quit");
+    LinePlotThread->wait();
+}
+
 /**
   \brief Sets the region that this manager will listen to
   */
@@ -226,12 +233,3 @@ void cwLinePlotManager::runSurvex() {
     }
 }
 
-/**
-  \brief Called when the manager should be rerun
-  */
- void cwLinePlotManager::reRunSurvex() {
-     if(Rerun) {
-         qDebug() << "***Rerun***";
-         runSurvex();
-     }
- }

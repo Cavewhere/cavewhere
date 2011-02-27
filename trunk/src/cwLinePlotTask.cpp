@@ -42,7 +42,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     PlotSauceParseTask = new cwPlotSauceXMLTask();
     PlotSauceParseTask->setParentTask(this);
 
-    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(complete()));
+    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
     connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
     connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(setStationPosition(QString,QVector3D)));
 }
@@ -117,7 +117,7 @@ void cwLinePlotTask::readXML() {
 /**
   \brief This alerts all the listeners that the data is done
   */
-void cwLinePlotTask::complete() {
+void cwLinePlotTask::linePlotTaskComplete() {
     qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }

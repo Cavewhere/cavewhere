@@ -33,7 +33,7 @@ private slots:
     void runCavern();
     void convertToXML();
     void readXML();
-    void complete();
+    void linePlotTaskComplete();
 
     //For testing
     void setStationPosition(QString name, QVector3D position);

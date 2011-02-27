@@ -14,6 +14,7 @@ class cwTrip;
 class cwCave : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
 
 public:
     explicit cwCave(QObject* parent = NULL);
@@ -34,11 +35,16 @@ public:
     void addStation(QSharedPointer<cwStation> station);
     void removeStation(QString name);
 
+    QList< QWeakPointer<cwStation> > stations() const;
+
 signals:
     void insertedTrips(int begin, int end);
     void removedTrips(int begin, int end);
 
     void nameChanged(QString name);
+
+    void stationAddedToCave(QString name);
+    void stationRemovedFromCave(QString name);
 
 protected:
     QList<cwTrip*> Trips;
@@ -98,8 +104,18 @@ inline QWeakPointer<cwStation> cwCave::station(QString name) {
 inline void cwCave::addStation(QSharedPointer<cwStation> station) {
     if(!station->name().isEmpty()) {
         StationLookup[station->name()] = station.toWeakRef();
-        qDebug() << "Station lookup: " << StationLookup;
     }
+}
+
+/**
+  \brief Gets all the stations in the cave
+
+  To figure out how stations are structured see cwTrip and cwSurveyChunk
+
+  Shots and stations are stored in the cwSurveyChunk
+  */
+inline QList< QWeakPointer<cwStation> > cwCave::stations() const {
+    return StationLookup.values();
 }
 
 

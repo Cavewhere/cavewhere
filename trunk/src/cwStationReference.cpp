@@ -97,9 +97,6 @@ void cwStationReference::setName(QString newName) {
             //Make the temperary point to the data
             QString oldName = SharedStation->name();
 
-            //Copy the old data, this is simlar to detaching the data
-            //cwStation* oldStationData = SharedStation.data();
-
             //Create a new station
             cwStation* newStation = new cwStation(newName); //*oldStationData);
 

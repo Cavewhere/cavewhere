@@ -53,7 +53,9 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwCavernTask.cpp \
     src/cwPlotSauceTask.cpp \
     src/cwPlotSauceXMLTask.cpp \
-    src/cwStationReference.cpp
+    src/cwStationReference.cpp \
+    src/cwUsedStationsTask.cpp \
+    src/cwUsedStationTaskManager.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -96,7 +98,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwCavernTask.h \
     src/cwPlotSauceTask.h \
     src/cwPlotSauceXMLTask.h \
-    src/cwStationReference.h
+    src/cwStationReference.h \
+    src/cwUsedStationsTask.h \
+    src/cwUsedStationTaskManager.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
@@ -127,7 +131,8 @@ qml/ClinoReadBox.qml \
     qml/BackCompassReadBox.qml \
     qml/SurveyChunkList.qml \
     qml/ScrollBar.qml \
-    qml/NotesGallery.qml
+    qml/NotesGallery.qml \
+    qml/CavePage.qml
 
 RESOURCES += \
     icons.qrc

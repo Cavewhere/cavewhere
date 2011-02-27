@@ -24,6 +24,7 @@
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegionTask.h"
 #include "cwLinePlotManager.h"
+#include "cwUsedStationTaskManager.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -45,7 +46,10 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     setupUi(this);
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
 
+    qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
+    qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
     qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
     qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
@@ -62,6 +66,9 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
     qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
+    qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
+
+
 
     //qmlRegisterExtendedType<cwRegionTreeModel, QAbstractItemModel>("Cavewhere", 1, 0, "AbstractItemModel");
 
@@ -73,6 +80,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
     RegionTreeView = new QTreeView();
+    RegionTreeView->setHeaderHidden(true);
     RegionTreeView->setModel(RegionTreeModel);
 
     cwCave* cave = new cwCave();
@@ -240,7 +248,6 @@ void cwSurveyEditorMainWindow::reloadQML() {
     context->setContextProperty("regionTreeView", RegionTreeView);
     //context->setContextProperty("regionModel", RegionTreeModel);
 
-
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
 
 
@@ -264,12 +271,16 @@ void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelec
         QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
         cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
         cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
-        if(trip != NULL) {
-            QDeclarativeContext* context = DeclarativeView->rootContext();
-            context->setContextProperty("surveyData", trip);
+        QDeclarativeContext* context = DeclarativeView->rootContext();
 
+        if(trip != NULL) {
+            qDebug() << "Setting the trip";
+            context->setContextProperty("surveyData", trip);
+            context->setContextProperty("currentPage", "SurveyEditor");
         } else if(cave != NULL) {
-            //Do nothing for now
+            qDebug() << "Setting the cave data";
+            context->setContextProperty("caveData", cave);
+            context->setContextProperty("currentPage", "CavePage");
         }
     }
 }

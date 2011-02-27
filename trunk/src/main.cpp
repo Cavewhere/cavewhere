@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
 
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
+    qRegisterMetaType<QList <QString> >("QList<QString>");
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");
