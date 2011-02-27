@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>SurveyEditorMainWindow</string>
+   <string>Cave-vapor-where - Version: Super-ultra-alpha-3000 - Don't redistribute without permission :D</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout">
