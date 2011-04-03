@@ -354,8 +354,8 @@ void cwSurvexImporter::addToErrors(QString prefix, QString errorMessage) {
 
 QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::useDefaultDataFormat() {
     QMap<DataFormatType, int> dataFormat;
-    dataFormat[To] = 0;
-    dataFormat[From] = 1;
+    dataFormat[From] = 0;
+    dataFormat[To] = 1;
     dataFormat[Distance] = 2;
     dataFormat[Compass] = 3;
     dataFormat[Clino] = 4;

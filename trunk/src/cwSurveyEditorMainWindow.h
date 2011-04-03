@@ -38,6 +38,9 @@ protected slots:
     void openExportSurvexRegionFileDialog();
     void exportSurvexRegion(QString filename);
 
+    void openExportCompassFileDialog();
+    void exportCompassRegion(QString filename);
+
     void importSurvex();
     void reloadQML();
 

@@ -24,7 +24,6 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwValidator.cpp \
     src/cwCompassValidator.cpp \
     src/cwDistanceValidator.cpp \
-    src/cwSurvexExporter.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
     src/cwNote.cpp \
@@ -69,7 +68,6 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwValidator.h \
     src/cwCompassValidator.h \
     src/cwDistanceValidator.h \
-    src/cwSurvexExporter.h \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \
     src/cwNote.h \
@@ -100,7 +98,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwPlotSauceXMLTask.h \
     src/cwStationReference.h \
     src/cwUsedStationsTask.h \
-    src/cwUsedStationTaskManager.h
+    src/cwUsedStationTaskManager.h \
+    src/cwCompassExporterTask.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

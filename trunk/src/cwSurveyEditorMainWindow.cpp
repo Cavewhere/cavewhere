@@ -4,7 +4,6 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurvexImporter.h"
-#include "cwSurvexExporter.h"
 #include "cwTrip.h"
 #include "cwSurveyChuckView.h"
 #include "cwSurveyChunkGroupView.h"
@@ -228,6 +227,20 @@ void cwSurveyEditorMainWindow::exportSurvexRegion(QString filename) {
     connect(exportTask, SIGNAL(stopped()), SLOT(exportSurvexFinished()));
     exportTask->setThread(ExportThread);
     exportTask->start();
+}
+
+/**
+  Opens the compass file export dialog
+  */
+void cwSurveyEditorMainWindow::openExportCompassFileDialog() {
+
+}
+
+/**
+  Exports the region centerline to compass
+  */
+void cwSurveyEditorMainWindow::exportCompassRegion(QString filename) {
+
 }
 
 /**

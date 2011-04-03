@@ -39,7 +39,14 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionSurvexExport"/>
+    <widget class="QMenu" name="menuExport">
+     <property name="title">
+      <string>Export</string>
+     </property>
+     <addaction name="actionSurvexExport"/>
+     <addaction name="actionCompass"/>
+    </widget>
+    <addaction name="menuExport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
@@ -63,7 +70,12 @@
   </action>
   <action name="actionSurvexExport">
    <property name="text">
-    <string>Export Survex</string>
+    <string>Survex (.svx)</string>
+   </property>
+  </action>
+  <action name="actionCompass">
+   <property name="text">
+    <string>Compass (.plt)</string>
    </property>
   </action>
  </widget>
