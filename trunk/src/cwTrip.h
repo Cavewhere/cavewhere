@@ -2,9 +2,11 @@
 #define CWSURVERYCHUNKGROUP_H
 
 //Our includes
+#include "cwUnits.h"
 class cwSurveyChunk;
 class cwCave;
 class cwStationReference;
+
 
 //Qt include
 #include <QObject>
@@ -27,6 +29,9 @@ public:
     QDate date() const;
     void setDate(QDate date);
 
+    cwUnits::LengthUnit distanceUnit() const;
+    void setDistanceUnit(cwUnits::LengthUnit);
+
     void removeChunks(int begin, int end);
     void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
@@ -46,6 +51,7 @@ public:
 signals:
     void nameChanged(QString name);
     void dateChanged(QDate date);
+    void distanceUnitChanged(cwUnits::LengthUnit);
     void chunksInserted(int begin, int end);
     void chunksRemoved(int begin, int end);
 
@@ -60,7 +66,8 @@ protected:
     cwCave* ParentCave;
 
     //Units
-    cw
+    cwUnits::LengthUnit DistanceUnit;
+
 
 private:
     void Copy(const cwTrip& object);
@@ -86,6 +93,13 @@ inline QDate cwTrip::date() const {
   */
 inline cwCave* cwTrip::parentCave() {
     return ParentCave;
+}
+
+/**
+  \brief Gets the distance unit for the trip
+  */
+inline cwUnits::LengthUnit cwTrip::distanceUnit() const {
+    return DistanceUnit;
 }
 
 #endif // CWSURVERYCHUNKGROUP_H

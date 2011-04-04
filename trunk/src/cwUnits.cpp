@@ -1,6 +1,6 @@
-#include "cwUnitCoverter.h"
+#include "cwUnits.h"
 
-double cwUnitConverter::UnitsToMeters[cwUnitConverter::NumberOfUnits] = {1.0, //Meters
+double cwUnits::UnitsToMeters[cwUnits::NumberOfUnits] = {1.0, //Meters
                                                                          0.3048 //Feet
                                                                         };
 
@@ -10,7 +10,7 @@ double cwUnitConverter::UnitsToMeters[cwUnitConverter::NumberOfUnits] = {1.0, //
   If the valueUnit and to unit are equal, this returns the value.
 
   */
-double cwUnitConverter::convert(double value, cwUnitConverter::LengthUnit valueUnit, cwUnitConverter::LengthUnit to) {
+double cwUnits::convert(double value, cwUnits::LengthUnit valueUnit, cwUnits::LengthUnit to) {
     if(valueUnit == to) {
         return value;
     }

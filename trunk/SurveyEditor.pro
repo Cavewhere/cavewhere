@@ -57,7 +57,7 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwExporterTask.cpp \
     src/cwCompassExporterCaveTask.cpp \
     src/cwCaveExporterTask.cpp \
-    src/cwUnitCoverter.cpp
+    src/cwUnits.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -104,7 +104,7 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwExporterTask.h \
     src/cwCompassExporterCaveTask.h \
     src/cwCaveExporterTask.h \
-    src/cwUnitCoverter.h
+    src/cwUnits.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

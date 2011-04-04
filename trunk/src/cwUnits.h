@@ -1,7 +1,7 @@
 #ifndef CWUNITCOVERTER_H
 #define CWUNITCOVERTER_H
 
-class cwUnitConverter
+class cwUnits
 {
 public:
     enum LengthUnit {
@@ -12,8 +12,8 @@ public:
 
 
     static double convert(double value,
-                          cwUnitConverter::LengthUnit valuesUnit,
-                          cwUnitConverter::LengthUnit to);
+                          cwUnits::LengthUnit valuesUnit,
+                          cwUnits::LengthUnit to);
 
     private:
         static double UnitsToMeters[NumberOfUnits];

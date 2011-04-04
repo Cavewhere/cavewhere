@@ -11,6 +11,7 @@ cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
     ParentCave(NULL)
 {
+    DistanceUnit = cwUnits::Meters;
 }
 
 void cwTrip::Copy(const cwTrip& object)
@@ -19,6 +20,8 @@ void cwTrip::Copy(const cwTrip& object)
 
     //Copy the name of the trip
     setName(object.Name);
+    setDistanceUnit(object.DistanceUnit);
+    setDate(object.Date);
 
     //Remove all the originals
     int lastChunkIndex = Chunks.size() - 1;
@@ -31,6 +34,7 @@ void cwTrip::Copy(const cwTrip& object)
         cwSurveyChunk* objectsChunk = object.Chunks[i];
         cwSurveyChunk* newChunk = new cwSurveyChunk(*objectsChunk);
         newChunk->setParent(this);
+        newChunk->setParentTrip(this);
         Chunks.append(newChunk);
     }
     emit chunksInserted(0, object.Chunks.size() - 1);
@@ -72,6 +76,16 @@ void cwTrip::setDate(QDate date) {
     if(date != Date) {
         Date = date;
         emit dateChanged(Date);
+    }
+}
+
+/**
+  Sets the distance unit for the trip
+  */
+void cwTrip::setDistanceUnit(cwUnits::LengthUnit newDistanceUnit) {
+    if(DistanceUnit != newDistanceUnit) {
+        DistanceUnit = newDistanceUnit;
+        emit DistanceUnit;
     }
 }
 

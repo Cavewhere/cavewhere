@@ -6,6 +6,9 @@
 #include "cwShot.h"
 #include "cwStationReference.h"
 
+//Std includes
+#include <math.h>
+
 cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
 {
@@ -102,7 +105,6 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
   THe chunk has all the real survey data
   */
 void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
-
     cwTrip* trip = chunk->parentTrip();
 
     for(int i = 0; i < chunk->ShotCount(); i++) {
@@ -110,33 +112,23 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         cwStationReference* from = shot->fromStation();
         cwStationReference* to = shot->toStation();
 
+        float shotLength = cwUnits::convert(shot->GetDistance().toDouble(),
+                                            trip->distanceUnit(),
+                                            cwUnits::DecimalFeet);
+
         writeData(stream, "From", 12, from->name());
         stream << " ";
         writeData(stream, "To", 12, to->name());
         stream << " ";
-        stream << shot->GetDistance() << " ";
-        stream << shot->GetCompass() << " ";
-        stream << shot->GetClino() << " ";
-        if(!from->left().isEmpty()) { stream << from->left() << " "; } else { stream << 0.0 << " "; }
-        if(!from->up().isEmpty()) { stream << from->right() << " ";
-        stream << from->up() << " ";
-        stream << from->down() << " ";
-
-        bool okay;
-        shot->GetBackCompass().toDouble(&okay);
-        if(okay) {
-            stream << shot->GetBackCompass() << " ";
-        } else {
-            stream << shot->GetCompass() << " ";
-        }
-
-        if(okay) {
-            stream << shot->GetBackClino() << " ";
-        } else {
-            stream << shot->GetCompass() << " ";
-        }
-
-        stream << shot->GetBackClino() << " ";
+        stream << shotLength << " ";
+        stream << convertField(shot, Compass) << " ";
+        stream << convertField(shot, Clino) << " ";
+        stream << convertField(from, Left, cwUnits::DecimalFeet) << " ";
+        stream << convertField(from, Right, cwUnits::DecimalFeet) << " ";
+        stream << convertField(from, Up, cwUnits::DecimalFeet) << " ";
+        stream << convertField(from, Down, cwUnits::DecimalFeet) << " ";
+        stream << convertField(shot, BackCompass) << " ";
+        stream << convertField(shot, Clino) << " ";
         stream << endl;
     }
 
@@ -148,11 +140,138 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     stream << 0.0 << " ";
     stream << 0.0 << " ";
     stream << 0.0 << " ";
-    stream << lastStation->left() << " ";
-    stream << lastStation->right() << " ";
-    stream << lastStation->up() << " ";
-    stream << lastStation->down() << " ";
+    stream << convertField(lastStation, Left, cwUnits::DecimalFeet) << " ";
+    stream << convertField(lastStation, Right, cwUnits::DecimalFeet) << " ";
+    stream << convertField(lastStation, Up, cwUnits::DecimalFeet) << " ";
+    stream << convertField(lastStation, Down, cwUnits::DecimalFeet) << " ";
     stream << 0.0 << " ";
     stream << 0.0 << " ";
     stream << endl;
+}
+
+/**
+  Extracts the data from the station's LRUD field
+
+  This will convert the value into decimal feet
+  */
+float cwCompassExportCaveTask::convertField(cwStationReference* station,
+                                       StationLRUDField field,
+                                       cwUnits::LengthUnit unit) {
+
+    QString value;
+    switch(field) {
+    case Left:
+        value = station->left();
+        break;
+    case Right:
+        value = station->right();
+        break;
+    case Up:
+        value = station->up();
+        break;
+    case Down:
+        value = station->down();
+        break;
+    }
+
+    bool okay;
+    double numValue = value.toDouble(&okay);
+    if(!okay) {
+        return 0.0;
+    }
+
+    return cwUnits::convert(numValue, unit, cwUnits::DecimalFeet);
+}
+
+/**
+  \brief Extracts the compass and clino from the shot
+
+  This will convert the shot's compass and clino data such that it works correctly in compass
+  */
+float cwCompassExportCaveTask::convertField(cwShot* shot, ShotField field) {
+
+    QString frontSite;
+    QString backSite;
+
+    switch(field) {
+    case Compass:
+    case BackCompass:
+        frontSite = shot->GetCompass();
+        backSite = shot->GetBackCompass();
+        break;
+    case Clino:
+    case BackClino:
+        frontSite = shot->GetClino();
+        backSite = shot->GetBackClino();
+    }
+
+    float value;
+
+    if(field == Clino || field == BackClino) {
+        frontSite = convertFromDownUp(frontSite);
+        backSite = convertFromDownUp(backSite);
+    }
+
+    switch(field) {
+    case Compass:
+        value = fixCompass(frontSite, backSite);
+        break;
+    case BackCompass:
+        value = fixCompass(backSite, frontSite);
+        break;
+    case Clino:
+        value = fixClino(frontSite, backSite);
+        break;
+    case BackClino:
+        value = fixClino(backSite, frontSite);
+        break;
+    }
+
+    return value;
+}
+
+/**
+  Heleper to extract shot data
+  */
+QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
+    if(clinoReading.compare("down", Qt::CaseInsensitive) == 0) {
+        clinoReading = "-90.0";
+    } else if(clinoReading.compare("up", Qt::CaseInsensitive) == 0) {
+        clinoReading = "90.0";
+    }
+    return clinoReading;
+}
+
+/**
+  Heleper to extract shot data
+  */
+float cwCompassExportCaveTask::fixCompass(QString compass1, QString compass2) {
+    float value;
+    if(compass1.isEmpty()) {
+        if(!compass2.isEmpty()) {
+            value = fmod(compass2.toDouble() + 180.0, 360.0);
+        } else {
+            return 0.0;
+        }
+    } else {
+        value = compass1.toDouble();
+    }
+    return value;
+}
+
+/**
+  Heleper to extract shot data
+  */
+float cwCompassExportCaveTask::fixClino(QString forward, QString backward) {
+    float value;
+    if(forward.isEmpty()) {
+        if(!backward.isEmpty()) {
+            value = backward.toDouble() * -1;
+        } else {
+            return 0.0;
+        }
+    } else {
+        value = forward.toDouble();
+    }
+    return value;
 }
