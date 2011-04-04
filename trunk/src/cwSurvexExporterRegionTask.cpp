@@ -8,7 +8,7 @@
 #include <QDebug>
 
 cwSurvexExporterRegionTask::cwSurvexExporterRegionTask(QObject* parent) :
-    cwSurvexExporterTask(parent)
+    cwExporterTask(parent)
 {
     CaveExporter = new cwSurvexExporterCaveTask(this);
     CaveExporter->setParentSurvexExporter(this);

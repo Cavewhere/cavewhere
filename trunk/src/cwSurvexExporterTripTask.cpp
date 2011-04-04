@@ -7,7 +7,7 @@
 const int cwSurvexExporterTripTask::TextPadding = -11; //Left align with 10 spaces
 
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
-    cwSurvexExporterTask(parent)
+    cwExporterTask(parent)
 {
     Trip = new cwTrip(this);
 }
@@ -125,11 +125,11 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
         if(!fromStation->isValid() || !toStation->isValid()) { continue; }
 
-        QString distance = shot->GetDistance().toString();
-        QString compass = shot->GetCompass().toString();
-        QString backCompass = shot->GetBackCompass().toString();
-        QString clino = shot->GetClino().toString();
-        QString backClino = shot->GetBackClino().toString();
+        QString distance = shot->GetDistance();
+        QString compass = shot->GetCompass();
+        QString backCompass = shot->GetBackCompass();
+        QString clino = shot->GetClino();
+        QString backClino = shot->GetBackClino();
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }

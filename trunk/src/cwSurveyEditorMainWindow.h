@@ -6,6 +6,7 @@
 class cwSurvexImporter;
 class cwSurvexExporter;
 class cwTrip;
+class cwCave;
 class cwSurveyNoteModel;
 class cwImportSurvexDialog;
 class cwCavingRegion;
@@ -30,7 +31,7 @@ public:
 protected slots:
     void openExportSurvexTripFileDialog();
     void exportSurvexTrip(QString filename);
-    void exportSurvexFinished();
+    void exporterFinished();
 
     void openExportSurvexCaveFileDialog();
     void exportSurvexCave(QString filename);
@@ -38,8 +39,8 @@ protected slots:
     void openExportSurvexRegionFileDialog();
     void exportSurvexRegion(QString filename);
 
-    void openExportCompassFileDialog();
-    void exportCompassRegion(QString filename);
+    void openExportCompassCaveFileDialog();
+    void exportCaveToCompass(QString filename);
 
     void importSurvex();
     void reloadQML();
@@ -61,6 +62,8 @@ private:
     //Loop closer manager
     cwLinePlotManager* LinePlotManager;
 
+    cwCave* currentSelectedCave() const;
+    cwTrip* currentSelectedTrip() const;
 };
 
 #endif // SURVEYEDITORMAINWINDOW_H

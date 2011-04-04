@@ -22,7 +22,10 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
 
   All station will be copied into new stations, with the same data.
   */
-cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) : QObject() {
+cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
+    QObject(),
+    ParentTrip(NULL)
+{
 
     //Copy all the stations
     Stations.reserve(chunk.Stations.size());

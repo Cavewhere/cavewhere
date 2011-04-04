@@ -5,26 +5,12 @@
 #include "cwTrip.h"
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
-    cwSurvexExporterTask(parent)
+    cwCaveExporterTask(parent)
 {
-    Cave = new cwCave(this);
     TripExporter = new cwSurvexExporterTripTask(this);
     TripExporter->setParentSurvexExporter(this);
 
     connect(TripExporter, SIGNAL(progressed(int)), SLOT(UpdateProgress(int)));
-}
-
-/**
-  \brief Sets the data for the task
-
-  If the task is already running, then this does nothing
-  */
-void cwSurvexExporterCaveTask::setData(const cwCave& cave) {
-    if(!isRunning()) {
-        *Cave = cave;
-    } else {
-        qWarning("Can't set cave data when cave exporter is already running");
-    }
 }
 
 /**
@@ -48,19 +34,3 @@ void cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     stream << "*end ; End of " << cave->name() << endl;
 }
 
-/**
-  \brief Starts running the export cave task
-  */
-void cwSurvexExporterCaveTask::runTask() {
-    openOutputFile();
-    writeCave(OutputStream, Cave);
-    closeOutputFile();
-    done();
-}
-
-/**
-  \brief Updates the progress of the cave task
-  */
-void cwSurvexExporterCaveTask::UpdateProgress(int /*tripProgress*/) {
-
-}

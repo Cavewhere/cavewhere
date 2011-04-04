@@ -44,7 +44,7 @@
       <string>Export</string>
      </property>
      <addaction name="actionSurvexExport"/>
-     <addaction name="actionCompass"/>
+     <addaction name="actionCompassExport"/>
     </widget>
     <addaction name="menuExport"/>
     <addaction name="actionSurvexImport"/>
@@ -73,9 +73,12 @@
     <string>Survex (.svx)</string>
    </property>
   </action>
-  <action name="actionCompass">
+  <action name="actionCompassExport">
    <property name="text">
-    <string>Compass (.plt)</string>
+    <string>Compass (.dat)</string>
+   </property>
+   <property name="toolTip">
+    <string>Compass (.dat)</string>
    </property>
   </action>
  </widget>

@@ -15,11 +15,11 @@ cwShot::cwShot(QObject *parent) :
 
 }
 
-cwShot::cwShot(QVariant distance,
-               QVariant compass,
-               QVariant backCompass,
-               QVariant clino,
-               QVariant backClino,
+cwShot::cwShot(QString distance,
+               QString compass,
+               QString backCompass,
+               QString clino,
+               QString backClino,
                QObject* parent) :
     QObject(parent)
 {
@@ -40,35 +40,35 @@ cwShot::cwShot(const cwShot& shot) : QObject() {
 }
 
 
-void cwShot::SetDistance(QVariant distance) {
+void cwShot::SetDistance(QString distance) {
     if(Distance != distance) {
         Distance = distance;
         emit DistanceChanged();
     }
 }
 
-void cwShot::SetCompass(QVariant compass) {
+void cwShot::SetCompass(QString compass) {
     if(Compass != compass) {
         Compass = compass;
         emit CompassChanged();
     }
 }
 
-void cwShot::SetBackCompass(QVariant backCompass) {
+void cwShot::SetBackCompass(QString backCompass) {
     if(BackCompass != backCompass) {
         BackCompass = backCompass;
         emit BackCompassChanged();
     }
 }
 
-void cwShot::SetClino(QVariant clino) {
+void cwShot::SetClino(QString clino) {
     if(Clino != clino) {
         Clino = clino;
         emit ClinoChanged();
     }
 }
 
-void cwShot::SetBackClino(QVariant backClino) {
+void cwShot::SetBackClino(QString backClino) {
     if(BackClino != backClino) {
         BackClino = backClino;
         emit BackClinoChanged();

@@ -46,8 +46,9 @@ cwCave& cwCave::Copy(const cwCave& object) {
     Trips.reserve(object.tripCount());
     for(int i = 0; i < object.tripCount(); i++) {
         cwTrip* trip = object.trip(i);
-        cwTrip* newTrip = new cwTrip(*trip); //Deap copy of the trip
+        cwTrip* newTrip = new cwTrip(*trip); //Deep copy of the trip
         newTrip->setParent(this);
+        newTrip->setParentCave(this);
         Trips.append(newTrip);
     }
 

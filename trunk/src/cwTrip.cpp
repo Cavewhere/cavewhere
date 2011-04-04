@@ -13,7 +13,10 @@ cwTrip::cwTrip(QObject *parent) :
 {
 }
 
-void cwTrip::Copy(const cwTrip& object) {
+void cwTrip::Copy(const cwTrip& object)
+{
+    ParentCave = NULL;
+
     //Copy the name of the trip
     setName(object.Name);
 
@@ -63,45 +66,21 @@ void cwTrip::setName(QString name) {
 }
 
 /**
+  Sets the date of the trip
+  */
+void cwTrip::setDate(QDate date) {
+    if(date != Date) {
+        Date = date;
+        emit dateChanged(Date);
+    }
+}
+
+/**
   \brief Gets the number of chunks in a trip
   */
 int cwTrip::numberOfChunks() const {
     return Chunks.size();
 }
-
-//int cwTrip::rowCount(const QModelIndex &/*parent*/) const {
-//    return Chunks.size();
-//}
-
-//QVariant cwTrip::data(const QModelIndex &index, int role) const {
-//    if(!index.isValid()) { return QVariant(); }
-//    if(role == ChunkRole) {
-//        return QVariant::fromValue(qobject_cast<QObject*>(Chunks[index.row()]));
-//    }
-//    return QVariant();
-//}
-
-///**
-//  \brief Insert rows to a chunk group
-
-//  This is reimplimentation of the model in the model view frame work
-
-//  Rows must always be added to the root item
-//  */
-//bool cwTrip::insertRows ( int row, int count, const QModelIndex & parent) {
-//    if(parent != QModelIndex()) { return false; }
-//    if(row < 0 || row > rowCount()) { return false; }
-
-//    beginInsertRows(parent, row, row + count - 1);
-//    for(int i = 0; i < count; i++) {
-//        cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-//        newChunk->AppendNewShot();
-
-//        Chunks.insert(row, newChunk);
-//    }
-//    endInsertRows();
-//    return true;
-//}
 
 /**
   \brief Remove the chunks

@@ -41,10 +41,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTreeView.cpp \
     src/cwQMLWidget.cpp \
     src/cwTask.cpp \
-    src/cwSurvexExporterTask.cpp \
     src/cwSurvexExporterTripTask.cpp \
     src/cwTripStatistics.cpp \
-    src/cwSurveExporterCaveTask.cpp \
     src/cwSurvexExporterCaveTask.cpp \
     src/cwSurvexExporterRegionTask.cpp \
     src/cwLinePlotTask.cpp \
@@ -54,7 +52,12 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwPlotSauceXMLTask.cpp \
     src/cwStationReference.cpp \
     src/cwUsedStationsTask.cpp \
-    src/cwUsedStationTaskManager.cpp
+    src/cwUsedStationTaskManager.cpp \
+    src/cwCompassExporterRegionTask.cpp \
+    src/cwExporterTask.cpp \
+    src/cwCompassExporterCaveTask.cpp \
+    src/cwCaveExporterTask.cpp \
+    src/cwUnitCoverter.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -85,10 +88,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTreeView.h \
     src/cwQMLWidget.h \
     src/cwTask.h \
-    src/cwSurvexExporterTask.h \
     src/cwSurvexExporterTripTask.h \
     src/cwTripStatistics.h \
-    src/cwSurveExporterCaveTask.h \
     src/cwSurvexExporterCaveTask.h \
     src/cwSurvexExporterRegionTask.h \
     src/cwLinePlotTask.h \
@@ -99,7 +100,11 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwStationReference.h \
     src/cwUsedStationsTask.h \
     src/cwUsedStationTaskManager.h \
-    src/cwCompassExporterTask.h
+    src/cwCompassExporterRegionTask.h \
+    src/cwExporterTask.h \
+    src/cwCompassExporterCaveTask.h \
+    src/cwCaveExporterTask.h \
+    src/cwUnitCoverter.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

@@ -9,14 +9,14 @@
 #include <QFile>
 #include <QTextStream>
 
-class cwSurvexExporterTask : public cwTask
+class cwExporterTask : public cwTask
 {
 Q_OBJECT
 
 public:
-    explicit cwSurvexExporterTask(QObject* object);
+    explicit cwExporterTask(QObject* object);
 
-    void setParentSurvexExporter(cwSurvexExporterTask* parent);
+    void setParentSurvexExporter(cwExporterTask* parent);
 
     bool parentIsRunning();
 
@@ -32,7 +32,7 @@ protected:
     void closeOutputFile();
 
 private:
-    cwSurvexExporterTask* ParentExportTask;
+    cwExporterTask* ParentExportTask;
 
     QString OutputFileName;
     QFile OutputFile;

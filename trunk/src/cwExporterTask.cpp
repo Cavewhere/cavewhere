@@ -1,6 +1,6 @@
-#include "cwSurvexExporterTask.h"
+#include "cwExporterTask.h"
 
-cwSurvexExporterTask::cwSurvexExporterTask(QObject* object) :
+cwExporterTask::cwExporterTask(QObject* object) :
 cwTask(object)
 {
     ParentExportTask = NULL;
@@ -11,7 +11,7 @@ cwTask(object)
 
   Does nothing if the exporter is still running
   */
-void cwSurvexExporterTask::setOutputFile(QString outputFile) {
+void cwExporterTask::setOutputFile(QString outputFile) {
     if(!isRunning()) {
         OutputFileName = outputFile;
     }
@@ -22,7 +22,7 @@ void cwSurvexExporterTask::setOutputFile(QString outputFile) {
 
   This is useful for reusing survex exporter's to do sub exporting
   */
-void cwSurvexExporterTask::setParentSurvexExporter(cwSurvexExporterTask* parent) {
+void cwExporterTask::setParentSurvexExporter(cwExporterTask* parent) {
     if(isRunning()) {
         qWarning("Can't set the survexExportTask's parent when it's running");
         return;
@@ -37,8 +37,8 @@ void cwSurvexExporterTask::setParentSurvexExporter(cwSurvexExporterTask* parent)
 
   \returns true if the parents are running
   */
-bool cwSurvexExporterTask::parentIsRunning() {
-    cwSurvexExporterTask* parentTask = ParentExportTask;
+bool cwExporterTask::parentIsRunning() {
+    cwExporterTask* parentTask = ParentExportTask;
     while(parentTask != NULL) {
         if(parentTask->isRunning()) {
             return true;
@@ -56,7 +56,7 @@ bool cwSurvexExporterTask::parentIsRunning() {
 
   Does nothing if the exporter is still running
   */
-QStringList cwSurvexExporterTask::errors() {
+QStringList cwExporterTask::errors() {
     if(isRunning()) {
         return QStringList();
     }
@@ -66,7 +66,7 @@ QStringList cwSurvexExporterTask::errors() {
 /**
   \brief Opens the survex output file for writting
   */
-bool cwSurvexExporterTask::openOutputFile() {
+bool cwExporterTask::openOutputFile() {
     OutputFile.setFileName(OutputFileName);
     bool canWrite = OutputFile.open(QIODevice::WriteOnly);
     if(!canWrite) {
@@ -83,7 +83,7 @@ bool cwSurvexExporterTask::openOutputFile() {
 /**
   \brief Closes the survex output file
   */
-void cwSurvexExporterTask::closeOutputFile() {
+void cwExporterTask::closeOutputFile() {
     if(OutputFile.isOpen()) {
         OutputFile.close();
     }

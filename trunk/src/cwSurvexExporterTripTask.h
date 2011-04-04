@@ -2,7 +2,7 @@
 #define CWSURVEXEXPORTERTRIPTASK_H
 
 //Our includes
-#include "cwSurvexExporterTask.h"
+#include "cwExporterTask.h"
 class cwTrip;
 class cwSurveyChunk;
 
@@ -10,7 +10,7 @@ class cwSurveyChunk;
 class QTextStream;
 
 
-class cwSurvexExporterTripTask : public cwSurvexExporterTask
+class cwSurvexExporterTripTask : public cwExporterTask
 {
     Q_OBJECT
 

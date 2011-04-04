@@ -5,7 +5,7 @@
 #include "cwSurvexExporterCaveTask.h"
 class cwCavingRegion;
 
-class cwSurvexExporterRegionTask : public cwSurvexExporterTask {
+class cwSurvexExporterRegionTask : public cwExporterTask {
     Q_OBJECT
 
 public:

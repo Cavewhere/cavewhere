@@ -11,6 +11,7 @@ class cwStationReference;
 #include <QList>
 #include <QAbstractListModel>
 #include <QWeakPointer>
+#include <QDate>
 
 class cwTrip : public QObject
 {
@@ -22,6 +23,9 @@ public:
 
     QString name() const;
     void setName(QString name);
+
+    QDate date() const;
+    void setDate(QDate date);
 
     void removeChunks(int begin, int end);
     void insertChunk(int row, cwSurveyChunk* chunk);
@@ -41,6 +45,7 @@ public:
 
 signals:
     void nameChanged(QString name);
+    void dateChanged(QDate date);
     void chunksInserted(int begin, int end);
     void chunksRemoved(int begin, int end);
 
@@ -51,7 +56,11 @@ public slots:
 protected:
     QList<cwSurveyChunk*> Chunks;
     QString Name;
+    QDate Date;
     cwCave* ParentCave;
+
+    //Units
+    cw
 
 private:
     void Copy(const cwTrip& object);
@@ -63,6 +72,13 @@ private:
   */
 inline QString cwTrip::name() const {
     return Name;
+}
+
+/**
+  Gets the date of the survey trip
+  */
+inline QDate cwTrip::date() const {
+    return Date;
 }
 
 /**
