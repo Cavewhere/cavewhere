@@ -3,6 +3,8 @@
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
 #include "cwStationReference.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QMap>
@@ -12,6 +14,8 @@ cwTrip::cwTrip(QObject *parent) :
     ParentCave(NULL)
 {
     DistanceUnit = cwUnits::Meters;
+    Team = new cwTeam(this);
+    Calibration = new cwTripCalibration(this);
 }
 
 void cwTrip::Copy(const cwTrip& object)
@@ -22,6 +26,14 @@ void cwTrip::Copy(const cwTrip& object)
     setName(object.Name);
     setDistanceUnit(object.DistanceUnit);
     setDate(object.Date);
+
+    //Copy the team
+    Team = new cwTeam(*(object.Team));
+    Team->setParent(this);
+
+    //Copy the calibration
+    Calibration = new cwTripCalibration(*(object.Calibration));
+    Calibration->setParent(this);
 
     //Remove all the originals
     int lastChunkIndex = Chunks.size() - 1;
@@ -80,12 +92,36 @@ void cwTrip::setDate(QDate date) {
 }
 
 /**
+  Sets the team for the trip
+  */
+void cwTrip::setTeam(cwTeam* team) {
+    if(team != Team) {
+        Team->deleteLater(); //Delete the old team
+        Team = team;
+        Team->setParent(this);
+        emit teamChanged();
+    }
+}
+
+/**
+  Sets the calibration for the trip
+  */
+void cwTrip::setCalibration(cwTripCalibration* calibration) {
+    if(calibration != Calibration) {
+        Calibration->deleteLater();
+        Calibration = calibration;
+        Calibration->setParent(this);
+        emit calibrationChanged();
+    }
+}
+
+/**
   Sets the distance unit for the trip
   */
 void cwTrip::setDistanceUnit(cwUnits::LengthUnit newDistanceUnit) {
     if(DistanceUnit != newDistanceUnit) {
         DistanceUnit = newDistanceUnit;
-        emit DistanceUnit;
+        emit distanceUnitChanged(DistanceUnit);
     }
 }
 

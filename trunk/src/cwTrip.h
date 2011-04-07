@@ -6,7 +6,8 @@
 class cwSurveyChunk;
 class cwCave;
 class cwStationReference;
-
+class cwTeam;
+class cwTripCalibration;
 
 //Qt include
 #include <QObject>
@@ -18,6 +19,10 @@ class cwStationReference;
 class cwTrip : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
+
 public:
     explicit cwTrip(QObject *parent = 0);
     cwTrip(const cwTrip& object);
@@ -28,6 +33,12 @@ public:
 
     QDate date() const;
     void setDate(QDate date);
+
+    void setTeam(cwTeam* team);
+    cwTeam* team() const;
+
+    void setCalibration(cwTripCalibration* calibrations);
+    cwTripCalibration* calibrations() const;
 
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit);
@@ -54,15 +65,18 @@ signals:
     void distanceUnitChanged(cwUnits::LengthUnit);
     void chunksInserted(int begin, int end);
     void chunksRemoved(int begin, int end);
+    void teamChanged();
+    void calibrationChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
-
 
 protected:
     QList<cwSurveyChunk*> Chunks;
     QString Name;
     QDate Date;
+    cwTeam* Team;
+    cwTripCalibration* Calibration;
     cwCave* ParentCave;
 
     //Units
@@ -100,6 +114,20 @@ inline cwCave* cwTrip::parentCave() {
   */
 inline cwUnits::LengthUnit cwTrip::distanceUnit() const {
     return DistanceUnit;
+}
+
+/**
+  \brief Gets the survey team for the trip
+  */
+inline cwTeam* cwTrip::team() const {
+    return Team;
+}
+
+/**
+  \brief Gets the trip's calibration
+  */
+inline cwTripCalibration* cwTrip::calibrations() const {
+    return Calibration;
 }
 
 #endif // CWSURVERYCHUNKGROUP_H

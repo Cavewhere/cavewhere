@@ -3,6 +3,8 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
     QObject(parent)
@@ -56,19 +58,31 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* c
     case cwSurvexBlockData::Trip: {
         currentTrip = new cwTrip(this);
 
+        //Copy the name and date
         currentTrip->setName(currentBlock->name());
+        currentTrip->setDate(currentBlock->date());
+
+        //Copy all the team members
+        currentTrip->setTeam(new cwTeam(*(currentBlock->team()))); //Copy the team
+
+        //Copy the calibration
+        currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
+
+        //Creates a cave for the trip if there isn't one
         if(currentCave == NULL) {
             currentCave = new cwCave(this);
             currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
             caves->append(currentCave);
         }
 
+        //Sets the trip name
         QString tripName = currentBlock->name();
         if(tripName.isEmpty()) {
             tripName = QString("Trip %1").arg(currentCave->tripCount() + 1);
         }
         currentTrip->setName(tripName);
 
+        //Adds the trip to the current cave
         currentCave->addTrip(currentTrip);
     }
     case cwSurvexBlockData::Structure:

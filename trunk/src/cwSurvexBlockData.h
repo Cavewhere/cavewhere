@@ -5,10 +5,13 @@
 class cwSurveyChunk;
 class cwStationReference;
 class cwShot;
+class cwTeam;
+class cwTripCalibration;
 
 //Qt includes
 #include <QList>
 #include <QObject>
+#include <QDate>
 
 
 class cwSurvexBlockData : public QObject
@@ -39,6 +42,12 @@ public:
     void setName(QString name);
     QString name() const;
 
+    void setDate(QDate date);
+    QDate date() const;
+
+    cwTeam* team() const;
+    cwTripCalibration* calibration() const;
+
     void setImportType(ImportType type);
     ImportType importType() const;
     static QString importTypeToString(ImportType type);
@@ -66,6 +75,9 @@ private:
     QString Name;
     ImportType Type;
 
+    QDate Date;
+    cwTeam* Team;
+    cwTripCalibration* Calibration;
 
     void addChildBlock(cwSurvexBlockData* blockData);
     void addChunk(cwSurveyChunk* chunk);
@@ -128,6 +140,34 @@ inline void cwSurvexBlockData::setParentBlock(cwSurvexBlockData* parentBlock) {
 
 inline cwSurvexBlockData::ImportType cwSurvexBlockData::importType() const {
     return Type;
+}
+
+/**
+  Sets the date for the block
+  */
+inline void cwSurvexBlockData::setDate(QDate date) {
+    Date = date;
+}
+
+/**
+  Gets the date for the block
+  */
+inline QDate cwSurvexBlockData::date() const {
+    return Date;
+}
+
+/**
+  Gets the survey team for the block
+  */
+inline cwTeam* cwSurvexBlockData::team() const {
+    return Team;
+}
+
+/**
+  Gets the survey's calibration
+  */
+inline cwTripCalibration* cwSurvexBlockData::calibration() const {
+    return Calibration;
 }
 
 

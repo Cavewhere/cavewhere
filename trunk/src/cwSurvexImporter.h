@@ -51,7 +51,20 @@ private:
         Clino,
         BackClino,
         Ignore,
-        IgnoreAll
+        IgnoreAll,
+        Station,
+        Left,
+        Right,
+        Up,
+        Down
+    };
+
+    /**
+      This are the survex import types, currently only normal and passage are supported
+      */
+    enum DataLineType {
+        Normal,
+        Passage
     };
 
     class Include {
@@ -84,14 +97,12 @@ private:
     cwSurvexBlockData* CurrentBlock; //The current block
     cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
 
-
-
     QStringList Errors;
 
     State CurrentState;
-//    int CurrentLine;
 
     //Data map <Type, index>
+    DataLineType DataType;
     QMap<DataFormatType, int> DataFormat;
     QMap<QString, cwStationReference*> StationLookup;
 
@@ -105,14 +116,19 @@ private:
     QString removeComment(QString& line);
 
     //Parsing the data format
-    void importDataFormat(QString line);
+    void parseDataFormat(QString line);
 
-    void importData(QString line);
+    //Helper to parseNormalData and parsePassageData
+    QStringList parseData(QString line);
+
+    void parseNormalData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
     cwStationReference* createOrLookupStation(QString stationName);
     void addShotToCurrentChunk(cwStationReference* fromStation,
                                cwStationReference* toStation,
                                cwShot* shot);
+
+    void parsePassageData(QString line);
 
     //Error Messages
     void addError(QString error);
@@ -131,6 +147,9 @@ private:
 
     bool compare(QString s1, QString s2) const;
 
+    void parseDate(QString args);
+    void parseTeamMember(QString line);
+    void parseCalibrate(QString line);
 };
 
 /**

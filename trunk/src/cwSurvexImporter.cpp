@@ -5,6 +5,8 @@
 #include "cwSurveyChunk.h"
 #include "cwSurvexBlockData.h"
 #include "cwSurvexGlobalData.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QFile>
@@ -17,9 +19,9 @@
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     QObject(parent),
     RootBlock(new cwSurvexBlockData(this)),
+    CurrentBlock(NULL),
     GlobalData(new cwSurvexGlobalData(this)),
-    CurrentState(FirstBegin),
-    CurrentBlock(NULL)
+    CurrentState(FirstBegin)
 {
 }
 
@@ -29,7 +31,8 @@ void cwSurvexImporter::importSurvex(QString filename) {
     //Setup inital state data
     QMap<DataFormatType, int> defaultFormat = useDefaultDataFormat();
     BeginEndState rootBlock; //Should never be poped off
-    rootBlock.DataFormat = defaultFormat;
+    rootBlock.DataFormat = defaultFormat; //Default normal data
+    DataType = Normal; //Normal data
     BeginEndStateStack.append(rootBlock);
 
     //The block state
@@ -43,13 +46,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
     //Add the rootBlocks to GlobalData
     GlobalData->setBlocks(RootBlock->childBlocks());
 
-    //if(!hasErrors()) {
     saveLastImport(filename);
-    //}
-
-//    foreach(QString error, Errors) {
-//        qDebug() << error;
-//    }
 
     emit finishedImporting();
 
@@ -71,12 +68,6 @@ QStringList cwSurvexImporter::errors() {
     return Errors;
 }
 
-///**
-//  \brief Gets all the survey chunks from the file
-//  */
-//QList<cwSurveyChunk*> cwSurvexImporter::chunks() {
-//    return Chunks;
-//}
 
 /**
   \brief Clears all the current data in the object
@@ -214,9 +205,15 @@ void cwSurvexImporter::parseLine(QString line) {
                 }
 
             } else if(compare(command, "data")) {
-                importDataFormat(line);
+                parseDataFormat(line);
             } else if(compare(command, "include")) {
                 loadFile(args);
+            } else if(compare(command, "date")) {
+                parseDate(args);
+            } else if(compare(command, "team")) {
+                parseTeamMember(args);
+            } else if(compare(command, "calibrate")) {
+                parseCalibrate(args);
             }  else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
@@ -228,11 +225,15 @@ void cwSurvexImporter::parseLine(QString line) {
             return;
         }
 
-        //Parse survey data
-        importData(line);
-
-
-
+        //Parse normal survey data
+        switch(DataType) {
+        case Normal:
+            parseNormalData(line);
+            break;
+        case Passage:
+            parsePassageData(line);
+            break;
+        }
     }
 
 
@@ -275,7 +276,7 @@ QString cwSurvexImporter::removeComment(QString& line) {
 /**
   \brief Tries to load the data formate
   */
-void cwSurvexImporter::importDataFormat(QString line) {
+void cwSurvexImporter::parseDataFormat(QString line) {
     //Remove *data from the line
     QRegExp regExp("^\\s*\\*data\\s*(.*)");
     regExp.setCaseSensitivity(Qt::CaseInsensitive);
@@ -292,11 +293,15 @@ void cwSurvexImporter::importDataFormat(QString line) {
         addWarning("Data format is empty, using default format");
     }
 
-    //Check for normal data
-    if(!compare(dataFormatList.front(), "normal")) {
-        addError("Normal data is only currently excepted, using default format");
+    QString dataFormatType = dataFormatList.front();
+    if(compare(dataFormatType, "normal")) {
+        DataType = Normal;
+    } else if(compare(dataFormatType, "passage")) {
+        DataType = Passage;
+    } else {
+        addError("Normal and passage data are supported, using default format");
+        DataType = Normal;
         setCurrentDataFormat(useDefaultDataFormat());
-        return;
     }
 
     QMap<DataFormatType, int> dataFormat;
@@ -326,6 +331,16 @@ void cwSurvexImporter::importDataFormat(QString line) {
             dataFormat[Ignore] = index;
         } else if(compare(format, "ignoreall")) {
             dataFormat[IgnoreAll] = index;
+        } else if(compare(format, "station")) {
+            dataFormat[Station] = index;
+        } else if(compare(format, "left")) {
+            dataFormat[Left] = index;
+        } else if(compare(format, "right")) {
+            dataFormat[Right] = index;
+        } else if(compare(format, "up")) {
+            dataFormat[Up] = index;
+        } else if(compare(format, "down")) {
+            dataFormat[Down] = index;
         } else {
             addError(QString("Unknown *data keyword: ") + format + " Using default format");
             dataFormat = useDefaultDataFormat();
@@ -363,9 +378,15 @@ QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::useDefaultDataForm
 }
 
 /**
-  \brief Imports a line of survey data
+Helper to parseNormalData and parsePassageData
+
+This makes the line has enough elements for the current data format
+
+It will return all the data in the line.  If there's an error, the error is added to the error
+list and this returns empty data
+
   */
-void cwSurvexImporter::importData(QString line) {
+QStringList cwSurvexImporter::parseData(QString line) {
     QStringList data = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
     data.removeAll(""); //Remove all empty ones
 
@@ -374,13 +395,24 @@ void cwSurvexImporter::importData(QString line) {
     //Make sure the there's the same number of columns as needed
     if(dataFormat.size() != data.size() && !dataFormat.contains(IgnoreAll)) {
         addError("Can't extract shot data. To many or not enough data columns, skipping data");
-        return;
+        return QStringList();
     }
 
     //Make sure there's enough columns
     if(dataFormat.contains(IgnoreAll) && dataFormat[IgnoreAll] < data.size()) {
         addError("Can't extract shot data. Not enough data columns, skipping data");
+        return QStringList();
     }
+
+    return data;
+}
+
+/**
+  \brief Imports a line of survey data
+  */
+void cwSurvexImporter::parseNormalData(QString line) {
+    QStringList data = parseData(line);
+    if(data.isEmpty()) { return; } //Error, check the error messages
 
     QString fromStationName = extractData(data, From);
     QString toStationName= extractData(data, To);
@@ -388,6 +420,7 @@ void cwSurvexImporter::importData(QString line) {
     //Make sure the to and from stations exist
     if(fromStationName.isEmpty() || toStationName.isEmpty()) {
         addError("Can't extract shot data. No toStation or from station");
+        return;
     }
 
     //Create the from and to stations
@@ -402,8 +435,6 @@ void cwSurvexImporter::importData(QString line) {
     shot->SetBackClino(extractData(data, BackClino));
 
     addShotToCurrentChunk(fromStation, toStation, shot);
-
-
 }
 
 /**
@@ -486,6 +517,32 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference* fromStation,
 }
 
 /**
+  \brief Parses the passage data
+  Something like this
+  *data passage station left right up down
+  a1 2.0 .3 2.1 4
+  */
+void cwSurvexImporter::parsePassageData(QString line) {
+    QStringList data = parseData(line);
+    if(data.isEmpty()) { return; } //Error, check the error messages
+
+    QString stationName = extractData(data, Station);
+
+    //Make sure the station exists
+    if(stationName.isEmpty()) {
+        addError("Can't extract passage data. No station");
+        return;
+    }
+
+    //Create or find a station from the name
+    cwStationReference* station = createOrLookupStation(stationName);
+    station->setLeft(extractData(data, Left));
+    station->setRight(extractData(data, Right));
+    station->setUp(extractData(data, Up));
+    station->setDown(extractData(data, Down));
+}
+
+/**
   \brief Get's the full station name
 
   \param The short name of the station
@@ -543,4 +600,124 @@ int cwSurvexImporter::currentLineNumber() const {
 void cwSurvexImporter::increamentLineNumber() {
     Q_ASSERT(!IncludeStack.isEmpty());
     IncludeStack.last().CurrentLine++;
+}
+
+/**
+  \brief Tries to extract the date from the date line
+
+  If it can't this function return a date of 2000 01 01
+  */
+void cwSurvexImporter::parseDate(QString dateString) {
+    QDate date = QDate::fromString(dateString, "yyyy.MM.dd");
+
+    if(!date.isValid()) {
+        date = QDate(2000, 01, 01);
+    }
+
+    CurrentBlock->setDate(date);
+}
+
+/**
+  \brief Extracts the team member from the survey line
+  */
+void cwSurvexImporter::parseTeamMember(QString line) {
+    QRegExp reg("\"(.+)\"\\s*(?:(\\S+\\s*)+)");
+
+    if(reg.exactMatch(line)) {
+        QString name = reg.cap(1);
+        QString rolesString = reg.cap(2);
+        QStringList roles = rolesString.split(' ', QString::SkipEmptyParts);
+
+        cwTeam* currentTeam = CurrentBlock->team();
+        currentTeam->addTeamMember(cwTeamMember(name, roles));
+    } else {
+        addError("couldn't read team member");
+    }
+}
+
+/**
+  \brief This extracts the calibration data from the survex file
+
+  This will set the TripCalibration object's data
+  */
+void cwSurvexImporter::parseCalibrate(QString line) {
+
+    QRegExp reg("(TAPE|COMPASS|BACKCOMPASS|BACKCLINO|CLINO|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)(?:\\s*(\\S+)\\s*)?");
+    reg.setCaseSensitivity(Qt::CaseInsensitive);
+
+    if(reg.exactMatch(line)) {
+        QString type = reg.cap(1).toLower();
+        QString calibrationString = reg.cap(2);
+        QString scaling = reg.cap(3);
+
+        //Parse the calibration value
+        bool okay;
+        float calibrationValue = calibrationString.toFloat(&okay);
+        if(!okay) {
+            addError("Calibration value isn't a number");
+            return;
+        }
+
+        float scaleValue = -1;
+        if(!scaling.isEmpty()) {
+            scaleValue = scaling.toFloat(&okay);
+            if(!okay) {
+                addError("Scaling value isn't a number");
+                return;
+            }
+        }
+
+        //Flip the calibration value because survex is written by strange british people
+        calibrationValue = -calibrationValue;
+
+        //Get the current calibration
+        cwTripCalibration* calibration = CurrentBlock->calibration();
+
+        if(type == "tape") {
+            calibration->setTapeCalibration(calibrationValue);
+
+        } else if (type == "compass") {
+            calibration->setFrontCompassCalibration(calibrationValue);
+
+        } else if (type == "backcompass") {
+            //Check to see if this is a correct compasss calibration
+            const float correctCalibrationThreshold = 20.0;
+            if(calibrationValue - 180.0 < correctCalibrationThreshold) {
+                //This is probably a correct back compass
+                calibrationValue = calibrationValue - 180.0;
+                calibration->setCorrectedCompassBacksight(true);
+            }
+            calibration->setBackCompassCalibration(calibrationValue);
+
+        } else if (type == "clino") {
+            calibration->setFrontClinoCalibration(calibrationValue);
+
+        } else if (type == "backclino") {
+            if(scaleValue == -1.0f) {
+                calibration->setCorrectedClinoBacksight(true);
+            }
+            calibration->setBackClinoCalibration(calibrationValue);
+
+        } else if (type == "declination") {
+            calibration->setDeclination(calibrationValue);
+
+        } else if (type == "counter") {
+            addWarning("cavewhere cannot handle 'COUNTER' calibration");
+
+        } else if (type == "depth") {
+            addWarning("cavewhere cannot handle 'DEPTH' calibration");
+
+        } else if (type == "x") {
+            addWarning("cavewhere cannot handle 'X' calibration");
+
+        } else if (type == "y") {
+            addWarning("cavewhere cannot handle 'Y' calibration");
+
+        } else if (type == "z") {
+            addWarning("cavewhere cannot handle 'Z' calibration");
+        }
+
+    } else {
+        addError("Couldn't read calibration");
+    }
 }

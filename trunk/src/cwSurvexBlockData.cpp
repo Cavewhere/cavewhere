@@ -2,11 +2,15 @@
 #include "cwSurvexBlockData.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
     QObject(parent),
     ParentBlock(NULL),
-    Type(NoImport)
+    Type(NoImport),
+    Team(new cwTeam(this)),
+    Calibration(new cwTripCalibration(this))
 {
 }
 

@@ -5,9 +5,13 @@
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
 #include "cwStationReference.h"
+#include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 //Std includes
 #include <math.h>
+
+const char* cwCompassExportCaveTask::CompassNewLine = "\r\n";
 
 cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
@@ -26,7 +30,7 @@ void cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         cwTrip* trip = cave->trip(i);
         writeTrip(stream, trip);
         TotalProgress += trip->numberOfStations();
-        stream << endl;
+        stream << CompassNewLine;
     }
 }
 
@@ -40,7 +44,7 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
         writeChunk(stream, chunk);
     }
 
-    stream << (char)(0x0C);
+    stream << (char)(0x0C); //0C is the ending char for the compass file
 }
 
 /**
@@ -52,32 +56,40 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     Q_ASSERT(cave != NULL);
 
     writeData(stream, "Cave Name", 80, cave->name());
-    stream << endl;
+    stream << CompassNewLine;
 
     stream << "SURVEY NAME: ";
     writeData(stream, "Survey Name", 12, trip->name());
-    stream << endl;
+    stream << CompassNewLine;
 
     stream << "SURVEY DATE: ";
     writeData(stream, "Survey Date", 12, QString("%1 %2 %3")
               .arg(trip->date().month())
               .arg(trip->date().day())
               .arg(trip->date().year()));
-    stream << " COMMENT:" << endl;
+    stream << " COMMENT:" << CompassNewLine;
 
-    stream << "SURVEY TEAM: ";
-    writeData(stream, "Survey Team", 100, QString());
-    stream << endl;
-    stream << endl;
+    stream << "SURVEY TEAM: " << CompassNewLine;
+    writeData(stream, "Survey Team", 100, surveyTeam(trip));
+    stream << CompassNewLine;
 
-    stream << "DECLINATION: 0.00 ";
+    cwTripCalibration* calibrations = trip->calibrations();
+    float declination = calibrations->declination();
+    float compassCorrections = calibrations->frontCompassCalibration();
+    float clinoCorrections = calibrations->frontClinoCalibration();
+    float tapeCorrections = calibrations->tapeCalibration();
+
+    stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
     stream << "FORMAT: DMMDLRUDLADN ";
-    stream << "CORRECTIONS: 0.00 0.00 0.00 ";
-    stream << endl;
+    stream << "CORRECTIONS: " << QString("%1 %2 %3")
+              .arg(compassCorrections, 0, 'f', 2)
+              .arg(clinoCorrections, 0, 'f', 2)
+              .arg(tapeCorrections, 0, 'f', 2);
+    stream << CompassNewLine;
 
-    stream << endl;
-    stream << "FROM TO   LEN  BEAR   INC LEFT RIGHT UP DOWN AZM2 INC2 FLAGS COMMENTS" << endl;
-    stream << endl;
+    stream << CompassNewLine;
+    stream << "FROM TO   LEN  BEAR   INC LEFT RIGHT UP DOWN AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
+    stream << CompassNewLine;
 }
 
 /**
@@ -88,7 +100,15 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
                                         QString fieldName,
                                         int fieldLength,
                                         QString data) {
-    QString paddedString = QString("%1").arg(data, fieldLength);
+    QString paddedString;
+    if(fieldLength < 0) {
+        paddedString = QString("%1").arg(data, fieldLength);
+    } else {
+        if(data.size() > fieldLength) {
+            data.resize(fieldLength);
+        }
+        paddedString = data;
+    }
 
     if(data.size() > fieldLength) {
         Errors.append(QString("Warning: Truncating %1 field from \"%2\" to \"%3\"").arg(fieldName,
@@ -121,15 +141,15 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         writeData(stream, "To", 12, to->name());
         stream << " ";
         stream << shotLength << " ";
-        stream << convertField(shot, Compass) << " ";
-        stream << convertField(shot, Clino) << " ";
+        stream << convertField(trip, shot, Compass) << " ";
+        stream << convertField(trip, shot, Clino) << " ";
         stream << convertField(from, Left, cwUnits::DecimalFeet) << " ";
         stream << convertField(from, Right, cwUnits::DecimalFeet) << " ";
         stream << convertField(from, Up, cwUnits::DecimalFeet) << " ";
         stream << convertField(from, Down, cwUnits::DecimalFeet) << " ";
-        stream << convertField(shot, BackCompass) << " ";
-        stream << convertField(shot, Clino) << " ";
-        stream << endl;
+        stream << convertField(trip, shot, BackCompass) << " ";
+        stream << convertField(trip, shot, BackClino) << " ";
+        stream << CompassNewLine;
     }
 
     cwStationReference* lastStation = chunk->Station(chunk->StationCount() - 1);
@@ -146,7 +166,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     stream << convertField(lastStation, Down, cwUnits::DecimalFeet) << " ";
     stream << 0.0 << " ";
     stream << 0.0 << " ";
-    stream << endl;
+    stream << CompassNewLine;
 }
 
 /**
@@ -188,7 +208,7 @@ float cwCompassExportCaveTask::convertField(cwStationReference* station,
 
   This will convert the shot's compass and clino data such that it works correctly in compass
   */
-float cwCompassExportCaveTask::convertField(cwShot* shot, ShotField field) {
+float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotField field) {
 
     QString frontSite;
     QString backSite;
@@ -212,18 +232,38 @@ float cwCompassExportCaveTask::convertField(cwShot* shot, ShotField field) {
         backSite = convertFromDownUp(backSite);
     }
 
+    bool okay;
     switch(field) {
     case Compass:
-        value = fixCompass(frontSite, backSite);
+        value = frontSite.toFloat(&okay);
+        if(!okay) {
+            value = backSite.toFloat();
+            value = fmod((value + 180.0), 360.0);
+        }
         break;
     case BackCompass:
-        value = fixCompass(backSite, frontSite);
+        value = backSite.toFloat(&okay);
+        if(!okay) {
+            value = frontSite.toFloat();
+        }
+        if(!okay || trip->calibrations()->hasCorrectedCompassBacksight()) {
+            value = fmod((value + 180.0), 360.0);
+        }
         break;
     case Clino:
-        value = fixClino(frontSite, backSite);
+        value = frontSite.toFloat(&okay);
+        if(!okay) {
+            value = -backSite.toFloat();
+        }
         break;
     case BackClino:
-        value = fixClino(backSite, frontSite);
+        value = backSite.toFloat(&okay);
+        if(!okay) {
+            value = frontSite.toFloat();
+        }
+        if(!okay || trip->calibrations()->hasCorrectedClinoBacksight()) {
+            value = -value;
+        }
         break;
     }
 
@@ -242,36 +282,54 @@ QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
     return clinoReading;
 }
 
-/**
-  Heleper to extract shot data
-  */
-float cwCompassExportCaveTask::fixCompass(QString compass1, QString compass2) {
-    float value;
-    if(compass1.isEmpty()) {
-        if(!compass2.isEmpty()) {
-            value = fmod(compass2.toDouble() + 180.0, 360.0);
-        } else {
-            return 0.0;
-        }
-    } else {
-        value = compass1.toDouble();
-    }
-    return value;
-}
+///**
+//  Heleper to extract shot data
+//  */
+//float cwCompassExportCaveTask::fixCompass(cwTrip* trip, QString compass1, QString compass2) {
+//    float value;
+//    if(compass1.isEmpty()) {
+//        if(!compass2.isEmpty()) {
+//            value = fmod(compass2.toDouble() + 180.0, 360.0);
+//        } else {
+//            return 0.0;
+//        }
+//    } else {
+//        value = compass1.toDouble();
+//    }
+//    return value;
+//}
+
+///**
+//  Heleper to extract shot data
+//  */
+//float cwCompassExportCaveTask::fixClino(cwTrip* trip, QString forward, QString backward) {
+//    float value;
+//    if(forward.isEmpty()) {
+//        if(!backward.isEmpty()) {
+//            value = backward.toDouble() * -1;
+//        } else {
+//            return 0.0;
+//        }
+//    } else {
+//        value = forward.toDouble();
+//    }
+//    return value;
+//}
 
 /**
-  Heleper to extract shot data
+  Creates the team line for a trip
+
+  All team member are join together using a comma
   */
-float cwCompassExportCaveTask::fixClino(QString forward, QString backward) {
-    float value;
-    if(forward.isEmpty()) {
-        if(!backward.isEmpty()) {
-            value = backward.toDouble() * -1;
-        } else {
-            return 0.0;
-        }
-    } else {
-        value = forward.toDouble();
+QString cwCompassExportCaveTask::surveyTeam(cwTrip* trip) {
+    cwTeam* team = trip->team();
+
+    QStringList teamMemberNames;
+    for(int i = 0; i < team->rowCount(); i++) {
+        QModelIndex index = team->index(i);
+        QString memberName = index.data(cwTeam::NameRole).toString();
+        teamMemberNames.append(memberName);
     }
-    return value;
+
+    return teamMemberNames.join(", ");
 }

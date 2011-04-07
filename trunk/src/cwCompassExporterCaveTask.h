@@ -38,17 +38,20 @@ private:
     };
 
 
+    static const char* CompassNewLine;
+
     void writeTrip(QTextStream& stream, cwTrip* trip);
     void writeHeader(QTextStream& stream, cwTrip* trip);
     void writeData(QTextStream& stream, QString fieldName, int fieldLength, QString data);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 
     float convertField(cwStationReference* station, StationLRUDField field, cwUnits::LengthUnit unit);
-    float convertField(cwShot* shot, ShotField field);
+    float convertField(cwTrip* trip, cwShot* shot, ShotField field);
 
     QString convertFromDownUp(QString clinoReading);
-    float fixCompass(QString compass1, QString compass2);
-    float fixClino(QString clino1, QString clino2);
+//    float fixCompass(cwTrip* trip, QString compass1, QString compass2);
+//    float fixClino(cwTrip* trip, QString clino1, QString clino2);
+    QString surveyTeam(cwTrip* trip);
 
 };
 
