@@ -81,6 +81,9 @@ void cwImportSurvexDialog::setSurvexFile(QString filename) {
     //Load the error list view
     SurvexErrorListWidget->addItems(Importer->errors());
 
+    //Update the error / warning label at the bottom
+    updateImportWarningLabel();
+
     show();
 }
 
@@ -153,6 +156,31 @@ void cwImportSurvexDialog::setupTypeComboBox() {
   */
 void cwImportSurvexDialog::updateImportErrors() {
 
+}
+
+/**
+  \brief Updates the import warning label next to the import button
+  */
+void cwImportSurvexDialog::updateImportWarningLabel() {
+    QStringList errors = Importer->errors();
+    int numberWarnings = 0;
+    int numberErrors = 0;
+    foreach(QString error, errors) {
+        if(error.contains("Error:")) {
+            numberErrors++;
+        } else if(error.contains("Warning:")) {
+            numberWarnings++;
+        }
+    }
+
+    QString message;
+    if(numberErrors > 0) {
+        message.append(QString("<b>Errors:%1</b> ").arg(numberErrors));
+    }
+    if(numberWarnings > 0) {
+        message.append(QString("Warnings:%2").arg(numberWarnings));
+    }
+    WarningLabel->setText(message);
 }
 
 
@@ -245,6 +273,8 @@ cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int ty
   */
 void cwImportSurvexDialog::import() {
     cwSurvexGlobalData* globalData = Importer->data();
-    Region->addCaves(globalData->caves());
+    if(!globalData->caves().isEmpty()) {
+        Region->addCaves(globalData->caves());
+    }
     accept();
 }

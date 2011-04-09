@@ -85,6 +85,7 @@ bool cwExporterTask::openOutputFile() {
   */
 void cwExporterTask::closeOutputFile() {
     if(OutputFile.isOpen()) {
+        OutputStream.flush();
         OutputFile.close();
     }
 }

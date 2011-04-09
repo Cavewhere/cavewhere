@@ -52,6 +52,8 @@ private:
 
     void updateImportErrors();
 
+    void updateImportWarningLabel();
+
 private slots:
     void updateCurrentItem(QItemSelection selected, QItemSelection deselected);
     void setType(int index);

@@ -25,9 +25,10 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   \brief Starts running the export cave task
   */
 void cwCaveExporterTask::runTask() {
-    openOutputFile();
-    writeCave(OutputStream, Cave);
-    closeOutputFile();
+    if(openOutputFile()) {
+        writeCave(OutputStream, Cave);
+        closeOutputFile();
+    }
     done();
 }
 

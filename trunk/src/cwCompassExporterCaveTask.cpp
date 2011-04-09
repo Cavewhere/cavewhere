@@ -80,7 +80,7 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     float tapeCorrections = calibrations->tapeCalibration();
 
     stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
-    stream << "FORMAT: DMMDLRUDLADN ";
+    stream << "FORMAT: DMMDLRUDLADB ";
     stream << "CORRECTIONS: " << QString("%1 %2 %3")
               .arg(compassCorrections, 0, 'f', 2)
               .arg(clinoCorrections, 0, 'f', 2)
@@ -143,10 +143,10 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << shotLength << " ";
         stream << convertField(trip, shot, Compass) << " ";
         stream << convertField(trip, shot, Clino) << " ";
-        stream << convertField(from, Left, cwUnits::DecimalFeet) << " ";
-        stream << convertField(from, Right, cwUnits::DecimalFeet) << " ";
-        stream << convertField(from, Up, cwUnits::DecimalFeet) << " ";
-        stream << convertField(from, Down, cwUnits::DecimalFeet) << " ";
+        stream << convertField(from, Left, trip->distanceUnit()) << " ";
+        stream << convertField(from, Up, trip->distanceUnit()) << " ";
+        stream << convertField(from, Right, trip->distanceUnit()) << " ";
+        stream << convertField(from, Down, trip->distanceUnit()) << " ";
         stream << convertField(trip, shot, BackCompass) << " ";
         stream << convertField(trip, shot, BackClino) << " ";
         stream << CompassNewLine;
@@ -160,10 +160,10 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     stream << 0.0 << " ";
     stream << 0.0 << " ";
     stream << 0.0 << " ";
-    stream << convertField(lastStation, Left, cwUnits::DecimalFeet) << " ";
-    stream << convertField(lastStation, Right, cwUnits::DecimalFeet) << " ";
-    stream << convertField(lastStation, Up, cwUnits::DecimalFeet) << " ";
-    stream << convertField(lastStation, Down, cwUnits::DecimalFeet) << " ";
+    stream << convertField(lastStation, Left, trip->distanceUnit()) << " ";
+    stream << convertField(lastStation, Up, trip->distanceUnit()) << " ";
+    stream << convertField(lastStation, Right, trip->distanceUnit()) << " ";
+    stream << convertField(lastStation, Down, trip->distanceUnit()) << " ";
     stream << 0.0 << " ";
     stream << 0.0 << " ";
     stream << CompassNewLine;

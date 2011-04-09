@@ -87,6 +87,13 @@
       </spacer>
      </item>
      <item>
+      <widget class="QLabel" name="WarningLabel">
+       <property name="text">
+        <string>TextLabel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="ImportButton">
        <property name="text">
         <string>Import</string>

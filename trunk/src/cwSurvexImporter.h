@@ -62,7 +62,7 @@ private:
     /**
       This are the survex import types, currently only normal and passage are supported
       */
-    enum DataLineType {
+    enum DataEntryType {
         Normal,
         Passage
     };
@@ -81,7 +81,12 @@ private:
 
     class BeginEndState {
     public:
+        BeginEndState();
+
         QMap<DataFormatType, int> DataFormat;
+        DataEntryType DataType;
+
+        static QMap<DataFormatType, int> defaultDataFormat();
     };
 
     //File state to handle includes
@@ -102,7 +107,6 @@ private:
     State CurrentState;
 
     //Data map <Type, index>
-    DataLineType DataType;
     QMap<DataFormatType, int> DataFormat;
     QMap<QString, cwStationReference*> StationLookup;
 
@@ -137,9 +141,10 @@ private:
 
     QString fullStationName(QString name);
 
-    QMap<DataFormatType, int> useDefaultDataFormat();
     QMap<DataFormatType, int> currentDataFormat() const;
+    DataEntryType currentDataEntryType() const;
     void setCurrentDataFormat(QMap<DataFormatType, int> format);
+    void setCurrentDataEntryType(DataEntryType type);
 
     QString currentFile() const;
     int currentLineNumber() const;

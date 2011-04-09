@@ -29,10 +29,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
     clear();
 
     //Setup inital state data
-    QMap<DataFormatType, int> defaultFormat = useDefaultDataFormat();
     BeginEndState rootBlock; //Should never be poped off
-    rootBlock.DataFormat = defaultFormat; //Default normal data
-    DataType = Normal; //Normal data
     BeginEndStateStack.append(rootBlock);
 
     //The block state
@@ -50,6 +47,29 @@ void cwSurvexImporter::importSurvex(QString filename) {
 
     emit finishedImporting();
 
+}
+
+/**
+  Constructor for teh begin and end state object
+
+  This creates a default dataformat and datatype for the begin and end state
+  */
+cwSurvexImporter::BeginEndState::BeginEndState() {
+    DataFormat = defaultDataFormat();
+    DataType = Normal;
+}
+
+/**
+  \brief Creates the default map for the data format
+  */
+QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::BeginEndState::defaultDataFormat() {
+    QMap<cwSurvexImporter::DataFormatType, int> dataFormat;
+    dataFormat[From] = 0;
+    dataFormat[To] = 1;
+    dataFormat[Distance] = 2;
+    dataFormat[Compass] = 3;
+    dataFormat[Clino] = 4;
+    return dataFormat;
 }
 
 /**
@@ -177,8 +197,8 @@ void cwSurvexImporter::parseLine(QString line) {
         CurrentBlock = newBlock;
 
         //Copy the last state variables
-        BeginEndState state = BeginEndStateStack.last();
-        BeginEndStateStack.append(state);
+        BeginEndState defaultState;
+        BeginEndStateStack.append(defaultState);
 
         return;
     }
@@ -226,7 +246,7 @@ void cwSurvexImporter::parseLine(QString line) {
         }
 
         //Parse normal survey data
-        switch(DataType) {
+        switch(currentDataEntryType()) {
         case Normal:
             parseNormalData(line);
             break;
@@ -295,13 +315,13 @@ void cwSurvexImporter::parseDataFormat(QString line) {
 
     QString dataFormatType = dataFormatList.front();
     if(compare(dataFormatType, "normal")) {
-        DataType = Normal;
+        setCurrentDataEntryType(Normal);
     } else if(compare(dataFormatType, "passage")) {
-        DataType = Passage;
+        setCurrentDataEntryType(Passage);
     } else {
         addError("Normal and passage data are supported, using default format");
-        DataType = Normal;
-        setCurrentDataFormat(useDefaultDataFormat());
+        setCurrentDataEntryType(Normal);
+        setCurrentDataFormat(BeginEndState::defaultDataFormat());
     }
 
     QMap<DataFormatType, int> dataFormat;
@@ -343,7 +363,7 @@ void cwSurvexImporter::parseDataFormat(QString line) {
             dataFormat[Down] = index;
         } else {
             addError(QString("Unknown *data keyword: ") + format + " Using default format");
-            dataFormat = useDefaultDataFormat();
+            dataFormat = BeginEndState::defaultDataFormat();
             break;
         }
     }
@@ -367,16 +387,6 @@ void cwSurvexImporter::addToErrors(QString prefix, QString errorMessage) {
     Errors.append(QString("%1: %2::Line %3::%4").arg(prefix).arg(currentFilename).arg(currentLineNumber()).arg(errorMessage));
 }
 
-QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::useDefaultDataFormat() {
-    QMap<DataFormatType, int> dataFormat;
-    dataFormat[From] = 0;
-    dataFormat[To] = 1;
-    dataFormat[Distance] = 2;
-    dataFormat[Compass] = 3;
-    dataFormat[Clino] = 4;
-    return dataFormat;
-}
-
 /**
 Helper to parseNormalData and parsePassageData
 
@@ -394,13 +404,13 @@ QStringList cwSurvexImporter::parseData(QString line) {
 
     //Make sure the there's the same number of columns as needed
     if(dataFormat.size() != data.size() && !dataFormat.contains(IgnoreAll)) {
-        addError("Can't extract shot data. To many or not enough data columns, skipping data");
+        addError("Can't extract data. To many or not enough data columns, skipping data");
         return QStringList();
     }
 
     //Make sure there's enough columns
-    if(dataFormat.contains(IgnoreAll) && dataFormat[IgnoreAll] < data.size()) {
-        addError("Can't extract shot data. Not enough data columns, skipping data");
+    if(dataFormat.contains(IgnoreAll) && dataFormat[IgnoreAll] > data.size()) {
+        addError("Can't extract data. Not enough data columns, skipping data");
         return QStringList();
     }
 
@@ -583,10 +593,30 @@ QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::currentDataFormat(
     return BeginEndStateStack.last().DataFormat;
 }
 
+/**
+  \brief Gets the current data entry type
+
+  *data normal <-- This is the normal entry type
+  *data passage <-- This is the passage entry type
+  *data somethingElse
+
+  */
+cwSurvexImporter::DataEntryType cwSurvexImporter::currentDataEntryType() const {
+    Q_ASSERT(!BeginEndStateStack.isEmpty());
+    return BeginEndStateStack.last().DataType;
+}
+
+
 void cwSurvexImporter::setCurrentDataFormat(QMap<DataFormatType, int> format) {
     Q_ASSERT(!BeginEndStateStack.isEmpty());
     BeginEndStateStack.last().DataFormat = format;
 }
+
+void cwSurvexImporter::setCurrentDataEntryType(DataEntryType type) {
+    Q_ASSERT(!BeginEndStateStack.isEmpty());
+    BeginEndStateStack.last().DataType = type;
+}
+
 
 QString cwSurvexImporter::currentFile() const {
     if(IncludeStack.isEmpty()) { return QString(); }
@@ -621,7 +651,7 @@ void cwSurvexImporter::parseDate(QString dateString) {
   \brief Extracts the team member from the survey line
   */
 void cwSurvexImporter::parseTeamMember(QString line) {
-    QRegExp reg("\"(.+)\"\\s*(?:(\\S+\\s*)+)");
+    QRegExp reg("\"(.+)\"\\s*(?:(\\S+\\s*)*)");
 
     if(reg.exactMatch(line)) {
         QString name = reg.cap(1);
