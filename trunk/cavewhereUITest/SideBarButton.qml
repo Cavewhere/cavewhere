@@ -9,6 +9,8 @@ Rectangle {
 
     property alias text: textLabel.text;
     property alias image: icon.source;
+    property bool troggled: false;
+    property int buttonIndex;
 
     Text {
         id: textLabel
@@ -180,4 +182,6 @@ Rectangle {
 
         }
     ]
+
+    onTroggledChanged: state = troggled ? "toggledState" : ""
 }

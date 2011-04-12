@@ -1,4 +1,5 @@
 import Qt 4.7
+import "buttonGroup.js" as ButtonGroup
 
 Rectangle {
     id: rectangle2
@@ -71,17 +72,6 @@ Rectangle {
         }
 
         SideBarButton {
-            id: drawButton
-            text: "Draw"
-            anchors.right: parent.right
-            anchors.rightMargin: 0
-            anchors.left: parent.left
-            anchors.leftMargin: 0
-            anchors.top: viewButton.bottom
-            anchors.topMargin: -1
-        }
-
-        SideBarButton {
             id: draftButton
             text: "Draft"
             anchors.right: parent.right
@@ -94,5 +84,11 @@ Rectangle {
 
     }
 
+    Component.onCompleted: {
+        ButtonGroup.addButton(viewButton);
+        ButtonGroup.addButton(dataEntyButton);
+        ButtonGroup.addButton(draftButton);
+        ButtonGroup.CurrentButton = dataEntyButton.buttonIndex;
+    }
 
 }
