@@ -47,6 +47,7 @@ private:
 
     float convertField(cwStationReference* station, StationLRUDField field, cwUnits::LengthUnit unit);
     float convertField(cwTrip* trip, cwShot* shot, ShotField field);
+    QString formatFloat(float value);
 
     QString convertFromDownUp(QString clinoReading);
 //    float fixCompass(cwTrip* trip, QString compass1, QString compass2);

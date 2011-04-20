@@ -12,6 +12,12 @@ Rectangle {
     property bool troggled: false;
     property int buttonIndex;
 
+    anchors.left: parent.left;
+    anchors.right: parent.right
+
+    //Called when troggle is true
+    signal buttonIsTroggled()
+
     Text {
         id: textLabel
         color: "#ffffff"
@@ -41,7 +47,8 @@ Rectangle {
         anchors.rightMargin: 3
         anchors.left: parent.left
         anchors.leftMargin: 3
-        source: "qrc:/qtquickplugin/images/template_image.png"
+        fillMode: Image.PreserveAspectFit
+        smooth: true
     }
 
     Rectangle {
@@ -85,7 +92,7 @@ Rectangle {
 
         onEntered: button.state = "hoverState"
         onExited: button.state = ""
-        onClicked: button.state = "toggledState"
+        onClicked: buttonIsTroggled();
     }
 
     Rectangle {
@@ -136,17 +143,15 @@ Rectangle {
                 style: "Raised"
             }
 
-
-            PropertyChanges {
-                target: mouseArea
-                onClicked: button.state = ""
-                onExited: { }
-                onEntered: { }
-            }
-
             PropertyChanges {
                 target: borderRectangle
                 border.color: "#313131"
+            }
+
+            PropertyChanges {
+                target: mouseArea
+                onEntered: {}
+                onExited: {}
             }
         },
         State {
@@ -183,5 +188,11 @@ Rectangle {
         }
     ]
 
-    onTroggledChanged: state = troggled ? "toggledState" : ""
+    onTroggledChanged: {
+        if(troggled) {
+            button.state = "toggledState";
+        } else {
+            button.state = "";
+        }
+    }
 }

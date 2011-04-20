@@ -66,9 +66,9 @@
     <value key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName" type="QString"></value>
     <value key="ProjectExplorer.ProjectConfiguration.DisplayName" type="QString">QML Viewer</value>
     <value key="ProjectExplorer.ProjectConfiguration.Id" type="QString">QmlProjectManager.QmlRunConfiguration</value>
-    <value key="QmlProjectManager.QmlRunConfiguration.MainScript" type="QString"></value>
-    <value key="QmlProjectManager.QmlRunConfiguration.QDeclarativeViewerArguments" type="QString"></value>
-    <value key="QmlProjectManager.QmlRunConfiguration.QtVersion" type="int">19</value>
+    <value key="QmlProjectManager.QmlRunConfiguration.MainScript" type="QString">CavewhereUITest.qml</value>
+    <value key="QmlProjectManager.QmlRunConfiguration.QDeclarativeViewerArguments" type="QString">-graphicssystem opengl</value>
+    <value key="QmlProjectManager.QmlRunConfiguration.QtVersion" type="int">40</value>
     <valuelist key="QmlProjectManager.QmlRunConfiguration.UserEnvironmentChanges" type="QVariantList"/>
     <value key="RunConfiguration.QmlDebugServerPort" type="uint">3768</value>
     <value key="RunConfiguration.UseCppDebugger" type="bool">false</value>

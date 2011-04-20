@@ -55,29 +55,30 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
 
     Q_ASSERT(cave != NULL);
 
-    writeData(stream, "Cave Name", 80, cave->name());
+    writeData(stream, "Cave Name", -80, cave->name());
     stream << CompassNewLine;
 
     stream << "SURVEY NAME: ";
-    writeData(stream, "Survey Name", 12, trip->name());
+    writeData(stream, "Survey Name", -12, trip->name());
     stream << CompassNewLine;
 
     stream << "SURVEY DATE: ";
-    writeData(stream, "Survey Date", 12, QString("%1 %2 %3")
+    writeData(stream, "Survey Date", -12, QString("%1 %2 %3")
               .arg(trip->date().month())
               .arg(trip->date().day())
               .arg(trip->date().year()));
     stream << " COMMENT:" << CompassNewLine;
 
     stream << "SURVEY TEAM: " << CompassNewLine;
-    writeData(stream, "Survey Team", 100, surveyTeam(trip));
+    writeData(stream, "Survey Team", -100, surveyTeam(trip));
     stream << CompassNewLine;
 
     cwTripCalibration* calibrations = trip->calibrations();
     float declination = calibrations->declination();
     float compassCorrections = calibrations->frontCompassCalibration();
     float clinoCorrections = calibrations->frontClinoCalibration();
-    float tapeCorrections = calibrations->tapeCalibration();
+    float tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
+                                             cwUnits::DecimalFeet, cwUnits::Meters);
 
     stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
     stream << "FORMAT: DMMDLRUDLADB ";
@@ -104,10 +105,11 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
     if(fieldLength < 0) {
         paddedString = QString("%1").arg(data, fieldLength);
     } else {
+        //This is evil, need to resize from the left, not from the right
         if(data.size() > fieldLength) {
             data.resize(fieldLength);
         }
-        paddedString = data;
+        paddedString = QString("%1").arg(data, fieldLength);
     }
 
     if(data.size() > fieldLength) {
@@ -140,15 +142,15 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << " ";
         writeData(stream, "To", 12, to->name());
         stream << " ";
-        stream << shotLength << " ";
-        stream << convertField(trip, shot, Compass) << " ";
-        stream << convertField(trip, shot, Clino) << " ";
-        stream << convertField(from, Left, trip->distanceUnit()) << " ";
-        stream << convertField(from, Up, trip->distanceUnit()) << " ";
-        stream << convertField(from, Right, trip->distanceUnit()) << " ";
-        stream << convertField(from, Down, trip->distanceUnit()) << " ";
-        stream << convertField(trip, shot, BackCompass) << " ";
-        stream << convertField(trip, shot, BackClino) << " ";
+        stream << formatFloat(shotLength) << " ";
+        stream << formatFloat(convertField(trip, shot, Compass)) << " ";
+        stream << formatFloat(convertField(trip, shot, Clino)) << " ";
+        stream << formatFloat(convertField(from, Left, trip->distanceUnit())) << " ";
+        stream << formatFloat(convertField(from, Up, trip->distanceUnit())) << " ";
+        stream << formatFloat(convertField(from, Right, trip->distanceUnit())) << " ";
+        stream << formatFloat(convertField(from, Down, trip->distanceUnit())) << " ";
+        stream << formatFloat(convertField(trip, shot, BackCompass)) << " ";
+        stream << formatFloat(convertField(trip, shot, BackClino)) << " ";
         stream << CompassNewLine;
     }
 
@@ -157,15 +159,15 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     stream << " ";
     writeData(stream, "To", 12, lastStation->name() + "lrud");
     stream << " ";
-    stream << 0.0 << " ";
-    stream << 0.0 << " ";
-    stream << 0.0 << " ";
-    stream << convertField(lastStation, Left, trip->distanceUnit()) << " ";
-    stream << convertField(lastStation, Up, trip->distanceUnit()) << " ";
-    stream << convertField(lastStation, Right, trip->distanceUnit()) << " ";
-    stream << convertField(lastStation, Down, trip->distanceUnit()) << " ";
-    stream << 0.0 << " ";
-    stream << 0.0 << " ";
+    stream << formatFloat(0.0) << " ";
+    stream << formatFloat(0.0) << " ";
+    stream << formatFloat(0.0) << " ";
+    stream << formatFloat(convertField(lastStation, Left, trip->distanceUnit())) << " ";
+    stream << formatFloat(convertField(lastStation, Up, trip->distanceUnit())) << " ";
+    stream << formatFloat(convertField(lastStation, Right, trip->distanceUnit())) << " ";
+    stream << formatFloat(convertField(lastStation, Down, trip->distanceUnit())) << " ";
+    stream << formatFloat(180.0) << " ";
+    stream << formatFloat(0.0) << " ";
     stream << CompassNewLine;
 }
 
@@ -280,6 +282,10 @@ QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
         clinoReading = "90.0";
     }
     return clinoReading;
+}
+
+QString cwCompassExportCaveTask::formatFloat(float value) {
+    return QString("%1").arg(value, 7, 'f', 2);
 }
 
 ///**
