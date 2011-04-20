@@ -254,13 +254,13 @@ void cwSurveyEditorMainWindow::reloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
-    context->setContextProperty("surveyNoteModel", NoteModel);
+    //context->setContextProperty("surveyNoteModel", NoteModel);
     //context->setContextProperty("surveyData", Trip);
     context->setContextProperty("regionTreeView", RegionTreeView);
     //context->setContextProperty("regionModel", RegionTreeModel);
 
-    DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
-
+    //DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
+    DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 
 //    RegionView  = context->findChild<cwTreeView*>("regionTree");
 //    //qDebug() << "TreeVariant" << treeVariant << treeVariant.isNull();
@@ -287,11 +287,11 @@ void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelec
         if(trip != NULL) {
             qDebug() << "Setting the trip";
             context->setContextProperty("surveyData", trip);
-            context->setContextProperty("currentPage", "SurveyEditor");
+            //context->setContextProperty("currentPage", "SurveyEditor");
         } else if(cave != NULL) {
             qDebug() << "Setting the cave data";
             context->setContextProperty("caveData", cave);
-            context->setContextProperty("currentPage", "CavePage");
+            //context->setContextProperty("currentPage", "CavePage");
         }
     }
 }

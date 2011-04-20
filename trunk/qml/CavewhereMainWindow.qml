@@ -1,4 +1,5 @@
 import Qt 4.7
+import Cavewhere 1.0
 
 Rectangle {
     id: rectangle2
@@ -47,7 +48,7 @@ Rectangle {
             color: "red"
         }
 
-        DataPage {
+        DataMainPage {
             //visible: mainSideBar.pageShown == "data"
             width:  parent.width
             height: parent.height

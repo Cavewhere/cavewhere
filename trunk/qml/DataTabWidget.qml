@@ -6,7 +6,7 @@ Rectangle {
     default property alias content: pageArea.children
     property int currentPageIndex: 0
 
-    anchors.fill: parent;
+    //anchors.fill: parent;
 
     onCurrentPageIndexChanged: setOpacities()
     Component.onCompleted: setOpacities()
@@ -176,6 +176,12 @@ Rectangle {
 //            horizontalTileMode: BorderImage.Repeat
 //            verticalTileMode: BorderImage.Repeat
 //        }
+
+        Rectangle {
+            anchors.fill: parent;
+            border.width: 1
+            border.color: "red"
+        }
 
         Item {
             id: pageArea

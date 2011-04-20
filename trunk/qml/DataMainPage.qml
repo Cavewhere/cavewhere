@@ -1,4 +1,5 @@
 import QtQuick 1.0
+import Cavewhere 1.0
 
 Rectangle {
     id: pageId
@@ -7,18 +8,49 @@ Rectangle {
 
    // anchors.fill: parent
 
-    DataTabWidget {
+    ProxyWidget {
+        id: regionTree
 
-        Text {
-            property string label: "Overview"
-            property string icon:  "icons/dataOverview.png"
-            text: "This is the overview of the a trip or cave"
+        width: 300;
+
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.bottomMargin: 1
+
+        widget: regionTreeView
+
+        Component.onCompleted: {
+            console.debug("Loading Widget: " + widget);
         }
 
-        Text {
+        Rectangle {
+            border.width: 1
+            border.color: "black"
+
+            anchors.fill: parent
+
+            color: Qt.rgba(0, 0, 0, 0);
+        }
+    }
+
+
+    DataTabWidget {
+
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: regionTree.right
+        anchors.right: parent.right
+
+        CavePage {
+            property string label: "Overview"
+            property string icon:  "icons/dataOverview.png"
+        }
+
+        SurveyEditor {
             property string label: "Data"
             property string icon: "icons/data.png"
-            text: "This is the Data page"
+        //    text: "This is the Data page"
         }
 
         Text {

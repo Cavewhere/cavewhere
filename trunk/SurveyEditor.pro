@@ -118,33 +118,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
 FORMS    += src/cwSurveyEditorMainWindow.ui \
     src/cwImportSurvexDialog.ui
 
-OTHER_FILES += qml/DataBox.qml \
-qml/Navigation.js \
-qml/NavigationRectangle.qml \
-qml/ReadingBox.qml \
-qml/ShadowRectangle.qml \
-qml/StationBox.qml \
-qml/SurveyChunk.js \
-qml/SurveyChunk.qml \
-qml/TitleLabel.qml \
-qml/DataBoxEntryState.qml \
-qml/ClinoReadBox.qml \
- qml/CompassReadBox.qml \
-    qml/DistanceDataBox.qml \
-    qml/LeftDataBox.qml \
-    qml/SurveyEditor.qml \
-    qml/RightDataBox.qml \
-    qml/UpDataBox.qml \
-    qml/DownDataBox.qml \
-    qml/ShotDistanceDataBox.qml \
-    qml/FrontClinoReadBox.qml \
-    qml/BackClinoReadBox.qml \
-    qml/FrontCompassReadBox.qml \
-    qml/BackCompassReadBox.qml \
-    qml/SurveyChunkList.qml \
-    qml/ScrollBar.qml \
-    qml/NotesGallery.qml \
-    qml/CavePage.qml
+OTHER_FILES += qml/*.qml \
+qml/*.js
 
 RESOURCES += \
     icons.qrc

@@ -6,49 +6,45 @@ Rectangle {
 
     //property alias currentPage: area.state
 
-    border.width: 2
-    border.color: "green"
+    anchors.fill: parent
 
-    state: currentPage
+//    state: currentPage
 
-    ProxyWidget {
-        id: regionTree
+//    ProxyWidget {
+//        id: regionTree
 
-        width: 300;
+//        width: 300;
 
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.bottomMargin: 1
+//        anchors.top: parent.top
+//        anchors.bottom: parent.bottom
+//        anchors.left: parent.left
+//        anchors.bottomMargin: 1
 
-        widget: regionTreeView
+//        widget: regionTreeView
 
-        Component.onCompleted: {
-            console.debug("Loading Widget: " + widget);
-        }
+//        Component.onCompleted: {
+//            console.debug("Loading Widget: " + widget);
+//        }
 
-        Rectangle {
-            border.width: 1
-            border.color: "black"
+//        Rectangle {
+//            border.width: 1
+//            border.color: "black"
 
-            anchors.fill: parent
+//            anchors.fill: parent
 
-            color: Qt.rgba(0, 0, 0, 0);
-        }
-    }
+//            color: Qt.rgba(0, 0, 0, 0);
+//        }
+//    }
 
     Flickable {
         id: flickArea
 
-        visible: false
-
         contentHeight: view.contentHeight
-
         width: view.contentWidth
 
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.left: regionTree.right
+        anchors.left: parent.left
         anchors.margins: 1;
 
         clip: true;
@@ -57,13 +53,6 @@ Rectangle {
               Moves the flickable such that r is always shown
               */
         function ensureVisible(r){
-            //console.log("Ensure visible:" + r.x + " " + r.y  + " " + r.width + " " + r.height);
-//            if (contentX >= r.x) {
-//                contentX = r.x;
-//            } else if (contentX+width <= r.x+r.width) {
-//                contentX = r.x+r.width-width;
-//            }
-
             if (contentY >= r.y) {
                 contentY = r.y;
             } else if (contentY+height <= r.y+r.height) {
@@ -88,54 +77,54 @@ Rectangle {
         }
     }
 
-    CavePage {
-        id: cavePage
+//    CavePage {
+//        id: cavePage
 
-        visible: false
+//        visible: false
 
-        anchors.left: regionTree.right
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-    }
+//        anchors.left: regionTree.right
+//        anchors.right: parent.right
+//        anchors.top: parent.top
+//        anchors.bottom: parent.bottom
+//    }
 
-    states:  [
+//    states:  [
 
-        State {
-            name: "SurveyEditor"
+//        State {
+//            name: "SurveyEditor"
 
-            PropertyChanges {
-                target: flickArea
-                visible: true
-                //restoreEntryValues: true
-            }
+//            PropertyChanges {
+//                target: flickArea
+//                visible: true
+//                //restoreEntryValues: true
+//            }
 
-            StateChangeScript {
-                script: {
-                    console.debug("Showing SurveyEditor");
-                }
-            }
+//            StateChangeScript {
+//                script: {
+//                    console.debug("Showing SurveyEditor");
+//                }
+//            }
 
-        },
+//        },
 
-        State {
-            name: "CavePage"
+//        State {
+//            name: "CavePage"
 
-            PropertyChanges {
-                target: cavePage
-                visible: true
-                //restoreEntryValues: true
-            }
+//            PropertyChanges {
+//                target: cavePage
+//                visible: true
+//                //restoreEntryValues: true
+//            }
 
-            StateChangeScript {
-                script: {
-                    console.debug("Showing CavePage");
-                }
-            }
+//            StateChangeScript {
+//                script: {
+//                    console.debug("Showing CavePage");
+//                }
+//            }
 
-        }
+//        }
 
-    ]
+//    ]
 
 //    NotesGallery {
 //        anchors.left: flickArea.right
