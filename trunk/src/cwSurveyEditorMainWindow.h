@@ -55,15 +55,15 @@ private:
     //Survey data
     cwCavingRegion* Region;
     cwRegionTreeModel* RegionTreeModel;
-    QTreeView* RegionTreeView;
+    //QTreeView* RegionTreeView;
 
     QThread* ExportThread;
 
     //Loop closer manager
     cwLinePlotManager* LinePlotManager;
 
-    cwCave* currentSelectedCave() const;
-    cwTrip* currentSelectedTrip() const;
+//    cwCave* currentSelectedCave() const;
+//    cwTrip* currentSelectedTrip() const;
 };
 
 #endif // SURVEYEDITORMAINWINDOW_H

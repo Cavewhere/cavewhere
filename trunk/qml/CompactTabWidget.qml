@@ -1,5 +1,7 @@
 import QtQuick 1.0
 
+import QtQuick 1.0
+
 Rectangle {
     id: tabWidget
 
@@ -22,7 +24,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
 
-        height: 70
+        height: 30
 
         Image {
             fillMode: Image.TileHorizontally
@@ -32,21 +34,19 @@ Rectangle {
             anchors.right: header.right
         }
 
-        color: "#B7BDC5"
-
 //        border.width: 1
 
         //Create the tab bar for the widget
         Row {
-           // clip: true
-            spacing: 2
+            clip: true
+            spacing: -2
 
             Repeater {
                 model: pageArea.children.length
 
                 delegate: Rectangle {
-                    width:  ((icon.width > iconText.width) ? icon.width + 15 : iconText.width + 15)
-                    height: header.height // - 5
+                    width:  header.width / pageArea.children.length;
+                    height: header.height
 
                     color: "#00000000"
                     state: tabWidget.currentPageIndex == index ? "selected" : " "
@@ -63,9 +63,6 @@ Rectangle {
                             anchors.bottomMargin: -5
                         }
 
-                        //color: "#9cbaff"
-                       // border.width: 1
-                        //visible: false
 
                     }
 
@@ -74,13 +71,16 @@ Rectangle {
                         source: pageArea.children[index].icon
                         fillMode: Image.PreserveAspectFit
                         smooth: true
+                        sourceSize.height: 32;
+                        sourceSize.width: 32;
+                        height: 16
+                        width: 16
 
-                        anchors.topMargin: 5
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        //                        anchors.left: parent.left
-                        //                        anchors.right: parent.right
+                        //anchors.topMargin: 5
+                        anchors.left: parent.left
                         anchors.top:  parent.top
-                        anchors.bottom: iconText.top
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: 7
 
                         Behavior on scale {
                             NumberAnimation {
@@ -91,11 +91,14 @@ Rectangle {
 
                     Text {
                         id: iconText
-                        horizontalAlignment: Qt.AlignHCenter; verticalAlignment: Qt.AlignVCenter
+                        horizontalAlignment: Qt.AlignLeft; verticalAlignment: Qt.AlignVCenter
                         height: 20
 
+                        anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.left: icon.right
+                        anchors.right: parent.right
+                        anchors.leftMargin: 3
 
                         text: pageArea.children[index].label
                         elide: Text.ElideRight
@@ -112,7 +115,7 @@ Rectangle {
 
                         onEntered: {
                             if(tabWidget.currentPageIndex != index) {
-                                icon.scale = 1.2
+                                icon.scale = 1.1
                             }
                         }
 
@@ -146,7 +149,7 @@ Rectangle {
     Rectangle {
         anchors.left: parent.left; anchors.right:  parent.right
         anchors.top: header.bottom; anchors.bottom: parent.bottom
-        clip: true
+        //clip: true
 
         Item {
             id: pageArea

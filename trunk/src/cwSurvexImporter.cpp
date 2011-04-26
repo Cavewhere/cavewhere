@@ -103,7 +103,6 @@ void cwSurvexImporter::clear() {
   \brief Loads the file
   */
 void cwSurvexImporter::loadFile(QString filename) {
-
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
         //This maybe a relative path to the rootFile
@@ -135,11 +134,17 @@ void cwSurvexImporter::loadFile(QString filename) {
         return;
     }
 
+    //Make sure we don't reopen the same file twice
+    if(qFind(IncludeFiles, filename) != IncludeFiles.end()) {
+        //File has already been included... Do nothing
+        return;
+    }
+    QStringList::iterator iter = qLowerBound(IncludeFiles.begin(), IncludeFiles.end(), filename);
+    IncludeFiles.insert(iter, filename);
 
+    //Add the file to the include stack
     IncludeStack.append(Include(filename));
 
-    //QString line;
-    //CurrentLine = 0;
     while(!file.atEnd()) {
         QString line = file.readLine();
 
@@ -147,27 +152,9 @@ void cwSurvexImporter::loadFile(QString filename) {
         increamentLineNumber();
 
         parseLine(line);
-        //qDebug() << "Is open" << file.isOpen();
     }
 
-
-
     IncludeStack.removeLast();
-
-    //Chunks
-//    foreach(cwSurveyChunk* chunk, Chunks) {
-//        //qDebug() << "------------------" << chunk << "------------------";
-//        for(int i = 0; i < chunk->StationCount() - 1; i++) {
-//            cwStation* station = chunk->Station(i);
-//            cwShot* shot = chunk->Shot(i);
-
-//            //qDebug() << station->GetName();
-//            //qDebug() << "\t" << shot->GetDistance().toString() << shot->GetCompass().toString() << "/" << shot->GetBackCompass().toString() << shot->GetClino().toString() << "/" << shot->GetBackClino().toString();
-//        }
-//        qDebug() << chunk->Station(chunk->StationCount() - 1)->GetName();
-//    }
-
-    //qDebug() << "Done";
 }
 
 /**

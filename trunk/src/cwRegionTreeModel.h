@@ -16,7 +16,15 @@ class cwRegionTreeModel : public QAbstractItemModel
 
 public:
     enum RoleItem {
-        ObjectRole = Qt::UserRole + 1
+        TypeRole = Qt::UserRole + 1,
+        NameRole, //For everything
+        DateRole,  //Only valid for trips
+        ObjectRole //For exctracting the object
+    };
+
+    enum ItemType {
+        Cave,
+        Trip
     };
 
     explicit cwRegionTreeModel(QObject *parent = 0);
@@ -29,8 +37,8 @@ public:
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
 
-    cwTrip* trip(const QModelIndex& index);
-    cwCave* cave(const QModelIndex& index);
+    cwTrip* trip(const QModelIndex& index) const;
+    cwCave* cave(const QModelIndex& index) const;
 
 signals:
 

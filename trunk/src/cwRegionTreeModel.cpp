@@ -12,6 +12,14 @@ cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
     QAbstractItemModel(parent),
     Region(NULL)
 {
+
+    QHash<int, QByteArray> roles;
+    roles[TypeRole] = "indexType";
+    roles[NameRole] = "name";
+    roles[DateRole] = "date"; //Only valid for trips
+    roles[ObjectRole] = "object";
+    setRoleNames(roles);
+
 }
 
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
@@ -88,11 +96,12 @@ int cwRegionTreeModel::columnCount ( const QModelIndex & /*parent*/) const {
 QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
     if(!index.isValid()) { return QVariant(); }
 
-    cwCave* cave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(cave != NULL) {
+    cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
+    if(currentCave != NULL) {
         switch(role) {
+        case NameRole:
         case Qt::DisplayRole:
-            return QVariant(cave->name());
+            return QVariant(currentCave->name());
         case Qt::DecorationRole: {
             QPixmap icon;
             if(!QPixmapCache::find(cwGlobalIcons::Cave, &icon)) {
@@ -102,17 +111,22 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-            return QVariant::fromValue<QObject*>(static_cast<QObject*>(cave));
+            return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentCave));
+        case TypeRole:
+            return Cave;
+        case DateRole:
+            return QDate(); //Caves dont have a date
         default:
             return QVariant();
         }
     }
 
-    cwTrip* trip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(trip != NULL) {
+    cwTrip* currentTrip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
+    if(currentTrip != NULL) {
         switch(role) {
+        case NameRole:
         case Qt::DisplayRole:
-            return QVariant(trip->name());
+            return QVariant(currentTrip->name());
         case Qt::DecorationRole: {
             QPixmap icon;
             if(!QPixmapCache::find(cwGlobalIcons::Trip, &icon)) {
@@ -122,7 +136,9 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-                return QVariant::fromValue<QObject*>(static_cast<QObject*>(trip));
+            return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentTrip));
+        case DateRole:
+            return QVariant(currentTrip->date());
         default:
             return QVariant();
         }
@@ -144,7 +160,7 @@ void cwRegionTreeModel::insertCaves(int beginIndex, int endIndex) {
 
   If index isn't a trip, then this returns null
   */
-cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) {
+cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
     QVariant tripVariant = data(index, ObjectRole);
     cwTrip* trip = qobject_cast<cwTrip*>(tripVariant.value<QObject*>());
     return trip;
@@ -153,7 +169,7 @@ cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) {
 /**
   \brief Gets the cave at inde
   */
-cwCave* cwRegionTreeModel::cave(const QModelIndex& index) {
+cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
     QVariant caveVariant = data(index, ObjectRole);
     cwCave* cave = qobject_cast<cwCave*>(caveVariant.value<QObject*>());
     return cave;

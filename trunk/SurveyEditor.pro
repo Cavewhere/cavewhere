@@ -119,7 +119,12 @@ FORMS    += src/cwSurveyEditorMainWindow.ui \
     src/cwImportSurvexDialog.ui
 
 OTHER_FILES += qml/*.qml \
-qml/*.js
+qml/*.js \
+    qml/DataSideBar.qml \
+    qml/CompactTabWidget.qml \
+    qml/Button.qml \
+    qml/CaveDataSidebarPage.qml \
+    qml/StandardBorder.qml
 
 RESOURCES += \
     icons.qrc

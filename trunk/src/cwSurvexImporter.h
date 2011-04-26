@@ -92,10 +92,11 @@ private:
     //File state to handle includes
     QList<Include> IncludeStack;
 
+    //Already included files
+    QStringList IncludeFiles;
+
     //Handles block state
     QList<BeginEndState> BeginEndStateStack;
-
-   // QStringList IncludeStack;
 
     //The data that'll be populated
     cwSurvexBlockData* RootBlock; //All blocks are child of this object
