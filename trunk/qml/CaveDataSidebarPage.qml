@@ -36,6 +36,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             height:  30
+            color: "#00000000"
 
             onHeightChanged: {
                 console.log("Height:" + children.height);
@@ -76,9 +77,6 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            //            border.color: "red"
-            //            border.width: 1
-
             color: "#00000000"
 
             Rectangle {
@@ -97,7 +95,6 @@ Rectangle {
                         duration: 100;
                     }
                 }
-
             }
 
             Text {

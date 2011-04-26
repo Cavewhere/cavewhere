@@ -4,18 +4,25 @@ Rectangle {
     id: dataSideBar
    // anchors.fill: parent
 
-//    Image {
-//        id: splitter
-//        fillMode: Image.TileVertically
-//        source: "icons/verticalLine.png"
-//        anchors.bottom: parent.bottom
-//        anchors.top: parent.top
-//        anchors.right: parent.right
-//        anchors.rightMargin: -3
-//    }
+
 
     CompactTabWidget {
+        id: tabWidget
         anchors.fill: parent;
+
+        children: [
+            Image {
+                id: splitter
+                fillMode: Image.TileVertically
+                source: "icons/verticalLine.png"
+               // anchors.bottom: parent.bottom
+                height: tabWidget.areaY + 4
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.rightMargin: 1
+                z: 1
+            }
+        ]
 
         CaveDataSidebarPage {
             property string label: "Caves"

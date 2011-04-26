@@ -6,6 +6,7 @@ Rectangle {
     id: tabWidget
 
     default property alias content: pageArea.children
+    property alias areaY: areaRect.y
     property int currentPageIndex: 0
 
     onCurrentPageIndexChanged: setOpacities()
@@ -147,6 +148,7 @@ Rectangle {
     }
 
     Rectangle {
+        id: areaRect
         anchors.left: parent.left; anchors.right:  parent.right
         anchors.top: header.bottom; anchors.bottom: parent.bottom
         //clip: true

@@ -67,6 +67,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: splitter.right
         anchors.right: parent.right
+        anchors.leftMargin: -1
 
         CavePage {
             property string label: "Overview"
