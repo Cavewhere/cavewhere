@@ -26,8 +26,7 @@ Rectangle {
 
         CaveDataSidebarPage {
             property string label: "Caves"
-            property string icon: "icons/cave-64x64.png"
-            anchors.margins: 4
+            property string icon: "icons/caves-64x64.png"
         }
 
         Text {

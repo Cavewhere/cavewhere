@@ -37,8 +37,8 @@ public:
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
 
-    cwTrip* trip(const QModelIndex& index) const;
-    cwCave* cave(const QModelIndex& index) const;
+    Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
+    Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
 
 signals:
 

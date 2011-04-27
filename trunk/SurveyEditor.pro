@@ -124,7 +124,9 @@ qml/*.js \
     qml/CompactTabWidget.qml \
     qml/Button.qml \
     qml/CaveDataSidebarPage.qml \
-    qml/StandardBorder.qml
+    qml/StandardBorder.qml \
+    qml/DataSidebarItemTab.qml \
+    qml/TreeRootElement.qml
 
 RESOURCES += \
     icons.qrc

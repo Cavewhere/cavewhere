@@ -4,9 +4,14 @@ Rectangle {
     id: button
     property alias text:  buttonText.text
     property alias iconSource: icon.source
+    property bool checkable:     false
     property bool troggled: false
+    property bool iconOnTheLeft:  true
+    property real iconSize: 16
 
-    width: buttonText.width + icon.width + (2 * container.anchors.margins) + icon.anchors.rightMargin
+    signal clicked();
+
+    width: buttonText.width + icon.width + (2 * container.anchors.margins) + icon.anchors.rightMargin + buttonText.anchors.rightMargin
     height: buttonText.height + (2 * container.anchors.margins)
 
     radius: 3
@@ -28,19 +33,24 @@ Rectangle {
         Image {
             id: icon
 
-            height: status == Image.Ready > 0 ? 16 : 0
-            width: status == Image.Ready > 0 ? 16 : 0
+            height: status == Image.Ready > 0 ? iconSize : 0
+            width: status == Image.Ready > 0 ? iconSize : 0
 
-            anchors.right: buttonText.left
-            anchors.rightMargin: status == Image.Ready > 0 ? 3 : 0
-            //anchors.left: parent.left
+            //anchors.left: iconOnTheLeft ? parent.left : buttonText.right
+            anchors.right: iconOnTheLeft ? buttonText.left : parent.right
+            anchors.rightMargin: status == Image.Ready && iconOnTheLeft > 0 ? 3 : 0
+                        //anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
 
             visible: status == Image.Ready
         }
 
         Text {
             id: buttonText
-            anchors.right: parent.right
+            //anchors.left: iconOnTheLeft ? buttonText.right : parent.left
+            anchors.right: iconOnTheLeft ? parent.right : icon.left
+            anchors.verticalCenter: icon.verticalCenter
+            anchors.rightMargin: icon.status == Image.Ready && !iconOnTheLeft > 0 ? 3 : 0
 
         }
     }
@@ -50,6 +60,11 @@ Rectangle {
         anchors.fill: parent
 
         hoverEnabled: true
+
+        onClicked: {
+            if(checkable) { troggled = !troggled }
+            button.clicked();
+        }
     }
 
     states: [
@@ -58,12 +73,7 @@ Rectangle {
             PropertyChanges { target: stop1; color: "#B7BDC5" }
             PropertyChanges { target: stop2; color: "#29335B" }
             //            PropertyChanges { target: buttonText; font.bold: true }
-        },
-
-        State {
-        name: "clicked"
-
-}
+        }
 
     ]
 

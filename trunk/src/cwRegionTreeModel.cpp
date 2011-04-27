@@ -137,6 +137,8 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         }
         case ObjectRole:
             return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentTrip));
+        case TypeRole:
+            return Trip;
         case DateRole:
             return QVariant(currentTrip->date());
         default:

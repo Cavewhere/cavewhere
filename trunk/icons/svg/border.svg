@@ -13,7 +13,7 @@
    height="100"
    id="svg2"
    version="1.1"
-   inkscape:version="0.47 r22583"
+   inkscape:version="0.48.1 r9760"
    sodipodi:docname="border.svg"
    inkscape:export-filename="/home/blitz/documents/projects/surveyEditor-svn/icons/border.png"
    inkscape:export-xdpi="45"
@@ -50,14 +50,6 @@
        sodipodi:type="inkscape:persp3d" />
     <filter
        inkscape:collect="always"
-       id="filter3855">
-      <feGaussianBlur
-         inkscape:collect="always"
-         stdDeviation="1.6541214"
-         id="feGaussianBlur3857" />
-    </filter>
-    <filter
-       inkscape:collect="always"
        id="filter3795">
       <feGaussianBlur
          inkscape:collect="always"
@@ -80,16 +72,16 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="5.6"
-     inkscape:cx="7.0167565"
+     inkscape:cx="39.465399"
      inkscape:cy="47.802257"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="true"
      inkscape:snap-global="false"
      inkscape:window-width="1600"
-     inkscape:window-height="1173"
-     inkscape:window-x="1600"
-     inkscape:window-y="0"
+     inkscape:window-height="1176"
+     inkscape:window-x="0"
+     inkscape:window-y="24"
      inkscape:window-maximized="1">
     <inkscape:grid
        type="xygrid"
@@ -121,21 +113,26 @@
      id="layer1"
      transform="translate(0,-952.36218)">
     <rect
-       style="fill:#1b1b1b;fill-opacity:0;stroke:#050505;stroke-width:2.02500831000000003;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;opacity:1;filter:url(#filter3795)"
+       style="fill:#1b1b1b;fill-opacity:0;stroke:#050505;stroke-width:1.81241608;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0;filter:url(#filter3795)"
        id="rect3745"
        width="83.035713"
        height="83.39286"
        x="8.2142859"
        y="959.86218"
-       rx="5"
-       transform="matrix(0.98958593,0,0,0.98571839,1.0536272,15.018158)" />
+       rx="4.4711251"
+       transform="matrix(1.1066409,0,0,1.1003668,-4.7677644,-100.0768)"
+       ry="4.4790444" />
     <rect
-       style="fill:#ffffff;fill-opacity:1;stroke:#050505;stroke-width:0.99139094;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0"
+       style="fill:#ffffff;fill-opacity:1;stroke:#050505;stroke-width:2;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;stroke-dashoffset:0"
        id="rect3745-6"
-       width="80.929581"
-       height="82.031914"
-       x="9.981637"
-       y="961.61414"
-       rx="4.8731794" />
+       width="90.50248"
+       height="91.573006"
+       x="5.216311"
+       y="956.61731"
+       rx="4.8731799"
+       ry="4.873179"
+       inkscape:export-filename="/home/blitz/documents/projects/surveyEditor-svn/icons/rect3745-6.png"
+       inkscape:export-xdpi="45"
+       inkscape:export-ydpi="45" />
   </g>
 </svg>

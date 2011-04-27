@@ -157,7 +157,6 @@ Rectangle {
             id: pageArea
             anchors.fill: parent;
 
-
         }
     }
 }

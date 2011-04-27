@@ -1,11 +1,7 @@
 import QtQuick 1.0
 
 Rectangle {
-    id: rectangle1
-    //    width: 100
-    //    height: 62
-
-    //  border.width: 1
+    id: page
 
     anchors.fill: parent
     anchors.bottomMargin: 1;
@@ -19,7 +15,6 @@ Rectangle {
         anchors.top: parent.top
         anchors.left: parent.right
         anchors.leftMargin: -3
-        //        z:1
     }
 
     Column {
@@ -29,37 +24,37 @@ Rectangle {
         anchors.top: parent.top
         anchors.topMargin: 3
         anchors.bottomMargin: 3
-        anchors.leftMargin: 3
+        anchors.leftMargin: 0
         anchors.rightMargin: 0
+        spacing: view.spacing
 
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height:  30
-            color: "#00000000"
+        TreeRootElement {
+            id: cavesElement
+            regionVisualDataModel: regionVisualDataModel;
+            view: view;
+            viewIndex: -1; //The root element
+            name: "All Caves"
+            iconSource: "icons/caves-64x64.png"
+            addChildElementText: "Add Cave"
 
-            onHeightChanged: {
-                console.log("Height:" + children.height);
-            }
-
-            Text {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Caves"
-
-            }
-
-            Button {
-                id: addCaveButton
-
-                anchors.right: parent.right
-                anchors.rightMargin: 5
-                anchors.verticalCenter: parent.verticalCenter
-
-                text: "Add Cave"
-                iconSource: "icons/plus.png"
+            onClicked: {
+               //This returns make the caveElement disappear
+               caveElement.visible = false;
             }
         }
+
+        TreeRootElement {
+            id: caveElement
+            regionVisualDataModel: regionVisualDataModel;
+            view: view;
+            viewIndex: -2; //The root element
+            addChildElementText: "Add Trip"
+            iconSource: "icons/cave-64x64.png"
+            visible: false
+
+            anchors.leftMargin: 5
+        }
+
     }
 
     VisualDataModel {
@@ -73,38 +68,49 @@ Rectangle {
 
             property bool selected: index == view.currentIndex;
 
-            height: 35
+            height: 26
             anchors.left: parent.left
             anchors.right: parent.right
 
             color: "#00000000"
 
-            Rectangle {
+            DataSidebarItemTab {
                 id: tabBackground
-                width:  parent.width
-                height: parent.height
-                x: selected ? parent.x : parent.x + parent.width
-                color: "#00000000"
+                selected: caveDelegate.selected
+            }
 
-                StandardBorder {
-                    anchors.rightMargin: -7
-                }
-
-                Behavior on x {
-                    NumberAnimation {
-                        duration: 100;
+            Image {
+                id: icon
+                anchors.left: parent.left
+                anchors.leftMargin: 7
+                anchors.verticalCenter: tabBackground.verticalCenter
+                source: {
+                    switch(indexType) {
+                    case 0: //Cave
+                        return "icons/cave.png"
+                    case 1: //Trip
+                        return "icons/trip.png"
                     }
+                    return ""
                 }
             }
 
             Text {
                 id: nameText
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: 7
+                anchors.verticalCenter: tabBackground.verticalCenter
+                anchors.left: icon.right
+                anchors.leftMargin: 2
                 text: name
 
                 font.bold: selected
+            }
+
+            Text {
+                id: dataText
+                anchors.verticalCenter: tabBackground.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: 5
+                text: Qt.formatDateTime(date, "yyyy-MM-dd")
             }
 
             MouseArea {
@@ -116,11 +122,26 @@ Rectangle {
                 Button {
                     id: tripsButton
                     text: "Trips"
+                    iconSource: "icons/moreArrow.png"
+                    iconOnTheLeft: false
                     opacity: 0.0
+                    iconSize: 12
+                    height: 18
+                    visible: indexType === 0 //Is a cave
 
                     anchors.right: parent.right
                     anchors.rightMargin: 5
                     anchors.verticalCenter: parent.verticalCenter
+
+                    onClicked: {
+                        //Change to trips
+                        caveElement.index = regionVisualDataModel.modelIndex(index)
+                        caveElement.name = regionModel.cave(caveElement.index).name
+                        regionVisualDataModel.rootIndex = caveElement.index
+                        view.currentIndex = caveElement.viewIndex
+                        caveElement.visible = true;
+
+                    }
                 }
 
                 onClicked: {
@@ -150,11 +171,20 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.top: staticElements.bottom
-        //anchors.rightMargin: -3
+
+        anchors.leftMargin: caveElement.visible ? 10 : 5
+
         clip: true
+        spacing: -3
+        currentIndex: -1
 
         model:  regionVisualDataModel
+
+        onModelChanged: {
+            cavesElement.index = regionVisualDataModel.rootIndex
+        }
     }
+
 
 
 }
