@@ -16,7 +16,7 @@ cwStation::cwStation() {
 
   This doesn't copy the parent
   */
-cwStation::cwStation(const cwStation& station) : QObject(),
+cwStation::cwStation(const cwStation& station) :
     Name(station.Name),
     Left(station.Left),
     Right(station.Right),
@@ -47,43 +47,25 @@ cwStation::cwStation(QString name, float left, float right, float up, float down
 }
 
 void cwStation::setName(QString name) {
-    if(name != Name) {
-        Name = name;
-        emit nameChanged();
-    }
- }
+    Name = name;
+}
 
 void cwStation::setLeft(QString left) {
-    if(left != Left) {
-        Left = left;
-        emit leftChanged();
-    }
- }
+    Left = left;
+}
 
- void cwStation::setRight(QString right) {
-     if(Right != right) {
-         Right = right;
-         emit rightChanged();
-     }
- }
+void cwStation::setRight(QString right) {
+    Right = right;
+}
 
- void cwStation::setUp(QString up) {
-     if(Up != up) {
-         Up = up;
-         emit upChanged();
-     }
- }
+void cwStation::setUp(QString up) {
+    Up = up;
+}
 
- void cwStation::setDown(QString down) {
-     if(Down != down) {
-         Down = down;
-         emit downChanged();
-     }
- }
+void cwStation::setDown(QString down) {
+    Down = down;
+}
 
- void cwStation::setPosition(QVector3D position) {
-     if(Position != position) {
-         Position = position;
-         emit positionChanged();
-     }
- }
+void cwStation::setPosition(QVector3D position) {
+    Position = position;
+}

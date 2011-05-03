@@ -9,5 +9,6 @@
         <file>icons/trip.png</file>
         <file>icons/plus.png</file>
         <file>icons/minus.png</file>
+        <file>icons/logo128x128.png</file>
     </qresource>
 </RCC>

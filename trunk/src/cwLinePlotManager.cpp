@@ -125,28 +125,28 @@ void cwLinePlotManager::connectShots(cwSurveyChunk* chunk) {
   \brief connects a shot
   */
 void cwLinePlotManager::connectShot(cwShot* shot) {
-    connect(shot, SIGNAL(DistanceChanged()), SLOT(runSurvex()));
-    connect(shot, SIGNAL(CompassChanged()), SLOT(runSurvex()));
-    connect(shot, SIGNAL(BackCompassChanged()), SLOT(runSurvex()));
-    connect(shot, SIGNAL(ClinoChanged()), SLOT(runSurvex()));
-    connect(shot, SIGNAL(BackClinoChanged()), SLOT(runSurvex()));
+//    connect(shot, SIGNAL(DistanceChanged()), SLOT(runSurvex()));
+//    connect(shot, SIGNAL(CompassChanged()), SLOT(runSurvex()));
+//    connect(shot, SIGNAL(BackCompassChanged()), SLOT(runSurvex()));
+//    connect(shot, SIGNAL(ClinoChanged()), SLOT(runSurvex()));
+//    connect(shot, SIGNAL(BackClinoChanged()), SLOT(runSurvex()));
 }
 
 /**
   \brief Connects all the stations in the trip to this object
   */
 void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
-    for(int i = 0; i < chunk->StationCount(); i++) {
-        cwStationReference* station = chunk->Station(i);
-        connectStation(station);
-    }
+//    for(int i = 0; i < chunk->StationCount(); i++) {
+//        cwStationReference station = chunk->Station(i);
+//        connectStation(station);
+//    }
 }
 
 /**
   \brief Connect to the station
   */
 void cwLinePlotManager::connectStation(cwStationReference* station) {
-    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
+//    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
 }
 
 /**
@@ -185,11 +185,11 @@ void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
   \brief Called when the chunks add more stations
   */
 void cwLinePlotManager::connectAddedStations(int beginIndex, int endIndex) {
-    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwStationReference* station = chunk->Station(i);
-        connectStation(station);
-    }
+//    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
+//    for(int i = beginIndex; i <= endIndex; i++) {
+//        cwStationReference station = chunk->Station(i);
+//        connectStation(station);
+//    }
 }
 
 /**

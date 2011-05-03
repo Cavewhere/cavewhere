@@ -6,8 +6,7 @@
 #include <QDebug>
 #include <QVector3D>
 
-class cwStation : public QObject {
-    Q_OBJECT
+class cwStation {
 
 public:
     cwStation();
@@ -15,12 +14,12 @@ public:
     cwStation(QString name);
     cwStation(QString name, float left, float right, float up, float down);
 
-    Q_INVOKABLE QString name() const;
-    Q_INVOKABLE QString left() const;
-    Q_INVOKABLE QString right() const;
-    Q_INVOKABLE QString up() const;
-    Q_INVOKABLE QString down() const;
-    Q_INVOKABLE QVector3D position() const;
+    QString name() const;
+    QString left() const;
+    QString right() const;
+    QString up() const;
+    QString down() const;
+    QVector3D position() const;
 
     bool isValid() const { return !Name.isEmpty(); }
 
@@ -41,14 +40,6 @@ protected:
     QString Down;
 
     QVector3D Position;
-
-signals:
-    void nameChanged();
-    void leftChanged();
-    void rightChanged();
-    void upChanged();
-    void downChanged();
-    void positionChanged();
 };
 
 inline QString cwStation::name() const { return Name; }

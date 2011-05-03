@@ -2,7 +2,7 @@
 #define CWSurveyChunk_H
 
 //Our includes
-class cwStationReference;
+#include <cwStationReference.h>
 class cwShot;
 class cwTrip;
 class cwCave;
@@ -23,9 +23,10 @@ public:
 
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
+    virtual ~cwSurveyChunk();
 
     bool isValid() const;
-    bool canAddShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot);
+    bool canAddShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
 
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
@@ -43,15 +44,15 @@ signals:
 
 public slots:
     int StationCount() const;
-    cwStationReference* Station(int index) const;
+    cwStationReference Station(int index) const;
 
     int ShotCount() const;
     cwShot* Shot(int index) const;
 
-    QPair<cwStationReference*, cwStationReference*> ToFromStations(const cwShot* shot) const;
+    QPair<cwStationReference, cwStationReference> ToFromStations(const cwShot* shot) const;
 
     void AppendNewShot();
-    void AppendShot(cwStationReference* fromStation, cwStationReference* toStation, cwShot* shot);
+    void AppendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
 
 
     cwSurveyChunk* SplitAtStation(int stationIndex);
@@ -66,7 +67,7 @@ public slots:
     bool CanRemoveShot(int shotIndex, Direction station);
 
 private:
-    QList<cwStationReference*> Stations;
+    QList<cwStationReference> Stations;
     QList<cwShot*> Shots;
     cwTrip* ParentTrip;
 
@@ -76,9 +77,9 @@ private:
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);
 
-    void updateStationsCave(cwStationReference* station);
+    void updateStationsCave(cwStationReference station);
 
-    cwStationReference* createNewStation();
+    cwStationReference createNewStation();
 
 };
 

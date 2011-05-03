@@ -2,8 +2,8 @@
 #define CWSURVEXBLOCKDATA_H
 
 //Our includes
+#include <cwStationReference.h>
 class cwSurveyChunk;
-class cwStationReference;
 class cwShot;
 class cwTeam;
 class cwTripCalibration;
@@ -26,7 +26,7 @@ public:
         NoImport, //!< Don't import this block
         Cave, //!< This block is a cave
         Trip, //!< This block is a trip
-        Structure, //!< This is neither a Cave nor a Trip, but a imported survex block
+        Structure //!< This is neither a Cave nor a Trip, but a imported survex block
     };
 
     cwSurvexBlockData(QObject* parent = 0);
@@ -56,7 +56,7 @@ public:
     QList<cwSurvexBlockData*> childBlocks();
 
     int stationCount() const;
-    cwStationReference* station(int index) const;
+    cwStationReference station(int index) const;
 
     int shotCount() const;
     cwShot* shot(int index) const;

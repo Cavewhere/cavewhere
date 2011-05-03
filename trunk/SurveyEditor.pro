@@ -11,6 +11,13 @@ TARGET = SurveyEditor
 TEMPLATE = app
 
 
+# Include JS debugger library if QMLJSDEBUGGER_PATH is set
+!isEmpty(QMLJSDEBUGGER_PATH) {
+    include($$QMLJSDEBUGGER_PATH/qmljsdebugger-lib.pri)
+} else {
+    DEFINES -= QMLJSDEBUGGER
+}
+
 SOURCES += src/main.cpp \
 src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyChunk.cpp \
@@ -61,7 +68,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwPerson.cpp \
     src/cwTeamMember.cpp \
     src/cwTeam.cpp \
-    src/cwTripCalibration.cpp
+    src/cwTripCalibration.cpp \
+    src/cwTaskProgressDialog.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -112,11 +120,13 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwPerson.h \
     src/cwTeamMember.h \
     src/cwTeam.h \
-    src/cwTripCalibration.h
+    src/cwTripCalibration.h \
+    src/cwTaskProgressDialog.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
-    src/cwImportSurvexDialog.ui
+    src/cwImportSurvexDialog.ui \
+    src/cwTaskProgressDialog.ui
 
 OTHER_FILES += qml/*.qml \
 qml/*.js \

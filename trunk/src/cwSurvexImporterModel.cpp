@@ -62,23 +62,23 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
      //This index is a shot
      cwShot* shot = toShot(index); //qobject_cast<cwShot*>(static_cast<QObject*>(index.internalPointer()));
      if(shot != NULL) {
-         cwStationReference* fromStation = shot->fromStation();
-         cwStationReference* toStation = shot->toStation();
+         cwStationReference fromStation = shot->fromStation();
+         cwStationReference toStation = shot->toStation();
 
          QString fromStationName;
          QString toStationName;
          QString errorStationName = "(Error - Unknown staton name)";
 
-         if(fromStation == NULL) {
+         if(!fromStation.isValid()) {
              fromStationName = errorStationName;
          } else {
-             fromStationName = fromStation->name();
+             fromStationName = fromStation.name();
          }
 
-         if(toStation == NULL) {
+         if(!toStation.isValid()) {
              toStationName = errorStationName;
          } else {
-             toStationName = toStation->name();
+             toStationName = toStation.name();
          }
 
          QString displayText = QString("%1 %2 %3").arg(fromStationName).arg(QString(QChar(0x2192))).arg(toStationName);
@@ -153,7 +153,7 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
          }
 
          cwSurvexBlockData* block = rootBlocks[row];
-         return createIndex(row, column, block);
+         return createAndRegisterIndex(row, block, Block);
      }
 
      //This if the index
@@ -162,14 +162,14 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
          if(row < block->childBlockCount()) {
              //This is another block index
              cwSurvexBlockData* childBlock = block->childBlock(row);
-             return createIndex(row, column, childBlock);
+             return createAndRegisterIndex(row, childBlock, Block);
          }
 
          int blockIndex = row - block->childBlockCount();
          if(blockIndex < block->shotCount()) {
              //This is a shot
              cwShot* shot = block->shot(blockIndex);
-             return createIndex(row, column, shot);
+             return createAndRegisterIndex(row, shot, Shot);
          }
      }
 
@@ -192,7 +192,7 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
 
      cwShot* shot = toShot(index);
      if(shot != NULL) {
-         QObject* shotParent = shot->parent(); //should be a chunk
+         QObject* shotParent = shot->parentChunk(); //should be a chunk
          if(shotParent != NULL) {
              parentBlock = qobject_cast<cwSurvexBlockData*>(shotParent->parent()); //Should be a block
          }
@@ -207,10 +207,10 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
      if(grandparentBlock == NULL) {
          //In the GlobalData
          int row = GlobalData->blocks().indexOf(parentBlock);
-         return createIndex(row, index.column(), parentBlock);
+         return createAndRegisterIndex(row, parentBlock, Block);
      } else {
          int row = grandparentBlock->childBlocks().indexOf(parentBlock);
-         return createIndex(row, index.column(), parentBlock);
+         return createAndRegisterIndex(row, parentBlock, Block);
      }
 
      return QModelIndex(); //Invalid object, so invalid parent
@@ -250,6 +250,16 @@ void cwSurvexImporterModel::setSurvexData(cwSurvexGlobalData* data) {
     }
 }
 
+QModelIndex cwSurvexImporterModel::createAndRegisterIndex(int row, void* object, Type type) const {
+    //Cast the constness away
+    const QHash<void*, Type>* constPointerTypeLookup = &PointerTypeLookup;
+    QHash<void*, Type>* unConstPointerTypeLookup = const_cast<QHash<void*, Type>*>(constPointerTypeLookup);
+
+    //Add to the lookup
+    unConstPointerTypeLookup->insert(object, type);
+    return createIndex(row, 0, object);
+}
+
 /**
   \brief A recusive function that connect block and it's sub blocks and shots to this model
   */
@@ -279,7 +289,8 @@ void cwSurvexImporterModel::connectBlock(cwSurvexBlockData* block) {
   */
 cwSurvexBlockData* cwSurvexImporterModel::toBlockData(const QModelIndex& index) const {
     if(!index.isValid()) { return NULL; }
-    return qobject_cast<cwSurvexBlockData*>(static_cast<QObject*>(index.internalPointer()));
+    if(PointerTypeLookup.value(index.internalPointer(), Invalid) != Block) { return NULL; }
+    return static_cast<cwSurvexBlockData*>(index.internalPointer());
 }
 
 
@@ -292,7 +303,8 @@ cwSurvexBlockData* cwSurvexImporterModel::toBlockData(const QModelIndex& index) 
   */
 cwShot* cwSurvexImporterModel::toShot(const QModelIndex& index) const {
     if(!index.isValid()) { return NULL; }
-    return qobject_cast<cwShot*>(static_cast<QObject*>(index.internalPointer()));
+    if(PointerTypeLookup.value(index.internalPointer(), Invalid) != Shot) { return NULL; }
+    return static_cast<cwShot*>(index.internalPointer());
 }
 
 /**
@@ -319,7 +331,7 @@ QModelIndex cwSurvexImporterModel::toIndex(cwSurvexBlockData* block) {
     }
 
     //Block is valid, create the index
-    return createIndex(row, 0, block);
+    return createAndRegisterIndex(row, block, Block);
 }
 
 /**
@@ -345,7 +357,7 @@ QModelIndex cwSurvexImporterModel::toIndex(cwShot* shot) {
 
     //Found the block
     int row = parentBlockData->childBlockCount() + shotIndex;
-    return createIndex(row, 0, shot);
+    return createAndRegisterIndex(row, shot, Shot);
 }
 
 /**
@@ -362,8 +374,8 @@ void cwSurvexImporterModel::blockDataChanged() {
   \brief Called when a shot's data has changed
   */
 void cwSurvexImporterModel::shotDataChanged() {
-    cwShot* shot = static_cast<cwShot*>(sender());
-    QModelIndex shotIndex = toIndex(shot);
-    if(!shotIndex.isValid()) { return; }
-    emit dataChanged(shotIndex, shotIndex);
+//    cwShot* shot = static_cast<cwShot*>(sender());
+//    QModelIndex shotIndex = toIndex(shot);
+//    if(!shotIndex.isValid()) { return; }
+//    emit dataChanged(shotIndex, shotIndex);
 }

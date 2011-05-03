@@ -6,6 +6,7 @@
 #include "cwSurvexBlockData.h"
 #include "cwSurvexGlobalData.h"
 #include "cwCavingRegion.h"
+#include "cwTaskProgressDialog.h"
 
 //Qt includes
 #include <QFileSystemModel>
@@ -15,6 +16,7 @@
 #include <QPixmapCache>
 #include <QMessageBox>
 #include <QDebug>
+#include <QThread>
 
 
 const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
@@ -23,12 +25,19 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
     QDialog(parent),
     Region(region),
     Model(new cwSurvexImporterModel(this)),
-    Importer(new cwSurvexImporter(this)),
-    SurvexSelectionModel(new QItemSelectionModel(Model, this))
-
+    Importer(new cwSurvexImporter()),
+    SurvexSelectionModel(new QItemSelectionModel(Model, this)),
+    ImportThread(new QThread(this))
 {
     setupUi(this);
     setupTypeComboBox();
+
+    //Move the importer to another thread
+    Importer->setThread(ImportThread);
+
+    //Connect the importer up
+    connect(Importer, SIGNAL(finished()), SLOT(importerFinishedRunning()));
+    connect(Importer, SIGNAL(stopped()), SLOT(importerCanceled()));
 
     connect(SurvexSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(updateCurrentItem(QItemSelection,QItemSelection)));
     connect(ImportButton, SIGNAL(clicked()), SLOT(import()));
@@ -43,6 +52,10 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
     splitter->setStretchFactor(1, 4);
 
     setWindowTitle("Survex Importer");
+}
+
+cwImportSurvexDialog::~cwImportSurvexDialog() {
+    delete Importer;
 }
 
 /**
@@ -70,21 +83,18 @@ void cwImportSurvexDialog::setSurvexFile(QString filename) {
     QSettings settings;
     settings.setValue(ImportSurvexKey, filename);
 
-    Importer->importSurvex(filename);
-    Model->setSurvexData(Importer->data());
-
-    //Cutoff extra text
+    //The root filename
     FullFilename = filename;
-    QString cutOffText = FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());
-    FileLabel->setText(cutOffText);
 
-    //Load the error list view
-    SurvexErrorListWidget->addItems(Importer->errors());
+    //Show a progress dialog
+    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog(this);
+    progressDialog->setTask(Importer);
+    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    progressDialog->show();
 
-    //Update the error / warning label at the bottom
-    updateImportWarningLabel();
-
-    show();
+    //Run the importer on another thread
+    QMetaObject::invokeMethod(Importer, "setSurvexFile", Q_ARG(QString, filename));
+    Importer->start();
 }
 
 
@@ -277,4 +287,34 @@ void cwImportSurvexDialog::import() {
         Region->addCaves(globalData->caves());
     }
     accept();
+}
+
+/**
+  \brief Called when the importer has finished
+
+  All the data has been parsed out of the importer
+  */
+void cwImportSurvexDialog::importerFinishedRunning() {
+    Model->setSurvexData(Importer->data());
+
+    //Cutoff to long text
+    QString cutOffText = FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());
+    FileLabel->setText(cutOffText);
+
+    //Load the error list view
+    SurvexErrorListWidget->addItems(Importer->errors());
+
+    //Update the error / warning label at the bottom
+    updateImportWarningLabel();
+
+    ImportThread->quit();
+    show();
+}
+
+/**
+  \brief Called if the importer has been canceled by the user
+  */
+void cwImportSurvexDialog::importerCanceled() {
+    ImportThread->quit();
+    close();
 }

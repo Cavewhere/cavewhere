@@ -7,22 +7,17 @@ class cwStation;
 class cwStationReference;
 
 //Qt includes
-#include <QObject>
 #include <QVariant>
 
-class cwShot : public QObject
+class cwShot
 {
-    Q_OBJECT
-    Q_PROPERTY(QString Distance READ GetDistance WRITE SetDistance NOTIFY DistanceChanged);
-    Q_PROPERTY(QString Compass READ GetCompass WRITE SetCompass NOTIFY CompassChanged);
-    Q_PROPERTY(QString BackCompass READ GetBackCompass WRITE SetBackCompass NOTIFY BackCompassChanged);
-    Q_PROPERTY(QString Clino READ GetClino WRITE SetClino NOTIFY ClinoChanged);
-    Q_PROPERTY(QString BackClino READ GetBackClino WRITE SetBackClino NOTIFY BackClinoChanged);
 
 public:
-    explicit cwShot(QObject *parent = 0);
+    explicit cwShot();
 
-    cwShot(QString distance, QString compass, QString backCompass, QString clino, QString backClino, QObject* parent = 0);
+    cwShot(QString distance,
+           QString compass, QString backCompass,
+           QString clino, QString backClino);
     cwShot(const cwShot& shot);
 
     QString GetDistance() const;
@@ -40,17 +35,11 @@ public:
     QString GetBackClino() const;
     void SetBackClino(QString backClino);
 
+    void setParentChunk(cwSurveyChunk* parentChunk);
     cwSurveyChunk* parentChunk() const;
-    cwStationReference* toStation() const;
-    cwStationReference* fromStation() const;
 
-
-signals:
-    void DistanceChanged();
-    void CompassChanged();
-    void BackCompassChanged();
-    void ClinoChanged();
-    void BackClinoChanged();
+    cwStationReference toStation() const;
+    cwStationReference fromStation() const;
 
 private:
     QString Distance;
@@ -58,6 +47,7 @@ private:
     QString BackCompass;
     QString Clino;
     QString BackClino;
+    cwSurveyChunk* ParentChunk;
 };
 
 inline QString cwShot::GetDistance() const {

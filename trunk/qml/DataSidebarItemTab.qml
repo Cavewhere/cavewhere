@@ -16,7 +16,8 @@ Rectangle {
 
     Behavior on x {
         NumberAnimation {
-            duration: 100;
+            duration: 200;
+            easing.type: Easing.OutQuad
         }
     }
 }

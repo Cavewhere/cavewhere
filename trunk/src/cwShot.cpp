@@ -2,16 +2,17 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
+#include "cwStationReference.h"
 
 
-cwShot::cwShot(QObject *parent) :
-    QObject(parent)
+cwShot::cwShot()
 {
     Distance = "";
     Compass = "";
     BackCompass = "";
     Clino = "";
     BackClino = "";
+    ParentChunk = NULL;
 
 }
 
@@ -19,9 +20,7 @@ cwShot::cwShot(QString distance,
                QString compass,
                QString backCompass,
                QString clino,
-               QString backClino,
-               QObject* parent) :
-    QObject(parent)
+               QString backClino)
 {
 
     Distance = distance;
@@ -29,9 +28,10 @@ cwShot::cwShot(QString distance,
     BackCompass = backCompass;
     Clino = clino;
     BackClino = backClino;
+    ParentChunk = NULL;
 }
 
-cwShot::cwShot(const cwShot& shot) : QObject() {
+cwShot::cwShot(const cwShot& shot) {
     Distance = shot.Distance;
     Compass = shot.Compass;
     BackCompass = shot.BackCompass;
@@ -41,66 +41,57 @@ cwShot::cwShot(const cwShot& shot) : QObject() {
 
 
 void cwShot::SetDistance(QString distance) {
-    if(Distance != distance) {
-        Distance = distance;
-        emit DistanceChanged();
-    }
+    Distance = distance;
 }
 
 void cwShot::SetCompass(QString compass) {
-    if(Compass != compass) {
-        Compass = compass;
-        emit CompassChanged();
-    }
+    Compass = compass;
 }
 
 void cwShot::SetBackCompass(QString backCompass) {
-    if(BackCompass != backCompass) {
-        BackCompass = backCompass;
-        emit BackCompassChanged();
-    }
+    BackCompass = backCompass;
 }
 
 void cwShot::SetClino(QString clino) {
-    if(Clino != clino) {
-        Clino = clino;
-        emit ClinoChanged();
-    }
+    Clino = clino;
 }
 
 void cwShot::SetBackClino(QString backClino) {
-    if(BackClino != backClino) {
-        BackClino = backClino;
-        emit BackClinoChanged();
-    }
+    BackClino = backClino;
+}
+
+/**
+  Sets the parent chunk
+  */
+void cwShot::setParentChunk(cwSurveyChunk* parentChunk) {
+    ParentChunk = parentChunk;
 }
 
 /**
   \brief The parent chunk that this shot is connected to
   */
 cwSurveyChunk* cwShot::parentChunk() const {
-    cwSurveyChunk* parentChunk = qobject_cast<cwSurveyChunk*>(parent());
-    return parentChunk;
+    return ParentChunk;
 }
 
 /**
   \brief The to station of this shot
   */
-cwStationReference* cwShot::toStation() const {
+cwStationReference cwShot::toStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
         return chunk->ToFromStations(this).second;
     }
-    return NULL;
+    return cwStationReference();
 }
 
 /**
   \brief The from station of these shot
   */
-cwStationReference* cwShot::fromStation() const {
+cwStationReference cwShot::fromStation() const {
     cwSurveyChunk* chunk = parentChunk();
     if(chunk != NULL) {
         return chunk->ToFromStations(this).first;
     }
-    return NULL;
+    return cwStationReference();
 }

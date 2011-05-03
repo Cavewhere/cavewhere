@@ -5,7 +5,6 @@
 //Our includes
 #include "cwSurveyEditorMainWindow.h"
 #include "cwStation.h"
-#include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwCavingRegion.h"
 

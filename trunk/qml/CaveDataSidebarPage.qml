@@ -146,6 +146,16 @@ Rectangle {
 
                 onClicked: {
                     view.currentIndex = index;
+
+                    switch(indexType) {
+                    case 0: //Cave
+                        caveData = object;
+                        break;
+                    case 1: //Trip
+                        tripData = object;
+                        break;
+                    }
+
                 }
             }
 
@@ -182,9 +192,7 @@ Rectangle {
 
         onModelChanged: {
             cavesElement.index = regionVisualDataModel.rootIndex
-        }
+        }      
     }
-
-
 
 }

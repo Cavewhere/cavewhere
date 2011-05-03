@@ -17,43 +17,26 @@ class cwCave;
   The same station may be used multiple times and this class make it
   so the data is shared and always upto date
   */
-class cwStationReference : public QObject
+class cwStationReference
 {
-    Q_OBJECT
-    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
-    Q_PROPERTY(QString left  READ left WRITE setLeft NOTIFY leftChanged);
-    Q_PROPERTY(QString right READ right WRITE setRight NOTIFY rightChanged);
-    Q_PROPERTY(QString up READ up WRITE setUp NOTIFY upChanged);
-    Q_PROPERTY(QString down READ down WRITE setDown NOTIFY downChanged);
-    Q_PROPERTY(QVector3D position READ position WRITE setPosition NOTIFY positionChanged);
 
 public:
-    cwStationReference(QObject *parent = NULL);
-    cwStationReference(QString name = QString(), QObject* parent = NULL);
+    cwStationReference();
+    cwStationReference(QString name);
     cwStationReference(const cwStationReference& object);
 
     void setCave(cwCave* cave);
     cwCave* cave() const;
 
-    Q_INVOKABLE QString name() const;
-    Q_INVOKABLE QString left() const;
-    Q_INVOKABLE QString right() const;
-    Q_INVOKABLE QString up() const;
-    Q_INVOKABLE QString down() const;
-    Q_INVOKABLE QVector3D position() const;
+    QString name() const;
+    QString left() const;
+    QString right() const;
+    QString up() const;
+    QString down() const;
+    QVector3D position() const;
 
     bool isValid() const { return SharedStation->isValid(); }
 
-signals:
-    void nameChanged();
-    void leftChanged();
-    void rightChanged();
-    void upChanged();
-    void downChanged();
-    void positionChanged();
-    void reset();
-
-public slots:
     void setName(QString Name);
     void setLeft(QString left);
     void setRight(QString right);
@@ -61,12 +44,14 @@ public slots:
     void setDown(QString down);
     void setPosition(QVector3D position);
 
+    QSharedPointer<cwStation> station() const;
+
+    bool operator ==(const cwStationReference& object) const;
+    bool operator !=(const cwStationReference& object) const;
+
 private:
     cwCave* Cave;
     QSharedPointer<cwStation> SharedStation;
-
-    void DisconnectStation();
-    void ConnectStation();
 
 private slots:
     void caveDestroyed();
@@ -123,18 +108,16 @@ inline void cwStationReference::setPosition(QVector3D position) {
     SharedStation->setPosition(position);
 }
 
-/**
-  \brief Called when the cave has been destroyed
-  */
-inline void cwStationReference::caveDestroyed() {
-    Cave = NULL;
+inline QSharedPointer<cwStation> cwStationReference::station() const {
+    return SharedStation;
 }
 
-/**
-  \brief Disconnects all the signals from SharedStation
-  */
-inline void cwStationReference::DisconnectStation() {
-    disconnect(SharedStation.data(), 0, this, 0);
+inline bool cwStationReference::operator ==(const cwStationReference& object) const {
+    return SharedStation == object.SharedStation;
+}
+
+inline bool cwStationReference::operator !=(const cwStationReference& object) const {
+    return !operator ==(object);
 }
 
 #endif // CWSTATIONREFERANCE_H

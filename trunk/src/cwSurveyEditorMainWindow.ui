@@ -13,6 +13,10 @@
   <property name="windowTitle">
    <string>Cave-vapor-where - Version: Super-ultra-alpha-3000 - Don't redistribute without permission :D</string>
   </property>
+  <property name="windowIcon">
+   <iconset resource="../icons.qrc">
+    <normaloff>:/icons/logo128x128.png</normaloff>:/icons/logo128x128.png</iconset>
+  </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <property name="spacing">
@@ -32,7 +36,7 @@
      <x>0</x>
      <y>0</y>
      <width>978</width>
-     <height>23</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -90,7 +94,9 @@
    <header>QtDeclarative/QDeclarativeView</header>
   </customwidget>
  </customwidgets>
- <resources/>
+ <resources>
+  <include location="../icons.qrc"/>
+ </resources>
  <connections>
   <connection>
    <sender>actionQuit</sender>

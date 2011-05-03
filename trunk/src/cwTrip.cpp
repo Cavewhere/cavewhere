@@ -229,12 +229,12 @@ int cwTrip::numberOfStations() const {
   A station may come up more than once on a trip, but only returns
   unique stations for this trip.
   */
-QList< cwStationReference* > cwTrip::uniqueStations() const {
-    QMap<QString, cwStationReference*> lookup;
+QList< cwStationReference > cwTrip::uniqueStations() const {
+    QMap<QString, cwStationReference> lookup;
     foreach(cwSurveyChunk* chunk, Chunks) {
         for(int i = 0; i < chunk->StationCount(); i++) {
-            cwStationReference* station = chunk->Station(i);
-            lookup[station->name()] = station;
+            cwStationReference station = chunk->Station(i);
+            lookup[station.name()] = station;
         }
     }
 

@@ -54,7 +54,7 @@ public:
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave();
 
-    QList< cwStationReference* > uniqueStations() const;
+    QList< cwStationReference > uniqueStations() const;
 
     //Stats
     int numberOfStations() const;

@@ -17,7 +17,7 @@
 #include <QDir>
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
-    QObject(parent),
+    cwTask(parent),
     RootBlock(new cwSurvexBlockData(this)),
     CurrentBlock(NULL),
     GlobalData(new cwSurvexGlobalData(this)),
@@ -25,7 +25,21 @@ cwSurvexImporter::cwSurvexImporter(QObject* parent) :
 {
 }
 
+void cwSurvexImporter::runTask() {
+    importSurvex(RootFilename);
+    done();
+}
+
+
+
 void cwSurvexImporter::importSurvex(QString filename) {
+    clear();
+
+    //Initilizing the importer
+    runStats(filename);
+    setNumberOfSteps(TotalNumberOfLines);
+
+    //Clear again because RunStats messes things up
     clear();
 
     //Setup inital state data
@@ -35,7 +49,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
     //The block state
     CurrentState = FirstBegin;
 
-    //
+    //Sets the current block to the root block
     CurrentBlock = RootBlock;
 
     loadFile(filename);
@@ -44,8 +58,6 @@ void cwSurvexImporter::importSurvex(QString filename) {
     GlobalData->setBlocks(RootBlock->childBlocks());
 
     saveLastImport(filename);
-
-    emit finishedImporting();
 
 }
 
@@ -96,13 +108,52 @@ void cwSurvexImporter::clear() {
     RootBlock->clear(); //Chunks.clear();
     Errors.clear();
     IncludeStack.clear();
+    IncludeFiles.clear();
     BeginEndStateStack.clear();
+    TotalNumberOfLines = 0;
+    CurrentTotalNumberOfLines = 0;
 }
 
 /**
   \brief Loads the file
   */
 void cwSurvexImporter::loadFile(QString filename) {
+    //Open the survex file
+    QFile file;
+    bool fileIsOpen = openFile(file, filename);
+    if(!fileIsOpen) { return; }
+
+    //Add the file to the include stack
+    IncludeStack.append(Include(file.fileName()));
+
+    //Update the status
+    emit statusMessage("Importing " + file.fileName() );
+
+    while(!file.atEnd() && isRunning()) {
+        QString line = file.readLine();
+
+        //The last includ file
+        increamentLineNumber();
+
+        //Get the line's data
+        parseLine(line);
+
+
+    }
+    //Emit the current line number
+    emit progressed(CurrentTotalNumberOfLines);
+
+    IncludeStack.removeLast();
+}
+
+/**
+  \brief This does the checking to open a survex file
+
+  It will also fix up the filename if need to try to load it
+
+  Adds an error to the error stack if it can open a file
+  */
+bool cwSurvexImporter::openFile(QFile& file, QString filename) {
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
         //This maybe a relative path to the rootFile
@@ -128,33 +179,21 @@ void cwSurvexImporter::loadFile(QString filename) {
         filename = fixedUpFile;
     }
 
-    QFile file(filename);
+    file.setFileName(filename);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Errors.append(QString("Error: Couldn't open ") + filename);
-        return;
+        return false;
     }
 
     //Make sure we don't reopen the same file twice
     if(qFind(IncludeFiles, filename) != IncludeFiles.end()) {
         //File has already been included... Do nothing
-        return;
+        return false;
     }
+
     QStringList::iterator iter = qLowerBound(IncludeFiles.begin(), IncludeFiles.end(), filename);
     IncludeFiles.insert(iter, filename);
-
-    //Add the file to the include stack
-    IncludeStack.append(Include(filename));
-
-    while(!file.atEnd()) {
-        QString line = file.readLine();
-
-        //The last includ file
-        increamentLineNumber();
-
-        parseLine(line);
-    }
-
-    IncludeStack.removeLast();
+    return true;
 }
 
 /**
@@ -421,8 +460,8 @@ void cwSurvexImporter::parseNormalData(QString line) {
     }
 
     //Create the from and to stations
-    cwStationReference* fromStation = createOrLookupStation(fromStationName);
-    cwStationReference* toStation = createOrLookupStation(toStationName);
+    cwStationReference fromStation = createOrLookupStation(fromStationName);
+    cwStationReference toStation = createOrLookupStation(toStationName);
 
     cwShot* shot = new cwShot();
     shot->SetDistance(extractData(data, Distance));
@@ -455,8 +494,8 @@ QString cwSurvexImporter::extractData(const QStringList data, DataFormatType typ
   \param stationName - The name of the station
   \returns A new station of a station that's already exists
   */
-cwStationReference* cwSurvexImporter::createOrLookupStation(QString stationName) {
-    if(stationName.isEmpty()) { return NULL; }
+cwStationReference cwSurvexImporter::createOrLookupStation(QString stationName) {
+    if(stationName.isEmpty()) { return cwStationReference(); }
 
     //Create the survex prefix
     QString fullName = fullStationName(stationName);
@@ -467,7 +506,7 @@ cwStationReference* cwSurvexImporter::createOrLookupStation(QString stationName)
     }
 
     //Create the stations
-    cwStationReference* station = new cwStationReference(stationName);
+    cwStationReference station(stationName);
     StationLookup[fullName] = station;
     return station;
 }
@@ -479,8 +518,8 @@ cwStationReference* cwSurvexImporter::createOrLookupStation(QString stationName)
   is the last station in the chunk or will create a new survey chunk.  If a
   new survey chunk is created, it'll be added to the end of the list of chunks.
   */
-void cwSurvexImporter::addShotToCurrentChunk(cwStationReference* fromStation,
-                                             cwStationReference* toStation,
+void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
+                                             cwStationReference toStation,
                                              cwShot* shot) {
     cwSurveyChunk* chunk;
     if(CurrentBlock->chunkCount() == 0) {
@@ -496,7 +535,7 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference* fromStation,
     } else {
         if(!chunk->isValid()) {
             //error
-            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation << toStation << shot;
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation .name() << shot;
             return;
         }
 
@@ -507,7 +546,7 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference* fromStation,
             chunk->AppendShot(fromStation, toStation, shot);
         } else {
             //error
-            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation << toStation << shot;
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name() << shot;
             return;
         }
     }
@@ -532,11 +571,11 @@ void cwSurvexImporter::parsePassageData(QString line) {
     }
 
     //Create or find a station from the name
-    cwStationReference* station = createOrLookupStation(stationName);
-    station->setLeft(extractData(data, Left));
-    station->setRight(extractData(data, Right));
-    station->setUp(extractData(data, Up));
-    station->setDown(extractData(data, Down));
+    cwStationReference station = createOrLookupStation(stationName);
+    station.setLeft(extractData(data, Left));
+    station.setRight(extractData(data, Right));
+    station.setUp(extractData(data, Up));
+    station.setDown(extractData(data, Down));
 }
 
 /**
@@ -617,6 +656,7 @@ int cwSurvexImporter::currentLineNumber() const {
 void cwSurvexImporter::increamentLineNumber() {
     Q_ASSERT(!IncludeStack.isEmpty());
     IncludeStack.last().CurrentLine++;
+    CurrentTotalNumberOfLines++; //All the lines combine
 }
 
 /**
@@ -737,4 +777,42 @@ void cwSurvexImporter::parseCalibrate(QString line) {
     } else {
         addError("Couldn't read calibration");
     }
+}
+
+/**
+  \brief Runs the stats on the survex files
+
+  This will go through all the survex file and
+  */
+void cwSurvexImporter::runStats(QString filename) {
+    emit statusMessage("Gathering sauce for " + filename);
+
+    QFile file;
+    bool canOpenFile = openFile(file, filename);
+
+    if(!canOpenFile) { return; } //Can't open the file
+
+    //Add the file to the include stack
+    IncludeStack.append(Include(file.fileName()));
+
+    QRegExp exp;
+    while(!file.atEnd() && isRunning()) {
+        QString line = file.readLine();
+
+        //Find the include files
+        exp = QRegExp("^\\s*\\*(\\w+)\\s*(.*)");
+        if(line.contains(exp)) {
+            QString command = exp.cap(1);
+            QString args = exp.cap(2).trimmed();
+
+            if(compare(command, "include")) {
+                runStats(args);
+            }
+        }
+
+        //Add all the lines up
+        TotalNumberOfLines++;
+    }
+
+    IncludeStack.removeLast();
 }

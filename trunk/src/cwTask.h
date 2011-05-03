@@ -29,6 +29,7 @@ public:
     Status status() const;
     bool isRunning() const;
 
+    //Do not move this to a slot!!! You will break things
     void stop();
 
 public slots:
@@ -40,6 +41,7 @@ signals:
     void finished();
     void stopped();
     void progressed(int step);
+    void statusMessage(QString message);
     void numberOfStepsChanged(int numberOfSteps);
     void shouldRerun();
 

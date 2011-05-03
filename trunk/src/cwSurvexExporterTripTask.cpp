@@ -97,14 +97,14 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 
     stream << dataLineComment << endl;
 
-    QList<cwStationReference*> stations = trip->uniqueStations();
-    foreach(cwStationReference* station, stations) {
+    QList<cwStationReference> stations = trip->uniqueStations();
+    foreach(cwStationReference station, stations) {
         QString dataLine = dataLineTemplate
-                .arg(station->name(), TextPadding)
-                .arg(station->left(), TextPadding)
-                .arg(station->right(), TextPadding)
-                .arg(station->up(), TextPadding)
-                .arg(station->down(), TextPadding);
+                .arg(station.name(), TextPadding)
+                .arg(station.left(), TextPadding)
+                .arg(station.right(), TextPadding)
+                .arg(station.up(), TextPadding)
+                .arg(station.down(), TextPadding);
 
         stream << dataLine << endl;
     }
@@ -119,11 +119,11 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         //Make sure we can still be run
         if(!parentIsRunning() && !isRunning()) { return; }
 
-        cwStationReference* fromStation = chunk->Station(i);
-        cwStationReference* toStation = chunk->Station(i + 1);
+        cwStationReference fromStation = chunk->Station(i);
+        cwStationReference toStation = chunk->Station(i + 1);
         cwShot* shot = chunk->Shot(i);
 
-        if(!fromStation->isValid() || !toStation->isValid()) { continue; }
+        if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
         QString distance = shot->GetDistance();
         QString compass = shot->GetCompass();
@@ -139,16 +139,16 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
                    backClino.compare("up", Qt::CaseInsensitive) != 0 &&
                    backClino.compare("down", Qt::CaseInsensitive) != 0) {
                Errors.append(QString("Error: No compass reading for %1 to %2")
-                             .arg(fromStation->name())
-                             .arg(toStation->name()));
+                             .arg(fromStation.name())
+                             .arg(toStation.name()));
                continue;
            }
         }
 
         if(clino.isEmpty() && backClino.isEmpty()) {
             Errors.append(QString("Error: No Clino reading for %1 to %2")
-                          .arg(fromStation->name())
-                          .arg(toStation->name()));
+                          .arg(fromStation.name())
+                          .arg(toStation.name()));
             continue;
         }
 
@@ -159,8 +159,8 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
 
         QString line = QString("%1 %2 %3 %4 %5 %6 %7")
-                .arg(fromStation->name(), TextPadding)
-                .arg(toStation->name(), TextPadding)
+                .arg(fromStation.name(), TextPadding)
+                .arg(toStation.name(), TextPadding)
                 .arg(distance, TextPadding)
                 .arg(compass, TextPadding)
                 .arg(backCompass, TextPadding)

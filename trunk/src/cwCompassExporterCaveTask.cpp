@@ -131,16 +131,16 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
     for(int i = 0; i < chunk->ShotCount(); i++) {
         cwShot* shot = chunk->Shot(i);
-        cwStationReference* from = shot->fromStation();
-        cwStationReference* to = shot->toStation();
+        cwStationReference from = shot->fromStation();
+        cwStationReference to = shot->toStation();
 
         float shotLength = cwUnits::convert(shot->GetDistance().toDouble(),
                                             trip->distanceUnit(),
                                             cwUnits::DecimalFeet);
 
-        writeData(stream, "From", 12, from->name());
+        writeData(stream, "From", 12, from.name());
         stream << " ";
-        writeData(stream, "To", 12, to->name());
+        writeData(stream, "To", 12, to.name());
         stream << " ";
         stream << formatFloat(shotLength) << " ";
         stream << formatFloat(convertField(trip, shot, Compass)) << " ";
@@ -154,10 +154,10 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << CompassNewLine;
     }
 
-    cwStationReference* lastStation = chunk->Station(chunk->StationCount() - 1);
-    writeData(stream, "From", 12, lastStation->name());
+    cwStationReference lastStation = chunk->Station(chunk->StationCount() - 1);
+    writeData(stream, "From", 12, lastStation.name());
     stream << " ";
-    writeData(stream, "To", 12, lastStation->name() + "lrud");
+    writeData(stream, "To", 12, lastStation.name() + "lrud");
     stream << " ";
     stream << formatFloat(0.0) << " ";
     stream << formatFloat(0.0) << " ";
@@ -176,23 +176,23 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
   This will convert the value into decimal feet
   */
-float cwCompassExportCaveTask::convertField(cwStationReference* station,
+float cwCompassExportCaveTask::convertField(cwStationReference station,
                                        StationLRUDField field,
                                        cwUnits::LengthUnit unit) {
 
     QString value;
     switch(field) {
     case Left:
-        value = station->left();
+        value = station.left();
         break;
     case Right:
-        value = station->right();
+        value = station.right();
         break;
     case Up:
-        value = station->up();
+        value = station.up();
         break;
     case Down:
-        value = station->down();
+        value = station.down();
         break;
     }
 

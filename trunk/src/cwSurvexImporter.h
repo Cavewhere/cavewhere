@@ -7,20 +7,22 @@
 #include <QList>
 #include <QStringList>
 #include <QMap>
+#include <cwTask.h>
+#include <QFile>
 
 //Our includes
+#include <cwStationReference.h>
 class cwSurvexBlockData;
 class cwSurvexGlobalData;
 class cwSurveyChunk;
-class cwStationReference;
 class cwShot;
 
-class cwSurvexImporter : public QObject
+class cwSurvexImporter : public cwTask
 {
 Q_OBJECT
 
 public:
-    cwSurvexImporter(QObject* parent);
+    cwSurvexImporter(QObject* parent = NULL);
 
     bool hasErrors();
     QStringList errors();
@@ -30,16 +32,16 @@ public:
     cwSurvexGlobalData* data();
 
 public slots:
-    void importSurvex(QString filename);
+    void setSurvexFile(QString filename);
 
-signals:
-    void finishedImporting();
+protected:
+    virtual void runTask();
 
 private:
 
     enum State {
         FirstBegin,
-        InsideBegin,
+        InsideBegin
     };
 
     enum DataFormatType {
@@ -89,6 +91,9 @@ private:
         static QMap<DataFormatType, int> defaultDataFormat();
     };
 
+    //Root filename
+    QString RootFilename;
+
     //File state to handle includes
     QList<Include> IncludeStack;
 
@@ -109,11 +114,18 @@ private:
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
-    QMap<QString, cwStationReference*> StationLookup;
+    QMap<QString, cwStationReference> StationLookup;
+
+    //For progress
+    int TotalNumberOfLines;
+    int CurrentTotalNumberOfLines;
+
+    void importSurvex(QString filename);
 
     void clear();
 
     void loadFile(QString filename);
+    bool openFile(QFile& file, QString filename);
     void parseLine(QString line);
     void saveLastImport(QString filename);
 
@@ -128,9 +140,9 @@ private:
 
     void parseNormalData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
-    cwStationReference* createOrLookupStation(QString stationName);
-    void addShotToCurrentChunk(cwStationReference* fromStation,
-                               cwStationReference* toStation,
+    cwStationReference createOrLookupStation(QString stationName);
+    void addShotToCurrentChunk(cwStationReference fromStation,
+                               cwStationReference toStation,
                                cwShot* shot);
 
     void parsePassageData(QString line);
@@ -156,6 +168,8 @@ private:
     void parseDate(QString args);
     void parseTeamMember(QString line);
     void parseCalibrate(QString line);
+
+    void runStats(QString filename);
 };
 
 /**
@@ -172,6 +186,11 @@ inline bool cwSurvexImporter::compare(QString s1, QString s2) const {
     return s1.compare(s2, Qt::CaseInsensitive) == 0;
 }
 
-
+/**
+  \brief Sets the root file for the survex
+  */
+inline void cwSurvexImporter::setSurvexFile(QString filename) {
+    RootFilename = filename;
+}
 
 #endif // CWSURVEYIMPORTER_H

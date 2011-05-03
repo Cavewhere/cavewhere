@@ -45,7 +45,7 @@ private:
     void writeData(QTextStream& stream, QString fieldName, int fieldLength, QString data);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 
-    float convertField(cwStationReference* station, StationLRUDField field, cwUnits::LengthUnit unit);
+    float convertField(cwStationReference station, StationLRUDField field, cwUnits::LengthUnit unit);
     float convertField(cwTrip* trip, cwShot* shot, ShotField field);
     QString formatFloat(float value);
 

@@ -8,6 +8,7 @@ class cwShot;
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QHash>
 
 class cwSurvexImporterModel : public QAbstractItemModel
 {
@@ -40,11 +41,20 @@ private:
         NumberOfColumns
     };
 
+    enum Type {
+        Block,
+        Shot,
+        Invalid
+    };
+
     cwSurvexGlobalData* GlobalData;
+    QHash<void*, Type> PointerTypeLookup;
 
     QVariant NameColumnData(const QModelIndex & index, int role) const;
     QVariant NameColumnDisplayData(const QModelIndex& index) const;
     QVariant NameColumnIconData(const QModelIndex& index) const;
+
+    QModelIndex createAndRegisterIndex(int row, void* object, Type type) const;
 
     void connectBlock(cwSurvexBlockData* block);
 

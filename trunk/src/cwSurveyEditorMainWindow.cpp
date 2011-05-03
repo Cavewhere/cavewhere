@@ -36,6 +36,35 @@
 #include <QMessageBox>
 #include <QThread>
 
+#if defined(QMLJSDEBUGGER)
+#include <qt_private/qdeclarativedebughelper_p.h>
+#endif
+
+#if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
+#include <jsdebuggeragent.h>
+#endif
+#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
+#include <qdeclarativeviewobserver.h>
+#endif
+
+#if defined(QMLJSDEBUGGER)
+
+// Enable debugging before any QDeclarativeEngine is created
+struct QmlJsDebuggingEnabler
+{
+    QmlJsDebuggingEnabler()
+    {
+        QDeclarativeDebugHelper::enableDebugging();
+    }
+};
+
+// Execute code in constructor before first QDeclarativeEngine is instantiated
+static QmlJsDebuggingEnabler enableDebuggingHelper;
+
+#endif // QMLJSDEBUGGER
+
+
+
 
 
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
@@ -43,15 +72,28 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     SurvexExporter(NULL),
     NoteModel(new cwSurveyNoteModel(this))
 {
+
+
     setupUi(this);
+
+#if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
+    new QmlJSDebugger::JSDebuggerAgent(DeclarativeView->engine());
+#endif
+#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
+    new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
+#endif
+
+
+   // setWindowIcon(QIcon(":icon/logo128x128.png"));
+
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
 
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
-    qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
-    qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
+//    qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
+//    qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
@@ -255,8 +297,10 @@ void cwSurveyEditorMainWindow::reloadQML() {
 
     //context->setContextProperty("surveyNoteModel", NoteModel);
     //context->setContextProperty("surveyData", Trip);
-//    context->setContextProperty("regionTreeView", RegionTreeView);
+    //    context->setContextProperty("regionTreeView", RegionTreeView);
     context->setContextProperty("regionModel", RegionTreeModel);
+    context->setContextProperty("caveData", NULL);
+    context->setContextProperty("tripData", NULL);
 
     //DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));

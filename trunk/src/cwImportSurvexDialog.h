@@ -11,6 +11,7 @@ class cwCavingRegion;
 class QItemSelectionModel;
 class QAction;
 #include <QItemSelection>
+#include <QDebug>
 
 class cwImportSurvexDialog : public QDialog, private Ui::cwImportSurvexDialog
 {
@@ -18,6 +19,7 @@ class cwImportSurvexDialog : public QDialog, private Ui::cwImportSurvexDialog
 
 public:
     explicit cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent = 0);
+    virtual ~cwImportSurvexDialog();
 
     void open();
 
@@ -48,6 +50,9 @@ private:
     cwSurvexImporter* Importer;
     QItemSelectionModel* SurvexSelectionModel;
 
+    //For threading ithe importer
+    QThread* ImportThread;
+
     void setupTypeComboBox();
 
     void updateImportErrors();
@@ -62,6 +67,8 @@ private slots:
     int typeItemToImportType(TypeItem typeItem) const;
 
     void import();
+    void importerFinishedRunning();
+    void importerCanceled();
 
 };
 

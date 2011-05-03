@@ -264,8 +264,8 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
         PositionStationRow(row, i);
 
         //Hock up the signals and slots with the models data
-        cwStationReference* station = Model->Station(i);
-        ConnectStation(station, row);
+//        cwStationReference station = Model->Station(i);
+        //ConnectStation(station, row);
 
         //Queue the index for navigation update
         StationNavigationQueue.append(i);
@@ -605,16 +605,16 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
   \brief Hooks up the model to the qml, for the station row
   */
 void cwSurveyChunkView::ConnectStation(cwStationReference* station, StationRow row) {
-    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
+//    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
 
-    QVector<QDeclarativeItem*> items = row.items();
-    foreach(QDeclarativeItem* item, items) {
-        item->setProperty("dataObject", stationObject);
-        item->setProperty("rowIndex", row.rowIndex());
-        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
-        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
-        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-    }
+//    QVector<QDeclarativeItem*> items = row.items();
+//    foreach(QDeclarativeItem* item, items) {
+//        item->setProperty("dataObject", stationObject);
+//        item->setProperty("rowIndex", row.rowIndex());
+//        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
+//        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
+//        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
+//    }
 }
 
 /**
@@ -635,16 +635,16 @@ void cwSurveyChunkView::PositionShotRow(ShotRow row, int index) {
   \brief Hooks up the model to the qml, for the shot row
   */
 void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
-    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
+//    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
 
-    QVector<QDeclarativeItem*> items = row.items();
-    foreach(QDeclarativeItem* item, items) {
-        item->setProperty("dataObject", shotObject);
-        item->setProperty("rowIndex", row.rowIndex());
-        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
-        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
-        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-    }
+//    QVector<QDeclarativeItem*> items = row.items();
+//    foreach(QDeclarativeItem* item, items) {
+//        item->setProperty("dataObject", shotObject);
+//        item->setProperty("rowIndex", row.rowIndex());
+//        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
+//        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
+//        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
+//    }
 }
 
 //void cwSurveyChunkView::StationFocusChanged(bool focus) {
