@@ -38,8 +38,8 @@ Rectangle {
             addChildElementText: "Add Cave"
 
             onClicked: {
-               //This returns make the caveElement disappear
-               caveElement.visible = false;
+                //This returns make the caveElement disappear
+                caveElement.visible = false;
             }
         }
 
@@ -79,34 +79,45 @@ Rectangle {
                 selected: caveDelegate.selected
             }
 
-            Image {
-                id: icon
-                anchors.left: parent.left
+            Row {
+                id: rowId
+                anchors.verticalCenter: tabBackground.verticalCenter
+                anchors.left: parent.left;
+                anchors.right: dateText.left
                 anchors.leftMargin: 7
-                anchors.verticalCenter: tabBackground.verticalCenter
-                source: {
-                    switch(indexType) {
-                    case 0: //Cave
-                        return "icons/cave.png"
-                    case 1: //Trip
-                        return "icons/trip.png"
+                //anchors.topMargin: 5
+                spacing: 2
+                Image {
+                    id: icon
+                    //anchors.left: parent.left
+                    //anchors.leftMargin: 7
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: {
+                        switch(indexType) {
+                        case 0: //Cave
+                            return "icons/cave.png"
+                        case 1: //Trip
+                            return "icons/trip.png"
+                        }
+                        return ""
                     }
-                    return ""
                 }
+
+                Text {
+                    id: nameText
+                    anchors.verticalCenter: parent.verticalCenter
+                    //                    anchors.left: icon.right
+                    //anchors.leftMargin: 2
+                    text: name
+
+                    font.bold: selected
+                }
+
+
             }
 
             Text {
-                id: nameText
-                anchors.verticalCenter: tabBackground.verticalCenter
-                anchors.left: icon.right
-                anchors.leftMargin: 2
-                text: name
-
-                font.bold: selected
-            }
-
-            Text {
-                id: dataText
+                id: dateText
                 anchors.verticalCenter: tabBackground.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: 5
@@ -137,6 +148,7 @@ Rectangle {
                         //Change to trips
                         caveElement.index = regionVisualDataModel.modelIndex(index)
                         caveElement.name = regionModel.cave(caveElement.index).name
+                        currentCave = regionModel.cave(caveElement.index)
                         regionVisualDataModel.rootIndex = caveElement.index
                         view.currentIndex = caveElement.viewIndex
                         caveElement.visible = true;
@@ -149,10 +161,10 @@ Rectangle {
 
                     switch(indexType) {
                     case 0: //Cave
-                        caveData = object;
+                        currentCave = object;
                         break;
                     case 1: //Trip
-                        tripData = object;
+                        currentTrip = object;
                         break;
                     }
 
@@ -192,7 +204,7 @@ Rectangle {
 
         onModelChanged: {
             cavesElement.index = regionVisualDataModel.rootIndex
-        }      
+        }
     }
 
 }

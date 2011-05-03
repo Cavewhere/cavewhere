@@ -136,7 +136,8 @@ qml/*.js \
     qml/CaveDataSidebarPage.qml \
     qml/StandardBorder.qml \
     qml/DataSidebarItemTab.qml \
-    qml/TreeRootElement.qml
+    qml/TreeRootElement.qml \
+    qml/UsedStationsWidget.qml
 
 RESOURCES += \
     icons.qrc

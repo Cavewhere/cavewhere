@@ -56,7 +56,7 @@
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_3">
            <item>
-            <widget class="QListWidget" name="SurvexErrorListWidget"/>
+            <widget class="QListView" name="SurvexErrorListView"/>
            </item>
           </layout>
          </widget>

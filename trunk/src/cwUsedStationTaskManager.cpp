@@ -23,6 +23,8 @@ cwUsedStationTaskManager::~cwUsedStationTaskManager() {
 
     QMetaObject::invokeMethod(Thread, "quit"); //Quit the event loop
     Thread->wait(); //wait to finish
+
+    delete Task;
 }
 
 /**

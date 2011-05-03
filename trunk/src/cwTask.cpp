@@ -55,9 +55,9 @@ void cwTask::setParentTask(cwTask* parentTask) {
 
   This will move the object to that thread immedately
   */
-void cwTask::setThread(QThread* threadToRunOn) {
+void cwTask::setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType) {
     threadToRunOn->start();
-    QMetaObject::invokeMethod(this, "changeThreads", Qt::AutoConnection,
+    QMetaObject::invokeMethod(this, "changeThreads", connectionType,
                               Q_ARG(QThread*, threadToRunOn));
 }
 

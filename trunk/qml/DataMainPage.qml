@@ -5,6 +5,8 @@ Rectangle {
     id: pageId
     //    width: 500
     //    height: 500
+    property variant currentCave: NULL;
+    property variant currentTrip: NULL;
 
     DataSideBar {
         id: dataSideBar
@@ -73,6 +75,7 @@ Rectangle {
         CavePage {
             property string label: "Overview"
             property string icon:  "icons/dataOverview.png"
+
         }
 
         SurveyEditor {

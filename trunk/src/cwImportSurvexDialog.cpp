@@ -17,6 +17,7 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QThread>
+#include <QStringListModel>
 
 
 const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
@@ -55,6 +56,11 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
 }
 
 cwImportSurvexDialog::~cwImportSurvexDialog() {
+    Importer->stop();
+
+    ImportThread->quit();
+    ImportThread->wait();
+
     delete Importer;
 }
 
@@ -295,6 +301,10 @@ void cwImportSurvexDialog::import() {
   All the data has been parsed out of the importer
   */
 void cwImportSurvexDialog::importerFinishedRunning() {
+    //Move the importer back to this thread
+    Importer->setThread(thread(), Qt::BlockingQueuedConnection);
+
+    //Get the importer's data
     Model->setSurvexData(Importer->data());
 
     //Cutoff to long text
@@ -302,12 +312,16 @@ void cwImportSurvexDialog::importerFinishedRunning() {
     FileLabel->setText(cutOffText);
 
     //Load the error list view
-    SurvexErrorListWidget->addItems(Importer->errors());
+    QStringListModel* parsingErrorsModel = new QStringListModel(this);
+    parsingErrorsModel->setStringList(Importer->errors());
+    SurvexErrorListView->setModel(parsingErrorsModel);
 
     //Update the error / warning label at the bottom
     updateImportWarningLabel();
 
+    //shut down the thread
     ImportThread->quit();
+
     show();
 }
 

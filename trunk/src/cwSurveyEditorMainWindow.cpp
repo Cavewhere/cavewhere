@@ -299,8 +299,8 @@ void cwSurveyEditorMainWindow::reloadQML() {
     //context->setContextProperty("surveyData", Trip);
     //    context->setContextProperty("regionTreeView", RegionTreeView);
     context->setContextProperty("regionModel", RegionTreeModel);
-    context->setContextProperty("caveData", NULL);
-    context->setContextProperty("tripData", NULL);
+//    context->setContextProperty("caveData", NULL);
+//    context->setContextProperty("tripData", NULL);
 
     //DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
@@ -319,24 +319,24 @@ void cwSurveyEditorMainWindow::reloadQML() {
   */
 void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelection /*deselected*/) {
 
-    QList<QModelIndex> selectedIndexes = selected.indexes();
-    if(!selectedIndexes.isEmpty()) {
-        QModelIndex firstSelected = selectedIndexes.first();
-        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
-        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
-        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
-        QDeclarativeContext* context = DeclarativeView->rootContext();
+//    QList<QModelIndex> selectedIndexes = selected.indexes();
+//    if(!selectedIndexes.isEmpty()) {
+//        QModelIndex firstSelected = selectedIndexes.first();
+//        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
+//        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
+//        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
+//        QDeclarativeContext* context = DeclarativeView->rootContext();
 
-        if(trip != NULL) {
-            qDebug() << "Setting the trip";
-            context->setContextProperty("surveyData", trip);
-            //context->setContextProperty("currentPage", "SurveyEditor");
-        } else if(cave != NULL) {
-            qDebug() << "Setting the cave data";
-            context->setContextProperty("caveData", cave);
-            //context->setContextProperty("currentPage", "CavePage");
-        }
-    }
+//        if(trip != NULL) {
+//            qDebug() << "Setting the trip";
+//            context->setContextProperty("surveyData", trip);
+//            //context->setContextProperty("currentPage", "SurveyEditor");
+//        } else if(cave != NULL) {
+//            qDebug() << "Setting the cave data";
+//            context->setContextProperty("caveData", cave);
+//            //context->setContextProperty("currentPage", "CavePage");
+//        }
+//    }
 }
 
 /**

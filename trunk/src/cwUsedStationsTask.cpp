@@ -61,7 +61,7 @@ void cwUsedStationsTask::runTask() {
   This is a threaded helper function to createSplitStationNames
   */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(QString stationName) {
-    QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\w+)");
+    QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\d*\\w*)");
     if(splitStationsReg.exactMatch(stationName)) {
         QString surveyName = splitStationsReg.cap(1).toUpper();
         QString stationName = splitStationsReg.cap(2);
@@ -137,7 +137,14 @@ QString cwUsedStationsTask::SurveyGroup::groupString() const {
 
     if(Stations.size() == 1) {
         //Only one station
-        groupString += QString("Station <b>%1</b>").arg(Stations.first());
+        QString station = Stations.first();
+        if(station.isEmpty() && Name.isEmpty()) { return QString(); }
+        if(station.isEmpty()) {
+            groupString = QString("Station <b>%1</b>").arg(Name); //The group string is really the station
+        } else {
+            groupString += QString("Station <b>%1</b>").arg(station);
+        }
+
     } else {
         //More than one station
         groupString += QString("Stations <b>%1</b> to <b>%2</b>").arg(Stations.first(), Stations.last());
@@ -231,7 +238,10 @@ bool cwUsedStationsTask::SurveyGroup::lessThanForNumericStation(QString left, QS
 QList<QString> cwUsedStationsTask::groupStrings(QList<SurveyGroup> groups) const {
     QList<QString> groupStrings;
     foreach(SurveyGroup group, groups) {
-        groupStrings.append(group.groupString());
+        QString groupString = group.groupString();
+        if(!groupString.isEmpty()) {
+            groupStrings.append(groupString);
+        }
     }
     return groupStrings;
 }

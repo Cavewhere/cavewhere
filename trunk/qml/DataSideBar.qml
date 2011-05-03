@@ -4,8 +4,6 @@ Rectangle {
     id: dataSideBar
    // anchors.fill: parent
 
-
-
     CompactTabWidget {
         id: tabWidget
         anchors.fill: parent;

@@ -45,16 +45,9 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
 }
 
 cwSurveyChunk::~cwSurveyChunk() {
-    qDebug() << "Deleting chunk: " << this;
-
     foreach(cwShot* shot, Shots) {
         delete shot;
     }
-
-//    foreach(cwStationReference* station, Stations) {
-//        qDebug() << "Deleting station:" << station;
-//        delete station;
-//    }
 }
 
 /**

@@ -23,7 +23,7 @@ public:
     explicit cwTask(QObject *parent = 0);
 
     void setParentTask(cwTask* parentTask);
-    void setThread(QThread* threadToRunOn);
+    void setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType = Qt::AutoConnection);
 
     int numberOfSteps() const;
     Status status() const;
