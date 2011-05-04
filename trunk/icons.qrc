@@ -10,5 +10,7 @@
         <file>icons/plus.png</file>
         <file>icons/minus.png</file>
         <file>icons/logo128x128.png</file>
+        <file>icons/stopSignError.png</file>
+        <file>icons/warning.png</file>
     </qresource>
 </RCC>

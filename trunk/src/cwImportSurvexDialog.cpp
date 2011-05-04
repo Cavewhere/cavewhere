@@ -7,6 +7,7 @@
 #include "cwSurvexGlobalData.h"
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
+#include "cwStringListErrorModel.h"
 
 //Qt includes
 #include <QFileSystemModel>
@@ -17,7 +18,6 @@
 #include <QMessageBox>
 #include <QDebug>
 #include <QThread>
-#include <QStringListModel>
 
 
 const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
@@ -51,6 +51,8 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
     TypeComboBox->setEnabled(false);
 
     splitter->setStretchFactor(1, 4);
+
+    //SurvexErrorListView->setUniformItemSizes(true);
 
     setWindowTitle("Survex Importer");
 }
@@ -312,7 +314,7 @@ void cwImportSurvexDialog::importerFinishedRunning() {
     FileLabel->setText(cutOffText);
 
     //Load the error list view
-    QStringListModel* parsingErrorsModel = new QStringListModel(this);
+    cwStringListErrorModel* parsingErrorsModel = new cwStringListErrorModel(this);
     parsingErrorsModel->setStringList(Importer->errors());
     SurvexErrorListView->setModel(parsingErrorsModel);
 

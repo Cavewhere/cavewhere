@@ -69,7 +69,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTeamMember.cpp \
     src/cwTeam.cpp \
     src/cwTripCalibration.cpp \
-    src/cwTaskProgressDialog.cpp
+    src/cwTaskProgressDialog.cpp \
+    src/cwStringListErrorModel.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -121,7 +122,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTeamMember.h \
     src/cwTeam.h \
     src/cwTripCalibration.h \
-    src/cwTaskProgressDialog.h
+    src/cwTaskProgressDialog.h \
+    src/cwStringListErrorModel.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
@@ -137,7 +139,10 @@ qml/*.js \
     qml/StandardBorder.qml \
     qml/DataSidebarItemTab.qml \
     qml/TreeRootElement.qml \
-    qml/UsedStationsWidget.qml
+    qml/UsedStationsWidget.qml \
+    qml/AllCavesTabWidget.qml \
+    qml/CaveTabWidget.qml \
+    qml/TripTabWidget.qml
 
 RESOURCES += \
     icons.qrc

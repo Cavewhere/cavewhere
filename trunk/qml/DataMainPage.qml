@@ -3,10 +3,22 @@ import Cavewhere 1.0
 
 Rectangle {
     id: pageId
-    //    width: 500
-    //    height: 500
-    property variant currentCave: NULL;
-    property variant currentTrip: NULL;
+
+    property variant currentCave
+    property variant currentTrip
+
+    onCurrentCaveChanged: {
+        if(currentCave != null) {
+            currentTrip = null;
+        }
+    }
+
+    onCurrentTripChanged: {
+        if(currentTrip != null) {
+            currentCave = null;
+        }
+    }
+
 
     DataSideBar {
         id: dataSideBar
@@ -14,105 +26,93 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: parent.left
-        //anchors.topMargin: 40
+        anchors.topMargin: 40
     }
 
-    //    ProxyWidget {
-    //        id: regionTree
+    Image {
+        fillMode: Image.TileVertically
+        source: "icons/verticalLine.png"
+        height: dataSideBar.anchors.topMargin
+        anchors.left: dataSideBar.right
+        anchors.leftMargin: -4
+        anchors.top: parent.top
+       // width: 5
+        z:2
+    }
 
-    //        width: 300;
-
-    //        anchors.top: parent.top
-    //        anchors.bottom: parent.bottom
-    //        anchors.left: parent.left
-    //        anchors.bottomMargin: 1
-
-    //        widget: regionTreeView
-
-    //        Component.onCompleted: {
-    //            console.debug("Loading Widget: " + widget);
-    //        }
-
-    //        Rectangle {
-    //            border.width: 1
-    //            border.color: "black"
-
-    //            anchors.fill: parent
-
-    //            color: Qt.rgba(0, 0, 0, 0);
-    //        }
-    //    }
-
-    Rectangle {
+    Item {
         id: splitter
-//        fillMode: Image.TileVertically
-//        source: "icons/verticalLine.png"
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: dataSideBar.right
-//        z:1
+        anchors.leftMargin: -width / 2
+
+        width:  10
+        z:1
+
+        MouseArea {
+            id: splitterMouseArea
+            anchors.fill: parent
+
+            property int lastMousePosition;
+
+            onPressed: {
+                lastMousePosition = mapToItem(null, mouse.x, 0).x;
+            }
+
+            states: [
+                State {
+                    when: splitterMouseArea.pressed
+                    PropertyChanges {
+                        target: splitterMouseArea
+
+                        onMousePositionChanged: {
+                            //Change the databar width
+                            var mappedX = mapToItem(null, mouse.x, 0).x;
+                            dataSideBar.width +=  mappedX - lastMousePosition
+                            lastMousePosition = mappedX
+                        }
+                    }
+                }
+            ]
+        }
     }
 
-//    Rectangle {
-//        id: blocker
-//        anchors.left:  splitter.left
-//        anchors.right: splitter.right
-//        height:
-//    }
-
-
-
-    DataTabWidget {
-      //  width: dataSideBar.width - parent.width
-        //            height: parent.height
-
+    Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.left: splitter.right
+        anchors.left: dataSideBar.right
         anchors.right: parent.right
         anchors.leftMargin: -1
 
-        CavePage {
-            property string label: "Overview"
-            property string icon:  "icons/dataOverview.png"
-
+        AllCavesTabWidget {
+            anchors.fill: parent
+            opacity: currentCave == null && currentTrip == null ? 1.0 : 0.0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
+                }
+            }
         }
 
-        SurveyEditor {
-            property string label: "Data"
-            property string icon: "icons/data.png"
-            //    text: "This is the Data page"
+        CaveTabWidget {
+            anchors.fill: parent
+            opacity: currentCave != null ? 1.0 : 0.0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
+                }
+            }
         }
 
-        Text {
-            property string label: "Notes"
-            property string icon: "icons/notes.png"
-            text: "This is the Notes page"
-        }
-
-        Text {
-            property string label: "Team"
-            property string icon: "icons/team.png"
-            text: "This is the Team page"
-        }
-
-        Text {
-            property string label: "Calibrations"
-            property string icon: "icons/calibration.png"
-            text: "This is the Team page"
-        }
-
-        Text {
-            property string label: "Pictures"
-            property string icon: "icons/pictures.png"
-            text: "This is the Pictures page"
-        }
-
-        Text {
-            property string label: "Log"
-            property string icon: "icons/log.png"
-            text: "This is the Log page"
+        TripTabWidget {
+            anchors.fill: parent
+            opacity: currentTrip != null ? 1.0 : 0.0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
+                }
+            }
         }
     }
-
 }

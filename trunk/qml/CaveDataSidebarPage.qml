@@ -40,6 +40,8 @@ Rectangle {
             onClicked: {
                 //This returns make the caveElement disappear
                 caveElement.visible = false;
+                currentCave = null
+                currentTrip = null
             }
         }
 
@@ -148,11 +150,10 @@ Rectangle {
                         //Change to trips
                         caveElement.index = regionVisualDataModel.modelIndex(index)
                         caveElement.name = regionModel.cave(caveElement.index).name
-                        currentCave = regionModel.cave(caveElement.index)
+                        currentCave = regionModel.cave(caveElement.index) //Update the global object
                         regionVisualDataModel.rootIndex = caveElement.index
                         view.currentIndex = caveElement.viewIndex
                         caveElement.visible = true;
-
                     }
                 }
 
