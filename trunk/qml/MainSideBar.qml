@@ -8,20 +8,6 @@ Rectangle {
     //Pageshown is an enumerated type that is either, view, data, draft
     property alias pageShown: buttonBar.currentIndex;
 
-//    pageShown: {
-//        switch (buttonBar.currentIndex) {
-//        case 0:
-//            return "view";
-//        case 1:
-//            return "data";
-//        case 2:
-//            return "draft";
-//        }
-//    }
-
-//    onPageShownChanged: {
-//        console.log("pageShow changed:" + pageShown);
-//    }
 
     Rectangle {
         id: sideBarBackground
@@ -46,6 +32,8 @@ Rectangle {
         transformOrigin: Item.Top
 
     }
+
+
 
     Column {
         id: buttonBar

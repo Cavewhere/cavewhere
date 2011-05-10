@@ -70,7 +70,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTeam.cpp \
     src/cwTripCalibration.cpp \
     src/cwTaskProgressDialog.cpp \
-    src/cwStringListErrorModel.cpp
+    src/cwStringListErrorModel.cpp \
+    src/cwGlobalUndoStack.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -123,7 +124,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTeam.h \
     src/cwTripCalibration.h \
     src/cwTaskProgressDialog.h \
-    src/cwStringListErrorModel.h
+    src/cwStringListErrorModel.h \
+    src/cwGlobalUndoStack.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
@@ -142,7 +144,9 @@ qml/*.js \
     qml/UsedStationsWidget.qml \
     qml/AllCavesTabWidget.qml \
     qml/CaveTabWidget.qml \
-    qml/TripTabWidget.qml
+    qml/TripTabWidget.qml \
+    qml/CaveTreeDelegate.qml \
+    qml/IconButton.qml
 
 RESOURCES += \
     icons.qrc

@@ -25,6 +25,7 @@
 #include "cwCompassExporterCaveTask.h"
 #include "cwLinePlotManager.h"
 #include "cwUsedStationTaskManager.h"
+#include "cwGlobalUndoStack.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -83,6 +84,16 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
 #endif
 
+    //Setup undo redo
+    QUndoStack* undoStack = new QUndoStack(this);
+    cwGlobalUndoStack::setGlobalUndoStack(undoStack);
+
+   connect(undoStack, SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
+   connect(undoStack, SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
+   connect(undoStack, SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
+   connect(undoStack, SIGNAL(redoTextChanged(QString)), SLOT(updateRedoText(QString)));
+   connect(ActionUndo, SIGNAL(triggered()), undoStack, SLOT(undo()));
+   connect(ActionRedo, SIGNAL(triggered()), undoStack, SLOT(redo()));
 
    // setWindowIcon(QIcon(":icon/logo128x128.png"));
 
@@ -110,6 +121,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
 
+
     //qmlRegisterExtendedType<cwRegionTreeModel, QAbstractItemModel>("Cavewhere", 1, 0, "AbstractItemModel");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
@@ -124,21 +136,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 //    RegionTreeView->setHeaderHidden(true);
 //    RegionTreeView->setModel(RegionTreeModel);
 
-    cwCave* cave = new cwCave();
-    cave->setName("Default Cave");
-
-    cwTrip* trip = new cwTrip();
-    trip->setName("Trip 1");
-
-    //Initial chunk - for qml testing
-    cwSurveyChunk* chunk = new cwSurveyChunk();
-    chunk->AppendNewShot(); //Add the first shot
-
-    trip->addChunk(chunk);
-    cave->addTrip(trip);
-    Region->addCave(cave);
-
-    reloadQML();
+    reloadQML(false);
 
 //    //Setup interaction for selection
 //    QItemSelectionModel* regionSelectionModel = RegionTreeView->selectionModel();
@@ -290,27 +288,25 @@ void cwSurveyEditorMainWindow::importSurvex() {
     survexImportDialog->open();
 }
 
-void cwSurveyEditorMainWindow::reloadQML() {
+void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
+
+    if(fullReload)  {
+        DeclarativeView->deleteLater();
+        DeclarativeView = new QDeclarativeView();
+        verticalLayout->addWidget(DeclarativeView);
+
+        DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
+        DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
+        DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
+    }
+
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
-
-    //context->setContextProperty("surveyNoteModel", NoteModel);
-    //context->setContextProperty("surveyData", Trip);
-    //    context->setContextProperty("regionTreeView", RegionTreeView);
     context->setContextProperty("regionModel", RegionTreeModel);
-//    context->setContextProperty("caveData", NULL);
-//    context->setContextProperty("tripData", NULL);
+    context->setContextProperty("region", Region);
 
-    //DeclarativeView->setSource(QUrl::fromLocalFile("qml/SurveyEditor.qml"));
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
-
-//    RegionView  = context->findChild<cwTreeView*>("regionTree");
-//    //qDebug() << "TreeVariant" << treeVariant << treeVariant.isNull();
-//    //RegionView = qobject_cast<cwTreeView*>(treeVariant.value<QObject*>());
-//    if(RegionView == NULL) {
-//        qWarning() << "WTF mate: Can't find \"regionTree\" in qml/SurveyEditor.qml";
-//    }
 
 }
 
@@ -375,3 +371,11 @@ void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelec
 
 //    return trip;
 //}
+
+void cwSurveyEditorMainWindow::updateUndoText(QString undoText) {
+    ActionUndo->setText(QString("Undo - %1").arg(undoText));
+}
+
+void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
+    ActionRedo->setText(QString("Redo - %1").arg(redoText));
+}

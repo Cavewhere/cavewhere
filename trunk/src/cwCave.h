@@ -10,11 +10,14 @@ class cwTrip;
 #include <QList>
 #include <QSharedPointer>
 #include <QWeakPointer>
+#include <QUndoCommand>
 
 class cwCave : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged);
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+
+    friend class NameCommand;
 
 public:
     explicit cwCave(QObject* parent = NULL);
@@ -54,6 +57,20 @@ protected:
 
 private:
     cwCave& Copy(const cwCave& object);
+
+
+
+
+    class NameCommand : public QUndoCommand {
+    public:
+        NameCommand(cwCave* cave, QString name);
+        void redo();
+        void undo();
+    private:
+        cwCave* Cave;
+        QString newName;
+        QString oldName;
+    };
 
 };
 

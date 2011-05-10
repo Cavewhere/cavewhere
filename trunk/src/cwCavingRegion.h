@@ -4,30 +4,37 @@
 //Qt includes
 #include <QObject>
 #include <QList>
-
+#include <QUndoCommand>
 //Our includes
 class cwCave;
 
 class cwCavingRegion : public QObject
 {
     Q_OBJECT
+
+    friend class InsertCaveCommand;
+    friend class RemoveCaveCommand;
 public:
     explicit cwCavingRegion(QObject *parent = 0);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
 
-    int caveCount() const;
-    cwCave* cave(int index) const;
+    Q_INVOKABLE int caveCount() const;
+    Q_INVOKABLE cwCave* cave(int index) const;
+    Q_INVOKABLE void addCave();
     void addCave(cwCave* cave);
     void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
-    void removeCave(int index);
+    Q_INVOKABLE void removeCave(int index);
     void removeCaves(int beginIndex, int endIndex);
 
     int indexOf(cwCave* cave);
 
 signals:
+    void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
+
+    void beginRemoveCaves(int begin, int end);
     void removedCaves(int begin, int end);
 
 public slots:
@@ -35,10 +42,45 @@ public slots:
 protected:
     QList<cwCave*> Caves;
 
-    void insertHelper(int index, cwCave* cave);
-
 private:
     cwCavingRegion& copy(const cwCavingRegion& object);
+
+    void unparentCave(cwCave* cave);
+
+    class InsertRemoveCave : public QUndoCommand {
+    public:
+        InsertRemoveCave(cwCavingRegion* region, int beginIndex, int endIndex);
+
+    protected:
+        void insertCaves();
+        void removeCaves();
+
+        QList<cwCave*> Caves;
+    private:
+        cwCavingRegion* Region;
+        int BeginIndex;
+        int EndIndex;
+    };
+
+    ////////////////////// Undo Redo commands ///////////////////////////////////
+    class InsertCaveCommand : public InsertRemoveCave {
+
+    public:
+        InsertCaveCommand(cwCavingRegion* parentRegion, cwCave* cave, int index);
+        InsertCaveCommand(cwCavingRegion* parentRegion, QList<cwCave*> cave, int index);
+        virtual ~InsertCaveCommand();
+        virtual void redo();
+        virtual void undo();
+    };
+
+    class RemoveCaveCommand : public InsertRemoveCave {
+    public:
+        RemoveCaveCommand(cwCavingRegion* region, int beginIndex, int endIndex);
+        virtual void redo();
+        virtual void undo();
+    };
+
+
 
 };
 

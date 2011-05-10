@@ -1,6 +1,7 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwGlobalUndoStack.h"
 
 //Qt includes
 #include <QDebug>
@@ -54,6 +55,20 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 }
 
 /**
+  \brief Creates a new cave and adds it to the caving region
+  */
+void cwCavingRegion::addCave() {
+    QString newCaveName = QString("Cave %1").arg(caveCount() + 1);
+    cwGlobalUndoStack::beginMacro(QString("Add %1").arg(newCaveName));
+
+    cwCave* cave = new cwCave();
+    cave->setName(newCaveName);
+    addCave(cave);
+
+    cwGlobalUndoStack::endMacro();
+}
+
+/**
   \brief Adds a cave to the region
   */
 void cwCavingRegion::addCave(cwCave* cave) {
@@ -61,13 +76,15 @@ void cwCavingRegion::addCave(cwCave* cave) {
 }
 
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
-    int firstIndex = Caves.size();
+
 
     foreach(cwCave* cave, caves) {
-        insertHelper(Caves.size(), cave);
+        unparentCave(cave);
     }
 
-    emit insertedCaves(firstIndex, Caves.size() - 1);
+    //Run the insert cave command
+    int firstIndex = Caves.size();
+    cwGlobalUndoStack::push(new InsertCaveCommand(this, caves, firstIndex));
 }
 
 /**
@@ -76,9 +93,10 @@ void cwCavingRegion::addCaves(QList<cwCave*> caves) {
 void cwCavingRegion::insertCave(int index, cwCave* cave) {
     if(index < 0 || index > Caves.size()) { return; }
 
-    insertHelper(index, cave);
+    unparentCave(cave);
 
-    emit insertedCaves(index, index);
+    //Run the insert cave command
+    cwGlobalUndoStack::push(new InsertCaveCommand(this, cave, index));
 }
 
 /**
@@ -105,15 +123,7 @@ void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
         return;
     }
 
-    for(int i = endIndex; i >= beginIndex; i--) {
-        //Unparent the trip
-        cwCave* currentCave = cave(i);
-        currentCave->deleteLater();
-
-        Caves.removeAt(i);
-    }
-
-    emit removedCaves(beginIndex, endIndex);
+    cwGlobalUndoStack::push(new RemoveCaveCommand(this, beginIndex, endIndex));
 }
 
 /**
@@ -124,16 +134,107 @@ int cwCavingRegion::indexOf(cwCave* cave) {
 }
 
 /**
-  \brief Helps the inserter
+  \brief Unparents the cave
   */
-void cwCavingRegion::insertHelper(int index, cwCave* cave) {
+void cwCavingRegion::unparentCave(cwCave* cave) {
     //Reparent the trip, if already in another cave
     cwCavingRegion* parentRegion = dynamic_cast<cwCavingRegion*>(((QObject*)cave)->parent());
     if(parentRegion != NULL) {
         int index = parentRegion->Caves.indexOf(cave);
         parentRegion->removeCave(index);
     }
-
-    Caves.insert(index, cave);
-    cave->setParent(this);
 }
+
+cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
+                                                   int beginIndex, int endIndex) {
+    Region = region;
+    BeginIndex = beginIndex;
+    EndIndex = endIndex;
+}
+
+void cwCavingRegion::InsertRemoveCave::insertCaves() {
+    emit Region->beginInsertCaves(BeginIndex, EndIndex);
+    for(int i = 0; i < Caves.size(); i++) {
+        int index = BeginIndex + i;
+        Region->Caves.insert(index, Caves[i]);
+        Caves[i]->setParent(Region);
+    }
+    emit Region->insertedCaves(BeginIndex, EndIndex);
+}
+
+void cwCavingRegion::InsertRemoveCave::removeCaves() {
+    emit Region->beginRemoveCaves(BeginIndex, EndIndex);
+
+    for(int i = Caves.size() - 1; i >= 0; i--) {
+        int index = BeginIndex + i;
+        Region->Caves.removeAt(index);
+        Caves[i]->setParent(NULL);
+    }
+
+    emit Region->removedCaves(BeginIndex, EndIndex);
+}
+
+
+cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegion,
+                                                     QList<cwCave*> caves,
+                                                     int index) :
+    cwCavingRegion::InsertRemoveCave(parentRegion, index, index + caves.size() -1)
+{
+    Caves = caves;
+
+    if(caves.size() == 1) {
+        setText(QString("Add %1").arg(caves.first()->name()));
+    } else {
+        setText(QString("Add %1 caves").arg(caves.size()));
+    }
+}
+
+cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegion,
+                                                     cwCave* cave,
+                                                     int index) :
+    cwCavingRegion::InsertRemoveCave(parentRegion, index, index)
+{
+    Caves.append(cave);
+    setText(QString("Add %1").arg(cave->name()));
+}
+
+cwCavingRegion::InsertCaveCommand::~InsertCaveCommand() {
+    foreach(cwCave* currentCave, Caves) {
+        currentCave->deleteLater();
+    }
+}
+
+void cwCavingRegion::InsertCaveCommand::redo() {
+    insertCaves();
+}
+
+void cwCavingRegion::InsertCaveCommand::undo() {
+    removeCaves();
+}
+
+cwCavingRegion::RemoveCaveCommand::RemoveCaveCommand(cwCavingRegion* region,
+                                                     int beginIndex,
+                                                     int endIndex) :
+    InsertRemoveCave(region, beginIndex, endIndex)
+{
+    for(int i = beginIndex; i <= endIndex; i++) {
+       Caves.append(region->Caves[i]);
+    }
+
+    QString commandText;
+    if(beginIndex != endIndex) {
+        commandText = QString("Remove %1 caves").arg(endIndex - beginIndex);
+    } else {
+        cwCave* cave = region->Caves[beginIndex];
+        commandText = QString("Remove %1").arg(cave->name());
+    }
+}
+
+void cwCavingRegion::RemoveCaveCommand::redo() {
+    removeCaves();
+}
+
+void cwCavingRegion::RemoveCaveCommand::undo() {
+    insertCaves();
+}
+

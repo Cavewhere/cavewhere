@@ -1,6 +1,8 @@
 //Our includes
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwGlobalUndoStack.h"
+
 
 cwCave::cwCave(QObject* parent) :
     QObject(parent)
@@ -66,8 +68,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
   */
 void cwCave::setName(QString name) {
     if(Name != name) {
-        Name = name;
-        emit nameChanged(Name);
+        cwGlobalUndoStack::push(new NameCommand(this, name));
     }
 }
 
@@ -128,4 +129,21 @@ void cwCave::removeStation(QString name) {
     if(pointer.isNull()) {
         StationLookup.remove(name);
     }
+}
+
+cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
+    Cave = cave;
+    newName = name;
+    oldName = Cave->name();
+    setText(QString("Change name to %1").arg(name));
+}
+
+void cwCave::NameCommand::redo() {
+    Cave->Name = newName;
+    emit Cave->nameChanged(Cave->Name);
+}
+
+void cwCave::NameCommand::undo() {
+    Cave->Name = oldName;
+    emit Cave->nameChanged(Cave->Name);
 }

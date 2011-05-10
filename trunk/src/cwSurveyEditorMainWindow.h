@@ -43,10 +43,15 @@ protected slots:
     void exportCaveToCompass(QString filename);
 
     void importSurvex();
-    void reloadQML();
+    void reloadQML(bool fullReload = true);
 
     //For changing
     void setSurveyData(QItemSelection selected, QItemSelection deselected);
+
+    //For undo / redo
+    void updateUndoText(QString undoText);
+    void updateRedoText(QString redoText);
+
 
 private:
     cwSurvexExporter* SurvexExporter;
@@ -61,6 +66,10 @@ private:
 
     //Loop closer manager
     cwLinePlotManager* LinePlotManager;
+
+    //For undo and redo
+    QAction* UndoAction;
+    QAction* RedoAction;
 
 //    cwCave* currentSelectedCave() const;
 //    cwTrip* currentSelectedTrip() const;

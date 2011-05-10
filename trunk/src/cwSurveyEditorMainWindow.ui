@@ -53,9 +53,19 @@
     <addaction name="menuExport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
+    <addaction name="actionReloadQML"/>
+    <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="ActionUndo"/>
+    <addaction name="ActionRedo"/>
+   </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
   </widget>
   <action name="actionQuit">
    <property name="text">
@@ -65,11 +75,6 @@
   <action name="actionSurvexImport">
    <property name="text">
     <string>Import Survex</string>
-   </property>
-  </action>
-  <action name="actionReloadQML">
-   <property name="text">
-    <string>Reload QML</string>
    </property>
   </action>
   <action name="actionSurvexExport">
@@ -83,6 +88,30 @@
    </property>
    <property name="toolTip">
     <string>Compass (.dat)</string>
+   </property>
+  </action>
+  <action name="ActionUndo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="ActionRedo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+Z</string>
+   </property>
+  </action>
+  <action name="actionReloadQML">
+   <property name="text">
+    <string>ReloadQML</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+R</string>
    </property>
   </action>
  </widget>

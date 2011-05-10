@@ -7,7 +7,10 @@ Rectangle {
     property bool checkable:     false
     property bool troggled: false
     property bool iconOnTheLeft:  true
-    property real iconSize: 16
+    property alias iconSize: icon.sourceSize
+    property bool hasText:  text.length > 0
+    property int buttonMargin:  container.anchors.margins
+
 
     signal clicked();
 
@@ -33,13 +36,18 @@ Rectangle {
         Image {
             id: icon
 
-            height: status == Image.Ready > 0 ? iconSize : 0
-            width: status == Image.Ready > 0 ? iconSize : 0
+            height: status == Image.Ready > 0 ? iconSize.height : 0
+            width: status == Image.Ready > 0 ? iconSize.width : 0
 
             //anchors.left: iconOnTheLeft ? parent.left : buttonText.right
-            anchors.right: iconOnTheLeft ? buttonText.left : parent.right
-            anchors.rightMargin: status == Image.Ready && iconOnTheLeft > 0 ? 3 : 0
-                        //anchors.left: parent.left
+            anchors.right: iconOnTheLeft && hasText ? buttonText.left : parent.right
+            anchors.rightMargin: {
+                if(hasText) {
+                    return status == Image.Ready && iconOnTheLeft ? 3 : 0
+                } else {
+                    return 0;
+                }
+            }
             anchors.verticalCenter: parent.verticalCenter
 
             visible: status == Image.Ready
@@ -50,7 +58,17 @@ Rectangle {
             //anchors.left: iconOnTheLeft ? buttonText.right : parent.left
             anchors.right: iconOnTheLeft ? parent.right : icon.left
             anchors.verticalCenter: icon.verticalCenter
-            anchors.rightMargin: icon.status == Image.Ready && !iconOnTheLeft > 0 ? 3 : 0
+            anchors.rightMargin: {
+                if(text.length > 0) {
+                    return icon.status == Image.Ready && !iconOnTheLeft ? 3 : 0
+                } else {
+                    console.log("text: margin is zero")
+                    return 0;
+                }
+            }
+
+            visible: hasText
+
 
         }
     }

@@ -8,6 +8,7 @@
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwStringListErrorModel.h"
+#include "cwGlobalUndoStack.h"
 
 //Qt includes
 #include <QFileSystemModel>
@@ -52,6 +53,7 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
 
     splitter->setStretchFactor(1, 4);
 
+    SurvexErrorListView->setWordWrap(true);
     //SurvexErrorListView->setUniformItemSizes(true);
 
     setWindowTitle("Survex Importer");
@@ -292,7 +294,9 @@ cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int ty
 void cwImportSurvexDialog::import() {
     cwSurvexGlobalData* globalData = Importer->data();
     if(!globalData->caves().isEmpty()) {
+        cwGlobalUndoStack::beginMacro("Import survex");
         Region->addCaves(globalData->caves());
+        cwGlobalUndoStack::endMacro();
     }
     accept();
 }

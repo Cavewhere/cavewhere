@@ -8,11 +8,12 @@ Rectangle {
     property variant view
     property int viewIndex
     property alias name: nameText.text
-    property alias addChildElementText: addCaveButton.text
+    property alias addButtonText: addButton.text
+    property alias addButtonVisible:  addButton.visible
     property bool selected: rootElement.view.currentIndex == viewIndex
     property alias iconSource:  icon.source
 
-    signal addChildElement()
+    signal addButtonClicked()
     signal clicked()
 
     anchors.left: parent.left
@@ -52,7 +53,7 @@ Rectangle {
         }
 
         Button {
-            id: addCaveButton
+            id: addButton
 
             anchors.right: parent.right
             anchors.rightMargin: 5
@@ -62,7 +63,7 @@ Rectangle {
 
             onClicked: {
                 //Add a cave
-                rootElement.addChildElement();
+                rootElement.addButtonClicked();
             }
         }
     }
