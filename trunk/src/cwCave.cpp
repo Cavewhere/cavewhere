@@ -73,6 +73,23 @@ void cwCave::setName(QString name) {
 }
 
 /**
+  Adds a new trip to the cave
+
+  The trip will be added to the end of the all the trip
+  */
+void cwCave::addTrip() {
+    cwTrip* trip = new cwTrip();
+
+    QString tripName = QString("Trip %1").arg(tripCount() + 1);
+    cwGlobalUndoStack::beginMacro(QString("Add %1").arg(tripName));
+
+    trip->setName(tripName);
+    addTrip(trip);
+
+    cwGlobalUndoStack::endMacro();
+}
+
+/**
   \brief Adds a trip to the cave
 
   Once the trip is added to the cave, the cave ownes the trip
@@ -96,10 +113,7 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
         parentCave->removeTrip(index);
     }
 
-    Trips.insert(i, trip);
-    trip->setParentCave(this);
-
-    emit insertedTrips(i, i);
+    cwGlobalUndoStack::push(new InsertTripCommand(this, trip, i));
 }
 
 /**
@@ -109,14 +123,8 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
   the caller to delete it
   */
 void cwCave::removeTrip(int i) {
-    if(i > 0 || i >= Trips.size()) { return; }
-
-    //Unparent the trip
-    cwTrip* currentTrip = trip(i);
-    currentTrip->setParent(NULL);
-
-    Trips.removeAt(i);
-    emit removedTrips(i, i);
+    if(i < 0 || i >= Trips.size()) { return; }
+    cwGlobalUndoStack::push(new RemoveTripCommand(this, i, i));
 }
 
 /**
@@ -135,7 +143,7 @@ cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
     Cave = cave;
     newName = name;
     oldName = Cave->name();
-    setText(QString("Change name to %1").arg(name));
+    setText(QString("Change cave's name to %1").arg(name));
 }
 
 void cwCave::NameCommand::redo() {
@@ -147,3 +155,97 @@ void cwCave::NameCommand::undo() {
     Cave->Name = oldName;
     emit Cave->nameChanged(Cave->Name);
 }
+
+cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
+                                                   int beginIndex, int endIndex) {
+    Cave = cave;
+    BeginIndex = beginIndex;
+    EndIndex = endIndex;
+}
+
+void cwCave::InsertRemoveTrip::insertTrips() {
+    emit Cave->beginInsertTrips(BeginIndex, EndIndex);
+    for(int i = 0; i < Trips.size(); i++) {
+        int index = BeginIndex + i;
+        Cave->Trips.insert(index, Trips[i]);
+        Trips[i]->setParentCave(Cave);
+    }
+    emit Cave->insertedTrips(BeginIndex, EndIndex);
+}
+
+void cwCave::InsertRemoveTrip::removeTrips() {
+    emit Cave->beginRemoveTrips(BeginIndex, EndIndex);
+
+    for(int i = Trips.size() - 1; i >= 0; i--) {
+        int index = BeginIndex + i;
+        Cave->Trips.removeAt(index);
+        Trips[i]->setParentCave(NULL);
+    }
+
+    emit Cave->removedTrips(BeginIndex, EndIndex);
+}
+
+
+cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
+                                             QList<cwTrip*> Trips,
+                                             int index) :
+    cwCave::InsertRemoveTrip(cave, index, index + Trips.size() -1)
+{
+    Trips = Trips;
+
+    if(Trips.size() == 1) {
+        setText(QString("Add %1").arg(Trips.first()->name()));
+    } else {
+        setText(QString("Add %1 Trips").arg(Trips.size()));
+    }
+}
+
+cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
+                                                     cwTrip* Trip,
+                                                     int index) :
+    cwCave::InsertRemoveTrip(cave, index, index)
+{
+    Trips.append(Trip);
+    setText(QString("Add %1").arg(Trip->name()));
+}
+
+cwCave::InsertTripCommand::~InsertTripCommand() {
+    foreach(cwTrip* currentTrip, Trips) {
+        currentTrip->deleteLater();
+    }
+}
+
+void cwCave::InsertTripCommand::redo() {
+    insertTrips();
+}
+
+void cwCave::InsertTripCommand::undo() {
+    removeTrips();
+}
+
+cwCave::RemoveTripCommand::RemoveTripCommand(cwCave* cave,
+                                                     int beginIndex,
+                                                     int endIndex) :
+    InsertRemoveTrip(cave, beginIndex, endIndex)
+{
+    for(int i = beginIndex; i <= endIndex; i++) {
+       Trips.append(cave->Trips[i]);
+    }
+
+    QString commandText;
+    if(beginIndex != endIndex) {
+        commandText = QString("Remove %1 Trips").arg(endIndex - beginIndex);
+    } else {
+        cwTrip* Trip = cave->Trips[beginIndex];
+        commandText = QString("Remove %1").arg(Trip->name());
+    }
+}
+
+void cwCave::RemoveTripCommand::redo() {
+    removeTrips();
+}
+
+void cwCave::RemoveTripCommand::undo() {
+    insertTrips();
+}
+

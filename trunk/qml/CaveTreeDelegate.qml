@@ -54,7 +54,8 @@ FocusScope {
                         visible: caveDelegate.selected
 
                         onClicked: {
-                            region.removeCave(index)
+                            var itemIndex = regionVisualDataModel.modelIndex(index);
+                            regionModel.removeIndex(itemIndex);
                         }
                     }
                 }
@@ -64,15 +65,7 @@ FocusScope {
                     //anchors.left: parent.left
                     //anchors.leftMargin: 7
                     anchors.verticalCenter: parent.verticalCenter
-                    source: {
-                        switch(indexType) {
-                        case RegionTreeModel.Cave: //Cave
-                            return "icons/cave.png"
-                        case RegionTreeModel.Trip: //Trip
-                            return "icons/trip.png"
-                        }
-                        return ""
-                    }
+                    source: iconSource
                 }
 
                 Text {
@@ -92,7 +85,6 @@ FocusScope {
                     focus: false
 
                     onFocusChanged: {
-                        console.log("Focus changed: " + (focus) + " " + (index))
                         if(!activeFocus) {
                             caveDelegate.state = ""
                             var currentIndex = regionVisualDataModel.modelIndex(index);
@@ -116,9 +108,6 @@ FocusScope {
                 anchors.rightMargin: 5
                 text: Qt.formatDateTime(date, "yyyy-MM-dd")
             }
-
-
-
 
             Button {
                 id: tripsButton
@@ -198,11 +187,6 @@ FocusScope {
                     target: nameText
                     visible: false
                 }
-
-                //                PropertyChanges {
-                //                    target: caveMouseArea
-                //                    enabled: false
-                //                }
 
             }
 

@@ -21,7 +21,8 @@ public:
         TypeRole = Qt::UserRole + 1,
         NameRole, //For everything
         DateRole,  //Only valid for trips
-        ObjectRole //For exctracting the object
+        ObjectRole, //For exctracting the object
+        IconSourceRole //Store a url to the image
     };
 
     enum ItemType {
@@ -34,12 +35,14 @@ public:
     void setCavingRegion(cwCavingRegion* region);
 
     QModelIndex index ( int row, int column, const QModelIndex & parent = QModelIndex() ) const;
+    QModelIndex index (cwCave* cave) const;
+    QModelIndex index (cwTrip* trip) const;
     QModelIndex parent ( const QModelIndex & index ) const;
     int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
-//     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, QString role);
+    Q_INVOKABLE void removeIndex(QModelIndex item);
     Qt::ItemFlags flags ( const QModelIndex & index);
 
     Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
@@ -56,7 +59,14 @@ private slots:
     void beginRemoveCaves(int beginIndex, int endIndex);
     void endRemoveCaves(int beginIndex, int endIndex);
 
+    void beginInsertTrip(int beginIndex, int endIndex);
+    void endInsertTrip(int beginIndex, int endIndex);
+
+    void beginRemoveTrip(int beginIndex, int endIndex);
+    void endRemoveTrip(int beginIndex, int endIndex);
+
     void caveDataChanged();
+    void tripDataChanged();
 
 private:
 
@@ -64,6 +74,9 @@ private:
 
     void addCaveConnections(int beginIndex, int endIndex);
     void removeCaveConnections(int beginIndex, int endIndex);
+
+    void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
+    void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
 
 };
 

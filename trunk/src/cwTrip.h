@@ -15,6 +15,7 @@ class cwTripCalibration;
 #include <QAbstractListModel>
 #include <QWeakPointer>
 #include <QDate>
+#include <QUndoCommand>
 
 class cwTrip : public QObject
 {
@@ -85,6 +86,29 @@ protected:
 
 private:
     void Copy(const cwTrip& object);
+
+    class NameCommand : public QUndoCommand {
+    public:
+        NameCommand(cwTrip* trip, QString name);
+        void redo();
+        void undo();
+    private:
+        cwTrip* Trip;
+        QString NewName;
+        QString OldName;
+    };
+
+    class DateCommand : public QUndoCommand {
+    public:
+        DateCommand(cwTrip* trip, QDate date);
+        void redo();
+        void undo();
+    private:
+        cwTrip* Trip;
+        QDate NewDate;
+        QDate OldDate;
+    };
+
 
 };
 

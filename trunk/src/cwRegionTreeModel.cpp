@@ -6,6 +6,7 @@
 #include "cwGlobalIcons.h"
 
 //Qt include
+#include <QUrl>
 #include <QDebug>
 
 cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
@@ -18,6 +19,7 @@ cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
     roles[NameRole] = "name";
     roles[DateRole] = "date"; //Only valid for trips
     roles[ObjectRole] = "object";
+    roles[IconSourceRole] = "iconSource";
     setRoleNames(roles);
 
 }
@@ -62,6 +64,38 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
 
     return QModelIndex();
 }
+
+/**
+  \brief Gets the cave index of the model
+
+  If the cave doesn't exist in the model this return QModelIndex()
+  */
+QModelIndex cwRegionTreeModel::index (cwCave* cave) const {
+    if(Region == NULL) { return QModelIndex(); }
+    if(cave == NULL) { return QModelIndex(); }
+    int caveIndex = Region->indexOf(cave);
+    if(caveIndex < 0) { QModelIndex(); }
+    return index(caveIndex, 0);
+}
+
+/**
+  \brief Gets the cave index of the model
+
+  If the cave doesn't exist in the model this return QModelIndex()
+  */
+QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
+    cwCave* parentCave = trip->parentCave();
+    if(parentCave == NULL) { return QModelIndex(); }
+    int tripIndex = parentCave->indexOf(trip);
+
+    QModelIndex parentIndex = index(parentCave);
+    if(!parentIndex.isValid()) { return QModelIndex(); }
+
+    if(tripIndex < 0) { return QModelIndex(); }
+
+    return index(tripIndex, 0, parentIndex);
+}
+
 
 QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
     cwCave* cave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
@@ -125,6 +159,8 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return Cave;
         case DateRole:
             return QDate(); //Caves dont have a date
+        case IconSourceRole:
+            return QUrl::fromLocalFile("icons/cave.png");
         default:
             return QVariant();
         }
@@ -150,6 +186,8 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return Trip;
         case DateRole:
             return QVariant(currentTrip->date());
+        case IconSourceRole:
+            return QUrl::fromLocalFile("icons/trip.png");
         default:
             return QVariant();
         }
@@ -197,14 +235,27 @@ bool cwRegionTreeModel::setData(const QModelIndex &index, const QVariant &value,
 }
 
 /**
-  \brief Sets the data for the model
+  \brief This removes a item from the model
+
+  If the item is a cave then it removes the cave from the index
+  If the item is a trip then it removes the trip from the parent cave
   */
-//bool cwRegionTreeModel::setData(const QModelIndex &index, const QVariant &value, QString role) {
-//    QByteArray byteArray = role.toLocal8Bit();
-//     QHash<int, QByteArray> roles = roleNames();
-//    int roleInt = roles.value(byteArray, -1);
-//    return setData(index, value, roleInt);
-//}
+void cwRegionTreeModel::removeIndex(QModelIndex item) {
+    if(!item.isValid()) { return; } //Can't remove an invalid
+
+    QModelIndex parentItem = parent(item);
+
+    if(item.data(TypeRole) == Cave) {
+        //item is a cave remove it from the region
+        Region->removeCave(item.row());
+    } else if(item.data(TypeRole) == Trip) {
+        //item is a trip remove it from the parent cave
+        cwCave* parentCave = cave(parentItem);
+        Q_ASSERT(parentCave != NULL);
+
+        parentCave->removeTrip(item.row());
+    }
+}
 
 Qt::ItemFlags cwRegionTreeModel::flags ( const QModelIndex & /*index*/) {
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
@@ -249,23 +300,98 @@ void cwRegionTreeModel::beginRemoveCaves(int beginIndex, int endIndex) {
 }
 
 /**
+  \brief The cave has begun inserting trips into itself.
+
+  This alerts the views of this model, that it's changing
+  */
+void cwRegionTreeModel::beginInsertTrip(int beginIndex, int endIndex) {
+    cwCave* cave = qobject_cast<cwCave*>(sender());
+
+    QModelIndex caveIndex = index(cave);
+    Q_ASSERT(caveIndex.isValid());
+
+    beginInsertRows(caveIndex, beginIndex, endIndex);
+}
+
+/**
+  \brief The cave has inserted trips into itself
+
+  This update the trip connections
+  */
+void cwRegionTreeModel::endInsertTrip(int beginIndex, int endIndex) {
+    cwCave* cave = qobject_cast<cwCave*>(sender());
+    Q_ASSERT(cave != NULL);
+
+    endInsertRows();
+
+    addTripConnections(cave, beginIndex, endIndex);
+}
+
+/**
+  \brief The cave has begun to removed trips from itself
+
+  This alerts the views of this model, to update themselfs
+  */
+void cwRegionTreeModel::beginRemoveTrip(int beginIndex, int endIndex) {
+    cwCave* cave = qobject_cast<cwCave*>(sender());
+    Q_ASSERT(cave != NULL);
+
+    QModelIndex caveIndex = index(cave);
+    Q_ASSERT(caveIndex.isValid());
+
+    removeTripConnections(cave, beginIndex, endIndex);
+
+    beginRemoveRows(caveIndex, beginIndex, endIndex);
+}
+
+/**
+  \brief The cave has removed the trips from itself
+
+  This alerts the views to update themselves
+  */
+void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
+    cwCave* cave = qobject_cast<cwCave*>(sender());
+    Q_ASSERT(cave != NULL);
+
+    endRemoveRows();
+}
+
+
+/**
   \brief calls dataChanged() when the cave data has changed
   */
  void cwRegionTreeModel::caveDataChanged() {
      Q_ASSERT(qobject_cast<cwCave*>(sender()) != NULL);
      cwCave* cave = static_cast<cwCave*>(sender());
-     int index = Region->indexOf(cave);
-     QModelIndex modelIndex = createIndex(index, 0, cave);
+     QModelIndex modelIndex = index(cave);
      emit dataChanged(modelIndex, modelIndex);
+ }
+
+ /**
+   \brief calls dataChanged() when the trip data has changed
+   */
+ void cwRegionTreeModel::tripDataChanged() {
+     Q_ASSERT(qobject_cast<cwTrip*>(sender()) != NULL);
+     cwTrip* trip = static_cast<cwTrip*>(sender());
+     QModelIndex modelIndexOfTrip = index(trip);
+     emit dataChanged(modelIndexOfTrip, modelIndexOfTrip);
  }
 
 /**
   \brief Adds all the connection for a cave
   */
 void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
+
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
         connect(cave, SIGNAL(nameChanged(QString)), SLOT(caveDataChanged()));
+
+        connect(cave, SIGNAL(beginInsertTrips(int,int)), SLOT(beginInsertTrip(int,int)));
+        connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(endInsertTrip(int,int)));
+        connect(cave, SIGNAL(beginRemoveTrips(int,int)), SLOT(beginRemoveTrip(int,int)));
+        connect(cave, SIGNAL(removedTrips(int,int)), SLOT(endRemoveTrip(int,int)));
+
+        addTripConnections(cave, 0, cave->tripCount() - 1);
     }
 }
 
@@ -275,7 +401,32 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
 void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
-        connect(cave, 0, this, 0);
+        disconnect(cave, 0, this, 0); //disconnect signals and slots to this object
     }
 }
+
+/**
+  \brief Adds connection for the trips between beginIndex and endIndex
+  */
+void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
+    for(int i = beginIndex; i <= endIndex; i++) {
+        cwTrip* currentTrip = parentCave->trip(i);
+        connect(currentTrip, SIGNAL(nameChanged(QString)), SLOT(tripDataChanged()));
+        connect(currentTrip, SIGNAL(dateChanged(QDate)), SLOT(tripDataChanged()));
+    }
+}
+
+/**
+  \brief Removes the connections for a trips between beginIndex and endIndex
+  */
+void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
+
+    for(int i = beginIndex; i <= endIndex; i++) {
+        cwTrip* trip = parentCave->trip(i);
+        disconnect(trip, 0, this, 0); //disconnect signals and slots to this object
+    }
+
+}
+
+
 

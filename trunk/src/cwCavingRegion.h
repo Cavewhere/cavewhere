@@ -12,8 +12,6 @@ class cwCavingRegion : public QObject
 {
     Q_OBJECT
 
-    friend class InsertCaveCommand;
-    friend class RemoveCaveCommand;
 public:
     explicit cwCavingRegion(QObject *parent = 0);
     cwCavingRegion(const cwCavingRegion& object);

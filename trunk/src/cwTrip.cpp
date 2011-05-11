@@ -5,6 +5,7 @@
 #include "cwStationReference.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwGlobalUndoStack.h"
 
 //Qt includes
 #include <QMap>
@@ -16,6 +17,7 @@ cwTrip::cwTrip(QObject *parent) :
     DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
+    Date = QDate::currentDate();
 }
 
 void cwTrip::Copy(const cwTrip& object)
@@ -76,8 +78,7 @@ cwTrip& cwTrip::operator=(const cwTrip& object) {
   */
 void cwTrip::setName(QString name) {
     if(name != Name) {
-        Name = name;
-        emit nameChanged(Name);
+        cwGlobalUndoStack::push(new NameCommand(this, name));
     }
 }
 
@@ -86,8 +87,7 @@ void cwTrip::setName(QString name) {
   */
 void cwTrip::setDate(QDate date) {
     if(date != Date) {
-        Date = date;
-        emit dateChanged(Date);
+        cwGlobalUndoStack::push(new DateCommand(this, date));
     }
 }
 
@@ -255,3 +255,36 @@ void cwTrip::setParentCave(cwCave* parentCave) {
     }
 }
 
+cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
+    Trip = trip;
+    NewName = name;
+    OldName = Trip->name();
+    setText(QString("Change trip's name to %1").arg(name));
+}
+
+void cwTrip::NameCommand::redo() {
+    Trip->Name = NewName;
+    emit Trip->nameChanged(Trip->Name);
+}
+
+void cwTrip::NameCommand::undo() {
+    Trip->Name = OldName;
+    emit Trip->nameChanged(Trip->Name);
+}
+
+cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
+    Trip = trip;
+    NewDate = date;
+    OldDate = Trip->date();
+    setText(QString("Change trip's date to %1").arg(NewDate.toString(Qt::TextDate)));
+}
+
+void cwTrip::DateCommand::redo() {
+    Trip->Date = NewDate;
+    emit Trip->dateChanged(Trip->Date);
+}
+
+void cwTrip::DateCommand::undo() {
+    Trip->Date = OldDate;
+    emit Trip->dateChanged(Trip->Date);
+}

@@ -30,8 +30,6 @@ void cwSurvexImporter::runTask() {
     done();
 }
 
-
-
 void cwSurvexImporter::importSurvex(QString filename) {
     clear();
 

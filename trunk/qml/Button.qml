@@ -10,7 +10,7 @@ Rectangle {
     property alias iconSize: icon.sourceSize
     property bool hasText:  text.length > 0
     property int buttonMargin:  container.anchors.margins
-
+    property bool mousePressed: false
 
     signal clicked();
 
@@ -83,14 +83,28 @@ Rectangle {
             if(checkable) { troggled = !troggled }
             button.clicked();
         }
+
+        onPressed: {
+            mousePressed = true
+        }
+
+        onReleased: {
+            mousePressed = false
+        }
     }
 
     states: [
         State {
-            name: "hover"; when: mouseArea.containsMouse
+            name: "hover"; when: mouseArea.containsMouse && !mousePressed
             PropertyChanges { target: stop1; color: "#B7BDC5" }
             PropertyChanges { target: stop2; color: "#29335B" }
-            //            PropertyChanges { target: buttonText; font.bold: true }
+        },
+
+        State {
+            name: "mousePressedState";
+            when: mouseArea.containsMouse && mousePressed
+            PropertyChanges { target: stop1; color: "#B7BDC5" }
+            PropertyChanges { target: stop2; color: "#8DB7F1" }
         }
 
     ]

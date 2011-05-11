@@ -17,8 +17,6 @@ class cwCave : public QObject
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
 
-    friend class NameCommand;
-
 public:
     explicit cwCave(QObject* parent = NULL);
     cwCave(const cwCave& object);
@@ -29,9 +27,11 @@ public:
 
     int tripCount() const;
     cwTrip* trip(int index) const;
-    void addTrip(cwTrip* trip);
+    Q_INVOKABLE void addTrip();
+    Q_INVOKABLE void addTrip(cwTrip* trip);
     void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
+    int indexOf(cwTrip* trip) const;
 
     bool hasStation(QString name);
     QWeakPointer<cwStation> station(QString name);
@@ -41,7 +41,10 @@ public:
     QList< QWeakPointer<cwStation> > stations() const;
 
 signals:
+    void beginInsertTrips(int begin, int end);
     void insertedTrips(int begin, int end);
+
+    void beginRemoveTrips(int begin, int end);
     void removedTrips(int begin, int end);
 
     void nameChanged(QString name);
@@ -58,9 +61,7 @@ protected:
 private:
     cwCave& Copy(const cwCave& object);
 
-
-
-
+////////////////////// Undo Redo commands ///////////////////////////////////
     class NameCommand : public QUndoCommand {
     public:
         NameCommand(cwCave* cave, QString name);
@@ -70,6 +71,37 @@ private:
         cwCave* Cave;
         QString newName;
         QString oldName;
+    };
+
+    class InsertRemoveTrip : public QUndoCommand {
+    public:
+        InsertRemoveTrip(cwCave* cave, int beginIndex, int endIndex);
+
+    protected:
+        void insertTrips();
+        void removeTrips();
+
+        QList<cwTrip*> Trips;
+    private:
+        cwCave* Cave;
+        int BeginIndex;
+        int EndIndex;
+    };
+
+    class InsertTripCommand : public InsertRemoveTrip {
+    public:
+        InsertTripCommand(cwCave* cave, cwTrip* Trip, int index);
+        InsertTripCommand(cwCave* cave, QList<cwTrip*> Trip, int index);
+        virtual ~InsertTripCommand();
+        virtual void redo();
+        virtual void undo();
+    };
+
+    class RemoveTripCommand : public InsertRemoveTrip {
+    public:
+        RemoveTripCommand(cwCave* cave, int beginIndex, int endIndex);
+        virtual void redo();
+        virtual void undo();
     };
 
 };
@@ -135,6 +167,11 @@ inline QList< QWeakPointer<cwStation> > cwCave::stations() const {
     return StationLookup.values();
 }
 
-
+/**
+  \brief Gets the index of the trip inside of the cave
+  */
+inline int cwCave::indexOf(cwTrip* trip) const {
+    return Trips.indexOf(trip);
+}
 
 #endif // CWCAVE_H

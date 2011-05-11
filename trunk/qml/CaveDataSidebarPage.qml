@@ -63,6 +63,13 @@ Rectangle {
             visible: false
 
             anchors.leftMargin: 5
+
+            //Add a trip to the model
+            onAddButtonClicked: {
+                //console.log("Cave:" + currentCave)
+                var cave = regionModel.cave(caveElement.index);
+                cave.addTrip()
+            }
         }
 
     }
