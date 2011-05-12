@@ -2,12 +2,8 @@ import Qt 4.7
 import Cavewhere 1.0
 
 Rectangle {
-    id: rectangle2
-    width: 800
-    height: 800
+    id: rootQMLItem
     anchors.fill: parent;
-
-
 
     MainSideBar {
         id: mainSideBar;
@@ -65,4 +61,6 @@ Rectangle {
             y: height * 2 - container.currentPosition
         }
     }
+
+
 }

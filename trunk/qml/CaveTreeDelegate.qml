@@ -68,46 +68,44 @@ FocusScope {
                     source: iconSource
                 }
 
-                Text {
-                    id: nameText
-                    anchors.verticalCenter: parent.verticalCenter
+                DoubleClickTextInput {
+                    id: nameTextInput
                     text: name
-                    font.bold: caveDelegate.selected
-                }
+                    anchors.verticalCenter: parent.verticalCenter
+                    selected: caveDelegate.selected
 
-
-                TextInput {
-                    id: nameTextEdit
-
-                    selectByMouse: true;
-                    activeFocusOnPress: false
-                    visible: false
-                    focus: false
-
-                    onFocusChanged: {
-                        if(!activeFocus) {
-                            caveDelegate.state = ""
-                            var currentIndex = regionVisualDataModel.modelIndex(index);
-                            regionModel.setData(currentIndex, text, RegionTreeModel.NameRole)
-                        }
+                    onStartedEditting: {
+                        view.currentIndex = index
+                        view.focus = true
+                        focusScope.focus = true
                     }
 
-                    Keys.onPressed: {
-                        if(event.key == Qt.Key_Return) {
-                            focus = false;
-                            event.accepted = true
-                        }
+                    onFinishedEditting: {
+                        var currentIndex = regionVisualDataModel.modelIndex(index);
+                        regionModel.setData(currentIndex, newText, RegionTreeModel.NameRole)
                     }
                 }
             }
 
-            Text {
-                id: dateText
+            DoubleClickTextInput {
+                id: dateTextInput
                 anchors.verticalCenter: parent.verticalCenter; //tabBackground.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: 5
                 text: Qt.formatDateTime(date, "yyyy-MM-dd")
+
+                onStartedEditting: {
+                    view.currentIndex = index
+                    view.focus = true
+                    focusScope.focus = true
+                }
+
+                onFinishedEditting: {
+                    var currentIndex = regionVisualDataModel.modelIndex(index);
+                    regionModel.setData(currentIndex, newText, RegionTreeModel.DateRole)
+                }
             }
+
 
             Button {
                 id: tripsButton
@@ -136,6 +134,10 @@ FocusScope {
 
             }
 
+            onPressed: {
+                console.log("Parent pressed")
+            }
+
             onClicked: {
                 view.currentIndex = index;
                 view.focus = true;
@@ -149,15 +151,6 @@ FocusScope {
                 }
             }
 
-            onDoubleClicked: {
-                console.log("Double clicked")
-                caveDelegate.state = "editName"
-                view.focus = true
-                nameTextEdit.selectAll();
-                nameTextEdit.text = name
-
-                //nameTextEdit.visible = true
-            }
 
             states: [
                 State {
@@ -175,19 +168,19 @@ FocusScope {
         }
 
         states: [
+
             State {
-                name: "editName";
+                name: "editDate";
                 PropertyChanges {
-                    target: nameTextEdit
+                    target:  dateTextInput
                     visible: true
                     focus: true
                 }
 
                 PropertyChanges {
-                    target: nameText
+                    target: dateText
                     visible: false
                 }
-
             }
 
         ]

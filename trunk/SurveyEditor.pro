@@ -146,7 +146,8 @@ qml/*.js \
     qml/CaveTabWidget.qml \
     qml/TripTabWidget.qml \
     qml/CaveTreeDelegate.qml \
-    qml/IconButton.qml
+    qml/IconButton.qml \
+    qml/DoubleClickTextInput.qml
 
 RESOURCES += \
     icons.qrc
