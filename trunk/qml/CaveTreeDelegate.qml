@@ -46,8 +46,8 @@ FocusScope {
 
                     IconButton {
                         id: removeButton
-                        iconSource: "icons/minusCircleLight.png"
-                        hoverIconSource: "icons/minusCircleDark.png"
+                        iconSource: "qrc:icons/minusCircleLight.png"
+                        hoverIconSource: "qrc:icons/minusCircleDark.png"
                         sourceSize: Qt.size(15, 15);
 
                         anchors.fill: parent
@@ -110,7 +110,7 @@ FocusScope {
             Button {
                 id: tripsButton
                 text: "Trips"
-                iconSource: "icons/moreArrow.png"
+                iconSource: "qrc:icons/moreArrow.png"
                 iconOnTheLeft: false
                 opacity: 0.0
                 iconSize: Qt.size(10, 10)

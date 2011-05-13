@@ -31,7 +31,7 @@ Rectangle {
 
     Image {
         fillMode: Image.TileVertically
-        source: "icons/verticalLine.png"
+        source: "qrc:icons/verticalLine.png"
         height: dataSideBar.anchors.topMargin
         anchors.left: dataSideBar.right
         anchors.leftMargin: -4

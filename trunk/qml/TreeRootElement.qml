@@ -59,7 +59,7 @@ Rectangle {
             anchors.rightMargin: 5
             anchors.verticalCenter: parent.verticalCenter
 
-            iconSource: "icons/plus.png"
+            iconSource: "qrc:icons/plus.png"
 
             onClicked: {
                 //Add a cave

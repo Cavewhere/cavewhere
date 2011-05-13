@@ -12,7 +12,7 @@ Rectangle {
             Image {
                 id: splitter
                 fillMode: Image.TileVertically
-                source: "icons/verticalLine.png"
+                source: "qrc:icons/verticalLine.png"
                // anchors.bottom: parent.bottom
                 height: tabWidget.areaY + 4
                 anchors.top: parent.top
@@ -24,12 +24,12 @@ Rectangle {
 
         CaveDataSidebarPage {
             property string label: "Caves"
-            property string icon: "icons/caves-64x64.png"
+            property string icon: "qrc:icons/caves-64x64.png"
         }
 
         Text {
             property string label: "Surface"
-            property string icon: "icons/surface.png"
+            property string icon: "qrc:icons/surface.png"
             text: "This is the Surface page"
         }
 

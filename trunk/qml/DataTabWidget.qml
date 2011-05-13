@@ -26,7 +26,7 @@ Rectangle {
 
         Image {
             fillMode: Image.TileHorizontally
-            source: "icons/horizontalLine.png"
+            source: "qrc:icons/horizontalLine.png"
             anchors.bottom: header.bottom
             anchors.left: header.left
             anchors.right: header.right

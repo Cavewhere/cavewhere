@@ -11,7 +11,7 @@ Rectangle {
     Image {
         id: splitter
         fillMode: Image.TileVertically
-        source: "icons/verticalLine.png"
+        source: "qrc:icons/verticalLine.png"
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: parent.right
@@ -35,7 +35,7 @@ Rectangle {
             view: view;
             viewIndex: -1; //The root element
             name: "All Caves"
-            iconSource: "icons/caves-64x64.png"
+            iconSource: "qrc:icons/caves-64x64.png"
             addButtonText: "Add Cave"
 
             onClicked: {
@@ -59,7 +59,7 @@ Rectangle {
             view: view;
             viewIndex: -2; //The root element
             addButtonText: "Add Trip"
-            iconSource: "icons/cave-64x64.png"
+            iconSource: "qrc:icons/cave-64x64.png"
             visible: false
 
             anchors.leftMargin: 5

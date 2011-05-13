@@ -51,7 +51,7 @@ Rectangle {
         SideBarButton {
             id: dataEntyButton
             text: "Data"
-            image: "icons/book.png"
+            image: "qrc:icons/book.png"
             troggled: 1 == parent.currentIndex
             onButtonIsTroggled: parent.currentIndex = 1           
         }
