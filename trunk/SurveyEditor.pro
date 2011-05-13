@@ -153,3 +153,5 @@ RESOURCES += \
     icons.qrc
 
 INCLUDEPATH += src .
+
+LIBS += -lz
