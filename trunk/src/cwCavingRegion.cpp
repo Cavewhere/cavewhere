@@ -57,7 +57,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 /**
   \brief Creates a new cave and adds it to the caving region
   */
-void cwCavingRegion::addCave() {
+void cwCavingRegion::addCaveHelper() {
     QString newCaveName = QString("Cave %1").arg(caveCount() + 1);
     cwGlobalUndoStack::beginMacro(QString("Add %1").arg(newCaveName));
 
@@ -72,6 +72,10 @@ void cwCavingRegion::addCave() {
   \brief Adds a cave to the region
   */
 void cwCavingRegion::addCave(cwCave* cave) {
+    if(cave == NULL) {
+        addCaveHelper();
+        return;
+    };
     insertCave(Caves.size(), cave);
 }
 

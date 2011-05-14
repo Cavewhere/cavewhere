@@ -2,7 +2,8 @@ import QtQuick 1.0
 
 Rectangle {
     id: dataSideBar
-   // anchors.fill: parent
+
+    property alias caveSidebar: caveDataSidebar
 
     CompactTabWidget {
         id: tabWidget
@@ -23,6 +24,7 @@ Rectangle {
         ]
 
         CaveDataSidebarPage {
+            id: caveDataSidebar
             property string label: "Caves"
             property string icon: "qrc:icons/caves-64x64.png"
         }
@@ -32,8 +34,6 @@ Rectangle {
             property string icon: "qrc:icons/surface.png"
             text: "This is the Surface page"
         }
-
-
     }
 
 

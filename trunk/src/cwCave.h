@@ -11,6 +11,7 @@ class cwTrip;
 #include <QSharedPointer>
 #include <QWeakPointer>
 #include <QUndoCommand>
+#include <QDebug>
 
 class cwCave : public QObject
 {
@@ -21,14 +22,15 @@ public:
     explicit cwCave(QObject* parent = NULL);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
+    ~cwCave() { qDebug() << "Deleteing: " << this << this->parent(); }
 
     QString name() const;
     void setName(QString name);
 
     int tripCount() const;
     cwTrip* trip(int index) const;
-    Q_INVOKABLE void addTrip();
-    Q_INVOKABLE void addTrip(cwTrip* trip);
+
+    Q_INVOKABLE void addTrip(cwTrip* trip = NULL);
     void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
@@ -60,6 +62,7 @@ protected:
 
 private:
     cwCave& Copy(const cwCave& object);
+    void addTripNullHelper();
 
 ////////////////////// Undo Redo commands ///////////////////////////////////
     class NameCommand : public QUndoCommand {

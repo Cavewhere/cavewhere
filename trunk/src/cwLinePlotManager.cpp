@@ -124,7 +124,7 @@ void cwLinePlotManager::connectShots(cwSurveyChunk* chunk) {
 /**
   \brief connects a shot
   */
-void cwLinePlotManager::connectShot(cwShot* shot) {
+void cwLinePlotManager::connectShot(cwShot* /*shot*/) {
 //    connect(shot, SIGNAL(DistanceChanged()), SLOT(runSurvex()));
 //    connect(shot, SIGNAL(CompassChanged()), SLOT(runSurvex()));
 //    connect(shot, SIGNAL(BackCompassChanged()), SLOT(runSurvex()));
@@ -135,7 +135,7 @@ void cwLinePlotManager::connectShot(cwShot* shot) {
 /**
   \brief Connects all the stations in the trip to this object
   */
-void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
+void cwLinePlotManager::connectStations(cwSurveyChunk* /*chunk*/) {
 //    for(int i = 0; i < chunk->StationCount(); i++) {
 //        cwStationReference station = chunk->Station(i);
 //        connectStation(station);
@@ -145,7 +145,7 @@ void cwLinePlotManager::connectStations(cwSurveyChunk* chunk) {
 /**
   \brief Connect to the station
   */
-void cwLinePlotManager::connectStation(cwStationReference* station) {
+void cwLinePlotManager::connectStation(cwStationReference* /*station*/) {
 //    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
 }
 
@@ -184,7 +184,7 @@ void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
 /**
   \brief Called when the chunks add more stations
   */
-void cwLinePlotManager::connectAddedStations(int beginIndex, int endIndex) {
+void cwLinePlotManager::connectAddedStations(int /*beginIndex*/, int /*endIndex*/) {
 //    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
 //    for(int i = beginIndex; i <= endIndex; i++) {
 //        cwStationReference station = chunk->Station(i);

@@ -77,7 +77,7 @@ void cwCave::setName(QString name) {
 
   The trip will be added to the end of the all the trip
   */
-void cwCave::addTrip() {
+void cwCave::addTripNullHelper() {
     cwTrip* trip = new cwTrip();
 
     QString tripName = QString("Trip %1").arg(tripCount() + 1);
@@ -95,6 +95,10 @@ void cwCave::addTrip() {
   Once the trip is added to the cave, the cave ownes the trip
   */
 void cwCave::addTrip(cwTrip* trip) {
+    if(trip == NULL) {
+        addTripNullHelper();
+        return;
+    }
     insertTrip(Trips.size(), trip);
 }
 

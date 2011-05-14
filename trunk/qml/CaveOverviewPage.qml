@@ -6,15 +6,20 @@ Rectangle {
 
     anchors.fill: parent;
 
-    Text {
+
+    DoubleClickTextInput {
         id: caveNameText
-        text: currentCave.name //From c++
+        text: currentCave != null ? currentCave.name : "" //From c++
         anchors.left: parent.left
         anchors.leftMargin: 5
         anchors.top: parent.top
         anchors.topMargin: 5
         font.bold: true
         font.pointSize: 20
+
+        onFinishedEditting: {
+            currentCave.name = newText
+        }
     }
 
     UsedStationsWidget {

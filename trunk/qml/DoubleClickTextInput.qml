@@ -3,16 +3,30 @@ import QtQuick 1.0
 Rectangle {
     id: doubleClickTextInput
     property alias text: textArea.text
-    property alias selected: textArea.font.bold
+    property alias font: textArea.font
 
     signal startedEditting()
     signal finishedEditting(string newText)
 
+    //border.width: 1
+
     height: textArea.visible ? textArea.height : input.height
-    width: textArea.visible ? textArea.width : input.width
+    width: {
+        var width;
+        if(textArea.visible) {
+            width = textArea.width
+        } else {
+            width = input.width
+        }
+        if(width <= 0) {
+            width = 100
+        }
+        return width;
+    }
 
     function commitChanges() {
-        input.visible = false;
+
+        edittor.visible = false;
         input.focus = false;
 
         globalMouseArea.enabled = false
@@ -20,13 +34,12 @@ Rectangle {
         globalMouseArea.ignoreFirstClick = false
         doubleClickArea.enabled = true
 
-        input.x = textArea.x
-        input.y = textArea.y
+        edittor.x = textArea.x
+        edittor.y = textArea.y
 
         //Emit the finishedEditting signal
         finishedEditting(input.text)
     }
-
 
     Text {
         id: textArea
@@ -53,30 +66,46 @@ Rectangle {
             mouse.accepted = false
         }
 
-        TextInput {
-            id: input
-            visible: false
+        ShadowRectangle {
+            id: edittor
+            visible: false; // true; //input.visible
 
             x: textArea.x
             y: textArea.y
 
-            selectByMouse: activeFocus;
-            activeFocusOnPress: false
+            color: "white"
 
-            Keys.onPressed: {
-                if(event.key == Qt.Key_Return) {
-                    commitChanges();
-                    event.accepted = true
+            width: input.width + 5
+            height: input.height + 5;
+
+            TextInput {
+                id: input
+                visible: edittor.visible
+                font: textArea.font
+                anchors.centerIn: parent;
+                //                x: textArea.x
+                //                y: textArea.y
+
+                selectByMouse: activeFocus;
+                activeFocusOnPress: false
+
+                Keys.onPressed: {
+                    if(event.key == Qt.Key_Return) {
+                        commitChanges();
+                        event.accepted = true
+                    }
                 }
             }
+
         }
 
         MouseArea {
             id: doubleClickArea
-            x: textArea.x
-            y: textArea.y
-            width: textArea.width
-            height: textArea.height
+
+            x: edittor.x
+            y: edittor.y
+            width: doubleClickTextInput.width
+            height: doubleClickTextInput.height
             enabled:  true
 
             onDoubleClicked: {
@@ -84,7 +113,7 @@ Rectangle {
                 doubleClickTextInput.startedEditting()
 
                 input.text = doubleClickTextInput.text
-                input.visible = true;
+                edittor.visible = true;
                 input.focus = true;
                 input.selectAll();
 
@@ -94,10 +123,10 @@ Rectangle {
                 globalMouseArea.ignoreFirstClick = true
                 doubleClickArea.enabled = false
 
-                var globalPosition = textArea.mapToItem(input, 0, 0)
+                var globalPosition = textArea.mapToItem(edittor, 0, 0)
 
-                input.x = globalPosition.x
-                input.y = globalPosition.y
+                edittor.x = globalPosition.x
+                edittor.y = globalPosition.y
             }
 
             onPressed: {

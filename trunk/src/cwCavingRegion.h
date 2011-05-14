@@ -19,8 +19,8 @@ public:
 
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
-    Q_INVOKABLE void addCave();
-    void addCave(cwCave* cave);
+
+    Q_INVOKABLE void addCave(cwCave* cave = NULL);
     void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     Q_INVOKABLE void removeCave(int index);
@@ -44,6 +44,7 @@ private:
     cwCavingRegion& copy(const cwCavingRegion& object);
 
     void unparentCave(cwCave* cave);
+    void addCaveHelper();
 
     class InsertRemoveCave : public QUndoCommand {
     public:

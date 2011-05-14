@@ -95,34 +95,9 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
    connect(ActionUndo, SIGNAL(triggered()), undoStack, SLOT(undo()));
    connect(ActionRedo, SIGNAL(triggered()), undoStack, SLOT(redo()));
 
-   // setWindowIcon(QIcon(":icon/logo128x128.png"));
-
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
-
-    qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
-    qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
-//    qmlRegisterType<cwStation>(); //"Cavewhere", 1, 0, "cwStation");
-//    qmlRegisterType<cwShot>(); //"Cavewhere", 1, 0, "cwShot");
-    qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
-    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
-    qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
-    qmlRegisterType<cwTrip>();
-    qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
-    qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
-    qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
-    qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
-    qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
-    qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
-    qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
-    qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
-    qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
-    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
-    qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
-
-
-    //qmlRegisterExtendedType<cwRegionTreeModel, QAbstractItemModel>("Cavewhere", 1, 0, "AbstractItemModel");
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
@@ -132,15 +107,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     Region = new cwCavingRegion(this);
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
-//    RegionTreeView = new QTreeView();
-//    RegionTreeView->setHeaderHidden(true);
-//    RegionTreeView->setModel(RegionTreeModel);
 
-    reloadQML(false);
-
-//    //Setup interaction for selection
-//    QItemSelectionModel* regionSelectionModel = RegionTreeView->selectionModel();
-//    connect(regionSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(setSurveyData(QItemSelection,QItemSelection)));
+    reloadQML(true);
 
     ExportThread = new QThread(this);
 
@@ -177,7 +145,7 @@ void cwSurveyEditorMainWindow::openExportSurvexTripFileDialog() {
 /**
   \brief Exports the currently selected trip to filename
   */
-void cwSurveyEditorMainWindow::exportSurvexTrip(QString filename) {
+void cwSurveyEditorMainWindow::exportSurvexTrip(QString /*filename*/) {
 //    if(filename.isEmpty()) { return; }
 
 //    cwTrip* trip = currentSelectedTrip();
@@ -214,7 +182,7 @@ void cwSurveyEditorMainWindow::openExportSurvexCaveFileDialog() {
 /**
   \brief Exports the currently selected cave to a file
   */
-void cwSurveyEditorMainWindow::exportSurvexCave(QString filename) {
+void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
 //    if(filename.isEmpty()) { return; }
 //    cwCave* cave = currentSelectedCave();
 //    if(cave != NULL) {
@@ -265,7 +233,7 @@ void cwSurveyEditorMainWindow::openExportCompassCaveFileDialog() {
 /**
   Exports the currently select cave to Compass
   */
-void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
+void cwSurveyEditorMainWindow::exportCaveToCompass(QString /*filename*/) {
 //    if(filename.isEmpty()) { return; }
 //    cwCave* cave = currentSelectedCave();
 //    if(cave != NULL) {
@@ -291,7 +259,7 @@ void cwSurveyEditorMainWindow::importSurvex() {
 void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
 
     if(fullReload)  {
-        DeclarativeView->deleteLater();
+        delete DeclarativeView;
         DeclarativeView = new QDeclarativeView();
         verticalLayout->addWidget(DeclarativeView);
 
@@ -303,6 +271,25 @@ void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
+    qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
+    qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
+    qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
+    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
+    qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
+    qmlRegisterType<cwTrip>();
+    qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
+    qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
+    qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
+    qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
+    qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
+    qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
+    qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
+    qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
+    qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
+    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
+    qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
+
+
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
 
@@ -313,7 +300,7 @@ void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
 /**
   \brief Set's the survey data for the current editor
   */
-void cwSurveyEditorMainWindow::setSurveyData(QItemSelection selected, QItemSelection /*deselected*/) {
+void cwSurveyEditorMainWindow::setSurveyData(QItemSelection /*selected*/, QItemSelection /*deselected*/) {
 
 //    QList<QModelIndex> selectedIndexes = selected.indexes();
 //    if(!selectedIndexes.isEmpty()) {

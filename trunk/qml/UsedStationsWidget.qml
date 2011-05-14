@@ -53,7 +53,7 @@ Rectangle {
 
         UsedStationTaskManager {
             id: usedStationsModel;
-            cave: currentCave
+            cave: currentCave != null ? currentCave : null
             listenToCaveChanges: parent.visible
         }
     }

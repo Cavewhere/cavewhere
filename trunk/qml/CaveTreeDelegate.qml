@@ -33,7 +33,7 @@ FocusScope {
                 id: rowId
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left;
-                anchors.right: dateText.left
+                anchors.right: dateTextInput.left
                 anchors.leftMargin: 7
                 //anchors.topMargin: 5
                 spacing: 2
@@ -72,7 +72,7 @@ FocusScope {
                     id: nameTextInput
                     text: name
                     anchors.verticalCenter: parent.verticalCenter
-                    selected: caveDelegate.selected
+                    font.bold: caveDelegate.selected
 
                     onStartedEditting: {
                         view.currentIndex = index
@@ -115,7 +115,7 @@ FocusScope {
                 opacity: 0.0
                 iconSize: Qt.size(10, 10)
                 height: 18
-                visible: indexType === 0 //Is a cave
+                visible: indexType === RegionTreeModel.CaveType //Is a cave
 
                 anchors.right: parent.right
                 anchors.rightMargin: 5
@@ -123,32 +123,18 @@ FocusScope {
 
                 onClicked: {
                     //Change to trips
-                    caveElement.index = regionVisualDataModel.modelIndex(index)
-                    caveElement.name = regionModel.cave(caveElement.index).name
-                    currentCave = regionModel.cave(caveElement.index) //Update the global object
-                    regionVisualDataModel.rootIndex = caveElement.index
+                    //Update the page's current index
+                    regionVisualDataModel.rootIndex = regionVisualDataModel.modelIndex(index);
                     view.currentIndex = caveElement.viewIndex
-                    caveElement.visible = true;
+
                 }
 
 
-            }
-
-            onPressed: {
-                console.log("Parent pressed")
             }
 
             onClicked: {
                 view.currentIndex = index;
                 view.focus = true;
-                switch(indexType) {
-                case RegionTreeModel.Cave: //Cave
-                    currentCave = object;
-                    break;
-                case RegionTreeModel.Trip: //Trip
-                    currentTrip = object;
-                    break;
-                }
             }
 
 

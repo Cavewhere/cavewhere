@@ -4,21 +4,16 @@ import Cavewhere 1.0
 Rectangle {
     id: pageId
 
-    property variant currentCave
-    property variant currentTrip
+    /**
+      This is used to test if the current Index in the dataSideBar is of type type.
 
-    onCurrentCaveChanged: {
-        if(currentCave != null) {
-            currentTrip = null;
-        }
+      If the type is equal to the current index's type, this returns true, otherwise false.
+      */
+    function currentIndexIsType(type) {
+        var index = dataSideBar.caveSidebar.currentIndex
+        var indexsType = regionModel.data(index, RegionTreeModel.TypeRole);
+        return (indexsType == type);
     }
-
-    onCurrentTripChanged: {
-        if(currentTrip != null) {
-            currentCave = null;
-        }
-    }
-
 
     DataSideBar {
         id: dataSideBar
@@ -79,6 +74,7 @@ Rectangle {
     }
 
     Rectangle {
+        id: caveTabs
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: dataSideBar.right
@@ -87,8 +83,8 @@ Rectangle {
 
         AllCavesTabWidget {
             anchors.fill: parent
-            opacity: currentCave == null && currentTrip == null ? 1.0 : 0.0
-            Behavior on opacity {
+            opacity: currentIndexIsType(RegionTreeModel.RegionType) ? 1.0 : 0.0
+                Behavior on opacity {
                 NumberAnimation {
                     duration: 300
                 }
@@ -97,7 +93,15 @@ Rectangle {
 
         CaveTabWidget {
             anchors.fill: parent
-            opacity: currentCave != null ? 1.0 : 0.0
+            opacity: currentIndexIsType(RegionTreeModel.CaveType) ? 1.0 : 0.0
+            currentCave: {
+                if(currentIndexIsType(RegionTreeModel.CaveType)) {
+                    var index = dataSideBar.caveSidebar.currentIndex
+                    return regionModel.data(index, RegionTreeModel.ObjectRole);
+                }
+                return null;
+            }
+
             Behavior on opacity {
                 NumberAnimation {
                     duration: 300
@@ -107,7 +111,7 @@ Rectangle {
 
         TripTabWidget {
             anchors.fill: parent
-            opacity: currentTrip != null ? 1.0 : 0.0
+            opacity: currentIndexIsType(RegionTreeModel.TripType) ? 1.0 : 0.0
             Behavior on opacity {
                 NumberAnimation {
                     duration: 300

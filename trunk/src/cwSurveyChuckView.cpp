@@ -604,7 +604,7 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
 /**
   \brief Hooks up the model to the qml, for the station row
   */
-void cwSurveyChunkView::ConnectStation(cwStationReference* station, StationRow row) {
+void cwSurveyChunkView::ConnectStation(cwStationReference* /*station*/, StationRow /*row*/) {
 //    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
 
 //    QVector<QDeclarativeItem*> items = row.items();
@@ -634,7 +634,7 @@ void cwSurveyChunkView::PositionShotRow(ShotRow row, int index) {
 /**
   \brief Hooks up the model to the qml, for the shot row
   */
-void cwSurveyChunkView::ConnectShot(cwShot* shot, ShotRow row) {
+void cwSurveyChunkView::ConnectShot(cwShot* /*shot*/, ShotRow /*row*/) {
 //    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
 
 //    QVector<QDeclarativeItem*> items = row.items();

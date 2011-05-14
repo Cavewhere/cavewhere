@@ -75,7 +75,7 @@ QModelIndex cwRegionTreeModel::index (cwCave* cave) const {
     if(cave == NULL) { return QModelIndex(); }
     int caveIndex = Region->indexOf(cave);
     if(caveIndex < 0) { QModelIndex(); }
-    return index(caveIndex, 0);
+    return index(caveIndex, 0, QModelIndex());
 }
 
 /**
@@ -137,7 +137,13 @@ int cwRegionTreeModel::columnCount ( const QModelIndex & /*parent*/) const {
 }
 
 QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
-    if(!index.isValid()) { return QVariant(); }
+    if(!index.isValid()) {     //Root item selected
+        switch(role) {
+        case TypeRole:
+            return RegionType;
+        }
+        return QVariant();
+    }
 
     cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
     if(currentCave != NULL) {
@@ -156,7 +162,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         case ObjectRole:
             return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentCave));
         case TypeRole:
-            return Cave;
+            return CaveType;
         case DateRole:
             return QDate(); //Caves dont have a date
         case IconSourceRole:
@@ -183,7 +189,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         case ObjectRole:
             return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentTrip));
         case TypeRole:
-            return Trip;
+            return TripType;
         case DateRole:
             return QVariant(currentTrip->date());
         case IconSourceRole:
@@ -192,6 +198,8 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant();
         }
     }
+
+
 
     return QVariant();
 }
@@ -245,10 +253,10 @@ void cwRegionTreeModel::removeIndex(QModelIndex item) {
 
     QModelIndex parentItem = parent(item);
 
-    if(item.data(TypeRole) == Cave) {
+    if(item.data(TypeRole) == CaveType) {
         //item is a cave remove it from the region
         Region->removeCave(item.row());
-    } else if(item.data(TypeRole) == Trip) {
+    } else if(item.data(TypeRole) == TripType) {
         //item is a trip remove it from the parent cave
         cwCave* parentCave = cave(parentItem);
         Q_ASSERT(parentCave != NULL);

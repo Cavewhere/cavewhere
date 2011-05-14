@@ -9,6 +9,7 @@ class cwCave;
 //Qt includes
 #include <QAbstractItemModel>
 #include <QtGlobal>
+#include <QDebug>
 
 class cwRegionTreeModel : public QAbstractItemModel
 {
@@ -26,21 +27,23 @@ public:
     };
 
     enum ItemType {
-        Cave,
-        Trip
+        RegionType,
+        CaveType,
+        TripType
     };
 
     explicit cwRegionTreeModel(QObject *parent = 0);
 
     void setCavingRegion(cwCavingRegion* region);
 
-    QModelIndex index ( int row, int column, const QModelIndex & parent = QModelIndex() ) const;
+    Q_INVOKABLE QModelIndex index ( int row, int column, const QModelIndex & parent ) const;
+   // Q_INVOKABLE QModelIndex index ( int row, const QModelIndex& parent) const;
     QModelIndex index (cwCave* cave) const;
     QModelIndex index (cwTrip* trip) const;
     QModelIndex parent ( const QModelIndex & index ) const;
     int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
-    QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
+    Q_INVOKABLE QVariant data ( const QModelIndex & index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
     Q_INVOKABLE void removeIndex(QModelIndex item);
     Qt::ItemFlags flags ( const QModelIndex & index);

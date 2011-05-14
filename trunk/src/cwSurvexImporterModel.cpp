@@ -142,7 +142,7 @@ cwSurvexImporterModel::cwSurvexImporterModel(QObject *parent) :
  /**
    \brief Gets the index at row and column of parent
    */
- QModelIndex cwSurvexImporterModel::index ( int row, int column, const QModelIndex & parent) const {
+ QModelIndex cwSurvexImporterModel::index ( int row, int /*column*/, const QModelIndex & parent) const {
      if(GlobalData == NULL) { return QModelIndex(); }
 
      if(!parent.isValid()) {
