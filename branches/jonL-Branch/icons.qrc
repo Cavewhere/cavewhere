@@ -1,0 +1,41 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/AddArrowDown.png</file>
+        <file>icons/AddArrowUp.png</file>
+        <file>icons/RemoveArrowDown.png</file>
+        <file>icons/RemoveArrowUp.png</file>
+        <file>icons/cave.png</file>
+        <file>icons/dontImport.png</file>
+        <file>icons/trip.png</file>
+        <file>icons/plus.png</file>
+        <file>icons/minus.png</file>
+        <file>icons/logo128x128.png</file>
+        <file>icons/stopSignError.png</file>
+        <file>icons/warning.png</file>
+        <file>icons/book.png</file>
+        <file>icons/border.png</file>
+        <file>icons/calibration.png</file>
+        <file>icons/cave-64x64.png</file>
+        <file>icons/caves.png</file>
+        <file>icons/caves-64x64.png</file>
+        <file>icons/data.png</file>
+        <file>icons/dataBorder.png</file>
+        <file>icons/dataOverview.png</file>
+        <file>icons/dataOverviewDark.png</file>
+        <file>icons/error.png</file>
+        <file>icons/good.png</file>
+        <file>icons/horizontalLine.png</file>
+        <file>icons/log.png</file>
+        <file>icons/minusCircle.png</file>
+        <file>icons/minusCircleDark.png</file>
+        <file>icons/minusCircleLight.png</file>
+        <file>icons/moreArrow.png</file>
+        <file>icons/notes.png</file>
+        <file>icons/overview.png</file>
+        <file>icons/pictures.png</file>
+        <file>icons/rightArrow.png</file>
+        <file>icons/surface.png</file>
+        <file>icons/team.png</file>
+        <file>icons/verticalLine.png</file>
+    </qresource>
+</RCC>
