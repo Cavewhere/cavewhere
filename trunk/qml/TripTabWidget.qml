@@ -1,6 +1,9 @@
 import QtQuick 1.0
 
 DataTabWidget {
+    id: tripTabWidget
+    property variant currentTrip:  null
+
     Text {
         property string label: "Overview"
         property string icon:  "qrc:icons/dataOverview.png"
@@ -10,6 +13,8 @@ DataTabWidget {
     SurveyEditor {
         property string label: "Data"
         property string icon: "qrc:icons/data.png"
+
+        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
         //    text: "This is the Data page"
     }
 

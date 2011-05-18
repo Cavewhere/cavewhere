@@ -4,37 +4,9 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
-    //property alias currentPage: area.state
+    property alias currentTrip: view.trip
 
     anchors.fill: parent
-
-//    state: currentPage
-
-//    ProxyWidget {
-//        id: regionTree
-
-//        width: 300;
-
-//        anchors.top: parent.top
-//        anchors.bottom: parent.bottom
-//        anchors.left: parent.left
-//        anchors.bottomMargin: 1
-
-//        widget: regionTreeView
-
-//        Component.onCompleted: {
-//            console.debug("Loading Widget: " + widget);
-//        }
-
-//        Rectangle {
-//            border.width: 1
-//            border.color: "black"
-
-//            anchors.fill: parent
-
-//            color: Qt.rgba(0, 0, 0, 0);
-//        }
-//    }
 
     Flickable {
         id: flickArea
@@ -71,60 +43,10 @@ Rectangle {
             viewportWidth: flickArea.width;
             viewportHeight: flickArea.height;
 
-            chunkGroup: surveyData
-
             onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
         }
     }
 
-//    CavePage {
-//        id: cavePage
-
-//        visible: false
-
-//        anchors.left: regionTree.right
-//        anchors.right: parent.right
-//        anchors.top: parent.top
-//        anchors.bottom: parent.bottom
-//    }
-
-//    states:  [
-
-//        State {
-//            name: "SurveyEditor"
-
-//            PropertyChanges {
-//                target: flickArea
-//                visible: true
-//                //restoreEntryValues: true
-//            }
-
-//            StateChangeScript {
-//                script: {
-//                    console.debug("Showing SurveyEditor");
-//                }
-//            }
-
-//        },
-
-//        State {
-//            name: "CavePage"
-
-//            PropertyChanges {
-//                target: cavePage
-//                visible: true
-//                //restoreEntryValues: true
-//            }
-
-//            StateChangeScript {
-//                script: {
-//                    console.debug("Showing CavePage");
-//                }
-//            }
-
-//        }
-
-//    ]
 
 //    NotesGallery {
 //        anchors.left: flickArea.right

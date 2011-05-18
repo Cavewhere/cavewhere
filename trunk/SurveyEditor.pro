@@ -71,7 +71,9 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTripCalibration.cpp \
     src/cwTaskProgressDialog.cpp \
     src/cwStringListErrorModel.cpp \
-    src/cwGlobalUndoStack.cpp
+    src/cwGlobalUndoStack.cpp \
+    src/cwUndoer.cpp \
+    src/cwCreateCommand.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -125,7 +127,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTripCalibration.h \
     src/cwTaskProgressDialog.h \
     src/cwStringListErrorModel.h \
-    src/cwGlobalUndoStack.h
+    src/cwGlobalUndoStack.h \
+    src/cwUndoer.h \
+    src/cwCreateCommand.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

@@ -5,13 +5,14 @@
 class cwSurvexBlockData;
 class cwCave;
 class cwTrip;
+#include "cwUndoer.h"
 
 //Qt includes
 #include <QObject>
 #include <QList>
 #include <QStringList>
 
-class cwSurvexGlobalData : public QObject
+class cwSurvexGlobalData : public QObject, public cwUndoer
 {
     friend class cwSurvexImporter;
 

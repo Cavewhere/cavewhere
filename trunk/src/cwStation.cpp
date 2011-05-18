@@ -46,26 +46,51 @@ cwStation::cwStation(QString name, float left, float right, float up, float down
 {
 }
 
-void cwStation::setName(QString name) {
-    Name = name;
+
+
+/**
+  \brief Sets the data in the station
+  */
+void cwStation::setData(QVariant data, DataRoles role) {
+    switch(role) {
+    case NameRole:
+        setName(data.toString());
+        break;
+    case LeftRole:
+        setLeft(data.toString());
+        break;
+    case RightRole:
+        setRight(data.toString());
+        break;
+    case UpRole:
+        setUp(data.toString());
+        break;
+    case DownRole:
+        setDown(data.toString());
+        break;
+    case PositionRole:
+        setPosition(data.value<QVector3D>());
+        break;
+    }
 }
 
-void cwStation::setLeft(QString left) {
-    Left = left;
-}
-
-void cwStation::setRight(QString right) {
-    Right = right;
-}
-
-void cwStation::setUp(QString up) {
-    Up = up;
-}
-
-void cwStation::setDown(QString down) {
-    Down = down;
-}
-
-void cwStation::setPosition(QVector3D position) {
-    Position = position;
+/**
+  \brief Gets the data in the station
+  */
+QVariant cwStation::data(DataRoles role) const {
+    switch(role) {
+    case NameRole:
+        return name();
+    case LeftRole:
+        return left();
+    case RightRole:
+        return right();
+    case UpRole:
+        return up();
+    case DownRole:
+        return down();
+    case PositionRole:
+        return position();
+    }
+    return QVariant();
 }

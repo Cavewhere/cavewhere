@@ -44,19 +44,23 @@ QStringList cwSurvexGlobalData::erros() {
 /**
   \brief Helper function the caves function
   */
-void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* currentTrip) {
+void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
+                                     cwSurvexBlockData* currentBlock,
+                                     cwCave* currentCave,
+                                     cwTrip* currentTrip) {
 
     switch(currentBlock->importType()) {
     case cwSurvexBlockData::NoImport:
         break;
     case cwSurvexBlockData::Cave:
-        currentCave = new cwCave(this);
+        currentCave = new cwCave(undoStack(), this);
+
         currentCave->setName(currentBlock->name());
         currentTrip = NULL;
         caves->append(currentCave);
         break;
     case cwSurvexBlockData::Trip: {
-        currentTrip = new cwTrip(this);
+        currentTrip = new cwTrip(undoStack(), this);
 
         //Copy the name and date
         currentTrip->setName(currentBlock->name());
@@ -70,7 +74,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* c
 
         //Creates a cave for the trip if there isn't one
         if(currentCave == NULL) {
-            currentCave = new cwCave(this);
+            currentCave = new cwCave(undoStack(), this);
             currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
             caves->append(currentCave);
         }
@@ -97,13 +101,13 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* c
 
             //Make sure we have a cave
             if(currentCave == NULL) {
-                currentCave = new cwCave(this);
+                currentCave = new cwCave(undoStack(), this);
                 currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
                 caves->append(currentCave);
             }
 
             //Create the trip
-            currentTrip = new cwTrip(this);
+            currentTrip = new cwTrip(undoStack(), this);
             currentTrip->setName(QString("Trip %1").arg(currentCave->tripCount() + 1));
             currentCave->addTrip(currentTrip);
         }

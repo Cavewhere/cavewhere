@@ -104,4 +104,29 @@ void cwStationReference::setName(QString newName) {
     }
 }
 
+void cwStationReference::setLeft(QString left) {
+    Q_ASSERT(!SharedStation.isNull());
+    SharedStation->setLeft(left);
+}
+
+void cwStationReference::setRight(QString right) {
+    Q_ASSERT(!SharedStation.isNull());
+    SharedStation->setRight(right);
+}
+
+void cwStationReference::setUp(QString up) {
+    Q_ASSERT(!SharedStation.isNull());
+    SharedStation->setUp(up);
+}
+
+void cwStationReference::setDown(QString down) {
+    Q_ASSERT(!SharedStation.isNull());
+    SharedStation->setDown(down);
+}
+
+void cwStationReference::setPosition(QVector3D position) {
+    Q_ASSERT(!SharedStation.isNull());
+    SharedStation->setPosition(position);
+}
+
 

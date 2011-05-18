@@ -62,7 +62,6 @@ inline QString cwStationReference::name() const {
     return SharedStation->name();
 }
 
-
 inline QString cwStationReference::left() const {
     return SharedStation->left();
 }
@@ -83,30 +82,7 @@ inline QVector3D cwStationReference::position() const {
     return SharedStation->position();
 }
 
-inline void cwStationReference::setLeft(QString left) {
-    Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setLeft(left);
-}
 
-inline void cwStationReference::setRight(QString right) {
-    Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setRight(right);
-}
-
-inline void cwStationReference::setUp(QString up) {
-    Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setUp(up);
-}
-
-inline void cwStationReference::setDown(QString down) {
-    Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setDown(down);
-}
-
-inline void cwStationReference::setPosition(QVector3D position) {
-    Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setPosition(position);
-}
 
 inline QSharedPointer<cwStation> cwStationReference::station() const {
     return SharedStation;

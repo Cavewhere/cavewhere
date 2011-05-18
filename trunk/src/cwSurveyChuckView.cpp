@@ -264,7 +264,7 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
         PositionStationRow(row, i);
 
         //Hock up the signals and slots with the models data
-//        cwStationReference station = Model->Station(i);
+        //cwStationReference station = Model->Station(i);
         //ConnectStation(station, row);
 
         //Queue the index for navigation update

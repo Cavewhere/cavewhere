@@ -64,10 +64,6 @@ static QmlJsDebuggingEnabler enableDebuggingHelper;
 
 #endif // QMLJSDEBUGGER
 
-
-
-
-
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexExporter(NULL),
@@ -85,15 +81,14 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 #endif
 
     //Setup undo redo
-    QUndoStack* undoStack = new QUndoStack(this);
-    cwGlobalUndoStack::setGlobalUndoStack(undoStack);
+    UndoStack = new QUndoStack(this);
 
-   connect(undoStack, SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
-   connect(undoStack, SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
-   connect(undoStack, SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
-   connect(undoStack, SIGNAL(redoTextChanged(QString)), SLOT(updateRedoText(QString)));
-   connect(ActionUndo, SIGNAL(triggered()), undoStack, SLOT(undo()));
-   connect(ActionRedo, SIGNAL(triggered()), undoStack, SLOT(redo()));
+    connect(UndoStack, SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
+    connect(UndoStack, SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
+    connect(UndoStack, SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
+    connect(UndoStack, SIGNAL(redoTextChanged(QString)), SLOT(updateRedoText(QString)));
+    connect(ActionUndo, SIGNAL(triggered()), UndoStack, SLOT(undo()));
+    connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
     DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -104,7 +99,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
-    Region = new cwCavingRegion(this);
+    Region = new cwCavingRegion(UndoStack, this);
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
 
@@ -252,6 +247,7 @@ void cwSurveyEditorMainWindow::exportCaveToCompass(QString /*filename*/) {
   */
 void cwSurveyEditorMainWindow::importSurvex() {
     cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Region, this);
+    survexImportDialog->setUndoStack(UndoStack);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     survexImportDialog->open();
 }

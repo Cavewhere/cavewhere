@@ -13,7 +13,7 @@
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
-    Region = new cwCavingRegion(this);
+    Region = new cwCavingRegion(NULL, this);
 
     SurvexFile = new QTemporaryFile(this);
     SurvexFile->open();

@@ -1,20 +1,22 @@
 //Our includes
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwGlobalUndoStack.h"
+#include "cwCreateCommand.h"
+#include "cwStation.h"
 
-
-cwCave::cwCave(QObject* parent) :
-    QObject(parent)
+cwCave::cwCave(QUndoStack* stack, QObject* parent) :
+    QObject(parent),
+    cwUndoer(stack)
 {
-
+    pushUndo(new cwCreateCommand(this));
 }
 
 /**
   \brief Copy constructor
   */
 cwCave::cwCave(const cwCave& object) :
-    QObject(NULL)
+    QObject(NULL),
+    cwUndoer(object)
 {
     Copy(object);
 }
@@ -68,7 +70,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
   */
 void cwCave::setName(QString name) {
     if(Name != name) {
-        cwGlobalUndoStack::push(new NameCommand(this, name));
+        pushUndo(new NameCommand(this, name));
     }
 }
 
@@ -78,15 +80,15 @@ void cwCave::setName(QString name) {
   The trip will be added to the end of the all the trip
   */
 void cwCave::addTripNullHelper() {
-    cwTrip* trip = new cwTrip();
+    cwTrip* trip = new cwTrip(undoStack());
 
     QString tripName = QString("Trip %1").arg(tripCount() + 1);
-    cwGlobalUndoStack::beginMacro(QString("Add %1").arg(tripName));
+    beginUndoMacro(QString("Add %1").arg(tripName));
 
     trip->setName(tripName);
     addTrip(trip);
 
-    cwGlobalUndoStack::endMacro();
+    endUndoMacro();
 }
 
 /**
@@ -117,7 +119,7 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
         parentCave->removeTrip(index);
     }
 
-    cwGlobalUndoStack::push(new InsertTripCommand(this, trip, i));
+    pushUndo(new InsertTripCommand(this, trip, i));
 }
 
 /**
@@ -128,7 +130,7 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
   */
 void cwCave::removeTrip(int i) {
     if(i < 0 || i >= Trips.size()) { return; }
-    cwGlobalUndoStack::push(new RemoveTripCommand(this, i, i));
+    pushUndo(new RemoveTripCommand(this, i, i));
 }
 
 /**
@@ -143,50 +145,80 @@ void cwCave::removeStation(QString name) {
     }
 }
 
+/**
+  \brief This sets the station's data based on it's role
+
+  This creates a undo / redo command and pushes it onto the undo stack
+  */
+void cwCave::setStationData(QSharedPointer<cwStation> station,
+                            QVariant data,
+                            cwStation::DataRoles role) {
+
+    station->setData(data, role);
+}
+
+/**
+  \brief This gets the stations data base on the role
+  */
+QVariant cwCave::stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const {
+    return station->data(role);
+}
+
+
+
 cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
-    Cave = cave;
+    CavePtr = QWeakPointer<cwCave>(cave);
     newName = name;
-    oldName = Cave->name();
+    oldName = cave->name();
     setText(QString("Change cave's name to %1").arg(name));
 }
 
 void cwCave::NameCommand::redo() {
-    Cave->Name = newName;
-    emit Cave->nameChanged(Cave->Name);
+    if(CavePtr.isNull()) { return; }
+    cwCave* cave = CavePtr.data();
+    cave->Name = newName;
+    emit cave->nameChanged(cave->Name);
 }
 
+
 void cwCave::NameCommand::undo() {
-    Cave->Name = oldName;
-    emit Cave->nameChanged(Cave->Name);
+    if(CavePtr.isNull()) { return; }
+    cwCave* cave = CavePtr.data();
+    cave->Name = oldName;
+    emit cave->nameChanged(cave->Name);
 }
 
 cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
                                                    int beginIndex, int endIndex) {
-    Cave = cave;
+    CavePtr = cave;
     BeginIndex = beginIndex;
     EndIndex = endIndex;
 }
 
 void cwCave::InsertRemoveTrip::insertTrips() {
-    emit Cave->beginInsertTrips(BeginIndex, EndIndex);
+    if(CavePtr.isNull()) { return; }
+    cwCave* cave = CavePtr.data();
+    emit cave->beginInsertTrips(BeginIndex, EndIndex);
     for(int i = 0; i < Trips.size(); i++) {
         int index = BeginIndex + i;
-        Cave->Trips.insert(index, Trips[i]);
-        Trips[i]->setParentCave(Cave);
+        cave->Trips.insert(index, Trips[i]);
+        Trips[i]->setParentCave(cave);
     }
-    emit Cave->insertedTrips(BeginIndex, EndIndex);
+    emit cave->insertedTrips(BeginIndex, EndIndex);
 }
 
 void cwCave::InsertRemoveTrip::removeTrips() {
-    emit Cave->beginRemoveTrips(BeginIndex, EndIndex);
+    if(CavePtr.isNull()) { return; }
+    cwCave* cave = CavePtr.data();
+    emit cave->beginRemoveTrips(BeginIndex, EndIndex);
 
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
-        Cave->Trips.removeAt(index);
+        cave->Trips.removeAt(index);
         Trips[i]->setParentCave(NULL);
     }
 
-    emit Cave->removedTrips(BeginIndex, EndIndex);
+    emit cave->removedTrips(BeginIndex, EndIndex);
 }
 
 
@@ -213,11 +245,6 @@ cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
     setText(QString("Add %1").arg(Trip->name()));
 }
 
-cwCave::InsertTripCommand::~InsertTripCommand() {
-    foreach(cwTrip* currentTrip, Trips) {
-        currentTrip->deleteLater();
-    }
-}
 
 void cwCave::InsertTripCommand::redo() {
     insertTrips();
@@ -251,5 +278,57 @@ void cwCave::RemoveTripCommand::redo() {
 
 void cwCave::RemoveTripCommand::undo() {
     insertTrips();
+}
+
+cwCave::StationDataCommand::StationDataCommand(cwCave* cave,
+        QSharedPointer<cwStation> station,
+        QVariant data,
+        cwStation::DataRoles role) {
+    Cave = cave;
+    Station = station;
+    OldData = station->data(role);
+    NewData = data;
+    Role = role;
+
+    QString commandText;
+    switch(role) {
+    case cwStation::NameRole:
+        commandText = QString("Stations Name - %1").arg(data.toString());
+        break;
+    case cwStation::LeftRole:
+        commandText = QString("Station %1's left to %1").arg(station->name()).arg(data.toString());
+        break;
+    case cwStation::RightRole:
+        commandText = QString("Station %1's right to %1").arg(station->name()).arg(data.toString());
+        break;
+    case cwStation::UpRole:
+        commandText = QString("Station %1's up to %1").arg(station->name()).arg(data.toString());
+        break;
+    case cwStation::DownRole:
+        commandText = QString("Station %1's down to %1").arg(station->name()).arg(data.toString());
+        break;
+    case cwStation::PositionRole: {
+        QVector3D position = data.value<QVector3D>();
+        commandText = QString("Station %1's position to %1, %2, %3")
+                .arg(station->name())
+                .arg(position.x())
+                .arg(position.y())
+                .arg(position.z());
+        break;
+    }
+    }
+    setText(commandText);
+}
+
+void cwCave::StationDataCommand::redo() {
+    if(Cave.isNull()) { return; }
+    Station->setData(NewData, Role);
+    emit Cave.data()->stationDataChanged(Station, Role);
+}
+
+void cwCave::StationDataCommand::undo() {
+    if(Cave.isNull()) { return; }
+    Station->setData(OldData, Role);
+    emit Cave.data()->stationDataChanged(Station, Role);
 }
 

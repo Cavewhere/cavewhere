@@ -15,6 +15,7 @@ class cwLinePlotManager;
 
 //Qt includes
 #include <QString>
+#include <QUndoStack>
 class QTreeView;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
@@ -70,6 +71,9 @@ private:
     //For undo and redo
     QAction* UndoAction;
     QAction* RedoAction;
+
+    //Undo / redo
+    QUndoStack* UndoStack;
 
 //    cwCave* currentSelectedCave() const;
 //    cwTrip* currentSelectedTrip() const;

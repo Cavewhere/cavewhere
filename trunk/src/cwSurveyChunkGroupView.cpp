@@ -19,7 +19,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
 {
 }
 
-void cwSurveyChunkGroupView::setChunkGroup(cwTrip* trip) {
+void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
     if(ChunkQMLComponents == NULL) {
         QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
         ChunkQMLComponents = new cwSurveyChunkViewComponents(context, this);
@@ -37,17 +37,18 @@ void cwSurveyChunkGroupView::setChunkGroup(cwTrip* trip) {
         ChunkViews.clear();
         ChunkBoundingRects.clear();
 
+        if(Trip != NULL) {
+            //Add chunks to the view
+            AddChunks(0, Trip->numberOfChunks() - 1);
 
-        //Add chunks to the view
-        AddChunks(0, Trip->numberOfChunks() - 1);
+            connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+        }
 
-        emit chunkGroupChanged();
-
-        connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+        emit tripChanged();
     }
 }
 
-cwTrip* cwSurveyChunkGroupView::chunkGroup() const {
+cwTrip* cwSurveyChunkGroupView::trip() const {
     return Trip;
 }
 

@@ -3,6 +3,7 @@
 
 //Our includes
 #include "ui_cwImportSurvexDialog.h"
+#include "cwUndoer.h"
 class cwSurvexImporterModel;
 class cwSurvexImporter;
 class cwCavingRegion;
@@ -13,7 +14,10 @@ class QAction;
 #include <QItemSelection>
 #include <QDebug>
 
-class cwImportSurvexDialog : public QDialog, private Ui::cwImportSurvexDialog
+class cwImportSurvexDialog :
+        public QDialog,
+        public cwUndoer,
+        private Ui::cwImportSurvexDialog
 {
     Q_OBJECT
 

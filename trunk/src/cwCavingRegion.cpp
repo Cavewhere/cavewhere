@@ -1,21 +1,24 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
-#include "cwGlobalUndoStack.h"
+#include "cwCreateCommand.h"
 
 //Qt includes
 #include <QDebug>
 
-cwCavingRegion::cwCavingRegion(QObject *parent) :
-    QObject(parent)
+cwCavingRegion::cwCavingRegion(QUndoStack* stack, QObject *parent) :
+    QObject(parent),
+    cwUndoer(stack)
 {
+    pushUndo(new cwCreateCommand(this));
 }
 
 /**
   \brief Copy constructor
   */
 cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
-    QObject(NULL)
+    QObject(NULL),
+    cwUndoer(object.undoStack())
 {
     copy(object);
 }
@@ -59,13 +62,14 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
   */
 void cwCavingRegion::addCaveHelper() {
     QString newCaveName = QString("Cave %1").arg(caveCount() + 1);
-    cwGlobalUndoStack::beginMacro(QString("Add %1").arg(newCaveName));
+    beginUndoMacro(QString("Add %1").arg(newCaveName));
 
     cwCave* cave = new cwCave();
+    cave->setUndoStack(undoStack());
     cave->setName(newCaveName);
     addCave(cave);
 
-    cwGlobalUndoStack::endMacro();
+    endUndoMacro();
 }
 
 /**
@@ -80,15 +84,13 @@ void cwCavingRegion::addCave(cwCave* cave) {
 }
 
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
-
-
     foreach(cwCave* cave, caves) {
         unparentCave(cave);
     }
 
     //Run the insert cave command
     int firstIndex = Caves.size();
-    cwGlobalUndoStack::push(new InsertCaveCommand(this, caves, firstIndex));
+    pushUndo(new InsertCaveCommand(this, caves, firstIndex));
 }
 
 /**
@@ -100,7 +102,7 @@ void cwCavingRegion::insertCave(int index, cwCave* cave) {
     unparentCave(cave);
 
     //Run the insert cave command
-    cwGlobalUndoStack::push(new InsertCaveCommand(this, cave, index));
+    pushUndo(new InsertCaveCommand(this, cave, index));
 }
 
 /**
@@ -127,7 +129,7 @@ void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
         return;
     }
 
-    cwGlobalUndoStack::push(new RemoveCaveCommand(this, beginIndex, endIndex));
+    pushUndo(new RemoveCaveCommand(this, beginIndex, endIndex));
 }
 
 /**

@@ -8,6 +8,7 @@ class cwCave;
 class cwStationReference;
 class cwTeam;
 class cwTripCalibration;
+#include "cwUndoer.h"
 
 //Qt include
 #include <QObject>
@@ -17,7 +18,8 @@ class cwTripCalibration;
 #include <QDate>
 #include <QUndoCommand>
 
-class cwTrip : public QObject
+
+class cwTrip : public QObject, public cwUndoer
 {
     Q_OBJECT
 
@@ -25,7 +27,7 @@ class cwTrip : public QObject
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
 
 public:
-    explicit cwTrip(QObject *parent = 0);
+    explicit cwTrip(QUndoStack* stack, QObject *parent = 0);
     cwTrip(const cwTrip& object);
     cwTrip& operator=(const cwTrip& object);
 
@@ -93,7 +95,7 @@ private:
         void redo();
         void undo();
     private:
-        cwTrip* Trip;
+        QWeakPointer<cwTrip> Trip;
         QString NewName;
         QString OldName;
     };
@@ -104,7 +106,7 @@ private:
         void redo();
         void undo();
     private:
-        cwTrip* Trip;
+        QWeakPointer<cwTrip> Trip;
         QDate NewDate;
         QDate OldDate;
     };

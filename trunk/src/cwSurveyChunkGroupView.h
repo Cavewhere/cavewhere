@@ -15,7 +15,7 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwTrip* chunkGroup READ chunkGroup WRITE setChunkGroup NOTIFY chunkGroupChanged)
+    Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
     Q_PROPERTY(float contentHeight READ contentHeight NOTIFY contentHeightChanged )
     Q_PROPERTY(float contentWidth READ contentWidth NOTIFY contentWidthChanged )
     Q_PROPERTY(float viewportX READ viewportX WRITE setViewportX NOTIFY viewportXChanged)
@@ -27,8 +27,8 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
 public:
     explicit cwSurveyChunkGroupView(QDeclarativeItem *parent = 0);
 
-    void setChunkGroup(cwTrip* chunkGroup);
-    cwTrip* chunkGroup() const;
+    void setTrip(cwTrip* trip);
+    cwTrip* trip() const;
 
     Q_INVOKABLE float contentHeight() const;
     Q_INVOKABLE float contentWidth() const;
@@ -49,7 +49,7 @@ public:
     Q_INVOKABLE QRectF ensureVisibleRect() const;
 
 signals:
-    void chunkGroupChanged();
+    void tripChanged();
     void contentHeightChanged();
     void contentWidthChanged();
 

@@ -5,15 +5,17 @@
 #include <QObject>
 #include <QList>
 #include <QUndoCommand>
+
 //Our includes
 class cwCave;
+#include "cwUndoer.h"
 
-class cwCavingRegion : public QObject
+class cwCavingRegion : public QObject, public cwUndoer
 {
     Q_OBJECT
 
 public:
-    explicit cwCavingRegion(QObject *parent = 0);
+    explicit cwCavingRegion(QUndoStack* stack = NULL, QObject *parent = NULL);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
 

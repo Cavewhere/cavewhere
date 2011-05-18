@@ -15,6 +15,20 @@ Rectangle {
         return (indexsType == type);
     }
 
+    /**
+      This takes the currently selected index in the dataSideBar and gets the object
+
+      This function returns null if the select index is not of 'type'.  If it is,
+      it returns the object
+      */
+    function getObject(type) {
+        if(currentIndexIsType(type)) {
+            var index = dataSideBar.caveSidebar.currentIndex
+            return regionModel.data(index, RegionTreeModel.ObjectRole);
+        }
+        return null;
+    }
+
     DataSideBar {
         id: dataSideBar
         width: 300;
@@ -94,14 +108,7 @@ Rectangle {
         CaveTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.CaveType) ? 1.0 : 0.0
-            currentCave: {
-                if(currentIndexIsType(RegionTreeModel.CaveType)) {
-                    var index = dataSideBar.caveSidebar.currentIndex
-                    return regionModel.data(index, RegionTreeModel.ObjectRole);
-                }
-                return null;
-            }
-
+            currentCave: getObject(RegionTreeModel.CaveType)
             Behavior on opacity {
                 NumberAnimation {
                     duration: 300
@@ -112,6 +119,7 @@ Rectangle {
         TripTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.TripType) ? 1.0 : 0.0
+            currentTrip: getObject(RegionTreeModel.TripType)
             Behavior on opacity {
                 NumberAnimation {
                     duration: 300

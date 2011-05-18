@@ -4,25 +4,26 @@
 //Our include
 class cwTrip;
 #include <cwStation.h>
+#include <cwUndoer.h>
 
 //Qt includes
 #include <QObject>
 #include <QList>
 #include <QSharedPointer>
-#include <QWeakPointer>
 #include <QUndoCommand>
 #include <QDebug>
+#include <QWeakPointer>
+#include <QVariant>
 
-class cwCave : public QObject
+class cwCave : public QObject, public cwUndoer
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
 
 public:
-    explicit cwCave(QObject* parent = NULL);
+    explicit cwCave(QUndoStack* stack = NULL, QObject* parent = NULL);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
-    ~cwCave() { qDebug() << "Deleteing: " << this << this->parent(); }
 
     QString name() const;
     void setName(QString name);
@@ -39,6 +40,8 @@ public:
     QWeakPointer<cwStation> station(QString name);
     void addStation(QSharedPointer<cwStation> station);
     void removeStation(QString name);
+    void setStationData(QSharedPointer<cwStation> station, QVariant data, cwStation::DataRoles role);
+    QVariant stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const;
 
     QList< QWeakPointer<cwStation> > stations() const;
 
@@ -53,6 +56,7 @@ signals:
 
     void stationAddedToCave(QString name);
     void stationRemovedFromCave(QString name);
+    void stationDataChanged(QSharedPointer<cwStation>, cwStation::DataRoles role);
 
 protected:
     QList<cwTrip*> Trips;
@@ -71,7 +75,7 @@ private:
         void redo();
         void undo();
     private:
-        cwCave* Cave;
+        QWeakPointer<cwCave> CavePtr;
         QString newName;
         QString oldName;
     };
@@ -86,7 +90,7 @@ private:
 
         QList<cwTrip*> Trips;
     private:
-        cwCave* Cave;
+        QWeakPointer<cwCave> CavePtr;
         int BeginIndex;
         int EndIndex;
     };
@@ -95,7 +99,6 @@ private:
     public:
         InsertTripCommand(cwCave* cave, cwTrip* Trip, int index);
         InsertTripCommand(cwCave* cave, QList<cwTrip*> Trip, int index);
-        virtual ~InsertTripCommand();
         virtual void redo();
         virtual void undo();
     };
@@ -105,6 +108,23 @@ private:
         RemoveTripCommand(cwCave* cave, int beginIndex, int endIndex);
         virtual void redo();
         virtual void undo();
+    };
+
+    class StationDataCommand : public QUndoCommand {
+    public:
+        StationDataCommand(cwCave* cave,
+                           QSharedPointer<cwStation> station,
+                           QVariant data,
+                           cwStation::DataRoles role);
+        virtual void redo();
+        virtual void undo();
+
+    private:
+        QWeakPointer<cwCave> Cave;
+        QSharedPointer<cwStation> Station;
+        QVariant NewData;
+        QVariant OldData;
+        cwStation::DataRoles Role;
     };
 
 };
