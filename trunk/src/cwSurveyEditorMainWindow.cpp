@@ -99,7 +99,9 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
-    Region = new cwCavingRegion(UndoStack, this);
+    Region = new cwCavingRegion(this);
+    Region->setUndoStack(UndoStack);
+
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
 
@@ -356,9 +358,9 @@ void cwSurveyEditorMainWindow::setSurveyData(QItemSelection /*selected*/, QItemS
 //}
 
 void cwSurveyEditorMainWindow::updateUndoText(QString undoText) {
-    ActionUndo->setText(QString("Undo - %1").arg(undoText));
+    ActionUndo->setText(QString("Undo %1").arg(undoText));
 }
 
 void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
-    ActionRedo->setText(QString("Redo - %1").arg(redoText));
+    ActionRedo->setText(QString("Redo %1").arg(redoText));
 }

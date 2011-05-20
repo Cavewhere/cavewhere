@@ -72,8 +72,7 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTaskProgressDialog.cpp \
     src/cwStringListErrorModel.cpp \
     src/cwGlobalUndoStack.cpp \
-    src/cwUndoer.cpp \
-    src/cwCreateCommand.cpp
+    src/cwUndoer.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -128,8 +127,7 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTaskProgressDialog.h \
     src/cwStringListErrorModel.h \
     src/cwGlobalUndoStack.h \
-    src/cwUndoer.h \
-    src/cwCreateCommand.h
+    src/cwUndoer.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

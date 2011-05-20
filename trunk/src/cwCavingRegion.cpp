@@ -1,16 +1,13 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
-#include "cwCreateCommand.h"
 
 //Qt includes
 #include <QDebug>
 
-cwCavingRegion::cwCavingRegion(QUndoStack* stack, QObject *parent) :
-    QObject(parent),
-    cwUndoer(stack)
+cwCavingRegion::cwCavingRegion(QObject *parent) :
+    QObject(parent)
 {
-    pushUndo(new cwCreateCommand(this));
 }
 
 /**
@@ -86,6 +83,7 @@ void cwCavingRegion::addCave(cwCave* cave) {
 void cwCavingRegion::addCaves(QList<cwCave*> caves) {
     foreach(cwCave* cave, caves) {
         unparentCave(cave);
+        cave->setUndoStack(undoStack());
     }
 
     //Run the insert cave command
@@ -140,6 +138,16 @@ int cwCavingRegion::indexOf(cwCave* cave) {
 }
 
 /**
+  \brief Sets the undo stack for this region
+
+  This will also set undo stack for the children as well
+  */
+void cwCavingRegion::setUndoStackForChildren() {
+    setUndoStackForChildrenHelper(Caves);
+}
+
+
+/**
   \brief Unparents the cave
   */
 void cwCavingRegion::unparentCave(cwCave* cave) {
@@ -156,28 +164,54 @@ cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
     Region = region;
     BeginIndex = beginIndex;
     EndIndex = endIndex;
+    OwnsCaves = false;
 }
 
+/**
+  Delete all the caves if it owns them
+  */
+cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
+    if(OwnsCaves) {
+        foreach(cwCave* cave, Caves) {
+            cave->deleteLater();
+        }
+    }
+}
+
+/**
+  \brief Insert the caves in this command into the region
+  */
 void cwCavingRegion::InsertRemoveCave::insertCaves() {
-    emit Region->beginInsertCaves(BeginIndex, EndIndex);
+    if(Region.isNull()) { return; }
+    cwCavingRegion* regionPtr = Region.data();
+
+    emit regionPtr->beginInsertCaves(BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
-        Region->Caves.insert(index, Caves[i]);
-        Caves[i]->setParent(Region);
+        regionPtr->Caves.insert(index, Caves[i]);
+        Caves[i]->setParent(regionPtr);
     }
-    emit Region->insertedCaves(BeginIndex, EndIndex);
+    emit regionPtr->insertedCaves(BeginIndex, EndIndex);
 }
 
+/**
+  \brief Removes the caves in this command from the region
+  */
 void cwCavingRegion::InsertRemoveCave::removeCaves() {
-    emit Region->beginRemoveCaves(BeginIndex, EndIndex);
+    if(Region.isNull()) { return; }
+    cwCavingRegion* regionPtr = Region.data();
+
+    emit regionPtr->beginRemoveCaves(BeginIndex, EndIndex);
 
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
-        Region->Caves.removeAt(index);
+        regionPtr->Caves.removeAt(index);
         Caves[i]->setParent(NULL);
     }
 
-    emit Region->removedCaves(BeginIndex, EndIndex);
+    OwnsCaves = true;
+
+    emit regionPtr->removedCaves(BeginIndex, EndIndex);
 }
 
 

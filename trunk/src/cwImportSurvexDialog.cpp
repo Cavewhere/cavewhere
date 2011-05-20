@@ -293,7 +293,6 @@ cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int ty
   */
 void cwImportSurvexDialog::import() {
     cwSurvexGlobalData* globalData = Importer->data();
-    globalData->setUndoStack(undoStack());
 
     if(!globalData->caves().isEmpty()) {
         beginUndoMacro("Import survex");

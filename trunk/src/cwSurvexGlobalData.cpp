@@ -53,14 +53,14 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
     case cwSurvexBlockData::NoImport:
         break;
     case cwSurvexBlockData::Cave:
-        currentCave = new cwCave(undoStack(), this);
+        currentCave = new cwCave(this);
 
         currentCave->setName(currentBlock->name());
         currentTrip = NULL;
         caves->append(currentCave);
         break;
     case cwSurvexBlockData::Trip: {
-        currentTrip = new cwTrip(undoStack(), this);
+        currentTrip = new cwTrip(this);
 
         //Copy the name and date
         currentTrip->setName(currentBlock->name());
@@ -74,7 +74,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 
         //Creates a cave for the trip if there isn't one
         if(currentCave == NULL) {
-            currentCave = new cwCave(undoStack(), this);
+            currentCave = new cwCave(this);
             currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
             caves->append(currentCave);
         }
@@ -101,13 +101,13 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 
             //Make sure we have a cave
             if(currentCave == NULL) {
-                currentCave = new cwCave(undoStack(), this);
+                currentCave = new cwCave(this);
                 currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
                 caves->append(currentCave);
             }
 
             //Create the trip
-            currentTrip = new cwTrip(undoStack(), this);
+            currentTrip = new cwTrip(this);
             currentTrip->setName(QString("Trip %1").arg(currentCave->tripCount() + 1));
             currentCave->addTrip(currentTrip);
         }

@@ -12,7 +12,7 @@ class cwTrip;
 #include <QList>
 #include <QStringList>
 
-class cwSurvexGlobalData : public QObject, public cwUndoer
+class cwSurvexGlobalData : public QObject
 {
     friend class cwSurvexImporter;
 

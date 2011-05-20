@@ -1,14 +1,11 @@
 //Our includes
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwCreateCommand.h"
 #include "cwStation.h"
 
-cwCave::cwCave(QUndoStack* stack, QObject* parent) :
-    QObject(parent),
-    cwUndoer(stack)
+cwCave::cwCave(QObject* parent) :
+    QObject(parent)
 {
-    pushUndo(new cwCreateCommand(this));
 }
 
 /**
@@ -16,7 +13,7 @@ cwCave::cwCave(QUndoStack* stack, QObject* parent) :
   */
 cwCave::cwCave(const cwCave& object) :
     QObject(NULL),
-    cwUndoer(object)
+    cwUndoer()
 {
     Copy(object);
 }
@@ -35,6 +32,8 @@ cwCave& cwCave::Copy(const cwCave& object) {
     if(&object == this) {
         return *this;
     }
+
+    setUndoStack(object.undoStack());
 
     //Set the name of the cave
     setName(object.name());
@@ -164,6 +163,12 @@ QVariant cwCave::stationData(QSharedPointer<cwStation> station, cwStation::DataR
     return station->data(role);
 }
 
+/**
+  \brief Sets the undo stack for the cave and all of it's children
+  */
+void cwCave::setUndoStackForChildren() {
+    setUndoStackForChildrenHelper(Trips);
+}
 
 
 cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
@@ -193,6 +198,15 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
     CavePtr = cave;
     BeginIndex = beginIndex;
     EndIndex = endIndex;
+    OwnsCaves = false;
+}
+
+cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
+    if(OwnsCaves) {
+        foreach(cwTrip* trip, Trips) {
+            trip->deleteLater();
+        }
+    }
 }
 
 void cwCave::InsertRemoveTrip::insertTrips() {
@@ -212,11 +226,14 @@ void cwCave::InsertRemoveTrip::removeTrips() {
     cwCave* cave = CavePtr.data();
     emit cave->beginRemoveTrips(BeginIndex, EndIndex);
 
+    //Remove all the trips from the back to the front
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
         cave->Trips.removeAt(index);
         Trips[i]->setParentCave(NULL);
     }
+
+    OwnsCaves = true;
 
     emit cave->removedTrips(BeginIndex, EndIndex);
 }

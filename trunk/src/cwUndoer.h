@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QUndoStack>
+#include <QSet>
 
 /**
   \brief This allows objects to undo themselves and have
@@ -14,29 +15,66 @@ class cwUndoer
 {
 public:
     QUndoStack* undoStack() const;
+
     void setUndoStack(QUndoStack* undoStack);
 
+//    void addUndoChild(cwUndoer* undoer);
+//    void removeUndoChild(cwUndoer* undoer);
+//    void clearChildren();
+
 protected:
+    QUndoStack* UndoStack;
+
     cwUndoer(QUndoStack* undoStack = NULL);
     void pushUndo(QUndoCommand* command);
     void beginUndoMacro(const QString& text);
     void endUndoMacro();
 
-private:
-    QUndoStack* Stack;
+    /// You need to implement this function in the subclass
+    /// Make sure you set UndoStack and then call setUndoStackForChildrenHelper()
+    virtual void setUndoStackForChildren() { }
 
+    /**
+      \brief This sets the undo stack for the undoer's children
+
+      This is a helper function when implementing setUndoStack
+      */
+    template <class UndoerSubClass>
+    void setUndoStackForChildrenHelper(QList<UndoerSubClass*> children) {
+        foreach(UndoerSubClass* undoer, children) {
+            undoer->setUndoStack(UndoStack);
+        }
+    }
 };
 
 /**
   \brief Gets the current undo stack
   */
 inline QUndoStack* cwUndoer::undoStack() const {
-    return Stack;
+    return UndoStack;
 }
 
+///**
+//  \brief Clears all the children
+//  */
+//inline void cwUndoer::clearChildren() {
+//    ChildUndors.clear();
+//}
 
-inline void cwUndoer::setUndoStack(QUndoStack* undoStack)  {
-    Stack = undoStack;
-}
+///**
+//  Adds a child under
+//  */
+//void cwUndoer::addUndoChild(cwUndoer* undoer) {
+//    ChildUndors.insert(undoer);
+//}
+
+///**
+//  \brief Removes a child
+//  */
+//void cwUndoer::removeUndoChild(cwUndoer* undoer) {
+//    ChildUndors.remove(undoer);
+//}
+
+
 
 #endif // CWUNDOER_H

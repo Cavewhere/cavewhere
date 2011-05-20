@@ -27,7 +27,7 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
 
 public:
-    explicit cwTrip(QUndoStack* stack, QObject *parent = 0);
+    explicit cwTrip(QObject *parent = 0);
     cwTrip(const cwTrip& object);
     cwTrip& operator=(const cwTrip& object);
 
@@ -85,7 +85,7 @@ protected:
     //Units
     cwUnits::LengthUnit DistanceUnit;
 
-
+    virtual void setUndoStackForChildren();
 private:
     void Copy(const cwTrip& object);
 
