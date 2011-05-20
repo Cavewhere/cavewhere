@@ -5,18 +5,14 @@
 #include "cwStationReference.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
-#include "cwCreateCommand.h"
 
 //Qt includes
 #include <QMap>
 
-cwTrip::cwTrip(QUndoStack* stack, QObject *parent) :
+cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
-    cwUndoer(stack),
     ParentCave(NULL)
 {
-    pushUndo(new cwCreateCommand(this));
-
     DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
@@ -240,8 +236,14 @@ QList< cwStationReference > cwTrip::uniqueStations() const {
             lookup[station.name()] = station;
         }
     }
-
     return lookup.values();
+}
+
+/**
+  \brief Sets the undo stack for the child objects
+  */
+void cwTrip::setUndoStackForChildren() {
+
 }
 
 /**

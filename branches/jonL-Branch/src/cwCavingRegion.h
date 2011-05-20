@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QList>
 #include <QUndoCommand>
+#include <QWeakPointer>
 
 //Our includes
 class cwCave;
@@ -15,7 +16,7 @@ class cwCavingRegion : public QObject, public cwUndoer
     Q_OBJECT
 
 public:
-    explicit cwCavingRegion(QUndoStack* stack = NULL, QObject *parent = NULL);
+    explicit cwCavingRegion(QObject *parent = NULL);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
 
@@ -42,6 +43,8 @@ public slots:
 protected:
     QList<cwCave*> Caves;
 
+    virtual void setUndoStackForChildren();
+
 private:
     cwCavingRegion& copy(const cwCavingRegion& object);
 
@@ -51,6 +54,7 @@ private:
     class InsertRemoveCave : public QUndoCommand {
     public:
         InsertRemoveCave(cwCavingRegion* region, int beginIndex, int endIndex);
+        ~InsertRemoveCave();
 
     protected:
         void insertCaves();
@@ -58,9 +62,10 @@ private:
 
         QList<cwCave*> Caves;
     private:
-        cwCavingRegion* Region;
+        QWeakPointer<cwCavingRegion> Region;
         int BeginIndex;
         int EndIndex;
+        bool OwnsCaves; //!< If the undo command own the caves, ie, it'll delete them
     };
 
     ////////////////////// Undo Redo commands ///////////////////////////////////

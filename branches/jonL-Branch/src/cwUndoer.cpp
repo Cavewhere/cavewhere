@@ -12,12 +12,12 @@ cwUndoer::cwUndoer(QUndoStack* stack)
 
   */
 void cwUndoer::pushUndo(QUndoCommand* command) {
-    if(Stack == NULL) {
+    if(UndoStack == NULL) {
         command->redo();
         delete command;
         return;
     }
-    Stack->push(command);
+    UndoStack->push(command);
 }
 
 /**
@@ -26,8 +26,8 @@ void cwUndoer::pushUndo(QUndoCommand* command) {
   If the undo stack hasn't been set, this does nothing
   */
 void cwUndoer::beginUndoMacro(const QString& text) {
-    if(Stack == NULL) { return; }
-    Stack->beginMacro(text);
+    if(UndoStack == NULL) { return; }
+    UndoStack->beginMacro(text);
 }
 
 /**
@@ -36,6 +36,18 @@ void cwUndoer::beginUndoMacro(const QString& text) {
   If the undo stack hasn't been set, this does nothing
   */
 void cwUndoer::endUndoMacro() {
-    if(Stack == NULL) { return; }
-    Stack->endMacro();
+    if(UndoStack == NULL) { return; }
+    UndoStack->endMacro();
+}
+
+/**
+  \brief Sets all the child undo stacks as well
+
+  This will set the undo stack recursively through all the children
+  */
+void cwUndoer::setUndoStack(QUndoStack* undoStack)  {
+    if(UndoStack != undoStack) {
+        UndoStack = undoStack;
+        setUndoStackForChildren();
+    }
 }

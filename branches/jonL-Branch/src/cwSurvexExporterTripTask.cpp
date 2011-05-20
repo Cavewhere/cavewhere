@@ -9,7 +9,7 @@ const int cwSurvexExporterTripTask::TextPadding = -11; //Left align with 10 spac
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
 {
-    Trip = new cwTrip(NULL, this);
+    Trip = new cwTrip(this);
 }
 
 /**

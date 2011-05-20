@@ -5,7 +5,7 @@
 cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
     cwExporterTask(parent)
 {
-    Cave = new cwCave(NULL, this);
+    Cave = new cwCave(this);
 }
 
 /**

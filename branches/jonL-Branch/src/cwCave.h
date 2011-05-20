@@ -21,7 +21,7 @@ class cwCave : public QObject, public cwUndoer
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
 
 public:
-    explicit cwCave(QUndoStack* stack = NULL, QObject* parent = NULL);
+    explicit cwCave(QObject* parent = NULL);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
 
@@ -45,6 +45,8 @@ public:
 
     QList< QWeakPointer<cwStation> > stations() const;
 
+
+
 signals:
     void beginInsertTrips(int begin, int end);
     void insertedTrips(int begin, int end);
@@ -64,6 +66,7 @@ protected:
 
     QMap<QString, QWeakPointer<cwStation> > StationLookup;
 
+    virtual void setUndoStackForChildren();
 private:
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();
@@ -83,6 +86,7 @@ private:
     class InsertRemoveTrip : public QUndoCommand {
     public:
         InsertRemoveTrip(cwCave* cave, int beginIndex, int endIndex);
+        ~InsertRemoveTrip();
 
     protected:
         void insertTrips();
@@ -93,6 +97,7 @@ private:
         QWeakPointer<cwCave> CavePtr;
         int BeginIndex;
         int EndIndex;
+        bool OwnsCaves;
     };
 
     class InsertTripCommand : public InsertRemoveTrip {
