@@ -4,6 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QSharedPointer>
+#include <QDebug>
 
 //Our includes
 class cwCave;
@@ -23,7 +24,6 @@ class cwStationReference
 public:
     cwStationReference();
     cwStationReference(QString name);
-    cwStationReference(const cwStationReference& object);
 
     void setCave(cwCave* cave);
     cwCave* cave() const;
@@ -48,6 +48,7 @@ public:
 
     bool operator ==(const cwStationReference& object) const;
     bool operator !=(const cwStationReference& object) const;
+    bool operator <(const cwStationReference& object) const;
 
 private:
     cwCave* Cave;
@@ -94,6 +95,10 @@ inline bool cwStationReference::operator ==(const cwStationReference& object) co
 
 inline bool cwStationReference::operator !=(const cwStationReference& object) const {
     return !operator ==(object);
+}
+
+inline bool cwStationReference::operator <(const cwStationReference& object) const {
+    return SharedStation < object.SharedStation;
 }
 
 #endif // CWSTATIONREFERANCE_H

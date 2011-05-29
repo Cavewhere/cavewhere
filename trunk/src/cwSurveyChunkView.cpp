@@ -1,9 +1,11 @@
 //Our includes
-#include "cwSurveyChuckView.h"
+#include "cwSurveyChunkView.h"
 #include "cwSurveyChunk.h"
 #include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunkViewComponents.h"
+#include "cwStationValidator.h"
+#include "cwDistanceValidator.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -17,14 +19,14 @@
 
 cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     QDeclarativeItem(parent),
-    Model(NULL),
+    SurveyChunk(NULL),
     QMLComponents(NULL),
     FocusedItem(NULL),
     ChunkBelow(NULL),
     ChunkAbove(NULL)
 
 {
-    connect(this, SIGNAL(focusChanged(bool)), SLOT(SetFocusForFirstStation(bool)));
+    connect(this, SIGNAL(focusChanged(bool)), SLOT(setFocusForFirstStation(bool)));
 
 }
 
@@ -51,18 +53,18 @@ float cwSurveyChunkView::heightHint(int numberElements) {
   If the user use the keyboard to move the focus, below is the object below this object.
   This will update the navigation for the object below this
   */
-void cwSurveyChunkView::SetNavigationBelow(const cwSurveyChunkView* below) {
+void cwSurveyChunkView::setNavigationBelow(const cwSurveyChunkView* below) {
     ChunkBelow = below;
 
     if(StationRows.empty()) { return; }
 
     //Update first station navigation
     int lastIndex = StationRows.size() - 1;
-    UpdateStationTabNavigation(lastIndex);
-    UpdateStationArrowNavigation(lastIndex);
+    updateStationTabNavigation(lastIndex);
+    updateStationArrowNavigation(lastIndex);
 
     lastIndex = ShotRows.size() - 1;
-    UpdateShotArrowNavigaton(lastIndex);
+    updateShotArrowNavigaton(lastIndex);
 }
 
 /**
@@ -71,14 +73,14 @@ void cwSurveyChunkView::SetNavigationBelow(const cwSurveyChunkView* below) {
   If the user use the keyboard to move the focus, above is the object above this
   object.  This will update the navigation for the first last object in this view
   */
-void cwSurveyChunkView::SetNavigationAbove(const cwSurveyChunkView* above) {
+void cwSurveyChunkView::setNavigationAbove(const cwSurveyChunkView* above) {
     ChunkAbove = above;
 
     if(StationRows.empty()) { return; }
 
-    UpdateStationTabNavigation(0);
-    UpdateStationArrowNavigation(0);
-    UpdateShotArrowNavigaton(0);
+    updateStationTabNavigation(0);
+    updateStationArrowNavigation(0);
+    updateShotArrowNavigaton(0);
 }
 
 /**
@@ -86,20 +88,41 @@ void cwSurveyChunkView::SetNavigationAbove(const cwSurveyChunkView* above) {
 
   Equivalent to SetNavigationBelow and SetNavigationAbove
   */
-void cwSurveyChunkView::SetNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below) {
-    SetNavigationAbove(above);
-    SetNavigationBelow(below);
+void cwSurveyChunkView::setNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below) {
+    setNavigationAbove(above);
+    setNavigationBelow(below);
 }
 
-void cwSurveyChunkView::SetQMLComponents(cwSurveyChunkViewComponents* components) {
+void cwSurveyChunkView::setQMLComponents(cwSurveyChunkViewComponents* components) {
     QMLComponents = components;
+}
+
+/**
+  \brief This update the survey chunk's data
+  */
+void cwSurveyChunkView::updateData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+    switch (role) {
+    case cwSurveyChunk::StationNameRole:
+    case cwSurveyChunk::StationLeftRole:
+    case cwSurveyChunk::StationRightRole:
+    case cwSurveyChunk::StationUpRole:
+    case cwSurveyChunk::StationDownRole:
+        updateStationData(role, index, data);
+        break;
+    case cwSurveyChunk::ShotCompassRole:
+    case cwSurveyChunk::ShotBackCompassRole:
+    case cwSurveyChunk::ShotClinoRole:
+    case cwSurveyChunk::ShotBackClinoRole:
+        updateShotData(role, index, data);
+        break;
+    }
 }
 
 /**
   \brief Get's the model from the view
   */
 cwSurveyChunk* cwSurveyChunkView::model() {
-    return Model;
+    return SurveyChunk;
 }
 
 /**
@@ -110,19 +133,19 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         qDebug() << "QML components need to be set before setting the model";
     }
 
-    if(Model != chunk) {
-        Model = chunk;
+    if(SurveyChunk != chunk) {
+        SurveyChunk = chunk;
 
         //SetupDelegates();
 
-        Clear();
-        AddStations(0, Model->StationCount() - 1);
-        AddShots(0, Model->ShotCount() - 1);
+        clear();
+        addStations(0, SurveyChunk->StationCount() - 1);
+        addShots(0, SurveyChunk->ShotCount() - 1);
 
-        connect(Model, SIGNAL(ShotsAdded(int,int)), SLOT(AddShots(int,int)));
-        connect(Model, SIGNAL(StationsAdded(int,int)), SLOT(AddStations(int,int)));
-        connect(Model, SIGNAL(ShotsRemoved(int,int)), SLOT(RemoveShots(int,int)));
-        connect(Model, SIGNAL(StationsRemoved(int,int)), SLOT(RemoveStations(int,int)));
+        connect(SurveyChunk, SIGNAL(ShotsAdded(int,int)), SLOT(addShots(int,int)));
+        connect(SurveyChunk, SIGNAL(StationsAdded(int,int)), SLOT(addStations(int,int)));
+        connect(SurveyChunk, SIGNAL(ShotsRemoved(int,int)), SLOT(removeShots(int,int)));
+        connect(SurveyChunk, SIGNAL(StationsRemoved(int,int)), SLOT(removeStations(int,int)));
 
         emit modelChanged();
     }
@@ -135,21 +158,22 @@ QRectF cwSurveyChunkView::boundingRect() const {
 /**
   \brief Re-initializes the view
   */
-void cwSurveyChunkView::Clear() {
+void cwSurveyChunkView::clear() {
     foreach(QGraphicsItem* item, childItems()) {
         delete item;
     }
 
     StationRows.clear();
     ShotRows.clear();
+    StationToIndex.clear();
 
-    CreateTitlebar();
+    createTitlebar();
 }
 
 /**
   \brief User right clicks on station
   */
-void cwSurveyChunkView::RightClickOnStation(int index) {
+void cwSurveyChunkView::rightClickOnStation(int index) {
 
     QMenu menu;
 
@@ -159,25 +183,25 @@ void cwSurveyChunkView::RightClickOnStation(int index) {
     QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
     QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
 
-    removeAbove->setEnabled(Model->CanRemoveStation(index, cwSurveyChunk::Above));
-    removeBelow->setEnabled(Model->CanRemoveStation(index, cwSurveyChunk::Below));
+    removeAbove->setEnabled(SurveyChunk->CanRemoveStation(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(SurveyChunk->CanRemoveStation(index, cwSurveyChunk::Below));
 
     QAction* selected = menu.exec(QCursor::pos());
     if(selected == insertAbove) {
-        Model->InsertStation(index, cwSurveyChunk::Above);
+        SurveyChunk->InsertStation(index, cwSurveyChunk::Above);
     } else if(selected == insertBelow) {
-        Model->InsertStation(index, cwSurveyChunk::Below);
+        SurveyChunk->InsertStation(index, cwSurveyChunk::Below);
     } else if(selected == removeAbove) {
-        Model->RemoveStation(index, cwSurveyChunk::Above);
+        SurveyChunk->RemoveStation(index, cwSurveyChunk::Above);
     } else if(selected == removeBelow) {
-        Model->RemoveStation(index, cwSurveyChunk::Below);
+        SurveyChunk->RemoveStation(index, cwSurveyChunk::Below);
     }
 }
 
 /**
   \brief User right clicks on station
   */
-void cwSurveyChunkView::RightClickOnShot(int index) {
+void cwSurveyChunkView::rightClickOnShot(int index) {
     QMenu menu;
 
     QAction* insertAbove = menu.addAction(QIcon(":icons/AddArrowUp.png"), "Insert Above");
@@ -186,18 +210,18 @@ void cwSurveyChunkView::RightClickOnShot(int index) {
     QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
     QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
 
-    removeAbove->setEnabled(Model->CanRemoveShot(index, cwSurveyChunk::Above));
-    removeBelow->setEnabled(Model->CanRemoveShot(index, cwSurveyChunk::Below));
+    removeAbove->setEnabled(SurveyChunk->CanRemoveShot(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(SurveyChunk->CanRemoveShot(index, cwSurveyChunk::Below));
 
     QAction* selected = menu.exec(QCursor::pos());
     if(selected == insertAbove) {
-        Model->InsertShot(index, cwSurveyChunk::Above);
+        SurveyChunk->InsertShot(index, cwSurveyChunk::Above);
     } else if(selected == insertBelow) {
-        Model->InsertShot(index, cwSurveyChunk::Below);
+        SurveyChunk->InsertShot(index, cwSurveyChunk::Below);
     } else if(selected == removeAbove) {
-        Model->RemoveShot(index, cwSurveyChunk::Above);
+        SurveyChunk->RemoveShot(index, cwSurveyChunk::Above);
     } else if(selected == removeBelow) {
-        Model->RemoveShot(index, cwSurveyChunk::Below);
+        SurveyChunk->RemoveShot(index, cwSurveyChunk::Below);
     }
 }
 
@@ -210,15 +234,15 @@ void cwSurveyChunkView::RightClickOnShot(int index) {
 
   This will emit a InsertNewChunk()
   */
-void cwSurveyChunkView::SplitOnStation(int index) {
+void cwSurveyChunkView::splitOnStation(int index) {
     qDebug() << "cwSurveyChunkView: split on station" << index;
 
     //Make sure the index is good
-    if(index < 0 || index >= Model->StationCount()) {
+    if(index < 0 || index >= SurveyChunk->StationCount()) {
         return; //Can't split on a bad index
     }
 
-    cwSurveyChunk* newChunk = Model->SplitAtStation(index);
+    cwSurveyChunk* newChunk = SurveyChunk->SplitAtStation(index);
     emit createdNewChunk(newChunk);
 }
 
@@ -227,7 +251,7 @@ void cwSurveyChunkView::SplitOnStation(int index) {
 
   \param int - The shot index where the chunk will be split
 */
-void cwSurveyChunkView::SplitOnShot(int /*index*/) {
+void cwSurveyChunkView::splitOnShot(int /*index*/) {
 
 
 
@@ -239,19 +263,19 @@ void cwSurveyChunkView::SplitOnShot(int /*index*/) {
 
   This inserts new stations found in the model at and between beginIndex and endIndex.
   */
-void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
+void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
     //Make sure the model has data
-    if(Model->StationCount() == 0) { return; }
+    if(SurveyChunk->StationCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
     prepareGeometryChange();
 
     //Disconnect stations that were watched
-    disconnect(this, SLOT(StationValueHasChanged()));
+    disconnect(this, SLOT(stationValueHasChanged()));
 
     //Make sure these are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
-    endIndex = qMin(Model->StationCount() - 1, endIndex);
+    endIndex = qMin(SurveyChunk->StationCount() - 1, endIndex);
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
@@ -260,12 +284,15 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
         //Insert the row
         StationRows.insert(i, row);
 
+        //Update the row's data
+        updateStationRowData(i);
+
         //Position the row in the correct place
-        PositionStationRow(row, i);
+        positionStationRow(row, i);
 
         //Hock up the signals and slots with the models data
-        //cwStationReference station = Model->Station(i);
-        //ConnectStation(station, row);
+        cwStationReference station = SurveyChunk->Station(i);
+        StationToIndex[station] = i;
 
         //Queue the index for navigation update
         StationNavigationQueue.append(i);
@@ -276,18 +303,18 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
     StationNavigationQueue.append(endIndex + 1);
 
     //Update the navigation
-    UpdateNavigation();
+    updateNavigation();
 
     //Connect the last station's in the view
-    UpdateLastRowBehaviour();
+    updateLastRowBehaviour();
 
     //Update the positions for all rows after endIndex
-    UpdatePositionsAfterIndex(endIndex + 1);
+    updatePositionsAfterIndex(endIndex + 1);
 
     //Update the id's on effected rows
-    UpdateIndexes(endIndex + 1);
+    updateIndexes(endIndex + 1);
 
-    UpdateDimensions();
+    updateDimensions();
 
     //qDebug() << boundingRect();
 }
@@ -297,16 +324,16 @@ void cwSurveyChunkView::AddStations(int beginIndex, int endIndex) {
 
   This inserts new shots found in the model at and between beginIndex and endIndex
   */
-void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
+void cwSurveyChunkView::addShots(int beginIndex, int endIndex) {
     //Make sure the model has data
-    if(Model->ShotCount() == 0) { return; }
+    if(SurveyChunk->ShotCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
     prepareGeometryChange();
 
     //Make sure thes are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
-    endIndex = qMin(Model->ShotCount() - 1, endIndex);
+    endIndex = qMin(SurveyChunk->ShotCount() - 1, endIndex);
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
@@ -316,11 +343,11 @@ void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
         ShotRows.insert(i, row);
 
         //Position the row in the correct place
-        PositionShotRow(row, i);
+        positionShotRow(row, i);
 
         //Hock up the signals and slots with the model's data
-        cwShot* shot = Model->Shot(i);
-        ConnectShot(shot, row);
+        cwShot* shot = SurveyChunk->Shot(i);
+        connectShot(shot, row);
 
         //Queue the index for navigation update
         ShotNavigationQueue.append(i);
@@ -329,35 +356,39 @@ void cwSurveyChunkView::AddShots(int beginIndex, int endIndex) {
     //Add previous station and next station to the navigation queue
     ShotNavigationQueue.append(beginIndex - 1);
     ShotNavigationQueue.append(endIndex + 1);
-    UpdateNavigation();
+    updateNavigation();
 
     //Update the positions for all rows after endIndex
-    UpdatePositionsAfterIndex(endIndex + 1);
+    updatePositionsAfterIndex(endIndex + 1);
 
     //Update the id's on effected rows
-    UpdateIndexes(endIndex + 1);
+    updateIndexes(endIndex + 1);
 
-    UpdateDimensions();
+    updateDimensions();
 
 }
 
 /**
   \brief Removes stations from the view
   */
-void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
+void cwSurveyChunkView::removeStations(int beginIndex, int endIndex) {
 
     //Make sure the index are good
     beginIndex = qMax(0, beginIndex);
     endIndex = qMin(StationRows.size() - 1, endIndex);
 
     for(int i = endIndex; i >= beginIndex; i--) {
-        StationRow row = GetStationRow(i);
+        StationRow row = getStationRow(i);
 
         foreach(QDeclarativeItem* item, row.items()) {
             if(item) {
                 item->deleteLater();
             }
         }
+
+        //Remove the station from the look up
+        cwStationReference station = SurveyChunk->Station(i);
+        StationToIndex.remove(station);
 
         //Remove the row from the station rows
         StationRows.removeAt(i);
@@ -367,27 +398,27 @@ void cwSurveyChunkView::RemoveStations(int beginIndex, int endIndex) {
     StationNavigationQueue.append(beginIndex - 1);
     StationNavigationQueue.append(beginIndex);
     StationNavigationQueue.append(beginIndex + 1);
-    UpdateNavigation();
+    updateNavigation();
 
     //Update the positions for all rows after endIndex
-    UpdatePositionsAfterIndex(beginIndex);
+    updatePositionsAfterIndex(beginIndex);
 
     //Update the id's on effected rows
-    UpdateIndexes(beginIndex);
+    updateIndexes(beginIndex);
 
-    UpdateDimensions();
+    updateDimensions();
 }
 
 /**
   \brief Remove shots from the view
   */
-void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
+void cwSurveyChunkView::removeShots(int beginIndex, int endIndex) {
     //Make sure the index are good
     beginIndex = qMax(0, beginIndex);
     endIndex = qMin(ShotRows.size() - 1, endIndex);
 
     for(int i = endIndex; i >= beginIndex; i--) {
-        ShotRow row = GetShotRow(i);
+        ShotRow row = getShotRow(i);
 
         foreach(QDeclarativeItem* item, row.items()) {
             if(item) {
@@ -404,22 +435,22 @@ void cwSurveyChunkView::RemoveShots(int beginIndex, int endIndex) {
     ShotNavigationQueue.append(beginIndex);
     ShotNavigationQueue.append(beginIndex + 1);
 
-    UpdateNavigation();
+    updateNavigation();
 
     //Update the positions for all rows after endIndex
-    UpdatePositionsAfterIndex(beginIndex);
+    updatePositionsAfterIndex(beginIndex);
 
     //Update the id's on effected rows
-    UpdateIndexes(beginIndex);
+    updateIndexes(beginIndex);
 
-    UpdateDimensions();
+    updateDimensions();
 }
 
 
 /**
   \brief Creates the title bar for the view
   */
-void cwSurveyChunkView::CreateTitlebar() {
+void cwSurveyChunkView::createTitlebar() {
 
     QDeclarativeComponent* titleDelegate = QMLComponents->titleDelegate();
     StationTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
@@ -480,27 +511,27 @@ void cwSurveyChunkView::CreateTitlebar() {
   Sets up the QML components that are used to create QML objects in
   this view
   */
-void cwSurveyChunkView::SetupDelegates() {
-//    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-//    if(context == NULL) { return; }
+void cwSurveyChunkView::setupDelegates() {
+    //    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+    //    if(context == NULL) { return; }
 
-//    QDeclarativeEngine* engine = context->engine();
-//    if(engine == NULL) { return; }
+    //    QDeclarativeEngine* engine = context->engine();
+    //    if(engine == NULL) { return; }
 
 
-//    if(StationDelegate == NULL) {
-//        StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
-//        TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
-//        LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
-//        RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
-//        UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
-//        DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
-//        DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
-//        FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
-//        BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
-//        FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
-//        BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
-//    }
+    //    if(StationDelegate == NULL) {
+    //        StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
+    //        TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
+    //        LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
+    //        RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
+    //        UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
+    //        DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
+    //        DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
+    //        FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
+    //        BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
+    //        FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
+    //        BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
+    //    }
 }
 
 /**
@@ -516,15 +547,31 @@ cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
-    Items[Station] = qobject_cast<QDeclarativeItem*>(components->stationDelegate()->create());
+    Items[StationName] = qobject_cast<QDeclarativeItem*>(components->stationDelegate()->create());
+    Items[StationName]->setProperty("dataRole", cwSurveyChunk::StationNameRole);
+    Items[StationName]->setProperty("dataValidator", components->stationValidatorAsVariant());
+
     Items[Left] = qobject_cast<QDeclarativeItem*>(components->leftDelegate()->create());
+    Items[Left]->setProperty("dataRole", cwSurveyChunk::StationLeftRole);
+    Items[Left]->setProperty("dataValidator", components->lrudValidatorAsVariant());
+
     Items[Right] = qobject_cast<QDeclarativeItem*>(components->rightDelegate()->create());
+    Items[Right]->setProperty("dataRole", cwSurveyChunk::StationRightRole);
+    Items[Right]->setProperty("dataValidator", components->lrudValidatorAsVariant());
+
     Items[Up] = qobject_cast<QDeclarativeItem*>(components->upDelegate()->create());
+    Items[Up]->setProperty("dataRole", cwSurveyChunk::StationUpRole);
+    Items[Up]->setProperty("dataValidator", components->lrudValidatorAsVariant());
+
     Items[Down] = qobject_cast<QDeclarativeItem*>(components->downDelegate()->create());
+    Items[Down]->setProperty("dataRole", cwSurveyChunk::StationDownRole);
+    Items[Down]->setProperty("dataValidator", components->lrudValidatorAsVariant());
 
     foreach(QDeclarativeItem* item, items()) {
         item->setParentItem(view);
         item->setParent(view);
+        item->setProperty("rowIndex", rowIndex);
+        item->setProperty("surveyChunk", QVariant::fromValue(static_cast<QObject*>(view->model())));
     }
 }
 
@@ -569,18 +616,18 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
   Will position the row based no the model's index of the row.
   All the elements in station row will be position correctly
   */
-void cwSurveyChunkView::PositionStationRow(StationRow row, int index) {
-    PositionElement(row.station(), StationTitle, index);
-    PositionElement(row.left(), LeftTitle, index);
-    PositionElement(row.right(), RightTitle, index);
-    PositionElement(row.up(), UpTitle, index);
-    PositionElement(row.down(), DownTitle, index);
+void cwSurveyChunkView::positionStationRow(StationRow row, int index) {
+    positionElement(row.stationName(), StationTitle, index);
+    positionElement(row.left(), LeftTitle, index);
+    positionElement(row.right(), RightTitle, index);
+    positionElement(row.up(), UpTitle, index);
+    positionElement(row.down(), DownTitle, index);
 }
 
 /**
   \brief Helper to the PositionStationRow
   */
-void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem* titleItem, int index, int yOffset, QSizeF size) {
+void cwSurveyChunkView::positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset, QSizeF size) {
     QRectF titleRect = mapRectFromItem(titleItem, titleItem->boundingRect());
     size = !size.isValid() ? titleRect.size() + QSizeF(-2, 0) : size;
     float y = titleRect.bottom() + titleRect.height() * index;
@@ -604,47 +651,47 @@ void cwSurveyChunkView::PositionElement(QDeclarativeItem* item, QDeclarativeItem
 /**
   \brief Hooks up the model to the qml, for the station row
   */
-void cwSurveyChunkView::ConnectStation(cwStationReference* /*station*/, StationRow /*row*/) {
-//    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
+void cwSurveyChunkView::connectStation(cwStationReference* /*station*/, StationRow /*row*/) {
+    //    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
 
-//    QVector<QDeclarativeItem*> items = row.items();
-//    foreach(QDeclarativeItem* item, items) {
-//        item->setProperty("dataObject", stationObject);
-//        item->setProperty("rowIndex", row.rowIndex());
-//        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
-//        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
-//        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-//    }
+    //    QVector<QDeclarativeItem*> items = row.items();
+    //    foreach(QDeclarativeItem* item, items) {
+    //        item->setProperty("dataObject", stationObject);
+    //        item->setProperty("rowIndex", row.rowIndex());
+    //        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
+    //        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
+    //        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
+    //    }
 }
 
 /**
   \brief Positions the shot row in the object
   */
-void cwSurveyChunkView::PositionShotRow(ShotRow row, int index) {
-    PositionElement(row.distance(), DistanceTitle, index);
+void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
+    positionElement(row.distance(), DistanceTitle, index);
 
     float halfAzimuthHeight = AzimuthTitle->height() / 2.0 + 1.0;
     float halfClinoHeight = ClinoTitle->height() / 2.0 + 1.0;
-    PositionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), halfAzimuthHeight));
-    PositionElement(row.backCompass(), AzimuthTitle, index, halfAzimuthHeight, QSize(AzimuthTitle->width(), halfAzimuthHeight));
-    PositionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), halfClinoHeight));
-    PositionElement(row.backClino(), ClinoTitle, index, halfClinoHeight, QSize(ClinoTitle->width(), halfClinoHeight));
+    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), halfAzimuthHeight));
+    positionElement(row.backCompass(), AzimuthTitle, index, halfAzimuthHeight, QSize(AzimuthTitle->width(), halfAzimuthHeight));
+    positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), halfClinoHeight));
+    positionElement(row.backClino(), ClinoTitle, index, halfClinoHeight, QSize(ClinoTitle->width(), halfClinoHeight));
 }
 
 /**
   \brief Hooks up the model to the qml, for the shot row
   */
-void cwSurveyChunkView::ConnectShot(cwShot* /*shot*/, ShotRow /*row*/) {
-//    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
+void cwSurveyChunkView::connectShot(cwShot* /*shot*/, ShotRow /*row*/) {
+    //    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
 
-//    QVector<QDeclarativeItem*> items = row.items();
-//    foreach(QDeclarativeItem* item, items) {
-//        item->setProperty("dataObject", shotObject);
-//        item->setProperty("rowIndex", row.rowIndex());
-//        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
-//        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
-//        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-//    }
+    //    QVector<QDeclarativeItem*> items = row.items();
+    //    foreach(QDeclarativeItem* item, items) {
+    //        item->setProperty("dataObject", shotObject);
+    //        item->setProperty("rowIndex", row.rowIndex());
+    //        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
+    //        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
+    //        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
+    //    }
 }
 
 //void cwSurveyChunkView::StationFocusChanged(bool focus) {
@@ -667,18 +714,18 @@ void cwSurveyChunkView::ConnectShot(cwShot* /*shot*/, ShotRow /*row*/) {
 /**
   \brief Called when this item get's focus
   */
-void cwSurveyChunkView::SetFocusForFirstStation(bool focus) {
+void cwSurveyChunkView::setFocusForFirstStation(bool focus) {
     //If this view has focus
     if(focus && !StationRows.isEmpty()) {
         StationRow row = StationRows.first();
-        row.station()->setFocus(true); //Focus the first station
+        row.stationName()->setFocus(true); //Focus the first station
     }
 }
 
 /**
   \brief Called when the children focus has changed
   */
-void cwSurveyChunkView::SetChildActiveFocus(bool focus) {
+void cwSurveyChunkView::setChildActiveFocus(bool focus) {
     if(sender() == FocusedItem && !focus) {
         //Losted focus
         FocusedItem = NULL;
@@ -698,21 +745,21 @@ void cwSurveyChunkView::SetChildActiveFocus(bool focus) {
 /**
   \brief Called when the station's value has changed
   */
-void cwSurveyChunkView::StationValueHasChanged() {
-    int stationCount = Model->StationCount();
+void cwSurveyChunkView::stationValueHasChanged() {
+    int stationCount = SurveyChunk->StationCount();
     if(stationCount < 2) { return; }
 
-    StationRow lastStation = GetStationRow(stationCount - 1);
-    StationRow secondLastStation = GetStationRow(stationCount - 2);
+    StationRow lastStation = getStationRow(stationCount - 1);
+    StationRow secondLastStation = getStationRow(stationCount - 2);
 
-    if(lastStation.station() == NULL || secondLastStation.station() == NULL) { return; }
+    if(lastStation.stationName() == NULL || secondLastStation.stationName() == NULL) { return; }
 
-    QString lastStationName = lastStation.station()->property("dataValue").toString();
-    QString secondLastStationName = secondLastStation.station()->property("dataValue").toString();
+    QString lastStationName = lastStation.stationName()->property("dataValue").toString();
+    QString secondLastStationName = secondLastStation.stationName()->property("dataValue").toString();
 
 
     if(lastStationName.isEmpty() && secondLastStationName.isEmpty()) {
-        ShotRow lastShotRow = GetShotRow(Model->ShotCount() - 1);
+        ShotRow lastShotRow = getShotRow(SurveyChunk->ShotCount() - 1);
 
         //Remove the lastStation
         if(lastStation.left()->property("dataValue").toString().isEmpty() &&
@@ -725,13 +772,13 @@ void cwSurveyChunkView::StationValueHasChanged() {
                 lastShotRow.frontClino()->property("dataValue").toString().isEmpty() &&
                 lastShotRow.backClino()->property("dataValue").toString().isEmpty()) {
 
-            Model->RemoveStation(Model->StationCount() - 1, cwSurveyChunk::Above);
+            SurveyChunk->RemoveStation(SurveyChunk->StationCount() - 1, cwSurveyChunk::Above);
         }
 
 
     } else if(!lastStationName.isEmpty()) {
         //Add station to the model
-        Model->AppendNewShot();
+        SurveyChunk->AppendNewShot();
     }
 }
 
@@ -743,20 +790,20 @@ void cwSurveyChunkView::StationValueHasChanged() {
   Updates the navigation for pending elements in the StationNavigationQueue and
   the ShotNavigationQueue and there neighbors
   */
-void cwSurveyChunkView::UpdateNavigation() {
+void cwSurveyChunkView::updateNavigation() {
 
     //Valid that we can update navigation
     if(StationRows.empty() || ShotRows.empty()) { return; }
     if(StationRows.size() - 1 != ShotRows.size()) { return; }
 
     foreach(int index, StationNavigationQueue) {
-        UpdateStationTabNavigation(index);
-        UpdateStationArrowNavigation(index);
+        updateStationTabNavigation(index);
+        updateStationArrowNavigation(index);
     }
 
     foreach(int index, ShotNavigationQueue) {
-        UpdateShotTabNavigation(index);
-        UpdateShotArrowNavigaton(index);
+        updateShotTabNavigation(index);
+        updateShotArrowNavigaton(index);
     }
 
     StationNavigationQueue.clear();
@@ -768,62 +815,62 @@ void cwSurveyChunkView::UpdateNavigation() {
 
   Update the tab order for the staton row at index
   */
-void cwSurveyChunkView::UpdateStationTabNavigation(int index) {
+void cwSurveyChunkView::updateStationTabNavigation(int index) {
 
-    StationRow previousRow = GetNavigationStationRow(index - 1);
-    StationRow currentRow = GetNavigationStationRow(index);
-    StationRow nextRow = GetNavigationStationRow(index + 1);
+    StationRow previousRow = getNavigationStationRow(index - 1);
+    StationRow currentRow = getNavigationStationRow(index);
+    StationRow nextRow = getNavigationStationRow(index + 1);
 
-    ShotRow previousShotRow = GetShotRow(index - 1);
-    ShotRow nextShotRow = GetShotRow(index);
+    ShotRow previousShotRow = getShotRow(index - 1);
+    ShotRow nextShotRow = getShotRow(index);
 
     if(index == 0) {
         //Special case for this row
-        SetTabOrder(currentRow.station(), previousRow.down(), nextRow.station());
-        LRUDTabNavigation(currentRow, nextShotRow.backClino(), nextRow.left());
+        setTabOrder(currentRow.stationName(), previousRow.down(), nextRow.stationName());
+        lrudTabNavigation(currentRow, nextShotRow.backClino(), nextRow.left());
 
     } else if(index == 1) {
         //Special case for this row
-        SetTabOrder(currentRow.station(), previousRow.station(), previousShotRow.distance());
-        LRUDTabNavigation(currentRow, previousRow.down(), nextRow.station());
+        setTabOrder(currentRow.stationName(), previousRow.stationName(), previousShotRow.distance());
+        lrudTabNavigation(currentRow, previousRow.down(), nextRow.stationName());
     } else {
-        SetTabOrder(currentRow.station(), previousRow.down(), previousShotRow.distance());
-        LRUDTabNavigation(currentRow, previousShotRow.backClino(), nextRow.station());
+        setTabOrder(currentRow.stationName(), previousRow.down(), previousShotRow.distance());
+        lrudTabNavigation(currentRow, previousShotRow.backClino(), nextRow.stationName());
     }
 }
 
 /**
   \brief Updates the tab order of the LRUD at index
   */
-void cwSurveyChunkView::LRUDTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next) {
-    SetTabOrder(row.left(), previous, row.right());
-    SetTabOrder(row.right(), row.left(), row.up());
-    SetTabOrder(row.up(), row.right(), row.down());
-    SetTabOrder(row.down(), row.up(), next);
+void cwSurveyChunkView::lrudTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next) {
+    setTabOrder(row.left(), previous, row.right());
+    setTabOrder(row.right(), row.left(), row.up());
+    setTabOrder(row.up(), row.right(), row.down());
+    setTabOrder(row.down(), row.up(), next);
 }
 
 /**
   \brief Updates the tab order for the shot
   */
-void cwSurveyChunkView::UpdateShotTabNavigation(int index) {
-    ShotRow row = GetShotRow(index);
-    StationRow fromStationRow = GetStationRow(index);
-    StationRow toStationRow = GetStationRow(index + 1);
+void cwSurveyChunkView::updateShotTabNavigation(int index) {
+    ShotRow row = getShotRow(index);
+    StationRow fromStationRow = getStationRow(index);
+    StationRow toStationRow = getStationRow(index + 1);
 
-    SetTabOrder(row.distance(), toStationRow.station(), row.frontCompass());
-    SetTabOrder(row.frontCompass(), row.distance(), row.backCompass());
-    SetTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
-    SetTabOrder(row.frontClino(), row.backCompass(), row.backClino());
+    setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
+    setTabOrder(row.frontCompass(), row.distance(), row.backCompass());
+    setTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
+    setTabOrder(row.frontClino(), row.backCompass(), row.backClino());
 
     if(index == 0) {
         //Special case for this row
-        SetTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
+        setTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
     } else {
-        SetTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
+        setTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
     }
 }
 
-void cwSurveyChunkView::SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next) {
+void cwSurveyChunkView::setTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next) {
     if(item == NULL) { return; }
     item->setProperty("previousTabObject", QVariant::fromValue(previous));
     item->setProperty("nextTabObject", QVariant::fromValue(next));
@@ -832,43 +879,43 @@ void cwSurveyChunkView::SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* pr
 /**
   \brief Sets the navigation for the station item
   */
-void cwSurveyChunkView::UpdateStationArrowNavigation(int index) {
-    StationRow previousRow = GetNavigationStationRow(index - 1);
-    StationRow currentRow = GetNavigationStationRow(index);
-    StationRow nextRow = GetNavigationStationRow(index + 1);
+void cwSurveyChunkView::updateStationArrowNavigation(int index) {
+    StationRow previousRow = getNavigationStationRow(index - 1);
+    StationRow currentRow = getNavigationStationRow(index);
+    StationRow nextRow = getNavigationStationRow(index + 1);
 
-    ShotRow previousShotRow = GetShotRow(index - 1);
-    ShotRow nextShotRow = GetShotRow(index);
+    ShotRow previousShotRow = getShotRow(index - 1);
+    ShotRow nextShotRow = getShotRow(index);
 
-    SetArrowNavigation(currentRow.station(), NULL, previousShotRow.distance(), previousRow.station(), nextRow.station());
-    SetArrowNavigation(currentRow.left(), previousShotRow.backClino(), currentRow.right(), previousRow.left(), nextRow.left());
-    SetArrowNavigation(currentRow.right(), currentRow.left(), currentRow.up(), previousRow.right(), nextRow.right());
-    SetArrowNavigation(currentRow.up(), currentRow.right(), currentRow.down(), previousRow.up(), nextRow.up());
-    SetArrowNavigation(currentRow.down(), currentRow.up(), NULL, previousRow.down(), nextRow.down());
+    setArrowNavigation(currentRow.stationName(), NULL, previousShotRow.distance(), previousRow.stationName(), nextRow.stationName());
+    setArrowNavigation(currentRow.left(), previousShotRow.backClino(), currentRow.right(), previousRow.left(), nextRow.left());
+    setArrowNavigation(currentRow.right(), currentRow.left(), currentRow.up(), previousRow.right(), nextRow.right());
+    setArrowNavigation(currentRow.up(), currentRow.right(), currentRow.down(), previousRow.up(), nextRow.up());
+    setArrowNavigation(currentRow.down(), currentRow.up(), NULL, previousRow.down(), nextRow.down());
 
     if(index == 0) {
         //Special case
-        SetArrowNavigation(currentRow.station(), NULL, nextShotRow.distance(), previousRow.station(), nextRow.station());
-        SetArrowNavigation(currentRow.left(), nextShotRow.frontClino(), currentRow.right(), previousRow.left(), nextRow.left());
+        setArrowNavigation(currentRow.stationName(), NULL, nextShotRow.distance(), previousRow.stationName(), nextRow.stationName());
+        setArrowNavigation(currentRow.left(), nextShotRow.frontClino(), currentRow.right(), previousRow.left(), nextRow.left());
     }
 }
 
 /**
   \brief Sets the navigation for shot item
   */
-void cwSurveyChunkView::UpdateShotArrowNavigaton(int index) {
-    StationRow fromStationRow = GetStationRow(index);
-    StationRow toStationRow = GetStationRow(index + 1);
+void cwSurveyChunkView::updateShotArrowNavigaton(int index) {
+    StationRow fromStationRow = getStationRow(index);
+    StationRow toStationRow = getStationRow(index + 1);
 
-    ShotRow previousRow = GetNavigationShotRow(index - 1);
-    ShotRow row = GetNavigationShotRow(index);
-    ShotRow nextRow = GetNavigationShotRow(index + 1);
+    ShotRow previousRow = getNavigationShotRow(index - 1);
+    ShotRow row = getNavigationShotRow(index);
+    ShotRow nextRow = getNavigationShotRow(index + 1);
 
-    SetArrowNavigation(row.distance(), toStationRow.station(), row.frontCompass(), previousRow.distance(), nextRow.distance());
-    SetArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
-    SetArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
-    SetArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
-    SetArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
+    setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
+    setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
+    setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
+    setArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
+    setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
 }
 
 
@@ -880,7 +927,7 @@ void cwSurveyChunkView::UpdateShotArrowNavigaton(int index) {
   \param up - The item above
   \param down - The item below
   */
-void cwSurveyChunkView::SetArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down) {
+void cwSurveyChunkView::setArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down) {
     if(item == NULL) { return; }
     item->setProperty("navLeftObject", QVariant::fromValue(left));
     item->setProperty("navRightObject", QVariant::fromValue(right));
@@ -894,7 +941,7 @@ void cwSurveyChunkView::SetArrowNavigation(QDeclarativeItem* item, QDeclarativeI
   \param index - If the index is -1 the it'll get the last station in the ChunkAbove
   If the index is the same size of the the number of stations this will get the ChunkBelow
   */
-cwSurveyChunkView::ShotRow cwSurveyChunkView::GetNavigationShotRow(int index) {
+cwSurveyChunkView::ShotRow cwSurveyChunkView::getNavigationShotRow(int index) {
     if(index == -1) {
         if(ChunkAbove != NULL && !ChunkAbove->ShotRows.isEmpty()) {
             return ChunkAbove->ShotRows.last();
@@ -905,7 +952,7 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::GetNavigationShotRow(int index) {
         }
     }
 
-    return GetShotRow(index);
+    return getShotRow(index);
 }
 
 /**
@@ -914,7 +961,7 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::GetNavigationShotRow(int index) {
   If the index is out of range then the ShotRow will invalid
   all elements will be null
   */
-cwSurveyChunkView::ShotRow cwSurveyChunkView::GetShotRow(int index) {
+cwSurveyChunkView::ShotRow cwSurveyChunkView::getShotRow(int index) {
     return index >= 0 && index < ShotRows.size() ? ShotRows[index] : ShotRow();
 }
 
@@ -924,7 +971,7 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::GetShotRow(int index) {
   \param index - If the index is -1 the it'll get the last station in the ChunkAbove
   If the index is the same size of the the number of stations this will get the ChunkBelow
   */
-cwSurveyChunkView::StationRow cwSurveyChunkView::GetNavigationStationRow(int index) {
+cwSurveyChunkView::StationRow cwSurveyChunkView::getNavigationStationRow(int index) {
     if(index == -1) {
         if(ChunkAbove != NULL && !ChunkAbove->StationRows.isEmpty()) {
             return ChunkAbove->StationRows.last();
@@ -935,7 +982,7 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::GetNavigationStationRow(int ind
         }
     }
 
-    return GetStationRow(index);
+    return getStationRow(index);
 }
 
 /**
@@ -944,7 +991,7 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::GetNavigationStationRow(int ind
   If the index is out of range then the StationRow will be invalid
   all elements will be null
   */
-cwSurveyChunkView::StationRow cwSurveyChunkView::GetStationRow(int index) {
+cwSurveyChunkView::StationRow cwSurveyChunkView::getStationRow(int index) {
     if(index >= 0 && index < StationRows.size()) {
         return StationRows[index];
     } else {
@@ -955,18 +1002,18 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::GetStationRow(int index) {
 /**
   \brief This handles editor behaviour of the last rows
   */
-void cwSurveyChunkView::UpdateLastRowBehaviour() {
+void cwSurveyChunkView::updateLastRowBehaviour() {
     int lastIndex = StationRows.size() - 1;
     int secondToLastIndex = StationRows.size() - 2;
-    StationRow lastRow = GetStationRow(lastIndex);
-    StationRow secondLastRow = GetStationRow(secondToLastIndex);
+    StationRow lastRow = getStationRow(lastIndex);
+    StationRow secondLastRow = getStationRow(secondToLastIndex);
 
-    if(lastRow.station() != NULL) {
-        connect(lastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
+    if(lastRow.stationName() != NULL) {
+        connect(lastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
     }
 
-    if(secondLastRow.station() != NULL) {
-        connect(secondLastRow.station(), SIGNAL(dataValueChanged()), SLOT(StationValueHasChanged()));
+    if(secondLastRow.stationName() != NULL) {
+        connect(secondLastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
     }
 }
 
@@ -975,16 +1022,16 @@ void cwSurveyChunkView::UpdateLastRowBehaviour() {
 
   If index is 0 then all index's positions are update
   */
-void cwSurveyChunkView::UpdatePositionsAfterIndex(int index) {
+void cwSurveyChunkView::updatePositionsAfterIndex(int index) {
     //Update the position when we have a valid interface
-    if(!InterfaceValid()) { return; }
+    if(!interfaceValid()) { return; }
 
     for(int i = index; i < StationRows.size(); i++) {
-        PositionStationRow(StationRows[i], i);
+        positionStationRow(StationRows[i], i);
     }
 
     for(int i = index; i < ShotRows.size(); i++) {
-        PositionShotRow(ShotRows[i], i);
+        positionShotRow(ShotRows[i], i);
     }
 }
 
@@ -992,8 +1039,8 @@ void cwSurveyChunkView::UpdatePositionsAfterIndex(int index) {
   Updates all the indexes for the gui elements, this is so
   the right click works correctly
   */
-void cwSurveyChunkView::UpdateIndexes(int index) {
-    if(!InterfaceValid()) { return; }
+void cwSurveyChunkView::updateIndexes(int index) {
+    if(!interfaceValid()) { return; }
 
     for(int i = index; i < StationRows.size(); i++) {
         foreach(QDeclarativeItem* item, StationRows[i].items()) {
@@ -1012,18 +1059,142 @@ void cwSurveyChunkView::UpdateIndexes(int index) {
 /**
   \brief Test to see if the interface is valid
   */
-bool cwSurveyChunkView::InterfaceValid() {
+bool cwSurveyChunkView::interfaceValid() {
     if(StationRows.empty() || ShotRows.empty()) { return false; }
     if(StationRows.size() - 1 != ShotRows.size()) { return false; }
     return true;
 }
 
-void cwSurveyChunkView::UpdateDimensions() {
-    if(!InterfaceValid()) { return; }
+/**
+  \brief This updates the bounds of the view
+  */
+void cwSurveyChunkView::updateDimensions() {
+    if(!interfaceValid()) { return; }
 
     QRectF rect = boundingRect();
     //qDebug() << "BoundingRect:" << rect;
 
     setWidth(rect.width());
     setHeight(rect.height());
+}
+
+/**
+  \brief Updates the view's shot data.
+
+  The role must by on of the following:
+        ShotDistance,
+        ShotCompassRole,
+        ShotBackCompassRole,
+        ShotClinoRole,
+        ShotBackClinoRole
+
+   If it's invalid, the this function does nothing
+
+   If the index is invalid, this does nothing
+
+   data - The data that the view will be updated with
+  */
+void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+    if(index < 0 || index >= ShotRows.size()) { return; }
+
+    QDeclarativeItem* shotItem;
+    switch(role) {
+    case cwSurveyChunk::ShotDistance:
+        shotItem = ShotRows[index].distance();
+        break;
+    case cwSurveyChunk::ShotCompassRole:
+        shotItem = ShotRows[index].frontCompass();
+        break;
+    case cwSurveyChunk::ShotBackCompassRole:
+        shotItem = ShotRows[index].backCompass();
+        break;
+    case cwSurveyChunk::ShotClinoRole:
+        shotItem = ShotRows[index].frontClino();
+        break;
+    case cwSurveyChunk::ShotBackClinoRole:
+        shotItem = ShotRows[index].backClino();
+        break;
+    default:
+        return;
+    }
+
+    shotItem->setProperty("dataValue", data);
+}
+
+/**
+  \brief Updates the view's station data.
+
+  The role must by on of the following:
+        StationNameRole,
+        StationLeftRole,
+        StationRightRole,
+        StationUpRole,
+        StationDownRole,
+
+   If it's invalid, the this function does nothing
+
+   If the index is invalid, this does nothing
+
+   data - The data that the view will be updated with
+  */
+void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+    if(index < 0 || index >= StationRows.size()) {
+        return;
+    }
+
+    QDeclarativeItem* stationItem;
+    switch(role) {
+    case cwSurveyChunk::StationNameRole:
+        stationItem = StationRows[index].stationName();
+        break;
+    case cwSurveyChunk::StationLeftRole:
+        stationItem = StationRows[index].left();
+        break;
+    case cwSurveyChunk::StationRightRole:
+        stationItem = StationRows[index].right();
+        break;
+    case cwSurveyChunk::StationUpRole:
+        stationItem = StationRows[index].up();
+        break;
+    case cwSurveyChunk::StationDownRole:
+        stationItem = StationRows[index].down();
+        break;
+    default:
+        return;
+    }
+
+    stationItem->setProperty("dataValue", data);
+}
+
+/**
+  This updates all the station data a index
+
+  If index, is invalid, this does nothing
+  */
+void cwSurveyChunkView::updateStationRowData(int index) {
+    if(index < 0 || index >= StationRows.size()) {
+        return;
+    }
+
+    updateStationData(cwSurveyChunk::StationNameRole,
+                      index,
+                      SurveyChunk->data(cwSurveyChunk::StationNameRole, index));
+
+    updateStationData(cwSurveyChunk::StationLeftRole,
+                      index,
+                      SurveyChunk->data(cwSurveyChunk::StationLeftRole, index));
+
+    updateStationData(cwSurveyChunk::StationRightRole,
+                      index,
+                      SurveyChunk->data(cwSurveyChunk::StationRightRole, index));
+
+    updateStationData(cwSurveyChunk::StationUpRole,
+                      index,
+                      SurveyChunk->data(cwSurveyChunk::StationUpRole, index));
+
+    updateStationData(cwSurveyChunk::StationDownRole,
+                      index,
+                      SurveyChunk->data(cwSurveyChunk::StationDownRole, index));
+
+
 }

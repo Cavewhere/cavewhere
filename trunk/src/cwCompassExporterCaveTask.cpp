@@ -134,7 +134,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         cwStationReference from = shot->fromStation();
         cwStationReference to = shot->toStation();
 
-        float shotLength = cwUnits::convert(shot->GetDistance().toDouble(),
+        float shotLength = cwUnits::convert(shot->distance().toDouble(),
                                             trip->distanceUnit(),
                                             cwUnits::DecimalFeet);
 
@@ -218,13 +218,13 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotFiel
     switch(field) {
     case Compass:
     case BackCompass:
-        frontSite = shot->GetCompass();
-        backSite = shot->GetBackCompass();
+        frontSite = shot->compass();
+        backSite = shot->backCompass();
         break;
     case Clino:
     case BackClino:
-        frontSite = shot->GetClino();
-        backSite = shot->GetBackClino();
+        frontSite = shot->clino();
+        backSite = shot->backClino();
     }
 
     float value;

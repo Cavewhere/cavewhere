@@ -5,7 +5,7 @@
 #include "cwShot.h"
 #include "cwSurvexImporter.h"
 #include "cwTrip.h"
-#include "cwSurveyChuckView.h"
+#include "cwSurveyChunkView.h"
 #include "cwSurveyChunkGroupView.h"
 #include "cwClinoValidator.h"
 #include "cwStationValidator.h"

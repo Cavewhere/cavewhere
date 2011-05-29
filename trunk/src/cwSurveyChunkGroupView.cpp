@@ -1,7 +1,7 @@
 //Our includes
 #include "cwSurveyChunkGroupView.h"
 #include "cwTrip.h"
-#include "cwSurveyChuckView.h"
+#include "cwSurveyChunkView.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyChunkViewComponents.h"
 
@@ -173,7 +173,7 @@ void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
             belowChunk = ChunkViews[belowIndex];
         }
 
-        ChunkViews[i]->SetNavigation(aboveChunk, belowChunk);
+        ChunkViews[i]->setNavigation(aboveChunk, belowChunk);
     }
 
 
@@ -225,7 +225,7 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
         QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
         QDeclarativeEngine::setContextForObject(chunkView, context);
-        chunkView->SetQMLComponents(ChunkQMLComponents);
+        chunkView->setQMLComponents(ChunkQMLComponents);
 
         //Set the model for the view
         chunkView->setModel(chunk);

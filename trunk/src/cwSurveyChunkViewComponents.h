@@ -5,10 +5,19 @@
 //This should reduce the memory footprint of a cwSurveyChunkview
 //And reducte the
 
+//Our includes
+#include "cwStationValidator.h"
+#include "cwDistanceValidator.h"
+#include "cwCompassValidator.h"
+#include "cwClinoValidator.h"
+
 //Qt includes
 #include <QObject>
+#include <QVariant>
 class QDeclarativeComponent;
 class QDeclarativeContext;
+class QValidator;
+
 
 class cwSurveyChunkViewComponents : public QObject
 {
@@ -28,22 +37,41 @@ public:
     QDeclarativeComponent* frontClinoDelegate() const;
     QDeclarativeComponent* backClinoDelegate() const;
 
+    QValidator* stationValidator() const;
+    QValidator* lrudValidator() const;
+    QValidator* distanceValidator() const;
+    QValidator* compassValidator() const;
+    QValidator* clinoValidator() const;
+
+    QVariant stationValidatorAsVariant() const;
+    QVariant lrudValidatorAsVariant() const;
+    QVariant distanceValidatorAsVariant() const;
+    QVariant compassValidatorAsVariant() const;
+    QVariant clinoValidatorAsVariant() const;
+
 signals:
 
 public slots:
 
 private:
-    QDeclarativeComponent* StationDelegate;
+    QDeclarativeComponent* Delegate;
+    //    QDeclarativeComponent* StationDelegate;
     QDeclarativeComponent* TitleDelegate;
-    QDeclarativeComponent* LeftDelegate;
-    QDeclarativeComponent* RightDelegate;
-    QDeclarativeComponent* UpDelegate;
-    QDeclarativeComponent* DownDelegate;
-    QDeclarativeComponent* DistanceDelegate;
-    QDeclarativeComponent* FrontCompassDelegate;
-    QDeclarativeComponent* BackCompassDelegate;
-    QDeclarativeComponent* FrontClinoDelegate;
-    QDeclarativeComponent* BackClinoDelegate;
+    //    QDeclarativeComponent* LeftDelegate;
+    //    QDeclarativeComponent* RightDelegate;
+    //    QDeclarativeComponent* UpDelegate;
+    //    QDeclarativeComponent* DownDelegate;
+    //    QDeclarativeComponent* DistanceDelegate;
+    //    QDeclarativeComponent* FrontCompassDelegate;
+    //    QDeclarativeComponent* BackCompassDelegate;
+    //    QDeclarativeComponent* FrontClinoDelegate;
+    //    QDeclarativeComponent* BackClinoDelegate;
+
+    cwStationValidator* StationValidator;
+    cwDistanceValidator* DistanceValidator;
+    cwCompassValidator* CompassValidator;
+    cwClinoValidator* ClinoValidator;
+
 
     void printErrors(QDeclarativeComponent* component);
 
@@ -54,43 +82,94 @@ inline QDeclarativeComponent* cwSurveyChunkViewComponents::titleDelegate() const
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::stationDelegate() const {
-    return StationDelegate;
+    return Delegate;
+    //    return StationDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::leftDelegate() const {
-    return LeftDelegate;
+    return Delegate;
+    //    return LeftDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::rightDelegate() const {
-    return RightDelegate;
+    return Delegate;
+    //    return RightDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::upDelegate() const {
-    return UpDelegate;
+    return Delegate;
+    //    return UpDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::downDelegate() const {
-    return DownDelegate;
+    return Delegate;
+    //    return DownDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::distanceDelegate() const {
-    return DistanceDelegate;
+    return Delegate;
+    //    return DistanceDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontCompassDelegate() const {
-    return FrontCompassDelegate;
+    return Delegate;
+    //    return FrontCompassDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::backCompassDelegate() const {
-    return BackCompassDelegate;
+    return Delegate;
+    //    return BackCompassDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontClinoDelegate() const {
-    return FrontClinoDelegate;
+    return Delegate;
+    //    return FrontClinoDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
-    return BackClinoDelegate;
+    return Delegate;
+    //    return BackClinoDelegate;
 }
+
+inline QValidator* cwSurveyChunkViewComponents::stationValidator() const {
+    return StationValidator;
+}
+
+inline QValidator* cwSurveyChunkViewComponents::lrudValidator() const  {
+    return DistanceValidator;
+}
+
+inline QValidator* cwSurveyChunkViewComponents::distanceValidator() const  {
+    return DistanceValidator;
+}
+
+inline QValidator* cwSurveyChunkViewComponents::compassValidator() const  {
+    return CompassValidator;
+}
+
+inline QValidator* cwSurveyChunkViewComponents::clinoValidator() const   {
+    return ClinoValidator;
+}
+
+inline QVariant cwSurveyChunkViewComponents::stationValidatorAsVariant() const   {
+    return QVariant::fromValue(static_cast<QObject*>(stationValidator()));
+}
+
+inline QVariant cwSurveyChunkViewComponents::lrudValidatorAsVariant() const   {
+    return QVariant::fromValue(static_cast<QObject*>(lrudValidator()));
+}
+
+inline QVariant cwSurveyChunkViewComponents::distanceValidatorAsVariant() const   {
+    return QVariant::fromValue(static_cast<QObject*>(distanceValidator()));
+}
+
+inline QVariant cwSurveyChunkViewComponents::compassValidatorAsVariant() const   {
+    return QVariant::fromValue(static_cast<QObject*>(compassValidator()));
+}
+
+inline QVariant cwSurveyChunkViewComponents::clinoValidatorAsVariant() const   {
+    return QVariant::fromValue(static_cast<QObject*>(clinoValidator()));
+}
+
 
 #endif // CWSURVEYCHUNKVIEWCOMPONENTS_H

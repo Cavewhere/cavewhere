@@ -9,11 +9,11 @@
 #include <QDebug>
 
 //Our includes
-class cwSurveyChunk;
+#include "cwSurveyChunk.h"
 class cwStation;
 class cwShot;
 class cwSurveyChunkViewComponents;
-class cwStationReference;
+#include "cwStationReference.h"
 
 
 class cwSurveyChunkView : public QDeclarativeItem
@@ -21,8 +21,10 @@ class cwSurveyChunkView : public QDeclarativeItem
     Q_OBJECT
 
     Q_PROPERTY(cwSurveyChunk* model READ model WRITE setModel NOTIFY modelChanged)
+    Q_ENUMS(DataBoxType)
 
 public:
+
     explicit cwSurveyChunkView(QDeclarativeItem *parent = 0);
     ~cwSurveyChunkView();
 
@@ -34,11 +36,11 @@ public:
     static float elementHeight();
     static float heightHint(int numberElements);
 
-    void SetNavigationBelow(const cwSurveyChunkView* below);
-    void SetNavigationAbove(const cwSurveyChunkView* above);
-    void SetNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below);
+    void setNavigationBelow(const cwSurveyChunkView* below);
+    void setNavigationAbove(const cwSurveyChunkView* above);
+    void setNavigation(const cwSurveyChunkView* above, const cwSurveyChunkView* below);
 
-    void SetQMLComponents(cwSurveyChunkViewComponents* components);
+    void setQMLComponents(cwSurveyChunkViewComponents* components);
 
 signals:
     void modelChanged();
@@ -48,27 +50,29 @@ signals:
 
 public slots:
 
+    void updateData(cwSurveyChunk::DataRole, int index, const QVariant& data);
+
 protected:
 
 
 private slots:
-    void SetFocusForFirstStation(bool focus);
-    void SetChildActiveFocus(bool focus);
-    void StationValueHasChanged();
+    void setFocusForFirstStation(bool focus);
+    void setChildActiveFocus(bool focus);
+    void stationValueHasChanged();
 
-    void AddStations(int beginIndex, int endIndex);
-    void AddShots(int beginIndex, int endIndex);
+    void addStations(int beginIndex, int endIndex);
+    void addShots(int beginIndex, int endIndex);
 
-    void RemoveStations(int beginIndex, int endIndex);
-    void RemoveShots(int beginIndex, int endIndex);
+    void removeStations(int beginIndex, int endIndex);
+    void removeShots(int beginIndex, int endIndex);
 
-    void Clear();
+    void clear();
 
-    void RightClickOnStation(int index);
-    void RightClickOnShot(int index);
+    void rightClickOnStation(int index);
+    void rightClickOnShot(int index);
 
-    void SplitOnStation(int index);
-    void SplitOnShot(int index);
+    void splitOnStation(int index);
+    void splitOnShot(int index);
 
 private:
 
@@ -90,7 +94,7 @@ private:
         StationRow();
         StationRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* station() const { return Items[Station]; }
+        QDeclarativeItem* stationName() const { return Items[StationName]; }
         QDeclarativeItem* left() const { return Items[Left]; }
         QDeclarativeItem* right() const { return Items[Right]; }
         QDeclarativeItem* up() const { return Items[Up]; }
@@ -99,7 +103,7 @@ private:
     private:
 
         enum {
-            Station,
+            StationName,
             Left,
             Right,
             Up,
@@ -133,9 +137,13 @@ private:
     friend class StationRow;
     friend class ShotRow;
 
-    cwSurveyChunk* Model;
+    cwSurveyChunk* SurveyChunk;
     QList<StationRow> StationRows;
     QList<ShotRow> ShotRows;
+
+    //This holds a reverse look up to station vs row and shot's verse rows
+    //This is called when station data is changed for this view
+    QMap<cwStationReference, int> StationToIndex;
 
     //Stations and shots are added to the navigation queue
     //When the are added and remove.  The navigation queue
@@ -175,36 +183,40 @@ private:
     const cwSurveyChunkView* ChunkBelow;
     const cwSurveyChunkView* ChunkAbove;
 
-    void CreateTitlebar();
-    void SetupDelegates();
+    void createTitlebar();
+    void setupDelegates();
 
-    void PositionStationRow(StationRow row, int index);
-    void PositionElement(QDeclarativeItem* item, QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
-    void ConnectStation(cwStationReference* station, StationRow row);
+    void positionStationRow(StationRow row, int index);
+    void positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
+    void connectStation(cwStationReference* station, StationRow row);
 
-    void PositionShotRow(ShotRow row, int index);
-    void ConnectShot(cwShot* shot, ShotRow row);
+    void positionShotRow(ShotRow row, int index);
+    void connectShot(cwShot* shot, ShotRow row);
 
-    void UpdateNavigation();
-    void UpdateStationTabNavigation(int index);
-    void UpdateShotTabNavigation(int index);
-    void LRUDTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next);
-    void SetTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next);
-    void UpdateStationArrowNavigation(int index);
-    void UpdateShotArrowNavigaton(int index);
-    void SetArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down);
+    void updateNavigation();
+    void updateStationTabNavigation(int index);
+    void updateShotTabNavigation(int index);
+    void lrudTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next);
+    void setTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next);
+    void updateStationArrowNavigation(int index);
+    void updateShotArrowNavigaton(int index);
+    void setArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down);
 
-    ShotRow GetShotRow(int index);
-    ShotRow GetNavigationShotRow(int index);
-    StationRow GetStationRow(int index);
-    StationRow GetNavigationStationRow(int index);
+    ShotRow getShotRow(int index);
+    ShotRow getNavigationShotRow(int index);
+    StationRow getStationRow(int index);
+    StationRow getNavigationStationRow(int index);
 
-    void UpdateLastRowBehaviour();
-    void UpdatePositionsAfterIndex(int index);
-    void UpdateIndexes(int index);
-    void UpdateDimensions();
+    void updateLastRowBehaviour();
+    void updatePositionsAfterIndex(int index);
+    void updateIndexes(int index);
+    void updateDimensions();
 
-    bool InterfaceValid();
+    void updateShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
+    void updateStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
+    void updateStationRowData(int index);
+
+    bool interfaceValid();
 };
 
 //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)

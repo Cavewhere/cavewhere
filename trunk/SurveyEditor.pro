@@ -6,10 +6,8 @@
 
 QT       += core gui declarative xml
 
-
 TARGET = SurveyEditor
 TEMPLATE = app
-
 
 # Include JS debugger library if QMLJSDEBUGGER_PATH is set
 !isEmpty(QMLJSDEBUGGER_PATH) {
@@ -24,7 +22,6 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
     src/cwSurvexImporter.cpp \
-    src/cwSurveyChuckView.cpp \
     src/cwSurveyChunkGroupView.cpp \
     src/cwClinoValidator.cpp \
     src/cwStationValidator.cpp \
@@ -72,14 +69,14 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwTaskProgressDialog.cpp \
     src/cwStringListErrorModel.cpp \
     src/cwGlobalUndoStack.cpp \
-    src/cwUndoer.cpp
+    src/cwUndoer.cpp \
+    src/cwSurveyChunkView.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
     src/cwStation.h \
     src/cwShot.h \
     src/cwSurvexImporter.h \
-    src/cwSurveyChuckView.h \
     src/cwSurveyChunkGroupView.h \
     src/cwClinoValidator.h \
     src/cwStationValidator.h \
@@ -127,7 +124,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwTaskProgressDialog.h \
     src/cwStringListErrorModel.h \
     src/cwGlobalUndoStack.h \
-    src/cwUndoer.h
+    src/cwUndoer.h \
+    src/cwSurveyChunkView.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \

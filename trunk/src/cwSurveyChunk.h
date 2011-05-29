@@ -11,9 +11,11 @@ class cwCave;
 #include <QObject>
 #include <QList>
 #include <QDeclarativeListProperty>
+#include <QVariant>
 
 class cwSurveyChunk : public QObject {
     Q_OBJECT
+    Q_ENUMS(DataRole)
 
 public:
     enum Direction {
@@ -21,12 +23,25 @@ public:
         Below
     };
 
+    enum DataRole {
+        StationNameRole,
+        StationLeftRole,
+        StationRightRole,
+        StationUpRole,
+        StationDownRole,
+        ShotDistance,
+        ShotCompassRole,
+        ShotBackCompassRole,
+        ShotClinoRole,
+        ShotBackClinoRole
+    };
+
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
     virtual ~cwSurveyChunk();
 
     bool isValid() const;
-    bool canAddShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
+    bool canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation, cwShot* shot);
 
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
@@ -42,6 +57,8 @@ signals:
     void StationsRemoved(int beginIndex, int endIndex);
     void ShotsRemoved(int beginIndex, int endIndex);
 
+    void dataChanged(DataRole mainRole, int index, QVariant data);
+
 public slots:
     int StationCount() const;
     cwStationReference Station(int index) const;
@@ -54,7 +71,6 @@ public slots:
     void AppendNewShot();
     void AppendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
 
-
     cwSurveyChunk* SplitAtStation(int stationIndex);
 
     void InsertStation(int stationIndex, Direction direction);
@@ -65,6 +81,9 @@ public slots:
 
     void RemoveShot(int shotIndex, Direction station);
     bool CanRemoveShot(int shotIndex, Direction station);
+
+    QVariant data(DataRole role, int index) const;
+    void setData(DataRole role, int index, QVariant data);
 
 private:
     QList<cwStationReference> Stations;
@@ -80,6 +99,9 @@ private:
     void updateStationsCave(cwStationReference station);
 
     cwStationReference createNewStation();
+
+    QVariant stationData(DataRole role, int index) const;
+    QVariant shotData(DataRole role, int index) const;
 
 };
 
