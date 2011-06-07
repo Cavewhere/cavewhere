@@ -101,7 +101,7 @@ inline int cwCavingRegion::caveCount() const {
 /**
   \brief Returns true if the region has at least on cave, otherwise false
   */
-bool cwCavingRegion::hasCaves() const {
+inline bool cwCavingRegion::hasCaves() const {
     return !Caves.isEmpty();
 }
 
