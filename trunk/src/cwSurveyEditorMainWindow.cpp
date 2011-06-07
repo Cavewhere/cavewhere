@@ -231,18 +231,20 @@ void cwSurveyEditorMainWindow::openExportCompassCaveFileDialog() {
 /**
   Exports the currently select cave to Compass
   */
-void cwSurveyEditorMainWindow::exportCaveToCompass(QString /*filename*/) {
-    //    if(filename.isEmpty()) { return; }
-    //    cwCave* cave = currentSelectedCave();
-    //    if(cave != NULL) {
-    //        cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
-    //        exportTask->setOutputFile(filename);
-    //        exportTask->setData(*cave);
-    //        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    //        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    //        exportTask->setThread(ExportThread);
-    //        exportTask->start();
-    //    }
+void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
+        if(filename.isEmpty()) { return; }
+        if(!Region->hasCaves()) { return; }
+
+        cwCave* cave = Region->cave(0);
+        if(cave != NULL) {
+            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
+            exportTask->setOutputFile(filename);
+            exportTask->setData(*cave);
+            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+            exportTask->setThread(ExportThread);
+            exportTask->start();
+        }
 }
 
 /**
