@@ -20,6 +20,7 @@ public:
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
 
+    bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
 
@@ -95,6 +96,13 @@ private:
   */
 inline int cwCavingRegion::caveCount() const {
     return Caves.count();
+}
+
+/**
+  \brief Returns true if the region has at least on cave, otherwise false
+  */
+bool cwCavingRegion::hasCaves() const {
+    return !Caves.isEmpty();
 }
 
 /**

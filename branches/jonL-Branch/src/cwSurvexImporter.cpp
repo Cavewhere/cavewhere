@@ -462,11 +462,11 @@ void cwSurvexImporter::parseNormalData(QString line) {
     cwStationReference toStation = createOrLookupStation(toStationName);
 
     cwShot* shot = new cwShot();
-    shot->SetDistance(extractData(data, Distance));
-    shot->SetCompass(extractData(data, Compass));
-    shot->SetBackCompass(extractData(data, BackCompass));
-    shot->SetClino(extractData(data, Clino));
-    shot->SetBackClino(extractData(data, BackClino));
+    shot->setDistance(extractData(data, Distance));
+    shot->setCompass(extractData(data, Compass));
+    shot->setBackCompass(extractData(data, BackCompass));
+    shot->setClino(extractData(data, Clino));
+    shot->setbackClino(extractData(data, BackClino));
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }

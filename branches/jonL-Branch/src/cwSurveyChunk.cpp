@@ -283,8 +283,10 @@ void cwSurveyChunk::InsertShot(int shotIndex, Direction direction) {
 
   \returns true if AddShot() will be successfull or will do nothing
   */
-bool cwSurveyChunk::canAddShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot) {
-    return !fromStation.station().isNull() && !toStation.station().isNull() && shot != NULL &&
+bool cwSurveyChunk::canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation, cwShot* shot) {
+    return !fromStation.station().isNull() &&
+            !toStation.station().isNull() &&
+            shot != NULL &&
             (Stations.empty() || Stations.last() == fromStation);
 }
 
@@ -373,6 +375,87 @@ bool cwSurveyChunk::CanRemoveShot(int shotIndex, Direction station) {
     return true;
 }
 
+
+/**
+  \brief Get's the chunk data based on a role
+  */
+QVariant cwSurveyChunk::data(DataRole role, int index) const {
+
+    switch (role) {
+    case StationNameRole:
+    case StationLeftRole:
+    case StationRightRole:
+    case StationUpRole:
+    case StationDownRole:
+        return stationData(role, index);
+    case ShotDistanceRole:
+    case ShotCompassRole:
+    case ShotBackCompassRole:
+    case ShotClinoRole:
+    case ShotBackClinoRole:
+        return shotData(role, index);
+
+    default:
+        return QVariant();
+    }
+}
+
+/**
+  \brief Helper function to data
+  */
+QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
+    if(index < 0 || index >= Stations.size()) { return QVariant(); }
+
+    const cwStationReference& station = Stations[index];
+
+    switch (role) {
+    case StationNameRole:
+        return station.name();
+    case StationLeftRole:
+        return station.left();
+    case StationRightRole:
+        return station.right();
+    case StationUpRole:
+        return station.up();
+    case StationDownRole:
+        return station.down();
+    default:
+        return QVariant();
+    }
+}
+
+/**
+  \brief Helper function to data
+  */
+QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
+    if(index < 0 || index >= Stations.size()) { return QVariant(); }
+
+    cwShot* shot = Shots[index];
+
+    switch(role) {
+    case ShotDistanceRole:
+        return shot->distance();
+    case ShotCompassRole:
+        return shot->compass();
+    case ShotBackCompassRole:
+        return shot->backCompass();
+    case ShotClinoRole:
+        return shot->clino();
+    case ShotBackClinoRole:
+        return shot->backClino();
+    default:
+        return QVariant();
+    }
+}
+
+
+/**
+  \brief Set's the chunk data based on a role
+  */
+void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
+   // qDebug() << "Role:" << role << "Index:" << index << "Data:" << data;
+}
+
 /**
   \brief Removes a station and a shot from the chunk
 
@@ -427,4 +510,6 @@ cwStationReference cwSurveyChunk::createNewStation() {
     station.setCave(parentCave());
     return station;
 }
+
+
 

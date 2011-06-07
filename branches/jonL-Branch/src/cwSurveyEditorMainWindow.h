@@ -1,6 +1,7 @@
 #ifndef SURVEYEDITORMAINWINDOW_H
 #define SURVEYEDITORMAINWINDOW_H
 
+
 //Our includes
 #include "ui_cwSurveyEditorMainWindow.h"
 class cwSurvexImporter;
@@ -17,6 +18,7 @@ class cwLinePlotManager;
 #include <QString>
 #include <QUndoStack>
 class QTreeView;
+class QGLWidget;
 
 class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
 {
@@ -44,7 +46,7 @@ protected slots:
     void exportCaveToCompass(QString filename);
 
     void importSurvex();
-    void reloadQML(bool fullReload = true);
+    void reloadQML();
 
     //For changing
     void setSurveyData(QItemSelection selected, QItemSelection deselected);
@@ -74,6 +76,9 @@ private:
 
     //Undo / redo
     QUndoStack* UndoStack;
+
+    QGLWidget* createGLWidget();
+    void initGLEW();
 
 //    cwCave* currentSelectedCave() const;
 //    cwTrip* currentSelectedTrip() const;

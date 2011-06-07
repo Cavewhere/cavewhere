@@ -1,3 +1,6 @@
+//Glew includes
+#include "GL/glew.h"
+
 //Our includes
 #include "cwSurveyEditorMainWindow.h"
 #include "cwSurveyChunk.h"
@@ -5,7 +8,7 @@
 #include "cwShot.h"
 #include "cwSurvexImporter.h"
 #include "cwTrip.h"
-#include "cwSurveyChuckView.h"
+#include "cwSurveyChunkView.h"
 #include "cwSurveyChunkGroupView.h"
 #include "cwClinoValidator.h"
 #include "cwStationValidator.h"
@@ -26,6 +29,7 @@
 #include "cwLinePlotManager.h"
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
+#include "cwGLRenderer.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -36,6 +40,7 @@
 #include <QTreeView>
 #include <QMessageBox>
 #include <QThread>
+#include <QGLWidget>
 
 #if defined(QMLJSDEBUGGER)
 #include <qt_private/qdeclarativedebughelper_p.h>
@@ -69,8 +74,6 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     SurvexExporter(NULL),
     NoteModel(new cwSurveyNoteModel(this))
 {
-
-
     setupUi(this);
 
 #if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
@@ -90,9 +93,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(ActionUndo, SIGNAL(triggered()), UndoStack, SLOT(undo()));
     connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
-    DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
-    DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
-    DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
+
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
@@ -105,13 +106,13 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
 
-    reloadQML(true);
+    reloadQML();
 
     ExportThread = new QThread(this);
 
     //Setup the loop closer
-//    LinePlotManager = new cwLinePlotManager(this);
-//    LinePlotManager->setRegion(Region);
+    LinePlotManager = new cwLinePlotManager(this);
+    LinePlotManager->setRegion(Region);
 
 }
 
@@ -143,18 +144,18 @@ void cwSurveyEditorMainWindow::openExportSurvexTripFileDialog() {
   \brief Exports the currently selected trip to filename
   */
 void cwSurveyEditorMainWindow::exportSurvexTrip(QString /*filename*/) {
-//    if(filename.isEmpty()) { return; }
+    //    if(filename.isEmpty()) { return; }
 
-//    cwTrip* trip = currentSelectedTrip();
-//    if(trip != NULL) {
-//        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
-//        exportTask->setOutputFile(filename);
-//        exportTask->setData(*trip);
-//        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//        exportTask->setThread(ExportThread);
-//        exportTask->start();
-//    }
+    //    cwTrip* trip = currentSelectedTrip();
+    //    if(trip != NULL) {
+    //        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
+    //        exportTask->setOutputFile(filename);
+    //        exportTask->setData(*trip);
+    //        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+    //        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+    //        exportTask->setThread(ExportThread);
+    //        exportTask->start();
+    //    }
 }
 
 /**
@@ -180,17 +181,17 @@ void cwSurveyEditorMainWindow::openExportSurvexCaveFileDialog() {
   \brief Exports the currently selected cave to a file
   */
 void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
-//    if(filename.isEmpty()) { return; }
-//    cwCave* cave = currentSelectedCave();
-//    if(cave != NULL) {
-//        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
-//        exportTask->setOutputFile(filename);
-//        exportTask->setData(*cave);
-//        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//        exportTask->setThread(ExportThread);
-//        exportTask->start();
-//    }
+    //    if(filename.isEmpty()) { return; }
+    //    cwCave* cave = currentSelectedCave();
+    //    if(cave != NULL) {
+    //        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
+    //        exportTask->setOutputFile(filename);
+    //        exportTask->setData(*cave);
+    //        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+    //        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+    //        exportTask->setThread(ExportThread);
+    //        exportTask->start();
+    //    }
 }
 
 /**
@@ -230,18 +231,20 @@ void cwSurveyEditorMainWindow::openExportCompassCaveFileDialog() {
 /**
   Exports the currently select cave to Compass
   */
-void cwSurveyEditorMainWindow::exportCaveToCompass(QString /*filename*/) {
-//    if(filename.isEmpty()) { return; }
-//    cwCave* cave = currentSelectedCave();
-//    if(cave != NULL) {
-//        cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
-//        exportTask->setOutputFile(filename);
-//        exportTask->setData(*cave);
-//        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//        exportTask->setThread(ExportThread);
-//        exportTask->start();
-//    }
+void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
+        if(filename.isEmpty()) { return; }
+        if(!Region->hasCaves()) { return; }
+
+        cwCave* cave = Region->cave(0);
+        if(cave != NULL) {
+            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
+            exportTask->setOutputFile(filename);
+            exportTask->setData(*cave);
+            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+            exportTask->setThread(ExportThread);
+            exportTask->start();
+        }
 }
 
 /**
@@ -254,17 +257,17 @@ void cwSurveyEditorMainWindow::importSurvex() {
     survexImportDialog->open();
 }
 
-void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
+void cwSurveyEditorMainWindow::reloadQML() {
 
-    if(fullReload)  {
-        delete DeclarativeView;
-        DeclarativeView = new QDeclarativeView();
-        verticalLayout->addWidget(DeclarativeView);
+    delete DeclarativeView;
+    DeclarativeView = new QDeclarativeView();
+    verticalLayout->addWidget(DeclarativeView);
 
-        DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
-        DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
-        DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
-    }
+    QGLWidget* glWidget = createGLWidget();
+    DeclarativeView->setViewport(glWidget);
+    DeclarativeView->setResizeMode(QDeclarativeView::SizeRootObjectToView);
+    DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
+    DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
 
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
@@ -284,12 +287,14 @@ void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
     qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
-    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
+    //    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
-
+    qmlRegisterType<cwGLRenderer>("Cavewhere", 1, 0, "GLRenderer");
+    qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
+    context->setContextProperty("mainGLWidget", glWidget);
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 
@@ -300,24 +305,24 @@ void cwSurveyEditorMainWindow::reloadQML(bool fullReload) {
   */
 void cwSurveyEditorMainWindow::setSurveyData(QItemSelection /*selected*/, QItemSelection /*deselected*/) {
 
-//    QList<QModelIndex> selectedIndexes = selected.indexes();
-//    if(!selectedIndexes.isEmpty()) {
-//        QModelIndex firstSelected = selectedIndexes.first();
-//        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
-//        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
-//        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
-//        QDeclarativeContext* context = DeclarativeView->rootContext();
+    //    QList<QModelIndex> selectedIndexes = selected.indexes();
+    //    if(!selectedIndexes.isEmpty()) {
+    //        QModelIndex firstSelected = selectedIndexes.first();
+    //        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
+    //        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
+    //        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
+    //        QDeclarativeContext* context = DeclarativeView->rootContext();
 
-//        if(trip != NULL) {
-//            qDebug() << "Setting the trip";
-//            context->setContextProperty("surveyData", trip);
-//            //context->setContextProperty("currentPage", "SurveyEditor");
-//        } else if(cave != NULL) {
-//            qDebug() << "Setting the cave data";
-//            context->setContextProperty("caveData", cave);
-//            //context->setContextProperty("currentPage", "CavePage");
-//        }
-//    }
+    //        if(trip != NULL) {
+    //            qDebug() << "Setting the trip";
+    //            context->setContextProperty("surveyData", trip);
+    //            //context->setContextProperty("currentPage", "SurveyEditor");
+    //        } else if(cave != NULL) {
+    //            qDebug() << "Setting the cave data";
+    //            context->setContextProperty("caveData", cave);
+    //            //context->setContextProperty("currentPage", "CavePage");
+    //        }
+    //    }
 }
 
 /**
@@ -363,4 +368,35 @@ void cwSurveyEditorMainWindow::updateUndoText(QString undoText) {
 
 void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
     ActionRedo->setText(QString("Redo %1").arg(redoText));
+}
+
+/**
+  This init's glew so opengl extentions work!
+  */
+void cwSurveyEditorMainWindow::initGLEW() {
+    GLenum err = glewInit();
+    if (GLEW_OK != err) {
+        QString informationText = QString("Error: %1").arg((const char*)glewGetErrorString(err));
+
+        QMessageBox* box = new QMessageBox();
+        box->setText("Problem: glewInit failed, something is seriously wrong.");
+        box->setInformativeText(informationText);
+        box->setIcon(QMessageBox::Critical);
+        box->show();
+        connect(box, SIGNAL(accepted()), QApplication::instance(), SLOT(quit()));
+    }
+}
+
+/**
+  \brief This creates the gl widget that the main declarative view paints to
+  */
+QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
+    QGLFormat format;
+    format.setSamples(8);
+
+    QGLWidget* glWidget = new QGLWidget(format, this);
+    glWidget->makeCurrent();
+    initGLEW();
+
+    return glWidget;
 }

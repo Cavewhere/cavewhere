@@ -20,20 +20,20 @@ public:
            QString clino, QString backClino);
     cwShot(const cwShot& shot);
 
-    QString GetDistance() const;
-    void SetDistance(QString distance);
+    QString distance() const;
+    void setDistance(QString distance);
 
-    QString GetCompass() const;
-    void SetCompass(QString compass);
+    QString compass() const;
+    void setCompass(QString compass);
 
-    QString GetBackCompass() const;
-    void SetBackCompass(QString backCompass);
+    QString backCompass() const;
+    void setBackCompass(QString backCompass);
 
-    QString GetClino() const;
-    void SetClino(QString backClino);
+    QString clino() const;
+    void setClino(QString backClino);
 
-    QString GetBackClino() const;
-    void SetBackClino(QString backClino);
+    QString backClino() const;
+    void setbackClino(QString backClino);
 
     void setParentChunk(cwSurveyChunk* parentChunk);
     cwSurveyChunk* parentChunk() const;
@@ -50,23 +50,23 @@ private:
     cwSurveyChunk* ParentChunk;
 };
 
-inline QString cwShot::GetDistance() const {
+inline QString cwShot::distance() const {
     return Distance;
 }
 
-inline QString cwShot::GetCompass() const {
+inline QString cwShot::compass() const {
     return Compass;
 }
 
-inline QString cwShot::GetBackCompass() const {
+inline QString cwShot::backCompass() const {
     return BackCompass;
 }
 
-inline QString cwShot::GetClino() const {
+inline QString cwShot::clino() const {
     return Clino;
 }
 
-inline QString cwShot::GetBackClino() const {
+inline QString cwShot::backClino() const {
     return BackClino;
 }
 

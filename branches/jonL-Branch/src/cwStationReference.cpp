@@ -17,17 +17,6 @@ cwStationReference::cwStationReference(QString name) :
 }
 
 /**
-  \brief Copies the station
-  */
-cwStationReference::cwStationReference(const cwStationReference& object) :
-    Cave(NULL)
-{
-    if(!object.SharedStation.isNull()) {
-        SharedStation = QSharedPointer<cwStation>(new cwStation(*(object.SharedStation.data())));
-    }
-}
-
-/**
   \brief Sets the cave for this referance
 
   If the station already exist in the cave, then the data will
@@ -36,14 +25,7 @@ cwStationReference::cwStationReference(const cwStationReference& object) :
 void cwStationReference::setCave(cwCave* cave) {
     if(Cave == cave) { return; }
 
-//    //Sets the cave for this referance
-//    if(Cave != NULL) {
-//        disconnect(Cave, 0, this, 0);
-//    }
-
     Cave = cave;
-
-//    connect(Cave, SIGNAL(destroyed()), SLOT(caveDestroyed()));
 
     //The cave already has a station named this
     if(Cave->hasStation(name())) {
@@ -86,11 +68,10 @@ void cwStationReference::setName(QString newName) {
             QString oldName = SharedStation->name();
 
             //Create a new station
-            cwStation* newStation = new cwStation(newName); //*oldStationData);
+            cwStation* newStation = new cwStation(newName);
 
             //Reassign the station
             SharedStation = QSharedPointer<cwStation>(newStation);
-            //SharedStation->setName(newName);
 
             //Try to remove the old station
             Cave->removeStation(oldName);

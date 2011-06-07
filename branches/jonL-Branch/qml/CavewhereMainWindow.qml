@@ -36,12 +36,13 @@ Rectangle {
         property int currentPosition: height * mainSideBar.pageShownReal
 
        //Replace with the view
-        Rectangle {
+        GLRenderer {
             //visible: mainSideBar.pageShown == "view"
+            glWidget: mainGLWidget
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
-            color: "red"
+
         }
 
         DataMainPage {

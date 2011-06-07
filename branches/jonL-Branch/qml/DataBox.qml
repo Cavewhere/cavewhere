@@ -1,17 +1,16 @@
 import Qt 4.7
+import Cavewhere 1.0
 import "Navigation.js" as NavigationHandler
 
 NavigationRectangle {
     id: dataBox
 
     property alias dataValue: dataTextInput.text
-    property alias dataValidator: dataTextInput.validator
     property alias edittorOpen: edittor.visible
-//    property string dataValue
-//    property variant dataValidator
-//    property bool edittorOpen
-    property variant dataObject //For hooking up signals and slots in subclasses
+    property variant dataValidator
+    property variant surveyChunk; //For hooking up signals and slots in subclasses
     property int rowIndex: -1
+    property int dataRole
 
     signal rightClicked(int index)
     signal splitOn(int index)
@@ -25,6 +24,9 @@ NavigationRectangle {
 //    Behavior on y { PropertyAnimation { duration: 250 } }
 //    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
+    onDataValidatorChanged: {
+        dataTextInput.validator = dataValidator;
+    }
 
     Rectangle {
         id: interalHighlight
@@ -47,6 +49,7 @@ NavigationRectangle {
 
         TextInput {
             id: dataTextInput
+           //validator: dataValidator != null ? dataValidator : null;
             anchors.centerIn: parent
             selectByMouse: true;
         }
@@ -132,6 +135,10 @@ NavigationRectangle {
         state = 'EndTyping';
         dataValue = '';
         dataTextInput.focus = true;
+    }
+
+    onDataValueChanged: {
+        surveyChunk.setData(dataRole, rowIndex, dataValue);
     }
 
     states: [

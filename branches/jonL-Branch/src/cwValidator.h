@@ -2,6 +2,7 @@
 #define CWVALIDATOR_H
 
 #include <QValidator>
+#include <QDebug>
 
 class cwValidator : public QValidator
 {

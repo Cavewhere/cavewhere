@@ -40,23 +40,23 @@ cwShot::cwShot(const cwShot& shot) {
 }
 
 
-void cwShot::SetDistance(QString distance) {
+void cwShot::setDistance(QString distance) {
     Distance = distance;
 }
 
-void cwShot::SetCompass(QString compass) {
+void cwShot::setCompass(QString compass) {
     Compass = compass;
 }
 
-void cwShot::SetBackCompass(QString backCompass) {
+void cwShot::setBackCompass(QString backCompass) {
     BackCompass = backCompass;
 }
 
-void cwShot::SetClino(QString clino) {
+void cwShot::setClino(QString clino) {
     Clino = clino;
 }
 
-void cwShot::SetBackClino(QString backClino) {
+void cwShot::setbackClino(QString backClino) {
     BackClino = backClino;
 }
 
