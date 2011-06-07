@@ -388,7 +388,7 @@ QVariant cwSurveyChunk::data(DataRole role, int index) const {
     case StationUpRole:
     case StationDownRole:
         return stationData(role, index);
-    case ShotDistance:
+    case ShotDistanceRole:
     case ShotCompassRole:
     case ShotBackCompassRole:
     case ShotClinoRole:
@@ -433,7 +433,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
     cwShot* shot = Shots[index];
 
     switch(role) {
-    case ShotDistance:
+    case ShotDistanceRole:
         return shot->distance();
     case ShotCompassRole:
         return shot->compass();
@@ -453,7 +453,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
   \brief Set's the chunk data based on a role
   */
 void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
-    qDebug() << "Role:" << role << "Index:" << index << "Data:" << data;
+   // qDebug() << "Role:" << role << "Index:" << index << "Data:" << data;
 }
 
 /**

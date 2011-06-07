@@ -7,6 +7,7 @@
 #include <QList>
 #include <QVector>
 #include <QDebug>
+class QValidator;
 
 //Our includes
 #include "cwSurveyChunk.h"
@@ -86,6 +87,10 @@ private:
     protected:
         QVector<QDeclarativeItem*> Items;
         int RowIndex;
+
+        static QDeclarativeItem* setupItem(QDeclarativeComponent* component,
+                                           cwSurveyChunk::DataRole,
+                                           QValidator* validator);
     };
 
     class StationRow : public Row {
@@ -215,6 +220,7 @@ private:
     void updateShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
     void updateStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
     void updateStationRowData(int index);
+    void updateShotRowData(int index);
 
     bool interfaceValid();
 };

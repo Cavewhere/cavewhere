@@ -29,7 +29,7 @@ public:
         StationRightRole,
         StationUpRole,
         StationDownRole,
-        ShotDistance,
+        ShotDistanceRole,
         ShotCompassRole,
         ShotBackCompassRole,
         ShotClinoRole,

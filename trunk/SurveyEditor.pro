@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui declarative xml
+QT       += core gui declarative xml opengl
 
 TARGET = SurveyEditor
 TEMPLATE = app
@@ -70,7 +70,8 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwStringListErrorModel.cpp \
     src/cwGlobalUndoStack.cpp \
     src/cwUndoer.cpp \
-    src/cwSurveyChunkView.cpp
+    src/cwSurveyChunkView.cpp \
+    src/cwGLRenderer.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -125,7 +126,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwStringListErrorModel.h \
     src/cwGlobalUndoStack.h \
     src/cwUndoer.h \
-    src/cwSurveyChunkView.h
+    src/cwSurveyChunkView.h \
+    src/cwGLRenderer.h
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
@@ -154,4 +156,4 @@ RESOURCES += \
 
 INCLUDEPATH += src .
 
-LIBS += -lz
+LIBS += -lz -lGLEW

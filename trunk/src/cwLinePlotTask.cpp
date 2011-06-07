@@ -122,6 +122,6 @@ void cwLinePlotTask::linePlotTaskComplete() {
     done();
 }
 
-void cwLinePlotTask::setStationPosition(QString /*name*/, QVector3D /*position*/) {
-   // qDebug() << "Station:" << name << "Position:" << position;
+void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
+   qDebug() << "Station:" << name << "Position:" << position;
 }

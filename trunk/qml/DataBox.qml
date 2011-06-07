@@ -24,6 +24,9 @@ NavigationRectangle {
 //    Behavior on y { PropertyAnimation { duration: 250 } }
 //    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
+    onDataValidatorChanged: {
+        dataTextInput.validator = dataValidator;
+    }
 
     Rectangle {
         id: interalHighlight
@@ -46,7 +49,7 @@ NavigationRectangle {
 
         TextInput {
             id: dataTextInput
-            validator: dataValidator
+           //validator: dataValidator != null ? dataValidator : null;
             anchors.centerIn: parent
             selectByMouse: true;
         }
