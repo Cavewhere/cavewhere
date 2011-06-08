@@ -93,8 +93,6 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(ActionUndo, SIGNAL(triggered()), UndoStack, SLOT(undo()));
     connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
-
-
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));

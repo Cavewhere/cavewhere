@@ -17,7 +17,7 @@ TEMPLATE = app
 }
 
 SOURCES += src/main.cpp \
-src/cwSurveyEditorMainWindow.cpp \
+    src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyChunk.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
@@ -71,7 +71,20 @@ src/cwSurveyEditorMainWindow.cpp \
     src/cwGlobalUndoStack.cpp \
     src/cwUndoer.cpp \
     src/cwSurveyChunkView.cpp \
-    src/cwGLRenderer.cpp
+    src/cwGLRenderer.cpp \
+    src/cwCamera.cpp \
+    src/cwPlane.cpp \
+    src/cwLine3D.cpp \
+    src/cwMouseEventTransition.cpp \
+    src/cwGLShader.cpp \
+    src/cwShaderDebugger.cpp \
+    src/cwWheelEventTransition.cpp \
+    src/cwEdgeTile.cpp \
+    src/cwTile.cpp \
+    src/utils/Forsyth.cpp \
+    src/cwGLTerrain.cpp \
+    src/cwGLObject.cpp \
+    src/cwRegularTile.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -127,7 +140,23 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGlobalUndoStack.h \
     src/cwUndoer.h \
     src/cwSurveyChunkView.h \
-    src/cwGLRenderer.h
+    src/cwGLRenderer.h \
+    src/cwCamera.h \
+    src/cwPlane.h \
+    src/cwLine3D.h \
+    src/cwMouseEventTransition.h \
+    src/cwGLShader.h \
+    src/cwDebug.h \
+    src/cwShaderDebugger.h \
+    src/cwWheelEventTransition.h \
+    src/cwEdgeTile.h \
+    src/cwTile.h \
+    src/utils/vcacheopt.h \
+    src/utils/Forsyth.h \
+    src/cwGLTerrain.h \
+    src/cwGLObject.h \
+    src/cwRegularTile.h
+
 
 
 FORMS    += src/cwSurveyEditorMainWindow.ui \
@@ -154,6 +183,6 @@ qml/*.js \
 RESOURCES += \
     icons.qrc
 
-INCLUDEPATH += src .
+INCLUDEPATH += src src/utils .
 
 LIBS += -lz -lGLEW

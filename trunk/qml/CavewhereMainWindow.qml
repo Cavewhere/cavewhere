@@ -42,7 +42,6 @@ Rectangle {
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
-
         }
 
         DataMainPage {
