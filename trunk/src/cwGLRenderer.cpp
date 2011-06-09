@@ -73,7 +73,7 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     glBlitFramebuffer(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
                       0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
                       GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-                      GL_NEAREST);
+                      GL_LINEAR);
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -117,7 +117,7 @@ void cwGLRenderer::initializeGL() {
     //Generate the color texture
     glGenTextures(1, &ColorTexture);
     glBindTexture(GL_TEXTURE_2D, ColorTexture);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
@@ -126,7 +126,7 @@ void cwGLRenderer::initializeGL() {
     //Generate the depth texture
     glGenTextures(1, &DepthTexture);
     glBindTexture(GL_TEXTURE_2D, DepthTexture);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );

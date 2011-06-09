@@ -58,7 +58,7 @@ void cwTrip::Copy(const cwTrip& object)
   \brief Copy constructor
   */
 cwTrip::cwTrip(const cwTrip& object)
-    : QObject(NULL), cwUndoer(object.undoStack())
+    : QObject(NULL), cwUndoer()
 {
     Copy(object);
 }

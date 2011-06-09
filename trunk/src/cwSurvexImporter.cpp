@@ -221,8 +221,17 @@ void cwSurvexImporter::parseLine(QString line) {
         CurrentBlock = newBlock;
 
         //Copy the last state variables
-        BeginEndState defaultState;
-        BeginEndStateStack.append(defaultState);
+        BeginEndState lastState;
+        if(!BeginEndStateStack.isEmpty()) {
+            lastState = BeginEndStateStack.last();
+        }
+
+        BeginEndState currentState;
+        currentState.Filename = currentFile();
+        if(lastState.Filename == currentFile()) {
+            currentState = lastState;
+        }
+        BeginEndStateStack.append(currentState);
 
         return;
     }

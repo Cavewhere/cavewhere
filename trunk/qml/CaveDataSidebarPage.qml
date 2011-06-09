@@ -62,7 +62,17 @@ Rectangle {
             model: regionModel
             view: view;
             viewIndex: -1; //The root element
-            name: "All Caves"
+            name: {
+                switch(region.caveCount) {
+                case 0:
+                    return "All Caves"
+                case 1:
+                    return "Only <b>1</b> Cave";
+                default:
+                    return "All <b>" + region.caveCount + "</b> Caves";
+                }
+            }
+
             iconSource: "qrc:icons/caves-64x64.png"
             addButtonText: "Add Cave"
 

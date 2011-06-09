@@ -192,6 +192,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         Caves[i]->setParent(regionPtr);
     }
     emit regionPtr->insertedCaves(BeginIndex, EndIndex);
+    emit regionPtr->caveCountChanged();
 }
 
 /**
@@ -212,6 +213,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
     OwnsCaves = true;
 
     emit regionPtr->removedCaves(BeginIndex, EndIndex);
+    emit regionPtr->caveCountChanged();
 }
 
 

@@ -15,6 +15,8 @@ class cwCavingRegion : public QObject, public cwUndoer
 {
     Q_OBJECT
 
+    Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
+
 public:
     explicit cwCavingRegion(QObject *parent = NULL);
     cwCavingRegion(const cwCavingRegion& object);
@@ -38,6 +40,8 @@ signals:
 
     void beginRemoveCaves(int begin, int end);
     void removedCaves(int begin, int end);
+
+    void caveCountChanged();
 
 public slots:
 

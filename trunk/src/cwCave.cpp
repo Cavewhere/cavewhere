@@ -33,8 +33,6 @@ cwCave& cwCave::Copy(const cwCave& object) {
         return *this;
     }
 
-    setUndoStack(object.undoStack());
-
     //Set the name of the cave
     setName(object.name());
 
@@ -60,8 +58,6 @@ cwCave& cwCave::Copy(const cwCave& object) {
     }
 
     return *this;
-
-
 }
 
 /**

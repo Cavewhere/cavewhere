@@ -87,6 +87,7 @@ private:
 
         QMap<DataFormatType, int> DataFormat;
         DataEntryType DataType;
+        QString Filename;
 
         static QMap<DataFormatType, int> defaultDataFormat();
     };
