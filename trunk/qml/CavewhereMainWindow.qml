@@ -36,7 +36,7 @@ Rectangle {
         property int currentPosition: height * mainSideBar.pageShownReal
 
        //Replace with the view
-        GLRenderer {
+        GLTerrainRenderer {
             //visible: mainSideBar.pageShown == "view"
             glWidget: mainGLWidget
             width:  parent.width

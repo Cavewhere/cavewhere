@@ -84,7 +84,8 @@ SOURCES += src/main.cpp \
     src/utils/Forsyth.cpp \
     src/cwGLTerrain.cpp \
     src/cwGLObject.cpp \
-    src/cwRegularTile.cpp
+    src/cwRegularTile.cpp \
+    src/cwGraphicsSceneMouseTransition.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -155,7 +156,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/utils/Forsyth.h \
     src/cwGLTerrain.h \
     src/cwGLObject.h \
-    src/cwRegularTile.h
+    src/cwRegularTile.h \
+    src/cwGraphicsSceneMouseTransition.h
 
 
 
@@ -178,7 +180,13 @@ qml/*.js \
     qml/TripTabWidget.qml \
     qml/CaveTreeDelegate.qml \
     qml/IconButton.qml \
-    qml/DoubleClickTextInput.qml
+    qml/DoubleClickTextInput.qml \
+    qml/GLTerrainRenderer.qml \
+shaders/*.frag \
+shaders/*.vert \
+shaders/*.geom \
+    shaders/simple.vert \
+    shaders/simple.frag
 
 RESOURCES += \
     icons.qrc

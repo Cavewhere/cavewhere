@@ -4,6 +4,7 @@
 //Our includes
 #include "cwGLRenderer.h"
 #include "cwCamera.h"
+#include "cwGraphicsSceneMouseTransition.h"
 #include "cwMouseEventTransition.h"
 #include "cwWheelEventTransition.h"
 #include "cwCamera.h"
@@ -25,6 +26,7 @@
 #include <QMouseEventTransition>
 #include <QKeyEventTransition>
 #include <QDebug>
+#include <QGraphicsSceneWheelEvent>
 
 //Std includes
 #include <math.h>
@@ -36,7 +38,7 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     GLWidget = NULL;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
 
-    setupInteractionStateMachine();
+    //setupInteractionStateMachine();
 
     Camera = new cwCamera(this);
     ShaderDebugger = new cwShaderDebugger(this);
@@ -60,29 +62,38 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     //Draw everything to a framebuffer
     MultiSampleFramebuffer->bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
     Terrain->draw();
+    glDisable(GL_DEPTH_TEST);
     MultiSampleFramebuffer->release();
 
     //Copy the MultiSampleFramebuffer data to the textureFramebuffer
-    QGLFramebufferObject::blitFramebuffer(TextureFramebuffer,
-                                          QRect(QPoint(0,0), TextureFramebuffer->size()),
-                                          MultiSampleFramebuffer,
-                                          QRect(QPoint(0,0), MultiSampleFramebuffer->size()));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, MultiSampleFramebuffer->handle());
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, TextureFramebuffer);
+    glBlitFramebuffer(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
+                      0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
+                      GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+                      GL_NEAREST);
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
     //Draw the texture that the TextureFramebuffer just rendered to
     glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, TextureFramebuffer->texture());
+    glBindTexture(GL_TEXTURE_2D, ColorTexture);
     glBegin(GL_QUADS);
-    glTexCoord2f(0.0, 0.0);
-    glVertex2f(0, 0);
     glTexCoord2f(0.0, 1.0);
+    glVertex2f(0, 0);
+    glTexCoord2f(0.0, 0.0);
     glVertex2f(0, height());
-    glTexCoord2f(1.0, 1.0);
-    glVertex2f(width(), height());
     glTexCoord2f(1.0, 0.0);
+    glVertex2f(width(), height());
+    glTexCoord2f(1.0, 1.0);
     glVertex2f(width(), 0);
     glEnd();
     glBindTexture(GL_TEXTURE_2D, 0);
+
+
 
     painter->endNativePainting();
 
@@ -97,18 +108,29 @@ void cwGLRenderer::initializeGL() {
     //Setup the camera
     resetView();
 
+    //Genereate the multi sample buffer for anti aliasing
     MultiSampleFramebuffer = new QGLFramebufferObject(QSize(1, 1));
-    TextureFramebuffer = new QGLFramebufferObject(QSize(1, 1));
 
-    //Generate the signle texture
-//    TextureFramebuffer->drawTexture(QPointF(0.0, 0.0));
-//    glGenTextures(1, &Texture);
-//    glBindTexture(GL_TEXTURE_2D, Texture);
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST );
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
-//    glBindTexture(GL_TEXTURE_2D, 0);
+    //Generate the texture framebuffer for rendering
+    glGenFramebuffers(1, &TextureFramebuffer);
+
+    //Generate the color texture
+    glGenTextures(1, &ColorTexture);
+    glBindTexture(GL_TEXTURE_2D, ColorTexture);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    //Generate the depth texture
+    glGenTextures(1, &DepthTexture);
+    glBindTexture(GL_TEXTURE_2D, DepthTexture);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     Terrain->initalize();
 
@@ -119,6 +141,8 @@ void cwGLRenderer::resizeGL() {
 
     QSize framebufferSize(width(), height());
 
+    if(!framebufferSize.isValid()) { return; }
+
     //Recreate the multisample framebuffer
     delete MultiSampleFramebuffer;
     QGLFramebufferObjectFormat multiSampleFormat;
@@ -126,17 +150,31 @@ void cwGLRenderer::resizeGL() {
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
     MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
 
-//    glBindTexture(GL_TEXTURE_2D, Texture);
-//    glTexImage2D(GL_TEXTURE, 0, GL_RGBA, framebufferSize.width(), framebufferSize.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, ColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 framebufferSize.width(), framebufferSize.height(), 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
-    delete TextureFramebuffer;
-    QGLFramebufferObjectFormat textureFramebufferFormat;
-//    textureFramebufferFormat.setTextureTarget(Texture);
-    textureFramebufferFormat.setAttachment(QGLFramebufferObject::Depth);
-    TextureFramebuffer = new QGLFramebufferObject(framebufferSize, textureFramebufferFormat);
+    glBindTexture(GL_TEXTURE_2D, DepthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                 framebufferSize.width(), framebufferSize.height(), 0,
+                 GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, TextureFramebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ColorTexture, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, TextureFramebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, DepthTexture, 0);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if(status != GL_FRAMEBUFFER_COMPLETE) {
+        qDebug() << "Can't complete framebuffer:" << TextureFramebuffer;
+    }
 
     //Update the viewport
-    QRect viewportRect(QPoint(x(), y()), QSize(width(), height()));
+    QRect viewportRect(QPoint(0, 0), framebufferSize);
     Camera->setViewport(viewportRect);
 
     QMatrix4x4 projectionMatrix;
@@ -166,16 +204,16 @@ void cwGLRenderer::setGLWidget(QGLWidget* widget) {
 /**
   Initializes the last click for the panning state
   */
-void cwGLRenderer::startPanning(QMouseEvent* event) {
-    LastMouseGlobalPosition = unProject(event->pos());
-    qDebug() << "Clicked: " << LastMouseGlobalPosition;
+void cwGLRenderer::startPanning(QPoint position) {
+    QPoint mappedPosition = Camera->mapToGLViewport(position);
+    LastMouseGlobalPosition = unProject(mappedPosition);
 }
 
 /**
   Pans the view allow the a plane
   */
-void cwGLRenderer::pan(QMouseEvent* event) {
-    QPoint mappedPos = Camera->mapToGLViewport(event->pos());
+void cwGLRenderer::pan(QPoint position) {
+    QPoint mappedPos = Camera->mapToGLViewport(position);
 
     //Get the ray from the front of the screen to the back of the screen
     QVector3D front = Camera->unProject(mappedPos, 0.0);
@@ -211,16 +249,18 @@ void cwGLRenderer::pan(QMouseEvent* event) {
 /**
   Called when the rotation is about to begin
   */
-void cwGLRenderer::startRotating(QMouseEvent* event) {
-    LastMouseGlobalPosition = unProject(event->pos());
-    LastMousePosition = event->pos();
+void cwGLRenderer::startRotating(QPoint position) {
+    position = Camera->mapToGLViewport(position);
+    LastMouseGlobalPosition = unProject(position);
+    LastMousePosition = position;
 }
 
 /**
   Rotates the view
   */
-void cwGLRenderer::rotate(QMouseEvent* event) {
-    QPoint currentMousePosition = event->pos();
+void cwGLRenderer::rotate(QPoint position) {
+    position = Camera->mapToGLViewport(position);
+    QPoint currentMousePosition = position;
     QPointF delta = LastMousePosition - currentMousePosition;
     LastMousePosition = currentMousePosition;
     delta /= 2.0;
@@ -246,20 +286,24 @@ void cwGLRenderer::rotate(QMouseEvent* event) {
     update();
 }
 
+void cwGLRenderer::wheelEvent(QGraphicsSceneWheelEvent *event) {
+    zoom(event);
+    event->accept();
+}
+
 /**
   Zooms the view
   */
-void cwGLRenderer::zoom(QWheelEvent* event) {
+void cwGLRenderer::zoom(QGraphicsSceneWheelEvent* event) {
 
     //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(event->pos());
+    QPoint mappedPos = Camera->mapToGLViewport(event->pos().toPoint());
 
     //Get the ray from the front of the screen to the back of the screen
     QVector3D front = Camera->unProject(mappedPos, 0.0);
-//    QVector3D back = Camera->unProject(mappedPos, 1.0);
 
     //Find the intsection on the plane
-    QVector3D intersection = unProject(event->pos());
+    QVector3D intersection = unProject(mappedPos);
 
     //Smallray
     QVector3D ray = intersection - front;
@@ -280,9 +324,9 @@ void cwGLRenderer::zoom(QWheelEvent* event) {
 }
 
 void cwGLRenderer::resetView() {
-    QMatrix4x4 projectionMatrix;
-    projectionMatrix.perspective(55, 1.0, .1, 5000); //ortho(-2.0, 2.0, -2.0, 2.0, -2.0, 2.0);
-    Camera->setProjectionMatrix(projectionMatrix);
+//    QMatrix4x4 projectionMatrix;
+//    projectionMatrix.perspective(55, 1.0, .1, 10000); //ortho(-2.0, 2.0, -2.0, 2.0, -2.0, 2.0);
+//    Camera->setProjectionMatrix(projectionMatrix);
 
     Pitch = 90.0;
     Azimuth = 0.0;
@@ -303,9 +347,6 @@ void cwGLRenderer::resetView() {
   Unprojects the screen point at point and returns a QVector3d in world coordinates
   */
 QVector3D cwGLRenderer::unProject(QPoint point) {
-    //Flip the point's y
-    point = Camera->mapToGLViewport(point);
-
     //Sample the depth buffer
     float depth = sampleDepthBuffer(point);
 
@@ -335,11 +376,13 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
     buffer.resize(bufferSize);
 
     //Get data from opengl framebuffer
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, TextureFramebuffer);
     glReadPixels(samplerArea.x(), samplerArea.y(), //where
                  samplerArea.width(), samplerArea.height(), //size
                  GL_DEPTH_COMPONENT, //what buffer
                  GL_FLOAT, //Returned data type
                  buffer.data()); //The buffer for the data
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
     float sum = 0.0;
     int count = 0;
@@ -360,108 +403,3 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
         return buffer[centerIndex];
     }
 }
-
-
-/**
-  Sets up the camera for the view
-  */
-void cwGLRenderer::setupCamera() {
-    Camera = new cwCamera(this);
-
-    resetView();
-}
-
-
-
-/**
-  Setup the statemachine for the interaction for the viewer
-  */
- void cwGLRenderer::setupInteractionStateMachine() {
-     InteractionMachine = new QStateMachine(this);
-
-     DefaultInteractionState = new QState(InteractionMachine);
-     QState* noState = new QState(DefaultInteractionState);
-
-     setupPan();
-     setupRotate();
-     setupZoom();
-
-     DefaultInteractionState->setInitialState(noState);
-     InteractionMachine->setInitialState(DefaultInteractionState);
-
-     InteractionMachine->start();
- }
-
- /**
-   Setup the pan state machine
-   */
- void cwGLRenderer::setupPan() {
-     QState* panState = new QState(DefaultInteractionState);
-
-     cwMouseEventTransition* enterPanTransition = new cwMouseEventTransition(this,
-                                                    QEvent::MouseButtonPress,
-                                                    Qt::LeftButton);
-     connect(enterPanTransition, SIGNAL(onMouseEvent(QMouseEvent*)), SLOT(startPanning(QMouseEvent*)));
-
-     enterPanTransition->setTargetState(panState);
-     DefaultInteractionState->addTransition(enterPanTransition);
-
-     //Circular pan event
-     cwMouseEventTransition* panTransition = new cwMouseEventTransition(this,
-                                                QEvent::MouseMove,
-                                                Qt::NoButton);
-
-     panState->addTransition(panTransition);
-     connect(panTransition, SIGNAL(onMouseEvent(QMouseEvent*)), SLOT(pan(QMouseEvent*)));
-
-     QMouseEventTransition* mouseReleaseTransition = new QMouseEventTransition(this,
-                                                                               QEvent::MouseButtonRelease,
-                                                                               Qt::LeftButton);
-     mouseReleaseTransition->setTargetState(DefaultInteractionState);
-     panState->addTransition(mouseReleaseTransition);
-
-
- }
-
- /**
-   Setup the rotation interaction state machine
-   */
- void cwGLRenderer::setupRotate() {
-     QState* rotateState = new QState(DefaultInteractionState);
-
-     cwMouseEventTransition* enterRotateTransition = new cwMouseEventTransition(this,
-                                                        QEvent::MouseButtonPress,
-                                                        Qt::RightButton);
-     connect(enterRotateTransition, SIGNAL(onMouseEvent(QMouseEvent*)), SLOT(startRotating(QMouseEvent*)));
-     enterRotateTransition->setTargetState(rotateState);
-     DefaultInteractionState->addTransition(enterRotateTransition);
-
-     //Circular rotation event
-     cwMouseEventTransition* rotateTransition = new cwMouseEventTransition(this,
-                                                   QEvent::MouseMove,
-                                                   Qt::NoButton);
-
-     rotateState->addTransition(rotateTransition);
-     connect(rotateTransition, SIGNAL(onMouseEvent(QMouseEvent*)), SLOT(rotate(QMouseEvent*)));
-
-     QMouseEventTransition* mouseReleaseTransition = new QMouseEventTransition(this,
-                                                                               QEvent::MouseButtonRelease,
-                                                                               Qt::RightButton);
-     mouseReleaseTransition->setTargetState(DefaultInteractionState);
-     rotateState->addTransition(mouseReleaseTransition);
- }
-
- void cwGLRenderer::setupZoom() {
-     cwWheelEventTransition* wheelEventTrasition = new cwWheelEventTransition(this,
-                                                                              QEvent::Wheel);
-     connect(wheelEventTrasition, SIGNAL(onWheelEvent(QWheelEvent*)), SLOT(zoom(QWheelEvent*)));
-     DefaultInteractionState->addTransition(wheelEventTrasition);
-
-
-     QKeyEventTransition* resetTransition = new QKeyEventTransition(this,
-                                                                    QEvent::KeyPress,
-                                                                    Qt::Key_R);
-     connect(resetTransition, SIGNAL(triggered()), SLOT(resetView()));
-     DefaultInteractionState->addTransition(resetTransition);
-
- }

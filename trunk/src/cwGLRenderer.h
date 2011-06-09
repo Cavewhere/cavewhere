@@ -43,15 +43,13 @@ public slots:
     void setGLWidget(QGLWidget* widget);
     QGLWidget* glWidget();
 
+    void startPanning(QPoint currentMousePos);
+    void pan(QPoint currentMousePos);
+
+    void startRotating(QPoint currentMousePos);
+    void rotate(QPoint currentMousePos);
 private slots:
     //Interaction events
-    void startPanning(QMouseEvent* event);
-    void pan(QMouseEvent* event);
-
-    void startRotating(QMouseEvent* event);
-    void rotate(QMouseEvent* event);
-    void zoom(QWheelEvent* event);
-
     void resetView();
 
     void resizeGL();
@@ -60,23 +58,25 @@ protected:
 
     void paintGL();
 
+    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
+    void zoom(QGraphicsSceneWheelEvent* event);
+
 private:
     QGLWidget* GLWidget; //This is so we make current when setting up the object
 
+    //Framebuffer for renderering
     QGLFramebufferObject* MultiSampleFramebuffer;
-    QGLFramebufferObject* TextureFramebuffer;
-    //GLuint Texture;
+    GLuint TextureFramebuffer;
+
+    GLuint ColorTexture;
+    GLuint DepthTexture;
 
     //The main camera for the viewer
     cwCamera* Camera;
 
-    //Interaction statemachine
-    QStateMachine* InteractionMachine;
-    QState* DefaultInteractionState;
-
     //For interaction
     QVector3D LastMouseGlobalPosition; //For panning
-    QPoint LastMousePosition; //For rotation
+    QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;
     float Pitch;
     float Azimuth;
@@ -88,13 +88,6 @@ private:
     cwShaderDebugger* ShaderDebugger;
 
     float sampleDepthBuffer(QPoint point);
-
-    void setupCamera();
-    void setupInteractionStateMachine();
-    void setupPan();
-    void setupRotate();
-    void setupZoom();
-
 };
 
 inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
