@@ -56,6 +56,7 @@ private:
 
     QGLShaderProgram* TileProgram;
     int UniformModelViewProjectionMatrix;
+    int UniformModelMatrix;
 
 //    QTimer Timer;
 //    float Angle;

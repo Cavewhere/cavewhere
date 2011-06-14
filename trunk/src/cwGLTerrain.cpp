@@ -14,26 +14,7 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
 
     TessilationSize = 2;
 
-   // Timer.setInterval(16);
-    //connect(&Timer, SIGNAL(timeout()), SLOT(updateTime()));
-//    Angle = 0.0;
-
-
 }
-
-//void cwGLTerrain::updateTime() {
-//    if(Angle >= 360.0) {
-//        Angle = 0.0;
-//    }
-
-//    TileProgram->setUniformValue("vAngle", (GLfloat)(Angle * acos(-1) / 180.0));
-//    emit redraw();
-
-//  //  qDebug() << "Angle:" << Angle << Angle * acos(-1) / 180.0;
-
-//    Angle++;
-//}
-
 
 /**
   \brief Called when the opengl context is good
@@ -61,7 +42,7 @@ void cwGLTerrain::initalize() {
 
     shaderDebugger()->addShaderProgram(TileProgram);
     UniformModelViewProjectionMatrix = TileProgram->uniformLocation("ModelViewProjectionMatrix");
-    //In_vVertex = TileProgram->attributeLocation("vVertex");
+    UniformModelMatrix = TileProgram->uniformLocation("ModelMatrix");
 
     EdgeTile->setCamera(camera());
     RegularTile->setCamera(camera());
@@ -77,9 +58,6 @@ void cwGLTerrain::initalize() {
 
     EdgeTile->setTileSize(TessilationSize);
     RegularTile->setTileSize(TessilationSize);
-
-
-//    Timer.start();
 }
 
 /**
@@ -91,8 +69,6 @@ void cwGLTerrain::draw() {
         TileProgram->release();
         return;
     }
-
-    QMatrix4x4 modelViewProjection = camera()->projectionMatrix() * camera()->viewMatrix();
 
     TileProgram->bind();
 
@@ -106,10 +82,6 @@ void cwGLTerrain::draw() {
     }
 
     TileProgram->release();
-
-
-
-
 }
 
 /**
@@ -183,8 +155,9 @@ void cwGLTerrain::drawCenter() {
                     * camera()->viewMatrix()
                     * modelMatrix;
 
+
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
-            TileProgram->setUniformValue("ModelMatrix", modelMatrix);
+            TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
             RegularTile->draw();
         }
     }
@@ -212,7 +185,7 @@ void cwGLTerrain::drawCorners(int level) {
                     * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
-            TileProgram->setUniformValue("ModelMatrix", modelMatrix);
+            TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
             RegularTile->draw();
         }
     }
@@ -253,7 +226,7 @@ void cwGLTerrain::drawEdges(int level) {
                     * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
-            TileProgram->setUniformValue("ModelMatrix", modelMatrix);
+            TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
             EdgeTile->draw();
         }
     }
@@ -282,7 +255,7 @@ void cwGLTerrain::drawEdges(int level) {
                     * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
-            TileProgram->setUniformValue("ModelMatrix", modelMatrix);
+            TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
             EdgeTile->draw();
         }
     }

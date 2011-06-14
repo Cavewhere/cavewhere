@@ -56,8 +56,6 @@ void cwRegularTile::generateVertex() {
     //vertex spacing
     double spacing = 1.0 / (double)tileSize();
 
-    qDebug() << "Spacing: " << spacing;
-
     int numVertexes = numVerticesOnADimension();
     int totalSize = numVertexes * numVertexes;
     Vertices.reserve(totalSize);

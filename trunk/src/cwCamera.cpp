@@ -33,7 +33,6 @@ QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 modelMat
 
    QVector3D viewportPoint(x, y, z);
    QVector3D unprojectPoint = inverseMatrix.map(viewportPoint);
-
    return unprojectPoint;
 }
 

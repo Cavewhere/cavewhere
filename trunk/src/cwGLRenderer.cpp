@@ -47,24 +47,28 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     Terrain->setCamera(Camera);
     Terrain->setShaderDebugger(ShaderDebugger);
     Terrain->setNumberOfLevels(10);
-    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
+    //connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
     connect(this, SIGNAL(widthChanged()), SLOT(resizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(resizeGL()));
-
-
 }
 
 void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
 
     painter->beginNativePainting();
 
+    glPushAttrib(GL_VIEWPORT_BIT);
+
     //Draw everything to a framebuffer
     MultiSampleFramebuffer->bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(0, 0, width(), height());
     glEnable(GL_DEPTH_TEST);
     Terrain->draw();
     glDisable(GL_DEPTH_TEST);
+
+    glPopAttrib();
+
     MultiSampleFramebuffer->release();
 
     //Copy the MultiSampleFramebuffer data to the textureFramebuffer
@@ -81,18 +85,22 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     //Draw the texture that the TextureFramebuffer just rendered to
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, ColorTexture);
+
     glBegin(GL_QUADS);
     glTexCoord2f(0.0, 1.0);
     glVertex2f(0, 0);
+
     glTexCoord2f(0.0, 0.0);
     glVertex2f(0, height());
+
     glTexCoord2f(1.0, 0.0);
     glVertex2f(width(), height());
+
     glTexCoord2f(1.0, 1.0);
     glVertex2f(width(), 0);
+
     glEnd();
     glBindTexture(GL_TEXTURE_2D, 0);
-
 
 
     painter->endNativePainting();
@@ -134,11 +142,12 @@ void cwGLRenderer::initializeGL() {
 
     Terrain->initalize();
 
-   // glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
+    glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }
 
 void cwGLRenderer::resizeGL() {
-
+    if(GLWidget == NULL) { return; }
+    if(width() == 0.0 || height() == 0.0) { return; }
     QSize framebufferSize(width(), height());
 
     if(!framebufferSize.isValid()) { return; }
@@ -146,7 +155,7 @@ void cwGLRenderer::resizeGL() {
     //Recreate the multisample framebuffer
     delete MultiSampleFramebuffer;
     QGLFramebufferObjectFormat multiSampleFormat;
-    multiSampleFormat.setSamples(4);
+    multiSampleFormat.setSamples(8);
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
     MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
 
@@ -173,6 +182,8 @@ void cwGLRenderer::resizeGL() {
         qDebug() << "Can't complete framebuffer:" << TextureFramebuffer;
     }
 
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     //Update the viewport
     QRect viewportRect(QPoint(0, 0), framebufferSize);
     Camera->setViewport(viewportRect);
@@ -194,11 +205,15 @@ void cwGLRenderer::setGLWidget(QGLWidget* widget) {
         return;
     }
 
+    qDebug() << "Initializing!";
+
     //Initialize the object here!
     GLWidget = widget;
     initializeGL();
 
     emit glWidgetChanged();
+
+    resizeGL();
 }
 
 /**
@@ -337,7 +352,7 @@ void cwGLRenderer::resetView() {
     CurrentRotation =  pitchQuat * azimuthQuat;
 
     QMatrix4x4 viewMatrix;
-    viewMatrix.translate(QVector3D(0.0, 0.0, -20));
+    viewMatrix.translate(QVector3D(0.0, 0.0, -2));
     Camera->setViewMatrix(viewMatrix);
 
     update();
