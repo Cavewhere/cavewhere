@@ -13,7 +13,7 @@ class cwGLObject : public QObject
 public:
     cwGLObject(QObject* parent = NULL);
 
-    virtual void initalize() = 0;
+    virtual void initialize() = 0;
     virtual void draw() = 0;
 
     void setCamera(cwCamera* camera);

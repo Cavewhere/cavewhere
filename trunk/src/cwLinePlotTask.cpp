@@ -5,6 +5,9 @@
 #include "cwCavingRegion.h"
 #include "cwPlotSauceTask.h"
 #include "cwPlotSauceXMLTask.h"
+#include "cwLinePlotGeometryTask.h"
+#include "cwCave.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QDebug>
@@ -42,9 +45,16 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     PlotSauceParseTask = new cwPlotSauceXMLTask();
     PlotSauceParseTask->setParentTask(this);
 
-    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
+    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(generateCenterlineGeometry()));
     connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
     connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(setStationPosition(QString,QVector3D)));
+
+    CenterlineGeometryTask = new cwLinePlotGeometryTask();
+    CenterlineGeometryTask->setParentTask(this);
+
+    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
+    connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
+
 }
 
 /**
@@ -58,6 +68,12 @@ void cwLinePlotTask::setData(cwCavingRegion region) {
 
     *Region = region;
     Region->setParent(this);
+
+    //Incode the the cave's index into the cave's name
+    for(int i = 0; i < Region->caveCount(); i++) {
+        cwCave* cave = Region->cave(i);
+        cave->setName(QString("%1-%2").arg(i).arg(cave->name()));
+    }
 }
 
 /**
@@ -103,15 +119,26 @@ void cwLinePlotTask::runCavern() {
   into compress xml file
   */
 void cwLinePlotTask::convertToXML() {
-    qDebug() << "Covert 3d to xml" << "Status" << status();
+    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
 
 void cwLinePlotTask::readXML() {
-    qDebug() << "Reading xml" << "Status" << status();;
+    qDebug() << "Reading xml" << "Status" << status();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
+}
+
+/**
+  \brief This starts the lineplot geometry task
+
+  This will generate the centerline geometry for the data
+  */
+void cwLinePlotTask::generateCenterlineGeometry() {
+    qDebug() << "Generating centerline geometry" << status();
+    CenterlineGeometryTask->setRegion(Region);
+    CenterlineGeometryTask->start();
 }
 
 /**
@@ -123,5 +150,32 @@ void cwLinePlotTask::linePlotTaskComplete() {
 }
 
 void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
-   qDebug() << "Station:" << name << "Position:" << position;
+
+   QString caveIndexString = name.section('-', 0, 0); //Extract the index
+   QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest
+   QString stationName = caveNameAndStation.section(".", 1, 1); //Extract the station
+
+   bool okay;
+   int caveIndex = caveIndexString.toInt(&okay);
+
+   if(!okay) {
+       qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+   }
+
+   //Make sure the index is good
+   if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
+       qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+   }
+
+   cwCave* cave = Region->cave(caveIndex);
+   QWeakPointer<cwStation> station = cave->station(stationName);
+   QSharedPointer<cwStation> sharedStation = station.toStrongRef();
+   if(sharedStation.isNull()) {
+       qDebug() << "Couldn't find station:" << stationName << "in cave" << cave->name();
+       return;
+   }
+
+   sharedStation->setPosition(position);
+
+  // qDebug() << "Station:" << name << "Position:" << position;
 }

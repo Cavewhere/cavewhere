@@ -19,7 +19,7 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
 /**
   \brief Called when the opengl context is good
   */
-void cwGLTerrain::initalize() {
+void cwGLTerrain::initialize() {
 
     cwGLShader* tileVertexShader = new cwGLShader(QGLShader::Vertex);
     tileVertexShader->setSourceFile("shaders/tileVertex.vert");
@@ -53,8 +53,8 @@ void cwGLTerrain::initalize() {
     EdgeTile->setShaderDebugger(shaderDebugger());
     RegularTile->setShaderDebugger(shaderDebugger());
 
-    EdgeTile->initalize();
-    RegularTile->initalize();
+    EdgeTile->initialize();
+    RegularTile->initialize();
 
     EdgeTile->setTileSize(TessilationSize);
     RegularTile->setTileSize(TessilationSize);
@@ -151,10 +151,7 @@ void cwGLTerrain::drawCenter() {
             QMatrix4x4 modelMatrix;
             modelMatrix.translate(x, y, 0.0);
 
-            QMatrix4x4 modelViewProjection = camera()->projectionMatrix()
-                    * camera()->viewMatrix()
-                    * modelMatrix;
-
+            QMatrix4x4 modelViewProjection = camera()->viewProjectionMatrix() * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
             TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
@@ -180,9 +177,7 @@ void cwGLTerrain::drawCorners(int level) {
             modelMatrix.translate(x, y, 0);
             modelMatrix.scale(scale, scale, 1.0);
 
-            QMatrix4x4 modelViewProjection = camera()->projectionMatrix()
-                    * camera()->viewMatrix()
-                    * modelMatrix;
+            QMatrix4x4 modelViewProjection = camera()->viewProjectionMatrix() * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
             TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
@@ -221,9 +216,7 @@ void cwGLTerrain::drawEdges(int level) {
             //Scale the quad
             modelMatrix.scale(scale, scale, 1.0);
 
-            QMatrix4x4 modelViewProjection = camera()->projectionMatrix()
-                    * camera()->viewMatrix()
-                    * modelMatrix;
+            QMatrix4x4 modelViewProjection = camera()->viewProjectionMatrix() * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
             TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);
@@ -250,9 +243,7 @@ void cwGLTerrain::drawEdges(int level) {
 
             modelMatrix.scale(scale, scale, 1.0);
 
-            QMatrix4x4 modelViewProjection = camera()->projectionMatrix()
-                    * camera()->viewMatrix()
-                    * modelMatrix;
+            QMatrix4x4 modelViewProjection = camera()->viewProjectionMatrix() * modelMatrix;
 
             TileProgram->setUniformValue(UniformModelViewProjectionMatrix, modelViewProjection);
             TileProgram->setUniformValue(UniformModelMatrix, modelMatrix);

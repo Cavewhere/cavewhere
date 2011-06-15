@@ -7,11 +7,13 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwLinePlotTask.h"
+#include "cwGLLinePlot.h"
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
 {
     Region = NULL;
+    GLLinePlot = NULL;
 
     LinePlotThread = new QThread(this);
     LinePlotThread->start();
@@ -19,6 +21,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     LinePlotTask = new cwLinePlotTask();
     LinePlotTask->setThread(LinePlotThread);
     connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(runSurvex())); //So the task is rerun
+    connect(LinePlotTask, SIGNAL(finished()), SLOT(updateLinePlot()));
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
@@ -43,6 +46,10 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     //Connect all sub data
     connectCaves(Region);
+}
+
+void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
+    GLLinePlot = linePlot;
 }
 
 /**
@@ -233,3 +240,13 @@ void cwLinePlotManager::runSurvex() {
     }
 }
 
+/**
+  \brief Updates the line plot
+  */
+void cwLinePlotManager::updateLinePlot() {
+    if(GLLinePlot == NULL) { return; }
+    if(LinePlotTask->status() != cwTask::Stopped) { return; }
+
+    GLLinePlot->setPoints(LinePlotTask->stationPositions());
+    GLLinePlot->setIndexes(LinePlotTask->linePlotIndexData());
+}

@@ -28,6 +28,13 @@ cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
 }
 
 /**
+  \brief Gets a cave by it's name
+
+  If the cave doesn't exist then this returns null
+  */
+
+
+/**
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
@@ -53,6 +60,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 
     return *this;
 }
+
 
 /**
   \brief Creates a new cave and adds it to the caving region

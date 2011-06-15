@@ -34,6 +34,7 @@ public:
 
     int indexOf(cwCave* cave);
 
+
 signals:
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
@@ -56,6 +57,7 @@ private:
     void unparentCave(cwCave* cave);
     void addCaveHelper();
 
+    ////////////////////// Undo Redo commands ///////////////////////////////////
     class InsertRemoveCave : public QUndoCommand {
     public:
         InsertRemoveCave(cwCavingRegion* region, int beginIndex, int endIndex);
@@ -73,7 +75,6 @@ private:
         bool OwnsCaves; //!< If the undo command own the caves, ie, it'll delete them
     };
 
-    ////////////////////// Undo Redo commands ///////////////////////////////////
     class InsertCaveCommand : public InsertRemoveCave {
 
     public:

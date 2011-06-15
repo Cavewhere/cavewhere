@@ -30,6 +30,7 @@
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
 #include "cwGLRenderer.h"
+#include "cwGLLinePlot.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -104,14 +105,13 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
 
-    reloadQML();
-
-    ExportThread = new QThread(this);
-
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(this);
     LinePlotManager->setRegion(Region);
 
+    ExportThread = new QThread(this);
+
+    reloadQML();
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -289,10 +289,13 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
     qmlRegisterType<cwGLRenderer>("Cavewhere", 1, 0, "GLRenderer");
     qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
+    qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "cwLinePlotManager");
+    qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "cwGLLinePlot");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
     context->setContextProperty("mainGLWidget", glWidget);
+    context->setContextProperty("linePlotManager", LinePlotManager);
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 

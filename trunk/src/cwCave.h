@@ -172,7 +172,7 @@ inline bool cwCave::hasStation(QString name) {
   \brief Get's the station from it's name
   */
 inline QWeakPointer<cwStation> cwCave::station(QString name) {
-    return StationLookup.value(name, QWeakPointer<cwStation>());
+    return StationLookup.value(name.toLower(), QWeakPointer<cwStation>());
 }
 
 /**
@@ -180,7 +180,7 @@ inline QWeakPointer<cwStation> cwCave::station(QString name) {
   */
 inline void cwCave::addStation(QSharedPointer<cwStation> station) {
     if(!station->name().isEmpty()) {
-        StationLookup[station->name()] = station.toWeakRef();
+        StationLookup[station->name().toLower()] = station.toWeakRef();
     }
 }
 

@@ -9,7 +9,7 @@ cwTile::cwTile() :
 /**
   \brief Called when the opengl context is good
   */
-void cwTile::initalize() {
+void cwTile::initialize() {
     TriangleIndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
     TriangleVertexBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
 

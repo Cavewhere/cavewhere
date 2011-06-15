@@ -452,7 +452,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
 /**
   \brief Set's the chunk data based on a role
   */
-void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
+void cwSurveyChunk::setData(DataRole /*role*/, int /*index*/, QVariant /*data*/) {
    // qDebug() << "Role:" << role << "Index:" << index << "Data:" << data;
 }
 

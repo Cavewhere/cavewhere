@@ -21,6 +21,8 @@ public:
     void setViewMatrix(QMatrix4x4 matrix);
     QMatrix4x4 viewMatrix() const;
 
+    QMatrix4x4 viewProjectionMatrix();
+
     QVector3D unProject(QPoint point, float viewDepth, QMatrix4x4 modelMatrix = QMatrix4x4()) const;
 
     QPoint mapToGLViewport(QPoint point) const;
@@ -33,6 +35,9 @@ private:
     QRect Viewport;
     QMatrix4x4 ProjectionMatrix;
     QMatrix4x4 ViewMatrix;
+    QMatrix4x4 ViewProjectionMatrix;
+    bool ViewProjectionMatrixIsDirty;
+
 
 };
 
@@ -55,6 +60,7 @@ inline QRect cwCamera::viewport() const {
   */
 inline void cwCamera::setProjectionMatrix(QMatrix4x4 matrix) {
     ProjectionMatrix = matrix;
+    ViewProjectionMatrixIsDirty = true;
 }
 
 /**
@@ -69,6 +75,7 @@ inline QMatrix4x4 cwCamera::projectionMatrix() const {
   */
 inline void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
     ViewMatrix = matrix;
+    ViewProjectionMatrixIsDirty = true;
 }
 
 /**

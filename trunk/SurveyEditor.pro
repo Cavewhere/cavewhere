@@ -85,7 +85,9 @@ SOURCES += src/main.cpp \
     src/cwGLTerrain.cpp \
     src/cwGLObject.cpp \
     src/cwRegularTile.cpp \
-    src/cwGraphicsSceneMouseTransition.cpp
+    src/cwGraphicsSceneMouseTransition.cpp \
+    src/cwLinePlotGeometryTask.cpp \
+    src/cwGLLinePlot.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -157,7 +159,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGLTerrain.h \
     src/cwGLObject.h \
     src/cwRegularTile.h \
-    src/cwGraphicsSceneMouseTransition.h
+    src/cwGraphicsSceneMouseTransition.h \
+    src/cwLinePlotGeometryTask.h \
+    src/cwGLLinePlot.h
 
 
 
@@ -186,7 +190,9 @@ shaders/*.frag \
 shaders/*.vert \
 shaders/*.geom \
     shaders/simple.vert \
-    shaders/simple.frag
+    shaders/simple.frag \
+    shaders/LinePlot.vert \
+    shaders/LinePlot.frag
 
 RESOURCES += \
     icons.qrc

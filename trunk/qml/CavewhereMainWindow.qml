@@ -42,6 +42,12 @@ Rectangle {
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
+
+            Component.onCompleted: {
+                //Setup the linePlotManager with the glLinePlot
+                console.log("LinePlot data:" + linePlot)
+               linePlotManager.setGLLinePlot(linePlot);
+            }
         }
 
         DataMainPage {

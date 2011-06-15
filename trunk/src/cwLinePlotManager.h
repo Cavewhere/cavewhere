@@ -9,6 +9,7 @@ class cwSurveyChunk;
 class cwShot;
 class cwStationReference;
 class cwLinePlotTask;
+class cwGLLinePlot;
 
 //Qt includes
 #include <QObject>
@@ -22,6 +23,7 @@ public:
     ~cwLinePlotManager();
 
     void setRegion(cwCavingRegion* region);
+    Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
 signals:
 
@@ -32,6 +34,8 @@ private:
 
     cwLinePlotTask* LinePlotTask;
     QThread* LinePlotThread;
+
+    cwGLLinePlot* GLLinePlot;
 
     bool Rerun;
 
@@ -49,6 +53,8 @@ private:
 private slots:
     void regionDestroyed(QObject* region);
     void runSurvex();
+
+    void updateLinePlot();
 
     void connectAddedCaves(int beginIndex, int endIndex);
     void connectAddedTrips(int beginIndex, int endIndex);

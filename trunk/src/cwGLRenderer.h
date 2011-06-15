@@ -21,13 +21,16 @@ class cwMouseEventTransition;
 class cwGLShader;
 class cwShaderDebugger;
 class cwGLTerrain;
+class cwGLLinePlot;
 #include <cwRegularTile.h>
 #include <cwEdgeTile.h>
+
 
 class cwGLRenderer : public QDeclarativeItem
 {
     Q_OBJECT
     Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
+    Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
 
 public:
     explicit cwGLRenderer(QDeclarativeItem *parent = 0);
@@ -42,6 +45,8 @@ signals:
 public slots:
     void setGLWidget(QGLWidget* widget);
     QGLWidget* glWidget();
+
+    cwGLLinePlot* linePlot();
 
     void startPanning(QPoint currentMousePos);
     void pan(QPoint currentMousePos);
@@ -83,6 +88,7 @@ private:
 
     //The terrain that's rendered
     cwGLTerrain* Terrain;
+    cwGLLinePlot* LinePlot;
 
     //Shaders for testing
     cwShaderDebugger* ShaderDebugger;
@@ -91,5 +97,10 @@ private:
 };
 
 inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
+
+/**
+  \brief Returns the object that renderes the line plot
+  */
+inline cwGLLinePlot* cwGLRenderer::linePlot() { return LinePlot; }
 
 #endif // CWGLRENDERER_H

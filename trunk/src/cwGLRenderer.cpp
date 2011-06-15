@@ -15,6 +15,7 @@
 #include "cwShaderDebugger.h"
 #include "cwGLShader.h"
 #include "cwGLTerrain.h"
+#include "cwGLLinePlot.h"
 
 //Qt includes
 #include <QPainter>
@@ -49,24 +50,27 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     Terrain->setNumberOfLevels(10);
     //connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
+    LinePlot = new cwGLLinePlot(this);
+    LinePlot->setCamera(Camera);
+    LinePlot->setShaderDebugger(ShaderDebugger);
+
     connect(this, SIGNAL(widthChanged()), SLOT(resizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(resizeGL()));
 }
 
 void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
 
-    painter->beginNativePainting();
-
-    glPushAttrib(GL_VIEWPORT_BIT);
+    painter->beginNativePainting();  
 
     //Draw everything to a framebuffer
+    glPushAttrib(GL_VIEWPORT_BIT);
     MultiSampleFramebuffer->bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0, 0, width(), height());
     glEnable(GL_DEPTH_TEST);
     Terrain->draw();
+    LinePlot->draw();
     glDisable(GL_DEPTH_TEST);
-
     glPopAttrib();
 
     MultiSampleFramebuffer->release();
@@ -140,7 +144,8 @@ void cwGLRenderer::initializeGL() {
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    Terrain->initalize();
+    Terrain->initialize();
+    LinePlot->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }

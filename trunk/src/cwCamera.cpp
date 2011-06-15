@@ -3,6 +3,7 @@
 cwCamera::cwCamera(QObject *parent) :
     QObject(parent)
 {
+    ViewProjectionMatrixIsDirty = true;
 }
 
 /**
@@ -43,4 +44,16 @@ QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 modelMat
 QPoint cwCamera::mapToGLViewport(QPoint point) const {
     int flippedY = Viewport.y() + (Viewport.height() - point.y());
     return QPoint(point.x(), flippedY);
+}
+
+/**
+  \brief Gets the view projection matrix for the camera
+  */
+QMatrix4x4 cwCamera::viewProjectionMatrix() {
+    if(ViewProjectionMatrixIsDirty) {
+        ViewProjectionMatrix = ProjectionMatrix * ViewMatrix;
+        ViewProjectionMatrix.optimize();
+        ViewProjectionMatrixIsDirty = false;
+    }
+    return ViewProjectionMatrix;
 }

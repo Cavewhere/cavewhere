@@ -18,7 +18,7 @@ class cwTile : public cwGLObject
 public:
     cwTile();
 
-    virtual void initalize();
+    virtual void initialize();
     virtual void draw();
 
     void setTileSize(int powerOfTwoSize);
