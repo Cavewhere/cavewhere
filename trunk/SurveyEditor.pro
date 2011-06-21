@@ -87,7 +87,8 @@ SOURCES += src/main.cpp \
     src/cwRegularTile.cpp \
     src/cwGraphicsSceneMouseTransition.cpp \
     src/cwLinePlotGeometryTask.cpp \
-    src/cwGLLinePlot.cpp
+    src/cwGLLinePlot.cpp \
+    src/cwCollisionRectKdTree.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -161,7 +162,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwRegularTile.h \
     src/cwGraphicsSceneMouseTransition.h \
     src/cwLinePlotGeometryTask.h \
-    src/cwGLLinePlot.h
+    src/cwGLLinePlot.h \
+    src/cwCollisionRectKdTree.h
 
 
 

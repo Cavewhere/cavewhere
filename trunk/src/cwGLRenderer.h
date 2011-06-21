@@ -22,14 +22,19 @@ class cwGLShader;
 class cwShaderDebugger;
 class cwGLTerrain;
 class cwGLLinePlot;
+class cwCavingRegion;
+class cwCave;
+#include <cwStation.h>
 #include <cwRegularTile.h>
 #include <cwEdgeTile.h>
+#include <cwCollisionRectKdTree.h>
 
 
 class cwGLRenderer : public QDeclarativeItem
 {
     Q_OBJECT
     Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
+    Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
 
 public:
@@ -41,8 +46,12 @@ public:
 
 signals:
     void glWidgetChanged();
+    void cavingRegionChanged();
 
 public slots:
+    void setCavingRegion(cwCavingRegion* region);
+    cwCavingRegion* cavingRegion() const;
+
     void setGLWidget(QGLWidget* widget);
     QGLWidget* glWidget();
 
@@ -67,6 +76,31 @@ protected:
     void zoom(QGraphicsSceneWheelEvent* event);
 
 private:
+
+    /**
+      \brief This is used to render text labels correctly
+
+      This will transform the points in a multi thread manor.
+      */
+    class TransformPoint {
+    public:
+        typedef QVector3D result_type;
+
+        TransformPoint(QMatrix4x4 modelViewProjection, QRect viewport) {
+            ModelViewProjection = modelViewProjection;
+            Viewport = viewport;
+        }
+
+        /**
+          \brief Transforms the point
+          */
+        QVector3D operator()(QWeakPointer<cwStation> station);
+
+    private:
+        QMatrix4x4 ModelViewProjection;
+        QRect Viewport;
+    };
+
     QGLWidget* GLWidget; //This is so we make current when setting up the object
 
     //Framebuffer for renderering
@@ -93,7 +127,14 @@ private:
     //Shaders for testing
     cwShaderDebugger* ShaderDebugger;
 
+    //For rendering label
+    cwCavingRegion* Region;
+    cwCollisionRectKdTree LabelKdTree;
+
     float sampleDepthBuffer(QPoint point);
+
+    void renderStationLabels(QPainter* painter);
+    void renderStationLabels(QPainter* painter, cwCave* cave);
 };
 
 inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
@@ -102,5 +143,12 @@ inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
   \brief Returns the object that renderes the line plot
   */
 inline cwGLLinePlot* cwGLRenderer::linePlot() { return LinePlot; }
+
+/**
+  \brief Returns the caving region that's owned by the renderer
+  */
+inline cwCavingRegion* cwGLRenderer::cavingRegion() const {
+    return Region;
+}
 
 #endif // CWGLRENDERER_H

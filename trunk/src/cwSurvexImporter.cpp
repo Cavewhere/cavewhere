@@ -745,14 +745,14 @@ void cwSurvexImporter::parseCalibrate(QString line) {
 
         } else if (type == "backcompass") {
             //Check to see if this is a correct compasss calibration
-            const float correctCalibrationThreshold = 20.0;
-            if(calibrationValue - 180.0 < correctCalibrationThreshold) {
+            const float correctCalibrationThreshold = 45.0;
+            if(calibrationValue + 180.0 < correctCalibrationThreshold) {
                 //This is probably a correct back compass
-                calibrationValue = calibrationValue - 180.0;
+                calibrationValue = calibrationValue + 180.0;
                 calibration->setCorrectedCompassBacksight(true);
             }
             calibration->setBackCompassCalibration(calibrationValue);
-
+            qDebug() << "Setting back compass calibration: " << calibrationValue;
         } else if (type == "clino") {
             calibration->setFrontClinoCalibration(calibrationValue);
 

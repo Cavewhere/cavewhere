@@ -57,3 +57,33 @@ QMatrix4x4 cwCamera::viewProjectionMatrix() {
     }
     return ViewProjectionMatrix;
 }
+
+/**
+  \brief This maps normalized screen coordinates to Qt Viewport
+
+  \param point - The point, in normalize screen coordinates.  This is the point after it's been
+  transform with modelViewProjection matrix
+
+  \returns This return QVector3D in QtViewport. The qt viewport is the orgin (0, 0) is upper left
+  corner of the window
+  */
+QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const {
+    mapNormalizeScreenToGLViewport(point, Viewport);
+}
+
+/**
+  \brief See mapNormalizeScreenToQtViewport
+
+  The only differenc, is the viewport is send to this function, instead of using the camera's viewport
+  */
+ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport) {
+     //Transform the point into screen pixels
+     float x = viewport.x() + (viewport.width() * (point.x() + 1.0)) / 2.0;
+     float y = viewport.y() + (viewport.height() * (point.y() + 1.0)) / 2.0;
+     float z = (point.z() + 1.0) / 2.0;
+
+     //Flip the y
+     y = viewport.y() + (viewport.height() - y);
+
+     return QVector3D(x, y, z);
+ }

@@ -16,6 +16,9 @@
 #include "cwGLShader.h"
 #include "cwGLTerrain.h"
 #include "cwGLLinePlot.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwStation.h"
 
 //Qt includes
 #include <QPainter>
@@ -28,6 +31,8 @@
 #include <QKeyEventTransition>
 #include <QDebug>
 #include <QGraphicsSceneWheelEvent>
+#include <QtConcurrentMap>
+#include <QFontMetrics>
 
 //Std includes
 #include <math.h>
@@ -36,6 +41,8 @@
 cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     QDeclarativeItem(parent)
 {
+    Region = NULL;
+
     GLWidget = NULL;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
 
@@ -59,8 +66,7 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
 }
 
 void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
-
-    painter->beginNativePainting();  
+    painter->beginNativePainting();
 
     //Draw everything to a framebuffer
     glPushAttrib(GL_VIEWPORT_BIT);
@@ -106,8 +112,16 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     glEnd();
     glBindTexture(GL_TEXTURE_2D, 0);
 
-
     painter->endNativePainting();
+
+    painter->save();
+    painter->setPen(QPen());
+    painter->setBrush(QBrush());
+    painter->setFont(QFont());
+
+    //Render text labels
+    renderStationLabels(painter);
+    painter->restore();
 
 }
 
@@ -421,5 +435,88 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
         //Use the middle value in the buffer
         int centerIndex = samplerSize * samplerCenter + samplerCenter;
         return buffer[centerIndex];
+    }
+}
+
+/**
+  \brief This renders the station labels for the caving region
+
+  This will go through all the caves and render station labels for them
+  */
+void cwGLRenderer::renderStationLabels(QPainter* painter) {
+    //Clear the collision lable kd-tree
+    LabelKdTree.clear();
+
+    for(int i = 0; i < Region->caveCount(); i++) {
+       cwCave* cave = Region->cave(i);
+       renderStationLabels(painter, cave);
+    }
+
+    LabelKdTree.paintTree(painter, QRect(QPoint(0, 0), QSize(width(), height())));
+}
+
+/**
+  \brief This renders the station labels for a cave
+  */
+void cwGLRenderer::renderStationLabels(QPainter* painter, cwCave* cave) {
+
+    QList <QWeakPointer<cwStation> > stations = cave->stations();
+
+    //Transforms all the station's points
+    QList<QVector3D> transformedStationPoints = QtConcurrent::blockingMapped(stations,
+                                                                             TransformPoint(Camera->viewProjectionMatrix(),
+                                                                                            Camera->viewport()));
+
+
+    Q_ASSERT(transformedStationPoints.size() == cave->stations().count());
+
+    QFont defaultFont;
+    QFontMetrics fontMetrics(defaultFont);
+
+    //Go through all the station points and render the text
+    for(int i = 0; i < stations.size(); i++) {
+        QVector3D projectedStationPosition = transformedStationPoints[i];
+
+        //Clip the stations to the rendering area
+        if(projectedStationPosition.z() > 1.0 ||
+                projectedStationPosition.z() < 0.0 ||
+                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
+            continue;
+        }
+
+        QString stationName = stations[i].data()->name();
+
+        //See if stationName overlaps with other stations
+        QPoint topLeftPoint = projectedStationPosition.toPoint();
+        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
+        QRect stationRect(topLeftPoint, stationNameTextSize);
+        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
+        bool couldAddText = LabelKdTree.addRect(stationRect);
+
+        if(couldAddText) {
+            painter->drawText(topLeftPoint, stationName);
+        }
+    }
+}
+
+/**
+  \brief This is a helper for QtCurrentent function
+
+  This is the kernel for multi threaded algroithm to transform the points into
+  screen coordinates.  This is a helper function to renderStationLabels
+  */
+QVector3D cwGLRenderer::TransformPoint::operator()(QWeakPointer<cwStation> station) {
+    QVector3D normalizeSceenCoordinate =  ModelViewProjection * station.data()->position();
+    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
+    return viewportCoord;
+}
+
+/**
+  \brief Sets the caving region for the renderer
+  */
+void cwGLRenderer::setCavingRegion(cwCavingRegion* region) {
+    if(Region != region) {
+        Region = region;
+        emit cavingRegionChanged();
     }
 }

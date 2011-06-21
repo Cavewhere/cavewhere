@@ -39,6 +39,7 @@ Rectangle {
         GLTerrainRenderer {
             //visible: mainSideBar.pageShown == "view"
             glWidget: mainGLWidget
+            cavingRegion: region
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
