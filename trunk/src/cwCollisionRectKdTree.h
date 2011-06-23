@@ -33,14 +33,21 @@ private:
         Node* RightChild;
         QRect Rectangle; //only for the leaf nodes
 
+        float value(int axis) const { return cwCollisionRectKdTree::value(Rectangle, axis); }
+       // float oppositeValue(int axis) const { return cwCollisionRectKdTree::oppositeValue(Rectangle, axis); }
+
         bool isLeaf() const { return LeftChild == NULL && RightChild == NULL; }
     };
 
     Node* Root;
 
-    bool addRect(const QRect& rectangle, int depth, Node* root);
+    bool rectIntersects(const QRect& rectangle, int depth, Node* root);
+    void addRect(const QRect& rectangle, int depth, Node* root);
 
     void paintTree(QPainter* painter, QRect windowSize, int depth, Node* root);
+
+    static float value(const QRect& rectangle, int axis);
+    static float oppositeValue(const QRect& rectangle, int axis);
 
 };
 

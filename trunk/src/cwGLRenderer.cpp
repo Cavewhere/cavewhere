@@ -452,7 +452,7 @@ void cwGLRenderer::renderStationLabels(QPainter* painter) {
        renderStationLabels(painter, cave);
     }
 
-    LabelKdTree.paintTree(painter, QRect(QPoint(0, 0), QSize(width(), height())));
+   // LabelKdTree.paintTree(painter, QRect(QPoint(0, 0), QSize(width(), height())));
 }
 
 /**
@@ -494,7 +494,13 @@ void cwGLRenderer::renderStationLabels(QPainter* painter, cwCave* cave) {
         bool couldAddText = LabelKdTree.addRect(stationRect);
 
         if(couldAddText) {
+            painter->save();
+            painter->setPen(Qt::white);
+            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
+
+            painter->setPen(Qt::black);
             painter->drawText(topLeftPoint, stationName);
+            painter->restore();
         }
     }
 }

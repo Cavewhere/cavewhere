@@ -29,8 +29,16 @@ void cwCollisionRectKdTree::clear() {
   \param rectangle - The rectangle that'll be searched
   */
 bool cwCollisionRectKdTree::addRect(const QRect& rectangle) {
-    //Search the tree
-    return addRect(rectangle, 0, Root);
+    //If the rectangle can be added
+    if(rectIntersects(rectangle, 0, Root)) {
+        //We found an inersecting rectangle with rectangle.  Can't add the rectangle
+        //Return false
+        return false;
+    }
+
+    //Add the rectangle, the rectangle is clear to be added
+    addRect(rectangle, 0, Root);
+    return true;
 }
 
 /**
@@ -51,80 +59,140 @@ cwCollisionRectKdTree::Node::Node(QRect rectangle) {
 }
 
 /**
+  \brief This searches for collisions with the rectangle in the kd-Tree
+
+  If the rectangle overlaps another rectangle, this return true, else this returns false
+  */
+bool cwCollisionRectKdTree::rectIntersects(const QRect& rectangle, int depth, Node* root) {
+    if(root == NULL) { return false; } //No rectangles to test, rectangle doesn't intesect with this node
+    if(root->isLeaf()) {
+        //Do the intersection test
+        return root->Rectangle.intersects(rectangle);
+    }
+
+    //Select axis based on depth so that axis cycles through all valid values
+    int axis = depth % 2; //divid by 4 because this is 2D range search problem
+
+    int leftValue = value(rectangle, axis);
+    int rightValue = oppositeValue(rectangle, axis);
+    int axisValue = root->value(axis);
+
+//    if(leftValue < axisValue &&
+//            axisValue <= rightValue) {
+//        //Rectangle goes between the splits, search left and right nodes
+//        return rectIntersects(rectangle, depth + 1, root->LeftChild) ||
+//                rectIntersects(rectangle, depth + 1, root->RightChild);
+
+  if(rightValue < axisValue) {
+        //Completely clears the left side of the axis
+        return rectIntersects(rectangle, depth + 1, root->LeftChild);
+    } else {
+        //Completely clears the right side of the axis
+        return rectIntersects(rectangle, depth + 1, root->LeftChild) ||
+                rectIntersects(rectangle, depth + 1, root->RightChild);
+    }
+
+}
+
+/**
   Helper function to addRect
   */
-bool cwCollisionRectKdTree::addRect(const QRect& rectangle, int depth, Node* root) {
+void cwCollisionRectKdTree::addRect(const QRect& rectangle, int depth, Node* root) {
+
+    //Select axis based on depth so that axis cycles through all valid values
+    int axis = depth % 2; //divid by 4 because this is 2D range search problem
+
     if(root->isLeaf()) {
         if(root->Rectangle.isNull()) {
             //Found a place to add the rectangle
             root->Rectangle = rectangle;
-            return true;
+            return;
+        } else {
+            //Split the this leaf node, so it's not a leaf node anymore
+
+            Node* node1 = new Node(rectangle);
+            Node* node2 = new Node(root->Rectangle);
+
+            if(node1->value(axis) < node2->value(axis)) {
+                root->LeftChild = node1;
+                root->RightChild = node2;
+            } else {
+                root->LeftChild = node2;
+                root->RightChild = node1;
+            }
+            root->Rectangle = root->RightChild->Rectangle;
+            return;
         }
     }
 
-    if(root->Rectangle.intersects(rectangle)) {
-        //The rectangle overlap, can't add the rectangle
-        return false;
+    int rectangleValue = value(rectangle, axis);
+    int axisValue = root->value(axis);
+
+    if(rectangleValue < axisValue) {
+        //Search to the left
+        addRect(rectangle, depth + 1, root->LeftChild);
+    } else {
+        //Search to the right
+        addRect(rectangle, depth + 1, root->RightChild);
     }
 
-   //Select axis based on depth so that axis cycles through all valid values
-   int axis = depth % 4; //divid by 4 because this is 2D range search problem
+    return;
 
-   //The heart of the kd-tree search, this switches the axises
-   int leftValue;
-   int rightValue;
-   int axisValue;
-   switch(axis) {
-   case 0: //Left
-       leftValue = rectangle.left();
-       rightValue = rectangle.right();
-       axisValue = root->Rectangle.left();
-       break;
-   case 1: //Top
-       leftValue = rectangle.top();
-       rightValue = rectangle.bottom();
-       axisValue = root->Rectangle.top();
-       break;
-   case 2: //Right
-       leftValue = rectangle.left();
-       rightValue = rectangle.right();
-       axisValue = root->Rectangle.right();
-       break;
-   case 3: //Bottom
-       leftValue = rectangle.top();
-       rightValue = rectangle.bottom();
-       axisValue = root->Rectangle.bottom();
-       break;
-   }
+//   //The heart of the kd-tree search, this switches the axises
+//   int leftValue;
+//   int rightValue;
+//   int axisValue;
+//   switch(axis) {
+//   case 0: //Left
+//       leftValue = rectangle.left();
+//       rightValue = rectangle.right();
+//       axisValue = root->Rectangle.left();
+//       break;
+//   case 1: //Top
+//       leftValue = rectangle.top();
+//       rightValue = rectangle.bottom();
+//       axisValue = root->Rectangle.top();
+//       break;
+//   case 2: //Right
+//       leftValue = rectangle.left();
+//       rightValue = rectangle.right();
+//       axisValue = root->Rectangle.right();
+//       break;
+//   case 3: //Bottom
+//       leftValue = rectangle.top();
+//       rightValue = rectangle.bottom();
+//       axisValue = root->Rectangle.bottom();
+//       break;
+//   }
 
-   //If the rectangle is to the left
- // if(rectangleValue == root->Location) { return false; }
-   if(leftValue < axisValue) {
-       if(root->LeftChild != NULL) {
-           //Search to the left
-           return addRect(rectangle, depth + 1, root->LeftChild);
-       } else {
-           //Add a leaf to the left
-           Node* leftNode = new Node(rectangle);
-           root->LeftChild = leftNode;
-           return true;
-       }
-  }
+//   //If the rectangle is to the left
+// // if(rectangleValue == root->Location) { return false; }
+//   if(leftValue < axisValue) {
+//       if(root->LeftChild != NULL) {
+//           //Search to the left
+//           return addRect(rectangle, depth + 1, root->LeftChild);
+//       } else {
+//           //Add a leaf to the left
+//           Node* leftNode = new Node(rectangle);
+//           root->LeftChild = leftNode;
+//           return true;
+//       }
+//  }
 
-   if(rightValue >= axisValue) {
-       //The rectangle is on the right
-       if(root->RightChild != NULL) {
-           //Search to the right
-           return addRect(rectangle, depth + 1, root->RightChild);
-       } else {
-           //Add to the right
-           Node* rightNode = new Node(rectangle);
-           root->RightChild = rightNode;
-           return true;
-       }
-   }
+//   if(rightValue >= axisValue) {
+//       //The rectangle is on the right
+//       if(root->RightChild != NULL) {
+//           //Search to the right
+//           return addRect(rectangle, depth + 1, root->RightChild);
+//       } else {
+//           //Add to the right
+//           Node* rightNode = new Node(rectangle);
+//           root->RightChild = rightNode;
+//           return true;
+//       }
+//   }
 
-   return false;
+//   return false;
 }
 
 
@@ -136,33 +204,47 @@ void cwCollisionRectKdTree::paintTree(QPainter* painter, const QRect& windowSize
 
 void cwCollisionRectKdTree::paintTree(QPainter* painter, QRect windowSize, int depth, Node* root) {
     if(root == NULL) { return; }
-    int axis = depth % 4; //divid by 4 because this is 2D range search problem
+
+    if(root->isLeaf()) {
+        painter->setPen(QPen(Qt::red));
+        painter->drawRect(root->Rectangle);
+        return;
+    }
+
+    int axis = depth % 2; //divid by 4 because this is 2D range search problem
 
     QRect windowSizeLeft = windowSize;
     QRect windowSizeRight = windowSize;
 
+    QPen pen;
+    pen.setWidthF(2.0);
+
     //The heart of the kd-tree search, this switches the axises
     switch(axis) {
     case 0: //Left-
-        painter->setPen(Qt::gray);
+        pen.setColor(Qt::gray);
+        painter->setPen(pen);
         painter->drawLine(root->Rectangle.left(), windowSize.top(), root->Rectangle.left(), windowSize.bottom());
         windowSizeLeft.setRight(root->Rectangle.left());
         windowSizeRight.setLeft(root->Rectangle.left());
         break;
     case 1: //Top
-        painter->setPen(Qt::darkCyan);
+        pen.setColor(Qt::darkCyan);
+        painter->setPen(pen);
         painter->drawLine(windowSize.left(), root->Rectangle.top(), windowSize.right(), root->Rectangle.top());
         windowSizeLeft.setBottom(root->Rectangle.top());
         windowSizeRight.setTop(root->Rectangle.top());
         break;
     case 2: //Right
-        painter->setPen(Qt::lightGray);
+        pen.setColor(Qt::lightGray);
+        painter->setPen(pen);
         painter->drawLine(root->Rectangle.right(), windowSize.top(), root->Rectangle.right(), windowSize.bottom());
         windowSizeLeft.setRight(root->Rectangle.right());
         windowSizeRight.setLeft(root->Rectangle.right());
         break;
     case 3: //Bottom
-        painter->setPen(Qt::cyan);
+        pen.setColor(Qt::cyan);
+        painter->setPen(pen);
         painter->drawLine(windowSize.left(), root->Rectangle.bottom(), windowSize.right(), root->Rectangle.bottom());
         windowSizeLeft.setBottom(root->Rectangle.bottom());
         windowSizeRight.setTop(root->Rectangle.bottom());
@@ -172,8 +254,46 @@ void cwCollisionRectKdTree::paintTree(QPainter* painter, QRect windowSize, int d
    // painter->setPen(QPen());
    // painter->drawText(windowSize.bottomLeft(), QString("%1").arg(depth));
 
-    painter->setPen(QPen(Qt::red));
-    painter->drawRect(root->Rectangle);
     paintTree(painter, windowSizeLeft, depth + 1, root->LeftChild);
     paintTree(painter, windowSizeRight, depth + 1, root->RightChild);
+}
+
+/**
+  \brief Gets the value at a specific axis
+
+  \param axis
+  */
+float cwCollisionRectKdTree::value(const QRect& Rectangle, int axis) {
+    switch(axis) {
+    case 0: //Left
+        return Rectangle.left();
+    case 1: //Top
+        return Rectangle.top();
+//    case 2: //Right
+//        return Rectangle.right();
+//    case 3: //Bottom
+//        return Rectangle.bottom();
+    }
+    Q_ASSERT(false);
+    return 0.0;
+}
+
+/**
+  \brief This is similar to value() but this gets the opposite value
+
+  For example if value returns the left value, this returns the right value
+  */
+float cwCollisionRectKdTree::oppositeValue(const QRect& Rectangle, int axis) {
+    switch(axis) {
+    case 0: //Left opposite
+        return Rectangle.right();
+    case 1: //Top opposite
+        return Rectangle.bottom();
+//    case 2: //Right opposite
+//        return Rectangle.left();
+//    case 3: //Bottom opposite
+//        return Rectangle.top();
+    }
+    Q_ASSERT(false);
+    return 0.0;
 }
