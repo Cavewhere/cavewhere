@@ -8,6 +8,7 @@ class cwCave;
 class cwStationReference;
 class cwTeam;
 class cwTripCalibration;
+class cwSurveyNoteModel;
 #include "cwUndoer.h"
 
 //Qt include
@@ -25,6 +26,7 @@ class cwTrip : public QObject, public cwUndoer
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
+    Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -42,6 +44,8 @@ public:
 
     void setCalibration(cwTripCalibration* calibrations);
     cwTripCalibration* calibrations() const;
+
+    cwSurveyNoteModel* notes() const;
 
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit);
@@ -70,6 +74,7 @@ signals:
     void chunksRemoved(int begin, int end);
     void teamChanged();
     void calibrationChanged();
+    void notesChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -81,6 +86,7 @@ protected:
     cwTeam* Team;
     cwTripCalibration* Calibration;
     cwCave* ParentCave;
+    cwSurveyNoteModel* Notes;
 
     //Units
     cwUnits::LengthUnit DistanceUnit;
@@ -154,6 +160,13 @@ inline cwTeam* cwTrip::team() const {
   */
 inline cwTripCalibration* cwTrip::calibrations() const {
     return Calibration;
+}
+
+/**
+  \brief This gets the notes for a trip
+  */
+inline cwSurveyNoteModel* cwTrip::notes() const {
+    return Notes;
 }
 
 #endif // CWSURVERYCHUNKGROUP_H

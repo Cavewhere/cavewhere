@@ -68,7 +68,7 @@ QMatrix4x4 cwCamera::viewProjectionMatrix() {
   corner of the window
   */
 QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const {
-    mapNormalizeScreenToGLViewport(point, Viewport);
+    return mapNormalizeScreenToGLViewport(point, Viewport);
 }
 
 /**

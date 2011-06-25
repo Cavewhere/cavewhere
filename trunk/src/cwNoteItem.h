@@ -1,16 +1,23 @@
 #ifndef CWNOTEITEM_H
 #define CWNOTEITEM_H
 
+//Glew includes
+#include <GL/glew.h>
+
+//Our includes
+#include "cwGLRenderer.h"
+
+//Qt includes
 #include <QDeclarativeItem>
 #include <QTransform>
 #include <QFutureWatcher>
 #include <QTimer>
 
-class cwNoteItem : public QDeclarativeItem
+class cwNoteItem : public cwGLRenderer
 {
     Q_OBJECT
 
-    Q_PROPERTY(QString imageSource READ imageSource WRITE setImageSource NOTIFY imageSourceChanged());
+    Q_PROPERTY(QString imageSource READ imageSource WRITE setImageSource NOTIFY imageSourceChanged)
 
 public:
     explicit cwNoteItem(QDeclarativeItem *parent = 0);
@@ -19,46 +26,83 @@ public:
     void setImageSource(QString imageSource);
 
 public slots:
-    void fitToView();
+//    void fitToView();
 
 signals:
     void imageSourceChanged();
-    void imageChanged();
+//    void imageChanged();
 
 public slots:
 
 protected:
+    virtual void initializeGL();
+    virtual void resizeGL();
+    virtual void paintFramebuffer();
 
-    QGraphicsPixmapItem* PixmapItem;
 
-    QTransform FastPixmapTransform;
-    QTransform SmoothTransform;
 
-    QPixmap FastPixmap;
-    QPixmap SmoothPixmap;
+private:
 
-    QFutureWatcher<QImage>* PixmapFutureWatcher;
+    //The shader program for the note
+    QGLShaderProgram* ImageProgram;
 
-    //LOD timer
-    QTimer* LODTimer;
+    //The vertex buffer
+    QGLBuffer VertexBuffer;
 
-    QImage OriginalNote;
+    //The attribute location of the vVertex
+    int vVertex;
+    int ModelViewProjectionMatrix;
+
+    //The texture id for rendering the notes to the screen
+    GLuint NoteTexture;
+
+    //Creates the scale matrix for the note item
+    QMatrix4x4 NoteModelMatrix;
+
+//    QGraphicsPixmapItem* PixmapItem;
+
+//    QTransform FastPixmapTransform;
+//    QTransform SmoothTransform;
+
+//    QPixmap FastPixmap;
+//    QPixmap SmoothPixmap;
+
+//    QFutureWatcher<QImage>* PixmapFutureWatcher;
+    QFutureWatcher<QImage>* LoadNoteWatcher;
+
+//    //LOD timer
+//    QTimer* LODTimer;
+
+//    QImage OriginalNote;
     QString NoteSource;
+    QSize ImageSize;
 
-    //For interaction
-    QPointF LastPanPoint;
-    QPointF ScaleCenter;
+
+//    //For interaction
+    QPoint LastPanPoint;
+//    QPointF ScaleCenter;
 
     virtual void mouseMoveEvent ( QGraphicsSceneMouseEvent * event );
     virtual void mousePressEvent ( QGraphicsSceneMouseEvent * event );
-    virtual void mouseReleaseEvent ( QGraphicsSceneMouseEvent * event );
+//    virtual void mouseReleaseEvent ( QGraphicsSceneMouseEvent * event );
     virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 
-    void SetScale(float scaleFactor);
+//    void SetScale(float scaleFactor);
+
+    void initializeShaders();
+    void initializeVertexBuffers();
+    void initializeTexture();
+
+    static QImage LoadImage(QString& filename);
+
 
 protected slots:
-    void RenderSmooth();
-    void SetSmoothPixmap();
+//    void RenderSmooth();
+//    void SetSmoothPixmap();
+
+    void ImageFinishedLoading();
+
+
 
 };
 

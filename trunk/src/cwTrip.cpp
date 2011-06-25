@@ -5,6 +5,7 @@
 #include "cwStationReference.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyNoteModel.h"
 
 //Qt includes
 #include <QMap>
@@ -17,6 +18,7 @@ cwTrip::cwTrip(QObject *parent) :
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
     Date = QDate::currentDate();
+    Notes = new cwSurveyNoteModel(this);
 }
 
 void cwTrip::Copy(const cwTrip& object)

@@ -18,10 +18,12 @@ DataTabWidget {
         //    text: "This is the Data page"
     }
 
-    Text {
+    NotesGallery {
         property string label: "Notes"
         property string icon: "qrc:icons/notes.png"
-        text: "This is the Notes page"
+
+        notesModel: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip.notes : null
+
     }
 
     Text {

@@ -5,12 +5,13 @@ Rectangle {
 //    width: 640
 //    height: 480
 
-    border.width: 5
-    border.color: "blue"
+    property alias notesModel: galleryView.model;
 
 
 
-    Component {
+ anchors.fill: parent;
+
+     Component {
         id: listDelegate
 
         Item {
@@ -24,6 +25,7 @@ Rectangle {
 
             Image {
                 id: image
+                asynchronous: true
                 pos.x:  border / 2
                 pos.y:  border / 2
                 source: imagePath
@@ -44,7 +46,7 @@ Rectangle {
         height: 210
 
         delegate: listDelegate
-        model: surveyNoteModel
+        //model: surveyNoteModel
 
         clip: true
 
@@ -81,7 +83,8 @@ Rectangle {
 
         clip: true
 
-        onImageSourceChanged: fitToView();
+      //  onImageSourceChanged: fitToView();
+        glWidget: mainGLWidget
 
     }
 

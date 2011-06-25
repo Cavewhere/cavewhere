@@ -151,8 +151,6 @@ Rectangle {
         Item {
             id: pageArea
             anchors.fill: parent;
-
-
         }
     }
 }

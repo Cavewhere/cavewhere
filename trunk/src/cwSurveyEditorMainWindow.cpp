@@ -31,6 +31,8 @@
 #include "cwGlobalUndoStack.h"
 #include "cwGLRenderer.h"
 #include "cwGLLinePlot.h"
+#include "cwSurveyNoteModel.h"
+#include "cw3dRegionViewer.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -287,7 +289,7 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
     //    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
-    qmlRegisterType<cwGLRenderer>("Cavewhere", 1, 0, "GLRenderer");
+    qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
     qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "cwLinePlotManager");
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "cwGLLinePlot");

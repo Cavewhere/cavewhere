@@ -88,7 +88,8 @@ SOURCES += src/main.cpp \
     src/cwGraphicsSceneMouseTransition.cpp \
     src/cwLinePlotGeometryTask.cpp \
     src/cwGLLinePlot.cpp \
-    src/cwCollisionRectKdTree.cpp
+    src/cwCollisionRectKdTree.cpp \
+    src/cw3dRegionViewer.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -163,7 +164,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGraphicsSceneMouseTransition.h \
     src/cwLinePlotGeometryTask.h \
     src/cwGLLinePlot.h \
-    src/cwCollisionRectKdTree.h
+    src/cwCollisionRectKdTree.h \
+    src/cw3dRegionViewer.h
 
 
 
@@ -194,7 +196,10 @@ shaders/*.geom \
     shaders/simple.vert \
     shaders/simple.frag \
     shaders/LinePlot.vert \
-    shaders/LinePlot.frag
+    shaders/LinePlot.frag \
+    shaders/NoteItem.vsh \
+    shaders/NoteItem.frag \
+    shaders/NoteItem.vert
 
 RESOURCES += \
     icons.qrc
