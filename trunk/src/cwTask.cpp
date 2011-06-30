@@ -53,7 +53,7 @@ void cwTask::setParentTask(cwTask* parentTask) {
 /**
   \brief Sets the thread that this task will run on
 
-  This will move the object to that thread immedately
+  This will move the object to that thread using the meta object system
   */
 void cwTask::setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType) {
     threadToRunOn->start();

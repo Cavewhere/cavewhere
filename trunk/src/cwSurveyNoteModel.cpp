@@ -6,7 +6,6 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     //For qml
     QHash<int, QByteArray> roles;
     roles.reserve(2);
-    roles[ImageRole] = "image";
     roles[ImagePathRole] = "imagePath";
     roles[NoteObjectRole] = "noteObject";
     setRoleNames(roles);
@@ -51,8 +50,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     }
     case NoteObjectRole:
         return QVariant::fromValue(qobject_cast<QObject*>(Notes[row]));
-    case ImageRole:
-        return QVariant::fromValue(Notes[row]->image());
+    default:
+        return QVariant();
     }
     return QVariant();
 }

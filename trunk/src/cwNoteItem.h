@@ -26,11 +26,9 @@ public:
     void setImageSource(QString imageSource);
 
 public slots:
-//    void fitToView();
 
 signals:
     void imageSourceChanged();
-//    void imageChanged();
 
 public slots:
 
@@ -59,35 +57,18 @@ private:
     //Creates the scale matrix for the note item
     QMatrix4x4 NoteModelMatrix;
 
-//    QGraphicsPixmapItem* PixmapItem;
-
-//    QTransform FastPixmapTransform;
-//    QTransform SmoothTransform;
-
-//    QPixmap FastPixmap;
-//    QPixmap SmoothPixmap;
-
-//    QFutureWatcher<QImage>* PixmapFutureWatcher;
     QFutureWatcher<QImage>* LoadNoteWatcher;
 
-//    //LOD timer
-//    QTimer* LODTimer;
-
-//    QImage OriginalNote;
     QString NoteSource;
     QSize ImageSize;
 
 
 //    //For interaction
     QPoint LastPanPoint;
-//    QPointF ScaleCenter;
 
     virtual void mouseMoveEvent ( QGraphicsSceneMouseEvent * event );
     virtual void mousePressEvent ( QGraphicsSceneMouseEvent * event );
-//    virtual void mouseReleaseEvent ( QGraphicsSceneMouseEvent * event );
     virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
-
-//    void SetScale(float scaleFactor);
 
     void initializeShaders();
     void initializeVertexBuffers();
@@ -97,12 +78,7 @@ private:
 
 
 protected slots:
-//    void RenderSmooth();
-//    void SetSmoothPixmap();
-
     void ImageFinishedLoading();
-
-
 
 };
 

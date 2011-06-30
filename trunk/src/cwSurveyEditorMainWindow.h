@@ -13,6 +13,7 @@ class cwImportSurvexDialog;
 class cwCavingRegion;
 class cwRegionTreeModel;
 class cwLinePlotManager;
+class cwProject;
 
 //Qt includes
 #include <QString>
@@ -76,6 +77,9 @@ private:
 
     //Undo / redo
     QUndoStack* UndoStack;
+
+    //Save / Load
+    cwProject* Project;
 
     QGLWidget* createGLWidget();
     void initGLEW();

@@ -29,6 +29,8 @@ cwLinePlotManager::~cwLinePlotManager() {
 
     QMetaObject::invokeMethod(LinePlotThread, "quit");
     LinePlotThread->wait();
+
+    delete LinePlotTask;
 }
 
 /**

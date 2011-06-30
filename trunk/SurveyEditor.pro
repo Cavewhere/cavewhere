@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui declarative xml opengl
+QT       += core gui declarative xml opengl sql
 
 TARGET = SurveyEditor
 TEMPLATE = app
@@ -89,7 +89,13 @@ SOURCES += src/main.cpp \
     src/cwLinePlotGeometryTask.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
-    src/cw3dRegionViewer.cpp
+    src/cw3dRegionViewer.cpp \
+    src/cwXMLProject.cpp \
+    src/cwSaveXMLProjectTask.cpp \
+    src/cwImageDatabase.cpp \
+    src/cwLoadImageTask.cpp \
+    src/cwImage.cpp \
+    src/cwImageData.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -165,7 +171,13 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwLinePlotGeometryTask.h \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
-    src/cw3dRegionViewer.h
+    src/cw3dRegionViewer.h \
+    src/cwXMLProject.h \
+    src/cwSaveXMLProjectTask.h \
+    src/cwImageDatabase.h \
+    src/cwLoadImageTask.h \
+    src/cwImage.h \
+    src/cwImageData.h
 
 
 
