@@ -90,12 +90,12 @@ SOURCES += src/main.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
     src/cw3dRegionViewer.cpp \
-    src/cwXMLProject.cpp \
     src/cwSaveXMLProjectTask.cpp \
     src/cwImageDatabase.cpp \
-    src/cwLoadImageTask.cpp \
     src/cwImage.cpp \
-    src/cwImageData.cpp
+    src/cwImageData.cpp \
+    src/cwProject.cpp \
+    src/cwAddImageTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -172,12 +172,12 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
     src/cw3dRegionViewer.h \
-    src/cwXMLProject.h \
     src/cwSaveXMLProjectTask.h \
     src/cwImageDatabase.h \
-    src/cwLoadImageTask.h \
     src/cwImage.h \
-    src/cwImageData.h
+    src/cwImageData.h \
+    src/cwProject.h \
+    src/cwAddImageTask.h
 
 
 

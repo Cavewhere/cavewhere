@@ -6,8 +6,8 @@
 
 //Our includes
 #include "cwImageData.h"
-#include "cwXMLProject.h"
-#include "cwLoadImageTask.h"
+#include "cwProject.h"
+#include "cwAddImageTask.h"
 
 class cwImageDatabaseManager : public QObject
 {

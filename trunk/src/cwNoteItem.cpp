@@ -104,23 +104,19 @@ void cwNoteItem::resizeGL() {
 
     if(!ImageSize.isValid()) { return; }
 
-   float windowAspect = width() / height();
+    QSize windowSize(width(), height());
+    QSize scaledImageSize = ImageSize;
+    scaledImageSize.scale(windowSize, Qt::KeepAspectRatio);
 
-   float width;
-   float height;
+    float changeInWidth = windowSize.width() / (float)scaledImageSize.width();
+    float changeInHeight = windowSize.height() / (float)scaledImageSize.height();
 
-   if(windowAspect < 1.0) {
-       //Height is bigger
-       width = ImageSize.width();
-       height = ImageSize.height() / windowAspect;
-   } else {
-       width = ImageSize.width() * windowAspect;
-       height = ImageSize.height();
-   }
+    float widthProjection = ImageSize.width() * changeInWidth;
+    float heightProjection = ImageSize.height() * changeInHeight;
 
     QMatrix4x4 orthognalProjection;
-    orthognalProjection.ortho(0.0, width,
-                              0.0, height,
+    orthognalProjection.ortho(0.0, widthProjection,
+                              0.0, heightProjection,
                               -1.0, 1.0);
     Camera->setProjectionMatrix(orthognalProjection);
 }

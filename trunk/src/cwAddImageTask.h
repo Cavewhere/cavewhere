@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QString>
 #include <QImage>
+#include <QDir>
 #include <QSqlDatabase>
 
 class cwAddImageTask : public cwTask
@@ -18,9 +19,13 @@ class cwAddImageTask : public cwTask
 public:
     cwAddImageTask(QObject* parent = NULL);
 
-    void setDatabasePath(const QString& databasePath);
+    //////////////// Parameters //////////////////
+    void setBaseDirectory(QDir baseDirectory);
     void setImagesPath(QStringList imagePaths);
 
+//    void setDatabasePath(const QString& databasePath);
+
+    ///////////// Results ///////////////////
     QList<cwImage> images();
 
     //static int addImageToDatabase(QSqlDatabase& database, const cwImageData& data);
@@ -29,12 +34,13 @@ protected:
     virtual void runTask();
 
 private:
+    QDir BaseDirectory;
     QStringList ImagePaths;
-    QString DatabasePath;
+//    QString DatabasePath;
 
     QList<cwImage> Images;
 
-    QSqlDatabase CurrentDatabase;
+//    QSqlDatabase CurrentDatabase;
 
 
     /**
@@ -53,7 +59,7 @@ private:
     };
 
 private slots:
-    void tryAddingmagesToDatabase();
+//    void tryAddingmagesToDatabase();
 
 
 };
@@ -64,8 +70,17 @@ private slots:
   This should be set before calling start!  And shouldn't be changed until the task
   has finished
   */
-inline void cwAddImageTask::setDatabasePath(const QString& databasePath) {
-    DatabasePath = databasePath;
+//inline void cwAddImageTask::setDatabasePath(const QString& databasePath) {
+//    DatabasePath = databasePath;
+//}
+
+/**
+  \brie Sets the base directory of where the image will be stored to
+
+  \param the baseDirectory
+  */
+inline void cwAddImageTask::setBaseDirectory(QDir baseDirectory) {
+    BaseDirectory = baseDirectory;
 }
 
 /**

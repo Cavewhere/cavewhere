@@ -33,7 +33,7 @@
 #include "cwGLLinePlot.h"
 #include "cwSurveyNoteModel.h"
 #include "cw3dRegionViewer.h"
-#include "cwXMLProject.h"
+#include "cwProject.h"
 #include "cwImageDatabase.h"
 
 //Qt includes
@@ -105,7 +105,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     Project = new cwProject(this);
 
-    Region = new cwCavingRegion(this);
+    Region = Project->cavingRegion(); //new cwCavingRegion(this);
     Region->setUndoStack(UndoStack);
 
     RegionTreeModel = new cwRegionTreeModel(this);
@@ -118,18 +118,6 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     ExportThread = new QThread(this);
 
     reloadQML();
-
-    //For testing only!!!
-    cwImageDatabaseManager* imageTableManager = new cwImageDatabaseManager(this);
-    imageTableManager->setProject(Project);
-
-    QStringList imagesToLoad;
-    imagesToLoad.append("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
-    imagesToLoad.append("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
-    imagesToLoad.append("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
-    imagesToLoad.append("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
-
-    imageTableManager->addImages(imagesToLoad);
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)

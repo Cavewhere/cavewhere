@@ -30,6 +30,7 @@ public:
 
     int tripCount() const;
     cwTrip* trip(int index) const;
+    bool hasTrips() const { return tripCount() > 0; }
 
     Q_INVOKABLE void addTrip(cwTrip* trip = NULL);
     void insertTrip(int i, cwTrip* trip);

@@ -37,5 +37,6 @@
         <file>icons/surface.png</file>
         <file>icons/team.png</file>
         <file>icons/verticalLine.png</file>
+        <file>icons/loadingSwirl.png</file>
     </qresource>
 </RCC>
