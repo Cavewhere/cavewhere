@@ -35,6 +35,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwImageDatabase.h"
+#include "cwFileDialogHelper.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -295,8 +296,9 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
     qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
-    qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "cwLinePlotManager");
-    qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "cwGLLinePlot");
+    qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
+    qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
+    qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);

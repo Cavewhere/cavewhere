@@ -128,6 +128,28 @@ Rectangle {
 
         z:1
 
+        onClicked: {
+            fileDialog.open();
+        }
+
+        FileDialogHelper {
+            id: fileDialog;
+
+            onFilesSelected: {
+
+
+                console.log("Files selected" + selected);
+            }
+        }
+
+//        QFileDialog {
+//            id: dialog
+//        }
+
+//        FileDialog {
+//            id: fileDialog
+//        }
+
     }
 
     NoteItem {

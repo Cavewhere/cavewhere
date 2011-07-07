@@ -95,7 +95,8 @@ SOURCES += src/main.cpp \
     src/cwImage.cpp \
     src/cwImageData.cpp \
     src/cwProject.cpp \
-    src/cwAddImageTask.cpp
+    src/cwAddImageTask.cpp \
+    src/cwFileDialogHelper.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -177,7 +178,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwImage.h \
     src/cwImageData.h \
     src/cwProject.h \
-    src/cwAddImageTask.h
+    src/cwAddImageTask.h \
+    src/cwFileDialogHelper.h
 
 
 
@@ -211,7 +213,8 @@ shaders/*.geom \
     shaders/LinePlot.frag \
     shaders/NoteItem.vsh \
     shaders/NoteItem.frag \
-    shaders/NoteItem.vert
+    shaders/NoteItem.vert \
+    qml/FileDialog.qml
 
 RESOURCES += \
     icons.qrc
