@@ -36,12 +36,12 @@ protected:
 private:
     QDir BaseDirectory;
     QStringList ImagePaths;
-//    QString DatabasePath;
 
     QList<cwImage> Images;
+    QStringList Errors;
 
-//    QSqlDatabase CurrentDatabase;
-
+    static const QString IconsDirectory;
+    static const QString MipmapsDirecotry;
 
     /**
       This will scale an image to size
@@ -58,21 +58,16 @@ private:
         QImage OriginalImage;
     };
 
+    QImage imageExists(QString image);
+    QString copyOriginalImage(QString image);
+    QString createIcon(QImage originalImage, QString baseFilename);
+    QStringList createMipmaps(QImage originalImage, QString baseFilename);
+    void saveToDXT1Format(QImage image, QString path);
+
 private slots:
-//    void tryAddingmagesToDatabase();
 
 
 };
-
-/**
-  \brief Sets the databasePath
-
-  This should be set before calling start!  And shouldn't be changed until the task
-  has finished
-  */
-//inline void cwAddImageTask::setDatabasePath(const QString& databasePath) {
-//    DatabasePath = databasePath;
-//}
 
 /**
   \brie Sets the base directory of where the image will be stored to

@@ -24,6 +24,11 @@ DataTabWidget {
 
         notesModel: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip.notes : null
 
+        onImagesAdded: {
+            console.debug("images:" + images);
+            project.addNoteImages(tripTabWidget.currentTrip, images);
+        }
+
     }
 
     Text {

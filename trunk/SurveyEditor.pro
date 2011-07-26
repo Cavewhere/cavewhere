@@ -219,6 +219,6 @@ shaders/*.geom \
 RESOURCES += \
     icons.qrc
 
-INCLUDEPATH += src src/utils .
+INCLUDEPATH += src src/utils . /home/blitz/Downloads/libsquish-read-only
 
-LIBS += -lz -lGLEW
+LIBS += -lz -lGLEW -L/home/blitz/Downloads/libsquish-read-only -lsquish

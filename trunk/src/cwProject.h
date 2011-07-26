@@ -14,6 +14,7 @@ class cwTrip;
 #include <QDir>
 #include <QThread>
 #include <QMap>
+#include <QHash>
 
 /**
   This class saves and load a cavewhere project using xml and sqlite
@@ -29,7 +30,7 @@ public:
 //        QByteArray ImageData;
 //    };
 
-    cwProject(QObject* parent);
+    cwProject(QObject* parent = NULL);
 
     //! The project owns the region
     cwCavingRegion* cavingRegion() const;
@@ -41,8 +42,9 @@ public:
 
     QString projectPath();
 
-    void addNoteImages(cwTrip* trip, QStringList noteImagePath);
+    Q_INVOKABLE void addNoteImages(cwTrip* trip, QStringList noteImagePath);
 
+    static QString uniqueFile(QDir baseDirectory, QString subFile);
 signals:
     void noteImagesAdded(QList<cwImage> images);
 
@@ -59,9 +61,13 @@ private:
     //The project directory
     QDir ProjectDir;
 
-    //Links a path to cwCave*
+    //Links a path to cwCave* and cwTrip*
     QMap<cwCave*, QDir> CaveLookup; //The pointer val
     QMap<cwTrip*, QDir> TripLookup;
+
+    //Looks up a id to a path image pathname
+    int MaxImage;
+    QHash<int, QString> ImageDatabase;
 
     //The region that this project looks after
     cwCavingRegion* Region;
@@ -81,8 +87,8 @@ private:
     void createNewCaveDirectory(cwCave* cave);
     void createNewTripDirectory(cwCave* parentCave, cwTrip* trip);
 
-    QString removeEvilCharacters(QString filename);
-    QString uniqueDirectory(QDir baseDirectory, QString subDirectory);
+    static QString removeEvilCharacters(QString filename);
+
 
 private slots:
 

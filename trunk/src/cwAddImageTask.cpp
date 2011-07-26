@@ -1,33 +1,28 @@
 //Our includes
 #include "cwAddImageTask.h"
-#include "cwImageData.h"
-#include "cwImageDatabase.h"
+#include "cwProject.h"
+//#include "cwImageData.h"
+//#include "cwImageDatabase.h"
+
+//For creating compressed DXT texture maps
+#include <squish.h>
+
+//Std includes
+#include <math.h>
 
 //Qt includes
+#include <QString>
 #include <QImage>
-#include <QSqlDatabase>
-#include <QSqlQuery>
-#include <QSqlError>
-#include <QtConcurrentMap>
-#include <QBuffer>
-#include <QTimer>
-#include <QFile>
-#include <QFileInfo>
-#include <QImageReader>
+#include <QGLWidget>
+#include <QDebug>
 
-#define SQLITE_BUSY         5
+const QString cwAddImageTask::IconsDirectory = "icons";
+const QString cwAddImageTask::MipmapsDirecotry = "mipmaps";
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwTask(parent)
 {
 
 }
-
-///**
-//  This creates the query that inserts th
-//  */
-//void cwAddImageTask::addImageToDatabase(QSqlDatabase& database, QSize size, QString type, const QByteArray& image) {
-
-//}
 
 /**
   \brief This loads images from disk into the database
@@ -36,23 +31,47 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwTask(parent)
   */
 void cwAddImageTask::runTask() {
 
-//    //Set the number of steps for this task
-//    setNumberOfSteps(ImagePaths.size());
+    //Set the number of steps for this task
+    setNumberOfSteps(ImagePaths.size());
 
-//    //Connect to the database
-//    CurrentDatabase = QSqlDatabase::addDatabase("QSQLITE", "LoadImageTask");
-//    CurrentDatabase.setDatabaseName(DatabasePath);
-//    bool connected = CurrentDatabase.open();
-//    if(!connected) {
-//        qDebug() << "Couldn't connect to database for LoadImageTask:" << DatabasePath;
-//        stop();
-//    }
+    //Make sure the icon directory is created
+    BaseDirectory.mkpath("icons");
+    BaseDirectory.mkpath("mipmaps");
 
-//    //Try to add thi ImagePaths to the database
-//    tryAddingmagesToDatabase();
+    for(int i = 0; i < ImagePaths.size() && status() == cwTask::Running; i++) {
+        QString imagePath = ImagePaths[i];
 
-//    //Close the database
-//    CurrentDatabase.close();
+        //Make sure the image is good, open it
+        QImage image(imagePath);
+        if(image.isNull()) {
+            //Add to errors
+            Errors.append(QString("%1 isn't a image").arg(imagePath));
+            continue;
+        }
+
+        //Copy the original image
+        copyOriginalImage(imagePath);
+
+        if(status() != cwTask::Running) { break; }
+
+        //Basename of the image
+        QFileInfo imageInfo(imagePath);
+        QString baseFilename = imageInfo.fileName();
+
+        //Create an icon
+        createIcon(image, baseFilename);
+
+        if(status() != cwTask::Running) { break; }
+
+        //Create the mipmaps for opengl
+        createMipmaps(image, baseFilename);
+
+        if(status() != cwTask::Running) { break; }
+        emit progressed(i + 1);
+    }
+
+    //Clean up if not running???
+    done();
 }
 
 /**
@@ -66,114 +85,134 @@ QImage cwAddImageTask::Scaler::operator()(int maxSideInPixels) {
     return OriginalImage.scaled(maxSideInPixels, maxSideInPixels, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
-///**
-//  \brief This tries to add the image to the database
-//  */
-//void cwAddImageTask::tryAddingmagesToDatabase() {
-//    //SQLITE begin transation
-//    QString beginTransationQuery = "BEGIN IMMEDIATE TRANSACTION";
-//    QSqlQuery query = CurrentDatabase.exec(beginTransationQuery);
-//    QSqlError error = query.lastError();
+/**
+  \brief This copies the original image to the new place
+  */
+QString cwAddImageTask::copyOriginalImage(QString imagePath) {
+    QFileInfo fileInfo(imagePath);
+    QString imageFilename = fileInfo.fileName();
+    QString newFilename = BaseDirectory.absoluteFilePath(imageFilename);
 
-//    //Check if there's error
-//    if(error.isValid()) {
-//        if(error.number() == SQLITE_BUSY) {
-//            //The database is busy, try to get a lock in 100ms
-//            QTimer::singleShot(100, this, SLOT(tryAddingmagesToDatabase()));
-//            return;
-//        } else {
-//            qDebug() << "Load Images error: " << error;
-//            return;
-//        }
-//    }
+    //Make sure the image isn't the same basicially check if the images is the same.
+    if(newFilename == imagePath) {
+        //Images are the same, don't copy anything
+        return newFilename;
+    }
 
-//    //Go through all the images
-//    for(int i = 0; i < ImagePaths.size() && isRunning(); i++) {
-//        QString imagePath = ImagePaths[i];
+    emit statusMessage(QString("Copying %1").arg(imageFilename));
 
-//        //Copy original directly into the database
-//        QFile originalFile;
-//        originalFile.setFileName(imagePath);
-//        bool successful = originalFile.open(QFile::ReadOnly);
+    //Get a uniqueFile name for the image
+    QString uniqueFilename = cwProject::uniqueFile(BaseDirectory, imageFilename);
 
-//        if(!successful) {
-//            qDebug() << "Couldn't load image: " << imagePath;
-//            continue;
-//        }
+    //Copy the data
+    QString fullPathToUniqueFilename = BaseDirectory.absoluteFilePath(uniqueFilename);
+    QFile::copy(imagePath, fullPathToUniqueFilename);
 
-//        //Read the whole file
-//        QByteArray originalImageByteData = originalFile.readAll();
+    return fullPathToUniqueFilename;
+}
 
-//        //The the original file's format and size
-//        QImageReader imageReader(imagePath);
-//        QByteArray format = imageReader.format();
-//        QSize size = imageReader.size();
+/**
+  \brief Creates an icon of the original image
 
-//        if(format.isEmpty()) {
-//            qDebug() << "This file is not an image:" << imagePath;
-//            continue;
-//        }
+  If the originalImage is less than 512x512, this just save the full image as a icon
+  */
+QString cwAddImageTask::createIcon(QImage originalImage, QString baseFilename) {
+    emit statusMessage(QString("Generating icon for %1").arg(baseFilename));
 
-//        //Write the image to the database
-//        cwImageData originalImageData(size, format, originalImageByteData);
-//        int imageId = cwImageDatabaseManager::addImageToDatabase(CurrentDatabase, originalImageData);
+    QImage scaledImage = originalImage.scaled(QSize(512, 512), Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-//        qDebug() << "Last inserted imageId:" << imagePath << imageId;
+    QString scaledImagePath = BaseDirectory.absoluteFilePath(QString("%1/%2.jpg")
+                                                             .arg(IconsDirectory)
+                                                             .arg(baseFilename));
+    scaledImage.save(scaledImagePath, "jpg", 85); //85 percent quality
 
-//        //Load the image
-//        QImage image;
-//        image.loadFromData(originalImageByteData, format.constData());
+    return scaledImagePath;
+}
 
-//        //Get the extension
+/**
+  \brief This creates compressed mipmaps for the originalImage
+
+  The return stringList is a list of all the mipmaps, starting with level 0 going to level
+  size-1 of the list.
+  */
+QStringList cwAddImageTask::createMipmaps(QImage originalImage, QString baseFilename) {
+
+    QSize imageSize = originalImage.size();
+    double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
+    int numberOfLevels = (int)log2(largestDimension);
+
+    QImage scaledImage = originalImage;
+    QStringList mipmapPaths;
+
+    int width = scaledImage.width();
+    int height = scaledImage.height();
+
+    for(int i = 0; i < numberOfLevels && status() == cwTask::Running; i++) {
+        emit statusMessage(QString("Compressing %1 of %2 the bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(baseFilename));
+
+        //Rescaled the image
+        scaledImage = scaledImage.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+
+        //Export the image to DXT1 format
+        QString mipmapImagePath = BaseDirectory.absoluteFilePath("%1/%2-level%3.dxt1")
+                .arg(MipmapsDirecotry)
+                .arg(baseFilename)
+                .arg(i);
+        saveToDXT1Format(scaledImage, mipmapImagePath);
+
+        //Add the path to the mipmapPath
+        mipmapPaths.append(mipmapImagePath);
+
+        //Create the new width and height
+        width = qMax(scaledImage.width() / 2, 1);
+        height = qMax(scaledImage.height() / 2, 1);
+    }
+
+    return mipmapPaths;
+}
+
+/**
+  \brief Saves the image to the path using the dxt1 format from squish
+
+  \param image - The image that'll be converted
+  \param path - The path when the image will be saved to
+  */
+void cwAddImageTask::saveToDXT1Format(QImage image, QString path) {
+    int dxt1FileSize = squish::GetStorageRequirements(image.width(), image.height(), squish::kDxt1);
+
+    //Allocate the compress data
+    QByteArray dxt1FileData;
+    dxt1FileData.resize(dxt1FileSize);
+
+    //Convert and compress using dxt1
+    QImage convertedFormat = QGLWidget::convertToGLFormat(image);
+    squish::CompressImage(static_cast<const squish::u8*>(convertedFormat.bits()),
+                          image.width(), image.height(),
+                          dxt1FileData.data(),
+                          squish::kDxt1);
+
+    //Compress the dxt1FileData using zlib
+    dxt1FileData = qCompress(dxt1FileData, 9);
+
+    //Write data to disk
+    QFile file;
+    file.setFileName(path);
+    file.open(QFile::WriteOnly);
+
+    if(file.error() != QFile::NoError) {
+        Errors.append(file.errorString());
+        return;
+    }
+
+    //Write the data to disk
+    file.write(dxt1FileData);
+
+    if(file.error() != QFile::NoError) {
+        Errors.append(file.errorString());
+        return;
+    }
+
+    qDebug() << "Wrote compress data to " << file.fileName() << "before zlib compression:" << (dxt1FileSize / 1024.0 / 1024.0) << "after" << (dxt1FileData.size() / 1024.0 / 1024.0);
+ }
 
 
-
-////        //Make the icon
-////        QFuture iconFuture<QImage>;
-////        if(qMax(image.size().width(), image.size().height()) > 512) {
-////           QList<int> iconImageSize;
-////           iconImageSize.append(512);
-////           iconFuture = QtConcurrent::mapped(iconImageSize, Scale(image));
-////        }
-
-////        //Create the rescale sizes for mipmaps
-////        QList<int> mipmapImageSize;
-////        int imageMinSize = qMin(image.size().height(), image.size().width());
-
-////        //Create the resize list
-////        while(imageMinSize > 4) {
-////            mipmapImageSize.append(imageMinSize);
-////            imageMinSize = imageMinSize / 2;
-////        }
-
-////        //Rescale the mipmaps
-////        QFuture mipmapFuture<QImage> = QtConcurrent::mapped(mipmapImageSize, Scale(image));
-
-////        //Get the iconFuture if doesn't already exist444
-////        if(iconFuture.resultCount() != 0) {
-////            QImage iconImage = iconFuture.result();
-////            QScopedPointer<QBuffer> buffer = new QBuffer();
-////            QString imageType = "jpg";
-////            iconImage.save(buffer, imageType, 85);
-
-////            addImageToDatabase(database, iconImage.size(), imageType, buffer->data());
-////        }
-//    }
-
-//    //If the task isn't running
-//    if(isRunning()) {
-//        //Commit the data
-//        QString commitTransationQuery = "COMMIT";
-//        QSqlQuery query = CurrentDatabase.exec(commitTransationQuery);
-//        if(query.lastError().isValid()) {
-//            qDebug() << "Couldn't commit transaction:" << query.lastError();
-//        }
-//    } else {
-//        //Roll back the commited images
-//        QString rollbackTransationQuery = "ROLLBACK";
-//        QSqlQuery query = CurrentDatabase.exec(rollbackTransationQuery);
-//        if(query.lastError().isValid()) {
-//            qDebug() << "Couldn't rollback transaction:" << query.lastError();
-//        }
-//    }
-//}

@@ -2,7 +2,11 @@ import Qt 4.7
 import Cavewhere 1.0
 
 Rectangle {
+    id: noteGallery
+
     property alias notesModel: galleryView.model;
+
+    signal imagesAdded(variant images)
 
     anchors.fill: parent
     anchors.margins: 3
@@ -100,7 +104,6 @@ Rectangle {
                 anchors.fill: parent
 
                 onClicked: {
-                    console.log("Clicked!");
                     var index = galleryView.indexAt(mouseX, mouseY);
                     galleryView.currentIndex = index;
                 }
@@ -135,11 +138,7 @@ Rectangle {
         FileDialogHelper {
             id: fileDialog;
 
-            onFilesSelected: {
-
-
-                console.log("Files selected" + selected);
-            }
+            onFilesSelected: noteGallery.imagesAdded(selected)
         }
 
 //        QFileDialog {

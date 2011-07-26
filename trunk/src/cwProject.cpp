@@ -4,6 +4,7 @@
 #include "cwTrip.h"
 #include "cwAddImageTask.h"
 #include "cwCavingRegion.h"
+#include "cwTaskProgressDialog.h"
 
 //Qt includes
 #include <QDir>
@@ -100,6 +101,8 @@ void cwProject::load() {
 
   */
 void cwProject::addNoteImages(cwTrip* trip, QStringList noteImagePath) {
+    if(trip == NULL )  { return; }
+
     if(!TripLookup.contains(trip)) {
         qDebug() << "Warning trying to add images, but trip directory doesn't exist";
 
@@ -123,6 +126,11 @@ void cwProject::addNoteImages(cwTrip* trip, QStringList noteImagePath) {
 
     //Run the addImageTask, in an asyncus way
     addImageTask->start();
+
+    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
+    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    progressDialog->setTask(addImageTask);
+    progressDialog->show();
 }
 
 /**
@@ -284,10 +292,10 @@ void cwProject::createNewCaveDirectory(cwCave* cave) {
     QDir baseCavesDirectory = ProjectDir.absolutePath() + "/" + CavesDir;
 
     //Get the unique directoryName
-    QString directoryName = uniqueDirectory(baseCavesDirectory, cave->name());
+    QString directoryName = uniqueFile(baseCavesDirectory, cave->name());
 
     //Create this directory
-    bool couldCreate = baseCavesDirectory.mkdir(directoryName);
+    bool couldCreate = baseCavesDirectory.mkpath(directoryName);
 
     if(!couldCreate) {
         qDebug() << "Couldn't create cave directory: " << baseCavesDirectory.absoluteFilePath(directoryName);
@@ -330,6 +338,12 @@ void cwProject::addTripDirectories(int beginTrip, int endTrip) {
   \brief Adds a new trip directory for the project
   */
 void cwProject::createNewTripDirectory(cwCave* parentCave, cwTrip* trip) {
+
+    if(parentCave == NULL || !CaveLookup.contains(parentCave)) {
+        qDebug() << "Parent Cave is invalid:" << parentCave;
+        return;
+    }
+
     //Find the parentCave directory
     QDir parentCaveDirectory = CaveLookup.value(parentCave, QDir());
 
@@ -343,7 +357,7 @@ void cwProject::createNewTripDirectory(cwCave* parentCave, cwTrip* trip) {
 
     //Trip to make the trip directory
     QDir baseTripsDirectory(parentCaveDirectory.absolutePath() + "/" + TripsDir);
-    QString tripDirectory = uniqueDirectory(baseTripsDirectory, trip->name());
+    QString tripDirectory = uniqueFile(baseTripsDirectory, trip->name());
 
     //Create the trip directory
     bool couldCreate = baseTripsDirectory.mkdir(tripDirectory);
@@ -373,24 +387,24 @@ QString cwProject::removeEvilCharacters(QString filename) {
 }
 
 /**
-  \brief This makes sure that baseDirectory + subDirectory is a unique directory
+  \brief This makes sure that baseDirectory + file is a unique file
 
-  If it's a unquie directory then a unmodified subDirectory is return, else
-  subdirectory is incremented.
+  If it's a unquie directory then a unmodified file is return, else
+  file is incremented.
 
   This also tries to remove all evil characters.
   */
-QString cwProject::uniqueDirectory(QDir baseDirectory, QString subDirectory) {
+QString cwProject::uniqueFile(QDir baseDirectory, QString file) {
     //Remove evil windows characters
-    subDirectory = removeEvilCharacters(subDirectory);
+    file = removeEvilCharacters(file);
 
     //Check to see if the name already exists
-    QString checkDirectoryName = subDirectory;
+    QString checkName = file;
     int counter = 1;
-    while(baseDirectory.exists(checkDirectoryName)) {
-        checkDirectoryName = QString("%1 %2").arg(subDirectory).arg(counter);
+    while(baseDirectory.exists(checkName)) {
+        checkName = QString("%1 %2").arg(file).arg(counter);
         counter++;
     }
 
-    return checkDirectoryName;
+    return checkName;
 }

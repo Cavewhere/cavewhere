@@ -299,11 +299,13 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
     qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
+    qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
     context->setContextProperty("mainGLWidget", glWidget);
     context->setContextProperty("linePlotManager", LinePlotManager);
+    context->setContextProperty("project", Project);
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 
