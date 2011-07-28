@@ -36,10 +36,12 @@
 #include "cwProject.h"
 #include "cwImageDatabase.h"
 #include "cwFileDialogHelper.h"
+#include "cwProjectImageProvider.h"
 
 //Qt includes
 #include <QDeclarativeContext>
 #include <QDeclarativeComponent>
+#include <QDeclarativeEngine>
 #include <QFileDialog>
 #include <QDebug>
 #include <QSettings>
@@ -47,6 +49,7 @@
 #include <QMessageBox>
 #include <QThread>
 #include <QGLWidget>
+
 
 #if defined(QMLJSDEBUGGER)
 #include <qt_private/qdeclarativedebughelper_p.h>
@@ -77,12 +80,11 @@ static QmlJsDebuggingEnabler enableDebuggingHelper;
 
 cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     QMainWindow(parent),
-    SurvexExporter(NULL),
-    NoteModel(new cwSurveyNoteModel(this))
+    SurvexExporter(NULL)
 {
     setupUi(this);
 
-#if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
+#if defined(QMLJcwSurveyEditorMainWindowSDEBUGGER) && !defined(NO_JSDEBUGGER)
     new QmlJSDebugger::JSDebuggerAgent(DeclarativeView->engine());
 #endif
 #if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
@@ -104,7 +106,13 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
+    //Create the project, this saves and load data
     Project = new cwProject(this);
+
+    //This allow to extra image data from the project's image database
+    ImageProvider = new cwProjectImageProvider();
+    ImageProvider->setProjectPath(Project->filename());
+    connect(Project, SIGNAL(filenameChanged(QString)), ImageProvider, SLOT(setProjectPath(QString)));
 
     Region = Project->cavingRegion(); //new cwCavingRegion(this);
     Region->setUndoStack(UndoStack);
@@ -199,7 +207,7 @@ void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
     //    }
 }
 
-/**
+/**cwSurveyEditorMainWindow
   \brief Open a file dialog for the user to save
   all the data to survex file
   */
@@ -307,8 +315,9 @@ void cwSurveyEditorMainWindow::reloadQML() {
     context->setContextProperty("linePlotManager", LinePlotManager);
     context->setContextProperty("project", Project);
 
-    DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
+    context->engine()->addImageProvider(cwProjectImageProvider::Name, ImageProvider);
 
+    DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 }
 
 /**

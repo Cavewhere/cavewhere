@@ -5,14 +5,17 @@
 #include <QAbstractListModel>
 
 //Our includes
-#include <cwNote.h>
+#include "cwNote.h"
+#include "cwImage.h"
+class cwProject;
 
 class cwSurveyNoteModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
     enum Roles {
-        ImagePathRole = Qt::UserRole + 1,
+        ImageOriginalPathRole = Qt::UserRole + 1,
+        ImageIconPathRole,
         ImageRole,   //Just get's the QImage
         NoteObjectRole //Gets the whole object
     };
@@ -22,14 +25,19 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
 
-    void addNoteFromFile(QString filename);
+    Q_INVOKABLE void addNotes(QStringList files, cwProject* project);
 
 signals:
 
 public slots:
 
-protected:
+private:
+    static const QString ImagePathString;
+
     QList<cwNote*> Notes;
+
+private slots:
+    void addNotesWithNewImages(QList<cwImage> images);
 
 };
 

@@ -5,6 +5,7 @@
 #include "cwAddImageTask.h"
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
+#include "cwImageData.h"
 
 //Qt includes
 #include <QDir>
@@ -28,7 +29,7 @@ cwProject::cwProject(QObject* parent) :
     //Creates a temp directory for the project
     createTempProjectFile();
 
-    qDebug() << "DatabaseFile:" << ProjectDir;
+    qDebug() << "DatabaseFile:" << ProjectFile;
 
     //Create the caving the caving region that this project mantaines
     Region = new cwCavingRegion(this);
@@ -40,6 +41,92 @@ cwProject::cwProject(QObject* parent) :
 
     //AddImageTask->setThread(AddImageThread);
 }
+
+/**
+  Creates a new tempDirectoryPath for the temp project
+  */
+void cwProject::createTempProjectFile() {
+
+    QDateTime seedTime = QDateTime::currentDateTime();
+
+    //Create the with a hex number
+    ProjectFile = QString("%1/CavewhereTmpProject-%2.cw")
+            .arg(QDir::tempPath())
+            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+    TempProject = true;
+
+
+    //Create and open a new database connection
+    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
+    ProjectDatabase.setDatabaseName(ProjectFile);
+    bool couldOpen = ProjectDatabase.open();
+    if(!couldOpen) {
+        qDebug() << "Couldn't open temp project file: " << ProjectFile;
+        return;
+    }
+    qDebug() << "Database is valid: " << ProjectDatabase.isValid();
+
+    //Create default schema
+    createDefaultSchema();
+}
+
+/**
+  \brief This creates the default empty schema for the project
+
+  The schema simple,
+  Tables:
+  1. CavingRegion
+  2. Images
+
+  Columns CavingRegion:
+  id | gunzipCompressedXML
+
+  Columns Images:
+  id | type | shouldDelete | data
+
+  */
+void cwProject::createDefaultSchema() {
+
+    //Create the caving region
+    QSqlQuery createCavingRegionTable(ProjectDatabase);
+    QString query =
+            QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("gunzipCompressedXML BLOB") + //Last index
+            QString(")");
+
+    bool couldPrepare = createCavingRegionTable.prepare(query);
+    if(!couldPrepare) {
+        qDebug() << "Couldn't prepare table Caving Region:" << createCavingRegionTable.lastError().databaseText() << query;
+    }
+
+    bool couldCreate = createCavingRegionTable.exec();
+    if(!couldCreate) {
+        qDebug() << "Couldn't create table Caving Region: " << createCavingRegionTable.lastError().databaseText();
+    }
+
+    //Create the caving region
+    QSqlQuery createImagesTable(ProjectDatabase);
+    query =
+            QString("CREATE TABLE IF NOT EXISTS Images (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("type STRING,") + //Type of image
+            QString("shouldDelete BOOL,") + //If the image should be delete
+            QString("width INTEGER,") + //The width of the image
+            QString("height INTEGER,") + //The height of the image
+            QString("imageData BLOB)"); //The blob that stores the image data
+
+    couldPrepare = createImagesTable.prepare(query);
+    if(!couldPrepare) {
+        qDebug() << "Couldn't prepare table images:" << createImagesTable.lastError().databaseText() << query;
+    }
+
+    couldCreate = createImagesTable.exec();
+    if(!couldCreate) {
+        qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText();
+    }
+}
+
 
 //void cwProject::setCavingRegion(cwCavingRegion* region) {
 //    if(region == Region) { return; }
@@ -93,33 +180,36 @@ void cwProject::load() {
 }
 
 /**
-  This will add notes to the trip.
+  \brief This will move the file project from it's current path to a new file
 
-  This function will take the noteImagePath and copy the original images into
-  the trip directory.  Then it'll create a 512x512 icon, jpg. And finally, it will
-  create the compressed mipmap images for the rendering to opengl.
-
+  \param newFilename - The new filename that this project will be moved to.
   */
-void cwProject::addNoteImages(cwTrip* trip, QStringList noteImagePath) {
-    if(trip == NULL )  { return; }
-
-    if(!TripLookup.contains(trip)) {
-        qDebug() << "Warning trying to add images, but trip directory doesn't exist";
-
-        //Add it
-        createNewTripDirectory(trip->parentCave(), trip);
+void cwProject::setFilename(QString newFilename) {
+    if(newFilename != filename()) {
+        ProjectFile = newFilename;
+        emit filenameChanged(ProjectFile);
     }
+}
 
-    //Get the trip's directory
-    QDir dir = TripLookup.value(trip);
+/**
+  This will add images to the database
+
+  \param noteImagePath - A list of all the image paths that'll be added to the project
+  \param receiver - The reciever of the addedImages signal
+  \param slot - The slot that'll handle the addImages signal
+
+  This will also popup a dialog when the images are being loaded
+  */
+void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const char* slot) {
+    if(receiver == NULL )  { return; }
 
     //Create a new image task
     cwAddImageTask* addImageTask = new cwAddImageTask();
+    connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
     addImageTask->setThread(AddImageThread);
 
-    //Notes base directory
-    QDir notesBaseDirectory(dir.absoluteFilePath(NotesDir));
-    addImageTask->setBaseDirectory(notesBaseDirectory);
+    //Set the project path
+    addImageTask->setProjectPath(filename());
 
     //Set all the noteImagePath
     addImageTask->setImagesPath(noteImagePath);
@@ -133,100 +223,26 @@ void cwProject::addNoteImages(cwTrip* trip, QStringList noteImagePath) {
     progressDialog->show();
 }
 
-/**
-  Creates a new tempDirectoryPath for the temp project
-  */
-void cwProject::createTempProjectFile() {
+///**
+//  Creates a new tempDirectoryPath for the temp project
+//  */
+//void cwProject::createTempProjectFile() {
 
-    QDateTime seedTime = QDateTime::currentDateTime();
+//    QDateTime seedTime = QDateTime::currentDateTime();
 
-    //Create the with a hex number
-    QString projectDir = QString("%1/CavewhereTmpProject-%2")
-            .arg(QDir::tempPath())
-            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
-    TempProject = true;
+//    //Create the with a hex number
+//    QString projectDir = QString("%1/CavewhereTmpProject-%2")
+//            .arg(QDir::tempPath())
+//            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+//    TempProject = true;
 
-    //Create the directory structure
-    ProjectDir = QDir(projectDir);
-    ProjectDir.mkdir("./"); //Create the directory path
-    ProjectDir.mkdir(CavesDir);
+//    //Create the directory structure
+//    ProjectDir = QDir(projectDir);
+//    ProjectDir.mkdir("./"); //Create the directory path
+//    ProjectDir.mkdir(CavesDir);
 
-    //tempProjectDirectory.mkpath(ProjectFile + "/~Trashed~");
-    //tempProjectDirectory.mkpath(ProjectFile + "/~Unsaved~");
-    qDebug() << "Making project file:" << ProjectDir.absolutePath();
-
-
-//    //Create and open a new database connection
-//    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
-//    ProjectDatabase.setDatabaseName(ProjectFile);
-//    bool couldOpen = ProjectDatabase.open();
-//    if(!couldOpen) {
-//        qDebug() << "Couldn't open temp project file: " << ProjectFile;
-//        return;
-//    }
-//    qDebug() << "Database is valid: " << ProjectDatabase.isValid();
-
-//    //Create default schema
-//    createDefaultSchema();
-}
-
-/**
-  \brief This creates the default empty schema for the project
-
-  The schema simple,
-  Tables:
-  1. CavingRegion
-  2. Images
-
-  Columns CavingRegion:
-  id | gunzipCompressedXML
-
-  Columns Images:
-  id | type | shouldDelete | data
-
-  */
-//void cwProject::createDefaultSchema() {
-
-//    //Create the caving region
-//    QSqlQuery createCavingRegionTable(ProjectDatabase);
-//    QString query =
-//            QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
-//            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-//            QString("gunzipCompressedXML BLOB") + //Last index
-//            QString(")");
-
-//    bool couldPrepare = createCavingRegionTable.prepare(query);
-//    if(!couldPrepare) {
-//        qDebug() << "Couldn't prepare table Caving Region:" << createCavingRegionTable.lastError().databaseText() << query;
-//    }
-
-//    bool couldCreate = createCavingRegionTable.exec();
-//    if(!couldCreate) {
-//        qDebug() << "Couldn't create table Caving Region: " << createCavingRegionTable.lastError().databaseText();
-//    }
-
-//    //Create the caving region
-//    QSqlQuery createImagesTable(ProjectDatabase);
-//    query =
-//            QString("CREATE TABLE IF NOT EXISTS Images (") +
-//            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-//            QString("type STRING,") + //Type of image
-//            QString("shouldDelete BOOL,") + //If the image should be delete
-//            QString("width INTEGER,") + //The width of the image
-//            QString("height INTEGER,") + //The height of the image
-//            QString("imageData BLOB)"); //The blob that stores the image data
-
-//    couldPrepare = createImagesTable.prepare(query);
-//    if(!couldPrepare) {
-//        qDebug() << "Couldn't prepare table images:" << createImagesTable.lastError().databaseText() << query;
-//    }
-
-//    couldCreate = createImagesTable.exec();
-//    if(!couldCreate) {
-//        qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText();
-//    }
+//    qDebug() << "Making project file:" << ProjectDir.absolutePath();
 //}
-
 
 /**
   \brief Connects the cave to this project
@@ -252,32 +268,60 @@ void cwProject::connectCave(cwCave* cave) {
 }
 
 /**
+  \brief Adds an image to the project file
+
+  This static function takes a database and adds the imageData to the database
+  */
+int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
+    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, imageData) "
+            "VALUES (?, ?, ?, ?, ?)";
+
+    QSqlQuery query(database);
+    bool successful = query.prepare(SQL);
+
+    if(!successful) {
+        qDebug() << "Couldn't create Insert Images query: " << query.lastError();
+        return -1;
+    }
+
+    query.bindValue(0, imageData.format());
+    query.bindValue(1, false);
+    query.bindValue(2, imageData.size().width());
+    query.bindValue(3, imageData.size().height());
+    query.bindValue(4, imageData.data());
+    query.exec();
+
+    //Get the id of the last inserted id
+    return query.lastInsertId().toInt();
+}
+
+/**
   Adds new directories back into the cwXMLProject
   */
-void cwProject::addCaveDirectories(int beginCave, int endCave) {
-    for(int i = beginCave; i <= endCave; i++) {
-        cwCave* cave = Region->cave(i);
+//void cwProject::addCaveDirectories(int beginCave, int endCave) {
+//    for(int i = beginCave; i <= endCave; i++) {
+//        cwCave* cave = Region->cave(i);
 
-        //Connect the cave
-        connectCave(cave);
+//        //Connect the cave
+//        connectCave(cave);
 
-        if(cave != NULL) {
-            //See if the cave already exist
-            if(CaveLookup.contains(cave)) {
-                //Directory already exists
-                return;
-            } else {
-                //Create a new directory
-                createNewCaveDirectory(cave);
-            }
-        }
+//        if(cave != NULL) {
+//            //See if the cave already exist
+//            if(CaveLookup.contains(cave)) {
+//                //Directory already exists
+//                return;
+//            } else {
+//                //Create a new directory
+//                createNewCaveDirectory(cave);
+//            }
+//        }
 
-        //Add trip directories for existing trips
-        if(cave->hasTrips()) {
-            addTripDirectories(cave, 0, cave->tripCount() - 1);
-        }
-    }
-}
+//        //Add trip directories for existing trips
+//        if(cave->hasTrips()) {
+//            addTripDirectories(cave, 0, cave->tripCount() - 1);
+//        }
+//    }
+//}
 
 /**
   \brief This create a new directory for the cave
@@ -287,124 +331,124 @@ void cwProject::addCaveDirectories(int beginCave, int endCave) {
 
   This will uses the cave's name. To try to create the directory
   */
-void cwProject::createNewCaveDirectory(cwCave* cave) {
-    //Where the new cave will be added to
-    QDir baseCavesDirectory = ProjectDir.absolutePath() + "/" + CavesDir;
+//void cwProject::createNewCaveDirectory(cwCave* cave) {
+//    //Where the new cave will be added to
+//    QDir baseCavesDirectory = ProjectDir.absolutePath() + "/" + CavesDir;
 
-    //Get the unique directoryName
-    QString directoryName = uniqueFile(baseCavesDirectory, cave->name());
+//    //Get the unique directoryName
+//    QString directoryName = uniqueFile(baseCavesDirectory, cave->name());
 
-    //Create this directory
-    bool couldCreate = baseCavesDirectory.mkpath(directoryName);
+//    //Create this directory
+//    bool couldCreate = baseCavesDirectory.mkpath(directoryName);
 
-    if(!couldCreate) {
-        qDebug() << "Couldn't create cave directory: " << baseCavesDirectory.absoluteFilePath(directoryName);
-        return;
-    }
+//    if(!couldCreate) {
+//        qDebug() << "Couldn't create cave directory: " << baseCavesDirectory.absoluteFilePath(directoryName);
+//        return;
+//    }
 
-    //Add the directory to the lookup
-    QDir caveDir(baseCavesDirectory.absoluteFilePath(directoryName));
-    CaveLookup.insert(cave, caveDir);
-}
+//    //Add the directory to the lookup
+//    QDir caveDir(baseCavesDirectory.absoluteFilePath(directoryName));
+//    CaveLookup.insert(cave, caveDir);
+//}
 
-/**
-  \brief Adds trip directories for the project
-  */
-void cwProject::addTripDirectories(int beginTrip, int endTrip) {
-    //Sender is always a cave!!!
-    cwCave* parentCave = static_cast<cwCave*>(sender());
+///**
+//  \brief Adds trip directories for the project
+//  */
+//void cwProject::addTripDirectories(int beginTrip, int endTrip) {
+//    //Sender is always a cave!!!
+//    cwCave* parentCave = static_cast<cwCave*>(sender());
 
-    addTripDirectories(parentCave, beginTrip, endTrip);
-}
+//    addTripDirectories(parentCave, beginTrip, endTrip);
+//}
 
-/**
-  \brief Adds trip directories for the project
+///**
+//  \brief Adds trip directories for the project
 
-  \param parentCave - The parent cave
-  \param beginTrip - The first trip index in the cave
-  \param endTrip - The last trip index in the cave
-  */
- void cwProject::addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip) {
-     for(int i = beginTrip; i <= endTrip; i++) {
-         cwTrip* trip = parentCave->trip(i);
+//  \param parentCave - The parent cave
+//  \param beginTrip - The first trip index in the cave
+//  \param endTrip - The last trip index in the cave
+//  */
+// void cwProject::addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip) {
+//     for(int i = beginTrip; i <= endTrip; i++) {
+//         cwTrip* trip = parentCave->trip(i);
 
-         if(!TripLookup.contains(trip)) {
-             createNewTripDirectory(parentCave, trip);
-         }
-     }
- }
+//         if(!TripLookup.contains(trip)) {
+//             createNewTripDirectory(parentCave, trip);
+//         }
+//     }
+// }
 
-/**
-  \brief Adds a new trip directory for the project
-  */
-void cwProject::createNewTripDirectory(cwCave* parentCave, cwTrip* trip) {
+///**
+//  \brief Adds a new trip directory for the project
+//  */
+//void cwProject::createNewTripDirectory(cwCave* parentCave, cwTrip* trip) {
 
-    if(parentCave == NULL || !CaveLookup.contains(parentCave)) {
-        qDebug() << "Parent Cave is invalid:" << parentCave;
-        return;
-    }
+//    if(parentCave == NULL || !CaveLookup.contains(parentCave)) {
+//        qDebug() << "Parent Cave is invalid:" << parentCave;
+//        return;
+//    }
 
-    //Find the parentCave directory
-    QDir parentCaveDirectory = CaveLookup.value(parentCave, QDir());
+//    //Find the parentCave directory
+//    QDir parentCaveDirectory = CaveLookup.value(parentCave, QDir());
 
-    if(!parentCaveDirectory.exists()) {
-        //Parent cave directory doesn't exist!
-        qDebug() << "Parent cave directory, " << parentCaveDirectory << "doesn't exist!!!";
-    }
+//    if(!parentCaveDirectory.exists()) {
+//        //Parent cave directory doesn't exist!
+//        qDebug() << "Parent cave directory, " << parentCaveDirectory << "doesn't exist!!!";
+//    }
 
-    //Try to make the trips directory
-    parentCaveDirectory.mkdir(TripsDir);
+//    //Try to make the trips directory
+//    parentCaveDirectory.mkdir(TripsDir);
 
-    //Trip to make the trip directory
-    QDir baseTripsDirectory(parentCaveDirectory.absolutePath() + "/" + TripsDir);
-    QString tripDirectory = uniqueFile(baseTripsDirectory, trip->name());
+//    //Trip to make the trip directory
+//    QDir baseTripsDirectory(parentCaveDirectory.absolutePath() + "/" + TripsDir);
+//    QString tripDirectory = uniqueFile(baseTripsDirectory, trip->name());
 
-    //Create the trip directory
-    bool couldCreate = baseTripsDirectory.mkdir(tripDirectory);
+//    //Create the trip directory
+//    bool couldCreate = baseTripsDirectory.mkdir(tripDirectory);
 
-    if(!couldCreate) {
-        qDebug() << "Couldn't create trips directory" << baseTripsDirectory.absoluteFilePath(tripDirectory);
-    }
+//    if(!couldCreate) {
+//        qDebug() << "Couldn't create trips directory" << baseTripsDirectory.absoluteFilePath(tripDirectory);
+//    }
 
-    QDir tripDir(baseTripsDirectory.absoluteFilePath(tripDirectory));
-    TripLookup.insert(trip, tripDir);
-}
+//    QDir tripDir(baseTripsDirectory.absoluteFilePath(tripDirectory));
+//    TripLookup.insert(trip, tripDir);
+//}
 
-/**
-  \brief This removes all the evil directory charactors that windows doesn't like
-  */
-QString cwProject::removeEvilCharacters(QString filename) {
-    filename.remove('<');
-    filename.remove('>');
-    filename.remove(':');
-    filename.remove('"');
-    filename.remove('/');
-    filename.remove('\\');
-    filename.remove('|');
-    filename.remove('?');
-    filename.remove('*');
-    return filename;
-}
+///**
+//  \brief This removes all the evil directory charactors that windows doesn't like
+//  */
+//QString cwProject::removeEvilCharacters(QString filename) {
+//    filename.remove('<');
+//    filename.remove('>');
+//    filename.remove(':');
+//    filename.remove('"');
+//    filename.remove('/');
+//    filename.remove('\\');
+//    filename.remove('|');
+//    filename.remove('?');
+//    filename.remove('*');
+//    return filename;
+//}
 
-/**
-  \brief This makes sure that baseDirectory + file is a unique file
+///**
+//  \brief This makes sure that baseDirectory + file is a unique file
 
-  If it's a unquie directory then a unmodified file is return, else
-  file is incremented.
+//  If it's a unquie directory then a unmodified file is return, else
+//  file is incremented.
 
-  This also tries to remove all evil characters.
-  */
-QString cwProject::uniqueFile(QDir baseDirectory, QString file) {
-    //Remove evil windows characters
-    file = removeEvilCharacters(file);
+//  This also tries to remove all evil characters.
+//  */
+//QString cwProject::uniqueFile(QDir baseDirectory, QString file) {
+//    //Remove evil windows characters
+//    file = removeEvilCharacters(file);
 
-    //Check to see if the name already exists
-    QString checkName = file;
-    int counter = 1;
-    while(baseDirectory.exists(checkName)) {
-        checkName = QString("%1 %2").arg(file).arg(counter);
-        counter++;
-    }
+//    //Check to see if the name already exists
+//    QString checkName = file;
+//    int counter = 1;
+//    while(baseDirectory.exists(checkName)) {
+//        checkName = QString("%1 %2").arg(file).arg(counter);
+//        counter++;
+//    }
 
-    return checkName;
-}
+//    return checkName;
+//}

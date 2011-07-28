@@ -7,6 +7,7 @@
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwCavingRegion.h"
+#include "cwImage.h"
 
 int main(int argc, char *argv[])
 {
@@ -15,6 +16,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
     qRegisterMetaType<QList <QString> >("QList<QString>");
+    qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
 
     QApplication::setOrganizationName("Vadose Solutions");

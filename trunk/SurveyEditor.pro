@@ -96,7 +96,9 @@ SOURCES += src/main.cpp \
     src/cwImageData.cpp \
     src/cwProject.cpp \
     src/cwAddImageTask.cpp \
-    src/cwFileDialogHelper.cpp
+    src/cwFileDialogHelper.cpp \
+    src/cwGunZipReader.cpp \
+    src/cwProjectImageProvider.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -179,7 +181,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwImageData.h \
     src/cwProject.h \
     src/cwAddImageTask.h \
-    src/cwFileDialogHelper.h
+    src/cwFileDialogHelper.h \
+    src/cwGunZipReader.h \
+    src/cwProjectImageProvider.h
 
 
 

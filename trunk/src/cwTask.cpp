@@ -16,7 +16,6 @@ cwTask::cwTask(QObject *parent) :
     NumberOfSteps = 0;
     CurrentStatus = Stopped;
     ParentTask = NULL;
-
 }
 
 /**

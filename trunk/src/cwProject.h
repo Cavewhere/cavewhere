@@ -4,13 +4,14 @@
 //Our includes
 #include "cwTask.h"
 #include "cwImage.h"
+#include "cwImageData.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
 class cwTrip;
 
 //Qt includes
-//#include <QSqlDatabase>
+#include <QSqlDatabase>
 #include <QDir>
 #include <QThread>
 #include <QMap>
@@ -24,12 +25,6 @@ class cwTrip;
 class cwProject :  public QObject{
 Q_OBJECT
 public:
-//    class ImageRow {
-//    public:
-//        QString type;
-//        QByteArray ImageData;
-//    };
-
     cwProject(QObject* parent = NULL);
 
     //! The project owns the region
@@ -38,15 +33,16 @@ public:
     void save();
     void load();
 
-//    QList<int> addImages(QList<cwProject::ImageRow> images);
+    void setFilename(QString newFilename);
+    QString filename() const;
 
-    QString projectPath();
+    void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);
 
-    Q_INVOKABLE void addNoteImages(cwTrip* trip, QStringList noteImagePath);
+    static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
 
-    static QString uniqueFile(QDir baseDirectory, QString subFile);
+    //    static QString uniqueFile(QDir baseDirectory, QString subFile);
 signals:
-    void noteImagesAdded(QList<cwImage> images);
+    void filenameChanged(QString newFilename);
 
 private:
 
@@ -57,17 +53,19 @@ private:
 
     //If this is a temp project directory on not
     bool TempProject;
+    QString ProjectFile;
+    QSqlDatabase ProjectDatabase;
 
     //The project directory
-    QDir ProjectDir;
+//    QDir ProjectDir;
 
-    //Links a path to cwCave* and cwTrip*
-    QMap<cwCave*, QDir> CaveLookup; //The pointer val
-    QMap<cwTrip*, QDir> TripLookup;
+//    //Links a path to cwCave* and cwTrip*
+//    QMap<cwCave*, QDir> CaveLookup; //The pointer val
+//    QMap<cwTrip*, QDir> TripLookup;
 
-    //Looks up a id to a path image pathname
-    int MaxImage;
-    QHash<int, QString> ImageDatabase;
+//    //Looks up a id to a path image pathname
+//    int MaxImage;
+//    QHash<int, QString> ImageDatabase;
 
     //The region that this project looks after
     cwCavingRegion* Region;
@@ -76,26 +74,23 @@ private:
     QThread* AddImageThread;
 
     void createTempProjectFile();
+    void createDefaultSchema();
 
     void connectRegion();
     void connectCave(cwCave* cave);
 
-    //    void createDefaultSchema();
+//    void addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip);
 
-    void addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip);
+//    void createNewCaveDirectory(cwCave* cave);
+//    void createNewTripDirectory(cwCave* parentCave, cwTrip* trip);
 
-    void createNewCaveDirectory(cwCave* cave);
-    void createNewTripDirectory(cwCave* parentCave, cwTrip* trip);
+//    static QString removeEvilCharacters(QString filename);
 
-    static QString removeEvilCharacters(QString filename);
 
 
 private slots:
-
-    void addCaveDirectories(int beginCave, int endCave);
-    void addTripDirectories(int beginTrip, int endTrip);
-
-
+//    void addCaveDirectories(int beginCave, int endCave);
+//    void addTripDirectories(int beginTrip, int endTrip);
 
 };
 
@@ -111,8 +106,8 @@ inline cwCavingRegion* cwProject::cavingRegion() const {
 
   This should always be valid
   */
-inline QString cwProject::projectPath() {
-    return ProjectDir.absolutePath();
+inline QString cwProject::filename() const {
+    return ProjectFile;
 }
 
 #endif // CWXMLPROJECT_H

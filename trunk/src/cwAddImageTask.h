@@ -20,7 +20,8 @@ public:
     cwAddImageTask(QObject* parent = NULL);
 
     //////////////// Parameters //////////////////
-    void setBaseDirectory(QDir baseDirectory);
+    void setProjectPath(QString projectPath);
+//    void setBaseDirectory(QDir baseDirectory);
     void setImagesPath(QStringList imagePaths);
 
 //    void setDatabasePath(const QString& databasePath);
@@ -30,53 +31,68 @@ public:
 
     //static int addImageToDatabase(QSqlDatabase& database, const cwImageData& data);
 
+signals:
+    void addedImages(QList<cwImage> images);
+
 protected:
     virtual void runTask();
 
 private:
-    QDir BaseDirectory;
+//    QDir ProjectDirectory;
+//    QDir BaseDirectory;
     QStringList ImagePaths;
+    QString DatabasePath;
 
     QList<cwImage> Images;
     QStringList Errors;
 
-    static const QString IconsDirectory;
-    static const QString MipmapsDirecotry;
+    QSqlDatabase CurrentDatabase;
 
-    /**
-      This will scale an image to size
+//    static const QString IconsDirectory;
+//    static const QString MipmapsDirecotry;
 
-      This class is used with Qt::Concurrent to scale a single image multiple times
-      */
-    class Scaler {
-    public:
-        Scaler(const QImage& image) { OriginalImage = image; }
+//    /**
+//      This will scale an image to size
 
-        QImage operator()(int maxSideInPixels);
+//      This class is used with Qt::Concurrent to scale a single image multiple times
+//      */
+//    class Scaler {
+//    public:
+//        Scaler(const QImage& image) { OriginalImage = image; }
 
-    private:
-        QImage OriginalImage;
-    };
+//        QImage operator()(int maxSideInPixels);
 
-    QImage imageExists(QString image);
-    QString copyOriginalImage(QString image);
-    QString createIcon(QImage originalImage, QString baseFilename);
-    QStringList createMipmaps(QImage originalImage, QString baseFilename);
-    void saveToDXT1Format(QImage image, QString path);
+//    private:
+//        QImage OriginalImage;
+//    };
+
+    QImage copyOriginalImage(QString image, cwImage* imageIds);
+    void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
+    void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
+    int saveToDXT1Format(QImage image);
 
 private slots:
-
+    void tryAddingmagesToDatabase();
 
 };
 
 /**
-  \brie Sets the base directory of where the image will be stored to
+  \brief Sets the project directory for the images
 
-  \param the baseDirectory
+  The images will store the relitive path to the project directory
   */
-inline void cwAddImageTask::setBaseDirectory(QDir baseDirectory) {
-    BaseDirectory = baseDirectory;
+inline void cwAddImageTask::setProjectPath(QString projectPath) {
+    DatabasePath = projectPath;
 }
+
+///**
+//  \brie Sets the base directory of where the image will be stored to
+
+//  \param the baseDirectory
+//  */
+//inline void cwAddImageTask::setBaseDirectory(QDir baseDirectory) {
+//    BaseDirectory = baseDirectory;
+//}
 
 /**
   \brief Sets the databasePath

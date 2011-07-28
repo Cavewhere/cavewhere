@@ -42,7 +42,7 @@ Rectangle {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.margins: 1
-                    source: imagePath
+                    source: imageOriginalPath
                     sourceSize.width: imageContainter.width - imageContainter.border.width
                     //sourceSize.height: imageContainter.height
                     fillMode: Image.PreserveAspectFit

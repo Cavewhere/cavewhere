@@ -14,6 +14,7 @@ class cwCavingRegion;
 class cwRegionTreeModel;
 class cwLinePlotManager;
 class cwProject;
+class cwProjectImageProvider;
 
 //Qt includes
 #include <QString>
@@ -27,8 +28,6 @@ class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorM
 
 public:
     explicit cwSurveyEditorMainWindow(QWidget *parent = 0);
-
-
 
     void changeEvent(QEvent *e);
 
@@ -59,7 +58,6 @@ protected slots:
 
 private:
     cwSurvexExporter* SurvexExporter;
-    cwSurveyNoteModel* NoteModel;
 
     //Survey data
     cwCavingRegion* Region;
@@ -80,6 +78,7 @@ private:
 
     //Save / Load
     cwProject* Project;
+    cwProjectImageProvider* ImageProvider;
 
     QGLWidget* createGLWidget();
     void initGLEW();

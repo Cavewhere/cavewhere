@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTask.h"
+class cwGunZipReader;
 
 //Qt includes
 #include <QString>
@@ -29,9 +30,12 @@ protected:
 private:
     QString XMLFileName;
 
+    //For extracting the gunzip data
+    cwGunZipReader* GunZipReader;
+
     Q_INVOKABLE void privateSetPlotSauceXMLFile(QString inputFile);
 
-    QByteArray extractXMLData();
+//    QByteArray extractXMLData();
     void ParseXML(QByteArray xml);
     void ParseStationXML(QDomNode station);
 

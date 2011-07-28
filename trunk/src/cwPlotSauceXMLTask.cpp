@@ -1,5 +1,6 @@
 //Our includes
 #include "cwPlotSauceXMLTask.h"
+#include "cwGunZipReader.h"
 
 //ZLib includes
 #include <zlib.h>
@@ -12,7 +13,8 @@
 cwPlotSauceXMLTask::cwPlotSauceXMLTask(QObject *parent) :
     cwTask(parent)
 {
-
+    GunZipReader = new cwGunZipReader(this);
+    GunZipReader->setParentTask(this);
 }
 
 /**
@@ -32,7 +34,10 @@ void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
   plot sauce file are usually compressed.
   */
 void cwPlotSauceXMLTask::runTask() {
-    QByteArray xmlData = extractXMLData();
+    GunZipReader->setFilename(XMLFileName);
+    GunZipReader->start();
+
+    QByteArray xmlData = GunZipReader->data();
     ParseXML(xmlData);
     done();
 }
@@ -44,43 +49,45 @@ void cwPlotSauceXMLTask::privateSetPlotSauceXMLFile(QString inputFile) {
     XMLFileName = inputFile;
 }
 
-/**
-  \brief This will extract the xml file data from
-  */
-QByteArray cwPlotSauceXMLTask::extractXMLData() {
-    if(!isRunning()) { return QByteArray(); }
+///**
+//  \brief This will extract the xml file data from
+//  */
+//QByteArray cwPlotSauceXMLTask::extractXMLData() {
+//    GunZipReader->
 
-    if(!QFileInfo(XMLFileName).exists()) {
-        qWarning() << "Can't parse plot sauce xml file becauce the file doesn't exist: " << XMLFileName;
-        return QByteArray();
-    }
+//    if(!isRunning()) { return QByteArray(); }
 
-    QByteArray totalBytes;
-    QByteArray buffer;
-    const int bufferSize = 1 * 1024;
-    buffer.resize(bufferSize); //32k buffer
+//    if(!QFileInfo(XMLFileName).exists()) {
+//        qWarning() << "Can't parse plot sauce xml file becauce the file doesn't exist: " << XMLFileName;
+//        return QByteArray();
+//    }
 
-    gzFile file = gzopen((const char*)XMLFileName.toAscii(), "r");
-    int numberOfBytesCopied = 0;
-    while((numberOfBytesCopied = gzread(file, buffer.data(), buffer.size())) && isRunning()) {
-        buffer.resize(numberOfBytesCopied);
-        totalBytes.append(buffer);
-    }
+//    QByteArray totalBytes;
+//    QByteArray buffer;
+//    const int bufferSize = 32 * 1024;
+//    buffer.resize(bufferSize); //32k buffer
 
-    if(!isRunning()) {
-        return QByteArray();
-    }
+//    gzFile file = gzopen((const char*)XMLFileName.toAscii(), "r");
+//    int numberOfBytesCopied = 0;
+//    while((numberOfBytesCopied = gzread(file, buffer.data(), buffer.size())) && isRunning()) {
+//        buffer.resize(numberOfBytesCopied);
+//        totalBytes.append(buffer);
+//    }
 
-    //If there was a error reading
-    if(!gzeof(file)) {
-        int errorCode;
-        const char* errorString = gzerror(file, &errorCode);
-        qWarning() << "There was an error reading gunzip data:" << errorCode << errorString;
-        return QByteArray();
-    }
+//    if(!isRunning()) {
+//        return QByteArray();
+//    }
 
-    return totalBytes;
-}
+//    //If there was a error reading
+//    if(!gzeof(file)) {
+//        int errorCode;
+//        const char* errorString = gzerror(file, &errorCode);
+//        qWarning() << "There was an error reading gunzip data:" << errorCode << errorString;
+//        return QByteArray();
+//    }
+
+//    return totalBytes;
+//}
 
 /**
   \brief Parse the xml out of the QByteArray

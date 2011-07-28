@@ -1,4 +1,8 @@
 #include "cwSurveyNoteModel.h"
+#include "cwProject.h"
+#include "cwProjectImageProvider.h"
+
+const QString cwSurveyNoteModel::ImagePathString = "image://" + cwProjectImageProvider::Name + "/%1";
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent)
@@ -6,25 +10,26 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     //For qml
     QHash<int, QByteArray> roles;
     roles.reserve(2);
-    roles[ImagePathRole] = "imagePath";
+    roles[ImageOriginalPathRole] = "imageOriginalPath";
+    roles[ImageIconPathRole] = "imageIconPath";
     roles[NoteObjectRole] = "noteObject";
     setRoleNames(roles);
 
-    //Add a few pages of notes
-    cwNote* note1 = new cwNote(this);
-    cwNote* note2 = new cwNote(this);
-    cwNote* note3 = new cwNote(this);
-    cwNote* note4 = new cwNote(this);
+//    //Add a few pages of notes
+//    cwNote* note1 = new cwNote(this);
+//    cwNote* note2 = new cwNote(this);
+//    cwNote* note3 = new cwNote(this);
+//    cwNote* note4 = new cwNote(this);
 
-    note1->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
-    note2->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
-    note3->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
-    note4->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
+//    note1->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
+//    note2->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
+//    note3->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
+//    note4->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
 
-    Notes.append(note1);
-    Notes.append(note2);
-    Notes.append(note3);
-    Notes.append(note4);
+//    Notes.append(note1);
+//    Notes.append(note2);
+//    Notes.append(note3);
+//    Notes.append(note4);
 
 }
 
@@ -44,9 +49,15 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     int row = index.row();
 
     switch(role) {
-    case ImagePathRole: {
-        QString imagePath = Notes[row]->imagePath();
-        return QVariant(imagePath); //Notes[row]->imagePath();
+    case ImageOriginalPathRole: {
+        //Get's the full blown note
+        cwImage imagePath = Notes[row]->image();
+        return ImagePathString.arg(imagePath.original());
+    }
+    case ImageIconPathRole: {
+        //Get's the icon for the note
+        cwImage imagePath = Notes[row]->image();
+        return ImagePathString.arg(imagePath.icon());
     }
     case NoteObjectRole:
         return QVariant::fromValue(qobject_cast<QObject*>(Notes[row]));
@@ -54,4 +65,35 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
         return QVariant();
     }
     return QVariant();
+}
+
+/**
+  \brief This adds notes to the notes model
+
+  \param files - The files that'll be added to the notes model
+  \param project - The project where the files will be added to
+
+  This will create new notes objects for each file. This will mipmap the files and also
+  create a icon for each file.  The original file, icon, and mipmaps will be stored in the
+  project.
+  */
+void cwSurveyNoteModel::addNotes(QStringList files, cwProject* project) {
+    project->addImages(files, this, SLOT(addNotesWithNewImages(QList<cwImage>)));
+}
+
+/**
+  This will create new notes foreach cwImage.  This assumes the the cwImage is valid.
+  */
+void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
+    if(images.empty()) { return; }
+
+    //Add all the images to the model
+    beginInsertRows(QModelIndex(), rowCount(), rowCount() + images.size());
+    foreach(cwImage image, images) {
+        cwNote* note = new cwNote(this);
+        note->setImage(image);
+
+        Notes.append(note);
+    }
+    endInsertRows();
 }
