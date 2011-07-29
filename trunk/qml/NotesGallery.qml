@@ -18,12 +18,12 @@ Rectangle {
             id: container
 
             property int border: 3
-            property alias imageSource: image.source
+            property variant imageIds: image
 
             width: 200
             height: {
-                if(image.status == Image.Ready) {
-                    return image.height + imageContainter.border.width + border * 2
+                if(imageItem.status == Image.Ready) {
+                    return imageItem.height + imageContainter.border.width + border * 2
                 }
                 return 200;
             }
@@ -37,7 +37,7 @@ Rectangle {
                 anchors.margins: container.border
 
                 Image {
-                    id: image
+                    id: imageItem
                     asynchronous: true
                     anchors.top: parent.top
                     anchors.left: parent.left
@@ -111,8 +111,8 @@ Rectangle {
             }
 
             onCurrentIndexChanged: {
-                console.log(currentItem.imageSource);
-                noteArea.imageSource = currentItem.imageSource;
+                console.log(currentItem.imageIds + " " + currentItem.imageOriginalPath);
+                noteArea.image = currentItem.imageIds;
             }
         }
 
@@ -164,6 +164,7 @@ Rectangle {
 
         //  onImageSourceChanged: fitToView();
         glWidget: mainGLWidget
+        projectFilename: project.filename
 
     }
 

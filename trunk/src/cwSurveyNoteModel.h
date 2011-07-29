@@ -12,6 +12,7 @@ class cwProject;
 class cwSurveyNoteModel : public QAbstractListModel
 {
     Q_OBJECT
+
 public:
     enum Roles {
         ImageOriginalPathRole = Qt::UserRole + 1,
@@ -23,7 +24,7 @@ public:
     explicit cwSurveyNoteModel(QObject *parent = 0);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant data(const QModelIndex &index, int role) const;
+    Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
     Q_INVOKABLE void addNotes(QStringList files, cwProject* project);
 

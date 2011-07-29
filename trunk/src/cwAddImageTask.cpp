@@ -2,6 +2,7 @@
 #include "cwAddImageTask.h"
 #include "cwProject.h"
 #include "cwImageData.h"
+#include "cwProjectImageProvider.h"
 //#include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
@@ -333,7 +334,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image) {
     dxt1FileData = qCompress(dxt1FileData, 9);
 
     //Add the image to the database
-    cwImageData iconImageData(image.size(), "dxt1.gz", dxt1FileData);
+    cwImageData iconImageData(image.size(), cwProjectImageProvider::Dxt1_GZ_Extension, dxt1FileData);
     int imageId = cwProject::addImage(CurrentDatabase, iconImageData);
     return imageId;
 

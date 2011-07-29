@@ -12,9 +12,11 @@ class cwProjectImageProvider : public QObject, public QDeclarativeImageProvider
 
 public:
     static const QString Name;
+    static const QByteArray Dxt1_GZ_Extension;
 
     cwProjectImageProvider();
     virtual QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
+    QByteArray requestImageData(int id, QSize* size, QByteArray* type = NULL);
 
 public slots:
     void setProjectPath(QString projectPath);
@@ -29,3 +31,4 @@ private:
 };
 
 #endif // CWPROJECTIMAGEPROVIDER_H
+

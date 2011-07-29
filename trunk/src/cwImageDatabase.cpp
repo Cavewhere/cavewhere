@@ -78,25 +78,25 @@ void cwImageDatabaseManager::addImages(QStringList imagePath) {
   This is a low level function that loads image data into the database. Use cwLoadImageTask for
   a non blocking interface.
   */
-int cwImageDatabaseManager::addImageToDatabase(const QSqlDatabase& database, const cwImageData& imageData)  {
-//    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, imageData) "
-//            "VALUES (?, ?, ?, ?, ?)";
+//int cwImageDatabaseManager::addImageToDatabase(const QSqlDatabase& database, const cwImageData& imageData)  {
+////    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, imageData) "
+////            "VALUES (?, ?, ?, ?, ?)";
 
-//    QSqlQuery query(database);
-//    bool successful = query.prepare(SQL);
+////    QSqlQuery query(database);
+////    bool successful = query.prepare(SQL);
 
-//    if(!successful) {
-//        qDebug() << "Couldn't create Insert Images query: " << query.lastError();
-//        return -1;
-//    }
+////    if(!successful) {
+////        qDebug() << "Couldn't create Insert Images query: " << query.lastError();
+////        return -1;
+////    }
 
-//    query.bindValue(0, imageData.format());
-//    query.bindValue(1, false);
-//    query.bindValue(2, imageData.size().width());
-//    query.bindValue(3, imageData.size().height());
-//    query.bindValue(4, imageData.data());
-//    query.exec();
+////    query.bindValue(0, imageData.format());
+////    query.bindValue(1, false);
+////    query.bindValue(2, imageData.size().width());
+////    query.bindValue(3, imageData.size().height());
+////    query.bindValue(4, imageData.data());
+////    query.exec();
 
-//    //Get the id of the last inserted id
-//    return query.lastInsertId().toInt();
-}
+////    //Get the id of the last inserted id
+////    return query.lastInsertId().toInt();
+//}

@@ -24,6 +24,8 @@ class cwTrip;
   */
 class cwProject :  public QObject{
 Q_OBJECT
+    Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
+
 public:
     cwProject(QObject* parent = NULL);
 

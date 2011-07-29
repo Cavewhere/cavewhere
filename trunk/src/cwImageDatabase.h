@@ -23,7 +23,7 @@ public:
     void addImages(QStringList imagePath);
 
     //Adds a single image to the database
-    static int addImageToDatabase(const QSqlDatabase& database, const cwImageData& data);
+//    static int addImageToDatabase(const QSqlDatabase& database, const cwImageData& data);
 
 signals:
 

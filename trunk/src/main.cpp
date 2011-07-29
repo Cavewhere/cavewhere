@@ -18,6 +18,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QList <QString> >("QList<QString>");
     qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
+    qRegisterMetaType<cwImage>("cwImage");
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

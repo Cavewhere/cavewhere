@@ -1,6 +1,10 @@
+//Our inculdes
 #include "cwSurveyNoteModel.h"
 #include "cwProject.h"
 #include "cwProjectImageProvider.h"
+
+//Qt includes
+#include <QDebug>
 
 const QString cwSurveyNoteModel::ImagePathString = "image://" + cwProjectImageProvider::Name + "/%1";
 
@@ -12,6 +16,7 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     roles.reserve(2);
     roles[ImageOriginalPathRole] = "imageOriginalPath";
     roles[ImageIconPathRole] = "imageIconPath";
+    roles[ImageRole] = "image";
     roles[NoteObjectRole] = "noteObject";
     setRoleNames(roles);
 
@@ -48,6 +53,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     if(!index.isValid()) { return QVariant(); }
     int row = index.row();
 
+    qDebug() << "Role:" << role << index;
+
     switch(role) {
     case ImageOriginalPathRole: {
         //Get's the full blown note
@@ -59,9 +66,13 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
         cwImage imagePath = Notes[row]->image();
         return ImagePathString.arg(imagePath.icon());
     }
+    case ImageRole: {
+        return QVariant::fromValue(Notes[row]->image());
+    }
     case NoteObjectRole:
         return QVariant::fromValue(qobject_cast<QObject*>(Notes[row]));
     default:
+        qDebug() << "Return undefined variant";
         return QVariant();
     }
     return QVariant();

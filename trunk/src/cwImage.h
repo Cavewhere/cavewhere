@@ -8,6 +8,7 @@ class cwProject;
 #include <QString>
 #include <QImage>
 #include <QStringList>
+#include <QMetaType>
 
 /**
   \brief This class stores id's to all the images in the database
@@ -41,6 +42,8 @@ private:
     int IconId;
     int OriginalId;
 };
+
+Q_DECLARE_METATYPE(cwImage);
 
 /**
   \brief Sets the mipmap image filenames

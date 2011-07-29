@@ -6,6 +6,7 @@
 
 //Our includes
 #include "cwGLRenderer.h"
+#include "cwImage.h"
 
 //Qt includes
 #include <QDeclarativeItem>
@@ -17,18 +18,24 @@ class cwNoteItem : public cwGLRenderer
 {
     Q_OBJECT
 
-    Q_PROPERTY(QString imageSource READ imageSource WRITE setImageSource NOTIFY imageSourceChanged)
+    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
+    Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())
 
 public:
     explicit cwNoteItem(QDeclarativeItem *parent = 0);
 
-    QString imageSource() const;
-    void setImageSource(QString imageSource);
+    cwImage image() const;
+    void setImage(cwImage image);
+
+    //This allows use to extract data
+    QString projectFilename() const;
+    void setProjectFilename(QString projectFilename);
 
 public slots:
 
 signals:
-    void imageSourceChanged();
+    void imageChanged();
+    void projectFilenameChanged();
 
 public slots:
 
@@ -36,8 +43,6 @@ protected:
     virtual void initializeGL();
     virtual void resizeGL();
     virtual void paintFramebuffer();
-
-
 
 private:
 
@@ -57,10 +62,13 @@ private:
     //Creates the scale matrix for the note item
     QMatrix4x4 NoteModelMatrix;
 
-    QFutureWatcher<QImage>* LoadNoteWatcher;
+    QFutureWatcher<QPair<QByteArray, QSize> >* LoadNoteWatcher;
 
-    QString NoteSource;
+    cwImage Image;
     QSize ImageSize;
+
+    //The project filename for this class
+    QString ProjectFilename;
 
 
 //    //For interaction
@@ -74,7 +82,28 @@ private:
     void initializeVertexBuffers();
     void initializeTexture();
 
-    static QImage LoadImage(QString& filename);
+
+    /**
+      This class allow use to load the mipmaps in a thread way
+      from the database
+
+      The project filename must be set so we can load the data
+*/
+    class LoadImage {
+    public:
+        LoadImage(QString projectFilename) :
+            Filename(projectFilename)
+        {
+
+        }
+
+        typedef QPair<QByteArray, QSize> result_type;
+
+        QPair<QByteArray, QSize> operator()(int imageId);
+
+        QString Filename;
+    };
+
 
 
 protected slots:
@@ -85,8 +114,15 @@ protected slots:
 /**
   \brief Get's the image's sourec director
   */
-inline QString cwNoteItem::imageSource() const {
-    return NoteSource;
+inline cwImage cwNoteItem::image() const {
+    return Image;
+}
+
+/**
+  \brief Get's the project Filename
+  */
+inline QString cwNoteItem::projectFilename() const {
+    return ProjectFilename;
 }
 
 

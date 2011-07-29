@@ -3,6 +3,7 @@
 #include "cwShaderDebugger.h"
 #include "cwGLShader.h"
 #include "cwCamera.h"
+#include "cwProjectImageProvider.h"
 
 //Qt includes
 #include <QPainter>
@@ -11,16 +12,24 @@
 #include <QLabel>
 #include <QUrl>
 #include <QtConcurrentRun>
+#include <QtConcurrentMap>
 #include <QFuture>
 
 
 cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     cwGLRenderer(parent),
-    LoadNoteWatcher(new QFutureWatcher<QImage>(this))
+    LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this))
 {
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
 
     connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
+}
+
+void cwNoteItem::setProjectFilename(QString projectFilename) {
+    if(projectFilename != ProjectFilename) {
+        ProjectFilename = projectFilename;
+        emit projectFilenameChanged();
+    }
 }
 
 /**
@@ -194,13 +203,13 @@ void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
 /**
   \brief Sets the image source for the the note item
   */
-void cwNoteItem::setImageSource(QString imageSource) {
-    if(imageSource != NoteSource) {
-        NoteSource = imageSource;
+void cwNoteItem::setImage(cwImage image) {
+    if(Image != image) {
+        Image = image;
 
         //Load the notes in an asyn way
         LoadNoteWatcher->cancel(); //Cancel previous run, if still running
-        QFuture<QImage> future = QtConcurrent::run(cwNoteItem::LoadImage, QUrl(NoteSource).toLocalFile());
+        QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
         LoadNoteWatcher->setFuture(future);
     }
 }
@@ -211,23 +220,35 @@ void cwNoteItem::setImageSource(QString imageSource) {
 void cwNoteItem::ImageFinishedLoading() {
     GLWidget->makeCurrent();
 
-    QImage glNoteImage = LoadNoteWatcher->future().result();
+    QList<QPair<QByteArray, QSize> >mipmaps = LoadNoteWatcher->future().results();
+
+    if(mipmaps.empty()) { return; }
 
     //Load the data into opengl
     glBindTexture(GL_TEXTURE_2D, NoteTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 glNoteImage.width(), glNoteImage.height(), 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, glNoteImage.bits());
-    glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture
+
+    for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
+
+        //Get the mipmap data
+        QPair<QByteArray, QSize> image = mipmaps.at(mipmapLevel);
+        QByteArray imageData = image.first;
+        QSize size = image.second;
+
+        glCompressedTexImage2D(GL_TEXTURE_2D, mipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                              size.width(), size.height(), 0,
+                              imageData.size(), imageData.data());
+    }
+
+//    glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    ImageSize = glNoteImage.size();
+    ImageSize = mipmaps.first().second;
     NoteModelMatrix.setToIdentity();
     NoteModelMatrix.scale(ImageSize.width(), ImageSize.height(), 1.0);
 
     resizeGL();
 
-    emit imageSourceChanged();
+    emit imageChanged();
 
     update();
 }
@@ -237,6 +258,13 @@ void cwNoteItem::ImageFinishedLoading() {
 
   This returns a opengl formatted image
   */
-QImage cwNoteItem::LoadImage(QString& filename) {
-    return QGLWidget::convertToGLFormat(QImage(filename));
+QPair<QByteArray, QSize> cwNoteItem::LoadImage::operator ()(int imageId) {
+    //Extract the image data from the imageProvider
+    cwProjectImageProvider imageProvidor;
+    imageProvidor.setProjectPath(Filename);
+
+    QSize size;
+    QByteArray imageData = imageProvidor.requestImageData(imageId, &size);
+
+    return QPair<QByteArray, QSize>(imageData, size);
 }
