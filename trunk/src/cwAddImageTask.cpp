@@ -279,7 +279,7 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
 void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds) {
     QSize imageSize = originalImage.size();
     double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
-    int numberOfLevels = (int)log2(largestDimension);
+    int numberOfLevels = (int)log2(largestDimension) + 1;
 
     QImage scaledImage = originalImage;
     QList<int> mipmapIds;
@@ -288,7 +288,7 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
     int height = scaledImage.height();
 
     for(int i = 0; i < numberOfLevels && isRunning(); i++) {
-        emit statusMessage(QString("Compressing %1 of %2 the bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(imageFilename));
+        emit statusMessage(QString("Compressing %1 of %2 bold flavors in %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
 
         //Rescaled the image
         scaledImage = scaledImage.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);

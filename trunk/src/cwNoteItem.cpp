@@ -99,7 +99,7 @@ void cwNoteItem::initializeTexture() {
     //Generate the color texture
     glGenTextures(1, &NoteTexture);
     glBindTexture(GL_TEXTURE_2D, NoteTexture);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
@@ -235,11 +235,11 @@ void cwNoteItem::ImageFinishedLoading() {
         QSize size = image.second;
 
         glCompressedTexImage2D(GL_TEXTURE_2D, mipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
-                              size.width(), size.height(), 0,
-                              imageData.size(), imageData.data());
+                               size.width(), size.height(), 0,
+                               imageData.size(), imageData.data());
     }
 
-//    glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture
+   // glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture
     glBindTexture(GL_TEXTURE_2D, 0);
 
     ImageSize = mipmaps.first().second;
