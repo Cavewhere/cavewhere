@@ -23,15 +23,13 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QBuffer>
+#include <QtConcurrentMap>
 
 //Sqlite lite includes
 #include <sqlite3.h>
 
 //Zlib includes
 #include <zlib.h>
-
-//const QString cwAddImageTask::IconsDirectory = "icons";
-//const QString cwAddImageTask::MipmapsDirecotry = "mipmaps";
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwTask(parent)
 {
@@ -45,8 +43,11 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwTask(parent)
   */
 void cwAddImageTask::runTask() {
 
+    //Clear the current progress
+    Progress = QAtomicInt(0);
+
     //Set the number of steps for this task
-    setNumberOfSteps(ImagePaths.size());
+    calculateNumberOfSteps();
 
     //Connect to the database
     CurrentDatabase = QSqlDatabase::addDatabase("QSQLITE", "LoadImageTask");
@@ -58,7 +59,7 @@ void cwAddImageTask::runTask() {
     }
 
     //Try to add the ImagePaths to the database
-    tryAddingmagesToDatabase();
+    tryAddingImagesToDatabase();
 
     //Close the database
     CurrentDatabase.close();
@@ -69,54 +70,36 @@ void cwAddImageTask::runTask() {
 
     //Finished
     done();
+}
 
+/**
+  \brief This calculate the number of steps in this task
 
+  The number of steps are equal = sum of all pixels in each mipmap
+  */
+void cwAddImageTask::calculateNumberOfSteps() {
+    int numberOfSteps = 0;
+    foreach(QString imagePath, ImagePaths) {
+        QImageReader reader(imagePath);
+        QSize imageSize = reader.size();
 
+        int numberOfMipmapLevel = numberOfMipmapLevels(imageSize);
+        for(int i = 0; i < numberOfMipmapLevel; i++) {
+            int iterWidth = imageSize.width() / 4 + 1;
+            int iterHeight = imageSize.height() / 4 + 1;
 
-//    //Make sure the icon directory is created
-//    BaseDirectory.mkpath("icons");
-//    BaseDirectory.mkpath("mipmaps");
+            numberOfSteps += iterWidth * iterHeight;
+            imageSize = halfSize(imageSize);
+        }
+    }
 
-//    for(int i = 0; i < ImagePaths.size() && isRunning(); i++) {
-//        QString imagePath = ImagePaths[i];
-
-//        //Make sure the image is good, open it
-//        QImage image(imagePath);
-//        if(image.isNull()) {
-//            //Add to errors
-//            Errors.append(QString("%1 isn't a image").arg(imagePath));
-//            continue;
-//        }
-
-//        //Copy the original image
-//        QString orginalImagePath = copyOriginalImage(imagePath);
-
-//        if(isRunning()) { break; }
-
-//        //Basename of the image
-//        QFileInfo imageInfo(imagePath);
-//        QString baseFilename = imageInfo.fileName();
-
-//        //Create an icon
-//        QString iconImagePath = createIcon(image, baseFilename);
-
-//        if(isRunning()) { break; }
-
-//        //Create the mipmaps for opengl
-//        QStringList mipmapPaths = createMipmaps(image, baseFilename);
-
-//        if(isRunning()) { break; }
-//        emit progressed(i + 1);
-//    }
-
-//    //Clean up if not running???
-//    done();
+    setNumberOfSteps(numberOfSteps);
 }
 
 /**
   \brief This tries to add the image to the database
   */
-void cwAddImageTask::tryAddingmagesToDatabase() {
+void cwAddImageTask::tryAddingImagesToDatabase() {
     //SQLITE begin transation
     QString beginTransationQuery = "BEGIN IMMEDIATE TRANSACTION";
     QSqlQuery query = CurrentDatabase.exec(beginTransationQuery);
@@ -126,7 +109,7 @@ void cwAddImageTask::tryAddingmagesToDatabase() {
     if(error.isValid()) {
         if(error.number() == SQLITE_BUSY) {
             //The database is busy, try to get a lock in 500ms
-            QTimer::singleShot(500, this, SLOT(tryAddingmagesToDatabase()));
+            QTimer::singleShot(500, this, SLOT(tryAddingImagesToDatabase()));
             return;
         } else {
             qDebug() << "Load Images error: " << error;
@@ -153,7 +136,7 @@ void cwAddImageTask::tryAddingmagesToDatabase() {
         //Add image ids to the list of images that are returned
         Images.append(imageIds);
 
-        emit progressed(i + 1);
+      //  emit progressed(i + 1);
     }
 
     //If the task isn't running
@@ -176,29 +159,9 @@ void cwAddImageTask::tryAddingmagesToDatabase() {
 
 
 /**
-  \brief This rescales the image by maxSideInPixel
-
-  This is a kernal to QtConnurrent::mapped runTask
-
-  The image that's being scaled set by the construct of the class
-  */
-//QImage cwAddImageTask::Scaler::operator()(int maxSideInPixels) {
-//    return OriginalImage.scaled(maxSideInPixels, maxSideInPixels, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-//}
-
-/**
   \brief This copies the original image to the new place
   */
 QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdContainer) {
-//    QFileInfo fileInfo(imagePath);
-//    QString imageFilename = fileInfo.fileName();
-//    QString newFilename = BaseDirectory.absoluteFilePath(imageFilename);
-
-//    //Make sure the image isn't the same basicially check if the images is the same.
-//    if(newFilename == imagePath) {
-//        //Images are the same, don't copy anything
-//        return newFilename;
-//    }
 
     emit statusMessage(QString("Copying %1").arg(QFileInfo(imagePath).fileName()));
 
@@ -233,16 +196,6 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     imageIdContainer->setOriginal(imageId);
 
     return image;
-
-
-//    //Get a uniqueFile name for the image
-//    QString uniqueFilename = cwProject::uniqueFile(BaseDirectory, imageFilename);
-
-//    //Copy the data
-//    QString fullPathToUniqueFilename = BaseDirectory.absoluteFilePath(uniqueFilename);
-//    QFile::copy(imagePath, fullPathToUniqueFilename);
-
-//    return fullPathToUniqueFilename;
 }
 
 /**
@@ -277,21 +230,18 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
   size-1 of the list.
   */
 void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds) {
-    QSize imageSize = originalImage.size();
-    double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
-    int numberOfLevels = (int)log2(largestDimension) + 1;
+    int numberOfLevels = numberOfMipmapLevels(originalImage.size());
 
     QImage scaledImage = originalImage;
     QList<int> mipmapIds;
 
-    int width = scaledImage.width();
-    int height = scaledImage.height();
+    QSize scaledImageSize = scaledImage.size();
 
     for(int i = 0; i < numberOfLevels && isRunning(); i++) {
         emit statusMessage(QString("Compressing %1 of %2 bold flavors in %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
 
         //Rescaled the image
-        scaledImage = scaledImage.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
         //Export the image to DXT1 format
         int mipmapId = saveToDXT1Format(scaledImage);
@@ -299,13 +249,24 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
         //Add the path to the mipmapPath
         mipmapIds.append(mipmapId);
 
-        //Create the new width and height
-        width = qMax(scaledImage.width() / 2, 1);
-        height = qMax(scaledImage.height() / 2, 1);
+        //Create the new width and height, by halfing them
+        scaledImageSize = halfSize(scaledImageSize);
     }
 
     imageIds->setMipmaps(mipmapIds);
 }
+
+/**
+  \brief This calculates the number of mipmap levels that the originalImage will
+  make up.
+
+  This takes the largest dimension and takes the log2 of it.
+  */
+ int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
+     double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
+     return (int)log2(largestDimension) + 1;
+ }
+
 
 /**
   \brief Saves the image to the path using the dxt1 format from squish
@@ -317,54 +278,171 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
   \param image - The image that'll be converted
   */
 int cwAddImageTask::saveToDXT1Format(QImage image) {
-    int dxt1FileSize = squish::GetStorageRequirements(image.width(), image.height(), squish::kDxt1);
-
-    //Allocate the compress data
-    QByteArray dxt1FileData;
-    dxt1FileData.resize(dxt1FileSize);
-
     //Convert and compress using dxt1
-    QImage convertedFormat = QGLWidget::convertToGLFormat(image);
-    squish::CompressImage(static_cast<const squish::u8*>(convertedFormat.bits()),
-                          image.width(), image.height(),
-                          dxt1FileData.data(),
-                          squish::kDxt1 | squish::kColourIterativeClusterFit);
+    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
 
     //Compress the dxt1FileData using zlib
-    dxt1FileData = qCompress(dxt1FileData, 9);
+    outputData = qCompress(outputData, 9);
 
     //Add the image to the database
-    cwImageData iconImageData(image.size(), cwProjectImageProvider::Dxt1_GZ_Extension, dxt1FileData);
+    cwImageData iconImageData(image.size(), cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
     int imageId = cwProject::addImage(CurrentDatabase, iconImageData);
     return imageId;
-
-
-//    //Compress the dxt1FileData using zlib
-//    path += ".gz";
-//    gzFile zippedFile = gzopen(path.toAscii(), "w"); //Write with level 9 huffman
-//    gzwrite(zippedFile, dxt1FileData.constData(), dxt1FileData.size());
-//    gzclose(zippedFile);
-
-//    //Write data to disk
-//    QFile file;
-//    file.setFileName(path);
-//    file.open(QFile::WriteOnly);
-
-//    if(file.error() != QFile::NoError) {
-//        Errors.append(file.errorString());
-//        return;
-//    }
-
-//    //Write the data to disk
-//    file.write(dxt1FileData);
-
-//    if(file.error() != QFile::NoError) {
-//        Errors.append(file.errorString());
-//        return;
-//    }
-
-//    qDebug() << "Wrote compress data to " << file.fileName() << "before zlib compression:" << (dxt1FileSize / 1024.0 / 1024.0) << "after" << (dxt1FileData.size() / 1024.0 / 1024.0);
  }
+
+using namespace squish;
+
+/**
+  This block is create to be compressed by squish in a thread way.
+
+  See sqiush::CompressMask for details
+  */
+class Block {
+public:
+
+    /**
+      \param x - The x parameter
+      \param y - The y parameter
+      \param rgba - The source rgba
+      \param blockData - The output blockdata
+      */
+    Block(int x, int y, u8 const* rgba, void* blockData) {
+        Position = QPoint(x, y);
+        RGBA = rgba;
+        BlockData = blockData;
+    }
+
+    QPoint Position;
+    u8 const* RGBA;
+    void* BlockData;
+};
+
+/**
+  \brief This class compresses a signle block.  This allow squish library to be
+  threaded.
+  */
+class CompressImageKernal {
+public:
+    CompressImageKernal(cwAddImageTask* task, QSize imageSize, int flags, float* metric) {
+        Task = task;
+        ImageSize = imageSize;
+        Flags = flags;
+        Metric = metric;
+    }
+
+    cwAddImageTask* Task;
+    QSize ImageSize;
+    int Flags;
+    float* Metric;
+
+
+    void operator()(Block block) {
+
+        if(!Task->isRunning()) { return; }
+
+        // build the 4x4 block of pixels
+        u8 sourceRgba[16*4];
+        u8* targetPixel = sourceRgba;
+        int mask = 0;
+        for( int py = 0; py < 4; ++py )
+        {
+                for( int px = 0; px < 4; ++px )
+                {
+                        // get the source pixel in the image
+                        int sx = block.Position.x() + px;
+                        int sy = block.Position.y() + py;
+
+                        // enable if we're in the image
+                        if( sx < ImageSize.width() && sy < ImageSize.height() )
+                        {
+                                // copy the rgba value
+                                u8 const* sourcePixel = block.RGBA + 4*( ImageSize.width() * sy + sx );
+                                for( int i = 0; i < 4; ++i ) {
+                                    *targetPixel++ = *sourcePixel++;
+                                }
+
+                                // enable this pixel
+                                mask |= ( 1 << ( 4*py + px ) );
+                        }
+                        else
+                        {
+                                // skip this pixel as its outside the image
+                                targetPixel += 4;
+                        }
+                }
+        }
+
+        CompressMasked(sourceRgba, mask, block.BlockData, Flags, Metric);
+
+        emit Task->IncreaseProgress();
+    }
+
+};
+
+
+
+/**
+  Copied directly from squish library
+  */
+
+static int FixFlags( int flags )
+{
+        // grab the flag bits
+        int method = flags & ( kDxt1 | kDxt3 | kDxt5 );
+        int fit = flags & ( kColourIterativeClusterFit | kColourClusterFit | kColourRangeFit );
+        int extra = flags & kWeightColourByAlpha;
+
+        // set defaults
+        if( method != kDxt3 && method != kDxt5 )
+                method = kDxt1;
+        if( fit != kColourRangeFit && fit != kColourIterativeClusterFit )
+                fit = kColourClusterFit;
+
+        // done
+        return method | fit | extra;
+}
+
+/**
+  \brief This is a drop in replacement for sqiush::CompressImage
+
+  The only differance is this is threaded.
+  */
+QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags, float* metric ) {
+    int outputFileSize = squish::GetStorageRequirements(image.width(), image.height(), squish::kDxt1);
+
+    //Allocate the compress data
+    QByteArray outputData;
+    outputData.resize(outputFileSize);
+
+    //Convert the image to a real format
+    QImage convertedFormat = QGLWidget::convertToGLFormat(image);
+
+    // fix any bad flags
+    flags = FixFlags( flags );
+
+    // initialise the block output
+    u8* targetBlock = reinterpret_cast< u8* >( outputData.data() );
+    int bytesPerBlock = ( ( flags & kDxt1 ) != 0 ) ? 8 : 16;
+
+    // loop over pixels and create blocks
+    QList<Block> computeBlocks;
+    for( int y = 0; y < image.height(); y += 4 )
+    {
+            for( int x = 0; x < image.width(); x += 4 )
+            {
+                    computeBlocks.append(Block(x, y, convertedFormat.bits(), targetBlock));
+
+                    // advance
+                    targetBlock += bytesPerBlock;
+            }
+    }
+
+    //This takes all the compute blocks and compresses them using squish
+    QtConcurrent::blockingMap(computeBlocks, CompressImageKernal(this, image.size(), flags, metric));
+
+    return outputData;
+}
+
 
 
 

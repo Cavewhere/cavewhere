@@ -9,6 +9,8 @@
 
 cwImage::cwImage()
 {
+    IconId = -1;
+    OriginalId = -1;
 }
 
 ///**

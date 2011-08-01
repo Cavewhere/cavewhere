@@ -107,11 +107,9 @@ Rectangle {
                     var index = galleryView.indexAt(mouseX, mouseY);
                     galleryView.currentIndex = index;
                 }
-
             }
 
             onCurrentIndexChanged: {
-                console.log(currentItem.imageIds + " " + currentItem.imageOriginalPath);
                 noteArea.image = currentItem.imageIds;
             }
         }

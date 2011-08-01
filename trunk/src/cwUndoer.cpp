@@ -1,6 +1,7 @@
 #include "cwUndoer.h"
 
-cwUndoer::cwUndoer(QUndoStack* stack)
+cwUndoer::cwUndoer(QUndoStack* stack) :
+    UndoStack(NULL)
 {
     setUndoStack(stack);
 }

@@ -25,6 +25,8 @@ void cwTrip::Copy(const cwTrip& object)
 {
     ParentCave = NULL;
 
+    DistanceUnit = cwUnits::Meters;
+
     //Copy the name of the trip
     setName(object.Name);
     setDistanceUnit(object.DistanceUnit);

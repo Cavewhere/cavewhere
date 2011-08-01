@@ -11,9 +11,18 @@
 #include <QImage>
 #include <QDir>
 #include <QSqlDatabase>
+#include <QAtomicInt>
+#include <QDebug>
+
+//Squish includes
+#include <squish.h>
+
+class CompressImageKernal;
 
 class cwAddImageTask : public cwTask
 {
+    friend class CompressImageKernal;
+
     Q_OBJECT
 
 public:
@@ -21,15 +30,10 @@ public:
 
     //////////////// Parameters //////////////////
     void setProjectPath(QString projectPath);
-//    void setBaseDirectory(QDir baseDirectory);
     void setImagesPath(QStringList imagePaths);
-
-//    void setDatabasePath(const QString& databasePath);
 
     ///////////// Results ///////////////////
     QList<cwImage> images();
-
-    //static int addImageToDatabase(QSqlDatabase& database, const cwImageData& data);
 
 signals:
     void addedImages(QList<cwImage> images);
@@ -38,8 +42,6 @@ protected:
     virtual void runTask();
 
 private:
-//    QDir ProjectDirectory;
-//    QDir BaseDirectory;
     QStringList ImagePaths;
     QString DatabasePath;
 
@@ -48,31 +50,22 @@ private:
 
     QSqlDatabase CurrentDatabase;
 
-//    static const QString IconsDirectory;
-//    static const QString MipmapsDirecotry;
-
-//    /**
-//      This will scale an image to size
-
-//      This class is used with Qt::Concurrent to scale a single image multiple times
-//      */
-//    class Scaler {
-//    public:
-//        Scaler(const QImage& image) { OriginalImage = image; }
-
-//        QImage operator()(int maxSideInPixels);
-
-//    private:
-//        QImage OriginalImage;
-//    };
+    QAtomicInt Progress;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);
     void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
     int saveToDXT1Format(QImage image);
+    QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
+
+    void calculateNumberOfSteps();
+    int numberOfMipmapLevels(QSize imageSize) const;
+    QSize halfSize(QSize size) const;
+
+    void IncreaseProgress();
 
 private slots:
-    void tryAddingmagesToDatabase();
+    void tryAddingImagesToDatabase();
 
 };
 
@@ -84,15 +77,6 @@ private slots:
 inline void cwAddImageTask::setProjectPath(QString projectPath) {
     DatabasePath = projectPath;
 }
-
-///**
-//  \brie Sets the base directory of where the image will be stored to
-
-//  \param the baseDirectory
-//  */
-//inline void cwAddImageTask::setBaseDirectory(QDir baseDirectory) {
-//    BaseDirectory = baseDirectory;
-//}
 
 /**
   \brief Sets the databasePath
@@ -111,6 +95,26 @@ inline void cwAddImageTask::setImagesPath(QStringList imagePaths) {
   */
 inline QList<cwImage> cwAddImageTask::images() {
     return Images;
+}
+
+/**
+  This halves the size.  The size that's returned will always be valid.
+  If the half size is less than 1, then the dimension below 1 is set to 1
+  */
+inline QSize cwAddImageTask::halfSize(QSize size) const {
+     //Create the new width and height
+     return QSize(qMax(size.width() / 2, 1), qMax(size.height() / 2, 1));
+ }
+
+/**
+  \brief This increases the current progress of the task
+
+  This uses an atomic integer that's thread safe, calling a signal is also
+  thread safe.
+  */
+inline void cwAddImageTask::IncreaseProgress() {
+    int originalValue = Progress.fetchAndAddRelaxed(1);
+    emit progressed(originalValue + 1);
 }
 
 #endif // CWLOADIMAGETASK_H

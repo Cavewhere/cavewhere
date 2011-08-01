@@ -13,7 +13,7 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
     RegularTile = new cwRegularTile();
 
     TessilationSize = 2;
-
+    NumberOfLevels = 0;
 }
 
 /**
