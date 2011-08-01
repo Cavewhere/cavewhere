@@ -139,6 +139,15 @@ void cwCavingRegion::removeCaves(int beginIndex, int endIndex) {
 }
 
 /**
+  \brief Removes all the caves from the region
+  */
+void cwCavingRegion::clearCaves() {
+    if(!Caves.isEmpty()) {
+        removeCaves(0, Caves.size() - 1);
+    }
+}
+
+/**
   \brief Get's the index of the cave
   */
 int cwCavingRegion::indexOf(cwCave* cave) {

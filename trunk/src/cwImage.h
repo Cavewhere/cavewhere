@@ -24,15 +24,12 @@ public:
     QList<int> mipmaps();
 
     int numberOfMipmapLevels();
-//    QByteArray mipmap(cwProject* project, int level);
 
     void setIcon(int icon);
     int icon() const;
-//    QImage icon(cwProject* project) const;
 
     void setOriginal(int originalId);
     int original() const;
-//    QImage original(cwProject* project);
 
     bool operator ==(const cwImage& other);
     bool operator !=(const cwImage& other);
@@ -43,7 +40,7 @@ private:
     int OriginalId;
 };
 
-Q_DECLARE_METATYPE(cwImage);
+Q_DECLARE_METATYPE(cwImage)
 
 /**
   \brief Sets the mipmap image filenames

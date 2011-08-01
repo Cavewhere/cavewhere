@@ -50,6 +50,8 @@
      <addaction name="actionSurvexExport"/>
      <addaction name="actionCompassExport"/>
     </widget>
+    <addaction name="actionSave"/>
+    <addaction name="separator"/>
     <addaction name="menuExport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
@@ -112,6 +114,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>Save</string>
    </property>
   </action>
  </widget>

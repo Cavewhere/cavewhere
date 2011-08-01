@@ -37,6 +37,7 @@
 #include "cwImageDatabase.h"
 #include "cwFileDialogHelper.h"
 #include "cwProjectImageProvider.h"
+#include "cwXMLProjectLoadSaveTask.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -49,7 +50,11 @@
 #include <QMessageBox>
 #include <QThread>
 #include <QGLWidget>
+#include <QTemporaryFile>
 
+//Std includes
+#include <iostream>
+#include <fstream>
 
 #if defined(QMLJSDEBUGGER)
 #include <qt_private/qdeclarativedebughelper_p.h>
@@ -101,6 +106,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(ActionUndo, SIGNAL(triggered()), UndoStack, SLOT(undo()));
     connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
+    connect(actionSave, SIGNAL(triggered()), SLOT(save()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
@@ -388,6 +394,21 @@ void cwSurveyEditorMainWindow::updateUndoText(QString undoText) {
 
 void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
     ActionRedo->setText(QString("Redo %1").arg(redoText));
+}
+
+/**
+  \brief Saves the project
+  */
+void cwSurveyEditorMainWindow::save() {
+    QTemporaryFile tempfile;
+    tempfile.setAutoRemove(false);
+    tempfile.open();
+    qDebug() << "Saved project to: " << tempfile.fileName();
+
+
+    std::ofstream outputStream((const char*)tempfile.fileName().toAscii());
+    boost::archive::xml_oarchive xmlOutputArchive(outputStream);
+    xmlOutputArchive << BOOST_SERIALIZATION_NVP(Region);
 }
 
 /**

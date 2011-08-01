@@ -25,12 +25,14 @@ public:
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
+    QList<cwCave*> caves() const;
 
     Q_INVOKABLE void addCave(cwCave* cave = NULL);
     void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     Q_INVOKABLE void removeCave(int index);
     void removeCaves(int beginIndex, int endIndex);
+    void clearCaves();
 
     int indexOf(cwCave* cave);
 
@@ -116,6 +118,13 @@ inline bool cwCavingRegion::hasCaves() const {
 inline cwCave* cwCavingRegion::cave(int index) const {
     if(index < 0 || index >= Caves.size()) { return NULL; }
     return Caves[index];
+}
+
+/**
+  \brief Gets all the caves in the region
+  */
+inline QList<cwCave*> cwCavingRegion::caves() const {
+    return Caves;
 }
 
 #endif // CWCAVINGREGION_H

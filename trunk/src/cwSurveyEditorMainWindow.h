@@ -55,6 +55,9 @@ protected slots:
     void updateUndoText(QString undoText);
     void updateRedoText(QString redoText);
 
+    //For saving the project
+    void save();
+
 
 private:
     cwSurvexExporter* SurvexExporter;
