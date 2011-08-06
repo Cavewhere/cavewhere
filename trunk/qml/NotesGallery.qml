@@ -11,6 +11,10 @@ Rectangle {
     anchors.fill: parent
     anchors.margins: 3
 
+    onNotesModelChanged: {
+        console.log("Notes Model:" + notesModel);
+    }
+
     Component {
         id: listDelegate
 
@@ -18,7 +22,7 @@ Rectangle {
             id: container
 
             property int border: 3
-            property variant imageIds: image
+            property variant imageIds: model.image
 
             width: 200
             height: {
@@ -42,7 +46,7 @@ Rectangle {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.margins: 1
-                    source: imageOriginalPath
+                    source: model.imageIconPath
                     sourceSize.width: imageContainter.width - imageContainter.border.width
                     //sourceSize.height: imageContainter.height
                     fillMode: Image.PreserveAspectFit
@@ -54,12 +58,12 @@ Rectangle {
                 Image {
                     id: statusImage
                     anchors.centerIn: parent
-                    visible: image.status == Image.Loading
+                    visible: imageItem.status == Image.Loading
 
                     source: "qrc:icons/loadingSwirl.png"
 
                     NumberAnimation {
-                        running: image.status == Image.Loading
+                        running: imageItem.status == Image.Loading
                         target: statusImage;
                         property: "rotation";
                         from: 0

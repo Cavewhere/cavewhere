@@ -19,25 +19,42 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     roles[ImageRole] = "image";
     roles[NoteObjectRole] = "noteObject";
     setRoleNames(roles);
-
-//    //Add a few pages of notes
-//    cwNote* note1 = new cwNote(this);
-//    cwNote* note2 = new cwNote(this);
-//    cwNote* note3 = new cwNote(this);
-//    cwNote* note4 = new cwNote(this);
-
-//    note1->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-02.png");
-//    note2->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-04.png");
-//    note3->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-06.png");
-//    note4->setImagePath("/home/blitz/documents/caving/survey/cave/us/va/washington/Debusk Mill/David Debusk Cave/notes/trip001-08.png");
-
-//    Notes.append(note1);
-//    Notes.append(note2);
-//    Notes.append(note3);
-//    Notes.append(note4);
-
 }
 
+cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
+    QAbstractListModel(NULL)
+{
+    copy(object);
+}
+
+cwSurveyNoteModel& cwSurveyNoteModel::operator=(const cwSurveyNoteModel& object) {
+    if(&object == this) { return *this; }
+    copy(object);
+    return *this;
+}
+
+/**
+  \brief Does a deap copy of all the notes in the notemodel
+  */
+void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
+
+    setRoleNames(object.roleNames());
+
+    beginResetModel();
+
+    //Delete all the old notes
+    foreach(cwNote* note, Notes) {
+        delete note;
+    }
+    Notes.clear();
+
+    foreach(cwNote* note, object.Notes) {
+        cwNote* copyNote = new cwNote(*note);
+        Notes.append(copyNote);
+    }
+
+    endResetModel();
+}
 /**
   \brief Get's the number of row in the model
   */
@@ -88,7 +105,7 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   create a icon for each file.  The original file, icon, and mipmaps will be stored in the
   project.
   */
-void cwSurveyNoteModel::addNotes(QStringList files, cwProject* project) {
+void cwSurveyNoteModel::addFromFiles(QStringList files, cwProject* project) {
     project->addImages(files, this, SLOT(addNotesWithNewImages(QList<cwImage>)));
 }
 
@@ -106,5 +123,23 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
 
         Notes.append(note);
     }
+    endInsertRows();
+}
+
+/**
+  This adds valid notes to the note model
+
+  The note model takes responibility for the notes, ie. it owns them
+  */
+void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
+    int lastIndex = rowCount();
+    beginInsertRows(QModelIndex(), lastIndex, lastIndex + notes.size());
+
+    Notes.append(notes);
+
+    foreach(cwNote* note, notes) {
+        note->setParent(this);
+    }
+
     endInsertRows();
 }

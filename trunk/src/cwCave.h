@@ -31,6 +31,7 @@ public:
     int tripCount() const;
     cwTrip* trip(int index) const;
     bool hasTrips() const { return tripCount() > 0; }
+    QList<cwTrip*> trips() const;
 
     Q_INVOKABLE void addTrip(cwTrip* trip = NULL);
     void insertTrip(int i, cwTrip* trip);
@@ -147,6 +148,13 @@ inline QString cwCave::name() const {
   */
 inline int cwCave::tripCount() const {
     return Trips.count();
+}
+
+/**
+  \brief Get's all the trips in the cave
+  */
+inline QList<cwTrip*> cwCave::trips() const {
+    return Trips;
 }
 
 /**

@@ -2,7 +2,7 @@
 #define CWLOADIMAGETASK_H
 
 //Our includes
-#include "cwTask.h"
+#include "cwProjectIOTask.h"
 #include "cwImage.h"
 
 //Qt includes
@@ -19,7 +19,7 @@
 
 class CompressImageKernal;
 
-class cwAddImageTask : public cwTask
+class cwAddImageTask : public cwProjectIOTask
 {
     friend class CompressImageKernal;
 
@@ -43,12 +43,9 @@ protected:
 
 private:
     QStringList ImagePaths;
-    QString DatabasePath;
 
     QList<cwImage> Images;
     QStringList Errors;
-
-    QSqlDatabase CurrentDatabase;
 
     QAtomicInt Progress;
 

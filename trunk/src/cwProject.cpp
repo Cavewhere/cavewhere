@@ -6,6 +6,8 @@
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
+#include "cwRegionSaveTask.h"
+#include "cwRegionLoadTask.h"
 
 //Qt includes
 #include <QDir>
@@ -14,6 +16,9 @@
 #include <QSqlQuery>
 #include <QDebug>
 #include <QSqlError>
+
+//Std includes
+#include <sstream>
 
 //Statics
 const QString cwProject::CavesDir = "Caves";
@@ -36,8 +41,8 @@ cwProject::cwProject(QObject* parent) :
     connectRegion();
 
     //Create a new thread
-    AddImageThread = new QThread(this);
-    AddImageThread->start();
+    LoadSaveThread = new QThread(this);
+    LoadSaveThread->start();
 
     //AddImageTask->setThread(AddImageThread);
 }
@@ -92,7 +97,7 @@ void cwProject::createDefaultSchema() {
     QString query =
             QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
             QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("gunzipCompressedXML BLOB") + //Last index
+            QString("qCompress_XML BLOB") + //Last index
             QString(")");
 
     bool couldPrepare = createCavingRegionTable.prepare(query);
@@ -165,22 +170,61 @@ void cwProject::createDefaultSchema() {
   Save the project, writes all files to the project
   */
 void cwProject::save() {
+    cwRegionSaveTask* saveTask = new cwRegionSaveTask();
+    connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
+    connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
+    saveTask->setThread(LoadSaveThread);
 
+    //Set the data for the project
+    qDebug() << "Saving project to:" << ProjectFile;
+    saveTask->setCavingRegion(*Region);
+    saveTask->setDatabaseFilename(ProjectFile);
+
+    //Start the save thread
+    saveTask->start();
 }
 
 /**
   Loads the project, loads all the files to the project
   */
-void cwProject::load() {
+void cwProject::load(QString filename) {
 
-    //Clear the undo / redo stack
+    //Load the region task
+    cwRegionLoadTask* loadTask = new cwRegionLoadTask();
+//    connect(loadTask, SIGNAL(finished()), loadTask, SLOT(deleteLater()));
+//    connect(loadTask, SIGNAL(stopped()), loadTask, SLOT(deleteLater()));
+    connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(UpdateRegionData(cwCavingRegion*)));
+    loadTask->setThread(LoadSaveThread);
 
-    //Clear the region
+    //Set the data for the project
+    qDebug() << "Loading project to:" << filename;
+    loadTask->setDatabaseFilename(filename);
+
+    //Start the save thread
+    loadTask->start();
 
 }
 
 /**
-  \brief This will move the file project from it's current path to a new file
+  Update the project with new region data
+
+  This should only be called by cwRegionLoadTask
+  */
+void cwProject::UpdateRegionData(cwCavingRegion* region) {
+    cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
+
+    //Clear the undo / redo stack
+    qDebug() << "Copying region:" << region;
+
+    //Copy the data from the loaded region
+    *Region = *region;
+
+    //Update the project filename
+    setFilename(loadTask->databaseFilename());
+}
+
+/**
+  \brief Sets the current project file
 
   \param newFilename - The new filename that this project will be moved to.
   */
@@ -206,7 +250,9 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
     //Create a new image task
     cwAddImageTask* addImageTask = new cwAddImageTask();
     connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-    addImageTask->setThread(AddImageThread);
+    connect(addImageTask, SIGNAL(finished()), addImageTask, SLOT(deleteLater()));
+    connect(addImageTask, SIGNAL(stopped()), addImageTask, SLOT(deleteLater()));
+    addImageTask->setThread(LoadSaveThread);
 
     //Set the project path
     addImageTask->setProjectPath(filename());

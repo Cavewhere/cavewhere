@@ -19,12 +19,11 @@ class cwNote : public QObject
 
 public:
     explicit cwNote(QObject *parent = 0);
+    cwNote(const cwNote& object);
+    cwNote& operator=(const cwNote& object);
 
     void setImage(cwImage image);
     cwImage image() const;
-
-//    void setImagePath(const QString& imagePath);
-//    QString imagePath() const;
 
     int original() const;
     int icon() const;
@@ -38,6 +37,8 @@ public slots:
 
 private:
     cwImage ImageIds;
+
+    void copy(const cwNote& object);
 };
 
 

@@ -21,7 +21,7 @@ public:
     cwImage();
 
     void setMipmaps(QList<int> mipmapFiles);
-    QList<int> mipmaps();
+    QList<int> mipmaps() const;
 
     int numberOfMipmapLevels();
 
@@ -52,7 +52,7 @@ inline void cwImage::setMipmaps(QList<int> mipmapIds) {
 /**
   Gets the mipmap image filenames
   */
-inline QList<int> cwImage::mipmaps() {
+inline QList<int> cwImage::mipmaps() const {
     return Mipmaps;
 }
 

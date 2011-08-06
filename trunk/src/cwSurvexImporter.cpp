@@ -752,7 +752,6 @@ void cwSurvexImporter::parseCalibrate(QString line) {
                 calibration->setCorrectedCompassBacksight(true);
             }
             calibration->setBackCompassCalibration(calibrationValue);
-            qDebug() << "Setting back compass calibration: " << calibrationValue;
         } else if (type == "clino") {
             calibration->setFrontClinoCalibration(calibrationValue);
 

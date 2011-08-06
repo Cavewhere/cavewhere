@@ -40,6 +40,10 @@ void cwTrip::Copy(const cwTrip& object)
     Calibration = new cwTripCalibration(*(object.Calibration));
     Calibration->setParent(this);
 
+    //Copy the notes model
+    Notes = new cwSurveyNoteModel(*(object.Notes));
+    Notes->setParent(this);
+
     //Remove all the originals
     int lastChunkIndex = Chunks.size() - 1;
     Chunks.clear();

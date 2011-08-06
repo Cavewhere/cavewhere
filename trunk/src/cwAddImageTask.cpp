@@ -31,7 +31,7 @@
 //Zlib includes
 #include <zlib.h>
 
-cwAddImageTask::cwAddImageTask(QObject* parent) : cwTask(parent)
+cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
 
 }
@@ -50,22 +50,18 @@ void cwAddImageTask::runTask() {
     calculateNumberOfSteps();
 
     //Connect to the database
-    CurrentDatabase = QSqlDatabase::addDatabase("QSQLITE", "LoadImageTask");
-    CurrentDatabase.setDatabaseName(DatabasePath);
-    bool connected = CurrentDatabase.open();
-    if(!connected) {
-        qDebug() << "Couldn't connect to database for LoadImageTask:" << DatabasePath;
-        stop();
-    }
+    bool connected = connectToDatabase("AddImagesTask");
 
-    //Try to add the ImagePaths to the database
-    tryAddingImagesToDatabase();
+    if(connected) {
+        //Try to add the ImagePaths to the database
+        tryAddingImagesToDatabase();
 
-    //Close the database
-    CurrentDatabase.close();
+        //Close the database
+        Database.close();
 
-    if(isRunning()) {
-        emit addedImages(images());
+        if(isRunning()) {
+            emit addedImages(images());
+        }
     }
 
     //Finished
@@ -102,7 +98,7 @@ void cwAddImageTask::calculateNumberOfSteps() {
 void cwAddImageTask::tryAddingImagesToDatabase() {
     //SQLITE begin transation
     QString beginTransationQuery = "BEGIN IMMEDIATE TRANSACTION";
-    QSqlQuery query = CurrentDatabase.exec(beginTransationQuery);
+    QSqlQuery query = Database.exec(beginTransationQuery);
     QSqlError error = query.lastError();
 
     //Check if there's error
@@ -143,14 +139,14 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
     if(isRunning()) {
         //Commit the data
         QString commitTransationQuery = "COMMIT";
-        QSqlQuery query = CurrentDatabase.exec(commitTransationQuery);
+        QSqlQuery query = Database.exec(commitTransationQuery);
         if(query.lastError().isValid()) {
             qDebug() << "Couldn't commit transaction:" << query.lastError();
         }
     } else {
         //Roll back the commited images
         QString rollbackTransationQuery = "ROLLBACK";
-        QSqlQuery query = CurrentDatabase.exec(rollbackTransationQuery);
+        QSqlQuery query = Database.exec(rollbackTransationQuery);
         if(query.lastError().isValid()) {
             qDebug() << "Couldn't rollback transaction:" << query.lastError();
         }
@@ -192,7 +188,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
 
     //Write the image to the database
     cwImageData originalImageData(image.size(), format, originalImageByteData);
-    int imageId = cwProject::addImage(CurrentDatabase, originalImageData);
+    int imageId = cwProject::addImage(Database, originalImageData);
     imageIdContainer->setOriginal(imageId);
 
     return image;
@@ -219,7 +215,7 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
 
     //Write the data to database
     cwImageData iconImageData(scaledSize, format, jpgData);
-    int imageId = cwProject::addImage(CurrentDatabase, iconImageData);
+    int imageId = cwProject::addImage(Database, iconImageData);
     imageIds->setIcon(imageId);
 }
 
@@ -286,7 +282,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image) {
 
     //Add the image to the database
     cwImageData iconImageData(image.size(), cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
-    int imageId = cwProject::addImage(CurrentDatabase, iconImageData);
+    int imageId = cwProject::addImage(Database, iconImageData);
     return imageId;
  }
 

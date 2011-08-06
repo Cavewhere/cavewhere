@@ -25,7 +25,7 @@ DataTabWidget {
         notesModel: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip.notes : null
 
         onImagesAdded: {
-            currentTrip.notes.addNotes(images, project);
+            currentTrip.notes.addFromFiles(images, project);
         }
 
     }

@@ -56,6 +56,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 
     if(Caves.size() - 1 > 0) {
         emit insertedCaves(0, Caves.size() -1);
+        emit caveCountChanged();
     }
 
     return *this;

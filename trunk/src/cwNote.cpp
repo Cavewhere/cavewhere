@@ -12,6 +12,25 @@ cwNote::cwNote(QObject *parent) :
 //    }
 //}
 
+cwNote::cwNote(const cwNote& object) :
+    QObject(NULL)
+{
+    copy(object);
+}
+
+cwNote& cwNote::operator=(const cwNote& object) {
+    if(&object == this) { return *this; }
+    copy(object);
+    return *this;
+}
+
+/**
+  Does a deap copy of the note
+  */
+void cwNote::copy(const cwNote& object) {
+    ImageIds = object.ImageIds;
+}
+
 /**
   \brief Sets the image data for the page of notes
 

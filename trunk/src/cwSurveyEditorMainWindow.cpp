@@ -52,9 +52,14 @@
 #include <QGLWidget>
 #include <QTemporaryFile>
 
+//---------------- For boost testing should be removed -------------
 //Std includes
 #include <iostream>
 #include <fstream>
+
+//Boost includes
+#include "cwSerialization.h"
+#include "cwQtSerialization.h"
 
 #if defined(QMLJSDEBUGGER)
 #include <qt_private/qdeclarativedebughelper_p.h>
@@ -107,6 +112,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
+    connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
@@ -400,15 +406,18 @@ void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
   \brief Saves the project
   */
 void cwSurveyEditorMainWindow::save() {
-    QTemporaryFile tempfile;
-    tempfile.setAutoRemove(false);
-    tempfile.open();
-    qDebug() << "Saved project to: " << tempfile.fileName();
+    Project->save();
+}
 
-
-    std::ofstream outputStream((const char*)tempfile.fileName().toAscii());
-    boost::archive::xml_oarchive xmlOutputArchive(outputStream);
-    xmlOutputArchive << BOOST_SERIALIZATION_NVP(Region);
+/**
+  \brief Ask the user to load a cw project file
+  */
+void cwSurveyEditorMainWindow::load() {
+    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+    loadDialog->setFileMode(QFileDialog::ExistingFile);
+    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
+    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    loadDialog->open(Project, SLOT(load(QString)));
 }
 
 /**

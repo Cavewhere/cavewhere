@@ -32,8 +32,6 @@ public:
     //Do not move this to a slot!!! You will break things
     void stop();
 
-    static void runOnSingleShotThread(cwTask* task);
-
 public slots:
     void start();
     void restart();

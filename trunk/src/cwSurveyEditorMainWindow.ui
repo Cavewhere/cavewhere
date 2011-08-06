@@ -50,6 +50,7 @@
      <addaction name="actionSurvexExport"/>
      <addaction name="actionCompassExport"/>
     </widget>
+    <addaction name="actionLoad"/>
     <addaction name="actionSave"/>
     <addaction name="separator"/>
     <addaction name="menuExport"/>
@@ -119,6 +120,11 @@
   <action name="actionSave">
    <property name="text">
     <string>Save</string>
+   </property>
+  </action>
+  <action name="actionLoad">
+   <property name="text">
+    <string>Load</string>
    </property>
   </action>
  </widget>

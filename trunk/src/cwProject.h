@@ -33,7 +33,7 @@ public:
     cwCavingRegion* cavingRegion() const;
 
     void save();
-    void load();
+
 
     void setFilename(QString newFilename);
     QString filename() const;
@@ -45,6 +45,9 @@ public:
     //    static QString uniqueFile(QDir baseDirectory, QString subFile);
 signals:
     void filenameChanged(QString newFilename);
+
+public slots:
+     void load(QString filename);
 
 private:
 
@@ -73,7 +76,7 @@ private:
     cwCavingRegion* Region;
 
     //For loading images from the disk into this project
-    QThread* AddImageThread;
+    QThread* LoadSaveThread;
 
     void createTempProjectFile();
     void createDefaultSchema();
@@ -93,6 +96,8 @@ private:
 private slots:
 //    void addCaveDirectories(int beginCave, int endCave);
 //    void addTripDirectories(int beginTrip, int endTrip);
+
+    void UpdateRegionData(cwCavingRegion* region);
 
 };
 

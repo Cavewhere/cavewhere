@@ -99,7 +99,10 @@ SOURCES += src/main.cpp \
     src/cwFileDialogHelper.cpp \
     src/cwGunZipReader.cpp \
     src/cwProjectImageProvider.cpp \
-    src/cwXMLProjectLoadSaveTask.cpp
+    src/cwProjectIOTask.cpp \
+    src/cwRegionIOTask.cpp \
+    src/cwRegionSaveTask.cpp \
+    src/cwRegionLoadTask.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -185,7 +188,12 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwFileDialogHelper.h \
     src/cwGunZipReader.h \
     src/cwProjectImageProvider.h \
-    src/cwXMLProjectLoadSaveTask.h
+    src/cwSerialization.h \
+    src/cwQtSerialization.h \
+    src/cwProjectIOTask.h \
+    src/cwRegionIOTask.h \
+    src/cwRegionSaveTask.h \
+    src/cwRegionLoadTask.h
 
 
 
@@ -226,5 +234,6 @@ RESOURCES += \
     icons.qrc
 
 INCLUDEPATH += src src/utils . /home/blitz/Downloads/libsquish-read-only
+DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/home/blitz/Downloads/libsquish-read-only -lsquish -lboost_serialization
