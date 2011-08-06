@@ -11,6 +11,7 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
     BackCompasssCalibration = 0.0f;
     BackClinoCalibration = 0.0f;
     Declination = 0.0f;
+    DistanceUnit = cwUnits::Meters;
 }
 
 /**
@@ -19,6 +20,21 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
 cwTripCalibration::cwTripCalibration(const cwTripCalibration& object) :
     QObject(NULL)
 {
+    copy(object);
+}
+
+/**
+  Alignment opterator
+  */
+cwTripCalibration& cwTripCalibration::operator =(const cwTripCalibration& object) {
+    return copy(object);
+}
+
+cwTripCalibration& cwTripCalibration::copy(const cwTripCalibration& object) {
+    if(&object == this) {
+        return *this;
+    }
+
     CorrectedCompassBacksight = object.CorrectedCompassBacksight;
     CorrectedClinoBacksight = object.CorrectedClinoBacksight;
     TapeCalibration = object.TapeCalibration;
@@ -27,6 +43,9 @@ cwTripCalibration::cwTripCalibration(const cwTripCalibration& object) :
     BackCompasssCalibration = object.BackCompasssCalibration;
     BackClinoCalibration = object.BackClinoCalibration;
     Declination = object.Declination;
+    DistanceUnit = object.DistanceUnit;
+
+    return *this;
 }
 
 void cwTripCalibration::setCorrectedCompassBacksight(bool isCorrected) {
@@ -82,6 +101,13 @@ void cwTripCalibration::setDeclination(float declination) {
     if(Declination != declination) {
         Declination = declination;
         emit declinationChanged(Declination);
+    }
+}
+
+void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit unit) {
+    if(DistanceUnit == unit) {
+        DistanceUnit = unit;
+        emit distanceUnitChanged(unit);
     }
 }
 

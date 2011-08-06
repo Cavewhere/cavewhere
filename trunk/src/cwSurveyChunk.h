@@ -50,6 +50,8 @@ public:
 
     void updateStationsWithNewCave();
 
+    QList<cwStationReference> stations() const;
+    QList<cwShot*> shots() const;
 signals:
     void StationsAdded(int beginIndex, int endIndex);
     void ShotsAdded(int beginIndex, int endIndex);
@@ -110,6 +112,24 @@ private:
   */
 inline cwTrip* cwSurveyChunk::parentTrip() const {
     return ParentTrip;
+}
+
+/**
+  \brief Gets all the stations
+
+  You shouldn't modify the station data from this list
+  */
+inline QList<cwStationReference> cwSurveyChunk::stations() const {
+    return Stations;
+}
+
+/**
+  \brief Gets all the shot date
+
+  You shouldn't modify the shot data from this list
+  */
+inline QList<cwShot*> cwSurveyChunk::shots() const {
+    return Shots;
 }
 
 

@@ -1,6 +1,10 @@
 #ifndef CWUNITCOVERTER_H
 #define CWUNITCOVERTER_H
 
+
+//Qt includes
+#include <QMetaType>
+
 class cwUnits
 {
 public:
@@ -19,5 +23,7 @@ public:
         static double UnitsToMeters[NumberOfUnits];
 
 };
+
+Q_DECLARE_METATYPE(cwUnits::LengthUnit)
 
 #endif // CWUNITCOVERTER_H

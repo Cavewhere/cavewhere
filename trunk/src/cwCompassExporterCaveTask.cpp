@@ -128,6 +128,7 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
   */
 void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
     cwTrip* trip = chunk->parentTrip();
+    cwUnits::LengthUnit distanceUnit = trip->calibrations()->distanceUnit();
 
     for(int i = 0; i < chunk->ShotCount(); i++) {
         cwShot* shot = chunk->Shot(i);
@@ -135,7 +136,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         cwStationReference to = shot->toStation();
 
         float shotLength = cwUnits::convert(shot->distance().toDouble(),
-                                            trip->distanceUnit(),
+                                            distanceUnit,
                                             cwUnits::DecimalFeet);
 
         writeData(stream, "From", 12, from.name());
@@ -145,10 +146,10 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << formatFloat(shotLength) << " ";
         stream << formatFloat(convertField(trip, shot, Compass)) << " ";
         stream << formatFloat(convertField(trip, shot, Clino)) << " ";
-        stream << formatFloat(convertField(from, Left, trip->distanceUnit())) << " ";
-        stream << formatFloat(convertField(from, Up, trip->distanceUnit())) << " ";
-        stream << formatFloat(convertField(from, Right, trip->distanceUnit())) << " ";
-        stream << formatFloat(convertField(from, Down, trip->distanceUnit())) << " ";
+        stream << formatFloat(convertField(from, Left, trip->calibrations()->distanceUnit())) << " ";
+        stream << formatFloat(convertField(from, Up, distanceUnit)) << " ";
+        stream << formatFloat(convertField(from, Right, distanceUnit)) << " ";
+        stream << formatFloat(convertField(from, Down, distanceUnit)) << " ";
         stream << formatFloat(convertField(trip, shot, BackCompass)) << " ";
         stream << formatFloat(convertField(trip, shot, BackClino)) << " ";
         stream << CompassNewLine;
@@ -162,10 +163,10 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     stream << formatFloat(0.0) << " ";
     stream << formatFloat(0.0) << " ";
     stream << formatFloat(0.0) << " ";
-    stream << formatFloat(convertField(lastStation, Left, trip->distanceUnit())) << " ";
-    stream << formatFloat(convertField(lastStation, Up, trip->distanceUnit())) << " ";
-    stream << formatFloat(convertField(lastStation, Right, trip->distanceUnit())) << " ";
-    stream << formatFloat(convertField(lastStation, Down, trip->distanceUnit())) << " ";
+    stream << formatFloat(convertField(lastStation, Left, distanceUnit)) << " ";
+    stream << formatFloat(convertField(lastStation, Up, distanceUnit)) << " ";
+    stream << formatFloat(convertField(lastStation, Right, distanceUnit)) << " ";
+    stream << formatFloat(convertField(lastStation, Down, distanceUnit)) << " ";
     stream << formatFloat(180.0) << " ";
     stream << formatFloat(0.0) << " ";
     stream << CompassNewLine;

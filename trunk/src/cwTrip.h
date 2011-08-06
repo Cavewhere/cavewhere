@@ -47,9 +47,6 @@ public:
 
     cwSurveyNoteModel* notes() const;
 
-    cwUnits::LengthUnit distanceUnit() const;
-    void setDistanceUnit(cwUnits::LengthUnit);
-
     void removeChunks(int begin, int end);
     void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
@@ -69,7 +66,6 @@ public:
 signals:
     void nameChanged(QString name);
     void dateChanged(QDate date);
-    void distanceUnitChanged(cwUnits::LengthUnit);
     void chunksInserted(int begin, int end);
     void chunksRemoved(int begin, int end);
     void teamChanged();
@@ -89,7 +85,7 @@ protected:
     cwSurveyNoteModel* Notes;
 
     //Units
-    cwUnits::LengthUnit DistanceUnit;
+
 
     virtual void setUndoStackForChildren();
 private:
@@ -141,12 +137,12 @@ inline cwCave* cwTrip::parentCave() {
     return ParentCave;
 }
 
-/**
-  \brief Gets the distance unit for the trip
-  */
-inline cwUnits::LengthUnit cwTrip::distanceUnit() const {
-    return DistanceUnit;
-}
+///**
+//  \brief Gets the distance unit for the trip
+//  */
+//inline cwUnits::LengthUnit cwTrip::distanceUnit() const {
+//    return DistanceUnit;
+//}
 
 /**
   \brief Gets the survey team for the trip

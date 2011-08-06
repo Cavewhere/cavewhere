@@ -8,6 +8,10 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwImage.h"
+#include "cwTripCalibration.h"
+#include "cwSurveyChunk.h"
+#include "cwStationReference.h"
+#include "cwShot.h"
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -27,6 +31,11 @@ BOOST_SERIALIZATION_SPLIT_FREE(cwTrip)
 BOOST_SERIALIZATION_SPLIT_FREE(cwSurveyNoteModel)
 BOOST_SERIALIZATION_SPLIT_FREE(cwNote)
 BOOST_SERIALIZATION_SPLIT_FREE(cwImage)
+BOOST_SERIALIZATION_SPLIT_FREE(cwTripCalibration)
+BOOST_SERIALIZATION_SPLIT_FREE(cwSurveyChunk)
+BOOST_SERIALIZATION_SPLIT_FREE(cwStationReference)
+BOOST_SERIALIZATION_SPLIT_FREE(cwShot)
+
 
 
 /**
@@ -170,6 +179,13 @@ void save(Archive &archive, const cwTrip &trip, const unsigned int) {
     cwSurveyNoteModel* noteModel = trip.notes();
     archive << BOOST_SERIALIZATION_NVP(noteModel);
 
+    //Save the trip's calibration
+    cwTripCalibration* tripCalibration = trip.calibrations();
+    archive << BOOST_SERIALIZATION_NVP(tripCalibration);
+
+    //Copy the trip chunks
+    QList<cwSurveyChunk*> chunks = trip.chunks();
+    archive << BOOST_SERIALIZATION_NVP(chunks);
 }
 
 template<class Archive>
@@ -188,9 +204,22 @@ void load(Archive &archive, cwTrip &trip, const unsigned int) {
     //Load the trip's notes
     cwSurveyNoteModel noteModel;
     archive >> BOOST_SERIALIZATION_NVP(noteModel);
-
     cwSurveyNoteModel* tripNoteModel = trip.notes();
     *tripNoteModel = noteModel;
+
+    //Load the calibration for the notes
+    cwTripCalibration tripCalibration;
+    archive >> BOOST_SERIALIZATION_NVP(tripCalibration);
+    cwTripCalibration*calibration = trip.calibrations();
+    *calibration = tripCalibration;
+
+    //Load all the chunks
+    QList<cwSurveyChunk*> chunks;
+    archive >> BOOST_SERIALIZATION_NVP(chunks);
+    foreach(cwSurveyChunk* chunk, chunks) {
+        trip.addChunk(chunk);
+    }
+
 }
 
 ///////////////////////////// cwSurveyNoteModel ///////////////////////////////
@@ -253,6 +282,160 @@ void load(Archive &archive, cwImage &image, const unsigned int) {
     image.setIcon(iconId);
     image.setMipmaps(mipmapIds);
 }
+
+////////////////////////// cwTripCalibration //////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwTripCalibration &calibration, const unsigned int) {
+
+    bool CorrectedCompassBacksight = calibration.hasCorrectedCompassBacksight();
+    bool CorrectedClinoBacksight = calibration.hasCorrectedClinoBacksight();
+    float TapeCalibration = calibration.tapeCalibration();
+    float FrontCompassCalibration = calibration.frontCompassCalibration();
+    float FrontClinoCalibration = calibration.frontClinoCalibration();
+    float BackCompasssCalibration = calibration.backCompassCalibration();
+    float BackClinoCalibration= calibration.backClinoCalibration();
+    float Declination = calibration.declination();
+    int DistanceUnit = (int)calibration.distanceUnit();
+
+    archive << BOOST_SERIALIZATION_NVP(CorrectedCompassBacksight);
+    archive << BOOST_SERIALIZATION_NVP(CorrectedClinoBacksight);
+    archive << BOOST_SERIALIZATION_NVP(TapeCalibration);
+    archive << BOOST_SERIALIZATION_NVP(FrontCompassCalibration);
+    archive << BOOST_SERIALIZATION_NVP(FrontClinoCalibration);
+    archive << BOOST_SERIALIZATION_NVP(BackCompasssCalibration);
+    archive << BOOST_SERIALIZATION_NVP(BackClinoCalibration);
+    archive << BOOST_SERIALIZATION_NVP(Declination);
+    archive << BOOST_SERIALIZATION_NVP(DistanceUnit);
+}
+
+template<class Archive>
+void load(Archive &archive, cwTripCalibration &calibration, const unsigned int) {
+    bool CorrectedCompassBacksight = false;
+    bool CorrectedClinoBacksight = false;
+    float TapeCalibration = 0.0;
+    float FrontCompassCalibration = 0.0;
+    float FrontClinoCalibration = 0.0;
+    float BackCompasssCalibration = 0.0;
+    float BackClinoCalibration = 0.0;
+    float Declination = 0.0;
+    int DistanceUnit = cwUnits::Meters;
+
+    archive >> BOOST_SERIALIZATION_NVP(CorrectedCompassBacksight);
+    archive >> BOOST_SERIALIZATION_NVP(CorrectedClinoBacksight);
+    archive >> BOOST_SERIALIZATION_NVP(TapeCalibration);
+    archive >> BOOST_SERIALIZATION_NVP(FrontCompassCalibration);
+    archive >> BOOST_SERIALIZATION_NVP(FrontClinoCalibration);
+    archive >> BOOST_SERIALIZATION_NVP(BackCompasssCalibration);
+    archive >> BOOST_SERIALIZATION_NVP(BackClinoCalibration);
+    archive >> BOOST_SERIALIZATION_NVP(Declination);
+    archive >> BOOST_SERIALIZATION_NVP(DistanceUnit);
+
+    calibration.setCorrectedCompassBacksight(CorrectedCompassBacksight);
+    calibration.setCorrectedClinoBacksight(CorrectedClinoBacksight);
+    calibration.setTapeCalibration(TapeCalibration);
+    calibration.setFrontCompassCalibration(FrontCompassCalibration);
+    calibration.setFrontClinoCalibration(FrontClinoCalibration);
+    calibration.setBackCompassCalibration(BackCompasssCalibration);
+    calibration.setBackClinoCalibration(BackClinoCalibration);
+    calibration.setDeclination(Declination);
+    calibration.setDistanceUnit((cwUnits::LengthUnit)DistanceUnit);
+}
+
+//////////////////////// cwSurveyChunk ////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwSurveyChunk &chunk, const unsigned int) {
+    QList<cwStationReference> stations = chunk.stations();
+    QList<cwShot*> shots = chunk.shots();
+
+    archive << BOOST_SERIALIZATION_NVP(stations);
+    archive << BOOST_SERIALIZATION_NVP(shots);
+
+}
+
+template<class Archive>
+void load(Archive &archive, cwSurveyChunk &chunk, const unsigned int) {
+
+    QList<cwStationReference> stations;
+    QList<cwShot*> shots;;
+
+    archive >> BOOST_SERIALIZATION_NVP(stations);
+    archive >> BOOST_SERIALIZATION_NVP(shots);
+
+    if(stations.count() - 1 != shots.count()) {
+        qDebug() << "Shot, station count mismatch, survey chunk invalid:" << stations.count() << shots.count();
+        return;
+    }
+
+    for(int i = 0; i < stations.count() - 1; i++) {
+        cwStationReference fromStation = stations[i];
+        cwStationReference toStation = stations[i + 1];
+        cwShot* shot = shots[i];
+
+        chunk.AppendShot(fromStation, toStation, shot);
+    }
+}
+
+////////////////////////// cwStationReferance ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwStationReference &station, const unsigned int) {
+    QString stationName = station.name();
+    cwCave* cave = station.cave();
+
+    archive << BOOST_SERIALIZATION_NVP(stationName);
+    archive << BOOST_SERIALIZATION_NVP(cave);
+}
+
+template<class Archive>
+void load(Archive &archive, cwStationReference &station, const unsigned int) {
+    QString stationName;
+    cwCave* cave = NULL;
+
+    archive >> BOOST_SERIALIZATION_NVP(stationName);
+    archive >> BOOST_SERIALIZATION_NVP(cave);
+
+    station.setCave(cave);
+    station.setName(stationName);
+}
+
+////////////////////////// cwShot ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwShot &shot, const unsigned int) {
+
+    QString Distance = shot.distance();
+    QString Compass = shot.compass();
+    QString BackCompass = shot.backCompass();
+    QString Clino = shot.clino();
+    QString BackClino = shot.backClino();
+
+    archive << BOOST_SERIALIZATION_NVP(Distance);
+    archive << BOOST_SERIALIZATION_NVP(Compass);
+    archive << BOOST_SERIALIZATION_NVP(BackCompass);
+    archive << BOOST_SERIALIZATION_NVP(Clino);
+    archive << BOOST_SERIALIZATION_NVP(BackClino);
+}
+
+template<class Archive>
+void load(Archive &archive, cwShot &shot, const unsigned int) {
+
+    QString Distance;
+    QString Compass;
+    QString BackCompass;
+    QString Clino;
+    QString BackClino;
+
+    archive >> BOOST_SERIALIZATION_NVP(Distance);
+    archive >> BOOST_SERIALIZATION_NVP(Compass);
+    archive >> BOOST_SERIALIZATION_NVP(BackCompass);
+    archive >> BOOST_SERIALIZATION_NVP(Clino);
+    archive >> BOOST_SERIALIZATION_NVP(BackClino);
+
+    shot.setDistance(Distance);
+    shot.setCompass(Compass);
+    shot.setBackCompass(BackCompass);
+    shot.setClino(Clino);
+    shot.setBackClino(BackClino);
+}
+
 
 }
 }

@@ -44,8 +44,8 @@ void cwRegionLoadTask::runTask() {
             cwCavingRegion region;
             xmlLoadArchive >> BOOST_SERIALIZATION_NVP(region);
             *Region = region;
-        } catch(boost::archive::xml_archive_exception exception) {
-            qDebug() << "Couldn't load data!";
+        } catch(boost::archive::archive_exception exception) {
+            qDebug() << "Couldn't load data!" << exception.what();
             stop();
         }
     }

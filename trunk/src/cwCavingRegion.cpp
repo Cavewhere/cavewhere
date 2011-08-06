@@ -46,6 +46,10 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
     int lastIndex = Caves.size() - 1;
     removeCaves(0, lastIndex);
 
+    if(!object.Caves.isEmpty()) {
+        emit beginInsertCaves(0, object.Caves.size() - 1);
+    }
+
     //Add new caves
     Caves.reserve(object.Caves.size());
     foreach(cwCave* cave, object.Caves) {
@@ -54,7 +58,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         Caves.append(newCave);
     }
 
-    if(Caves.size() - 1 > 0) {
+    if(Caves.size() - 1 >= 0) {
         emit insertedCaves(0, Caves.size() -1);
         emit caveCountChanged();
     }

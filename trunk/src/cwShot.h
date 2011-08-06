@@ -33,7 +33,7 @@ public:
     void setClino(QString backClino);
 
     QString backClino() const;
-    void setbackClino(QString backClino);
+    void setBackClino(QString backClino);
 
     void setParentChunk(cwSurveyChunk* parentChunk);
     cwSurveyChunk* parentChunk() const;

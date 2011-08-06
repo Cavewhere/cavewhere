@@ -67,9 +67,9 @@ Rectangle {
                 case 0:
                     return "All Caves"
                 case 1:
-                    return "Only <b>1</b> Cave";
+                    return "Only 1 Cave";
                 default:
-                    return "All <b>" + region.caveCount + "</b> Caves";
+                    return "All " + region.caveCount + " Caves";
                 }
             }
 

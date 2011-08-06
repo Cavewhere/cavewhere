@@ -59,6 +59,13 @@ private slots:
 
 };
 
+/**
+  The cave that this station is located in
+  */
+inline cwCave* cwStationReference::cave() const {
+    return Cave;
+}
+
 inline QString cwStationReference::name() const {
     return SharedStation->name();
 }

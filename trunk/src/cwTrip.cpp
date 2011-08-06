@@ -14,7 +14,7 @@ cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
     ParentCave(NULL)
 {
-    DistanceUnit = cwUnits::Meters;
+//    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
     Date = QDate::currentDate();
@@ -25,11 +25,10 @@ void cwTrip::Copy(const cwTrip& object)
 {
     ParentCave = NULL;
 
-    DistanceUnit = cwUnits::Meters;
+//    DistanceUnit = cwUnits::Meters;
 
     //Copy the name of the trip
     setName(object.Name);
-    setDistanceUnit(object.DistanceUnit);
     setDate(object.Date);
 
     //Copy the team
@@ -122,15 +121,15 @@ void cwTrip::setCalibration(cwTripCalibration* calibration) {
     }
 }
 
-/**
-  Sets the distance unit for the trip
-  */
-void cwTrip::setDistanceUnit(cwUnits::LengthUnit newDistanceUnit) {
-    if(DistanceUnit != newDistanceUnit) {
-        DistanceUnit = newDistanceUnit;
-        emit distanceUnitChanged(DistanceUnit);
-    }
-}
+///**
+//  Sets the distance unit for the trip
+//  */
+//void cwTrip::setDistanceUnit(cwUnits::LengthUnit newDistanceUnit) {
+//    if(DistanceUnit != newDistanceUnit) {
+//        DistanceUnit = newDistanceUnit;
+//        emit distanceUnitChanged(DistanceUnit);
+//    }
+//}
 
 /**
   \brief Gets the number of chunks in a trip

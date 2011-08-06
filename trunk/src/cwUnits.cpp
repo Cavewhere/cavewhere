@@ -1,8 +1,9 @@
+//Our includes
 #include "cwUnits.h"
 
 double cwUnits::UnitsToMeters[cwUnits::NumberOfUnits] = {1.0, //Meters
-                                                                         0.3048 //Feet
-                                                                        };
+                                                         0.3048 //Feet
+                                                        };
 
 /**
   Converts value to the 'to' LengthUnit
@@ -22,3 +23,4 @@ double cwUnits::convert(double value, cwUnits::LengthUnit valueUnit, cwUnits::Le
     value /= UnitsToMeters[to];
     return value;
 }
+

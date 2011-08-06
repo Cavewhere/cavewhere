@@ -475,7 +475,7 @@ void cwSurvexImporter::parseNormalData(QString line) {
     shot->setCompass(extractData(data, Compass));
     shot->setBackCompass(extractData(data, BackCompass));
     shot->setClino(extractData(data, Clino));
-    shot->setbackClino(extractData(data, BackClino));
+    shot->setBackClino(extractData(data, BackClino));
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }

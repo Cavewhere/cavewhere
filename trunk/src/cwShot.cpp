@@ -56,7 +56,7 @@ void cwShot::setClino(QString clino) {
     Clino = clino;
 }
 
-void cwShot::setbackClino(QString backClino) {
+void cwShot::setBackClino(QString backClino) {
     BackClino = backClino;
 }
 
