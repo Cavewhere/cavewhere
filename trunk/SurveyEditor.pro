@@ -228,7 +228,8 @@ shaders/*.geom \
     shaders/NoteItem.vsh \
     shaders/NoteItem.frag \
     shaders/NoteItem.vert \
-    qml/FileDialog.qml
+    qml/FileDialog.qml \
+    qml/ButtonGroup.qml
 
 RESOURCES += \
     icons.qrc

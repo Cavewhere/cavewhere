@@ -79,8 +79,9 @@ Rectangle {
     Rectangle {
         id: galleryContainer
         anchors.bottom: parent.bottom
-        anchors.top:  parent.top
+        anchors.top:  buttonArea.bottom
         anchors.right: parent.right
+        anchors.topMargin: 3
         width: 210
         radius: 7
 
@@ -121,37 +122,91 @@ Rectangle {
 
     }
 
-    Button {
-        id: addNoteButton
+    Rectangle {
+        id: buttonArea
 
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.margins: 2
+        z: 1
 
-        iconSource: "qrc:/icons/plus.png"
-        text: "Add Notes"
+        anchors.right: parent.right
+        anchors.top:  parent.top
 
-        z:1
+        width: childrenRect.width + 6
+        height: childrenRect.height + 6
 
-        onClicked: {
-            fileDialog.open();
+        radius: 3
+        color: "#DDDDDD"
+
+        Row {
+            id: toolBar
+            property variant iconSize: Qt.size(42, 42)
+
+            spacing: 3
+
+            anchors.centerIn: parent
+
+            IconButton {
+                iconSource: "qrc:icons/notes.png"
+                sourceSize: toolBar.iconSize
+                text: "Pan"
+            }
+
+            IconButton {
+                iconSource: "qrc:icons/notes.png"
+                sourceSize: toolBar.iconSize
+                text: "Rotate"
+            }
+
+            ButtonGroup {
+                id: addButtonGroup
+
+                text: "Add"
+
+                IconButton {
+                    iconSource: "qrc:icons/notes.png"
+                    sourceSize: toolBar.iconSize
+                    text: "Notes"
+
+                    onClicked: {
+                        fileDialog.open();
+                    }
+
+                    FileDialogHelper {
+                        id: fileDialog;
+                        onFilesSelected: noteGallery.imagesAdded(selected)
+                    }
+                }
+
+                IconButton {
+                    iconSource: "qrc:icons/notes.png"
+                    sourceSize: toolBar.iconSize
+                    text: "Stations"
+                }
+
+                IconButton {
+                    iconSource: "qrc:icons/notes.png"
+                    sourceSize: toolBar.iconSize
+                    text: "Scraps"
+                }
+            }
         }
-
-        FileDialogHelper {
-            id: fileDialog;
-
-            onFilesSelected: noteGallery.imagesAdded(selected)
-        }
-
-//        QFileDialog {
-//            id: dialog
-//        }
-
-//        FileDialog {
-//            id: fileDialog
-//        }
-
     }
+//        Button {
+//            id: addNoteButton
+
+//            anchors.left: parent.left
+//            anchors.top: parent.top
+//            anchors.margins: 2
+
+//            iconSource: "qrc:/icons/plus.png"
+//            text: "Add Notes"
+
+//            z:1
+
+
+
+
+//        }
+//    }
 
     NoteItem {
         id: noteArea

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QDeclarativeImageProvider>
 #include <QMutex>
+#include <QDebug>
 
 class cwProjectImageProvider : public QObject, public QDeclarativeImageProvider
 {

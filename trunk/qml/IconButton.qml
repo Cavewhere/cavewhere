@@ -5,24 +5,37 @@ Rectangle {
     property alias iconSource: iconNormal.source
     property alias hoverIconSource: iconHover.source
     property alias sourceSize: iconNormal.sourceSize;
+    property alias text: label.text
 
     signal clicked();
 
-    height: iconNormal.sourceSize.height
-    width:  iconNormal.sourceSize.width
+    height: iconNormal.sourceSize.height + label.height
+    width:  Math.max(iconNormal.sourceSize.width, label.width)
+
+    color: "#00000000"
 
     Image {
         id: iconNormal
-        anchors.centerIn: parent;
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
         sourceSize: container.sourceSize
         visible: true;
     }
 
     Image {
         id: iconHover
-        anchors.centerIn: parent;
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
         sourceSize: iconNormal.sourceSize
         visible: false;
+    }
+
+    Text {
+        id: label
+//        anchors.bottom: parent.bottom
+        anchors.top: iconNormal.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: -2
     }
 
     MouseArea {
@@ -39,7 +52,7 @@ Rectangle {
 
     states: [
         State {
-            name: "hover"; when: mouseArea.containsMouse
+            name: "hover"; when: mouseArea.containsMouse && iconHover.status == Image.Ready
             PropertyChanges { target: iconHover; visible: true }
             PropertyChanges { target: iconNormal; visible: false }
             //            PropertyChanges { target: buttonText; font.bold: true }

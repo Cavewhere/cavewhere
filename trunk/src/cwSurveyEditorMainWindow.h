@@ -81,7 +81,6 @@ private:
 
     //Save / Load
     cwProject* Project;
-    cwProjectImageProvider* ImageProvider;
 
     QGLWidget* createGLWidget();
     void initGLEW();

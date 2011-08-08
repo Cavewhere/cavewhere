@@ -121,11 +121,6 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     //Create the project, this saves and load data
     Project = new cwProject(this);
 
-    //This allow to extra image data from the project's image database
-    ImageProvider = new cwProjectImageProvider();
-    ImageProvider->setProjectPath(Project->filename());
-    connect(Project, SIGNAL(filenameChanged(QString)), ImageProvider, SLOT(setProjectPath(QString)));
-
     Region = Project->cavingRegion(); //new cwCavingRegion(this);
     Region->setUndoStack(UndoStack);
 
@@ -285,6 +280,7 @@ void cwSurveyEditorMainWindow::importSurvex() {
 void cwSurveyEditorMainWindow::reloadQML() {
 
     delete DeclarativeView;
+   // verticalLayout->removeWidget(DeclarativeView);
     DeclarativeView = new QDeclarativeView();
     verticalLayout->addWidget(DeclarativeView);
 
@@ -327,7 +323,11 @@ void cwSurveyEditorMainWindow::reloadQML() {
     context->setContextProperty("linePlotManager", LinePlotManager);
     context->setContextProperty("project", Project);
 
-    context->engine()->addImageProvider(cwProjectImageProvider::Name, ImageProvider);
+    //This allow to extra image data from the project's image database
+    cwProjectImageProvider* imageProvider = new cwProjectImageProvider();
+    imageProvider->setProjectPath(Project->filename());
+    connect(Project, SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+    context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
 }

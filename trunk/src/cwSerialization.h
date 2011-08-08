@@ -37,7 +37,6 @@ BOOST_SERIALIZATION_SPLIT_FREE(cwStationReference)
 BOOST_SERIALIZATION_SPLIT_FREE(cwShot)
 
 
-
 /**
   All the saving and loading for all the objects
   */
