@@ -7,6 +7,7 @@
 //Our includes
 #include "cwGLRenderer.h"
 #include "cwImage.h"
+#include "cwNote.h"
 
 //Qt includes
 #include <QDeclarativeItem>
@@ -18,26 +19,23 @@ class cwNoteItem : public cwGLRenderer
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
+    Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
     Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())
 
 public:
     explicit cwNoteItem(QDeclarativeItem *parent = 0);
 
-    cwImage image() const;
-    void setImage(cwImage image);
+    cwNote* note() const;
+    void setNote(cwNote* note);
 
     //This allows use to extract data
     QString projectFilename() const;
     void setProjectFilename(QString projectFilename);
 
-public slots:
 
 signals:
-    void imageChanged();
+    void noteChanged(cwNote* note);
     void projectFilenameChanged();
-
-public slots:
 
 protected:
     virtual void initializeGL();
@@ -60,16 +58,16 @@ private:
     GLuint NoteTexture;
 
     //Creates the scale matrix for the note item
-    QMatrix4x4 NoteModelMatrix;
+    QMatrix4x4 NoteScaleModelMatrix;
+    QMatrix4x4 RotationModelMatrix;
 
     QFutureWatcher<QPair<QByteArray, QSize> >* LoadNoteWatcher;
 
-    cwImage Image;
+    cwNote* Note;
     QSize ImageSize;
 
     //The project filename for this class
     QString ProjectFilename;
-
 
 //    //For interaction
     QPoint LastPanPoint;
@@ -83,6 +81,7 @@ private:
     void initializeTexture();
 
 
+
     /**
       This class allow use to load the mipmaps in a thread way
       from the database
@@ -92,10 +91,7 @@ private:
     class LoadImage {
     public:
         LoadImage(QString projectFilename) :
-            Filename(projectFilename)
-        {
-
-        }
+            Filename(projectFilename) {    }
 
         typedef QPair<QByteArray, QSize> result_type;
 
@@ -106,23 +102,32 @@ private:
 
 
 
-protected slots:
+private slots:
     void ImageFinishedLoading();
-
+    void noteDeleted();
+    void updateNoteRotation(float degrees);
+    void setImage(cwImage image);
 };
-
-/**
-  \brief Get's the image's sourec director
-  */
-inline cwImage cwNoteItem::image() const {
-    return Image;
-}
 
 /**
   \brief Get's the project Filename
   */
 inline QString cwNoteItem::projectFilename() const {
     return ProjectFilename;
+}
+
+/**
+  \brief Get's the note that this item is rendering
+  */
+inline cwNote* cwNoteItem::note() const {
+    return Note;
+}
+
+/**
+  \brief Removes the point to the Note object from this item
+  */
+inline void cwNoteItem::noteDeleted() {
+    setNote(NULL);
 }
 
 

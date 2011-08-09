@@ -22,7 +22,7 @@ Rectangle {
             id: container
 
             property int border: 3
-            property variant imageIds: model.image
+            property variant noteObject: model.noteObject
 
             width: 200
             height: {
@@ -43,13 +43,14 @@ Rectangle {
                 Image {
                     id: imageItem
                     asynchronous: true
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.margins: 1
+//                    anchors.top: parent.top
+//                    anchors.left: parent.left
+//                    anchors.margins: 1
                     source: model.imageIconPath
                     sourceSize.width: imageContainter.width - imageContainter.border.width
                     //sourceSize.height: imageContainter.height
                     fillMode: Image.PreserveAspectFit
+                    rotation: model.noteObject.rotate
                 }
 
                 /**
@@ -115,8 +116,9 @@ Rectangle {
             }
 
             onCurrentIndexChanged: {
-                noteArea.image = currentItem.imageIds;
+                noteArea.note = currentItem.noteObject;
             }
+
         }
 
 
@@ -154,6 +156,13 @@ Rectangle {
                 iconSource: "qrc:icons/notes.png"
                 sourceSize: toolBar.iconSize
                 text: "Rotate"
+
+                onClicked: {
+                    //Update the note's rotation
+                    noteRotationAnimation.from = noteArea.note.rotate
+                    noteRotationAnimation.to = noteArea.note.rotate + 90
+                    noteRotationAnimation.start()
+                }
             }
 
             ButtonGroup {
@@ -190,23 +199,6 @@ Rectangle {
             }
         }
     }
-//        Button {
-//            id: addNoteButton
-
-//            anchors.left: parent.left
-//            anchors.top: parent.top
-//            anchors.margins: 2
-
-//            iconSource: "qrc:/icons/plus.png"
-//            text: "Add Notes"
-
-//            z:1
-
-
-
-
-//        }
-//    }
 
     NoteItem {
         id: noteArea
@@ -222,7 +214,13 @@ Rectangle {
         //  onImageSourceChanged: fitToView();
         glWidget: mainGLWidget
         projectFilename: project.filename
+    }
 
+    PropertyAnimation {
+        id: noteRotationAnimation
+        target: noteArea.note
+        property: "rotate"
+        easing.type: Easing.InOutCubic
     }
 
 }

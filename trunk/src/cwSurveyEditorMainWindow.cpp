@@ -316,6 +316,7 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
     qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
     qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
+    qmlRegisterType<cwNote>("Cavewhere", 1, 0, "Note");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);

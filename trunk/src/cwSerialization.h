@@ -23,6 +23,7 @@
 
 BOOST_CLASS_VERSION(cwCavingRegion, 1)
 BOOST_CLASS_VERSION(cwCave, 1)
+BOOST_CLASS_VERSION(cwNote, 1)
 
 BOOST_SERIALIZATION_SPLIT_FREE(cwCave)
 BOOST_SERIALIZATION_SPLIT_FREE(cwCavingRegion)
@@ -243,15 +244,24 @@ template<class Archive>
 void save(Archive &archive, const cwNote &note, const unsigned int) {
     //Save the notes
     cwImage image = note.image();
+    float rotation = note.rotate();
+
     archive << BOOST_SERIALIZATION_NVP(image);
+    archive << BOOST_SERIALIZATION_NVP(rotation);
 }
 
 template<class Archive>
-void load(Archive &archive, cwNote &note, const unsigned int) {
+void load(Archive &archive, cwNote &note, const unsigned int version) {
     //Load the notes
     cwImage image;
     archive >> BOOST_SERIALIZATION_NVP(image);
     note.setImage(image);
+
+    if(version >= 1 ) {
+        float rotation;
+        archive >> BOOST_SERIALIZATION_NVP(rotation);
+        note.setRotate(rotation);
+    }
 }
 
 ///////////////////////////// cwImage ///////////////////////////////

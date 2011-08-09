@@ -18,7 +18,8 @@
 
 cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     cwGLRenderer(parent),
-    LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this))
+    LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this)),
+    Note(NULL)
 {
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
 
@@ -114,7 +115,12 @@ void cwNoteItem::resizeGL() {
     if(!ImageSize.isValid()) { return; }
 
     QSize windowSize(width(), height());
-    QSize scaledImageSize = ImageSize;
+
+    QTransform transformer;
+    transformer.rotate(Note->rotate());
+    QRectF rotatedImageRect = transformer.mapRect(QRectF(QPointF(), ImageSize));
+
+    QSize scaledImageSize = rotatedImageRect.size().toSize();
     scaledImageSize.scale(windowSize, Qt::KeepAspectRatio);
 
     float changeInWidth = windowSize.width() / (float)scaledImageSize.width();
@@ -135,13 +141,14 @@ void cwNoteItem::resizeGL() {
   */
 void cwNoteItem::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT);
+    if(Note == NULL) { return; }
 
     VertexBuffer.bind();
 
     ImageProgram->bind();
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     ImageProgram->enableAttributeArray(vVertex);
-    ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * NoteModelMatrix);
+    ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * NoteScaleModelMatrix * RotationModelMatrix);
 
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, NoteTexture);
@@ -158,12 +165,12 @@ void cwNoteItem::mouseMoveEvent ( QGraphicsSceneMouseEvent * event ) {
 
     QPoint currentPanPoint = Camera->mapToGLViewport(event->pos().toPoint());
 
-    QVector3D unProjectedCurrent = Camera->unProject(currentPanPoint, 0.1, NoteModelMatrix);
-    QVector3D unProjectedLast = Camera->unProject(LastPanPoint, 0.1, NoteModelMatrix);
+    QVector3D unProjectedCurrent = Camera->unProject(currentPanPoint, 0.1, NoteScaleModelMatrix);
+    QVector3D unProjectedLast = Camera->unProject(LastPanPoint, 0.1, NoteScaleModelMatrix);
 
     QVector3D delta = unProjectedCurrent - unProjectedLast;
 
-    NoteModelMatrix.translate(delta);
+    NoteScaleModelMatrix.translate(delta);
 
     LastPanPoint = currentPanPoint;
 
@@ -172,7 +179,7 @@ void cwNoteItem::mouseMoveEvent ( QGraphicsSceneMouseEvent * event ) {
 
 void cwNoteItem::mousePressEvent ( QGraphicsSceneMouseEvent * event ) {
     LastPanPoint = Camera->mapToGLViewport(event->pos().toPoint());
-    Camera->unProject(LastPanPoint, 0.1, NoteModelMatrix);
+    Camera->unProject(LastPanPoint, 0.1, NoteScaleModelMatrix);
     event->accept();
 }
 
@@ -185,33 +192,49 @@ void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
     }
 
     QPoint screenCoords = Camera->mapToGLViewport(event->pos().toPoint());
-    QVector3D beforeZoom = Camera->unProject(screenCoords, 0.1, NoteModelMatrix);
+    QVector3D beforeZoom = Camera->unProject(screenCoords, 0.1, NoteScaleModelMatrix);
 
     QMatrix4x4 zoom;
     zoom.scale(scaleFactor, scaleFactor);
-    NoteModelMatrix = NoteModelMatrix * zoom;
+    NoteScaleModelMatrix = NoteScaleModelMatrix * zoom;
 
-    QVector3D afterZoom = Camera->unProject(screenCoords, 0.1, NoteModelMatrix);
+    QVector3D afterZoom = Camera->unProject(screenCoords, 0.1, NoteScaleModelMatrix);
 
     //Adjust the scale matrix
     QVector3D changeInPosition = afterZoom - beforeZoom;
-    NoteModelMatrix.translate(changeInPosition);
+    NoteScaleModelMatrix.translate(changeInPosition);
 
     update();
+}
+
+/**
+  Sets the note that this note item displayes
+  */
+void cwNoteItem::setNote(cwNote* note) {
+    if(Note != NULL) {
+        disconnect(Note, NULL, this, NULL);
+    }
+
+    if(Note != note) {
+        Note = note;
+
+        if(Note != NULL) {
+            connect(Note, SIGNAL(destroyed()), SLOT(noteDeleted()));
+            connect(Note, SIGNAL(rotateChanged(float)), SLOT(updateNoteRotation(float)));
+            connect(Note, SIGNAL(imageChanged(cwImage)), SLOT(setImage(cwImage)));
+            setImage(Note->image());
+        }
+    }
 }
 
 /**
   \brief Sets the image source for the the note item
   */
 void cwNoteItem::setImage(cwImage image) {
-    if(Image != image) {
-        Image = image;
-
-        //Load the notes in an asyn way
-        LoadNoteWatcher->cancel(); //Cancel previous run, if still running
-        QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
-        LoadNoteWatcher->setFuture(future);
-    }
+    //Load the notes in an asyn way
+    LoadNoteWatcher->cancel(); //Cancel previous run, if still running
+    QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(image.mipmaps(), LoadImage(ProjectFilename));
+    LoadNoteWatcher->setFuture(future);
 }
 
 /**
@@ -243,13 +266,29 @@ void cwNoteItem::ImageFinishedLoading() {
     glBindTexture(GL_TEXTURE_2D, 0);
 
     ImageSize = mipmaps.first().second;
-    NoteModelMatrix.setToIdentity();
-    NoteModelMatrix.scale(ImageSize.width(), ImageSize.height(), 1.0);
+    NoteScaleModelMatrix.setToIdentity();
+    NoteScaleModelMatrix.scale(ImageSize.width(), ImageSize.height(), 1.0);
+
+    updateNoteRotation(Note->rotate());
 
     resizeGL();
 
-    emit imageChanged();
+    emit noteChanged(Note);
 
+    update();
+}
+
+/**
+  \brief Rotates the note item
+
+  \param degrees, the amount of rotaton of the noteItem
+  */
+void cwNoteItem::updateNoteRotation(float degrees) {
+    RotationModelMatrix.setToIdentity();
+    RotationModelMatrix.translate(.5, .5, 0.0);
+    RotationModelMatrix.rotate(-degrees, 0.0, 0.0, 1.0);
+    RotationModelMatrix.translate(-.5, -.5, 0.0);
+    resizeGL();
     update();
 }
 
