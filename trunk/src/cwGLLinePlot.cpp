@@ -46,7 +46,6 @@ void cwGLLinePlot::initializeShaders() {
     UniformMaxZValue = ShaderProgram->uniformLocation("MaxZValue");
     UniformMinZValue = ShaderProgram->uniformLocation("MinZValue");
 
-    qDebug() << "UniformMaxZValue:" << UniformMaxZValue << UniformMinZValue;
 }
 
 /**

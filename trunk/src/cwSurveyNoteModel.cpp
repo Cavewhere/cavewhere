@@ -70,8 +70,6 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     if(!index.isValid()) { return QVariant(); }
     int row = index.row();
 
-    qDebug() << "Role:" << role << index;
-
     switch(role) {
     case ImageOriginalPathRole: {
         //Get's the full blown note

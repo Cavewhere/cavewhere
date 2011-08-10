@@ -11,67 +11,53 @@ Rectangle {
     anchors.fill: parent
     anchors.margins: 3
 
-    onNotesModelChanged: {
-        console.log("Notes Model:" + notesModel);
-    }
-
     Component {
         id: listDelegate
 
         Item {
             id: container
 
-            property int border: 3
+            property int border: 6
             property variant noteObject: model.noteObject
+            property real maxImageWidth: galleryView.width
 
-            width: 200
-            height: {
-                if(imageItem.status == Image.Ready) {
-                    return imageItem.height + imageContainter.border.width + border * 2
-                }
-                return 200;
-            }
+            width: maxImageWidth
+            height: maxImageWidth
 
-            Rectangle {
-                id: imageContainter
-
-                border.color: "black"
-                border.width: 1
-                anchors.fill: parent;
+            Image {
+                id: imageItem
+                asynchronous: true
+                anchors.fill: parent
                 anchors.margins: container.border
 
-                Image {
-                    id: imageItem
-                    asynchronous: true
-//                    anchors.top: parent.top
-//                    anchors.left: parent.left
-//                    anchors.margins: 1
-                    source: model.imageIconPath
-                    sourceSize.width: imageContainter.width - imageContainter.border.width
-                    //sourceSize.height: imageContainter.height
-                    fillMode: Image.PreserveAspectFit
-                    rotation: model.noteObject.rotate
-                }
+                anchors.centerIn: parent
 
-                /**
+                source: model.imageIconPath
+                sourceSize.width: container.maxImageWidth - 2 * container.border
+                fillMode: Image.PreserveAspectFit
+                rotation: model.noteObject.rotate
+
+            }
+
+
+            /**
                   Probably could be allocated and deleted on the fly
                   */
-                Image {
-                    id: statusImage
-                    anchors.centerIn: parent
-                    visible: imageItem.status == Image.Loading
+            Image {
+                id: statusImage
+                anchors.centerIn: parent
+                visible: imageItem.status == Image.Loading
 
-                    source: "qrc:icons/loadingSwirl.png"
+                source: "qrc:icons/loadingSwirl.png"
 
-                    NumberAnimation {
-                        running: imageItem.status == Image.Loading
-                        target: statusImage;
-                        property: "rotation";
-                        from: 0
-                        to: 360
-                        duration: 1500
-                        loops: Animation.Infinite
-                    }
+                NumberAnimation {
+                    running: imageItem.status == Image.Loading
+                    target: statusImage;
+                    property: "rotation";
+                    from: 0
+                    to: 360
+                    duration: 1500
+                    loops: Animation.Infinite
                 }
             }
         }
@@ -106,6 +92,8 @@ Rectangle {
                 radius:  3
             }
 
+            spacing: 3
+
             MouseArea {
                 anchors.fill: parent
 
@@ -118,6 +106,7 @@ Rectangle {
             onCurrentIndexChanged: {
                 noteArea.note = currentItem.noteObject;
             }
+
 
         }
 

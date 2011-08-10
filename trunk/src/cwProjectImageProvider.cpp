@@ -56,7 +56,6 @@ QImage cwProjectImageProvider::requestImage(const QString &id, QSize *size, cons
         //Get the size of the image, scale it and return it.
         QImage scaledImage = image.scaled(QSize(maxSize, maxSize), Qt::KeepAspectRatio, Qt::SmoothTransformation);
         *size = scaledImage.size();
-        qDebug() << "size of scaleImage:" << scaledImage.size();
 
         return scaledImage;
     } else {

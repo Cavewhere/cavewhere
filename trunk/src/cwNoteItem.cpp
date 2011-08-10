@@ -211,11 +211,11 @@ void cwNoteItem::wheelEvent(QGraphicsSceneWheelEvent *event) {
   Sets the note that this note item displayes
   */
 void cwNoteItem::setNote(cwNote* note) {
-    if(Note != NULL) {
-        disconnect(Note, NULL, this, NULL);
-    }
-
     if(Note != note) {
+        if(Note != NULL) {
+            disconnect(Note, NULL, this, NULL);
+        }
+
         Note = note;
 
         if(Note != NULL) {
@@ -284,6 +284,7 @@ void cwNoteItem::ImageFinishedLoading() {
   \param degrees, the amount of rotaton of the noteItem
   */
 void cwNoteItem::updateNoteRotation(float degrees) {
+    qDebug() << "Update note rotation" << degrees;
     RotationModelMatrix.setToIdentity();
     RotationModelMatrix.translate(.5, .5, 0.0);
     RotationModelMatrix.rotate(-degrees, 0.0, 0.0, 1.0);
