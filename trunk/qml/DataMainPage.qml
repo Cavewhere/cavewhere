@@ -49,42 +49,40 @@ Rectangle {
         z:2
     }
 
-    Item {
+    Splitter {
         id: splitter
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: dataSideBar.right
-        anchors.leftMargin: -width / 2
+        resizeObject: dataSideBar
+//        z:1
 
-        width:  10
-        z:1
+//        MouseArea {
+//            id: splitterMouseArea
+//            anchors.fill: parent
 
-        MouseArea {
-            id: splitterMouseArea
-            anchors.fill: parent
+//            property int lastMousePosition;
 
-            property int lastMousePosition;
+//            onPressed: {
+//                lastMousePosition = mapToItem(null, mouse.x, 0).x;
+//            }
 
-            onPressed: {
-                lastMousePosition = mapToItem(null, mouse.x, 0).x;
-            }
+//            states: [
+//                State {
+//                    when: splitterMouseArea.pressed
+//                    PropertyChanges {
+//                        target: splitterMouseArea
 
-            states: [
-                State {
-                    when: splitterMouseArea.pressed
-                    PropertyChanges {
-                        target: splitterMouseArea
-
-                        onMousePositionChanged: {
-                            //Change the databar width
-                            var mappedX = mapToItem(null, mouse.x, 0).x;
-                            dataSideBar.width +=  mappedX - lastMousePosition
-                            lastMousePosition = mappedX
-                        }
-                    }
-                }
-            ]
-        }
+//                        onMousePositionChanged: {
+//                            //Change the databar width
+//                            var mappedX = mapToItem(null, mouse.x, 0).x;
+//                            dataSideBar.width +=  mappedX - lastMousePosition
+//                            lastMousePosition = mappedX
+//                        }
+//                    }
+//                }
+//            ]
+//        }
     }
 
     Rectangle {

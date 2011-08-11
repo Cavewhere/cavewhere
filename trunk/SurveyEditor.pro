@@ -229,7 +229,8 @@ shaders/*.geom \
     shaders/NoteItem.frag \
     shaders/NoteItem.vert \
     qml/FileDialog.qml \
-    qml/ButtonGroup.qml
+    qml/ButtonGroup.qml \
+    qml/Splitter.qml
 
 RESOURCES += \
     icons.qrc

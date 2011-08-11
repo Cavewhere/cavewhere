@@ -11,6 +11,9 @@ Rectangle {
     anchors.fill: parent
     anchors.margins: 3
 
+    /**
+      For displaying the note as icons in a gallery
+      */
     Component {
         id: listDelegate
 
@@ -24,18 +27,54 @@ Rectangle {
             width: maxImageWidth
             height: maxImageWidth
 
+            onChildrenRectChanged: {
+                console.log("Children rect change:" + childrenRect)
+            }
+
             Image {
                 id: imageItem
                 asynchronous: true
-                anchors.fill: parent
-                anchors.margins: container.border
+//                anchors.fill: parent
+//                anchors.margins: container.border
 
                 anchors.centerIn: parent
 
                 source: model.imageIconPath
-                sourceSize.width: container.maxImageWidth - 2 * container.border
+                width: container.maxImageWidth - 2 * container.border
+                height: width;
                 fillMode: Image.PreserveAspectFit
                 rotation: model.noteObject.rotate
+                smooth: true
+
+                function updateHeight() {
+                    if(paintedHeight == 0.0 || paintedWidth == 0.0) {
+                        container.height = container.maxImageWidth
+                        return;
+                    }
+
+                    var p1 = mapToItem(container, x, y);
+                    var p2 = mapToItem(container, x + paintedWidth, y + paintedHeight);
+                    var p3 = mapToItem(container, x, y + paintedHeight);
+                    var p4 = mapToItem(container, x + paintedWidth, y);
+
+                    var maxY = Math.max(p1.y, Math.max(p2.y, Math.max(p3.y, p4.y)));
+                    var minY = Math.min(p1.y, Math.min(p2.y, Math.min(p3.y, p4.y)));
+
+                    container.height = maxY - minY + 2 * container.border;
+                }
+
+                onPaintedGeometryChanged: {
+                    updateHeight();
+                }
+
+                onRotationChanged:  {
+                    updateHeight();
+                }
+
+                Component.onCompleted: {
+                    updateHeight();
+                }
+
 
             }
 
@@ -90,7 +129,12 @@ Rectangle {
             highlight: Rectangle {
                 color: "#418CFF"
                 radius:  3
+                width: parent.width
             }
+
+            highlightMoveDuration: 300
+            highlightResizeDuration: -1
+            highlightResizeSpeed: -1
 
             spacing: 3
 
@@ -98,7 +142,7 @@ Rectangle {
                 anchors.fill: parent
 
                 onClicked: {
-                    var index = galleryView.indexAt(mouseX, mouseY);
+                    var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
                     galleryView.currentIndex = index;
                 }
             }
@@ -106,11 +150,7 @@ Rectangle {
             onCurrentIndexChanged: {
                 noteArea.note = currentItem.noteObject;
             }
-
-
         }
-
-
     }
 
     Rectangle {
@@ -187,6 +227,14 @@ Rectangle {
                 }
             }
         }
+    }
+
+    Splitter {
+        anchors.bottom: parent.bottom
+        anchors.top: parent.top
+        anchors.left: galleryContainer.left
+        resizeObject: galleryContainer
+        expandDirection: "left"
     }
 
     NoteItem {
