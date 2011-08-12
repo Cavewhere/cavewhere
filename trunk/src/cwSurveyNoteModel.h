@@ -39,7 +39,7 @@ signals:
 public slots:
 
 private:
-    static const QString ImagePathString;
+    static QString ImagePathString;
 
     QList<cwNote*> Notes;
 

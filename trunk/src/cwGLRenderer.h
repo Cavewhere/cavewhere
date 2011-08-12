@@ -37,6 +37,7 @@ class cwGLRenderer : public QDeclarativeItem
 
 public:
     explicit cwGLRenderer(QDeclarativeItem *parent = 0);
+    ~cwGLRenderer();
 
     QVector3D unProject(QPoint point);
 

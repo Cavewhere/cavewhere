@@ -235,7 +235,7 @@ shaders/*.geom \
 RESOURCES += \
     icons.qrc
 
-INCLUDEPATH += src src/utils . /home/blitz/Downloads/libsquish-read-only
+INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
-LIBS += -lz -lGLEW -L/home/blitz/Downloads/libsquish-read-only -lsquish -lboost_serialization
+LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization

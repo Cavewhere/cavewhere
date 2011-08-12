@@ -6,11 +6,13 @@
 //Qt includes
 #include <QDebug>
 
-const QString cwSurveyNoteModel::ImagePathString = "image://" + cwProjectImageProvider::Name + "/%1";
+QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent)
 {
+    ImagePathString = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
+
     //For qml
     QHash<int, QByteArray> roles;
     roles.reserve(2);

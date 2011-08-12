@@ -1,10 +1,10 @@
-#version 330
+//#version 330
 
-in vec2 vVertex;
+attribute vec2 vVertex;
 
 uniform mat4 ModelViewProjectionMatrix;
 
-out vec2 TexCoord;
+varying vec2 TexCoord;
 
 void main(void)
 {
