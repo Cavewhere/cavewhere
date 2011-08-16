@@ -68,7 +68,7 @@ void cw3dRegionViewer::paint(QPainter * painter, const QStyleOptionGraphicsItem 
 void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    //Terrain->draw();
+    Terrain->draw();
     LinePlot->draw();
     glDisable(GL_DEPTH_TEST);
 }

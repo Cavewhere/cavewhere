@@ -37,7 +37,7 @@ Rectangle {
 
 //       Replace with the view
         GLTerrainRenderer {
-            //visible: mainSideBar.pageShown == "view"
+//            visible: mainSideBar.pageShown == "view"
             glWidget: mainGLWidget
             cavingRegion: region
             width:  parent.width

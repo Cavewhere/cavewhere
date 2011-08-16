@@ -444,7 +444,6 @@ void cwSurveyEditorMainWindow::initGLEW() {
 QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
     QGLFormat format;
     format.setSamples(8);
-    format.setDirectRendering(false);
 
     QGLWidget* glWidget = new QGLWidget(format, this);
     glWidget->makeCurrent();

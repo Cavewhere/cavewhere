@@ -2,6 +2,7 @@
 
 // these lines enable the geometry shader support.
 //#version 330
+#version 120
 #extension GL_EXT_geometry_shader4 : enable
 
 //layout(triangles) in;
