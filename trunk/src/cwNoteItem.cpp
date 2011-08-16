@@ -140,10 +140,12 @@ void cwNoteItem::resizeGL() {
   \brief Draws the note item
   */
 void cwNoteItem::paintFramebuffer() {
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if(Note == NULL) { return; }
 
     VertexBuffer.bind();
+
+    glDisable(GL_DEPTH_TEST);
 
     ImageProgram->bind();
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
@@ -250,6 +252,7 @@ void cwNoteItem::ImageFinishedLoading() {
     //Load the data into opengl
     glBindTexture(GL_TEXTURE_2D, NoteTexture);
 
+    int trueMipmapLevel = 0;
     for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
 
         //Get the mipmap data
@@ -257,9 +260,12 @@ void cwNoteItem::ImageFinishedLoading() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
-        glCompressedTexImage2D(GL_TEXTURE_2D, mipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
-                               size.width(), size.height(), 0,
-                               imageData.size(), imageData.data());
+        if(size.width() < 2048 && size.height() < 2048) {
+            glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                                   size.width(), size.height(), 0,
+                                   imageData.size(), imageData.data());
+            trueMipmapLevel++;
+        }
     }
 
    // glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture

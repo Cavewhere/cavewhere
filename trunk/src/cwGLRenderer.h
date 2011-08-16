@@ -80,7 +80,7 @@ protected:
       The subclass should reimplement this function with opengl rendering commands.  All these
       rendering commands will be rendered to the framebuffer
       */
-    virtual void paintFramebuffer() {}
+    virtual void paintFramebuffer() { qDebug() << "Bad paint"; }
 
 protected slots:
     virtual void resizeGL() {}

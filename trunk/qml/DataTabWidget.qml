@@ -146,7 +146,7 @@ Rectangle {
     Rectangle {
         anchors.left: parent.left; anchors.right:  parent.right
         anchors.top: header.bottom; anchors.bottom: parent.bottom
-        clip: true
+        clip: true //This causes rendering problems for the Intel 950 Graphics card
 
         Item {
             id: pageArea

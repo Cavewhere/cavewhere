@@ -1,7 +1,7 @@
-#version 330
+//#version 330
 
-in vec3 vVertex;
-out float depth;
+attribute vec3 vVertex;
+varying float depth;
 
 uniform mat4 ModelViewProjectionMatrix;
 uniform float MaxZValue;

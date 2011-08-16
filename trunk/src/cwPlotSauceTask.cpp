@@ -6,6 +6,8 @@
 #include <QWriteLocker>
 #include <QProcess>
 #include <QFileInfo>
+#include <QDir>
+#include <QApplication>
 #include <QDebug>
 
 const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
@@ -55,17 +57,28 @@ QString cwPlotSauceTask::survex3DFilename() const {
 void cwPlotSauceTask::runTask() {
     if(!isRunning()) {
         done();
+        return;
     }
 
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
-    QString plotsaucePath = "/home/blitz/documents/projects/plotsauce-build-desktop/plotsauce";
+    QString plotSauceAppName = "plotsauce";
+
+    QDir plotSauceDir(QApplication::applicationDirPath());
+    QString plotSaucePath = plotSauceDir.absoluteFilePath(plotSauceAppName);
+
+    QFileInfo plotSauceFileInfo(plotSaucePath);
+    if(!plotSauceFileInfo.exists() || !plotSauceFileInfo.isExecutable()) {
+        qDebug() << "Can't find plotsauce executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
+        done();
+        return;
+    }
 
     QStringList arguments;
     arguments.append(inputFile);
     arguments.append(outputFile);
 
-    PlotSauceProcess->start(plotsaucePath, arguments);
+    PlotSauceProcess->start(plotSaucePath, arguments);
 }
 
 /**

@@ -1,16 +1,16 @@
 // simple geometry shader
 
 // these lines enable the geometry shader support.
-#version 330
+//#version 330
 #extension GL_EXT_geometry_shader4 : enable
 
-layout(triangles) in;
-layout(triangle_strip, max_vertices=3) out;
+//layout(triangles) in;
+//layout(triangle_strip, max_vertices=3) out;
 
-in vec3 vPosition[3];
+varying in vec3 vPosition[3];
 
-out vec3 gTriangleDistance;
-out vec3 gPosition;
+varying out vec3 gTriangleDistance;
+varying out vec3 gPosition;
 
 //in vec3 vPosition;
 

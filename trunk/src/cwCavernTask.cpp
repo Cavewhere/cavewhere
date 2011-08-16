@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDebug>
+#include <QApplication>
 
 const QString cwCavernTask::Survex3dExtension = ".3d";
 
@@ -45,17 +46,29 @@ QString cwCavernTask::output3dFileName() const {
  void cwCavernTask::runTask() {
      if(!isRunning()) {
          done();
+         return;
      }
 
      QString inputFile = survexFileName();
      QString outputFile = inputFile + Survex3dExtension;
-     QString cavernPath = "/usr/local/bin/cavern";
+     QString cavernAppName = "cavern";
+
+     QDir cavernDir(QApplication::applicationDirPath());
+     QString cavernPathName = cavernDir.absoluteFilePath(cavernAppName);
+
+     QFileInfo cavernFileInfo(cavernPathName);
+     if(!cavernFileInfo.exists() || !cavernFileInfo.isExecutable()) {
+         qDebug() << "Can't find cavern executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
+         done();
+         return;
+     }
+
 
      QStringList arguments;
      arguments.append(QString("--output=%1").arg(outputFile));
      arguments.append(inputFile);
 
-     CavernProcess->start(cavernPath, arguments);
+     CavernProcess->start(cavernPathName, arguments);
  }
 
 
@@ -84,7 +97,7 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
   \brief Called when cavern has finished
   */
 void cwCavernTask::cavernFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) {
-    //qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
-    //qDebug() << CavernProcess->readAllStandardOutput();
+    qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
+    qDebug() << CavernProcess->readAllStandardOutput();
     done();
 }

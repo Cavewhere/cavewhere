@@ -6,13 +6,16 @@
 #include "cwCamera.h"
 #include "cwShaderDebugger.h"
 
+
 //Qt includes
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
+#include <QLabel>
 
 //Std includes
 #include <math.h>
+#include <iostream>
 
 
 cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
@@ -58,9 +61,10 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     painter->beginNativePainting();
 
     //Draw the subclasses paintFramebuffer to the render framebuffer
-    glPushAttrib(GL_VIEWPORT_BIT);
     MultiSampleFramebuffer->bind();
+    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
     glViewport(0, 0, width(), height());
+    glDisable(GL_SCISSOR_TEST);
     paintFramebuffer();
     glPopAttrib();
     MultiSampleFramebuffer->release();
@@ -101,15 +105,19 @@ void cwGLRenderer::renderTextureFramebuffer() {
     glBindTexture(GL_TEXTURE_2D, ColorTexture);
 
     glBegin(GL_QUADS);
+    //glColor3f(0.0, 1.0, 0.0);
     glTexCoord2f(0.0, 1.0);
     glVertex2f(0, 0);
 
+   // glColor3f(0.0, 0.0, 0.0);
     glTexCoord2f(0.0, 0.0);
     glVertex2f(0, height());
 
+  //  glColor3f(1.0, 0.0, 0.0);
     glTexCoord2f(1.0, 0.0);
     glVertex2f(width(), height());
 
+    //glColor3f(1.0, 1.0, 0.0);
     glTexCoord2f(1.0, 1.0);
     glVertex2f(width(), 0);
 
@@ -197,6 +205,8 @@ void cwGLRenderer::privateResizeGL() {
 //    }
 
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
+    //multiSampleFormat.setInternalTextureFormat(GL_RGBA);
+
     MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
 
     if(!QGLFramebufferObject::hasOpenGLFramebufferBlit()) {
@@ -268,13 +278,13 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
     buffer.resize(bufferSize);
 
     //Get data from opengl framebuffer
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, TextureFramebuffer);
+    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, TextureFramebuffer);
     glReadPixels(samplerArea.x(), samplerArea.y(), //where
                  samplerArea.width(), samplerArea.height(), //size
                  GL_DEPTH_COMPONENT, //what buffer
                  GL_FLOAT, //Returned data type
                  buffer.data()); //The buffer for the data
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
 
     float sum = 0.0;
     int count = 0;

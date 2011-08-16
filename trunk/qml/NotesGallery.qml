@@ -239,14 +239,20 @@ Rectangle {
 
     NoteItem {
         id: noteArea
+
+//        x: -300
+//        y: 0
+//        width: 600
+//        height: 300
+
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
-        anchors.margins: 3
 
-        clip: true
+
+//        clip: true
 
         //  onImageSourceChanged: fitToView();
         glWidget: mainGLWidget
