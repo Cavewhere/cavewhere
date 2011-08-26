@@ -1,5 +1,5 @@
 //Glew includes
-#include "GL/glew.h"
+#include "C:/Qt/qtcreator-2.2.0/glew-1.6.0/include/GL/glew.h"
 
 //Our includes
 #include "cwGLRenderer.h"

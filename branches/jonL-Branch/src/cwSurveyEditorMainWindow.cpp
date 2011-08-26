@@ -1,5 +1,5 @@
 //Glew includes
-#include "GL/glew.h"
+#include "C:\Qt\qtcreator-2.2.0\glew-1.6.0\include\GL\glew.h"
 
 //Our includes
 #include "cwSurveyEditorMainWindow.h"
@@ -20,6 +20,7 @@
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
 #include "cwImportSurvexDialog.h"
+#include "cwImportWallsDialog.h"
 #include "cwTreeView.h"
 #include "cwQMLWidget.h"
 #include "cwSurvexExporterTripTask.h"
@@ -30,6 +31,7 @@
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
 #include "cwGLRenderer.h"
+#include "cwWallsExporterCaveTask.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -40,7 +42,8 @@
 #include <QTreeView>
 #include <QMessageBox>
 #include <QThread>
-#include <QGLWidget>
+//#include <QGLWidget>
+#include <QtOpenGL/QGLWidget>
 
 #if defined(QMLJSDEBUGGER)
 #include <qt_private/qdeclarativedebughelper_p.h>
@@ -96,8 +99,11 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
 
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
+    //connect(actionCompassImport, SIGNAL(triggered()), SLOT(importCompass()));
+    connect(actionWallsImport, SIGNAL(triggered()), SLOT(importWalls()));
     connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
+    connect(actionWallsExport, SIGNAL(triggered()), SLOT(openExportWallsCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
     Region = new cwCavingRegion(this);
@@ -195,14 +201,13 @@ void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
 }
 
 /**
-  \brief Open a file dialog for the user to save
-  all the data to survex file
+  \brief Open a file dialog for the user to save all the data to survex file
   */
 void cwSurveyEditorMainWindow::openExportSurvexRegionFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexRegion(QString)));
+//    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx",);
+//    dialog->setAcceptMode(QFileDialog::AcceptSave);
+//    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+//    dialog->open(this, SLOT(exportSurvexRegion(QString)));
 }
 
 /**
@@ -237,7 +242,7 @@ void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
 
         cwCave* cave = Region->cave(0);
         if(cave != NULL) {
-            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
+            cwCompassExporterCaveTask* exportTask = new cwCompassExporterCaveTask();
             exportTask->setOutputFile(filename);
             exportTask->setData(*cave);
             connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
@@ -248,6 +253,39 @@ void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
 }
 
 /**
+  Opens the walls file export dialog
+  */
+void cwSurveyEditorMainWindow::openExportWallsCaveFileDialog() {
+    QFileDialog* dialog = new QFileDialog(NULL, "Export selected cave to Walls Project", "", "Walls *.wpj");
+    dialog->setAcceptMode(QFileDialog::AcceptSave);
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    dialog->open(this, SLOT(exportCaveToWalls(QString)));
+}
+
+/**
+  Exports the currently select cave to Walls
+  */
+void cwSurveyEditorMainWindow::exportCaveToWalls(QString filename) {
+    if(filename.isEmpty()) { return; }
+    if(!Region->hasCaves()) { return; }
+    cwCave* cave = Region->cave(0);
+    if(cave != NULL) {
+        cwWallsExporterCaveTask* exportTask = new cwWallsExporterCaveTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*cave);
+        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
+    else {
+        QMessageBox msgBox;
+         msgBox.setText("Error: No cave currently loaded.");
+         msgBox.exec();
+    }
+}
+
+/**
   \brief Opens the suvrex import dialog
   */
 void cwSurveyEditorMainWindow::importSurvex() {
@@ -255,6 +293,20 @@ void cwSurveyEditorMainWindow::importSurvex() {
     survexImportDialog->setUndoStack(UndoStack);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     survexImportDialog->open();
+}
+
+//void cwSurveyEditorMainWindow::importCompass() {
+//    cwImportCompassDialog* compassImportDialog = new cwImportCompassDialog(Region, this);
+//    compassImportDialog->setUndoStack(UndoStack);
+//    compassImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+//    compassImportDialog->open();
+//}
+
+void cwSurveyEditorMainWindow::importWalls() {
+    cwImportWallsDialog* wallsImportDialog = new cwImportWallsDialog(Region, this);
+    wallsImportDialog->setUndoStack(UndoStack);
+    wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    wallsImportDialog->open();
 }
 
 void cwSurveyEditorMainWindow::reloadQML() {

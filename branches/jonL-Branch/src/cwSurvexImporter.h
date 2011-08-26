@@ -1,5 +1,5 @@
-#ifndef CWSURVEYIMPORTER_H
-#define CWSURVEYIMPORTER_H
+#ifndef CWSURVEXIMPORTER_H
+#define CWSURVEXIMPORTER_H
 
 //Qt includes
 #include <QObject>

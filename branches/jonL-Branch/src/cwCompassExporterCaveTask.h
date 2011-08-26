@@ -1,5 +1,5 @@
-#ifndef CWCOMPASSEXPORTCAVETASK_H
-#define CWCOMPASSEXPORTCAVETASK_H
+#ifndef CWCOMPASSEXPORTERCAVETASK_H
+#define CWCOMPASSEXPORTERCAVETASK_H
 
 //Our includes
 #include "cwCaveExporterTask.h"
@@ -10,11 +10,11 @@ class cwSurveyChunk;
 class cwStationReference;
 class cwShot;
 
-class cwCompassExportCaveTask : public cwCaveExporterTask
+class cwCompassExporterCaveTask : public cwCaveExporterTask
 {
     Q_OBJECT
 public:
-    explicit cwCompassExportCaveTask(QObject *parent = 0);
+    explicit cwCompassExporterCaveTask(QObject *parent = 0);
 
     void writeCave(QTextStream& stream, cwCave* cave);
 
@@ -56,4 +56,4 @@ private:
 
 };
 
-#endif // CWCOMPASSEXPORTCAVETASK_H
+#endif // CWCOMPASSEXPORTERCAVETASK_H

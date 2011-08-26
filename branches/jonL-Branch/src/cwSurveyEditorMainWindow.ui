@@ -36,7 +36,7 @@
      <x>0</x>
      <y>0</y>
      <width>978</width>
-     <height>25</height>
+     <height>18</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -49,8 +49,18 @@
      </property>
      <addaction name="actionSurvexExport"/>
      <addaction name="actionCompassExport"/>
+     <addaction name="actionWallsExport"/>
+    </widget>
+    <widget class="QMenu" name="menuImport">
+     <property name="title">
+      <string>Import</string>
+     </property>
+     <addaction name="actionSurvexImport_2"/>
+     <addaction name="actionCompassImport"/>
+     <addaction name="actionWallsImport"/>
     </widget>
     <addaction name="menuExport"/>
+    <addaction name="menuImport"/>
     <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
     <addaction name="actionReloadQML"/>
@@ -112,6 +122,26 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
+   </property>
+  </action>
+  <action name="actionWallsExport">
+   <property name="text">
+    <string>Walls(.wpj)</string>
+   </property>
+  </action>
+  <action name="actionSurvexImport_2">
+   <property name="text">
+    <string>Import Survex</string>
+   </property>
+  </action>
+  <action name="actionCompassImport">
+   <property name="text">
+    <string>Import Compass</string>
+   </property>
+  </action>
+  <action name="actionWallsImport">
+   <property name="text">
+    <string>Import Walls</string>
    </property>
   </action>
  </widget>

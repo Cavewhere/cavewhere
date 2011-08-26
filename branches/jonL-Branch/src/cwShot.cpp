@@ -95,3 +95,9 @@ cwStationReference cwShot::fromStation() const {
     }
     return cwStationReference();
 }
+
+bool cwShot::isForesightOnly(){
+    if(BackCompass.isNull() || backClino().isNull()) return TRUE;
+    else return FALSE;
+}
+

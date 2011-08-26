@@ -2,7 +2,7 @@
 #include "cwPlotSauceXMLTask.h"
 
 //ZLib includes
-#include <zlib.h>
+#include "zlib.h"
 
 //Qt includes
 #include <QFileInfo>

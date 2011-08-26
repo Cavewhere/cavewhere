@@ -11,9 +11,9 @@
 //Std includes
 #include <math.h>
 
-const char* cwCompassExportCaveTask::CompassNewLine = "\r\n";
+const char* cwCompassExporterCaveTask::CompassNewLine = "\r\n";
 
-cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
+cwCompassExporterCaveTask::cwCompassExporterCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
 {
 }
@@ -21,7 +21,7 @@ cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-void cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+void cwCompassExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     //Haven't done anything
     TotalProgress = 0;
 
@@ -37,7 +37,7 @@ void cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 /**
   Writes a signle trip to the stream
   */
-void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
+void cwCompassExporterCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     writeHeader(stream, trip);
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
@@ -50,7 +50,7 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 /**
   Writes the compass file header to a file
   */
-void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
+void cwCompassExporterCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     cwCave* cave = trip->parentCave();
 
     Q_ASSERT(cave != NULL);
@@ -97,7 +97,7 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
   Writes data to the stream, with a fieldLength.  FieldName is only used for error reporteding.
   If data is longer then fieldLength, then data is truncated and an error is reported.
   */
-void cwCompassExportCaveTask::writeData(QTextStream& stream,
+void cwCompassExporterCaveTask::writeData(QTextStream& stream,
                                         QString fieldName,
                                         int fieldLength,
                                         QString data) {
@@ -126,7 +126,7 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
 
   THe chunk has all the real survey data
   */
-void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
+void cwCompassExporterCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
     cwTrip* trip = chunk->parentTrip();
 
     for(int i = 0; i < chunk->ShotCount(); i++) {
@@ -176,7 +176,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
   This will convert the value into decimal feet
   */
-float cwCompassExportCaveTask::convertField(cwStationReference station,
+float cwCompassExporterCaveTask::convertField(cwStationReference station,
                                        StationLRUDField field,
                                        cwUnits::LengthUnit unit) {
 
@@ -210,7 +210,7 @@ float cwCompassExportCaveTask::convertField(cwStationReference station,
 
   This will convert the shot's compass and clino data such that it works correctly in compass
   */
-float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotField field) {
+float cwCompassExporterCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotField field) {
 
     QString frontSite;
     QString backSite;
@@ -275,7 +275,7 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotFiel
 /**
   Heleper to extract shot data
   */
-QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
+QString cwCompassExporterCaveTask::convertFromDownUp(QString clinoReading) {
     if(clinoReading.compare("down", Qt::CaseInsensitive) == 0) {
         clinoReading = "-90.0";
     } else if(clinoReading.compare("up", Qt::CaseInsensitive) == 0) {
@@ -284,14 +284,14 @@ QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
     return clinoReading;
 }
 
-QString cwCompassExportCaveTask::formatFloat(float value) {
+QString cwCompassExporterCaveTask::formatFloat(float value) {
     return QString("%1").arg(value, 7, 'f', 2);
 }
 
 ///**
 //  Heleper to extract shot data
 //  */
-//float cwCompassExportCaveTask::fixCompass(cwTrip* trip, QString compass1, QString compass2) {
+//float cwCompassExporterCaveTask::fixCompass(cwTrip* trip, QString compass1, QString compass2) {
 //    float value;
 //    if(compass1.isEmpty()) {
 //        if(!compass2.isEmpty()) {
@@ -308,7 +308,7 @@ QString cwCompassExportCaveTask::formatFloat(float value) {
 ///**
 //  Heleper to extract shot data
 //  */
-//float cwCompassExportCaveTask::fixClino(cwTrip* trip, QString forward, QString backward) {
+//float cwCompassExporterCaveTask::fixClino(cwTrip* trip, QString forward, QString backward) {
 //    float value;
 //    if(forward.isEmpty()) {
 //        if(!backward.isEmpty()) {
@@ -327,7 +327,7 @@ QString cwCompassExportCaveTask::formatFloat(float value) {
 
   All team member are join together using a comma
   */
-QString cwCompassExportCaveTask::surveyTeam(cwTrip* trip) {
+QString cwCompassExporterCaveTask::surveyTeam(cwTrip* trip) {
     cwTeam* team = trip->team();
 
     QStringList teamMemberNames;

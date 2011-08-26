@@ -41,6 +41,8 @@ public:
     cwStationReference toStation() const;
     cwStationReference fromStation() const;
 
+    bool isForesightOnly();
+
 private:
     QString Distance;
     QString Compass;

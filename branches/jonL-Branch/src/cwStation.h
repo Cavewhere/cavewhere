@@ -44,7 +44,6 @@ public slots:
 
 protected:
     QString Name;
-
     QString Left;
     QString Right;
     QString Up;
@@ -60,28 +59,11 @@ inline QString cwStation::up() const { return Up; }
 inline QString cwStation::down() const { return Down; }
 inline QVector3D cwStation::position() const { return Position; }
 
-inline void cwStation::setName(QString name) {
-    Name = name;
-}
-
-inline void cwStation::setLeft(QString left) {
-    Left = left;
-}
-
-inline void cwStation::setRight(QString right) {
-    Right = right;
-}
-
-inline void cwStation::setUp(QString up) {
-    Up = up;
-}
-
-inline void cwStation::setDown(QString down) {
-    Down = down;
-}
-
-inline void cwStation::setPosition(QVector3D position) {
-    Position = position;
-}
+inline void cwStation::setName(QString name) { Name = name;}
+inline void cwStation::setLeft(QString left) { Left = left;}
+inline void cwStation::setRight(QString right) { Right = right;}
+inline void cwStation::setUp(QString up) { Up = up;}
+inline void cwStation::setDown(QString down) { Down = down;}
+inline void cwStation::setPosition(QVector3D position) { Position = position;}
 
 #endif // cwStation_H

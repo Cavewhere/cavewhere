@@ -45,7 +45,12 @@ protected slots:
     void openExportCompassCaveFileDialog();
     void exportCaveToCompass(QString filename);
 
+    void openExportWallsCaveFileDialog();
+    void exportCaveToWalls(QString filename);
+
     void importSurvex();
+    //void importCompass();
+    void importWalls();
     void reloadQML();
 
     //For changing
