@@ -32,6 +32,15 @@ public:
     QString projectFilename() const;
     void setProjectFilename(QString projectFilename);
 
+    //For panning notes
+    Q_INVOKABLE void panFirstPoint(QPointF firstMousePoint);
+    Q_INVOKABLE void panMove(QPointF mousePosition);
+
+    //For adding a station
+    Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
+
+//    Q_INVOKABLE void
+
 
 signals:
     void noteChanged(cwNote* note);
@@ -48,7 +57,10 @@ private:
     QGLShaderProgram* ImageProgram;
 
     //The vertex buffer
-    QGLBuffer VertexBuffer;
+    QGLBuffer NoteVertexBuffer;
+
+    //The vertex buffer for the stations
+  //  QGLBuffer StationVertexBuffer;
 
     //The attribute location of the vVertex
     int vVertex;
@@ -69,17 +81,26 @@ private:
     //The project filename for this class
     QString ProjectFilename;
 
-//    //For interaction
+   //For interaction
     QPoint LastPanPoint;
 
-    virtual void mouseMoveEvent ( QGraphicsSceneMouseEvent * event );
-    virtual void mousePressEvent ( QGraphicsSceneMouseEvent * event );
+    //Transformation object for scaling the 2D station objects and the line
+    QDeclarativeItem* QMLTransformItem;
+
+    QDeclarativeComponent* NoteStationComponent;
+    QList<QDeclarativeItem*> QMLNoteStations;
+
     virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 
     void initializeShaders();
     void initializeVertexBuffers();
     void initializeTexture();
 
+    void updateQMLTransformItem();
+    void setRotationMatrix(QMatrix4x4 rotationMatrix);
+    void setNoteScaleModelMatrix(QMatrix4x4 noteScaleModelMatrix);
+
+    QMatrix4x4 modelMatrix() const;
 
 
     /**
@@ -107,6 +128,7 @@ private slots:
     void noteDeleted();
     void updateNoteRotation(float degrees);
     void setImage(cwImage image);
+    void regenerateStationVertices();
 };
 
 /**

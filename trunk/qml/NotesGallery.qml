@@ -34,8 +34,8 @@ Rectangle {
             Image {
                 id: imageItem
                 asynchronous: true
-//                anchors.fill: parent
-//                anchors.margins: container.border
+                //                anchors.fill: parent
+                //                anchors.margins: container.border
 
                 anchors.centerIn: parent
 
@@ -129,7 +129,7 @@ Rectangle {
             highlight: Rectangle {
                 color: "#418CFF"
                 radius:  3
-                width: parent.width
+                width: galleryView.width
             }
 
             highlightMoveDuration: 300
@@ -176,9 +176,14 @@ Rectangle {
             anchors.centerIn: parent
 
             IconButton {
+                id: panButton
                 iconSource: "qrc:icons/notes.png"
                 sourceSize: toolBar.iconSize
                 text: "Pan"
+
+                onClicked: {
+                    noteGallery.state = "PAN"
+                }
             }
 
             IconButton {
@@ -215,15 +220,22 @@ Rectangle {
                 }
 
                 IconButton {
+                    id: addStationId
                     iconSource: "qrc:icons/notes.png"
                     sourceSize: toolBar.iconSize
                     text: "Stations"
+
+                    onClicked: noteGallery.state = "ADD-STATION"
+
                 }
 
                 IconButton {
+                    id: addScrapId
                     iconSource: "qrc:icons/notes.png"
                     sourceSize: toolBar.iconSize
                     text: "Scraps"
+
+                    onClicked: noteGallery.state = "ADD-SCRAP"
                 }
             }
         }
@@ -240,23 +252,21 @@ Rectangle {
     NoteItem {
         id: noteArea
 
-//        x: -300
-//        y: 0
-//        width: 600
-//        height: 300
-
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
-
-
-//        clip: true
-
-        //  onImageSourceChanged: fitToView();
         glWidget: mainGLWidget
         projectFilename: project.filename
+
+        MouseArea {
+            id: noteItemMouseArea
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+
+        }
     }
 
     PropertyAnimation {
@@ -265,5 +275,84 @@ Rectangle {
         property: "rotate"
         easing.type: Easing.InOutCubic
     }
+
+    states: [
+
+        State {
+            name: "PAN"
+            PropertyChanges {
+                target: panButton
+                selected: true
+            }
+
+            PropertyChanges {
+                target: noteItemMouseArea
+                onPressed: noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                onMousePositionChanged: noteArea.panMove(Qt.point(mouse.x, mouse.y))
+            }
+
+        },
+
+        State {
+            name: "ADD-STATION"
+            PropertyChanges {
+                target: addStationId
+                selected: true
+            }
+
+            PropertyChanges {
+                target: noteItemMouseArea
+
+                onPressed: {
+                    if(mouse.button == Qt.RightButton) {
+                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    }
+                    mouse.accepted = true
+                }
+
+                onReleased: {
+                    if(mouse.button == Qt.LeftButton) {
+                        noteArea.addStation(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+
+                onMousePositionChanged: {
+                    if(pressedButtons == Qt.RightButton) {
+                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+            }
+
+        },
+
+        State {
+            name:  "ADD-SCRAP"
+            PropertyChanges {
+                target: addScrapId
+                selected: true
+            }
+
+            PropertyChanges {
+                target: noteItemMouseArea
+                onPressed: {
+                    if(pressedButtons == Qt.RightButton) {
+                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+
+                onMousePositionChanged: {
+                    if(pressedButtons == Qt.RightButton) {
+                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+
+            }
+        }
+
+
+
+
+    ]
+
 
 }

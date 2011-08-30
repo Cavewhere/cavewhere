@@ -18,7 +18,7 @@ cwCamera::cwCamera(QObject *parent) :
   */
 QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 modelMatrix) const {
 
-   QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * ViewMatrix * modelMatrix; // * ViewMatrix * ProjectionMatrix;
+   QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * ViewMatrix * modelMatrix;
 
    bool canInvert;
    QMatrix4x4 inverseMatrix = modelViewProjectionMatrix.inverted(&canInvert);

@@ -102,7 +102,8 @@ SOURCES += src/main.cpp \
     src/cwProjectIOTask.cpp \
     src/cwRegionIOTask.cpp \
     src/cwRegionSaveTask.cpp \
-    src/cwRegionLoadTask.cpp
+    src/cwRegionLoadTask.cpp \
+    src/cwNoteStation.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -193,7 +194,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwProjectIOTask.h \
     src/cwRegionIOTask.h \
     src/cwRegionSaveTask.h \
-    src/cwRegionLoadTask.h
+    src/cwRegionLoadTask.h \
+    src/cwNoteStation.h
 
 
 
@@ -230,7 +232,8 @@ shaders/*.geom \
     shaders/NoteItem.vert \
     qml/FileDialog.qml \
     qml/ButtonGroup.qml \
-    qml/Splitter.qml
+    qml/Splitter.qml \
+    qml/NoteStation.qml
 
 RESOURCES += \
     icons.qrc

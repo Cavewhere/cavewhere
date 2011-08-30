@@ -6,6 +6,7 @@
 
 //Our includes
 #include "cwImage.h"
+#include "cwNoteStation.h"
 
 class cwNote : public QObject
 {
@@ -32,6 +33,11 @@ public:
     void setRotate(float degrees);
     float rotate() const;
 
+    void addStation(cwNoteStation station);
+    const QList<cwNoteStation>& stations() const;
+    int numberOfStations() const;
+
+
 signals:
 //    void imagePathChanged();
     void originalChanged(int id);
@@ -39,11 +45,15 @@ signals:
     void imageChanged(cwImage image);
     void rotateChanged(float rotate);
 
+    void stationAdded();
+
 public slots:
 
 private:
     cwImage ImageIds;
     float Rotation;
+
+    QList<cwNoteStation> Stations;
 
     void copy(const cwNote& object);
 };
@@ -69,6 +79,17 @@ inline int cwNote::icon() const {
   */
 inline float cwNote::rotate() const {
     return Rotation;
+}
+
+/**
+  \brief Gets the number of stations for a page of notes
+  */
+inline int cwNote::numberOfStations() const {
+    return Stations.count();
+}
+
+inline const QList<cwNoteStation>& cwNote::stations() const {
+    return Stations;
 }
 
 

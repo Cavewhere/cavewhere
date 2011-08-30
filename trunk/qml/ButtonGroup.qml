@@ -11,7 +11,7 @@ Item {
         id: buttonAreaRect
 
         width: buttonArea.width + 5
-        height: buttonArea.height + textRect.height / 2.0
+        height: buttonArea.height + 3 + textRect.height / 2.0
 
         border.width: 1
         border.color: "black"

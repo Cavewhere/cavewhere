@@ -134,6 +134,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     ExportThread = new QThread(this);
 
     reloadQML();
+
+    Project->load("/home/blitz/eg3-2.cw");
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)

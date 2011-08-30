@@ -6,13 +6,17 @@ Rectangle {
     property alias hoverIconSource: iconHover.source
     property alias sourceSize: iconNormal.sourceSize;
     property alias text: label.text
+    property bool selected: false
 
     signal clicked();
 
-    height: iconNormal.sourceSize.height + label.height
-    width:  Math.max(iconNormal.sourceSize.width, label.width)
+    radius: 3
 
-    color: "#00000000"
+    height: iconNormal.sourceSize.height + label.height
+    width:  Math.max(iconNormal.sourceSize.width, label.width) + 4
+
+    color: selected ? "#999999" : "#00000000"
+
 
     Image {
         id: iconNormal
@@ -48,6 +52,10 @@ Rectangle {
             container.clicked();
         }
 
+    }
+
+    Behavior on color {
+        PropertyAnimation { }
     }
 
     states: [

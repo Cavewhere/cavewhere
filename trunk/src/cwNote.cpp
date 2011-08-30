@@ -68,3 +68,11 @@ void cwNote::setRotate(float degrees) {
     }
 }
 
+/**
+  \brief Adds a station to the note
+  */
+void cwNote::addStation(cwNoteStation station) {
+    Stations.append(station);
+    emit stationAdded();
+}
+
