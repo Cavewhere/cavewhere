@@ -19,6 +19,8 @@ cwTrip::cwTrip(QObject *parent) :
     Calibration = new cwTripCalibration(this);
     Date = QDate::currentDate();
     Notes = new cwSurveyNoteModel(this);
+
+    Notes->setParentTrip(this);
 }
 
 void cwTrip::Copy(const cwTrip& object)
@@ -41,7 +43,7 @@ void cwTrip::Copy(const cwTrip& object)
 
     //Copy the notes model
     Notes = new cwSurveyNoteModel(*(object.Notes));
-    Notes->setParent(this);
+    Notes->setParentTrip(this);
 
     //Remove all the originals
     int lastChunkIndex = Chunks.size() - 1;

@@ -38,5 +38,9 @@
         <file>icons/team.png</file>
         <file>icons/verticalLine.png</file>
         <file>icons/loadingSwirl.png</file>
+        <file>icons/station.png</file>
+        <file>icons/stationBad.png</file>
+        <file>icons/stationGood.png</file>
+        <file>icons/stationSelected.png</file>
     </qresource>
 </RCC>

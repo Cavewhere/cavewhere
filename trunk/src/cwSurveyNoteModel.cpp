@@ -2,6 +2,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwProject.h"
 #include "cwProjectImageProvider.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QDebug>
@@ -9,7 +10,8 @@
 QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
-    QAbstractListModel(parent)
+    QAbstractListModel(parent),
+    ParentTrip(NULL)
 {
     ImagePathString = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
 
@@ -24,7 +26,8 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
 }
 
 cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
-    QAbstractListModel(NULL)
+    QAbstractListModel(NULL),
+    ParentTrip(NULL)
 {
     copy(object);
 }
@@ -52,6 +55,7 @@ void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
 
     foreach(cwNote* note, object.Notes) {
         cwNote* copyNote = new cwNote(*note);
+        copyNote->setParentTrip(parentTrip());
         Notes.append(copyNote);
     }
 
@@ -115,17 +119,15 @@ void cwSurveyNoteModel::addFromFiles(QStringList files, cwProject* project) {
 void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
     if(images.empty()) { return; }
 
-    //Add all the images to the model
-    beginInsertRows(QModelIndex(), rowCount(), rowCount() + images.size());
+    QList<cwNote*> newNotes;
     foreach(cwImage image, images) {
         cwNote* note = new cwNote(this);
         note->setImage(image);
-
-        Notes.append(note);
+        newNotes.append(note);
     }
-    endInsertRows();
-}
 
+    addNotes(newNotes);
+}
 /**
   This adds valid notes to the note model
 
@@ -137,9 +139,25 @@ void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
 
     Notes.append(notes);
 
+    //Update the parent trips in the notes
     foreach(cwNote* note, notes) {
-        note->setParent(this);
+        note->setParentTrip(parentTrip());
     }
 
     endInsertRows();
+}
+
+/**
+  \brief Sets the survey trip for the notes model
+
+  This will update all the note's parents to the trip
+*/
+void cwSurveyNoteModel::setParentTrip(cwTrip* trip) {
+    if(ParentTrip != trip) {
+        ParentTrip = trip;
+        setParent(ParentTrip);
+        foreach(cwNote* note, Notes) {
+            note->setParentTrip(ParentTrip);
+        }
+    }
 }

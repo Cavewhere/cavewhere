@@ -1,9 +1,12 @@
 import QtQuick 1.0
 
-Rectangle {
+Item {
     id: doubleClickTextInput
     property alias text: textArea.text
     property alias font: textArea.font
+    property alias style: textArea.style
+    property alias styleColor: textArea.styleColor
+    property bool acceptMousePress: false  //This make the double click text box accept mouse clicks
 
     signal startedEditting()
     signal finishedEditting(string newText)
@@ -25,7 +28,13 @@ Rectangle {
     }
 
     function commitChanges() {
+        closeEditor();
 
+        //Emit the finishedEditting signal
+        finishedEditting(input.text)
+    }
+
+    function closeEditor() {
         edittor.visible = false;
         input.focus = false;
 
@@ -36,9 +45,6 @@ Rectangle {
 
         edittor.x = textArea.x
         edittor.y = textArea.y
-
-        //Emit the finishedEditting signal
-        finishedEditting(input.text)
     }
 
     Text {
@@ -93,6 +99,9 @@ Rectangle {
                     if(event.key == Qt.Key_Return) {
                         commitChanges();
                         event.accepted = true
+                    } else if(event.key == Qt.Key_Escape) {
+                        closeEditor();
+                        event.accepted = true
                     }
                 }
             }
@@ -119,7 +128,7 @@ Rectangle {
 
                 //Change the globalMouseArea to fill the root
                 globalMouseArea.enabled = true
-                globalMouseArea.parent = rootQMLItem
+                globalMouseArea.parent = rootObject
                 globalMouseArea.ignoreFirstClick = true
                 doubleClickArea.enabled = false
 
@@ -130,7 +139,7 @@ Rectangle {
             }
 
             onPressed: {
-                mouse.accepted = false
+                mouse.accepted = acceptMousePress
             }
         }
     }

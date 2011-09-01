@@ -29,8 +29,6 @@ cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
 
     connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
-
-    QMLTransformItem = new QDeclarativeItem(this);
 }
 
 void cwNoteItem::setProjectFilename(QString projectFilename) {
@@ -110,23 +108,31 @@ void cwNoteItem::regenerateStationVertices() {
         QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
         if(context == NULL) { return; }
         NoteStationComponent = new QDeclarativeComponent(context->engine(), "qml/NoteStation.qml", this);
+        if(NoteStationComponent->isError()) {
+            qDebug() << "Notecomponent errors:" << NoteStationComponent->errorString();
+        }
     }
 
     if(QMLNoteStations.size() < Note->numberOfStations()) {
         int notesToAdd = Note->numberOfStations() - QMLNoteStations.size();
         //Add more stations to the NoteStations
         for(int i = 0; i < notesToAdd; i++) {
-            cwNoteStation noteStation = Note->stations()[QMLNoteStations.size() + i];
+            int noteStationIndex = QMLNoteStations.size();
+
+            if(noteStationIndex < 0 || noteStationIndex >= Note->stations().size()) {
+                qDebug() << "noteStationIndex out of bounds:" << noteStationIndex << QMLNoteStations.size();
+                continue;
+            }
+
+            cwNoteStation noteStation = Note->stations()[noteStationIndex];
+            noteStation.station().setName("Sauce");
 
             QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(NoteStationComponent->create());
             if(stationItem == NULL) {
                 qDebug() << "Problem creating new station item ... THIS IS A BUG!";
                 continue;
             }
-            stationItem->setParentItem(QMLTransformItem);
-            stationItem->setProperty("note", QVariant::fromValue<QObject*>(Note));
-            stationItem->setProperty("stationId", i);
-            stationItem->setProperty("pos", noteStation.positionOnNote());
+
             QMLNoteStations.append(stationItem);
         }
     } else if(QMLNoteStations.size() > Note->numberOfStations()) {
@@ -138,6 +144,14 @@ void cwNoteItem::regenerateStationVertices() {
             QMLNoteStations.removeLast();
             deleteStation->deleteLater();
         }
+    }
+
+    for(int i = 0; i < QMLNoteStations.size(); i++) {
+        QDeclarativeItem* stationItem = QMLNoteStations[i];
+        stationItem->setParentItem(this);
+        stationItem->setProperty("noteViewer", QVariant::fromValue<QObject*>(this));
+        stationItem->setProperty("note", QVariant::fromValue<QObject*>(Note));
+        stationItem->setProperty("stationId", i);
     }
 
     updateQMLTransformItem();
@@ -185,6 +199,8 @@ void cwNoteItem::resizeGL() {
                               0.0, heightProjection,
                               -1.0, 1.0);
     Camera->setProjectionMatrix(orthognalProjection);
+
+    updateQMLTransformItem();
 }
 
 /**
@@ -285,6 +301,7 @@ void cwNoteItem::setNote(cwNote* note) {
             connect(Note, SIGNAL(rotateChanged(float)), SLOT(updateNoteRotation(float)));
             connect(Note, SIGNAL(imageChanged(cwImage)), SLOT(setImage(cwImage)));
             connect(Note, SIGNAL(stationAdded()), SLOT(regenerateStationVertices()));
+            connect(Note, SIGNAL(stationPositionChanged(int)), SLOT(regenerateStationVertices()));
             setImage(Note->image());
 
             regenerateStationVertices();
@@ -374,24 +391,6 @@ void cwNoteItem::updateNoteRotation(float degrees) {
   gui elements are place in the correct spot when rendering
   */
 void cwNoteItem::updateQMLTransformItem() {
-//    QMatrix4x4 currentModelMatrix = modelMatrix();
-
-//    //Flip along the vertical axis, to put it in qt coordinates
-
-
-
-
-//    QVector3D top = Camera->unProject(QPoint(0, 0), 0.1, NoteScaleModelMatrix);
-//    QVector3D bottom = Camera->unProject(QPoint(0, height()), 0.1, NoteScaleModelMatrix);
-//    QMatrix4x4 flippedScaleMatrix = Camera->viewProjectionMatrix() * NoteScaleModelMatrix;
-//    //flippedScaleMatrix.translate(-top - bottom);
-
-//    QTransform transform = flippedScaleMatrix.toTransform();
-//   // transform.translate(0.0, -height());
-//    //transform.scale(0, -1);
-//    qDebug() << "Transform:" << transform;
-//    qDebug() << "ModelMatrix:" << currentModelMatrix;
-
     QList<cwNoteStation> stations = Note->stations();
     if(stations.size() != QMLNoteStations.size()) {
         qDebug() << "Stations size are wrong!!!, this is a bug!" << stations.size() << QMLNoteStations.size();
@@ -407,16 +406,12 @@ void cwNoteItem::updateQMLTransformItem() {
         QVector3D transformedPoint = Camera->viewProjectionMatrix() * modelMatrix() * QVector3D(station.positionOnNote());
         transformedPoint = Camera->mapNormalizeScreenToGLViewport(transformedPoint);
 
-        item->setPos(transformedPoint.toPointF());
+        QTransform transform;
+        transform.translate(transformedPoint.x(), transformedPoint.y());
+
+        item->setTransform(transform);
+        item->setPos(-item->width() / 2.0, -item->height() / 2.0);
     }
-
-//    foreach(cwNoteStation station, Note->stations()) {
-//       QVector3D transformedPoint = Camera->viewProjectionMatrix() * modelMatrix() * QVector3D(station.positionOnNote());
-//       transformedPoint = Camera->mapNormalizeScreenToGLViewport(transformedPoint);
-//       qDebug() << "Transformed Point: " << transformedPoint;
-//    }
-
-//    QMLTransformItem->setTransform(transform);
 }
 
 /**
@@ -484,4 +479,22 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
     Note->addStation(newNoteStation);
 
     return Note->numberOfStations() - 1;
+}
+
+/**
+  \brief Moves the station to qtViewportCoordinate
+
+  This will convert the qtVieweportCoordinate, that's in this coordinate system
+  and convert it into a new note position.
+
+  */
+void cwNoteItem::moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex) {
+
+    if(note == NULL) { return; }
+    if(stationIndex < 0 || stationIndex >= note->numberOfStations()) { return; }
+
+    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
+    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, modelMatrix());
+
+    Note->setStationData(cwNote::StaitonPosition, stationIndex, notePosition.toPointF());
 }

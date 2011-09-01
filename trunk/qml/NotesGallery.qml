@@ -260,12 +260,12 @@ Rectangle {
         glWidget: mainGLWidget
         projectFilename: project.filename
 
+        clip: true
+
         MouseArea {
             id: noteItemMouseArea
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-
         }
     }
 
@@ -307,7 +307,6 @@ Rectangle {
                     if(mouse.button == Qt.RightButton) {
                         noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
                     }
-                    mouse.accepted = true
                 }
 
                 onReleased: {

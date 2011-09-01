@@ -333,6 +333,9 @@ void cwSurveyEditorMainWindow::reloadQML() {
     context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
 
     DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
+
+    //Allow for the DoubleClickTextInput to work correctly
+    context->setContextProperty("rootObject", DeclarativeView->rootObject());
 }
 
 /**

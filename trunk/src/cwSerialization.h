@@ -210,7 +210,7 @@ void load(Archive &archive, cwTrip &trip, const unsigned int) {
     //Load the calibration for the notes
     cwTripCalibration tripCalibration;
     archive >> BOOST_SERIALIZATION_NVP(tripCalibration);
-    cwTripCalibration*calibration = trip.calibrations();
+    cwTripCalibration* calibration = trip.calibrations();
     *calibration = tripCalibration;
 
     //Load all the chunks

@@ -1,5 +1,6 @@
 //Our include
 #include "cwNote.h"
+#include "cwTrip.h"
 
 //Std includes
 #include <math.h>
@@ -8,7 +9,8 @@
 #include <QDebug>
 
 cwNote::cwNote(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    ParentTrip(NULL)
 {
     Rotation = 0.0;
 }
@@ -21,7 +23,8 @@ cwNote::cwNote(QObject *parent) :
 //}
 
 cwNote::cwNote(const cwNote& object) :
-    QObject(NULL)
+    QObject(NULL),
+    ParentTrip(NULL)
 {
     copy(object);
 }
@@ -69,6 +72,16 @@ void cwNote::setRotate(float degrees) {
 }
 
 /**
+  \brief Sets the parent trip for this note
+  */
+void cwNote::setParentTrip(cwTrip* trip) {
+    if(ParentTrip != trip) {
+        ParentTrip = trip;
+        setParent(trip);
+    }
+}
+
+/**
   \brief Adds a station to the note
   */
 void cwNote::addStation(cwNoteStation station) {
@@ -76,3 +89,49 @@ void cwNote::addStation(cwNoteStation station) {
     emit stationAdded();
 }
 
+/**
+  \brief Gets the station data at role at noteStationIndex with the role
+  */
+QVariant cwNote::stationData(StationDataRole role, int noteStationIndex) const {
+    //Make sure the noteStationIndex is valid
+    if(noteStationIndex < 0 || noteStationIndex >= Stations.size()) {
+        return QVariant();
+    }
+
+    cwNoteStation noteStation = Stations[noteStationIndex];
+
+    switch(role) {
+    case StationName:
+        return noteStation.station().name();
+    case StaitonPosition:
+        return noteStation.positionOnNote();
+    }
+}
+
+/**
+  \brief Sets the station data on the note
+  */
+void cwNote::setStationData(StationDataRole role, int noteStationIndex, QVariant value)  {
+
+    //Make sure the noteStationIndex is valid
+    if(noteStationIndex < 0 || noteStationIndex >= Stations.size()) {
+        return;
+    }
+
+    cwNoteStation& noteStation = Stations[noteStationIndex];
+
+    switch(role) {
+    case StationName:
+        if(noteStation.station().name() != value.toString()) {
+            noteStation.station().setName(value.toString());
+            emit stationNameChanged(noteStationIndex);
+        }
+        break;
+    case StaitonPosition:
+        if(noteStation.positionOnNote() != value.toPointF()) {
+            noteStation.setPositionOnNote(value.toPointF());
+            emit stationPositionChanged(noteStationIndex);
+        }
+        break;
+    }
+}

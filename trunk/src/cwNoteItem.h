@@ -38,6 +38,8 @@ public:
 
     //For adding a station
     Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
+    Q_INVOKABLE void moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex);
+
 
 //    Q_INVOKABLE void
 
@@ -83,9 +85,6 @@ private:
 
    //For interaction
     QPoint LastPanPoint;
-
-    //Transformation object for scaling the 2D station objects and the line
-    QDeclarativeItem* QMLTransformItem;
 
     QDeclarativeComponent* NoteStationComponent;
     QList<QDeclarativeItem*> QMLNoteStations;

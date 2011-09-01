@@ -29,6 +29,9 @@ public:
     QList<cwNote*> notes() const;
     void addNotes(QList<cwNote*> notes);
 
+    void setParentTrip(cwTrip* trip);
+    cwTrip* parentTrip() const;
+
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
@@ -43,6 +46,8 @@ private:
 
     QList<cwNote*> Notes;
 
+    cwTrip* ParentTrip;
+
     void initModel();
     void copy(const cwSurveyNoteModel& object);
 
@@ -56,6 +61,13 @@ private slots:
   */
 inline QList<cwNote*> cwSurveyNoteModel::notes() const {
     return Notes;
+}
+
+/**
+  \brief Gets the parent trip for this chunk
+  */
+inline cwTrip* cwSurveyNoteModel::parentTrip() const {
+    return ParentTrip;
 }
 
 #endif // CWSURVEYNOTEMODEL_H

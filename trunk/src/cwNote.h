@@ -7,6 +7,7 @@
 //Our includes
 #include "cwImage.h"
 #include "cwNoteStation.h"
+class cwTrip;
 
 class cwNote : public QObject
 {
@@ -19,7 +20,14 @@ class cwNote : public QObject
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
 
+    Q_ENUMS(StationDataRole)
+
 public:
+    enum StationDataRole {
+        StationName,
+        StaitonPosition
+    };
+
     explicit cwNote(QObject *parent = 0);
     cwNote(const cwNote& object);
     cwNote& operator=(const cwNote& object);
@@ -33,9 +41,14 @@ public:
     void setRotate(float degrees);
     float rotate() const;
 
+    void setParentTrip(cwTrip* trip);
+    cwTrip* parentTrip() const;
+
     void addStation(cwNoteStation station);
     const QList<cwNoteStation>& stations() const;
     int numberOfStations() const;
+    Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
+    Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
 
 
 signals:
@@ -46,10 +59,14 @@ signals:
     void rotateChanged(float rotate);
 
     void stationAdded();
+    void stationPositionChanged(int noteStationIndex);
+    void stationNameChanged(int noteStationIndex);
 
 public slots:
 
 private:
+    cwTrip* ParentTrip;
+
     cwImage ImageIds;
     float Rotation;
 
@@ -57,6 +74,13 @@ private:
 
     void copy(const cwNote& object);
 };
+
+/**
+  \brief Gets the parent trip for this chunk
+  */
+inline cwTrip* cwNote::parentTrip() const {
+    return ParentTrip;
+}
 
 
 /**
