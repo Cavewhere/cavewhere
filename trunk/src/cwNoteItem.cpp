@@ -124,9 +124,6 @@ void cwNoteItem::regenerateStationVertices() {
                 continue;
             }
 
-            cwNoteStation noteStation = Note->stations()[noteStationIndex];
-            noteStation.station().setName("Sauce");
-
             QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(NoteStationComponent->create());
             if(stationItem == NULL) {
                 qDebug() << "Problem creating new station item ... THIS IS A BUG!";
@@ -475,6 +472,7 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
 
     cwNoteStation newNoteStation;
     newNoteStation.setPositionOnNote(notePosition.toPointF());
+    newNoteStation.station().setName("Station Name");
 
     Note->addStation(newNoteStation);
 

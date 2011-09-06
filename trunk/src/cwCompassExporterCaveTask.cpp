@@ -130,8 +130,8 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     cwTrip* trip = chunk->parentTrip();
     cwUnits::LengthUnit distanceUnit = trip->calibrations()->distanceUnit();
 
-    for(int i = 0; i < chunk->ShotCount(); i++) {
-        cwShot* shot = chunk->Shot(i);
+    for(int i = 0; i < chunk->shotCount(); i++) {
+        cwShot* shot = chunk->shot(i);
         cwStationReference from = shot->fromStation();
         cwStationReference to = shot->toStation();
 
@@ -155,7 +155,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << CompassNewLine;
     }
 
-    cwStationReference lastStation = chunk->Station(chunk->StationCount() - 1);
+    cwStationReference lastStation = chunk->station(chunk->stationCount() - 1);
     writeData(stream, "From", 12, lastStation.name());
     stream << " ";
     writeData(stream, "To", 12, lastStation.name() + "lrud");

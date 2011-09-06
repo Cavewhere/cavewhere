@@ -60,8 +60,10 @@ public:
 
     QList< cwStationReference > uniqueStations() const;
 
-    //Stats
+    //Network operations
     int numberOfStations() const;
+    bool hasStation(QString stationName) const;
+    QSet<cwStationReference> neighboringStations(QString stationName) const;
 
 signals:
     void nameChanged(QString name);

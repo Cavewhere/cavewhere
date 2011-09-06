@@ -135,7 +135,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("/home/blitz/eg3-2.cw");
+    Project->load("/home/blitz/bcc.cw");
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)

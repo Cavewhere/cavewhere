@@ -31,6 +31,9 @@ public:
     void setOriginal(int originalId);
     int original() const;
 
+    void setOriginalSize(QSize size);
+    QSize origianlSize() const;
+
     bool operator ==(const cwImage& other);
     bool operator !=(const cwImage& other);
 
@@ -38,6 +41,7 @@ private:
     QList<int> Mipmaps;
     int IconId;
     int OriginalId;
+    QSize OriginalSize;
 };
 
 Q_DECLARE_METATYPE(cwImage)
@@ -104,6 +108,20 @@ inline bool cwImage::operator ==(const cwImage& other) {
   */
 inline bool cwImage::operator !=(const cwImage& other) {
     return !operator ==(other);
+}
+
+/**
+  \brief Sets the original size of the image
+  */
+inline void cwImage::setOriginalSize(QSize size) {
+    OriginalSize = size;
+}
+
+/**
+  \brief Gets the original size of the image
+  */
+inline QSize cwImage::origianlSize() const {
+    return OriginalSize;
 }
 
 

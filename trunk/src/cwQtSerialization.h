@@ -7,6 +7,7 @@
 #include <QVector3D>
 #include <QString>
 #include <QDate>
+#include <QSize>
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -21,6 +22,7 @@ BOOST_SERIALIZATION_COLLECTION_TRAITS(QList)
 BOOST_SERIALIZATION_SPLIT_FREE(QString)
 BOOST_SERIALIZATION_SPLIT_FREE(QVector3D)
 BOOST_SERIALIZATION_SPLIT_FREE(QDate)
+BOOST_SERIALIZATION_SPLIT_FREE(QSize)
 
 namespace boost {
 namespace  serialization {
@@ -130,6 +132,28 @@ void load(Archive &archive, QDate &date, const unsigned int) {
 
     date = QDate(year, month, day);
 }
+
+////////////////////////////// QSize ////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const QSize &size, const unsigned int) {
+    int width = size.width();
+    int height = size.height();
+
+    archive << BOOST_SERIALIZATION_NVP(width);
+    archive << BOOST_SERIALIZATION_NVP(height);
+}
+
+template<class Archive>
+void load(Archive &archive, QSize &size, const unsigned int) {
+    int width;
+    int height;
+
+    archive >> BOOST_SERIALIZATION_NVP(width);
+    archive >> BOOST_SERIALIZATION_NVP(height);
+
+    size = QSize(width, height);
+}
+
 }
 }
 #endif

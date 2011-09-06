@@ -226,9 +226,37 @@ QList<cwSurveyChunk*> cwTrip::chunks() const {
 int cwTrip::numberOfStations() const {
     int stationCount = 0;
     foreach(cwSurveyChunk* chunk, Chunks) {
-        stationCount += chunk->StationCount();
+        stationCount += chunk->stationCount();
     }
     return stationCount;
+}
+
+/**
+  \brief Returns true if this trip has a station with stationName, else returns fales
+  */
+bool cwTrip::hasStation(QString stationName) const {
+    foreach(cwSurveyChunk* chunk, Chunks) {
+        if(chunk->hasStation(stationName)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+  \brief Returns a list of neighboring stations with of stationName, that only exist in this
+  trip.
+
+  The trip has a surveyChunks, a survey chunk has shots and stations.  If the stationName exists
+  in the trip it will have neighboring stations, if there's at least one shot.
+  */
+QSet<cwStationReference> cwTrip::neighboringStations(QString stationName) const {
+    QSet<cwStationReference> neighbors;
+    foreach(cwSurveyChunk* chunk, Chunks) {
+        QSet<cwStationReference> chunkNeighbors = chunk->neighboringStations(stationName);
+        neighbors.unite(chunkNeighbors);
+    }
+    return neighbors;
 }
 
 /**
@@ -240,8 +268,8 @@ int cwTrip::numberOfStations() const {
 QList< cwStationReference > cwTrip::uniqueStations() const {
     QMap<QString, cwStationReference> lookup;
     foreach(cwSurveyChunk* chunk, Chunks) {
-        for(int i = 0; i < chunk->StationCount(); i++) {
-            cwStationReference station = chunk->Station(i);
+        for(int i = 0; i < chunk->stationCount(); i++) {
+            cwStationReference station = chunk->station(i);
             lookup[station.name()] = station;
         }
     }

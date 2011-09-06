@@ -47,42 +47,46 @@ public:
     cwTrip* parentTrip() const;
 
     cwCave* parentCave() const;
-
     void updateStationsWithNewCave();
 
     QList<cwStationReference> stations() const;
     QList<cwShot*> shots() const;
-signals:
-    void StationsAdded(int beginIndex, int endIndex);
-    void ShotsAdded(int beginIndex, int endIndex);
 
-    void StationsRemoved(int beginIndex, int endIndex);
-    void ShotsRemoved(int beginIndex, int endIndex);
+    bool hasStation(QString stationName) const;
+    QSet<cwStationReference> neighboringStations(QString stationName) const;
+
+signals:
+    void stationsAdded(int beginIndex, int endIndex);
+    void shotsAdded(int beginIndex, int endIndex);
+
+    void stationsRemoved(int beginIndex, int endIndex);
+    void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(DataRole mainRole, int index, QVariant data);
 
 public slots:
-    int StationCount() const;
-    cwStationReference Station(int index) const;
+    int stationCount() const;
+    cwStationReference station(int index) const;
+    QList<int> indicesOfStation(QString stationName) const;
 
-    int ShotCount() const;
-    cwShot* Shot(int index) const;
+    int shotCount() const;
+    cwShot* shot(int index) const;
 
-    QPair<cwStationReference, cwStationReference> ToFromStations(const cwShot* shot) const;
+    QPair<cwStationReference, cwStationReference> toFromStations(const cwShot* shot) const;
 
-    void AppendNewShot();
-    void AppendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
+    void appendNewShot();
+    void appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
 
-    cwSurveyChunk* SplitAtStation(int stationIndex);
+    cwSurveyChunk* splitAtStation(int stationIndex);
 
-    void InsertStation(int stationIndex, Direction direction);
-    void InsertShot(int stationIndex, Direction direction);
+    void insertStation(int stationIndex, Direction direction);
+    void insertShot(int stationIndex, Direction direction);
 
-    void RemoveStation(int stationIndex, Direction shot);
-    bool CanRemoveStation(int stationIndex, Direction shot);
+    void removeStation(int stationIndex, Direction shot);
+    bool canRemoveStation(int stationIndex, Direction shot);
 
-    void RemoveShot(int shotIndex, Direction station);
-    bool CanRemoveShot(int shotIndex, Direction station);
+    void removeShot(int shotIndex, Direction station);
+    bool canRemoveShot(int shotIndex, Direction station);
 
     QVariant data(DataRole role, int index) const;
     void setData(DataRole role, int index, QVariant data);

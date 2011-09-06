@@ -270,24 +270,28 @@ void save(Archive &archive, const cwImage &image, const unsigned int) {
     int originalId = image.original();
     int iconId = image.icon();
     QList<int> mipmapIds = image.mipmaps();
+    QSize size = image.origianlSize();
 
     archive << BOOST_SERIALIZATION_NVP(originalId);
     archive << BOOST_SERIALIZATION_NVP(iconId);
     archive << BOOST_SERIALIZATION_NVP(mipmapIds);
+    archive << BOOST_SERIALIZATION_NVP(size);
 }
 
 template<class Archive>
 void load(Archive &archive, cwImage &image, const unsigned int) {
-
     int originalId;
     int iconId;
     QList<int> mipmapIds;
+    QSize size;
 
     archive >> BOOST_SERIALIZATION_NVP(originalId);
     archive >> BOOST_SERIALIZATION_NVP(iconId);
     archive >> BOOST_SERIALIZATION_NVP(mipmapIds);
+    archive >> BOOST_SERIALIZATION_NVP(size);
 
     image.setOriginal(originalId);
+    image.setOriginalSize(size);
     image.setIcon(iconId);
     image.setMipmaps(mipmapIds);
 }
@@ -380,7 +384,7 @@ void load(Archive &archive, cwSurveyChunk &chunk, const unsigned int) {
         cwStationReference toStation = stations[i + 1];
         cwShot* shot = shots[i];
 
-        chunk.AppendShot(fromStation, toStation, shot);
+        chunk.appendShot(fromStation, toStation, shot);
     }
 }
 

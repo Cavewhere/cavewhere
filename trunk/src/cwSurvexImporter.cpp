@@ -538,7 +538,7 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
     }
 
     if(chunk->canAddShot(fromStation, toStation, shot)) {
-        chunk->AppendShot(fromStation, toStation, shot);
+        chunk->appendShot(fromStation, toStation, shot);
     } else {
         if(!chunk->isValid()) {
             //error
@@ -550,7 +550,7 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
         CurrentBlock->addChunk(chunk);
         //Chunks.append(chunk);
         if(chunk->canAddShot(fromStation, toStation, shot)) {
-            chunk->AppendShot(fromStation, toStation, shot);
+            chunk->appendShot(fromStation, toStation, shot);
         } else {
             //error
             qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name() << shot;

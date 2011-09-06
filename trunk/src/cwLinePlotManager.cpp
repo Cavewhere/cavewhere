@@ -110,12 +110,12 @@ void cwLinePlotManager::connectChunks(cwTrip* trip) {
   \brief Connects as chunk
   */
 void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
-    connect(chunk, SIGNAL(ShotsAdded(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(ShotsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(StationsAdded(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(StationsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(ShotsAdded(int,int)), SLOT(connectAddedShots(int,int)));
-    connect(chunk, SIGNAL(StationsAdded(int,int)), SLOT(connectAddedStations(int,int)));
+    connect(chunk, SIGNAL(shotsAdded(int,int)), SLOT(runSurvex()));
+    connect(chunk, SIGNAL(shotsRemoved(int,int)), SLOT(runSurvex()));
+    connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(runSurvex()));
+    connect(chunk, SIGNAL(stationsRemoved(int,int)), SLOT(runSurvex()));
+    connect(chunk, SIGNAL(shotsAdded(int,int)), SLOT(connectAddedShots(int,int)));
+    connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(connectAddedStations(int,int)));
     connectShots(chunk);
     connectStations(chunk);
 }
@@ -124,8 +124,8 @@ void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
   \brief Connects all the shots in the trip
   */
 void cwLinePlotManager::connectShots(cwSurveyChunk* chunk) {
-    for(int i = 0; i < chunk->ShotCount(); i++) {
-        cwShot* shot = chunk->Shot(i);
+    for(int i = 0; i < chunk->shotCount(); i++) {
+        cwShot* shot = chunk->shot(i);
         connectShot(shot);
     }
 }
@@ -207,7 +207,7 @@ void cwLinePlotManager::connectAddedStations(int /*beginIndex*/, int /*endIndex*
 void cwLinePlotManager::connectAddedShots(int beginIndex, int endIndex) {
     cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwShot* shot = chunk->Shot(i);
+        cwShot* shot = chunk->shot(i);
         connectShot(shot);
     }
 }

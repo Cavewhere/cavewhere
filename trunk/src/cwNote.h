@@ -3,10 +3,12 @@
 
 //Qt includes
 #include <QObject>
+#include <QMatrix4x4>
 
 //Our includes
 #include "cwImage.h"
 #include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
 class cwTrip;
 
 class cwNote : public QObject
@@ -44,6 +46,8 @@ public:
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
 
+    QMatrix4x4 scaleMatrix() const;
+
     void addStation(cwNoteStation station);
     const QList<cwNoteStation>& stations() const;
     int numberOfStations() const;
@@ -68,11 +72,19 @@ private:
     cwTrip* ParentTrip;
 
     cwImage ImageIds;
-    float Rotation;
+    float DisplayRotation;  //!< Display rotation of the notes, don't confuse this with NoteTransform's rotation
 
+    cwNoteTranformation NoteTransformation;
     QList<cwNoteStation> Stations;
 
     void copy(const cwNote& object);
+
+    void updateNoteTransformation();
+    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
+    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
+    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
+    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+
 };
 
 /**
@@ -81,7 +93,6 @@ private:
 inline cwTrip* cwNote::parentTrip() const {
     return ParentTrip;
 }
-
 
 /**
   \brief Get's the path for the image
@@ -102,7 +113,7 @@ inline int cwNote::icon() const {
   \brief Sets the rotation for the notes
   */
 inline float cwNote::rotate() const {
-    return Rotation;
+    return DisplayRotation;
 }
 
 /**

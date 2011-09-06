@@ -287,6 +287,10 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
             continue;
         }
 
+        if(stations[i].isNull()) {
+            continue;
+        }
+
         QString stationName = stations[i].data()->name();
 
         //See if stationName overlaps with other stations
@@ -315,7 +319,13 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
   screen coordinates.  This is a helper function to renderStationLabels
   */
 QVector3D cw3dRegionViewer::TransformPoint::operator()(QWeakPointer<cwStation> station) {
-    QVector3D normalizeSceenCoordinate =  ModelViewProjection * station.data()->position();
+    QSharedPointer<cwStation> strongStation = station.toStrongRef();
+
+    if(strongStation.isNull()) {
+        return QVector3D();
+    }
+
+    QVector3D normalizeSceenCoordinate =  ModelViewProjection * strongStation->position();
     QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
     return viewportCoord;
 }

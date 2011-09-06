@@ -74,14 +74,14 @@ void cwLinePlotGeometryTask::addShotLines(cwCave* cave) {
         //Go through all the chunks in the trip
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
 
-            if(chunk->StationCount() < 2) { continue; }
+            if(chunk->stationCount() < 2) { continue; }
 
-            cwStationReference firstStation = chunk->Station(0);
+            cwStationReference firstStation = chunk->station(0);
             unsigned int previousStationIndex = StationIndexLookup.value(firstStation.station().data(), 0);
 
             //Go through all the the stations/shots in the chunk
-            for(int stationIndex = 1; stationIndex < chunk->StationCount(); stationIndex++) {
-                cwStationReference station = chunk->Station(stationIndex);
+            for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
+                cwStationReference station = chunk->station(stationIndex);
 
                 //Look up the index
                 unsigned int stationIndex = StationIndexLookup.value(station.station().data(), 0);

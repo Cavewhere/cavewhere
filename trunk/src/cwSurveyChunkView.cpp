@@ -140,13 +140,13 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         //SetupDelegates();
 
         clear();
-        addStations(0, SurveyChunk->StationCount() - 1);
-        addShots(0, SurveyChunk->ShotCount() - 1);
+        addStations(0, SurveyChunk->stationCount() - 1);
+        addShots(0, SurveyChunk->shotCount() - 1);
 
-        connect(SurveyChunk, SIGNAL(ShotsAdded(int,int)), SLOT(addShots(int,int)));
-        connect(SurveyChunk, SIGNAL(StationsAdded(int,int)), SLOT(addStations(int,int)));
-        connect(SurveyChunk, SIGNAL(ShotsRemoved(int,int)), SLOT(removeShots(int,int)));
-        connect(SurveyChunk, SIGNAL(StationsRemoved(int,int)), SLOT(removeStations(int,int)));
+        connect(SurveyChunk, SIGNAL(shotsAdded(int,int)), SLOT(addShots(int,int)));
+        connect(SurveyChunk, SIGNAL(stationsAdded(int,int)), SLOT(addStations(int,int)));
+        connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
+        connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
 
         emit modelChanged();
     }
@@ -184,18 +184,18 @@ void cwSurveyChunkView::rightClickOnStation(int index) {
     QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
     QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
 
-    removeAbove->setEnabled(SurveyChunk->CanRemoveStation(index, cwSurveyChunk::Above));
-    removeBelow->setEnabled(SurveyChunk->CanRemoveStation(index, cwSurveyChunk::Below));
+    removeAbove->setEnabled(SurveyChunk->canRemoveStation(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(SurveyChunk->canRemoveStation(index, cwSurveyChunk::Below));
 
     QAction* selected = menu.exec(QCursor::pos());
     if(selected == insertAbove) {
-        SurveyChunk->InsertStation(index, cwSurveyChunk::Above);
+        SurveyChunk->insertStation(index, cwSurveyChunk::Above);
     } else if(selected == insertBelow) {
-        SurveyChunk->InsertStation(index, cwSurveyChunk::Below);
+        SurveyChunk->insertStation(index, cwSurveyChunk::Below);
     } else if(selected == removeAbove) {
-        SurveyChunk->RemoveStation(index, cwSurveyChunk::Above);
+        SurveyChunk->removeStation(index, cwSurveyChunk::Above);
     } else if(selected == removeBelow) {
-        SurveyChunk->RemoveStation(index, cwSurveyChunk::Below);
+        SurveyChunk->removeStation(index, cwSurveyChunk::Below);
     }
 }
 
@@ -211,18 +211,18 @@ void cwSurveyChunkView::rightClickOnShot(int index) {
     QAction* removeAbove = menu.addAction(QIcon(":icons/RemoveArrowUp.png"),"Remove Above");
     QAction* removeBelow = menu.addAction(QIcon(":icons/RemoveArrowDown.png"),"Remove Below");
 
-    removeAbove->setEnabled(SurveyChunk->CanRemoveShot(index, cwSurveyChunk::Above));
-    removeBelow->setEnabled(SurveyChunk->CanRemoveShot(index, cwSurveyChunk::Below));
+    removeAbove->setEnabled(SurveyChunk->canRemoveShot(index, cwSurveyChunk::Above));
+    removeBelow->setEnabled(SurveyChunk->canRemoveShot(index, cwSurveyChunk::Below));
 
     QAction* selected = menu.exec(QCursor::pos());
     if(selected == insertAbove) {
-        SurveyChunk->InsertShot(index, cwSurveyChunk::Above);
+        SurveyChunk->insertShot(index, cwSurveyChunk::Above);
     } else if(selected == insertBelow) {
-        SurveyChunk->InsertShot(index, cwSurveyChunk::Below);
+        SurveyChunk->insertShot(index, cwSurveyChunk::Below);
     } else if(selected == removeAbove) {
-        SurveyChunk->RemoveShot(index, cwSurveyChunk::Above);
+        SurveyChunk->removeShot(index, cwSurveyChunk::Above);
     } else if(selected == removeBelow) {
-        SurveyChunk->RemoveShot(index, cwSurveyChunk::Below);
+        SurveyChunk->removeShot(index, cwSurveyChunk::Below);
     }
 }
 
@@ -239,11 +239,11 @@ void cwSurveyChunkView::splitOnStation(int index) {
     qDebug() << "cwSurveyChunkView: split on station" << index;
 
     //Make sure the index is good
-    if(index < 0 || index >= SurveyChunk->StationCount()) {
+    if(index < 0 || index >= SurveyChunk->stationCount()) {
         return; //Can't split on a bad index
     }
 
-    cwSurveyChunk* newChunk = SurveyChunk->SplitAtStation(index);
+    cwSurveyChunk* newChunk = SurveyChunk->splitAtStation(index);
     emit createdNewChunk(newChunk);
 }
 
@@ -266,7 +266,7 @@ void cwSurveyChunkView::splitOnShot(int /*index*/) {
   */
 void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
     //Make sure the model has data
-    if(SurveyChunk->StationCount() == 0) { return; }
+    if(SurveyChunk->stationCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
     prepareGeometryChange();
@@ -276,7 +276,7 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
 
     //Make sure these are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
-    endIndex = qMin(SurveyChunk->StationCount() - 1, endIndex);
+    endIndex = qMin(SurveyChunk->stationCount() - 1, endIndex);
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
@@ -292,7 +292,7 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
         positionStationRow(row, i);
 
         //Hock up the signals and slots with the models data
-        cwStationReference station = SurveyChunk->Station(i);
+        cwStationReference station = SurveyChunk->station(i);
         StationToIndex[station] = i;
 
         //Queue the index for navigation update
@@ -327,14 +327,14 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
   */
 void cwSurveyChunkView::addShots(int beginIndex, int endIndex) {
     //Make sure the model has data
-    if(SurveyChunk->ShotCount() == 0) { return; }
+    if(SurveyChunk->shotCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
     prepareGeometryChange();
 
     //Make sure thes are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
-    endIndex = qMin(SurveyChunk->ShotCount() - 1, endIndex);
+    endIndex = qMin(SurveyChunk->shotCount() - 1, endIndex);
 
     for(int i = beginIndex; i <= endIndex; i++) {
         //Create the row
@@ -350,7 +350,7 @@ void cwSurveyChunkView::addShots(int beginIndex, int endIndex) {
         positionShotRow(row, i);
 
         //Hock up the signals and slots with the model's data
-        cwShot* shot = SurveyChunk->Shot(i);
+        cwShot* shot = SurveyChunk->shot(i);
         connectShot(shot, row);
 
         //Queue the index for navigation update
@@ -391,7 +391,7 @@ void cwSurveyChunkView::removeStations(int beginIndex, int endIndex) {
         }
 
         //Remove the station from the look up
-        cwStationReference station = SurveyChunk->Station(i);
+        cwStationReference station = SurveyChunk->station(i);
         StationToIndex.remove(station);
 
         //Remove the row from the station rows
@@ -779,7 +779,7 @@ void cwSurveyChunkView::setChildActiveFocus(bool focus) {
   \brief Called when the station's value has changed
   */
 void cwSurveyChunkView::stationValueHasChanged() {
-    int stationCount = SurveyChunk->StationCount();
+    int stationCount = SurveyChunk->stationCount();
     if(stationCount < 2) { return; }
 
     StationRow lastStation = getStationRow(stationCount - 1);
@@ -792,7 +792,7 @@ void cwSurveyChunkView::stationValueHasChanged() {
 
 
     if(lastStationName.isEmpty() && secondLastStationName.isEmpty()) {
-        ShotRow lastShotRow = getShotRow(SurveyChunk->ShotCount() - 1);
+        ShotRow lastShotRow = getShotRow(SurveyChunk->shotCount() - 1);
 
         //Remove the lastStation
         if(lastStation.left()->property("dataValue").toString().isEmpty() &&
@@ -805,13 +805,13 @@ void cwSurveyChunkView::stationValueHasChanged() {
                 lastShotRow.frontClino()->property("dataValue").toString().isEmpty() &&
                 lastShotRow.backClino()->property("dataValue").toString().isEmpty()) {
 
-            SurveyChunk->RemoveStation(SurveyChunk->StationCount() - 1, cwSurveyChunk::Above);
+            SurveyChunk->removeStation(SurveyChunk->stationCount() - 1, cwSurveyChunk::Above);
         }
 
 
     } else if(!lastStationName.isEmpty()) {
         //Add station to the model
-        SurveyChunk->AppendNewShot();
+        SurveyChunk->appendNewShot();
     }
 }
 

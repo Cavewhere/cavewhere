@@ -125,7 +125,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  int cwSurvexBlockData::stationCount() const {
      int numStations = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
-         numStations += chunk->StationCount();
+         numStations += chunk->stationCount();
      }
      return numStations;
  }
@@ -138,10 +138,10 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    */
  cwStationReference cwSurvexBlockData::station(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
-         if(index < chunk->StationCount()) {
-             return chunk->Station(index);
+         if(index < chunk->stationCount()) {
+             return chunk->station(index);
          }
-         index -= chunk->StationCount();
+         index -= chunk->stationCount();
      }
      return cwStationReference();
  }
@@ -152,7 +152,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  int cwSurvexBlockData::shotCount() const {
      int numShots = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
-         numShots += chunk->ShotCount();
+         numShots += chunk->shotCount();
      }
      return numShots;
  }
@@ -164,10 +164,10 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    */
  cwShot* cwSurvexBlockData::shot(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
-         if(index < chunk->ShotCount()) {
-             return chunk->Shot(index);
+         if(index < chunk->shotCount()) {
+             return chunk->shot(index);
          }
-         index -= chunk->ShotCount();
+         index -= chunk->shotCount();
      }
      return NULL;
  }
@@ -180,8 +180,8 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  int cwSurvexBlockData::indexOfShot(cwShot* shot) const {
      int index = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
-         for(int i = 0; i < chunk->ShotCount(); i++) {
-             cwShot* chunkShot = chunk->Shot(i);
+         for(int i = 0; i < chunk->shotCount(); i++) {
+             cwShot* chunkShot = chunk->shot(i);
              if(shot == chunkShot) {
                  return index;
              }

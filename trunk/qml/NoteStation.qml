@@ -97,6 +97,11 @@ Item {
 
         anchors.verticalCenter: stationImage.verticalCenter
         anchors.left: stationImage.right
+
+        onFinishedEditting: {
+            note.setStationData(Note.StationName, stationId, newText);
+            text = newText;
+        }
     }
 
 

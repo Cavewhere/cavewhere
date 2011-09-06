@@ -103,7 +103,8 @@ SOURCES += src/main.cpp \
     src/cwRegionIOTask.cpp \
     src/cwRegionSaveTask.cpp \
     src/cwRegionLoadTask.cpp \
-    src/cwNoteStation.cpp
+    src/cwNoteStation.cpp \
+    src/cwNoteTranformation.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -195,7 +196,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwRegionIOTask.h \
     src/cwRegionSaveTask.h \
     src/cwRegionLoadTask.h \
-    src/cwNoteStation.h
+    src/cwNoteStation.h \
+    src/cwNoteTranformation.h
 
 
 

@@ -154,20 +154,30 @@ void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
    QString caveIndexString = name.section('-', 0, 0); //Extract the index
    QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest
    QString stationName = caveNameAndStation.section(".", 1, 1); //Extract the station
+   QString caveName = name.section(".", 0, 0);
 
    bool okay;
    int caveIndex = caveIndexString.toInt(&okay);
 
    if(!okay) {
        qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+       return;
    }
 
    //Make sure the index is good
    if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
        qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+       return;
    }
 
    cwCave* cave = Region->cave(caveIndex);
+
+   //Make sure the caveName is valid
+   if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
+       qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
+       return;
+   }
+
    QWeakPointer<cwStation> station = cave->station(stationName);
    QSharedPointer<cwStation> sharedStation = station.toStrongRef();
    if(sharedStation.isNull()) {

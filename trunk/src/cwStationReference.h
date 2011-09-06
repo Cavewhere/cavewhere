@@ -4,7 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QSharedPointer>
-#include <QDebug>
+//#include <QDebug>
 
 //Our includes
 class cwCave;
@@ -58,6 +58,10 @@ private slots:
     void caveDestroyed();
 
 };
+
+inline uint qHash(const cwStationReference& station) {
+    return qHash(station.station());
+}
 
 /**
   The cave that this station is located in

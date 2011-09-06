@@ -153,14 +153,14 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
   \brief Writes a chunk to a stream
   */
 void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
-    for(int i = 0; i < chunk->StationCount() - 1; i++) {
+    for(int i = 0; i < chunk->stationCount() - 1; i++) {
 
         //Make sure we can still be run
         if(!parentIsRunning() && !isRunning()) { return; }
 
-        cwStationReference fromStation = chunk->Station(i);
-        cwStationReference toStation = chunk->Station(i + 1);
-        cwShot* shot = chunk->Shot(i);
+        cwStationReference fromStation = chunk->station(i);
+        cwStationReference toStation = chunk->station(i + 1);
+        cwShot* shot = chunk->shot(i);
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 

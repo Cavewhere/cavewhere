@@ -393,7 +393,7 @@ void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
         cwSurveyChunk* chunk = Trip->chunk(i);;
         if(chunk == NULL) { continue; }
 
-        float height = cwSurveyChunkView::heightHint(chunk->StationCount());
+        float height = cwSurveyChunkView::heightHint(chunk->stationCount());
         ChunkBoundingRects[i].setHeight(height);
         ChunkBoundingRects[i].setWidth(1);
         ChunkBoundingRects[i].moveTop(yOffset);

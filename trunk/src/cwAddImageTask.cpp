@@ -190,6 +190,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     cwImageData originalImageData(image.size(), format, originalImageByteData);
     int imageId = cwProject::addImage(Database, originalImageData);
     imageIdContainer->setOriginal(imageId);
+    imageIdContainer->setOriginalSize(image.size());
 
     return image;
 }
