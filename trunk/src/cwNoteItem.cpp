@@ -4,6 +4,7 @@
 #include "cwGLShader.h"
 #include "cwCamera.h"
 #include "cwProjectImageProvider.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QPainter>
@@ -227,6 +228,65 @@ void cwNoteItem::paintFramebuffer() {
 
 }
 
+void cwNoteItem::paint(QPainter* painter, const QStyleOptionGraphicsItem * styleItem, QWidget * widget) {
+    cwGLRenderer::paint(painter, styleItem, widget);
+
+    drawShotsOfSelectedItem(painter);
+}
+
+/**
+  \brief Draws the legs of the selected item
+  */
+void cwNoteItem::drawShotsOfSelectedItem(QPainter* painter) {
+    painter->setRenderHint(QPainter::HighQualityAntialiasing);
+    painter->setPen(Qt::red);
+
+    if(SelectedNoteStation == NULL) { return; }
+    if(Note == NULL) { return; }
+
+    bool okay;
+    int stationIndex = SelectedNoteStation->property("stationId").toInt(&okay);
+
+    if(!okay) { return; }
+
+    cwTrip* parentTrip = Note->parentTrip();
+    if(parentTrip == NULL) { return; }
+
+    cwNoteStation selectedStation = Note->station(stationIndex);
+    if(!selectedStation.station().isValid()) { return; }
+
+    QVector3D selectStationPosition = selectedStation.station().position();
+    selectStationPosition.setZ(0.0);
+
+    //Transformation matrix for maniplating the points
+    cwNoteTranformation transformation = Note->stationNoteTransformation();
+    QMatrix4x4 matrix;
+    matrix.rotate(transformation.northUp(), 0.0, 0.0, 1.0);
+    matrix.scale(transformation.scale(), transformation.scale(), 1.0);
+    matrix = matrix * Note->scaleMatrix().inverted();  //The matrix that converts a real point into a notePosition
+
+    QMatrix4x4 projection = Camera->viewProjectionMatrix() * modelMatrix();
+
+    //Get all the neighboring stations for this trip
+    QSet<cwStationReference> neighboringStations = parentTrip->neighboringStations(selectedStation.name());
+    foreach(cwStationReference station, neighboringStations) {
+        QVector3D neighborPosition = station.position();
+        neighborPosition.setZ(0.0);
+
+        //Scale and rotate the vector
+        QVector3D vectorBetween = neighborPosition - selectStationPosition;
+        vectorBetween = matrix * vectorBetween;
+
+        QVector3D centerPoint = projection * QVector3D(selectedStation.positionOnNote());
+        centerPoint = Camera->mapNormalizeScreenToGLViewport(centerPoint);
+
+        QVector3D neighborPoint = projection * QVector3D(selectedStation.positionOnNote() + vectorBetween.toPointF());
+        neighborPoint = Camera->mapNormalizeScreenToGLViewport(neighborPoint);
+
+        painter->drawLine(centerPoint.toPointF(), neighborPoint.toPointF());
+    }
+}
+
 /**
   \brief Initializes the pan with the first point in the pan
   */
@@ -292,6 +352,7 @@ void cwNoteItem::setNote(cwNote* note) {
         }
 
         Note = note;
+        setSelectedStation(NULL);
 
         if(Note != NULL) {
             connect(Note, SIGNAL(destroyed()), SLOT(noteDeleted()));
@@ -299,6 +360,7 @@ void cwNoteItem::setNote(cwNote* note) {
             connect(Note, SIGNAL(imageChanged(cwImage)), SLOT(setImage(cwImage)));
             connect(Note, SIGNAL(stationAdded()), SLOT(regenerateStationVertices()));
             connect(Note, SIGNAL(stationPositionChanged(int)), SLOT(regenerateStationVertices()));
+            connect(Note, SIGNAL(stationRemoved(int)), SLOT(stationRemoved(int)));
             setImage(Note->image());
 
             regenerateStationVertices();
@@ -476,6 +538,12 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
 
     Note->addStation(newNoteStation);
 
+    //Get the last station in the list and select it
+    if(!QMLNoteStations.isEmpty()) {
+        QMLNoteStations.last()->setProperty("selected", true);
+    }
+
+
     return Note->numberOfStations() - 1;
 }
 
@@ -496,3 +564,37 @@ void cwNoteItem::moveStation(QPoint qtViewportCoordinate, cwNote* note, int stat
 
     Note->setStationData(cwNote::StaitonPosition, stationIndex, notePosition.toPointF());
 }
+
+/**
+  \brief Sets the selected station.
+
+  This will deselect the previous station.  Send this null to deselect the current
+  station
+  */
+void cwNoteItem::setSelectedStation(QDeclarativeItem* station) {
+    if(SelectedNoteStation != NULL && SelectedNoteStation->property("selected").toBool() != false) {
+        SelectedNoteStation->setProperty("selected", false);
+    }
+
+    SelectedNoteStation = station;
+
+    if(SelectedNoteStation != NULL && SelectedNoteStation->property("selected").toBool() != true) {
+        SelectedNoteStation->setProperty("selected", true);
+    }
+}
+
+/**
+  This is called when the note removes a station
+  */
+void cwNoteItem::stationRemoved(int stationIndex) {
+    //Unselect the item that's going to be deleted
+    if(stationIndex >= 0 || stationIndex < QMLNoteStations.size()) {
+        if(SelectedNoteStation == QMLNoteStations[stationIndex]) {
+            SelectedNoteStation = NULL;
+        }
+        QMLNoteStations[stationIndex]->deleteLater();
+        QMLNoteStations.removeAt(stationIndex);
+        regenerateStationVertices();
+    }
+}
+

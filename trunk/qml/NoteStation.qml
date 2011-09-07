@@ -9,6 +9,7 @@ Item {
     property variant stationId;
     property alias selected: selectedBackground.visible;
 
+
     //    x: -width / 2;
     //    y: -height / 2;
 
@@ -23,6 +24,8 @@ Item {
 
     //        visible: false
     //    }
+
+    focus: selected
 
     Rectangle {
         id: selectedBackground
@@ -110,6 +113,16 @@ Item {
         stationName.text = note.stationData(Note.StationName, stationId)
     }
 
+    onSelectedChanged: {
+        if(selected) {
+            noteViewer.setSelectedStation(noteStation);
+            forceActiveFocus();
+        }
+    }
 
+    Keys.onDeletePressed: {
+        console.log("Delete pressed!");
+        note.removeStation(stationId);
+    }
 
 }

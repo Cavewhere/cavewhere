@@ -49,10 +49,14 @@ public:
     QMatrix4x4 scaleMatrix() const;
 
     void addStation(cwNoteStation station);
+    Q_INVOKABLE void removeStation(int stationId);
     const QList<cwNoteStation>& stations() const;
+    cwNoteStation station(int stationId);
     int numberOfStations() const;
     Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
+
+    cwNoteTranformation stationNoteTransformation() const;
 
 
 signals:
@@ -65,6 +69,7 @@ signals:
     void stationAdded();
     void stationPositionChanged(int noteStationIndex);
     void stationNameChanged(int noteStationIndex);
+    void stationRemoved(int index);
 
 public slots:
 
@@ -125,6 +130,14 @@ inline int cwNote::numberOfStations() const {
 
 inline const QList<cwNoteStation>& cwNote::stations() const {
     return Stations;
+}
+
+/**
+  Gets the station note transformation,  This is the note page real scale and
+  rotation!
+  */
+inline cwNoteTranformation cwNote::stationNoteTransformation() const {
+    return NoteTransformation;
 }
 
 

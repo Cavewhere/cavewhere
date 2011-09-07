@@ -39,7 +39,7 @@ public:
     //For adding a station
     Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
     Q_INVOKABLE void moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex);
-
+    Q_INVOKABLE void setSelectedStation(QDeclarativeItem* station);
 
 //    Q_INVOKABLE void
 
@@ -52,6 +52,7 @@ protected:
     virtual void initializeGL();
     virtual void resizeGL();
     virtual void paintFramebuffer();
+    virtual void paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *);
 
 private:
 
@@ -88,6 +89,7 @@ private:
 
     QDeclarativeComponent* NoteStationComponent;
     QList<QDeclarativeItem*> QMLNoteStations;
+    QDeclarativeItem* SelectedNoteStation;
 
     virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 
@@ -100,6 +102,8 @@ private:
     void setNoteScaleModelMatrix(QMatrix4x4 noteScaleModelMatrix);
 
     QMatrix4x4 modelMatrix() const;
+
+    void drawShotsOfSelectedItem(QPainter* painter);
 
 
     /**
@@ -128,6 +132,7 @@ private slots:
     void updateNoteRotation(float degrees);
     void setImage(cwImage image);
     void regenerateStationVertices();
+    void stationRemoved(int stationIndex);
 };
 
 /**

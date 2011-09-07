@@ -267,6 +267,10 @@ Rectangle {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
         }
+
+        Keys.onDeletePressed: {
+
+        }
     }
 
     PropertyAnimation {

@@ -109,6 +109,22 @@ void cwNote::addStation(cwNoteStation station) {
 }
 
 /**
+  \brief Removes a station from the note
+
+  The index needs to be valid
+*/
+void cwNote::removeStation(int index) {
+    if(index < 0 || index >= Stations.size()) {
+        return;
+    }
+
+    Stations.removeAt(index);
+    updateNoteTransformation();
+
+    emit stationRemoved(index);
+}
+
+/**
   \brief Gets the station data at role at noteStationIndex with the role
   */
 QVariant cwNote::stationData(StationDataRole role, int noteStationIndex) const {
@@ -155,6 +171,17 @@ void cwNote::setStationData(StationDataRole role, int noteStationIndex, QVariant
         }
         break;
     }
+}
+
+/**
+  \brief Gets the station at stationId
+
+  stationId - The station at stationId, if the station id is invalid, this returns
+  an empty cwNoteStation
+  */
+cwNoteStation cwNote::station(int stationId) {
+    if(stationId < 0 || stationId >= Stations.size()) { return cwNoteStation(); }
+    return Stations[stationId];
 }
 
 /**
