@@ -102,6 +102,8 @@ void cwNote::addStation(cwNoteStation station) {
         station.setCave(parentTrip()->parentCave());
     }
 
+    qDebug() << "Station name:" << station.name();
+
     Stations.append(station);
     updateNoteTransformation();
 
@@ -331,12 +333,84 @@ cwNoteTranformation cwNote::averageTransformations(QList< cwNoteTranformation > 
 }
 
 /**
+  This guess the station based on the position on the Notes
+
+  If it doesn't know the station name.  If a station is within 5%, then it'll automatically
+  update the station name.
+
+  This only works for the plan view, z is always 0
+
+  \param previousStation - The current station that's select.  This will only look at neighboring
+  station of this station
+  \param stationNotePosition - The position on this page of notes of the station that needs to be guessed
+
+  \return An empty string if no station is within 5% of the guess
+  */
+QString cwNote::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
+
+    if(parentTrip() == NULL) { return QString(); }
+
+    QSet<cwStationReference> neigborStations = parentTrip()->neighboringStations(previousStation.name());
+
+    //Make sure we have neigbors
+    if(neigborStations.isEmpty()) {
+        return QString();
+    }
+
+//    In normalized note coordinates
+//    QPointF notePositionVector = stationNotePosition - previousStation.positionOnNote();
+
+    QVector3D previousStationPosition = previousStation.station().position();
+    previousStationPosition.setZ(0); //Don't need the z
+
+    QMatrix4x4 noteMatrix = noteTransformationMatrix();
+
+    foreach(cwStationReference station, neigborStations) {
+        QVector3D stationPosition = station.position();
+        stationPosition.setZ(0);
+
+        //Figure out the predicited position of the station on the notes
+        QVector3D vectorBetween = stationPosition - previousStationPosition;
+        QVector3D noteVectorBetween = noteMatrix * vectorBetween;
+        QVector3D predictedPosition = QVector3D(previousStation.positionOnNote()) + noteVectorBetween;
+
+        //Figure out the error between stationNotePosition and predictedPosition
+        QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
+        double normalizedError = errorVector.length() / noteVectorBetween.length();
+
+        qDebug() << "Normalized error: " << normalizedError;
+
+        if(normalizedError < 0.15) {
+            //Station is probably the one
+            return QString(station.name());
+        }
+    }
+
+    //Couldn't find a station
+    return QString();
+}
+
+/**
   \brief Gets the scaling matrix for the orignial size of the notes
   */
 QMatrix4x4 cwNote::scaleMatrix() const {
     QSize size = ImageIds.origianlSize();
     QMatrix4x4 matrix;
     matrix.scale(size.width(), size.height(), 1.0);
+    return matrix;
+}
+
+/**
+  This returns a matrix that's used to convert note coordinates into world coordinates.  Of corse with
+  world coordinates, you must first offset the matrix.
+  */
+QMatrix4x4 cwNote::noteTransformationMatrix() const {
+    //Transformation matrix for maniplating the points
+    cwNoteTranformation transformation = stationNoteTransformation();
+    QMatrix4x4 matrix;
+    matrix.rotate(transformation.northUp(), 0.0, 0.0, 1.0);
+    matrix.scale(transformation.scale(), transformation.scale(), 1.0);
+    matrix = matrix * scaleMatrix().inverted();  //The matrix that converts a real point into a notePosition
     return matrix;
 }
 

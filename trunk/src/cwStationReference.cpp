@@ -19,8 +19,7 @@ cwStationReference::cwStationReference(QString name) :
 /**
   \brief Sets the cave for this referance
 
-  If the station already exist in the cave, then the data will
-  be over written with new data
+
   */
 void cwStationReference::setCave(cwCave* cave) {
     if(Cave == cave) { return; }
@@ -32,12 +31,12 @@ void cwStationReference::setCave(cwCave* cave) {
         //Overwrite that station
         QSharedPointer<cwStation> caveStation = cave->station(name()).toStrongRef();
 
-        //Copy the data from this object
-        caveStation->setDown(SharedStation->down());
-        caveStation->setLeft(SharedStation->left());
-        caveStation->setRight(SharedStation->right());
-        caveStation->setUp(SharedStation->up());
-        caveStation->setPosition(SharedStation->position());
+//        //Copy the data from this object
+//        caveStation->setDown(SharedStation->down());
+//        caveStation->setLeft(SharedStation->left());
+//        caveStation->setRight(SharedStation->right());
+//        caveStation->setUp(SharedStation->up());
+//        caveStation->setPosition(SharedStation->position());
 
         //Set that station to this object
         SharedStation = caveStation;

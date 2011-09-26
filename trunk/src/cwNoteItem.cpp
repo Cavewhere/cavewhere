@@ -147,9 +147,9 @@ void cwNoteItem::regenerateStationVertices() {
     for(int i = 0; i < QMLNoteStations.size(); i++) {
         QDeclarativeItem* stationItem = QMLNoteStations[i];
         stationItem->setParentItem(this);
+        stationItem->setProperty("stationId", i);
         stationItem->setProperty("noteViewer", QVariant::fromValue<QObject*>(this));
         stationItem->setProperty("note", QVariant::fromValue<QObject*>(Note));
-        stationItem->setProperty("stationId", i);
     }
 
     updateQMLTransformItem();
@@ -238,7 +238,7 @@ void cwNoteItem::paint(QPainter* painter, const QStyleOptionGraphicsItem * style
   \brief Draws the legs of the selected item
   */
 void cwNoteItem::drawShotsOfSelectedItem(QPainter* painter) {
-    painter->setRenderHint(QPainter::HighQualityAntialiasing);
+    painter->setRenderHint(QPainter::Antialiasing);
     painter->setPen(Qt::red);
 
     if(SelectedNoteStation == NULL) { return; }
@@ -259,12 +259,9 @@ void cwNoteItem::drawShotsOfSelectedItem(QPainter* painter) {
     selectStationPosition.setZ(0.0);
 
     //Transformation matrix for maniplating the points
-    cwNoteTranformation transformation = Note->stationNoteTransformation();
-    QMatrix4x4 matrix;
-    matrix.rotate(transformation.northUp(), 0.0, 0.0, 1.0);
-    matrix.scale(transformation.scale(), transformation.scale(), 1.0);
-    matrix = matrix * Note->scaleMatrix().inverted();  //The matrix that converts a real point into a notePosition
+    QMatrix4x4 matrix = Note->noteTransformationMatrix();
 
+    //For projecting the points on to the page of notes
     QMatrix4x4 projection = Camera->viewProjectionMatrix() * modelMatrix();
 
     //Get all the neighboring stations for this trip
@@ -534,8 +531,22 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
 
     cwNoteStation newNoteStation;
     newNoteStation.setPositionOnNote(notePosition.toPointF());
-    newNoteStation.station().setName("Station Name");
 
+    //Try to guess the station name
+    QString stationName;
+    if(SelectedNoteStation != NULL) {
+        int stationId = SelectedNoteStation->property("stationId").toInt();
+        cwNoteStation selectedStation = Note->station(stationId);
+        stationName = Note->guessNeighborStationName(selectedStation, notePosition.toPointF());
+    }
+
+    if(stationName.isEmpty()) {
+        stationName = "Station Name";
+    }
+
+    qDebug() << "Found Station name:" << stationName;
+
+    newNoteStation.station().setName(stationName);
     Note->addStation(newNoteStation);
 
     //Get the last station in the list and select it

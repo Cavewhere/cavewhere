@@ -21,6 +21,7 @@ class cwNote : public QObject
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
+//    Q_PROPERTY(cwNoteTranformation* noteTranformation  )
 
     Q_ENUMS(StationDataRole)
 
@@ -47,6 +48,7 @@ public:
     cwTrip* parentTrip() const;
 
     QMatrix4x4 scaleMatrix() const;
+    QMatrix4x4 noteTransformationMatrix() const;
 
     void addStation(cwNoteStation station);
     Q_INVOKABLE void removeStation(int stationId);
@@ -57,6 +59,8 @@ public:
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
 
     cwNoteTranformation stationNoteTransformation() const;
+
+    QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
 
 signals:
@@ -84,11 +88,15 @@ private:
 
     void copy(const cwNote& object);
 
+    //For note station transformation
     void updateNoteTransformation();
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
     QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
     cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
     cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+
+    //Guess station name
+//    void guessStationName(cwNoteStation& station);
 
 };
 

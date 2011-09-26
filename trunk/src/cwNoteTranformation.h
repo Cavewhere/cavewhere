@@ -4,15 +4,18 @@
 //Qt includes
 #include <QSharedData>
 #include <QSharedDataPointer>
+#include <QObject>
 
 /**
   This class is useful for allowing automatic station referencing.  This holds the page of note's
   scale (example 40:1 and rotation that rotates the page such that north is up, ie. parallel the y axis.
   */
-class cwNoteTranformation
+class cwNoteTranformation : public QObject
 {
 public:
-    cwNoteTranformation();
+    cwNoteTranformation(QObject* parent = 0);
+    cwNoteTranformation(const cwNoteTranformation& other);
+    const cwNoteTranformation& operator =(const cwNoteTranformation& other);
 
     double scale() const;
     void setScale(double scale);
@@ -35,6 +38,8 @@ private:
 
     QSharedDataPointer<PrivateData> Data;
 };
+
+//Q_DECLARE_METATYPE(cwNoteTranformation*)
 
 /**
   \brief Sets the scale of the notes

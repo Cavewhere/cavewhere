@@ -109,7 +109,11 @@ Item {
 
 
     onNoteChanged: {
-        console.debug("Note station:" + note.stationData(Note.StationName, stationId));
+        console.debug("Note station:" + note.stationData(Note.StationName, stationId) + " " + stationId);
+        stationName.text = note.stationData(Note.StationName, stationId)
+    }
+
+    onStationIdChanged: {
         stationName.text = note.stationData(Note.StationName, stationId)
     }
 
