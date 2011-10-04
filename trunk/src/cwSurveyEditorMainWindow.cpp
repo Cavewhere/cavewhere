@@ -38,6 +38,11 @@
 #include "cwFileDialogHelper.h"
 #include "cwProjectImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
+#include "cwBasePanZoomInteraction.h"
+#include "cwBaseScrapInteraction.h"
+#include "cwCamera.h"
+#include "cwImageItem.h"
+#include "cwWheelArea.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -306,7 +311,7 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
     qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
-    qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
+    //qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
     qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
@@ -319,6 +324,11 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
     qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
     qmlRegisterType<cwNote>("Cavewhere", 1, 0, "Note");
+    qmlRegisterType<cwBasePanZoomInteraction>("Cavewhere", 1, 0, "BasePanZoomInteraction");
+    qmlRegisterType<cwBaseScrapInteraction>("Cavewhere", 1, 0, "BaseScrapInteraction");
+    qmlRegisterType<cwCamera>("Cavewhere", 1, 0, "Camera");
+    qmlRegisterType<cwImageItem>("Cavewhere", 1, 0, "ImageItem");
+    qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
@@ -448,7 +458,8 @@ void cwSurveyEditorMainWindow::initGLEW() {
   */
 QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
     QGLFormat format;
-    format.setSamples(8);
+//    format.setSamples(8);
+    format.setSampleBuffers(true);
 
     QGLWidget* glWidget = new QGLWidget(format, this);
     glWidget->makeCurrent();

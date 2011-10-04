@@ -37,6 +37,8 @@ public:
     bool operator ==(const cwImage& other);
     bool operator !=(const cwImage& other);
 
+    bool isValid() const;
+
 private:
     QList<int> Mipmaps;
     int IconId;
@@ -124,6 +126,12 @@ inline QSize cwImage::origianlSize() const {
     return OriginalSize;
 }
 
+/**
+  \brief Returns false if the image isn't valid and true if it is valid.
+  */
+inline bool cwImage::isValid() const {
+    return OriginalId > -1;
+}
 
 
 #endif // CWIMAGE_H

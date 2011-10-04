@@ -87,6 +87,11 @@ QByteArray cwProjectImageProvider::requestImageData(int id, QSize* size, QByteAr
         return QByteArray();
     }
 
+    QString databaseName = QString("resquestImage/%1").arg(id);
+    if(QSqlDatabase::contains(databaseName)) {
+        QSqlDatabase::removeDatabase(databaseName);
+    }
+
     //Define the database
     QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("resquestImage/%1").arg(id));
     database.setDatabaseName(projectPath());

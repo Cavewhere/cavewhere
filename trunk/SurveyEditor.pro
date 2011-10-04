@@ -104,7 +104,15 @@ SOURCES += src/main.cpp \
     src/cwRegionSaveTask.cpp \
     src/cwRegionLoadTask.cpp \
     src/cwNoteStation.cpp \
-    src/cwNoteTranformation.cpp
+    src/cwNoteTranformation.cpp \
+    src/cwScrap.cpp \
+    src/cwTransformUpdater.cpp \
+    src/cwBaseNoteStationInteraction.cpp \
+    src/cwBaseScrapInteraction.cpp \
+    src/cwImageItem.cpp \
+    src/cwScrapItem.cpp \
+    src/cwBasePanZoomInteraction.cpp \
+    src/cwWheelArea.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -197,7 +205,15 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwRegionSaveTask.h \
     src/cwRegionLoadTask.h \
     src/cwNoteStation.h \
-    src/cwNoteTranformation.h
+    src/cwNoteTranformation.h \
+    src/cwScrap.h \
+    src/cwTransformUpdater.h \
+    src/cwBaseNoteStationInteraction.h \
+    src/cwBaseScrapInteraction.h \
+    src/cwImageItem.h \
+    src/cwScrapItem.h \
+    src/cwBasePanZoomInteraction.h \
+    src/cwWheelArea.h
 
 
 
@@ -235,7 +251,11 @@ shaders/*.geom \
     qml/FileDialog.qml \
     qml/ButtonGroup.qml \
     qml/Splitter.qml \
-    qml/NoteStation.qml
+    qml/NoteStation.qml \
+    qml/Positioner3D.qml \
+    qml/PanZoomInteraction.qml \
+    qml/NoteItem.qml \
+    qml/AddScrapInteraction.qml
 
 RESOURCES += \
     icons.qrc

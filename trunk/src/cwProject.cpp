@@ -295,7 +295,7 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
   */
 void cwProject::connectRegion() {
     //Connects all the signals from the region so the directory
-    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(addCaveDirectories(int,int)));
+//    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(addCaveDirectories(int,int)));
 
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);

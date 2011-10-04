@@ -140,9 +140,10 @@ QVariant cwNote::stationData(StationDataRole role, int noteStationIndex) const {
     switch(role) {
     case StationName:
         return noteStation.station().name();
-    case StaitonPosition:
+    case StationPosition:
         return noteStation.positionOnNote();
     }
+    return QVariant();
 }
 
 /**
@@ -165,7 +166,7 @@ void cwNote::setStationData(StationDataRole role, int noteStationIndex, QVariant
             emit stationNameChanged(noteStationIndex);
         }
         break;
-    case StaitonPosition:
+    case StationPosition:
         if(noteStation.positionOnNote() != value.toPointF()) {
             noteStation.setPositionOnNote(value.toPointF());
             updateNoteTransformation();
@@ -414,3 +415,16 @@ QMatrix4x4 cwNote::noteTransformationMatrix() const {
     return matrix;
 }
 
+/**
+  \Brief adds a scrap to the notes
+  */
+void cwNote::addScrap(cwScrap* scrap) {
+    Scraps.append(scrap);
+}
+
+/**
+  \brief Gets all the scraps from the notes
+  */
+QList<cwScrap*> cwNote::scraps() {
+    return Scraps;
+}

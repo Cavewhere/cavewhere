@@ -10,6 +10,7 @@
 #include "cwNoteStation.h"
 #include "cwNoteTranformation.h"
 class cwTrip;
+class cwScrap;
 
 class cwNote : public QObject
 {
@@ -28,7 +29,7 @@ class cwNote : public QObject
 public:
     enum StationDataRole {
         StationName,
-        StaitonPosition
+        StationPosition
     };
 
     explicit cwNote(QObject *parent = 0);
@@ -49,6 +50,9 @@ public:
 
     QMatrix4x4 scaleMatrix() const;
     QMatrix4x4 noteTransformationMatrix() const;
+
+    void addScrap(cwScrap* scrap);
+    QList<cwScrap*> scraps();
 
     void addStation(cwNoteStation station);
     Q_INVOKABLE void removeStation(int stationId);
@@ -86,6 +90,8 @@ private:
     cwNoteTranformation NoteTransformation;
     QList<cwNoteStation> Stations;
 
+    QList<cwScrap*> Scraps;
+
     void copy(const cwNote& object);
 
     //For note station transformation
@@ -99,6 +105,8 @@ private:
 //    void guessStationName(cwNoteStation& station);
 
 };
+
+Q_DECLARE_METATYPE(cwNote*)
 
 /**
   \brief Gets the parent trip for this chunk
@@ -147,6 +155,8 @@ inline const QList<cwNoteStation>& cwNote::stations() const {
 inline cwNoteTranformation cwNote::stationNoteTransformation() const {
     return NoteTransformation;
 }
+
+
 
 
 #endif // CWNOTE_H

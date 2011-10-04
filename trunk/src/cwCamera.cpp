@@ -10,15 +10,15 @@ cwCamera::cwCamera(QObject *parent) :
   This unprojects point with viewDepth.  The point should be in the
   windows coordinates and the viewDepth should be queried from the depth buffer.
 
-  If the model matrix isn't specified, then this returns in world coordinates, otherwise
+  If the model matrix is the identity, then this returns in world coordinates, otherwise
   it returns in local coordinates of the model.
 
   This assumes that point is already in opengl viewport pixel coordinates.  Use mapToGLViewport
   to convert from Qt viewport coordinates
   */
-QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 modelMatrix) const {
+QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const {
 
-   QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * ViewMatrix * modelMatrix;
+   QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * viewMatrix * modelMatrix;
 
    bool canInvert;
    QMatrix4x4 inverseMatrix = modelViewProjectionMatrix.inverted(&canInvert);
@@ -44,6 +44,24 @@ QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 modelMat
 QPoint cwCamera::mapToGLViewport(QPoint point) const {
     int flippedY = Viewport.y() + (Viewport.height() - point.y());
     return QPoint(point.x(), flippedY);
+}
+
+/**
+  Sets the projection matrix for the camera
+  */
+void cwCamera::setProjectionMatrix(QMatrix4x4 matrix) {
+    ProjectionMatrix = matrix;
+    ViewProjectionMatrixIsDirty = true;
+    emit projectionChanged();
+}
+
+/**
+  Sets the view matrix for the camera
+  */
+void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
+    ViewMatrix = matrix;
+    ViewProjectionMatrixIsDirty = true;
+    emit viewChanged();
 }
 
 /**

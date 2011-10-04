@@ -16,7 +16,7 @@
 class QGLWidget;
 
 //Our includes
-class cwCamera;
+#include "cwCamera.h"
 class cwMouseEventTransition;
 class cwGLShader;
 class cwShaderDebugger;
@@ -34,6 +34,7 @@ class cwGLRenderer : public QDeclarativeItem
 {
     Q_OBJECT
     Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
+    Q_PROPERTY(cwCamera* camera READ camera NOTIFY cameraChanged)
 
 public:
     explicit cwGLRenderer(QDeclarativeItem *parent = 0);
@@ -43,8 +44,11 @@ public:
 
     virtual void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *);
 
+    cwCamera* camera() const;
+
 signals:
     void glWidgetChanged();
+    void cameraChanged();
 
 
 public slots:
@@ -84,6 +88,7 @@ protected:
 
 protected slots:
     virtual void resizeGL() {}
+    void updateRenderer();
 
 private:
     void copyRenderFramebufferToTextures();
@@ -97,6 +102,7 @@ private slots:
 };
 
 inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
-
+inline cwCamera* cwGLRenderer::camera() const { return Camera; }
+inline void cwGLRenderer::updateRenderer() { update(); }
 
 #endif // CWGLRENDERER_H

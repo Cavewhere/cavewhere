@@ -5,6 +5,7 @@ Rectangle {
     id: noteGallery
 
     property alias notesModel: galleryView.model;
+    property Note currentNote
 
     signal imagesAdded(variant images)
 
@@ -148,7 +149,11 @@ Rectangle {
             }
 
             onCurrentIndexChanged: {
-                noteArea.note = currentItem.noteObject;
+                if(currentItem != null) {
+                    currentNote = currentItem.noteObject
+                   // noteArea.rotation = currentNote.rotate;
+                    noteArea.image = currentItem.noteObject.image;
+                }
             }
         }
     }
@@ -182,8 +187,8 @@ Rectangle {
 
                 onClicked: {
                     //Update the note's rotation
-                    noteRotationAnimation.from = noteArea.note.rotate
-                    noteRotationAnimation.to = noteArea.note.rotate + 90
+                    noteRotationAnimation.from = currentNote.rotate
+                    noteRotationAnimation.to = currentNote.rotate + 90
                     noteRotationAnimation.start()
                 }
             }
@@ -194,7 +199,9 @@ Rectangle {
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"
 
-                onClicked:  noteGallery.state = "CARPET"
+                onClicked:  {
+                    noteGallery.state = "SELECT"
+                }
             }
 
             IconButton {
@@ -211,33 +218,6 @@ Rectangle {
                     onFilesSelected: noteGallery.imagesAdded(selected)
                 }
             }
-
-            //            ButtonGroup {
-            //                id: addButtonGroup
-
-            //                text: "Add"
-
-
-
-            //                IconButton {
-            //                    id: addStationId
-            //                    iconSource: "qrc:icons/notes.png"
-            //                    sourceSize: mainToolBar.iconSize
-            //                    text: "Stations"
-
-            //                    onClicked: noteGallery.state = "ADD-STATION"
-
-            //                }
-
-            //                IconButton {
-            //                    id: addScrapId
-            //                    iconSource: "qrc:icons/notes.png"
-            //                    sourceSize: mainToolBar.iconSize
-            //                    text: "Scraps"
-
-            //                    onClicked: noteGallery.state = "ADD-SCRAP"
-            //                }
-            //            }
         }
     }
 
@@ -247,16 +227,13 @@ Rectangle {
         visible: false
         z: 1
 
-        //        anchors.horizontalCenter: parent.horizontalCenter
-        //        anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.top:  parent.top
-        //   anchors.centerIn: parent
 
         width: childrenRect.width + 6
         height: childrenRect.height + 6
 
-        radius: mainmainButtonArea.radius
+        radius: mainButtonArea.radius
         color: "#EEEEEE"
         Row {
             spacing: 3
@@ -268,11 +245,13 @@ Rectangle {
                 text: "Back"
 
                 onClicked: {
+                    noteGallery.state = "CARPET"
                     noteGallery.state = ""
                 }
             }
 
             IconButton {
+                id: selectObjectId
                 iconSource: "qrc:icons/notes.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Select"
@@ -287,6 +266,7 @@ Rectangle {
                 text: "Add"
 
                 IconButton {
+                    id: addStationId
                     iconSource: "qrc:icons/notes.png"
                     sourceSize: mainToolBar.iconSize
                     text: "Station"
@@ -295,6 +275,7 @@ Rectangle {
                 }
 
                 IconButton {
+                    id: addScrapId
                     iconSource: "qrc:icons/notes.png"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
@@ -322,64 +303,38 @@ Rectangle {
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
-        glWidget: mainGLWidget
-        projectFilename: project.filename
-
-        clip: true
-
-        MouseArea {
-            id: noteItemMouseArea
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-            onMousePositionChanged: noteArea.panMove(Qt.point(mouse.x, mouse.y))
-        }
-
-        Keys.onDeletePressed: {
-
-        }
+        note: currentNote
     }
 
-    PropertyAnimation {
+    SequentialAnimation {
         id: noteRotationAnimation
-        target: noteArea.note
-        property: "rotate"
-        easing.type: Easing.InOutCubic
+
+        property alias to: subAnimation.to
+        property alias from: subAnimation.from
+
+        ScriptAction {
+            script: noteArea.updateRotationCenter()
+        }
+
+        PropertyAnimation {
+            id: subAnimation
+            target: currentNote
+            property: "rotate"
+            easing.type: Easing.InOutCubic
+        }
     }
+
+
 
     states: [
-
-        //        State {
-        //            name: "PAN"
-        //            PropertyChanges {
-        //                target: panButton
-        //                selected: true
-        //            }
-
-        //            PropertyChanges {
-        //                target: noteItemMouseArea
-        //                onPressed: noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        //                onMousePositionChanged: noteArea.panMove(Qt.point(mouse.x, mouse.y))
-        //            }
-
-        //        },
-
 
         State {
             name: "CARPET"
 
-                        PropertyChanges {
-                            target: mainButtonArea
-                            visible: false
-                        }
-
-//            AnchorChanges {
-//                target: carpetButtonArea
-//                //                anchors.horizontalCenter: undefined
-//                //                anchors.verticalCenter: undefined
-//                anchors.right: parent.right
-//                anchors.top:  parent.top
-//            }
+            PropertyChanges {
+                target: mainButtonArea
+                visible: false
+            }
 
             PropertyChanges {
                 target: carpetButtonArea
@@ -395,6 +350,11 @@ Rectangle {
         State {
             name: "SELECT"
             extend: "CARPET"
+
+            PropertyChanges {
+                target: selectObjectId
+                selected: true
+            }
         },
 
         State {
@@ -406,26 +366,31 @@ Rectangle {
             }
 
             PropertyChanges {
-                target: noteItemMouseArea
-
-                onPressed: {
-                    if(mouse.button == Qt.RightButton) {
-                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-
-                onReleased: {
-                    if(mouse.button == Qt.LeftButton) {
-                        noteArea.addStation(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-
-                onMousePositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
-                    }
-                }
+                target: noteArea
+                state: "ADD-STATION"
             }
+
+//            PropertyChanges {
+//                target: noteItemMouseArea
+
+//                onPressed: {
+//                    if(mouse.button == Qt.RightButton) {
+//                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
+//                    }
+//                }
+
+//                onReleased: {
+//                    if(mouse.button == Qt.LeftButton) {
+//                        noteArea.addStation(Qt.point(mouse.x, mouse.y))
+//                    }
+//                }
+
+//                onMousePositionChanged: {
+//                    if(pressedButtons == Qt.RightButton) {
+//                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
+//                    }
+//                }
+//            }
         },
 
         State {
@@ -437,36 +402,37 @@ Rectangle {
             }
 
             PropertyChanges {
-                target: mainButtonArea
-                visible: false
+                target: noteArea
+                state: "ADD-SCRAP"
             }
 
-            PropertyChanges {
-                target: carpetButtonArea
-                visible: true
-            }
+//            PropertyChanges {
+//                target: noteItemMouseArea
+//                onPressed: {
+//                    if(pressedButtons == Qt.RightButton) {
+//                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
+//                    }
+//                }
 
-            PropertyChanges {
-                target: noteItemMouseArea
-                onPressed: {
-                    if(pressedButtons == Qt.RightButton) {
-                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-                    }
-                }
+//                onReleased: {
+//                    if(mouse.button == Qt.LeftButton) {
+//                        noteArea.add
+//                    }
+//                }
 
-                onMousePositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-            }
+//                onMousePositionChanged: {
+//                    if(pressedButtons == Qt.RightButton) {
+//                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
+//                    }
+//                }
+//            }
         }
     ]
 
     transitions: [
         Transition {
             from: ""
-            to: "CARPET"
+            to: "SELECT"
 
             PropertyAnimation {
                 target: carpetButtonArea;
@@ -494,6 +460,7 @@ Rectangle {
 
         Transition {
             to: ""
+            from: "CARPET"
 
             PropertyAnimation {
                 target: carpetButtonArea;

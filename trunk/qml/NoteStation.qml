@@ -1,31 +1,42 @@
 import QtQuick 1.0
 import Cavewhere 1.0
 
-Item {
+Positioner3D {
     id: noteStation
 
-    property variant noteViewer;
-    property variant note;
-    property variant stationId;
+    property NoteItem noteViewer;
+    property Note note;
+    property int stationId;
     property alias selected: selectedBackground.visible;
 
-
-    //    x: -width / 2;
-    //    y: -height / 2;
+    function updateItem() {
+        if(note != null) {
+            stationName.text = note.stationData(Note.StationName, stationId)
+            var position = note.stationData(Note.StationPosition, stationId);
+            console.log("Position:" + position.x + " " + position.y);
+            position3D = Qt.vector3d(position.x, position.y, 0.0);
+        }
+    }
 
     width: 2
     height: 2
-    //  color: "red"
-
-    //    Image {
-    //        id: selectedBackground
-    //        anchors.centerIn: parent
-    //        source: "qrc:icons/stationSelected.png"
-
-    //        visible: false
-    //    }
 
     focus: selected
+
+    onNoteChanged: updateItem()
+    onStationIdChanged: updateItem()
+
+    onSelectedChanged: {
+        if(selected) {
+            noteViewer.setSelectedStation(noteStation);
+            forceActiveFocus();
+        }
+    }
+
+    Keys.onDeletePressed: {
+        console.log("Delete pressed!");
+        note.removeStation(stationId);
+    }
 
     Rectangle {
         id: selectedBackground
@@ -108,25 +119,6 @@ Item {
     }
 
 
-    onNoteChanged: {
-        console.debug("Note station:" + note.stationData(Note.StationName, stationId) + " " + stationId);
-        stationName.text = note.stationData(Note.StationName, stationId)
-    }
 
-    onStationIdChanged: {
-        stationName.text = note.stationData(Note.StationName, stationId)
-    }
-
-    onSelectedChanged: {
-        if(selected) {
-            noteViewer.setSelectedStation(noteStation);
-            forceActiveFocus();
-        }
-    }
-
-    Keys.onDeletePressed: {
-        console.log("Delete pressed!");
-        note.removeStation(stationId);
-    }
 
 }

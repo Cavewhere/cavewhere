@@ -8,6 +8,7 @@
 #include "cwGLRenderer.h"
 #include "cwImage.h"
 #include "cwNote.h"
+#include "cwTransformUpdater.h"
 
 //Qt includes
 #include <QDeclarativeItem>
@@ -32,15 +33,13 @@ public:
     QString projectFilename() const;
     void setProjectFilename(QString projectFilename);
 
-    //For panning notes
-    Q_INVOKABLE void panFirstPoint(QPointF firstMousePoint);
-    Q_INVOKABLE void panMove(QPointF mousePosition);
-
     //For adding a station
     Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
     Q_INVOKABLE void moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex);
     Q_INVOKABLE void setSelectedStation(QDeclarativeItem* station);
 
+    //For adding a scrap
+    Q_INVOKABLE void addScrapPoint(QPoint qtViewportCoordinate);
 //    Q_INVOKABLE void
 
 
@@ -52,7 +51,7 @@ protected:
     virtual void initializeGL();
     virtual void resizeGL();
     virtual void paintFramebuffer();
-    virtual void paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *);
+//    virtual void paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *);
 
 private:
 
@@ -73,7 +72,7 @@ private:
     GLuint NoteTexture;
 
     //Creates the scale matrix for the note item
-    QMatrix4x4 NoteScaleModelMatrix;
+//    QMatrix4x4 ViewMatrix;
     QMatrix4x4 RotationModelMatrix;
 
     QFutureWatcher<QPair<QByteArray, QSize> >* LoadNoteWatcher;
@@ -84,24 +83,28 @@ private:
     //The project filename for this class
     QString ProjectFilename;
 
-   //For interaction
-    QPoint LastPanPoint;
+
 
     QDeclarativeComponent* NoteStationComponent;
     QList<QDeclarativeItem*> QMLNoteStations;
     QDeclarativeItem* SelectedNoteStation;
 
-    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
+    cwTransformUpdater* TransformUpdater; //!< Transform objects with gl coordinates into qt item coordinates
+
+    QGraphicsObject* TestParent;
+    QGraphicsPolygonItem* TestRectangle;
+
+//    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 
     void initializeShaders();
     void initializeVertexBuffers();
     void initializeTexture();
 
-    void updateQMLTransformItem();
+//    void updateQMLTransformItem();
     void setRotationMatrix(QMatrix4x4 rotationMatrix);
-    void setNoteScaleModelMatrix(QMatrix4x4 noteScaleModelMatrix);
+//    void setViewMatrix(QMatrix4x4 noteScaleModelMatrix);
 
-    QMatrix4x4 modelMatrix() const;
+//    QMatrix4x4 modelViewMatrix() const;
 
     void drawShotsOfSelectedItem(QPainter* painter);
 
@@ -132,8 +135,11 @@ private slots:
     void updateNoteRotation(float degrees);
     void setImage(cwImage image);
     void regenerateStationVertices();
+    void updateStationPosition(int stationIndex);
     void stationRemoved(int stationIndex);
 };
+
+Q_DECLARE_METATYPE(cwNoteItem*)
 
 /**
   \brief Get's the project Filename
