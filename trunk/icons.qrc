@@ -42,5 +42,12 @@
         <file>icons/stationBad.png</file>
         <file>icons/stationGood.png</file>
         <file>icons/stationSelected.png</file>
+        <file>icons/rotate.png</file>
+        <file>icons/addNotes.png</file>
+        <file>icons/carpet.png</file>
+        <file>icons/addScrap.png</file>
+        <file>icons/addStation.png</file>
+        <file>icons/back.png</file>
+        <file>icons/select.png</file>
     </qresource>
 </RCC>

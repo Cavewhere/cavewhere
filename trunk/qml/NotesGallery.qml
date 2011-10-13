@@ -181,7 +181,8 @@ Rectangle {
             anchors.centerIn: parent
 
             IconButton {
-                iconSource: "qrc:icons/notes.png"
+                id: rotateIconButtonId
+                iconSource: "qrc:icons/rotate.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
 
@@ -195,7 +196,7 @@ Rectangle {
 
             IconButton {
                 id: carpetButtonId
-                iconSource: "qrc:icons/notes.png"
+                iconSource: "qrc:icons/carpet.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Carpet"
 
@@ -205,7 +206,7 @@ Rectangle {
             }
 
             IconButton {
-                iconSource: "qrc:icons/notes.png"
+                iconSource: "qrc:icons/addNotes.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Add"
 
@@ -240,7 +241,7 @@ Rectangle {
             anchors.centerIn: parent
 
             IconButton {
-                iconSource: "qrc:icons/notes.png"
+                iconSource: "qrc:icons/back.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Back"
 
@@ -252,7 +253,7 @@ Rectangle {
 
             IconButton {
                 id: selectObjectId
-                iconSource: "qrc:icons/notes.png"
+                iconSource: "qrc:icons/select.png"
                 sourceSize: mainToolBar.iconSize
                 text: "Select"
 
@@ -267,7 +268,7 @@ Rectangle {
 
                 IconButton {
                     id: addStationId
-                    iconSource: "qrc:icons/notes.png"
+                    iconSource: "qrc:icons/addStation.png"
                     sourceSize: mainToolBar.iconSize
                     text: "Station"
 
@@ -276,7 +277,7 @@ Rectangle {
 
                 IconButton {
                     id: addScrapId
-                    iconSource: "qrc:icons/notes.png"
+                    iconSource: "qrc:icons/addScrap.png"
                     sourceSize: mainToolBar.iconSize
                     text: "Scrap"
 

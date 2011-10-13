@@ -51,7 +51,6 @@ Rectangle {
         onClicked: {
             container.clicked();
         }
-
     }
 
     Behavior on color {

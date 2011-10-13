@@ -6,16 +6,13 @@
 #include "cwCamera.h"
 #include "cwShaderDebugger.h"
 
-
 //Qt includes
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
-#include <QLabel>
 
 //Std includes
 #include <math.h>
-#include <iostream>
 
 
 cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
@@ -23,7 +20,8 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     MultiSampleFramebuffer(NULL),
     TextureFramebuffer(0),
     ColorTexture(0),
-    DepthTexture(0)
+    DepthTexture(0),
+    HasBlit(false)
 {
     GLWidget = NULL;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
@@ -33,6 +31,8 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
 
     connect(this, SIGNAL(widthChanged()), SLOT(privateResizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(privateResizeGL()));
+
+
 }
 
 cwGLRenderer::~cwGLRenderer() {
@@ -61,10 +61,9 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     painter->beginNativePainting();
 
     //Draw the subclasses paintFramebuffer to the render framebuffer
+    glPushAttrib(GL_VIEWPORT_BIT);
     MultiSampleFramebuffer->bind();
-    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
     glViewport(0, 0, width(), height());
-    glDisable(GL_SCISSOR_TEST);
     paintFramebuffer();
     glPopAttrib();
     MultiSampleFramebuffer->release();
@@ -82,7 +81,7 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
   This copies the render buffer to the texture framebuffer object
   */
 void cwGLRenderer::copyRenderFramebufferToTextures() {
-    if(QGLFramebufferObject::hasOpenGLFramebufferBlit()) {
+    if(HasBlit) {
         //Copy the MultiSampleFramebuffer data to the textureFramebuffer
         glBindFramebufferEXT(GL_READ_FRAMEBUFFER, MultiSampleFramebuffer->handle());
         glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, TextureFramebuffer);
@@ -105,19 +104,15 @@ void cwGLRenderer::renderTextureFramebuffer() {
     glBindTexture(GL_TEXTURE_2D, ColorTexture);
 
     glBegin(GL_QUADS);
-    //glColor3f(0.0, 1.0, 0.0);
     glTexCoord2f(0.0, 1.0);
     glVertex2f(0, 0);
 
-   // glColor3f(0.0, 0.0, 0.0);
     glTexCoord2f(0.0, 0.0);
     glVertex2f(0, height());
 
-  //  glColor3f(1.0, 0.0, 0.0);
     glTexCoord2f(1.0, 0.0);
     glVertex2f(width(), height());
 
-    //glColor3f(1.0, 1.0, 0.0);
     glTexCoord2f(1.0, 1.0);
     glVertex2f(width(), 0);
 
@@ -134,7 +129,7 @@ void cwGLRenderer::privateInitializeGL() {
     //Genereate the multi sample buffer for anti aliasing
     MultiSampleFramebuffer = new QGLFramebufferObject(QSize(1, 1));
 
-    if(QGLFramebufferObject::hasOpenGLFramebufferBlit()) {
+    if(HasBlit) {
         //Generate the texture framebuffer for rendering
         glGenFramebuffersEXT(1, &TextureFramebuffer);
 
@@ -170,7 +165,7 @@ void cwGLRenderer::privateResizeGL() {
     //Recreate the multisample framebuffer
     delete MultiSampleFramebuffer;
     QGLFramebufferObjectFormat multiSampleFormat;
-    if(QGLFramebufferObject::hasOpenGLFramebufferBlit()) {
+    if(HasBlit) {
         multiSampleFormat.setSamples(8);
 
         //Don't alloc
@@ -205,11 +200,10 @@ void cwGLRenderer::privateResizeGL() {
 //    }
 
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
-    //multiSampleFormat.setInternalTextureFormat(GL_RGBA);
+    multiSampleFormat.setInternalTextureFormat(GL_RGBA);
+    MultiSampleFramebuffer = new QGLFramebufferObject(512, 512); //, multiSampleFormat);
 
-    MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
-
-    if(!QGLFramebufferObject::hasOpenGLFramebufferBlit()) {
+    if(!HasBlit) {
         //No multi sampling support
         TextureFramebuffer = MultiSampleFramebuffer->handle();
         ColorTexture = MultiSampleFramebuffer->texture();
@@ -278,13 +272,13 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
     buffer.resize(bufferSize);
 
     //Get data from opengl framebuffer
-    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, TextureFramebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, TextureFramebuffer);
     glReadPixels(samplerArea.x(), samplerArea.y(), //where
                  samplerArea.width(), samplerArea.height(), //size
                  GL_DEPTH_COMPONENT, //what buffer
                  GL_FLOAT, //Returned data type
                  buffer.data()); //The buffer for the data
-    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
     float sum = 0.0;
     int count = 0;
