@@ -68,6 +68,7 @@ protected:
     GLuint TextureFramebuffer;
     GLuint ColorTexture;
     GLuint DepthTexture;
+    bool HasBlit;
 
     //Shaders for testing
     cwShaderDebugger* ShaderDebugger;

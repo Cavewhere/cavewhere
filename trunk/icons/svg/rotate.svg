@@ -16,7 +16,7 @@
    version="1.1"
    inkscape:version="0.48.1 r9760"
    sodipodi:docname="rotate.svg"
-   inkscape:export-filename="/home/blitz/documents/projects/surveyEditor-svn/icons/rotate.png"
+   inkscape:export-filename="/home/blitz/documents/projects/surveyEditor-svn/icons/svg/back.png"
    inkscape:export-xdpi="90"
    inkscape:export-ydpi="90">
   <defs
@@ -82,9 +82,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="7.328125"
-     inkscape:cx="20.002139"
-     inkscape:cy="20.076713"
+     inkscape:zoom="3.6640625"
+     inkscape:cx="105.80804"
+     inkscape:cy="-14.641435"
      inkscape:current-layer="layer1"
      showgrid="true"
      inkscape:document-units="px"

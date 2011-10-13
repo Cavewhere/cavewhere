@@ -21,7 +21,7 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     TextureFramebuffer(0),
     ColorTexture(0),
     DepthTexture(0),
-    HasBlit(false)
+    HasBlit(true)
 {
     GLWidget = NULL;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
@@ -31,6 +31,8 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
 
     connect(this, SIGNAL(widthChanged()), SLOT(privateResizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(privateResizeGL()));
+    connect(Camera, SIGNAL(viewChanged()), SLOT(updateRenderer()));
+    connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
 
 }
@@ -86,9 +88,9 @@ void cwGLRenderer::copyRenderFramebufferToTextures() {
         glBindFramebufferEXT(GL_READ_FRAMEBUFFER, MultiSampleFramebuffer->handle());
         glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, TextureFramebuffer);
         glBlitFramebufferEXT(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
-                             0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
-                             GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-                             GL_LINEAR);
+                          0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
+                          GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+                          GL_LINEAR);
 
         glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
         glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
@@ -201,7 +203,7 @@ void cwGLRenderer::privateResizeGL() {
 
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
     multiSampleFormat.setInternalTextureFormat(GL_RGBA);
-    MultiSampleFramebuffer = new QGLFramebufferObject(512, 512); //, multiSampleFormat);
+    MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
 
     if(!HasBlit) {
         //No multi sampling support
@@ -245,6 +247,8 @@ void cwGLRenderer::setGLWidget(QGLWidget* widget) {
 QVector3D cwGLRenderer::unProject(QPoint point) {
     //Sample the depth buffer
     float depth = sampleDepthBuffer(point);
+
+    qDebug() << "Depth:" << depth;
 
     //Unproject the point
     return Camera->unProject(point, depth);
