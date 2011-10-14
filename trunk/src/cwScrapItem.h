@@ -6,6 +6,7 @@
 
 //Our includes
 class cwScrap;
+class cwTransformUpdater;
 
 /**
   \brief This draws a scrap
@@ -21,6 +22,9 @@ public:
 
     void setScrap(cwScrap* scrap);
     cwScrap* scrap() const;
+
+    void setTransformUpdater(cwTransformUpdater* updater);
+    void transformUpdate() const;
 
 signals:
     void scrapChanged();
