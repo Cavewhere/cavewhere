@@ -89,6 +89,8 @@ void cwTransformUpdater::addTransformItem(QGraphicsObject* item) {
 
     TransformItems.insert(item);
     connect(item, SIGNAL(destroyed(QObject*)), SLOT(transformItemDeleted(QObject*)));
+
+    updateTransform(item);
 }
 
 /**

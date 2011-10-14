@@ -22,19 +22,20 @@ public:
     void setScrap(cwScrap* scrap);
     cwScrap* scrap() const;
 
-protected:
-    void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *);
-
 signals:
     void scrapChanged();
 
 public slots:
 
 private:
+    //Data class
     cwScrap* Scrap;
 
+    //Visual elements
+    QGraphicsPolygonItem* BorderItem;
+
 private slots:
-    void updateScrapItem();
+    void updateScrapGeometry();
 
 };
 
@@ -45,11 +46,11 @@ inline cwScrap* cwScrapItem::scrap() const {
     return Scrap;
 }
 
-/**
-  Repaints the the scrap
-  */
-inline void cwScrapItem::updateScrapItem() {
-    update();
-}
+///**
+//  Repaints the the scrap
+//  */
+//inline void cwScrapItem::updateScrapItem() {
+//    update();
+//}
 
 #endif // CWSCRAPITEM_H

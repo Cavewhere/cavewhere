@@ -14,6 +14,7 @@ cwGraphicsSceneMouseTransition::cwGraphicsSceneMouseTransition( QObject * object
 
 bool cwGraphicsSceneMouseTransition::eventTest( QEvent * event ) {
     qDebug() << "eventTest:" << event;
+    return false;
 }
 
 void cwGraphicsSceneMouseTransition::onTransition( QEvent * event ) {

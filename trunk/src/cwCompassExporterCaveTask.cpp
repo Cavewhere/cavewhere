@@ -228,7 +228,7 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotFiel
         backSite = shot->backClino();
     }
 
-    float value;
+    float value = 0.0f;
 
     if(field == Clino || field == BackClino) {
         frontSite = convertFromDownUp(frontSite);

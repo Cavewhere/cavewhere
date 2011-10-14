@@ -62,7 +62,8 @@ ImageItem {
     HelpBox {
         id: scrapHelpBox
         visible: false
-        text: "<b>Click</b> to add points to the current scrap <i>or</i> <br> Press <b>spacebar</b> to add a new scrap"
+        text: "Trace a scrap by <b>clicking</b> points around it <br>
+        Press <b>spacebar</b> to add a new scrap"
     }
 
     states: [

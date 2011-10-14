@@ -3,13 +3,15 @@
 #include "cwScrap.h"
 
 //Qt includes
-#include <QPainter>
+#include <QGraphicsPolygonItem>
 
 cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
-    Scrap(NULL)
+    Scrap(NULL),
+    BorderItem(new QGraphicsPolygonItem(this))
 {
-    setFlag(QGraphicsItem::ItemHasNoContents, false);
+    BorderItem->setBrush(Qt::red);
+    BorderItem->setOpacity(0.25);
 }
 
 /**
@@ -17,21 +19,36 @@ cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
   */
 void cwScrapItem::setScrap(cwScrap* scrap) {
     if(Scrap != scrap) {
+        if(Scrap != NULL) {
+            disconnect(Scrap, NULL, this, NULL);
+        }
+
         Scrap = scrap;
 
-        connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapItem()));
-        connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updateScrapItem()));
+        if(Scrap != NULL) {
+            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapGeometry()));
+            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updateScrapGeometry()));
+            updateScrapGeometry();
+        }
 
         emit scrapChanged();
     }
 }
 
 /**
-  Paints the scrap
+    This will update the polygon item's geometry
   */
-void cwScrapItem::paint(QPainter * painter, const QStyleOptionGraphicsItem *, QWidget *) {
-    if(Scrap == NULL) { return; }
-
-    QPolygonF scrapArea(Scrap->points());
-    painter->drawPolygon(scrapArea);
+void cwScrapItem::updateScrapGeometry() {
+    BorderItem->setPolygon(QPolygonF(Scrap->points()));
 }
+
+
+///**
+//  Paints the scrap
+//  */
+//void cwScrapItem::paint(QPainter * painter, const QStyleOptionGraphicsItem *, QWidget *) {
+//    if(Scrap == NULL) { return; }
+
+//    QPolygonF scrapArea(Scrap->points());
+//    painter->drawPolygon(scrapArea);
+//}
