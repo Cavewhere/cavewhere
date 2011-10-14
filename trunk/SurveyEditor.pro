@@ -112,7 +112,9 @@ SOURCES += src/main.cpp \
     src/cwImageItem.cpp \
     src/cwScrapItem.cpp \
     src/cwBasePanZoomInteraction.cpp \
-    src/cwWheelArea.cpp
+    src/cwWheelArea.cpp \
+    src/cwNoteInteraction.cpp \
+    src/cwScrapView.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -213,7 +215,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwImageItem.h \
     src/cwScrapItem.h \
     src/cwBasePanZoomInteraction.h \
-    src/cwWheelArea.h
+    src/cwWheelArea.h \
+    src/cwNoteInteraction.h \
+    src/cwScrapView.h
 
 
 
@@ -255,7 +259,8 @@ shaders/*.geom \
     qml/Positioner3D.qml \
     qml/PanZoomInteraction.qml \
     qml/NoteItem.qml \
-    qml/AddScrapInteraction.qml
+    qml/AddScrapInteraction.qml \
+    qml/HelpBox.qml
 
 RESOURCES += \
     icons.qrc
@@ -264,3 +269,8 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
+
+
+

@@ -42,6 +42,7 @@ import Qt 4.7
 
 Item {
     property alias color : rectangle.color
+    property alias radius: rectangle.radius
 
     BorderImage {
         anchors.fill: rectangle

@@ -1,6 +1,8 @@
 //Our include
 #include "cwNote.h"
 #include "cwTrip.h"
+#include "cwScrap.h"
+#include "cwDebug.h"
 
 //Std includes
 #include <math.h>
@@ -419,7 +421,14 @@ QMatrix4x4 cwNote::noteTransformationMatrix() const {
   \Brief adds a scrap to the notes
   */
 void cwNote::addScrap(cwScrap* scrap) {
+    if(scrap == NULL) {
+        qDebug() << "This is a bug! scrap is null and shouldn't be" << LOCATION;
+        return;
+    }
+
+    scrap->setParent(this);
     Scraps.append(scrap);
+    emit scrapAdded();
 }
 
 /**
@@ -427,4 +436,16 @@ void cwNote::addScrap(cwScrap* scrap) {
   */
 QList<cwScrap*> cwNote::scraps() {
     return Scraps;
+}
+
+/**
+  Gets the scrap form the note at a index
+
+  If the scrapIndex is out of bounds, this returns NULL
+  */
+cwScrap* cwNote::scrap(int scrapIndex) {
+    if(scrapIndex >= 0 && scrapIndex < Scraps.size()) {
+        return Scraps[scrapIndex];
+    }
+    return NULL;
 }

@@ -50,8 +50,6 @@ void cwImageItem::updateRotationCenter() {
     QPoint center(width() / 2.0, height() / 2.0);
     QVector3D rotationCenter = Camera->unProject(center, 0.0);
     RotationCenter = rotationCenter.toPointF();
-
-    qDebug() << "Rotation center:" << RotationCenter;
 }
 
 /**
@@ -294,4 +292,15 @@ QPair<QByteArray, QSize> cwImageItem::LoadImage::operator ()(int imageId) {
     QByteArray imageData = imageProvidor.requestImageData(imageId, &size);
 
     return QPair<QByteArray, QSize>(imageData, size);
+}
+
+/**
+  This converts a mouse click into note coordinates
+
+  The note coordinate are normalized from 0.0 to 1.0 for both the x and y.
+  */
+QPointF cwImageItem::mapQtViewportToNote(QPoint qtViewportCoordinate) {
+    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
+    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
+    return notePosition.toPointF();
 }

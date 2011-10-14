@@ -22,11 +22,16 @@
 class cwTransformUpdater : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY matrixChanged)
+    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
+
+
 public:
     explicit cwTransformUpdater(QObject *parent = 0);
 
     void setCamera(cwCamera* camera);
-    cwCamera* camrea() const;
+    cwCamera* camera() const;
 
     void setModelMatrix(QMatrix4x4 matrix);
     QMatrix4x4 modelMatrix() const;
@@ -41,6 +46,7 @@ public:
 
 signals:
     void matrixChanged();
+    void cameraChanged();
 
 public slots:
     void update();
@@ -71,6 +77,13 @@ private:
   */
 inline QMatrix4x4 cwTransformUpdater::matrix() const {
     return TransformMatrix;
+}
+
+/**
+  \brief Get's the camera for the transform updater
+  */
+inline cwCamera* cwTransformUpdater::camera() const {
+    return Camera;
 }
 
 /**

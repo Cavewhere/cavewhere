@@ -34,6 +34,8 @@ public:
 
     Q_INVOKABLE void updateRotationCenter();
 
+    Q_INVOKABLE QPointF mapQtViewportToNote(QPoint qtViewportCoordinate);
+
 
 signals:
     void rotationChanged();

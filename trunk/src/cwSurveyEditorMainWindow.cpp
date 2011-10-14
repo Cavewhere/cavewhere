@@ -43,6 +43,8 @@
 #include "cwCamera.h"
 #include "cwImageItem.h"
 #include "cwWheelArea.h"
+#include "cwScrapView.h"
+//#include "cwTransformUpdater.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -329,6 +331,8 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwCamera>("Cavewhere", 1, 0, "Camera");
     qmlRegisterType<cwImageItem>("Cavewhere", 1, 0, "ImageItem");
     qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
+    qmlRegisterType<cwScrapView>("Cavewhere", 1, 0, "ScrapView");
+    qmlRegisterType<cwTransformUpdater>("Cavewhere", 1, 0, "TransformUpdater");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);

@@ -27,6 +27,8 @@ void cwTransformUpdater::setCamera(cwCamera* camera) {
         connect(Camera, SIGNAL(viewChanged()), SLOT(update()));
         connect(Camera, SIGNAL(viewportChanged()), SLOT(update()));
         update();
+
+        emit cameraChanged();
     }
 }
 

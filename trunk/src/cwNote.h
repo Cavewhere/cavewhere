@@ -52,6 +52,7 @@ public:
     QMatrix4x4 noteTransformationMatrix() const;
 
     void addScrap(cwScrap* scrap);
+    cwScrap* scrap(int scrap);
     QList<cwScrap*> scraps();
 
     void addStation(cwNoteStation station);
@@ -74,10 +75,14 @@ signals:
     void imageChanged(cwImage image);
     void rotateChanged(float rotate);
 
+    //For stations
     void stationAdded();
     void stationPositionChanged(int noteStationIndex);
     void stationNameChanged(int noteStationIndex);
     void stationRemoved(int index);
+
+    //For scraps
+    void scrapAdded();
 
 public slots:
 

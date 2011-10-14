@@ -18,12 +18,29 @@ ImageItem {
     }
 
     BaseScrapInteraction {
-        id: addBasScrapInteraction
+        id: addBaseScrapInteraction
         camera: noteArea.camera
+        note: noteArea.note
     }
 
     Keys.onDeletePressed: {
 
+    }
+
+    Keys.onSpacePressed: {
+
+    }
+
+    //This allows note coordinates to be mapped to opengl coordinates
+    TransformUpdater {
+        id: transformUpdaterId
+        camera: noteArea.camera
+        modelMatrix: noteArea.modelMatrix
+    }
+
+    ScrapView {
+        note: noteArea.note
+        transformUpdater: transformUpdaterId
     }
 
     MouseArea {
@@ -33,12 +50,19 @@ ImageItem {
         onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
         onReleased: { }
         onMousePositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+        onEntered:  noteArea.forceActiveFocus()
     }
 
     WheelArea {
         id: wheelArea
         anchors.fill: parent
         onVerticalScroll: basePanZoomInteraction.zoom(delta, position)
+    }
+
+    HelpBox {
+        id: scrapHelpBox
+        visible: false
+        text: "<b>Click</b> to add points to the current scrap <i>or</i> <br> Press <b>spacebar</b> to add a new scrap"
     }
 
     states: [
@@ -59,7 +83,8 @@ ImageItem {
 
                 onReleased: {
                     if(mouse.button == Qt.LeftButton) {
-                        console.log("Add scrap");
+                        var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                        addBaseScrapInteraction.addPoint(notePoint)
                     }
                 }
 
@@ -68,6 +93,30 @@ ImageItem {
                         basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                     }
                 }
+            }
+
+            PropertyChanges {
+                target: scrapHelpBox
+                visible: true
+            }
+
+            PropertyChanges {
+                target: noteArea
+                Keys.onSpacePressed: {
+                    console.log("Space pressed");
+                    addBaseScrapInteraction.startNewScrap()
+                }
+            }
+        }
+    ]
+
+    transitions: [
+        Transition {
+            from: "ADD-SCRAP"
+            reversible: true
+
+            ScriptAction {
+                script: addBaseScrapInteraction.startNewScrap()
             }
         }
 

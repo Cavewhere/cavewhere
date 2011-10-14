@@ -27,8 +27,6 @@ public:
     QVector3D unProject(QPoint point, float viewDepth, QMatrix4x4 modelMatrix) const;
     QVector3D unProject(QPoint point, float viewDepth, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
 
-//    QVector3D project(QVector3D )
-
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
     QPoint mapToGLViewport(QPoint point) const;

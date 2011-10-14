@@ -208,7 +208,7 @@ Rectangle {
             IconButton {
                 iconSource: "qrc:icons/addNotes.png"
                 sourceSize: mainToolBar.iconSize
-                text: "Add"
+                text: "Load"
 
                 onClicked: {
                     fileDialog.open();

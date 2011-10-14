@@ -33,6 +33,8 @@ public:
     QString projectFilename() const;
     void setProjectFilename(QString projectFilename);
 
+//    Q_INVOKABLE QPointF mapQtViewportToNote(QPointF qtViewportCoordinate);
+
     //For adding a station
     Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
     Q_INVOKABLE void moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex);

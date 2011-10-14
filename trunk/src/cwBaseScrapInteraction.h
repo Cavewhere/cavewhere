@@ -5,20 +5,29 @@
 #include <QDeclarativeItem>
 
 //Our includes
-#include <cwBasePanZoomInteraction.h>
+#include "cwNoteInteraction.h"
+class cwScrap;
 
-class cwBaseScrapInteraction : public cwBasePanZoomInteraction
+class cwBaseScrapInteraction : public cwNoteInteraction
 {
     Q_OBJECT
+
+
+
 public:
     explicit cwBaseScrapInteraction(QDeclarativeItem *parent = 0);
 
-    Q_INVOKABLE void addScrap();
-    Q_INVOKABLE void addPoint(int scrapIndex, QPointF qtViewportCoordinate);
+    Q_INVOKABLE void addPoint(QPointF noteCoordinate);
 
 signals:
 
 public slots:
+    void startNewScrap();
+
+private:
+    int CurrentScrapIndex;
+
+    void addScrap();
 
 };
 

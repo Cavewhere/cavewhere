@@ -511,36 +511,36 @@ QPair<QByteArray, QSize> cwNoteItem::LoadImage::operator ()(int imageId) {
   \return The index to the add station
   */
 int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
-    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
-    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
+//    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
+//    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
 
-    cwNoteStation newNoteStation;
-    newNoteStation.setPositionOnNote(notePosition.toPointF());
+//    cwNoteStation newNoteStation;
+//    newNoteStation.setPositionOnNote(notePosition.toPointF());
 
-    //Try to guess the station name
-    QString stationName;
-    if(SelectedNoteStation != NULL) {
-        int stationId = SelectedNoteStation->property("stationId").toInt();
-        cwNoteStation selectedStation = Note->station(stationId);
-        stationName = Note->guessNeighborStationName(selectedStation, notePosition.toPointF());
-    }
+//    //Try to guess the station name
+//    QString stationName;
+//    if(SelectedNoteStation != NULL) {
+//        int stationId = SelectedNoteStation->property("stationId").toInt();
+//        cwNoteStation selectedStation = Note->station(stationId);
+//        stationName = Note->guessNeighborStationName(selectedStation, notePosition.toPointF());
+//    }
 
-    if(stationName.isEmpty()) {
-        stationName = "Station Name";
-    }
+//    if(stationName.isEmpty()) {
+//        stationName = "Station Name";
+//    }
 
-    qDebug() << "Found Station name:" << stationName;
+//    qDebug() << "Found Station name:" << stationName;
 
-    newNoteStation.station().setName(stationName);
-    Note->addStation(newNoteStation);
+//    newNoteStation.station().setName(stationName);
+//    Note->addStation(newNoteStation);
 
-    //Get the last station in the list and select it
-    if(!QMLNoteStations.isEmpty()) {
-        QMLNoteStations.last()->setProperty("selected", true);
-    }
+//    //Get the last station in the list and select it
+//    if(!QMLNoteStations.isEmpty()) {
+//        QMLNoteStations.last()->setProperty("selected", true);
+//    }
 
 
-    return Note->numberOfStations() - 1;
+//    return Note->numberOfStations() - 1;
 }
 
 /**
@@ -552,13 +552,13 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
   */
 void cwNoteItem::moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex) {
 
-    if(note == NULL) { return; }
-    if(stationIndex < 0 || stationIndex >= note->numberOfStations()) { return; }
+//    if(note == NULL) { return; }
+//    if(stationIndex < 0 || stationIndex >= note->numberOfStations()) { return; }
 
-    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
-    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
+//    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
+//    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
 
-    Note->setStationData(cwNote::StationPosition, stationIndex, notePosition.toPointF());
+//    Note->setStationData(cwNote::StationPosition, stationIndex, notePosition.toPointF());
 }
 
 /**
