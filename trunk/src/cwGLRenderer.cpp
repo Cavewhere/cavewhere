@@ -21,7 +21,7 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     TextureFramebuffer(0),
     ColorTexture(0),
     DepthTexture(0),
-    HasBlit(true)
+    HasBlit(false)
 {
     GLWidget = NULL;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
@@ -63,9 +63,10 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     painter->beginNativePainting();
 
     //Draw the subclasses paintFramebuffer to the render framebuffer
-    glPushAttrib(GL_VIEWPORT_BIT);
+    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
     MultiSampleFramebuffer->bind();
     glViewport(0, 0, width(), height());
+    glDisable(GL_SCISSOR_TEST);
     paintFramebuffer();
     glPopAttrib();
     MultiSampleFramebuffer->release();
@@ -195,11 +196,10 @@ void cwGLRenderer::privateResizeGL() {
         }
 
         glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
+    } else {
+        //No multi sampling, doesn't support blit
+        multiSampleFormat.setSamples(0);
     }
-//    else {
-//        //No multi sampling, doesn't support blit
-//        multiSampleFormat.setSamples(0);
-//    }
 
     multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
     multiSampleFormat.setInternalTextureFormat(GL_RGBA);
@@ -248,8 +248,6 @@ QVector3D cwGLRenderer::unProject(QPoint point) {
     //Sample the depth buffer
     float depth = sampleDepthBuffer(point);
 
-    qDebug() << "Depth:" << depth;
-
     //Unproject the point
     return Camera->unProject(point, depth);
 }
@@ -263,6 +261,7 @@ QVector3D cwGLRenderer::unProject(QPoint point) {
   The return value will be from 0.0 to 1.0
   */
 float cwGLRenderer::sampleDepthBuffer(QPoint point) {
+    GLWidget->makeCurrent();
 
     const int samplerSize = 3;
     const int samplerCenter = samplerSize / 2;

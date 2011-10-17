@@ -121,6 +121,7 @@ void cwScrapView::updateAllScraps() {
     if(ScrapItems.size() > numberOfScraps) {
         //Delete unused polygons
         for(int i = ScrapItems.size() - 1; i >= numberOfScraps; i--) {
+            transformUpdater()->removeTransformItem(ScrapItems[i]);
             delete ScrapItems[i];
             ScrapItems.removeLast();
         }

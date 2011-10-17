@@ -100,6 +100,7 @@ void cwTransformUpdater::removeTransformItem(QGraphicsObject* item) {
     if(!TransformItems.contains(item)) {
         qDebug() << item << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
     }
+    disconnect(item, NULL, this, NULL);
     TransformItems.remove(item);
 }
 
@@ -120,6 +121,7 @@ void cwTransformUpdater::update() {
 
     //Update the transform objects
     foreach(QGraphicsObject* object, TransformItems) {
+        qDebug() << "Object: " << object;
         updateTransform(object);
     }
 }
@@ -143,6 +145,7 @@ void cwTransformUpdater::updatePoint(QGraphicsObject* object) {
   This assuems that the object's geometry has already been set in local 2D opengl coordinates.
   */
 void cwTransformUpdater::updateTransform(QGraphicsObject* object) {
+    Q_ASSERT(object != NULL);
     object->setTransform(TransformMatrix.toTransform());
 }
 

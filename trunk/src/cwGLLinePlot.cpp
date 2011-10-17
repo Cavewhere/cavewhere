@@ -81,7 +81,8 @@ void cwGLLinePlot::draw() {
     LinePlotVertexBuffer.release();
     LinePlotIndexBuffer.release();
     ShaderProgram->release();
-}
+
+    }
 
 /**
   \brief Set the line points for the line plot object

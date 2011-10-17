@@ -39,7 +39,7 @@ Rectangle {
 //        anchors.bottom: parent.bottom
         anchors.top: iconNormal.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: -2
+        anchors.topMargin: 2
     }
 
     MouseArea {

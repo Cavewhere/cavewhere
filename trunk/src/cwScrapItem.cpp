@@ -10,7 +10,7 @@ cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
     Scrap(NULL),
     BorderItem(new QGraphicsPolygonItem(this))
 {
-    BorderItem->setBrush(Qt::red);
+    BorderItem->setBrush(Qt::blue);
     BorderItem->setOpacity(0.25);
 }
 

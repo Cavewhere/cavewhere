@@ -97,6 +97,10 @@ void cwImageItem::ImageFinishedLoading() {
     //Load the data into opengl
     glBindTexture(GL_TEXTURE_2D, NoteTexture);
 
+    //Get the max texture size
+    GLint maxTextureSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+
     int trueMipmapLevel = 0;
     for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
 
@@ -105,12 +109,12 @@ void cwImageItem::ImageFinishedLoading() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
-        //if(size.width() < 2048 && size.height() < 2048) {
+        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
             trueMipmapLevel++;
-        //}
+        }
     }
 
    // glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture

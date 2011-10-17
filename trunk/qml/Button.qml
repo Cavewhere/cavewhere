@@ -57,7 +57,7 @@ Rectangle {
             id: buttonText
             //anchors.left: iconOnTheLeft ? buttonText.right : parent.left
             anchors.right: iconOnTheLeft ? parent.right : icon.left
-            anchors.verticalCenter: icon.verticalCenter
+            anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: {
                 if(text.length > 0) {
                     return icon.status == Image.Ready && !iconOnTheLeft ? 3 : 0
