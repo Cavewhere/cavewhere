@@ -8,7 +8,8 @@
 #include <limits>
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
-    cwGLObject(parent)
+    cwGLObject(parent),
+    ShaderProgram(NULL)
 {
     MaxZValue = 0.0;
     MinZValue = 0.0;

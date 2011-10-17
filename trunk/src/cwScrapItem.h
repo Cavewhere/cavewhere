@@ -38,6 +38,8 @@ private:
     //Visual elements
     QGraphicsPolygonItem* BorderItem;
 
+    //Sets the transform updater
+
 private slots:
     void updateScrapGeometry();
 
@@ -48,6 +50,13 @@ private slots:
   */
 inline cwScrap* cwScrapItem::scrap() const {
     return Scrap;
+}
+
+/**
+
+  */
+inline void cwScrapItem::transformUpdate() const {
+
 }
 
 ///**
