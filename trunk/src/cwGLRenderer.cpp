@@ -63,11 +63,35 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     painter->beginNativePainting();
 
     //Draw the subclasses paintFramebuffer to the render framebuffer
-    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
+    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
+
+    glMatrixMode(GL_PROJECTION_MATRIX);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glMatrixMode(GL_MODELVIEW_MATRIX);
+    glPushMatrix();
+    glLoadIdentity();
+
     MultiSampleFramebuffer->bind();
     glViewport(0, 0, width(), height());
     glDisable(GL_SCISSOR_TEST);
-    paintFramebuffer();
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBegin(GL_TRIANGLES);
+    glColor3f(1.0, 0.0, 0.0);
+
+    glVertex3f(1, 1, -.5);
+    glVertex3f(0.0, 0.0, -0.5);
+    glVertex3f(1, 0.0, -0.5);
+    glEnd();
+
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION_MATRIX);
+
+    glPopMatrix();
+
+    //paintFramebuffer();
     glPopAttrib();
     MultiSampleFramebuffer->release();
 
@@ -275,13 +299,13 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
     buffer.resize(bufferSize);
 
     //Get data from opengl framebuffer
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, TextureFramebuffer);
+    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, TextureFramebuffer);
     glReadPixels(samplerArea.x(), samplerArea.y(), //where
                  samplerArea.width(), samplerArea.height(), //size
                  GL_DEPTH_COMPONENT, //what buffer
                  GL_FLOAT, //Returned data type
                  buffer.data()); //The buffer for the data
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
 
     float sum = 0.0;
     int count = 0;
