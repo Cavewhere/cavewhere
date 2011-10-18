@@ -65,11 +65,11 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     //Draw the subclasses paintFramebuffer to the render framebuffer
     glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
 
-    glMatrixMode(GL_PROJECTION_MATRIX);
+    glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
 
-    glMatrixMode(GL_MODELVIEW_MATRIX);
+    glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
 
@@ -79,15 +79,15 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBegin(GL_TRIANGLES);
-    glColor3f(1.0, 0.0, 0.0);
+  //  glColor3f(1.0, 0.0, 0.0);
 
-    glVertex3f(1, 1, -.5);
+    glVertex3f(.1, .1, -.5);
     glVertex3f(0.0, 0.0, -0.5);
-    glVertex3f(1, 0.0, -0.5);
+    glVertex3f(.1, 0.0, -0.5);
     glEnd();
 
     glPopMatrix();
-    glMatrixMode(GL_PROJECTION_MATRIX);
+    glMatrixMode(GL_PROJECTION);
 
     glPopMatrix();
 

@@ -33,6 +33,8 @@ cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
     cwGLRenderer(parent)
 {
     Region = NULL;
+    Terrain = NULL;
+            LinePlot = NULL;
 
 //    Terrain = NULL;
 
