@@ -35,6 +35,8 @@ public:
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* updater);
 
+    void selectScrapItem(cwScrapItem* scrapItem);
+
 //    QMatrix4x4 noteMatrix() const;
 //    void setNoteMatrix(QMatrix4x4 matrix);
 
@@ -59,7 +61,9 @@ private:
     cwNote* Note;
 
     QList<cwScrapItem*> ScrapItems;
-    QMap<cwScrap*, QGraphicsPolygonItem*> ItemLookup;
+    cwScrapItem* SelectScrapItem;
+
+    //    QMap<cwScrap*, QGraphicsPolygonItem*> ItemLookup;
 
     cwTransformUpdater* TransformUpdater;
 

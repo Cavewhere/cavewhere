@@ -16,22 +16,11 @@ class cwNote : public QObject
 {
     Q_OBJECT
 
-//    Q_PROPERTY(QString imagePath READ imagePath WRITE setImagePath NOTIFY imagePathChanged)
-
     Q_PROPERTY(int original READ original NOTIFY originalChanged)
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
-//    Q_PROPERTY(cwNoteTranformation* noteTranformation  )
-
-    Q_ENUMS(StationDataRole)
-
 public:
-    enum StationDataRole {
-        StationName,
-        StationPosition
-    };
-
     explicit cwNote(QObject *parent = 0);
     cwNote(const cwNote& object);
     cwNote& operator=(const cwNote& object);
@@ -49,23 +38,11 @@ public:
     cwTrip* parentTrip() const;
 
     QMatrix4x4 scaleMatrix() const;
-    QMatrix4x4 noteTransformationMatrix() const;
+//    QMatrix4x4 noteTransformationMatrix() const;
 
     void addScrap(cwScrap* scrap);
     cwScrap* scrap(int scrap);
     QList<cwScrap*> scraps();
-
-    void addStation(cwNoteStation station);
-    Q_INVOKABLE void removeStation(int stationId);
-    const QList<cwNoteStation>& stations() const;
-    cwNoteStation station(int stationId);
-    int numberOfStations() const;
-    Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
-    Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
-
-    cwNoteTranformation stationNoteTransformation() const;
-
-    QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
 
 signals:
@@ -75,14 +52,11 @@ signals:
     void imageChanged(cwImage image);
     void rotateChanged(float rotate);
 
-    //For stations
-    void stationAdded();
-    void stationPositionChanged(int noteStationIndex);
-    void stationNameChanged(int noteStationIndex);
-    void stationRemoved(int index);
-
     //For scraps
     void scrapAdded();
+
+    //When ever the trip parent has changed
+    void parentTripChanged();
 
 public slots:
 
@@ -99,12 +73,12 @@ private:
 
     void copy(const cwNote& object);
 
-    //For note station transformation
-    void updateNoteTransformation();
-    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+//    //For note station transformation
+//    void updateNoteTransformation();
+//    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
+//    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
+//    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
+//    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
 
     //Guess station name
 //    void guessStationName(cwNoteStation& station);
@@ -142,24 +116,6 @@ inline float cwNote::rotate() const {
     return DisplayRotation;
 }
 
-/**
-  \brief Gets the number of stations for a page of notes
-  */
-inline int cwNote::numberOfStations() const {
-    return Stations.count();
-}
-
-inline const QList<cwNoteStation>& cwNote::stations() const {
-    return Stations;
-}
-
-/**
-  Gets the station note transformation,  This is the note page real scale and
-  rotation!
-  */
-inline cwNoteTranformation cwNote::stationNoteTransformation() const {
-    return NoteTransformation;
-}
 
 
 

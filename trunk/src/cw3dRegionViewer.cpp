@@ -33,16 +33,12 @@ cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
     cwGLRenderer(parent)
 {
     Region = NULL;
-    Terrain = NULL;
-            LinePlot = NULL;
 
-//    Terrain = NULL;
-
-//    Terrain = new cwGLTerrain(this);
-//    Terrain->setCamera(Camera);
-//    Terrain->setShaderDebugger(ShaderDebugger);
-//    Terrain->setNumberOfLevels(10);
-////    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
+    Terrain = new cwGLTerrain(this);
+    Terrain->setCamera(Camera);
+    Terrain->setShaderDebugger(ShaderDebugger);
+    Terrain->setNumberOfLevels(10);
+    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
     LinePlot = new cwGLLinePlot(this);
     LinePlot->setCamera(Camera);
@@ -72,7 +68,7 @@ void cw3dRegionViewer::paint(QPainter * painter, const QStyleOptionGraphicsItem 
 void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-//    Terrain->draw();
+    Terrain->draw();
     LinePlot->draw();
 
    glDisable(GL_DEPTH_TEST);
@@ -85,7 +81,7 @@ void cw3dRegionViewer::initializeGL() {
     //Initilizes the cameras
     resetView();
 
-//    Terrain->initialize();
+    Terrain->initialize();
     LinePlot->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array

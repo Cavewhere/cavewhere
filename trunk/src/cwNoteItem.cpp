@@ -127,60 +127,56 @@ void cwNoteItem::initializeVertexBuffers() {
   */
 void cwNoteItem::regenerateStationVertices() {
 
-    //Make sure we have a note component so we can create it
-    if(NoteStationComponent == NULL) {
-        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-        if(context == NULL) { return; }
-        NoteStationComponent = new QDeclarativeComponent(context->engine(), "qml/NoteStation.qml", this);
-        if(NoteStationComponent->isError()) {
-            qDebug() << "Notecomponent errors:" << NoteStationComponent->errorString();
-        }
-    }
+//    //Make sure we have a note component so we can create it
+//    if(NoteStationComponent == NULL) {
+//        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+//        if(context == NULL) { return; }
+//        NoteStationComponent = new QDeclarativeComponent(context->engine(), "qml/NoteStation.qml", this);
+//        if(NoteStationComponent->isError()) {
+//            qDebug() << "Notecomponent errors:" << NoteStationComponent->errorString();
+//        }
+//    }
 
-    if(QMLNoteStations.size() < Note->numberOfStations()) {
-        int notesToAdd = Note->numberOfStations() - QMLNoteStations.size();
-        //Add more stations to the NoteStations
-        for(int i = 0; i < notesToAdd; i++) {
-            int noteStationIndex = QMLNoteStations.size();
+//    if(QMLNoteStations.size() < Note->numberOfStations()) {
+//        int notesToAdd = Note->numberOfStations() - QMLNoteStations.size();
+//        //Add more stations to the NoteStations
+//        for(int i = 0; i < notesToAdd; i++) {
+//            int noteStationIndex = QMLNoteStations.size();
 
-            if(noteStationIndex < 0 || noteStationIndex >= Note->stations().size()) {
-                qDebug() << "noteStationIndex out of bounds:" << noteStationIndex << QMLNoteStations.size();
-                continue;
-            }
+//            if(noteStationIndex < 0 || noteStationIndex >= Note->stations().size()) {
+//                qDebug() << "noteStationIndex out of bounds:" << noteStationIndex << QMLNoteStations.size();
+//                continue;
+//            }
 
-            QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(NoteStationComponent->create());
-            if(stationItem == NULL) {
-                qDebug() << "Problem creating new station item ... THIS IS A BUG!";
-                continue;
-            }
+//            QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(NoteStationComponent->create());
+//            if(stationItem == NULL) {
+//                qDebug() << "Problem creating new station item ... THIS IS A BUG!";
+//                continue;
+//            }
 
-            QMLNoteStations.append(stationItem);
-            TransformUpdater->addPointItem(stationItem);
-        }
-    } else if(QMLNoteStations.size() > Note->numberOfStations()) {
-        //Remove stations from NoteStations
-        int notesToRemove = QMLNoteStations.size() - Note->numberOfStations();
-        //Add more stations to the NoteStations
-        for(int i = 0; i < notesToRemove; i++) {
-            QDeclarativeItem* deleteStation = QMLNoteStations.last();
-            QMLNoteStations.removeLast();
-            deleteStation->deleteLater();
-        }
-    }
+//            QMLNoteStations.append(stationItem);
+//            TransformUpdater->addPointItem(stationItem);
+//        }
+//    } else if(QMLNoteStations.size() > Note->numberOfStations()) {
+//        //Remove stations from NoteStations
+//        int notesToRemove = QMLNoteStations.size() - Note->numberOfStations();
+//        //Add more stations to the NoteStations
+//        for(int i = 0; i < notesToRemove; i++) {
+//            QDeclarativeItem* deleteStation = QMLNoteStations.last();
+//            QMLNoteStations.removeLast();
+//            deleteStation->deleteLater();
+//        }
+//    }
 
-    for(int i = 0; i < QMLNoteStations.size(); i++) {
-        QDeclarativeItem* stationItem = QMLNoteStations[i];
-        stationItem->setProperty("stationId", i);
-        stationItem->setProperty("noteViewer", QVariant::fromValue(this));
-        stationItem->setProperty("note", QVariant::fromValue(Note));
-        stationItem->setParentItem(this);
-//        stationItem->update();
-    }
+//    for(int i = 0; i < QMLNoteStations.size(); i++) {
+//        QDeclarativeItem* stationItem = QMLNoteStations[i];
+//        stationItem->setProperty("stationId", i);
+//        stationItem->setProperty("noteViewer", QVariant::fromValue(this));
+//        stationItem->setProperty("note", QVariant::fromValue(Note));
+//        stationItem->setParentItem(this);
+//    }
 
-    TransformUpdater->update();
-
-//    update();
-//    updateQMLTransformItem();
+//    TransformUpdater->update();
 
 }
 
@@ -264,53 +260,53 @@ void cwNoteItem::paintFramebuffer() {
 /**
   \brief Draws the legs of the selected item
   */
-void cwNoteItem::drawShotsOfSelectedItem(QPainter* painter) {
-    QPen pen;
-    pen.setColor(Qt::red);
-    pen.setWidthF(1.0);
-    painter->setPen(pen);
+void cwNoteItem::drawShotsOfSelectedItem(QPainter* /*painter*/) {
+//    QPen pen;
+//    pen.setColor(Qt::red);
+//    pen.setWidthF(1.0);
+//    painter->setPen(pen);
 
-    if(SelectedNoteStation == NULL) { return; }
-    if(Note == NULL) { return; }
+//    if(SelectedNoteStation == NULL) { return; }
+//    if(Note == NULL) { return; }
 
-    bool okay;
-    int stationIndex = SelectedNoteStation->property("stationId").toInt(&okay);
+//    bool okay;
+//    int stationIndex = SelectedNoteStation->property("stationId").toInt(&okay);
 
-    if(!okay) { return; }
+//    if(!okay) { return; }
 
-    cwTrip* parentTrip = Note->parentTrip();
-    if(parentTrip == NULL) { return; }
+//    cwTrip* parentTrip = Note->parentTrip();
+//    if(parentTrip == NULL) { return; }
 
-    cwNoteStation selectedStation = Note->station(stationIndex);
-    if(!selectedStation.station().isValid()) { return; }
+//    cwNoteStation selectedStation = Note->station(stationIndex);
+//    if(!selectedStation.station().isValid()) { return; }
 
-    QVector3D selectStationPosition = selectedStation.station().position();
-    selectStationPosition.setZ(0.0);
+//    QVector3D selectStationPosition = selectedStation.station().position();
+//    selectStationPosition.setZ(0.0);
 
-    //Transformation matrix for maniplating the points
-    QMatrix4x4 matrix = Note->noteTransformationMatrix();
+//    //Transformation matrix for maniplating the points
+//    QMatrix4x4 matrix = Note->noteTransformationMatrix();
 
-    //For projecting the points on to the page of notes
-    QMatrix4x4 projection = Camera->viewProjectionMatrix() * RotationModelMatrix;
+//    //For projecting the points on to the page of notes
+//    QMatrix4x4 projection = Camera->viewProjectionMatrix() * RotationModelMatrix;
 
-    //Get all the neighboring stations for this trip
-    QSet<cwStationReference> neighboringStations = parentTrip->neighboringStations(selectedStation.name());
-    foreach(cwStationReference station, neighboringStations) {
-        QVector3D neighborPosition = station.position();
-        neighborPosition.setZ(0.0);
+//    //Get all the neighboring stations for this trip
+//    QSet<cwStationReference> neighboringStations = parentTrip->neighboringStations(selectedStation.name());
+//    foreach(cwStationReference station, neighboringStations) {
+//        QVector3D neighborPosition = station.position();
+//        neighborPosition.setZ(0.0);
 
-        //Scale and rotate the vector
-        QVector3D vectorBetween = neighborPosition - selectStationPosition;
-        vectorBetween = matrix * vectorBetween;
+//        //Scale and rotate the vector
+//        QVector3D vectorBetween = neighborPosition - selectStationPosition;
+//        vectorBetween = matrix * vectorBetween;
 
-        QVector3D centerPoint = projection * QVector3D(selectedStation.positionOnNote());
-        centerPoint = Camera->mapNormalizeScreenToGLViewport(centerPoint);
+//        QVector3D centerPoint = projection * QVector3D(selectedStation.positionOnNote());
+//        centerPoint = Camera->mapNormalizeScreenToGLViewport(centerPoint);
 
-        QVector3D neighborPoint = projection * QVector3D(selectedStation.positionOnNote() + vectorBetween.toPointF());
-        neighborPoint = Camera->mapNormalizeScreenToGLViewport(neighborPoint);
+//        QVector3D neighborPoint = projection * QVector3D(selectedStation.positionOnNote() + vectorBetween.toPointF());
+//        neighborPoint = Camera->mapNormalizeScreenToGLViewport(neighborPoint);
 
-        painter->drawLine(centerPoint.toPointF(), neighborPoint.toPointF());
-    }
+//        painter->drawLine(centerPoint.toPointF(), neighborPoint.toPointF());
+//    }
 }
 
 /**
@@ -505,12 +501,12 @@ QPair<QByteArray, QSize> cwNoteItem::LoadImage::operator ()(int imageId) {
   a normalized position of the notes.
 
   \param qtViewportCoordinates - This is the unprojected viewport coordinates, ie
-  the qt window coordinates were the top left is the origin.  These should be
+  the qt window coordinates were the top left is the 54origin.  These should be
   in local coordines of the cwNoteItem
 
   \return The index to the add station
   */
-int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
+int cwNoteItem::addStation(QPoint /*qtViewportCoordinate*/) {
 //    QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
 //    QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
 
@@ -541,6 +537,7 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
 
 
 //    return Note->numberOfStations() - 1;
+    return 0;
 }
 
 /**
@@ -550,7 +547,7 @@ int cwNoteItem::addStation(QPoint qtViewportCoordinate) {
   and convert it into a new note position.
 
   */
-void cwNoteItem::moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex) {
+void cwNoteItem::moveStation(QPoint /*qtViewportCoordinate*/, cwNote* /*note*/, int /*stationIndex*/) {
 
 //    if(note == NULL) { return; }
 //    if(stationIndex < 0 || stationIndex >= note->numberOfStations()) { return; }
@@ -597,11 +594,11 @@ void cwNoteItem::stationRemoved(int stationIndex) {
 /**
   \brief Updates the station's position
   */
-void cwNoteItem::updateStationPosition(int stationIndex) {
-    if(stationIndex >= 0 || stationIndex < QMLNoteStations.size()) {
-        QPointF point = Note->stationData(cwNote::StationPosition, stationIndex).value<QPointF>();
-        QMLNoteStations[stationIndex]->setProperty("position3D", QVector3D(point));
-    }
+void cwNoteItem::updateStationPosition(int /*stationIndex*/) {
+//    if(stationIndex >= 0 || stationIndex < QMLNoteStations.size()) {
+//        QPointF point = Note->stationData(cwNote::StationPosition, stationIndex).value<QPointF>();
+//        QMLNoteStations[stationIndex]->setProperty("position3D", QVector3D(point));
+//    }
 }
 
 /**

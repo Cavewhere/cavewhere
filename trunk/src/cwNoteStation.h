@@ -26,6 +26,8 @@ public:
     void setName(QString name);
     QString name() const;
 
+    bool isValid() const;
+
     bool operator ==(const cwNoteStation& station) const;
 
 private:
@@ -91,6 +93,13 @@ inline void cwNoteStation::setName(QString name) {
   */
 inline QString cwNoteStation::name() const {
     return Data->Station.name();
+}
+
+/**
+  \brief Returns true if the note station has a name
+  */
+inline bool cwNoteStation::isValid() const {
+    return !name().isEmpty();
 }
 
 

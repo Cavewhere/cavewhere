@@ -8,6 +8,7 @@
 cwScrapView::cwScrapView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Note(NULL),
+    SelectScrapItem(NULL),
     TransformUpdater(NULL)
 {
 }
@@ -61,6 +62,23 @@ void cwScrapView::addScrapItem() {
         TransformUpdater->addTransformItem(scrapItem);
     }
     ScrapItems.append(scrapItem);
+
+    //Select the scrapItem
+
+}
+
+/**
+  This select the scrapItem, if the scrap item isn't null, and is part of the
+  scrap view.  Otherwise this function does nothing
+  */
+void cwScrapView::selectScrapItem(cwScrapItem* scrapItem) {
+    if(SelectScrapItem != scrapItem) {
+        if(scrapItem != NULL) {
+            if(ScrapItems.contains(scrapItem)) {
+                SelectScrapItem = scrapItem;
+            }
+        }
+    }
 }
 
 ///**

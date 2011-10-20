@@ -121,7 +121,6 @@ void cwTransformUpdater::update() {
 
     //Update the transform objects
     foreach(QGraphicsObject* object, TransformItems) {
-        qDebug() << "Object: " << object;
         updateTransform(object);
     }
 }

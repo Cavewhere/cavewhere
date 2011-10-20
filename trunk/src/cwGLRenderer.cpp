@@ -65,33 +65,14 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     //Draw the subclasses paintFramebuffer to the render framebuffer
     glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
 
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-
     MultiSampleFramebuffer->bind();
     glViewport(0, 0, width(), height());
     glDisable(GL_SCISSOR_TEST);
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glBegin(GL_TRIANGLES);
-  //  glColor3f(1.0, 0.0, 0.0);
 
-    glVertex3f(.1, .1, -.5);
-    glVertex3f(0.0, 0.0, -0.5);
-    glVertex3f(.1, 0.0, -0.5);
-    glEnd();
+    paintFramebuffer();
 
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-
-    glPopMatrix();
-
-    //paintFramebuffer();
     glPopAttrib();
     MultiSampleFramebuffer->release();
 
@@ -155,6 +136,7 @@ void cwGLRenderer::renderTextureFramebuffer() {
 void cwGLRenderer::privateInitializeGL() {
     //Genereate the multi sample buffer for anti aliasing
     MultiSampleFramebuffer = new QGLFramebufferObject(QSize(1, 1));
+    HasBlit = MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
 
     if(HasBlit) {
         //Generate the texture framebuffer for rendering

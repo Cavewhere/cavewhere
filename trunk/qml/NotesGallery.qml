@@ -356,6 +356,11 @@ Rectangle {
                 target: selectObjectId
                 selected: true
             }
+
+            PropertyChanges {
+                target: noteArea
+                state: ""
+            }
         },
 
         State {
@@ -370,28 +375,6 @@ Rectangle {
                 target: noteArea
                 state: "ADD-STATION"
             }
-
-//            PropertyChanges {
-//                target: noteItemMouseArea
-
-//                onPressed: {
-//                    if(mouse.button == Qt.RightButton) {
-//                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-//                    }
-//                }
-
-//                onReleased: {
-//                    if(mouse.button == Qt.LeftButton) {
-//                        noteArea.addStation(Qt.point(mouse.x, mouse.y))
-//                    }
-//                }
-
-//                onMousePositionChanged: {
-//                    if(pressedButtons == Qt.RightButton) {
-//                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
-//                    }
-//                }
-//            }
         },
 
         State {
@@ -406,27 +389,6 @@ Rectangle {
                 target: noteArea
                 state: "ADD-SCRAP"
             }
-
-//            PropertyChanges {
-//                target: noteItemMouseArea
-//                onPressed: {
-//                    if(pressedButtons == Qt.RightButton) {
-//                        noteArea.panFirstPoint(Qt.point(mouse.x, mouse.y))
-//                    }
-//                }
-
-//                onReleased: {
-//                    if(mouse.button == Qt.LeftButton) {
-//                        noteArea.add
-//                    }
-//                }
-
-//                onMousePositionChanged: {
-//                    if(pressedButtons == Qt.RightButton) {
-//                        noteArea.panMove(Qt.point(mouse.x, mouse.y))
-//                    }
-//                }
-//            }
         }
     ]
 

@@ -8,8 +8,8 @@ ShadowRectangle {
     width: textId.width + 10
     height: textId.height + 10
 
-    anchors.top: parent.top
-    anchors.topMargin: 20
+    anchors.bottom: parent.bottom
+    anchors.bottomMargin: 20
     anchors.horizontalCenter: parent.horizontalCenter
 
     color: "#85c1f4"

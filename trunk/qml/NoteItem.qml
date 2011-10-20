@@ -23,6 +23,12 @@ ImageItem {
         note: noteArea.note
     }
 
+    BaseNoteStationInteraction {
+        id: addStationInteraction
+        camera: noteArea.camera
+//        scrap:
+    }
+
     Keys.onDeletePressed: {
 
     }
@@ -66,9 +72,43 @@ ImageItem {
         Press <b>spacebar</b> to add a new scrap"
     }
 
+    HelpBox {
+        id: stationHelpBox
+        visible: false
+        text: "Click to add new station"
+    }
+
     states: [
         State {
             name: "ADD-STATION"
+
+            PropertyChanges {
+                target: mouseArea
+                onPressed: {
+                    if(pressedButtons == Qt.RightButton) {
+                        basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+
+                onReleased: {
+                    if(mouse.button == Qt.LeftButton) {
+                        var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                        addStationInteraction.addStation(notePoint)
+                    }
+                }
+
+                onMousePositionChanged: {
+                    if(pressedButtons == Qt.RightButton) {
+                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                    }
+                }
+            }
+
+            PropertyChanges {
+                target: stationHelpBox
+                visible: true
+            }
+
         },
 
         State {
