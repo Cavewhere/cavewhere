@@ -8,7 +8,7 @@
 cwScrapView::cwScrapView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Note(NULL),
-    SelectScrapItem(NULL),
+    SelectedScrap(NULL),
     TransformUpdater(NULL)
 {
 }
@@ -68,17 +68,38 @@ void cwScrapView::addScrapItem() {
 }
 
 /**
-  This select the scrapItem, if the scrap item isn't null, and is part of the
+
+This select the scrapItem, if the scrap item isn't null, and is part of the
   scrap view.  Otherwise this function does nothing
-  */
-void cwScrapView::selectScrapItem(cwScrapItem* scrapItem) {
-    if(SelectScrapItem != scrapItem) {
-        if(scrapItem != NULL) {
-            if(ScrapItems.contains(scrapItem)) {
-                SelectScrapItem = scrapItem;
+*/
+void cwScrapView::setSelectedScrap(cwScrapItem* selectedScrap) {
+    if(SelectedScrap != selectedScrap) {
+        if(selectedScrap != NULL) {
+            if(ScrapItems.contains(selectedScrap)) {
+                SelectedScrap = selectedScrap;
+                emit selectedScrapChanged();
             }
         }
     }
+}
+
+/**
+    Gets the scrapItem at notePoint
+
+    If no scrap is defined at this point NULL is returned.
+
+    \param notePoint - Normalized note coordinate
+  */
+QList<cwScrapItem*> cwScrapView::scrapItemsAt(QPointF notePoint) {
+    QList<cwScrapItem*> items;
+    foreach(cwScrapItem* scrapItem, ScrapItems) {
+        QPolygonF polygon(scrapItem->scrap()->points());
+        if(polygon.containsPoint(notePoint, Qt::OddEvenFill)) {
+            items.append(scrapItem);
+        }
+    }
+
+    return items;
 }
 
 ///**

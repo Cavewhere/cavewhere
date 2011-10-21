@@ -12,6 +12,14 @@ ImageItem {
     clip: true
     rotation: note != null ? note.rotate : 0
 
+    Keys.onDeletePressed: {
+
+    }
+
+    Keys.onSpacePressed: {
+
+    }
+
     BasePanZoomInteraction {
         id: basePanZoomInteraction
         camera: noteArea.camera
@@ -26,16 +34,10 @@ ImageItem {
     BaseNoteStationInteraction {
         id: addStationInteraction
         camera: noteArea.camera
-//        scrap:
+        scrapView: scrapViewId
+        noteStationView: noteStaitonViewId
     }
 
-    Keys.onDeletePressed: {
-
-    }
-
-    Keys.onSpacePressed: {
-
-    }
 
     //This allows note coordinates to be mapped to opengl coordinates
     TransformUpdater {
@@ -44,10 +46,20 @@ ImageItem {
         modelMatrix: noteArea.modelMatrix
     }
 
+    //For rendering scraps onto the view
     ScrapView {
+        id: scrapViewId
         note: noteArea.note
         transformUpdater: transformUpdaterId
     }
+
+    //For rendering note onto the note
+    NoteStationView {
+        id: noteStaitonViewId
+        note: noteArea.note
+        transformUpdater: transformUpdaterId
+    }
+
 
     MouseArea {
         id: mouseArea

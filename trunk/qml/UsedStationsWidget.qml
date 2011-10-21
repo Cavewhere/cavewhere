@@ -15,14 +15,14 @@ Rectangle {
             color: "#ffffff"
         }
     }
-   // transformOrigin: Item.Center
-//    anchors.bottomMargin: 5
-//    anchors.left: parent.left
-//    anchors.leftMargin: 5
-//    anchors.top: parent.top
-//    anchors.bottom: parent.bottom
-//    anchors.topMargin: 5
-   // border.color: "#000000"
+    // transformOrigin: Item.Center
+    //    anchors.bottomMargin: 5
+    //    anchors.left: parent.left
+    //    anchors.leftMargin: 5
+    //    anchors.top: parent.top
+    //    anchors.bottom: parent.bottom
+    //    anchors.topMargin: 5
+    // border.color: "#000000"
     border.width: 1
 
     ListView {
@@ -39,17 +39,19 @@ Rectangle {
         clip: true
         model: usedStationsModel.usedStations;
 
-        delegate: Rectangle {
-            height: lineId.height
-            width: parent.width
-            color: Qt.rgba(0.0, 0.0, 0.0, 0.0);
+        delegate: Text {
+            id: textId
 
-            Text {
-                id: lineId
-                text: modelData
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 3
+            anchors.rightMargin: 3
 
-            }
+            text: modelData
+
+
         }
+
 
         UsedStationTaskManager {
             id: usedStationsModel;

@@ -44,6 +44,10 @@ public:
 
     QMatrix4x4 matrix() const;
 
+    QVector3D mapFromViewportToModel(QPointF viewport) const;
+    QPointF mapModelToViewport(QVector3D modelPoint) const;
+    QPointF mapModelToViewport(QPointF modelPoint) const;
+
 signals:
     void matrixChanged();
     void cameraChanged();
@@ -78,6 +82,16 @@ private:
 inline QMatrix4x4 cwTransformUpdater::matrix() const {
     return TransformMatrix;
 }
+
+
+/**
+  Maps modelPoint to into a viewport position
+  */
+inline QPointF cwTransformUpdater::mapModelToViewport(QPointF modelPoint) const
+{
+    return mapModelToViewport(QVector3D(modelPoint));
+}
+
 
 /**
   \brief Get's the camera for the transform updater

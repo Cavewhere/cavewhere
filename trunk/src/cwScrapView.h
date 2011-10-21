@@ -22,6 +22,7 @@ class cwScrapView : public QDeclarativeItem
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
+    Q_PROPERTY(cwScrapItem* selectedScrap READ selectedScrap WRITE setSelectedScrap NOTIFY selectedScrapChanged)
 
 //    Q_PROPERTY(QMatrix4x4 noteMatrix READ noteMatrix WRITE setNoteMatrix NOTIFY noteMatrixChanged)
 //    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
@@ -35,7 +36,12 @@ public:
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* updater);
 
+    cwScrapItem* selectedScrap() const;
+    void setSelectedScrap(cwScrapItem* selectedScrap);
+
     void selectScrapItem(cwScrapItem* scrapItem);
+
+    QList<cwScrapItem*> scrapItemsAt(QPointF notePoint);
 
 //    QMatrix4x4 noteMatrix() const;
 //    void setNoteMatrix(QMatrix4x4 matrix);
@@ -46,6 +52,7 @@ public:
 signals:
     void noteChanged();
     void transformUpdaterChanged();
+    void selectedScrapChanged();
 //    void noteMatrixChanged();
 //    void cameraChanged();
 
@@ -61,9 +68,7 @@ private:
     cwNote* Note;
 
     QList<cwScrapItem*> ScrapItems;
-    cwScrapItem* SelectScrapItem;
-
-    //    QMap<cwScrap*, QGraphicsPolygonItem*> ItemLookup;
+    cwScrapItem* SelectedScrap; //!< The current select scrap, NULL if no scrapitem is selected
 
     cwTransformUpdater* TransformUpdater;
 
@@ -82,6 +87,13 @@ inline cwNote* cwScrapView::note() const {
   */
 inline cwTransformUpdater* cwScrapView::transformUpdater() const {
     return TransformUpdater;
+}
+
+/**
+Gets selectedScrap
+*/
+inline cwScrapItem* cwScrapView::selectedScrap() const {
+    return SelectedScrap;
 }
 
 //inline QMatrix4x4 cwScrapView::noteMatrix() const {

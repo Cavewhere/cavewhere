@@ -4,16 +4,16 @@ import Cavewhere 1.0
 Positioner3D {
     id: noteStation
 
-    property NoteItem noteViewer;
-    property Note note;
+    property ScrapStationView stationView;
+    property Scrap scrap;
     property int stationId;
     property alias selected: selectedBackground.visible;
 
     function updateItem() {
-        if(note != null) {
-            stationName.text = note.stationData(Note.StationName, stationId)
-            var position = note.stationData(Note.StationPosition, stationId);
-            console.log("Position:" + position.x + " " + position.y);
+        if(scrap != null) {
+            stationName.text = scrap.stationData(Scrap.StationName, stationId)
+            var position = scrap.stationData(Scrap.StationPosition, stationId);
+            console.log("stationId:" + stationId + " SCrap:" + scrap + " Position:" + position.x + " " + position.y);
             position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }
@@ -23,19 +23,19 @@ Positioner3D {
 
     focus: selected
 
-    onNoteChanged: updateItem()
+    onScrapChanged: updateItem()
     onStationIdChanged: updateItem()
 
     onSelectedChanged: {
         if(selected) {
-            noteViewer.setSelectedStation(noteStation);
+            stationView.setSelectedStation(noteStation);
             forceActiveFocus();
         }
     }
 
     Keys.onDeletePressed: {
         console.log("Delete pressed!");
-        note.removeStation(stationId);
+        scrap.removeStation(stationId);
     }
 
     Rectangle {
@@ -78,9 +78,7 @@ Positioner3D {
                 noteStation.selected = true
             }
 
-            onReleased: {
-
-            }
+            onReleased: ({ })
 
             onPressed: {
                 lastPoint = Qt.point(mouse.x, mouse.y);
@@ -92,8 +90,8 @@ Positioner3D {
                 var length = Math.sqrt(Math.pow(lastPoint.x - mouse.x, 2) + Math.pow(lastPoint.y - mouse.y, 2));
                 if(length > 3 || ignoreLength) {
                     ignoreLength = true
-                    var parentCoord = mapToItem(noteViewer, mouse.x, mouse.y);
-                    noteViewer.moveStation(Qt.point(parentCoord.x, parentCoord.y), note, stationId)
+                    var parentCoord = mapToItem(stationView, mouse.x, mouse.y);
+                    stationView.moveStation(Qt.point(parentCoord.x, parentCoord.y), scrap, stationId)
                 }
             }
         }
@@ -113,7 +111,7 @@ Positioner3D {
         anchors.left: stationImage.right
 
         onFinishedEditting: {
-            note.setStationData(Note.StationName, stationId, newText);
+            scrap.setStationData(Note.StationName, stationId, newText);
             text = newText;
         }
     }

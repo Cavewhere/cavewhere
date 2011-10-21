@@ -197,3 +197,19 @@ void cwTransformUpdater::transformItemDeleted(QObject* object) {
     removeTransformItem(graphicsObject);
 }
 
+/**
+  Maps the viewport point into the local position
+  */
+QVector3D cwTransformUpdater::mapFromViewportToModel(QPointF viewport) const {
+    return matrix().inverted() * QVector3D(viewport);
+}
+
+/**
+  Maps a 3d model point into a viewport position
+  */
+QPointF cwTransformUpdater::mapModelToViewport(QVector3D modelPoint) const {
+    QVector3D viewportPoint = matrix() * modelPoint;
+    return viewportPoint.toPointF();
+}
+
+

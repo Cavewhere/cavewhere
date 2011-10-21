@@ -142,7 +142,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("/Users/philipschuchardt/bcc.cw");
+  //  Project->load("/home/blitz/bcc.cw");
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
