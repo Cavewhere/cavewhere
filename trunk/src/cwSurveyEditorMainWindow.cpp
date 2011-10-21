@@ -44,7 +44,12 @@
 #include "cwImageItem.h"
 #include "cwWheelArea.h"
 #include "cwScrapView.h"
-//#include "cwTransformUpdater.h"
+#include "cwTransformUpdater.h"
+#include "cwBaseNoteStationInteraction.h"
+#include "cwScrap.h"
+#include "cwNoteStationView.h"
+#include "cwScrapStationView.h"
+
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -142,7 +147,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-  //  Project->load("/home/blitz/bcc.cw");
+    Project->load("/home/blitz/bcc.cw");
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -333,6 +338,10 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
     qmlRegisterType<cwScrapView>("Cavewhere", 1, 0, "ScrapView");
     qmlRegisterType<cwTransformUpdater>("Cavewhere", 1, 0, "TransformUpdater");
+    qmlRegisterType<cwNoteStationView>("Cavewhere", 1, 0, "NoteStationView");
+    qmlRegisterType<cwScrapStationView>("Cavewhere", 1, 0, "ScrapStationView");
+    qmlRegisterType<cwScrap>("Cavewhere", 1, 0, "Scrap");
+    qmlRegisterType<cwBaseNoteStationInteraction>("Cavewhere", 1, 0, "BaseNoteStationInteraction");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);
