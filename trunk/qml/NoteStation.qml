@@ -20,6 +20,7 @@ Positioner3D {
 
     width: 2
     height: 2
+    z: 2
 
     focus: selected
 
@@ -75,6 +76,7 @@ Positioner3D {
             property bool ignoreLength;
 
             onClicked: {
+                console.log("On selection");
                 noteStation.selected = true
             }
 
@@ -91,10 +93,17 @@ Positioner3D {
                 if(length > 3 || ignoreLength) {
                     ignoreLength = true
                     var parentCoord = mapToItem(stationView, mouse.x, mouse.y);
-                    stationView.moveStation(Qt.point(parentCoord.x, parentCoord.y), scrap, stationId)
+                    var transformer = stationView.transformUpdater;
+                    var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
+                    scrap.setStationData(Scrap.StationPosition, stationId, Qt.point(noteCoord.x, noteCoord.y));
                 }
             }
         }
+
+//        Rectangle {
+//            anchors.fill: parent
+//            color: "red"
+//        }
     }
 
     DoubleClickTextInput {

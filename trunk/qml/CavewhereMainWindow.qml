@@ -46,7 +46,6 @@ Rectangle {
 
             Component.onCompleted: {
                 //Setup the linePlotManager with the glLinePlot
-                console.log("LinePlot data:" + linePlot)
                linePlotManager.setGLLinePlot(linePlot);
             }
         }

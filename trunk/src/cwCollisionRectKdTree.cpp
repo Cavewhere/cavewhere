@@ -73,7 +73,7 @@ bool cwCollisionRectKdTree::rectIntersects(const QRect& rectangle, int depth, No
     //Select axis based on depth so that axis cycles through all valid values
     int axis = depth % 2; //divid by 4 because this is 2D range search problem
 
-    int leftValue = value(rectangle, axis);
+    //int leftValue = value(rectangle, axis);
     int rightValue = oppositeValue(rectangle, axis);
     int axisValue = root->value(axis);
 

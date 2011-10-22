@@ -52,6 +52,7 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
 void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
     GLLinePlot = linePlot;
+    updateLinePlot();
 }
 
 /**

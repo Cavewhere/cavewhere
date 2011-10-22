@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QVector2D>
 #include <QVector>
+#include <QPolygonF>
 
 //Our includes
 #include <cwNoteTranformation.h>
@@ -65,7 +66,7 @@ signals:
 
 private:
     //The outline of the scrap, in normalized points
-    QVector<QPointF> OutlinePoints;
+    QPolygonF OutlinePoints;
 
     //The stations that the scrap owns
     cwNoteTranformation NoteTransformation;
@@ -73,6 +74,10 @@ private:
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
+
+    //Clamps a pointF that's in note coordinates to the scrap
+    QPointF clampToScrap(QPointF point);
+    bool pointOnLine(QLineF line, QPointF point);
 
     //For note station transformation, automatic calculation
 //    void updateNoteTransformation();

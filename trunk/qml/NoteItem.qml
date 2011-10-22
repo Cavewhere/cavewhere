@@ -46,6 +46,16 @@ ImageItem {
         modelMatrix: noteArea.modelMatrix
     }
 
+    MouseArea {
+        id: mouseArea
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+        onReleased: ({ })
+        onMousePositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+        onEntered:  noteArea.forceActiveFocus()
+    }
+
     //For rendering scraps onto the view
     ScrapView {
         id: scrapViewId
@@ -58,17 +68,7 @@ ImageItem {
         id: noteStaitonViewId
         note: noteArea.note
         transformUpdater: transformUpdaterId
-    }
-
-
-    MouseArea {
-        id: mouseArea
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        onReleased: { }
-        onMousePositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-        onEntered:  noteArea.forceActiveFocus()
     }
 
     WheelArea {
@@ -103,7 +103,7 @@ ImageItem {
                 }
 
                 onReleased: {
-                    if(mouse.button == Qt.LeftButton) {
+                    if(mouse.button === Qt.LeftButton) {
                         var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
                         addStationInteraction.addStation(notePoint)
                     }
@@ -135,7 +135,7 @@ ImageItem {
                 }
 
                 onReleased: {
-                    if(mouse.button == Qt.LeftButton) {
+                    if(mouse.button === Qt.LeftButton) {
                         var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
                         addBaseScrapInteraction.addPoint(notePoint)
                     }

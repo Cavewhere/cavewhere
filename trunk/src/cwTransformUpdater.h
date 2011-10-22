@@ -44,9 +44,9 @@ public:
 
     QMatrix4x4 matrix() const;
 
-    QVector3D mapFromViewportToModel(QPointF viewport) const;
-    QPointF mapModelToViewport(QVector3D modelPoint) const;
-    QPointF mapModelToViewport(QPointF modelPoint) const;
+    Q_INVOKABLE QVector3D mapFromViewportToModel(QPointF viewport) const;
+    Q_INVOKABLE QPointF mapModelToViewport(QVector3D modelPoint) const;
+    Q_INVOKABLE QPointF mapModelToViewport(QPointF modelPoint) const;
 
 signals:
     void matrixChanged();

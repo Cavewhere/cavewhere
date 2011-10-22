@@ -85,7 +85,6 @@ SOURCES += src/main.cpp \
     src/cwGLTerrain.cpp \
     src/cwGLObject.cpp \
     src/cwRegularTile.cpp \
-    src/cwGraphicsSceneMouseTransition.cpp \
     src/cwLinePlotGeometryTask.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
@@ -188,7 +187,6 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGLTerrain.h \
     src/cwGLObject.h \
     src/cwRegularTile.h \
-    src/cwGraphicsSceneMouseTransition.h \
     src/cwLinePlotGeometryTask.h \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
@@ -273,6 +271,8 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
 
 
 

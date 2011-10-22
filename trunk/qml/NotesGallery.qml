@@ -346,6 +346,11 @@ Rectangle {
                 target: galleryContainer
                 anchors.top:  carpetButtonArea.bottom
             }
+
+            PropertyChanges {
+                target: noteArea
+                state: ""
+            }
         },
 
         State {
@@ -355,11 +360,6 @@ Rectangle {
             PropertyChanges {
                 target: selectObjectId
                 selected: true
-            }
-
-            PropertyChanges {
-                target: noteArea
-                state: ""
             }
         },
 

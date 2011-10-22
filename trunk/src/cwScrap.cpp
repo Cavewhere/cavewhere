@@ -8,6 +8,9 @@
 //Qt includes
 #include <QDebug>
 
+//Std includes
+#include <limits>
+
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     ParentNote(NULL)
@@ -53,7 +56,7 @@ void cwScrap::addStation(cwNoteStation station) {
     qDebug() << "Station name:" << station.name();
 
     Stations.append(station);
-//    updateNoteTransformation();
+    //    updateNoteTransformation();
 
     emit stationAdded();
 }
@@ -69,7 +72,7 @@ void cwScrap::removeStation(int index) {
     }
 
     Stations.removeAt(index);
-//    updateNoteTransformation();
+    //    updateNoteTransformation();
 
     emit stationRemoved(index);
 }
@@ -110,14 +113,13 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
     case StationName:
         if(noteStation.station().name() != value.toString()) {
             noteStation.setName(value.toString());
-//            updateNoteTransformation();
             emit stationNameChanged(noteStationIndex);
         }
         break;
     case StationPosition:
         if(noteStation.positionOnNote() != value.toPointF()) {
-            noteStation.setPositionOnNote(value.toPointF());
-//            updateNoteTransformation();
+            QPointF clampedPosition = clampToScrap(value.toPointF());
+            noteStation.setPositionOnNote(clampedPosition);
             emit stationPositionChanged(noteStationIndex);
         }
         break;
@@ -298,43 +300,43 @@ cwNoteStation cwScrap::station(int stationId) {
   */
 QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
 
-//    if(parentNote() == NULL) { return QString(); }
+    //    if(parentNote() == NULL) { return QString(); }
 
-//    QSet<cwStationReference> neigborStations = parentNote()->neighboringStations(previousStation.name());
+    //    QSet<cwStationReference> neigborStations = parentNote()->neighboringStations(previousStation.name());
 
-//    //Make sure we have neigbors
-//    if(neigborStations.isEmpty()) {
-//        return QString();
-//    }
+    //    //Make sure we have neigbors
+    //    if(neigborStations.isEmpty()) {
+    //        return QString();
+    //    }
 
-////    In normalized note coordinates
-////    QPointF notePositionVector = stationNotePosition - previousStation.positionOnNote();
+    ////    In normalized note coordinates
+    ////    QPointF notePositionVector = stationNotePosition - previousStation.positionOnNote();
 
-//    QVector3D previousStationPosition = previousStation.station().position();
-//    previousStationPosition.setZ(0); //Don't need the z
+    //    QVector3D previousStationPosition = previousStation.station().position();
+    //    previousStationPosition.setZ(0); //Don't need the z
 
-//    QMatrix4x4 noteMatrix = noteTransformationMatrix();
+    //    QMatrix4x4 noteMatrix = noteTransformationMatrix();
 
-//    foreach(cwStationReference station, neigborStations) {
-//        QVector3D stationPosition = station.position();
-//        stationPosition.setZ(0);
+    //    foreach(cwStationReference station, neigborStations) {
+    //        QVector3D stationPosition = station.position();
+    //        stationPosition.setZ(0);
 
-//        //Figure out the predicited position of the station on the notes
-//        QVector3D vectorBetween = stationPosition - previousStationPosition;
-//        QVector3D noteVectorBetween = noteMatrix * vectorBetween;
-//        QVector3D predictedPosition = QVector3D(previousStation.positionOnNote()) + noteVectorBetween;
+    //        //Figure out the predicited position of the station on the notes
+    //        QVector3D vectorBetween = stationPosition - previousStationPosition;
+    //        QVector3D noteVectorBetween = noteMatrix * vectorBetween;
+    //        QVector3D predictedPosition = QVector3D(previousStation.positionOnNote()) + noteVectorBetween;
 
-//        //Figure out the error between stationNotePosition and predictedPosition
-//        QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
-//        double normalizedError = errorVector.length() / noteVectorBetween.length();
+    //        //Figure out the error between stationNotePosition and predictedPosition
+    //        QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
+    //        double normalizedError = errorVector.length() / noteVectorBetween.length();
 
-//        qDebug() << "Normalized error: " << normalizedError;
+    //        qDebug() << "Normalized error: " << normalizedError;
 
-//        if(normalizedError < 0.15) {
-//            //Station is probably the one
-//            return QString(station.name());
-//        }
-//    }
+    //        if(normalizedError < 0.15) {
+    //            //Station is probably the one
+    //            return QString(station.name());
+    //        }
+    //    }
 
     //Couldn't find a station
     return QString();
@@ -371,4 +373,93 @@ void cwScrap::updateStationsWithNewCave() {
     for(int i = 0; i < Stations.size(); i++) {
         Stations[i].setCave(cave);
     }
+}
+
+/**
+  Clamps the point within the scrap
+
+    If the point is in the polygon, this returns the point
+  */
+QPointF cwScrap::clampToScrap(QPointF point) {
+
+    if(OutlinePoints.containsPoint(point, Qt::OddEvenFill)) {
+        //Point is in the polygon
+        return point;
+    }
+
+    //The best length and index
+    double bestLength = std::numeric_limits<double>::max();
+    int bestIndex = -1;
+
+    //Find the nearest in the polygon to point
+    for(int i = 0; i < OutlinePoints.size(); i++) {
+        QPointF currentPoint = OutlinePoints[i];
+        double currentLength = QLineF(currentPoint, point).length();
+
+        if(currentLength < bestLength) {
+            bestLength = currentLength;
+            bestIndex = i;
+        }
+    }
+
+    //Now get the left and right lines
+    int leftIndex = bestIndex - 1;
+    int rightIndex = bestIndex + 1;
+
+    //Make sure the index are good
+    if(leftIndex <= -1) {
+        leftIndex = OutlinePoints.size() - 1; //wrap around
+    }
+
+    if(rightIndex >= OutlinePoints.size()) {
+        rightIndex = 0; //wrap around
+    }
+
+    //Get the left and right lines
+    QLineF leftLine(OutlinePoints[bestIndex], OutlinePoints[leftIndex]);
+    QLineF rightLine(OutlinePoints[bestIndex], OutlinePoints[rightIndex]);
+
+    //Get the normals for each of the left and right lines
+    QLineF leftNormal = leftLine.normalVector().unitVector();
+    QLineF rightNormal = rightLine.normalVector().unitVector();
+
+    //Translate the left line and the right line
+    leftNormal.translate(-leftNormal.p1());
+    rightNormal.translate(-rightNormal.p2());
+    leftNormal.translate(point);
+    rightNormal.translate(point);
+
+    //Left intersection
+    QPointF leftIntersectionPoint;
+    QLineF::IntersectType leftType = leftNormal.intersect(leftLine, &leftIntersectionPoint);
+
+    //Right intersection
+    QPointF rightIntersectionPoint;
+    QLineF::IntersectType rightType = rightNormal.intersect(rightLine, &rightIntersectionPoint);
+
+    if(leftType != QLineF::NoIntersection && pointOnLine(leftLine, leftIntersectionPoint)) {
+        //Point is on the left line
+        return leftIntersectionPoint;
+    } else if(rightType != QLineF::NoIntersection && pointOnLine(rightLine, rightIntersectionPoint)) {
+        //Point on the right line
+        return rightIntersectionPoint;
+    } else {
+        //Point on neither
+        return OutlinePoints[bestIndex];
+    }
+}
+
+/**
+  This true if the point is in the bounded line. and false if it outside of the bounded
+  line.
+
+  */
+bool cwScrap::pointOnLine(QLineF line, QPointF point) {
+    double maxX = qMax(line.p1().x(), line.p2().x());
+    double minX = qMin(line.p1().x(), line.p2().x());
+    double maxY = qMax(line.p1().y(), line.p2().y());
+    double minY = qMin(line.p1().y(), line.p2().y());
+
+    return point.x() >= minX && point.x() <= maxX &&
+            point.y() >= minY && point.y() <= maxY;
 }
