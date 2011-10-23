@@ -262,7 +262,8 @@ shaders/*.geom \
     qml/PanZoomInteraction.qml \
     qml/NoteItem.qml \
     qml/AddScrapInteraction.qml \
-    qml/HelpBox.qml
+    qml/HelpBox.qml \
+    qml/NoteTransformEditor.qml
 
 RESOURCES += \
     icons.qrc
@@ -271,6 +272,7 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
 
 
 

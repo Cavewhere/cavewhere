@@ -97,8 +97,8 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
         MinZValue = qMin((qreal)MinZValue, pointData[i].z());
     }
 
-    qDebug() << "MaxZValue: " << MaxZValue;
-    qDebug() << "MinZValue: " << MinZValue;
+//    qDebug() << "MaxZValue: " << MaxZValue;
+//    qDebug() << "MinZValue: " << MinZValue;
 
     LinePlotVertexBuffer.bind();
     LinePlotVertexBuffer.allocate(pointData.data(), pointData.size() * sizeof(QVector3D));

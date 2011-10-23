@@ -382,10 +382,58 @@ void cwScrap::updateStationsWithNewCave() {
   */
 QPointF cwScrap::clampToScrap(QPointF point) {
 
-    if(OutlinePoints.containsPoint(point, Qt::OddEvenFill)) {
+    if(OutlinePoints.containsPoint(point, Qt::OddEvenFill) || OutlinePoints.isEmpty()) {
         //Point is in the polygon
         return point;
     }
+
+//    double bestLength = std::numeric_limits<double>::max();
+//    QPointF bestPoint;
+
+//    //Go through all the lines in the polygon
+//    for(int i = 0; i < OutlinePoints.size(); i++) {
+//        QPointF p1 = OutlinePoints[i];
+//        QPointF p2 = i + 1 < OutlinePoints.size() ? OutlinePoints[i + 1] : OutlinePoints[0];
+
+//        //Create the lines to find the intesection
+//        QLineF line(p1, p2);
+//        QLineF normal = line.normalVector().unitVector();
+//        normal.translate(-line.p1());
+//        normal.translate(point);
+
+//        //Do the intesection
+//        QPointF interectionPoint;
+//        QLineF::IntersectType type = normal.intersect(line, &interectionPoint);
+
+//        if(type != QLineF::NoIntersection && pointOnLine(line, interectionPoint)) {
+//            //This is a good line add this line
+//            double length = QLineF(interectionPoint, point).length();
+//            if(length < bestLength) {
+//                bestLength = length;
+//                bestPoint = interectionPoint;
+//            }
+//        }
+//    }
+
+//    //Didn't find any good lines, find the nearest point
+//    if(bestLength == std::numeric_limits<double>::max()) {
+//        int bestIndex = -1;
+
+//        //Find the nearest in the polygon to point
+//        for(int i = 0; i < OutlinePoints.size(); i++) {
+//            QPointF currentPoint = OutlinePoints[i];
+//            double currentLength = QLineF(currentPoint, point).length();
+
+//            if(currentLength < bestLength) {
+//                bestLength = currentLength;
+//                bestIndex = i;
+//            }
+//        }
+
+//        return OutlinePoints[bestIndex];
+//    }
+
+//    return bestPoint;
 
     //The best length and index
     double bestLength = std::numeric_limits<double>::max();
