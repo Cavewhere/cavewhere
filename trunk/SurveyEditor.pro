@@ -115,7 +115,8 @@ SOURCES += src/main.cpp \
     src/cwNoteInteraction.cpp \
     src/cwScrapView.cpp \
     src/cwNoteStationView.cpp \
-    src/cwScrapStationView.cpp
+    src/cwScrapStationView.cpp \
+    src/cwLength.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -219,7 +220,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwNoteInteraction.h \
     src/cwScrapView.h \
     src/cwNoteStationView.h \
-    src/cwScrapStationView.h
+    src/cwScrapStationView.h \
+    src/cwLength.h
 
 
 
@@ -272,6 +274,8 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
 
 
 

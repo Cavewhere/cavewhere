@@ -300,7 +300,7 @@ cwNoteStation cwScrap::station(int stationId) {
   */
 QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
 
-    //    if(parentNote() == NULL) { return QString(); }
+    //    if(parentNote() == NULL) { return QString(k); }
 
     //    QSet<cwStationReference> neigborStations = parentNote()->neighboringStations(previousStation.name());
 

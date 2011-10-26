@@ -1,5 +1,6 @@
 import QtQuick 1.0
-import QtDesktop 0.1
+import QtDesktop 0.1 as QtDesktop
+import Cavewhere 1.0
 
 Item {
     id: item1
@@ -15,7 +16,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            Button {
+             Button {
                 id: setNorthButton
             }
 
@@ -62,14 +63,14 @@ Item {
                 id: lengthId
             }
 
-            ComboBox {
+            QtDesktop.ComboBox {
                 id: unitsCombo
 
-                MenuItem {
+                QtDesktop.MenuItem {
                     text: "m"
                 }
 
-                MenuItem {
+                QtDesktop.MenuItem {
                     text: "ft"
                 }
             }

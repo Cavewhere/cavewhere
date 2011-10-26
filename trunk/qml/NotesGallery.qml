@@ -307,6 +307,12 @@ Rectangle {
         note: currentNote
     }
 
+    NoteTransformEditor {
+        id: noteTransformEditorId
+        anchors.top: parent.top
+        anchors.left: parent.left
+    }
+
     SequentialAnimation {
         id: noteRotationAnimation
 
