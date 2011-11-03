@@ -5,6 +5,7 @@
 #include <QSharedData>
 #include <QSharedDataPointer>
 #include <QObject>
+#include <QPointF>
 
 //Our includes
 class cwLength;
@@ -40,6 +41,8 @@ public:
 
     double pixelsPerInch() const;
     void setPixelsPerInch(double pixelsPerInch);
+
+    Q_INVOKABLE double calculateNorth(QPointF noteP1, QPointF noteP2) const;
 
 signals:
     void scaleChanged();

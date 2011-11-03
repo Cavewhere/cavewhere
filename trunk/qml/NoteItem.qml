@@ -12,32 +12,57 @@ ImageItem {
     clip: true
     rotation: note != null ? note.rotate : 0
 
-    Keys.onDeletePressed: {
-
-    }
-
-    Keys.onSpacePressed: {
-
-    }
-
-    BasePanZoomInteraction {
-        id: basePanZoomInteraction
+    PanZoomInteraction {
+        id: panZoomInteraction
+        anchors.fill: parent
         camera: noteArea.camera
     }
 
-    BaseScrapInteraction {
-        id: addBaseScrapInteraction
+    ScrapInteraction {
+        id: addScrapInteraction
+        anchors.fill: parent
         camera: noteArea.camera
         note: noteArea.note
+        basePanZoomInteraction: panZoomInteraction
+        imageItem: noteArea
     }
 
-    BaseNoteStationInteraction {
+    NoteStationInteraction {
         id: addStationInteraction
+        anchors.fill: parent
         camera: noteArea.camera
         scrapView: scrapViewId
-        noteStationView: noteStaitonViewId
+        noteStationView: noteStationViewId
+        basePanZoomInteraction: panZoomInteraction
+        imageItem: noteArea
     }
 
+    NoteItemSelectionInteraction {
+        id: noteSelectionInteraction
+        anchors.fill: parent
+        scrapView: scrapViewId
+        imageItem: noteArea
+        basePanZoomInteraction: panZoomInteraction
+    }
+
+    NoteNorthInteraction {
+        id: noteNorthUpInteraction
+        anchors.fill: parent
+        imageItem: noteArea
+        basePanZoomInteraction: panZoomInteraction
+    }
+
+    InteractionManager {
+        id: interactionManagerId
+        interactions: [
+            panZoomInteraction,
+            addScrapInteraction,
+            addStationInteraction,
+            noteSelectionInteraction,
+            noteNorthUpInteraction
+        ]
+        defaultInteraction: panZoomInteraction
+    }
 
     //This allows note coordinates to be mapped to opengl coordinates
     TransformUpdater {
@@ -46,14 +71,19 @@ ImageItem {
         modelMatrix: noteArea.modelMatrix
     }
 
-    MouseArea {
-        id: mouseArea
-        anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        onReleased: ({ })
-        onMousePositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-        onEntered:  noteArea.forceActiveFocus()
+    NoteTransformEditor {
+        id: noteTransformEditorId
+        anchors.top: parent.top
+        anchors.left: parent.left
+        noteTransform: {
+            if(scrapViewId.selectedScrap != null && scrapViewId.selectedScrap.scrap != null) {
+                return scrapViewId.selectedScrap.scrap.noteTransformation;
+            }
+            return null
+        }
+        interactionManager: interactionManagerId
+        northInteraction: noteNorthUpInteraction
+        z: 2
     }
 
     //For rendering scraps onto the view
@@ -65,7 +95,7 @@ ImageItem {
 
     //For rendering note onto the note
     NoteStationView {
-        id: noteStaitonViewId
+        id: noteStationViewId
         note: noteArea.note
         transformUpdater: transformUpdaterId
         anchors.fill: parent
@@ -74,102 +104,55 @@ ImageItem {
     WheelArea {
         id: wheelArea
         anchors.fill: parent
-        onVerticalScroll: basePanZoomInteraction.zoom(delta, position)
-    }
-
-    HelpBox {
-        id: scrapHelpBox
-        visible: false
-        text: "Trace a scrap by <b>clicking</b> points around it <br>
-        Press <b>spacebar</b> to add a new scrap"
-    }
-
-    HelpBox {
-        id: stationHelpBox
-        visible: false
-        text: "Click to add new station"
+        onVerticalScroll: panZoomInteraction.zoom(delta, position)
     }
 
     states: [
         State {
             name: "ADD-STATION"
-
-            PropertyChanges {
-                target: mouseArea
-                onPressed: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-
-                onReleased: {
-                    if(mouse.button === Qt.LeftButton) {
-                        var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                        addStationInteraction.addStation(notePoint)
-                    }
-                }
-
-                onMousePositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-            }
-
-            PropertyChanges {
-                target: stationHelpBox
-                visible: true
-            }
-
         },
 
         State {
             name: "ADD-SCRAP"
+        },
 
-            PropertyChanges {
-                target: mouseArea
-                onPressed: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-
-                onReleased: {
-                    if(mouse.button === Qt.LeftButton) {
-                        var notePoint = mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                        addBaseScrapInteraction.addPoint(notePoint)
-                    }
-                }
-
-                onMousePositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-                    }
-                }
-            }
-
-            PropertyChanges {
-                target: scrapHelpBox
-                visible: true
-            }
-
-            PropertyChanges {
-                target: noteArea
-                Keys.onSpacePressed: {
-                    console.log("Space pressed");
-                    addBaseScrapInteraction.startNewScrap()
-                }
-            }
+        State {
+            name: "SELECT"
         }
     ]
 
     transitions: [
         Transition {
-            from: "ADD-SCRAP"
-            reversible: true
-
+            to: "ADD-SCRAP"
             ScriptAction {
-                script: addBaseScrapInteraction.startNewScrap()
+                script: {
+                    interactionManagerId.active(addScrapInteraction)
+                    addScrapInteraction.startNewScrap()
+                }
+            }
+        },
+
+        Transition {
+            to: "ADD-STATION"
+            ScriptAction {
+                script: interactionManagerId.active(addStationInteraction)
+            }
+        },
+
+        Transition {
+            to: ""
+            ScriptAction {
+                script: {
+                    scrapViewId.clearSelection();
+                    interactionManagerId.active(panZoomInteraction)
+                }
+            }
+        },
+
+        Transition {
+            to: "SELECT"
+            ScriptAction {
+                script: interactionManagerId.active(noteSelectionInteraction)
             }
         }
 

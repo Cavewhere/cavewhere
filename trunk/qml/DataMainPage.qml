@@ -96,33 +96,33 @@ Rectangle {
         AllCavesTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.RegionType) ? 1.0 : 0.0
-                Behavior on opacity {
-                NumberAnimation {
-                    duration: 300
-                }
-            }
+//                Behavior on opacity {
+//                NumberAnimation {
+//                    duration: 300
+//                }
+//            }
         }
 
         CaveTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.CaveType) ? 1.0 : 0.0
             currentCave: getObject(RegionTreeModel.CaveType)
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 300
-                }
-            }
+//            Behavior on opacity {
+//                NumberAnimation {
+//                    duration: 300
+//                }
+//            }
         }
 
         TripTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.TripType) ? 1.0 : 0.0
             currentTrip: getObject(RegionTreeModel.TripType)
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 300
-                }
-            }
+//            Behavior on opacity {
+//                NumberAnimation {
+//                    duration: 300
+//                }
+//            }
         }
     }
 }

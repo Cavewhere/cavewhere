@@ -16,6 +16,7 @@ class cwScrapItem : public QDeclarativeItem
     Q_OBJECT
 
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
+    Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
 
 public:
     explicit cwScrapItem(QDeclarativeItem *parent = 0);
@@ -23,11 +24,11 @@ public:
     void setScrap(cwScrap* scrap);
     cwScrap* scrap() const;
 
-    void setTransformUpdater(cwTransformUpdater* updater);
-    void transformUpdate() const;
-
+    bool isSelected() const;
+    void setSelected(bool selected);
 signals:
     void scrapChanged();
+    void selectedChanged();
 
 public slots:
 
@@ -38,7 +39,7 @@ private:
     //Visual elements
     QGraphicsPolygonItem* BorderItem;
 
-    //Sets the transform updater
+    bool Selected; //!< True if the scrap is select and false if it isn't
 
 private slots:
     void updateScrapGeometry();
@@ -52,18 +53,13 @@ inline cwScrap* cwScrapItem::scrap() const {
     return Scrap;
 }
 
+
 /**
-
+  Returns true if the scrap item is select and false if it isn't
   */
-inline void cwScrapItem::transformUpdate() const {
-
+inline bool cwScrapItem::isSelected() const {
+    return Selected;
 }
 
-///**
-//  Repaints the the scrap
-//  */
-//inline void cwScrapItem::updateScrapItem() {
-//    update();
-//}
 
 #endif // CWSCRAPITEM_H

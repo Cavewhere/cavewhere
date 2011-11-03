@@ -24,9 +24,6 @@ class cwScrapView : public QDeclarativeItem
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapItem* selectedScrap READ selectedScrap WRITE setSelectedScrap NOTIFY selectedScrapChanged)
 
-//    Q_PROPERTY(QMatrix4x4 noteMatrix READ noteMatrix WRITE setNoteMatrix NOTIFY noteMatrixChanged)
-//    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-
 public:
     explicit cwScrapView(QDeclarativeItem *parent = 0);
 
@@ -39,29 +36,21 @@ public:
     cwScrapItem* selectedScrap() const;
     void setSelectedScrap(cwScrapItem* selectedScrap);
 
+    Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void selectScrapAt(QPointF notePoint);
     void selectScrapItem(cwScrapItem* scrapItem);
 
     QList<cwScrapItem*> scrapItemsAt(QPointF notePoint);
-
-//    QMatrix4x4 noteMatrix() const;
-//    void setNoteMatrix(QMatrix4x4 matrix);
-
-//    cwCamera* camera() const;
-//    void setCamera(cwCamera* camera);
 
 signals:
     void noteChanged();
     void transformUpdaterChanged();
     void selectedScrapChanged();
-//    void noteMatrixChanged();
-//    void cameraChanged();
 
 public slots:
 
 private slots:
     void addScrapItem();
-//    void updateScrapGeometry();
-//    void updateScrapGeometry(cwScrap* scrap);
     void updateAllScraps();
 
 private:
@@ -72,7 +61,6 @@ private:
 
     cwTransformUpdater* TransformUpdater;
 
-    QGraphicsPolygonItem* createPolygon();
 };
 
 /**
@@ -96,20 +84,11 @@ inline cwScrapItem* cwScrapView::selectedScrap() const {
     return SelectedScrap;
 }
 
-//inline QMatrix4x4 cwScrapView::noteMatrix() const {
-//    return TransformUpdater->modelMatrix();
-//}
-
-//inline cwCamera* cwScrapView::camera() const {
-//    return TransformUpdater->camera();
-//}
-
-//inline void cwScrapView::setNoteMatrix(QMatrix4x4 matrix) {
-//    TransformUpdater->setModelMatrix(matrix);
-//}
-
-//inline void cwScrapView::setCamera(cwCamera* camera) {
-//    TransformUpdater->setCamera(camera);
-//}
+/**
+  Clears the current selection
+  */
+inline void cwScrapView::clearSelection() {
+    setSelectedScrap(NULL);
+}
 
 #endif // CWSCRAPVIEW_H

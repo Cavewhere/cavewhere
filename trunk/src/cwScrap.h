@@ -22,6 +22,8 @@ class cwScrap : public QObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
+
     Q_ENUMS(StationDataRole)
 public:
 
@@ -49,7 +51,7 @@ public:
     Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
 
-    cwNoteTranformation stationNoteTransformation() const;
+    cwNoteTranformation* noteTransformation() const;
 
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
@@ -64,12 +66,14 @@ signals:
     void stationNameChanged(int noteStationIndex);
     void stationRemoved(int index);
 
+    void noteTransformationChanged();
+
 private:
     //The outline of the scrap, in normalized points
     QPolygonF OutlinePoints;
 
     //The stations that the scrap owns
-    cwNoteTranformation NoteTransformation;
+    cwNoteTranformation* NoteTransformation;
     QList<cwNoteStation> Stations;
 
     //The parent trip, this is for referencing the stations
@@ -132,7 +136,7 @@ inline const QList<cwNoteStation>& cwScrap::stations() const {
   Gets the station note transformation,  This is the note page real scale and
   rotation!
   */
-inline cwNoteTranformation cwScrap::stationNoteTransformation() const {
+inline cwNoteTranformation* cwScrap::noteTransformation() const {
     return NoteTransformation;
 }
 

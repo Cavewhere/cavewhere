@@ -4,14 +4,15 @@
 
 //Qt includes
 #include <QGraphicsPolygonItem>
+#include <QPen>
 
 cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Scrap(NULL),
     BorderItem(new QGraphicsPolygonItem(this))
 {
-    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9));
-    BorderItem->setOpacity(0.25);
+    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
+    setSelected(false);
 }
 
 /**
@@ -42,13 +43,23 @@ void cwScrapItem::updateScrapGeometry() {
     BorderItem->setPolygon(QPolygonF(Scrap->points()));
 }
 
+/**
+Sets the scrap item as the selected scrap
+*/
+void cwScrapItem::setSelected(bool selected) {
+    if(Selected != selected) {
+        Selected = selected;
 
-///**
-//  Paints the scrap
-//  */
-//void cwScrapItem::paint(QPainter * painter, const QStyleOptionGraphicsItem *, QWidget *) {
-//    if(Scrap == NULL) { return; }
+        //Make the pen wider
+        QPen pen;
+        pen.setCosmetic(true);
+        if(Selected) {
+            pen.setWidth(2.0);
+        } else {
+            pen.setWidth(1.0);
+        }
+        BorderItem->setPen(pen);
 
-//    QPolygonF scrapArea(Scrap->points());
-//    painter->drawPolygon(scrapArea);
-//}
+        emit selectedChanged();
+    }
+}

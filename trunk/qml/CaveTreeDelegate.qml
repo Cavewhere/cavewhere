@@ -12,7 +12,7 @@ FocusScope {
     Rectangle {
         id: caveDelegate
 
-        property bool selected: index == view.currentIndex;
+        property bool selected: index === view.currentIndex;
 
         anchors.fill: parent
 

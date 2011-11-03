@@ -10,9 +10,13 @@ class cwLength : public QObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(double value READ value WRITE setValue NOTIFY valueChanged)
+    Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
+
     Q_ENUMS(Unit)
 public:
     enum Unit {
+        in,
         ft,
         m,
         mm,

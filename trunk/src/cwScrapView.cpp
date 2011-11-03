@@ -74,12 +74,27 @@ This select the scrapItem, if the scrap item isn't null, and is part of the
 */
 void cwScrapView::setSelectedScrap(cwScrapItem* selectedScrap) {
     if(SelectedScrap != selectedScrap) {
+
+        if(SelectedScrap != NULL) {
+            //Deselect the scrap
+            SelectedScrap->setSelected(false);
+        }
+
+        SelectedScrap = NULL;
+
         if(selectedScrap != NULL) {
             if(ScrapItems.contains(selectedScrap)) {
+
                 SelectedScrap = selectedScrap;
-                emit selectedScrapChanged();
+
+                if(SelectedScrap != NULL) {
+                    //Select the new selectedScrap
+                    SelectedScrap->setSelected(true);
+                }
             }
         }
+
+        emit selectedScrapChanged();
     }
 }
 
@@ -102,44 +117,25 @@ QList<cwScrapItem*> cwScrapView::scrapItemsAt(QPointF notePoint) {
     return items;
 }
 
-///**
-//  This should only be called by the scrap signals and slots
+/**
+  \brief Selects the scrap at the notePoint
+  */
+void cwScrapView::selectScrapAt(QPointF notePoint) {
+    QList<cwScrapItem*> items = scrapItemsAt(notePoint);
+    if(items.isEmpty()) {
+        return; //Nothing to select
+    }
 
-//    Else this function will do nothing.
-
-//    This will update the polygon item's geometry
-//  */
-//void cwScrapView::updateScrapGeometry() {
-//    cwScrap* scrap = qobject_cast<cwScrap*>(sender());
-//    updateScrapGeometry(scrap);
-//}
-
-///**
-//    This will update the polygon item's geometry
-//  */
-//void cwScrapView::updateScrapGeometry(cwScrap* scrap) {
-//    if(scrap != NULL) {
-//        QGraphicsPolygonItem* polygonItem = ItemLookup.value(scrap, NULL);
-//        if(polygonItem != NULL) {
-//            polygonItem->setPolygon(QPolygonF(scrap->points()));
-//        }
-//    }
-//}
+    //Select the first item
+    setSelectedScrap(items.first());
+}
 
 /**
   \brief Sets the transform updater
   */
 void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
     if(TransformUpdater != updater) {
-//        if(TransformUpdater != NULL) {
-//            TransformUpdater->removeTransformItem(this);
-//        }
-
         TransformUpdater = updater;
-
-//        if(TransformUpdater != NULL) {
-//            TransformUpdater->addTransformItem(this);
-//        }
 
         updateAllScraps();
 
@@ -160,6 +156,11 @@ void cwScrapView::updateAllScraps() {
     if(ScrapItems.size() > numberOfScraps) {
         //Delete unused polygons
         for(int i = ScrapItems.size() - 1; i >= numberOfScraps; i--) {
+
+            if(ScrapItems[i] == SelectedScrap) {
+                setSelectedScrap(NULL);
+            }
+
             transformUpdater()->removeTransformItem(ScrapItems[i]);
             delete ScrapItems[i];
             ScrapItems.removeLast();
@@ -186,14 +187,3 @@ void cwScrapView::updateAllScraps() {
         }
     }
 }
-
-///**
-//  This creates an empty polygon
-//  */
-//QGraphicsPolygonItem* cwScrapView::createPolygon() {
-//    //Create a new polygon item
-//    QGraphicsPolygonItem* item = new QGraphicsPolygonItem(this);
-//    item->setBrush(Qt::red);
-//    item->setOpacity(0.25);
-//    return item;
-//}

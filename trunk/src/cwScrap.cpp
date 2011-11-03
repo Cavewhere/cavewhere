@@ -13,6 +13,7 @@
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
+    NoteTransformation(new cwNoteTranformation(this)),
     ParentNote(NULL)
 {
 

@@ -10,13 +10,14 @@ DataTabWidget {
         text: "This is the Trip overview page"
     }
 
-    SurveyEditor {
-        property string label: "Data"
-        property string icon: "qrc:icons/data.png"
+    //Comment this out, because it's slow
+//    SurveyEditor {
+//        property string label: "Data"
+//        property string icon: "qrc:icons/data.png"
 
-        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
-        //    text: "This is the Data page"
-    }
+//        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
+//        //    text: "This is the Data page"
+//    }
 
     NotesGallery {
         property string label: "Notes"

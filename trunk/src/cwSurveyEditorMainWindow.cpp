@@ -50,6 +50,8 @@
 #include "cwNoteStationView.h"
 #include "cwScrapStationView.h"
 #include "cwNoteTranformation.h"
+#include "cwScrapItem.h"
+#include "cwLength.h"
 
 
 //Qt includes
@@ -148,8 +150,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-   // Project->load("/home/blitz/bcc.cw");
-    Project->load("/Users/philipschuchardt/bcc.cw");
+    Project->load("/home/blitz/bcc.cw");
+   // Project->load("/Users/philipschuchardt/bcc.cw");
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -345,6 +347,8 @@ void cwSurveyEditorMainWindow::reloadQML() {
     qmlRegisterType<cwScrap>("Cavewhere", 1, 0, "Scrap");
     qmlRegisterType<cwBaseNoteStationInteraction>("Cavewhere", 1, 0, "BaseNoteStationInteraction");
     qmlRegisterType<cwNoteTranformation>("Cavewhere", 1, 0, "NoteTransform");
+    qmlRegisterType<cwScrapItem>("Cavewhere", 1, 0, "ScrapItem");
+    qmlRegisterType<cwLength>("Cavewhere", 1, 0, "Length");
 
     context->setContextProperty("regionModel", RegionTreeModel);
     context->setContextProperty("region", Region);

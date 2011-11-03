@@ -75,6 +75,8 @@ cwLength cwLength::convertTo(Unit to) const {
   */
 double cwLength::toMeters(cwLength::Unit unit) {
     switch(unit) {
+    case in:
+        return 0.0254;
     case ft:
         return 0.3048;
     case m:

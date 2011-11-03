@@ -116,7 +116,8 @@ SOURCES += src/main.cpp \
     src/cwScrapView.cpp \
     src/cwNoteStationView.cpp \
     src/cwScrapStationView.cpp \
-    src/cwLength.cpp
+    src/cwLength.cpp \
+    src/cwGlobals.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -221,7 +222,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwScrapView.h \
     src/cwNoteStationView.h \
     src/cwScrapStationView.h \
-    src/cwLength.h
+    src/cwLength.h \
+    src/cwGlobals.h
 
 
 
@@ -263,9 +265,13 @@ shaders/*.geom \
     qml/Positioner3D.qml \
     qml/PanZoomInteraction.qml \
     qml/NoteItem.qml \
-    qml/AddScrapInteraction.qml \
     qml/HelpBox.qml \
-    qml/NoteTransformEditor.qml
+    qml/NoteTransformEditor.qml \
+    qml/ScrapInteraction.qml \
+    qml/NoteStationInteraction.qml \
+    qml/InteractionManager.qml \
+    qml/NoteItemSelectionInteraction.qml \
+    qml/NoteNorthInteraction.qml
 
 RESOURCES += \
     icons.qrc
@@ -274,6 +280,17 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
+
+
+
+
+
+
+
+
+
 
 
 

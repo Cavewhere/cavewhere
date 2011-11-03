@@ -122,7 +122,7 @@ Rectangle {
         model: regionModel
 
         delegate: CaveTreeDelegate {
-            focus: view.currentIndex == index
+            focus: view.currentIndex === index
         }
 
         onRootIndexChanged:  {
