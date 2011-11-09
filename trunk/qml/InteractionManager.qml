@@ -1,9 +1,10 @@
-import QtQuick 1.0
+import QtQuick 1.1
+import Cavewhere 1.0
 
 Item {
 
-    property list<Item> interactions
-    property Item defaultInteraction
+    property list<Interaction> interactions
+    property Interaction defaultInteraction
 
     //This function hides all other interaction and shows the active interaction
     function active(interaction) {
@@ -18,8 +19,20 @@ Item {
             interaction.visible = true;
         }
 
-            Component.onCompleted: {
+            function activeDefaultInteraction() {
+                console.log("Active at default interaction")
                 active(defaultInteraction)
             }
 
-        }
+                Component.onCompleted: {
+                    for(var i = 0; i < interactions.length; i++) {
+                        var interaction = interactions[i];
+                        interaction.visible = false
+                        interaction.activated.connect(active);
+                        interaction.deactivated.connect(activeDefaultInteraction);
+                    }
+
+                    active(defaultInteraction)
+                }
+
+            }

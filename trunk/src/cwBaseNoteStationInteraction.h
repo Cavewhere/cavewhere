@@ -11,7 +11,7 @@ class cwNoteStationView;
 class cwScrapView;
 class cwScrapItem;
 
-class cwBaseNoteStationInteraction : public cwBasePanZoomInteraction
+class cwBaseNoteStationInteraction : public cwInteraction
 {
     Q_OBJECT
 

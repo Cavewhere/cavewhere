@@ -5,9 +5,10 @@
 #include <QDeclarativeItem>
 
 //Our includes
+#include "cwInteraction.h"
 #include "cwCamera.h"
 
-class cwBasePanZoomInteraction : public QDeclarativeItem
+class cwBasePanZoomInteraction : public cwInteraction
 {
     Q_OBJECT
 

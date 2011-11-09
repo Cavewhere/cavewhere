@@ -1,8 +1,7 @@
 #include "cwNoteInteraction.h"
 
 cwNoteInteraction::cwNoteInteraction(QDeclarativeItem *parent) :
-    cwBasePanZoomInteraction(parent),
-    Note(NULL)
+    cwInteraction(parent), Note(NULL)
 {
 }
 

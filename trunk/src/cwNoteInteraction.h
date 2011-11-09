@@ -6,7 +6,7 @@ class cwNote;
 #include "cwBasePanZoomInteraction.h"
 
 
-class cwNoteInteraction : public cwBasePanZoomInteraction
+class cwNoteInteraction : public cwInteraction
 {
     Q_OBJECT
 

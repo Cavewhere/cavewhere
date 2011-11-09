@@ -1,10 +1,5 @@
 import QtQuick 1.0
-import Cavewhere 1.0
 
-/**
-  This interaction allows the user to select two points on the note scrap update the north
-  rotation
-  */
 Interaction {
     id: interaction
 

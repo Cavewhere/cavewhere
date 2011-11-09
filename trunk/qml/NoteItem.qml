@@ -21,7 +21,6 @@ ImageItem {
     ScrapInteraction {
         id: addScrapInteraction
         anchors.fill: parent
-        camera: noteArea.camera
         note: noteArea.note
         basePanZoomInteraction: panZoomInteraction
         imageItem: noteArea
@@ -30,7 +29,6 @@ ImageItem {
     NoteStationInteraction {
         id: addStationInteraction
         anchors.fill: parent
-        camera: noteArea.camera
         scrapView: scrapViewId
         noteStationView: noteStationViewId
         basePanZoomInteraction: panZoomInteraction

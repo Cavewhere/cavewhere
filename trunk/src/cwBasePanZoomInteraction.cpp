@@ -5,7 +5,7 @@
 #include <QGraphicsSceneWheelEvent>
 
 cwBasePanZoomInteraction::cwBasePanZoomInteraction(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+    cwInteraction(parent),
     Camera(new cwCamera(this))
 {
 

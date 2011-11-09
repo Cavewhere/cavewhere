@@ -47,15 +47,15 @@ void cwNoteTranformation::setNorthUp(double degrees) {
     }
 }
 
-/**
-    Sets the resolution of the page of notes.
-  */
-void cwNoteTranformation::setPixelsPerInch(double pixelsPerInch) {
-    if(Data->PixelsPerInch != pixelsPerInch) {
-        Data->PixelsPerInch = pixelsPerInch;
-        emit pixelsPerInchChanged();
-    }
-}
+///**
+//    Sets the resolution of the page of notes.
+//  */
+//void cwNoteTranformation::setPixelsPerInch(double pixelsPerInch) {
+//    if(Data->PixelsPerInch != pixelsPerInch) {
+//        Data->PixelsPerInch = pixelsPerInch;
+//        emit pixelsPerInchChanged();
+//    }
+//}
 
 /**
   \brief Sets the scale of the notes

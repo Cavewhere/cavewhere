@@ -7,7 +7,7 @@
 #include "cwScrapItem.h"
 
 cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QDeclarativeItem *parent) :
-    cwBasePanZoomInteraction(parent),
+    cwInteraction(parent),
     NoteStationView(NULL),
     ScrapView(NULL)
 {
