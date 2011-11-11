@@ -62,7 +62,7 @@ Rectangle {
                 if(text.length > 0) {
                     return icon.status == Image.Ready && !iconOnTheLeft ? 3 : 0
                 } else {
-                    console.log("text: margin is zero")
+//                    console.log("text: margin is zero")
                     return 0;
                 }
             }

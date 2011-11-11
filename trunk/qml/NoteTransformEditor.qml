@@ -2,16 +2,22 @@ import QtQuick 1.0
 import QtDesktop 0.1 as Desktop
 import Cavewhere 1.0
 
-Item {
-    id: item1
+Rectangle {
+    id: editor
 
     property NoteTransform noteTransform
     property NoteNorthInteraction northInteraction
     property InteractionManager interactionManager
 
     visible: noteTransform !== null
+    color: style.floatingWidgetColor
+    radius: style.floatingWidgetRadius
+    height: childrenRect.height + 10
+    width: 250
 
-    anchors.fill: parent
+    Style {
+        id: style
+    }
 
     Binding {
         target: northInteraction
@@ -21,42 +27,19 @@ Item {
 
     Column {
         id: column1
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        //anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: 5
+        y: 5
+        spacing: 5
 
-
-        Row {
-
+        NorthUpInput {
+            id: northUpInputId
             anchors.left: parent.left
             anchors.right: parent.right
-
-            Button {
-                id: setNorthButton
-
-                onClicked: {
-                    interactionManager.active(northInteraction)
-                }
-            }
-
-            Text {
-                id: text1
-                text: qsTr("North")
-            }
-
-            DoubleClickTextInput {
-                id: northUpId
-                text: noteTransform.northUp
-                onFinishedEditting: noteTransform.northUp = newText
-            }
-
-            Text {
-                id: text3
-                x: 133
-                y: 6
-                width: 6
-                height: 15
-                text: qsTr("°")
-                font.pixelSize: 12
-            }
+            noteTransform: editor.noteTransform
+            onNorthUpInteractionActivated: interactionManager.active(northInteraction)
         }
 
         Row {
@@ -135,21 +118,21 @@ Item {
             }
         }
 
-        Row {
-            Text {
-                text: "PPI"
-            }
+//        Row {
+//            Text {
+//                text: "PPI"
+//            }
 
-            DoubleClickTextInput {
-                id: ppiId
-                text: noteTransform.pixelsPerInch
-                onFinishedEditting: noteTransform.pixelsPerInch = newText
-            }
+//            DoubleClickTextInput {
+//                id: ppiId
+//                text: noteTransform.pixelsPerInch
+//                onFinishedEditting: noteTransform.pixelsPerInch = newText
+//            }
 
-            Text {
-                text: "Pixels / in"
-                font.italic: true
-            }
-        }
+//            Text {
+//                text: "Pixels / in"
+//                font.italic: true
+//            }
+//        }
     }
 }

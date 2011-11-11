@@ -48,6 +48,7 @@ ImageItem {
         anchors.fill: parent
         imageItem: noteArea
         basePanZoomInteraction: panZoomInteraction
+        transformUpdater: transformUpdaterId
     }
 
     InteractionManager {

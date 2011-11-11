@@ -8,6 +8,7 @@ Rectangle {
     color: "gray"
     height: 0
     radius: 5
+    clip: true
 
     visible: false
 
@@ -24,12 +25,15 @@ Rectangle {
     Text {
         id: helpText
 
-        anchors.top: parent.top
+        //anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 5
+        anchors.verticalCenter: parent.verticalCenter
 
         textFormat: Text.RichText
+
+        text: "No documentation"
     }
 
     QtObject {
@@ -41,10 +45,10 @@ Rectangle {
         State {
             name: "VISIBLE"
 
-//            PropertyChanges {
-//                target: helpArea
-//                height: helpText.height + 10
-//            }
+            PropertyChanges {
+                target: helpArea
+                height: helpText.height + 10
+            }
         }
     ]
 
@@ -55,14 +59,13 @@ Rectangle {
 
             SequentialAnimation {
                 PropertyAction { target: privateData; property: "inTransition"; value: true }
-
-                NumberAnimation {
-                    target: object
+                PropertyAnimation {
+                    target: helpArea
                     property: "height"
+                    from: 0
                     to: helpText.height + 10
                     duration: 200
                 }
-
                 PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
         },
@@ -73,18 +76,16 @@ Rectangle {
 
             SequentialAnimation {
                 PropertyAction { target: privateData; property: "inTransition"; value: true }
-
                 PropertyAction { target: helpArea; property: "visible"; value: true }
 
                 NumberAnimation {
-                    target: object
+                    target: helpArea
                     property: "height"
                     to: 0
                     duration: 200
                 }
 
                 PropertyAction { target: helpArea; property: "visible"; value: false }
-
                 PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
         }

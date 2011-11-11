@@ -49,6 +49,8 @@
 #include "cwScrapItem.h"
 #include "cwLength.h"
 #include "cwInteraction.h"
+#include "cwNorthArrowItem.h"
+#include "cwPositioner3D.h"
 //#include "cwInteractionManager.h"
 
 cwQMLRegister::cwQMLRegister()
@@ -97,5 +99,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScrapItem>(uri, 1, 0, "ScrapItem");
     qmlRegisterType<cwLength>(uri, 1, 0, "Length");
     qmlRegisterType<cwInteraction>(uri, 1, 0, "Interaction");
+    qmlRegisterType<cwNorthArrowItem>(uri, 1, 0, "NorthArrowItem");
+    qmlRegisterType<cwPositioner3D>(uri, 1, 0, "Positioner3D");
 //    qmlRegisterType<cwInteractionManager>(uri, 1, 0, "InteractionManager");
 }

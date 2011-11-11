@@ -110,8 +110,8 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-   // Project->load("/home/blitz/bcc.cw");
-    Project->load("/Users/philipschuchardt/bcc.cw");
+    Project->load("/home/blitz/bcc.cw");
+   // Project->load("/Users/philipschuchardt/bcc.cw");
 
     //Positions and resize the main window
     initialWindowShape();

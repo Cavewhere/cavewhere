@@ -119,7 +119,9 @@ SOURCES += src/main.cpp \
     src/cwLength.cpp \
     src/cwGlobals.cpp \
     src/cwInteraction.cpp \
-    src/cwQMLRegister.cpp
+    src/cwQMLRegister.cpp \
+    src/cwNorthArrowItem.cpp \
+    src/cwPositioner3D.cpp
 
 HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwSurveyChunk.h \
@@ -228,7 +230,9 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwGlobals.h \
     src/cwInteraction.h \
     src/cwQMLRegister.h \
-    src/cwQMLRegister.h
+    src/cwQMLRegister.h \
+    src/cwNorthArrowItem.h \
+    src/cwPositioner3D.h
 
 
 
@@ -251,7 +255,6 @@ qml/*.js \
     qml/TripTabWidget.qml \
     qml/CaveTreeDelegate.qml \
     qml/IconButton.qml \
-    qml/DoubleClickTextInput.qml \
     qml/GLTerrainRenderer.qml \
 shaders/*.frag \
 shaders/*.vert \
@@ -267,7 +270,6 @@ shaders/*.geom \
     qml/ButtonGroup.qml \
     qml/Splitter.qml \
     qml/NoteStation.qml \
-    qml/Positioner3D.qml \
     qml/PanZoomInteraction.qml \
     qml/NoteItem.qml \
     qml/HelpBox.qml \
@@ -280,7 +282,11 @@ shaders/*.geom \
     qml/NoteScaleInteraction.qml \
     qml/HelpArea.qml \
     qml/LabelWithHelp.qml \
-    qml/LabelValueUnit.qml
+    qml/LabelValueUnit.qml \
+    qml/ClickTextInput.qml \
+    qml/DoubleClickTextInput.qml \
+    qml/NorthUpInput.qml \
+    qml/Style.qml
 
 RESOURCES += \
     icons.qrc
@@ -289,6 +295,22 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

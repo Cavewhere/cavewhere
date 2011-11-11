@@ -30,7 +30,7 @@ class cwTransformUpdater : public QObject
 public:
     explicit cwTransformUpdater(QObject *parent = 0);
 
-    void setCamera(cwCamera* camera);
+     void setCamera(cwCamera* camera);
     cwCamera* camera() const;
 
     void setModelMatrix(QMatrix4x4 matrix);
@@ -51,6 +51,7 @@ public:
 signals:
     void matrixChanged();
     void cameraChanged();
+    void updated();
 
 public slots:
     void update();

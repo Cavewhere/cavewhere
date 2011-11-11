@@ -123,6 +123,8 @@ void cwTransformUpdater::update() {
     foreach(QGraphicsObject* object, TransformItems) {
         updateTransform(object);
     }
+
+    emit updated();
 }
 
 /**

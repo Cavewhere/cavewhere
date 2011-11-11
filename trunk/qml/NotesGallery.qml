@@ -169,8 +169,12 @@ Rectangle {
         width: childrenRect.width + 6
         height: childrenRect.height + 6
 
-        radius: 3
-        color: "#DDDDDD"
+        radius: style.floatingWidgetRadius
+        color: style.floatingWidgetColor
+
+        Style {
+            id: style
+        }
 
         Row {
             id: mainToolBar
