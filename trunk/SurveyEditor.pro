@@ -227,6 +227,7 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwLength.h \
     src/cwGlobals.h \
     src/cwInteraction.h \
+    src/cwQMLRegister.h \
     src/cwQMLRegister.h
 
 
@@ -276,7 +277,10 @@ shaders/*.geom \
     qml/NoteItemSelectionInteraction.qml \
     qml/NoteNorthInteraction.qml \
     qml/InteractionManager.qml \
-    qml/NoteScaleInteraction.qml
+    qml/NoteScaleInteraction.qml \
+    qml/HelpArea.qml \
+    qml/LabelWithHelp.qml \
+    qml/LabelValueUnit.qml
 
 RESOURCES += \
     icons.qrc
@@ -285,6 +289,10 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
+
+
 
 
 

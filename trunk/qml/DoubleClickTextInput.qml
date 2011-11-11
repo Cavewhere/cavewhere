@@ -6,7 +6,8 @@ Item {
     property alias font: textArea.font
     property alias style: textArea.style
     property alias styleColor: textArea.styleColor
-    property bool acceptMousePress: false  //This make the double click text box accept mouse clicks
+    property bool acceptMousePress: false  //This make the double click text box accept mouse clicks (This
+    property bool doubleClickEdit: false
 
     signal startedEditting()
     signal finishedEditting(string newText)

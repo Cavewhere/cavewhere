@@ -41,6 +41,12 @@ Interaction {
         text: "Click"
     }
 
+    Rectangle {
+        Text {
+
+        }
+    }
+
     states: [
         State {
             name: "WaitForSecondClick"

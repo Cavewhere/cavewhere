@@ -85,6 +85,7 @@ private:
     QGLWidget* createGLWidget();
     void initGLEW();
 
+    void initialWindowShape();
 //    cwCave* currentSelectedCave() const;
 //    cwTrip* currentSelectedTrip() const;
 };

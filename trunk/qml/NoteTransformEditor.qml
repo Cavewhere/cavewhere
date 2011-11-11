@@ -79,8 +79,6 @@ Item {
                 onFinishedEditting: noteTransform.scaleNumerator.value = newText
             }
 
-
-
             Text {
                 text: ":"
             }

@@ -25,6 +25,7 @@
 #include <QThread>
 #include <QGLWidget>
 #include <QTemporaryFile>
+#include <QDesktopWidget>
 
 //---------------- For boost testing should be removed -------------
 //Std includes
@@ -109,8 +110,11 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("/home/blitz/bcc.cw");
-   // Project->load("/Users/philipschuchardt/bcc.cw");
+   // Project->load("/home/blitz/bcc.cw");
+    Project->load("/Users/philipschuchardt/bcc.cw");
+
+    //Positions and resize the main window
+    initialWindowShape();
 }
 
 void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
@@ -408,4 +412,22 @@ QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
     initGLEW();
 
     return glWidget;
+}
+
+/**
+  This positions the main window in the center of the screen. The size
+  of the window will be half the size of the screen
+  */
+void cwSurveyEditorMainWindow::initialWindowShape() {
+    QRect screenGeometry = QApplication::desktop()->screenGeometry();
+
+    double size = 0.8;
+    double position = (1.0 - size) / 2.0;
+
+    int x = qRound(screenGeometry.width() * position);
+    int y = qRound(screenGeometry.height() * position);
+    int width = qRound(screenGeometry.width() * size);
+    int height = qRound(screenGeometry.height() * size);
+
+    setGeometry(x, y, width, height);
 }
