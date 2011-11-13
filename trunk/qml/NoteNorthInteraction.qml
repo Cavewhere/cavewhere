@@ -67,7 +67,8 @@ Interaction {
 
 
     HelpBox {
-        text: "Click"
+        id: helpBoxId
+        text: "<b>Click</b> the north arrow's first point"
     }
 
     states: [
@@ -96,6 +97,11 @@ Interaction {
                         interaction.deactivate();
                     }
                 }
+            }
+
+            PropertyChanges {
+                target: helpBoxId
+                text: "<b>Click</b> the north arrow's second point"
             }
         }
     ]

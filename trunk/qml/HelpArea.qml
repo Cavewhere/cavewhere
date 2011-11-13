@@ -32,6 +32,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
 
         textFormat: Text.RichText
+        wrapMode: Text.WordWrap
 
         text: "No documentation"
     }

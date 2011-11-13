@@ -55,5 +55,8 @@ Item {
         anchors.right: parent.right
         anchors.top: row.bottom
         anchors.topMargin: 4
+
+        text: "You can set the direction of <b>north</b> relative to page for a scrap.
+        Cavewhere only uses <b>north</b> to help you automatically label stations."
     }
 }

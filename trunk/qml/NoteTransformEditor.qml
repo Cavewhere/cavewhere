@@ -13,7 +13,7 @@ Rectangle {
     color: style.floatingWidgetColor
     radius: style.floatingWidgetRadius
     height: childrenRect.height + 10
-    width: 250
+    width: 300
 
     Style {
         id: style
@@ -31,6 +31,7 @@ Rectangle {
         anchors.right: parent.right
         //anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: 5
+        anchors.rightMargin: 5
         y: 5
         spacing: 5
 

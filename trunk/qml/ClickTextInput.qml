@@ -52,7 +52,31 @@ Item {
     Text {
         id: textArea
         visible: !input.visible
-        anchors.left: parent.left
+        //anchors.left: parent.left
+
+        onTextChanged: {
+            console.log("Text changed:" + text)
+            textChangedAnimation.restart()
+        }
+
+        SequentialAnimation {
+            id: textChangedAnimation
+            NumberAnimation {
+                target: textArea;
+                property: "scale";
+                easing.type: Easing.OutInElastic
+                from: 1.0;
+                to: 1.2
+                duration: 100
+            }
+            NumberAnimation {
+                target: textArea;
+                property: "scale";
+                easing.type: Easing.OutInElastic
+                to: 1.0
+                duration: 100
+            }
+        }
     }
 
     MouseArea {
