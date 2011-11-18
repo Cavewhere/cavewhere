@@ -3,7 +3,7 @@
 
 
 //Our includes
-#include "ui_cwSurveyEditorMainWindow.h"
+#include "ui_cwMainWindow.h"
 class cwSurvexImporter;
 class cwSurvexExporter;
 class cwTrip;
@@ -22,7 +22,7 @@ class cwProjectImageProvider;
 class QTreeView;
 class QGLWidget;
 
-class cwMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
+class cwMainWindow : public QMainWindow, private Ui::cwMainWindow
 {
     Q_OBJECT
 

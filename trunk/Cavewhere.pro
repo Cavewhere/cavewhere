@@ -237,12 +237,11 @@ HEADERS  += \
 
 
 
-FORMS    += src/cwSurveyEditorMainWindow.ui \
+FORMS    += src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
     src/cwTaskProgressDialog.ui
 
-OTHER_FILES += qml/*.qml \
-qml/*.js \
+OTHER_FILES += \
     qml/DataSideBar.qml \
     qml/CompactTabWidget.qml \
     qml/Button.qml \
@@ -257,9 +256,6 @@ qml/*.js \
     qml/CaveTreeDelegate.qml \
     qml/IconButton.qml \
     qml/GLTerrainRenderer.qml \
-shaders/*.frag \
-shaders/*.vert \
-shaders/*.geom \
     shaders/simple.vert \
     shaders/simple.frag \
     shaders/LinePlot.vert \
