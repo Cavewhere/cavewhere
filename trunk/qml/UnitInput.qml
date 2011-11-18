@@ -33,6 +33,8 @@ Item {
         id: numeratorMenu
         model: listModel
         selectedIndex: 0
+
+        onSelectedIndexChanged: unitChanged(selectedIndex)
     }
 
     ListModel {

@@ -32,9 +32,9 @@ cwLength::cwLength(const cwLength& other) :
   */
 void cwLength::setUnit(Unit unit) {
     if(Data->LengthUnit != unit) {
-        //Update the value with a new value
-        double newValue = convert(value(), Data->LengthUnit, unit);
-        setValue(newValue);
+//        //Update the value with a new value
+//        double newValue = convert(value(), Data->LengthUnit, unit);
+//        setValue(newValue);
 
         Data->LengthUnit = unit;
         emit unitChanged();
@@ -44,11 +44,9 @@ void cwLength::setUnit(Unit unit) {
 /**
   Returns all the unit names for the length object
   */
-QStringList cwLength::unitNames()
-{
+QStringList cwLength::unitNames() {
     QStringList units;
     for(int i = in; i <= Unitless; i++) {
-        qDebug() << "Unit names:" << unitName((Unit)i);
         units.append(unitName((Unit)i));
     }
     return units;
@@ -57,8 +55,7 @@ QStringList cwLength::unitNames()
 /**
   Converts the unit into a string
   */
-QString cwLength::unitName(cwLength::Unit unit)
-{
+QString cwLength::unitName(cwLength::Unit unit) {
     switch(unit) {
     case in:
         return "in";
@@ -102,7 +99,7 @@ double cwLength::convert(double value, Unit from, Unit to) {
     double fromFactor = toMeters(from);
     double toFactor = toMeters(to);
 
-    return value / fromFactor * toFactor;
+    return value * fromFactor / toFactor;
 }
 
 /**

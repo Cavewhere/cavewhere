@@ -1,8 +1,10 @@
 import QtQuick 1.0
 import QtDesktop 0.1 as Destkop
 import Cavewhere 1.0
+
 Item {
     property NoteTransform noteTransform
+    property Note note
 
     height: childrenRect.height
 
@@ -52,17 +54,20 @@ Item {
             spacing: 3
             anchors.verticalCenter: parent.verticalCenter
 
-            LabelWithHelp {
-                id: unitLabelId
-                helpArea: unitsHelpAreaId
-                text: "Units"
-            }
+//            LabelWithHelp {
+//                id: unitLabelId
+//                helpArea: unitsHelpAreaId
+//                text: "Units"
+//            }
 
             Row {
                 UnitInput {
                     unitModel: noteTransform.scaleNumerator.unitNames
                     unit: noteTransform.scaleNumerator.unit
-                    onUnitChanged: noteTransform.scaleNumerator.unit = unit
+                    onUnitChanged: {
+                        console.log("scaleNumerator: unit" + unit)
+                        noteTransform.scaleNumerator.unit = unit
+                    }
                 }
 
                 Text {
@@ -77,30 +82,56 @@ Item {
             }
         }
 
-        Row {
-            spacing: 3
+
+        Text {
             anchors.verticalCenter: parent.verticalCenter
-
-            LabelWithHelp {
-                id: pageResLabel
-                helpArea: unitsHelpAreaId
-                text: "Page Resolution"
-            }
-
-            Row {
-                ClickTextInput {
-                    id: pageResInput
-                    text: noteTransform.scaleDenominator.value.toFixed(0)
-                    onFinishedEditting: noteTransform.scaleDenominator.value = newText
-                }
-
-                UnitInput {
-                    unitModel: noteTransform.scaleDenominator.unitNames
-                    unit: noteTransform.scaleDenominator.unit
-                    onUnitChanged: noteTransform.scaleDenominator.unit = unit
-                }
-            }
+            visible: !((noteTransform.scaleDenominator.unit === Length.Unitless ||
+                     noteTransform.scaleNumerator.unit === Length.Unitless) ||
+                     noteTransform.scaleDenominator.unit === noteTransform.scaleNumerator.unit)
+            text: "= 1:" + new Number((1 / noteTransform.scale).toFixed(1)).toString()
         }
+
+        Text {
+            color: "red"
+            anchors.verticalCenter: parent.verticalCenter
+            visible: (noteTransform.scaleDenominator.unit === Length.Unitless ||
+                      noteTransform.scaleNumerator.unit === Length.Unitless) &&
+                     !(noteTransform.scaleDenominator.unit === Length.Unitless &&
+                      noteTransform.scaleNumerator.unit === Length.Unitless)
+            text: "Weird scaling units"
+            font.italic: true
+            font.bold: true
+        }
+
+//        Row {
+//            spacing: 3
+//            anchors.verticalCenter: parent.verticalCenter
+
+//            LabelWithHelp {
+//                id: pageResLabel
+//                helpArea: unitsHelpAreaId
+//                text: "Resolution"
+//            }
+
+//            Row {
+//                ClickTextInput {
+//                    id: pageResInput
+//                    text: noteTransform.scaleDenominator.value.toFixed(0)
+//                    onFinishedEditting: noteTransform.scaleDenominator.value = newText
+//                }
+
+//                UnitInput {
+//                    unitModel: [
+//                        "dpi",
+//                        "dpm"
+//                    ]
+//                    unit: 0
+//                    onUnitChanged: {
+
+//                    }
+//                }
+//            }
+//        }
     }
 
     HelpArea {

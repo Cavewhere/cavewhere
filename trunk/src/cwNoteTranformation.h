@@ -65,6 +65,8 @@ private:
     QSharedDataPointer<PrivateData> Data;
     cwLength* ScaleNumerator; //!< This is the numerator of the scale, usually 1
     cwLength* ScaleDenominator; //!< The scale denominator
+
+    void connectLengthObjects();
 };
 //Q_DECLARE_METATYPE(cwNoteTranformation*)
 

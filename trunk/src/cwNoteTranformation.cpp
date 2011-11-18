@@ -15,7 +15,7 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     ScaleNumerator(new cwLength(1, cwLength::Unitless, this)),
     ScaleDenominator(new cwLength(1, cwLength::Unitless, this))
 {
-
+    connectLengthObjects();
 }
 
 
@@ -25,7 +25,7 @@ cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
     ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
     ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
 {
-
+    connectLengthObjects();
 }
 
 const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
@@ -46,16 +46,6 @@ void cwNoteTranformation::setNorthUp(double degrees) {
         emit northUpChanged();
     }
 }
-
-///**
-//    Sets the resolution of the page of notes.
-//  */
-//void cwNoteTranformation::setPixelsPerInch(double pixelsPerInch) {
-//    if(Data->PixelsPerInch != pixelsPerInch) {
-//        Data->PixelsPerInch = pixelsPerInch;
-//        emit pixelsPerInchChanged();
-//    }
-//}
 
 /**
   \brief Sets the scale of the notes
@@ -87,4 +77,14 @@ double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const
     double northUp = acos(dot) * cwGlobals::RadiansToDegrees;
 
     return northUp;
+}
+
+/**
+  This connects the length objects when the scale has changed.
+  */
+void cwNoteTranformation::connectLengthObjects() {
+    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
+    connect(ScaleNumerator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
+    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
+    connect(ScaleDenominator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
 }

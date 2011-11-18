@@ -110,7 +110,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("/home/blitz/bcc.cw");
+    Project->load("/home/blitz/eg3.cw");
    // Project->load("/Users/philipschuchardt/bcc.cw");
 
     //Positions and resize the main window

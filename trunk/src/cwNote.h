@@ -20,6 +20,7 @@ class cwNote : public QObject
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
+
 public:
     explicit cwNote(QObject *parent = 0);
     cwNote(const cwNote& object);
