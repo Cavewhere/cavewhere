@@ -3,7 +3,7 @@
 #include <QDeclarativeComponent>
 
 //Our includes
-#include "cwSurveyEditorMainWindow.h"
+#include "cwMainWindow.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwCavingRegion.h"
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName("Cavewhere");
     QApplication::setApplicationVersion("0.1");
 
-    cwSurveyEditorMainWindow w;
+    cwMainWindow w;
     w.show();
 
     return a.exec();

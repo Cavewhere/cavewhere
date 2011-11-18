@@ -22,12 +22,12 @@ class cwProjectImageProvider;
 class QTreeView;
 class QGLWidget;
 
-class cwSurveyEditorMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
+class cwMainWindow : public QMainWindow, private Ui::cwSurveyEditorMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit cwSurveyEditorMainWindow(QWidget *parent = 0);
+    explicit cwMainWindow(QWidget *parent = 0);
 
     void changeEvent(QEvent *e);
 

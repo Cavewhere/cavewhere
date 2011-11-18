@@ -2,7 +2,7 @@
 #include "GL/glew.h"
 
 //Our includes
-#include "cwSurveyEditorMainWindow.h"
+#include "cwMainWindow.h"
 #include "cwQMLRegister.h"
 #include "cwProject.h"
 #include "cwRegionTreeModel.h"
@@ -63,7 +63,7 @@ static QmlJsDebuggingEnabler enableDebuggingHelper;
 
 #endif // QMLJSDEBUGGER
 
-cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
+cwMainWindow::cwMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexExporter(NULL)
 {
@@ -117,7 +117,7 @@ cwSurveyEditorMainWindow::cwSurveyEditorMainWindow(QWidget *parent) :
     initialWindowShape();
 }
 
-void cwSurveyEditorMainWindow::changeEvent(QEvent *e)
+void cwMainWindow::changeEvent(QEvent *e)
 {
     QMainWindow::changeEvent(e);
     switch (e->type()) {
@@ -134,7 +134,7 @@ void OpenExportSurvexTripFileDialog();
 /**
   \brief Opens the survex exporter
   */
-void cwSurveyEditorMainWindow::openExportSurvexTripFileDialog() {
+void cwMainWindow::openExportSurvexTripFileDialog() {
     QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -144,7 +144,7 @@ void cwSurveyEditorMainWindow::openExportSurvexTripFileDialog() {
 /**
   \brief Exports the currently selected trip to filename
   */
-void cwSurveyEditorMainWindow::exportSurvexTrip(QString /*filename*/) {
+void cwMainWindow::exportSurvexTrip(QString /*filename*/) {
     //    if(filename.isEmpty()) { return; }
 
     //    cwTrip* trip = currentSelectedTrip();
@@ -162,7 +162,7 @@ void cwSurveyEditorMainWindow::exportSurvexTrip(QString /*filename*/) {
 /**
   \brief Called when the export task has completed
   */
-void cwSurveyEditorMainWindow::exporterFinished() {
+void cwMainWindow::exporterFinished() {
     if(sender()) {
         sender()->deleteLater();
     }
@@ -171,7 +171,7 @@ void cwSurveyEditorMainWindow::exporterFinished() {
 /**
   \brief Asks the user to choose a file to export the currently selected file
   */
-void cwSurveyEditorMainWindow::openExportSurvexCaveFileDialog() {
+void cwMainWindow::openExportSurvexCaveFileDialog() {
     QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -181,7 +181,7 @@ void cwSurveyEditorMainWindow::openExportSurvexCaveFileDialog() {
 /**
   \brief Exports the currently selected cave to a file
   */
-void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
+void cwMainWindow::exportSurvexCave(QString /*filename*/) {
     //    if(filename.isEmpty()) { return; }
     //    cwCave* cave = currentSelectedCave();
     //    if(cave != NULL) {
@@ -199,7 +199,7 @@ void cwSurveyEditorMainWindow::exportSurvexCave(QString /*filename*/) {
   \brief Open a file dialog for the user to save
   all the data to survex file
   */
-void cwSurveyEditorMainWindow::openExportSurvexRegionFileDialog() {
+void cwMainWindow::openExportSurvexRegionFileDialog() {
     QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -209,7 +209,7 @@ void cwSurveyEditorMainWindow::openExportSurvexRegionFileDialog() {
 /**
   \brief Exports the survex region to filename
   */
-void cwSurveyEditorMainWindow::exportSurvexRegion(QString filename) {
+void cwMainWindow::exportSurvexRegion(QString filename) {
     cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
     exportTask->setOutputFile(filename);
     exportTask->setData(*Region);
@@ -222,7 +222,7 @@ void cwSurveyEditorMainWindow::exportSurvexRegion(QString filename) {
 /**
   Opens the compass file export dialog
   */
-void cwSurveyEditorMainWindow::openExportCompassCaveFileDialog() {
+void cwMainWindow::openExportCompassCaveFileDialog() {
     QFileDialog* dialog = new QFileDialog(NULL, "Export selected cave to Compass", "", "Compass *.dat");
     dialog->setAcceptMode(QFileDialog::AcceptSave);
     dialog->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -232,7 +232,7 @@ void cwSurveyEditorMainWindow::openExportCompassCaveFileDialog() {
 /**
   Exports the currently select cave to Compass
   */
-void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
+void cwMainWindow::exportCaveToCompass(QString filename) {
         if(filename.isEmpty()) { return; }
         if(!Region->hasCaves()) { return; }
 
@@ -251,14 +251,14 @@ void cwSurveyEditorMainWindow::exportCaveToCompass(QString filename) {
 /**
   \brief Opens the suvrex import dialog
   */
-void cwSurveyEditorMainWindow::importSurvex() {
+void cwMainWindow::importSurvex() {
     cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Region, this);
     survexImportDialog->setUndoStack(UndoStack);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     survexImportDialog->open();
 }
 
-void cwSurveyEditorMainWindow::reloadQML() {
+void cwMainWindow::reloadQML() {
 
     delete DeclarativeView;
    // verticalLayout->removeWidget(DeclarativeView);
@@ -297,7 +297,7 @@ void cwSurveyEditorMainWindow::reloadQML() {
 /**
   \brief Set's the survey data for the current editor
   */
-void cwSurveyEditorMainWindow::setSurveyData(QItemSelection /*selected*/, QItemSelection /*deselected*/) {
+void cwMainWindow::setSurveyData(QItemSelection /*selected*/, QItemSelection /*deselected*/) {
 
     //    QList<QModelIndex> selectedIndexes = selected.indexes();
     //    if(!selectedIndexes.isEmpty()) {
@@ -356,25 +356,25 @@ void cwSurveyEditorMainWindow::setSurveyData(QItemSelection /*selected*/, QItemS
 //    return trip;
 //}
 
-void cwSurveyEditorMainWindow::updateUndoText(QString undoText) {
+void cwMainWindow::updateUndoText(QString undoText) {
     ActionUndo->setText(QString("Undo %1").arg(undoText));
 }
 
-void cwSurveyEditorMainWindow::updateRedoText(QString redoText) {
+void cwMainWindow::updateRedoText(QString redoText) {
     ActionRedo->setText(QString("Redo %1").arg(redoText));
 }
 
 /**
   \brief Saves the project
   */
-void cwSurveyEditorMainWindow::save() {
+void cwMainWindow::save() {
     Project->save();
 }
 
 /**
   \brief Ask the user to load a cw project file
   */
-void cwSurveyEditorMainWindow::load() {
+void cwMainWindow::load() {
     QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
     loadDialog->setFileMode(QFileDialog::ExistingFile);
     loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
@@ -385,7 +385,7 @@ void cwSurveyEditorMainWindow::load() {
 /**
   This init's glew so opengl extentions work!
   */
-void cwSurveyEditorMainWindow::initGLEW() {
+void cwMainWindow::initGLEW() {
     GLenum err = glewInit();
     if (GLEW_OK != err) {
         QString informationText = QString("Error: %1").arg((const char*)glewGetErrorString(err));
@@ -402,7 +402,7 @@ void cwSurveyEditorMainWindow::initGLEW() {
 /**
   \brief This creates the gl widget that the main declarative view paints to
   */
-QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
+QGLWidget* cwMainWindow::createGLWidget() {
     QGLFormat format;
 //    format.setSamples(8);
     format.setSampleBuffers(true);
@@ -418,7 +418,7 @@ QGLWidget* cwSurveyEditorMainWindow::createGLWidget() {
   This positions the main window in the center of the screen. The size
   of the window will be half the size of the screen
   */
-void cwSurveyEditorMainWindow::initialWindowShape() {
+void cwMainWindow::initialWindowShape() {
     QRect screenGeometry = QApplication::desktop()->screenGeometry();
 
     double size = 0.8;

@@ -6,7 +6,7 @@
 
 QT       += core gui declarative xml opengl sql
 
-TARGET = SurveyEditor
+TARGET = Cavewhere
 TEMPLATE = app
 
 # Include JS debugger library if QMLJSDEBUGGER_PATH is set
@@ -17,7 +17,6 @@ TEMPLATE = app
 }
 
 SOURCES += src/main.cpp \
-    src/cwSurveyEditorMainWindow.cpp \
     src/cwSurveyChunk.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
@@ -121,9 +120,10 @@ SOURCES += src/main.cpp \
     src/cwInteraction.cpp \
     src/cwQMLRegister.cpp \
     src/cwNorthArrowItem.cpp \
-    src/cwPositioner3D.cpp
+    src/cwPositioner3D.cpp \
+    src/cwMainWindow.cpp
 
-HEADERS  += src/cwSurveyEditorMainWindow.h \
+HEADERS  += \
     src/cwSurveyChunk.h \
     src/cwStation.h \
     src/cwShot.h \
@@ -232,7 +232,8 @@ HEADERS  += src/cwSurveyEditorMainWindow.h \
     src/cwQMLRegister.h \
     src/cwQMLRegister.h \
     src/cwNorthArrowItem.h \
-    src/cwPositioner3D.h
+    src/cwPositioner3D.h \
+    src/cwMainWindow.h
 
 
 
@@ -295,6 +296,10 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+
+
+
 
 
 
