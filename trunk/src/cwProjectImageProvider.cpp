@@ -12,7 +12,8 @@
 #include <QDebug>
 
 const QString cwProjectImageProvider::Name = "sqlimagequery";
-const QString cwProjectImageProvider::RequestImageSQL = "SELECT type,imageData,width,height from Images where id=?";
+const QString cwProjectImageProvider::RequestImageSQL = "SELECT type,width,height,dotsPerMeter,imageData from Images where id=?";
+const QString cwProjectImageProvider::RequestMetadataSQL = "SELECT type,width,height,dotsPerMeter from Images where id=?";
 const QByteArray cwProjectImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
 
 cwProjectImageProvider::cwProjectImageProvider() :
@@ -87,62 +88,14 @@ QByteArray cwProjectImageProvider::requestImageData(int id, QSize* size, QByteAr
         return QByteArray();
     }
 
-    QString databaseName = QString("resquestImage/%1").arg(id);
-    if(QSqlDatabase::contains(databaseName)) {
-        QSqlDatabase::removeDatabase(databaseName);
-    }
+    //Extra all the image data
+    cwImageData imageData = data(id);
 
-    //Define the database
-    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("resquestImage/%1").arg(id));
-    database.setDatabaseName(projectPath());
-
-    //Create an sql connection
-    bool connected = database.open();
-    if(!connected) {
-        qDebug() << "cwProjectImageProvider:: Couldn't connect to database:" << ProjectPath;
-        return QByteArray();
-    }
-
-    //Setup the query
-    QSqlQuery query(database);
-    bool successful = query.prepare(RequestImageSQL);
-
-    if(!successful) {
-        qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << RequestImageSQL;
-        return QByteArray();
-    }
-
-    //Set the id that we're searching for
-    query.bindValue(0, id);
-    query.exec();
-
-    //Extract the data
-    QSqlRecord record = query.record();
-    if(record.isEmpty()) {
-        qDebug() << "cwProjectImageProvider:: No data extracted for " << id;
-        return QByteArray();
-    }
-
-    //Get the first row
-    query.next();
-
-    *type = query.value(0).toByteArray();
-    QByteArray imageData = query.value(1).toByteArray();
-    int width = query.value(2).toInt();
-    int height = query.value(3).toInt();
-
-    //Update the size from the database
-    *size = QSize(width, height);
-
-    //Remove the zlib compression from the image
-    if(QString(*type) == QString(cwProjectImageProvider::Dxt1_GZ_Extension)) {
-        //Decompress the QByteArray
-        imageData = qUncompress(imageData);
-    }
-
-    return imageData;
+    //Set up all the data to be returned
+    *size = imageData.size();
+    if(type != NULL) { *type = imageData.format(); }
+    return imageData.data();
 }
-
 
 /**
  *Sets the project path so we can connect and extract data from it
@@ -158,4 +111,80 @@ void cwProjectImageProvider::setProjectPath(QString projectPath) {
 QString cwProjectImageProvider::projectPath() const {
     QMutexLocker locker(const_cast<QMutex*>(&ProjectPathMutex));
     return ProjectPath;
+}
+
+/**
+  Gets the metadata of the original image
+  */
+cwImageData cwProjectImageProvider::originalMetadata(const cwImage &image) {
+    return data(image.original(), true); //Only get the metadata of the original
+}
+
+/**
+  Gets the metadata of the image at id
+  */
+cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) {
+    QString databaseName = QString("resquestImage/%1").arg(id);
+    if(QSqlDatabase::contains(databaseName)) {
+        QSqlDatabase::removeDatabase(databaseName);
+    }
+
+    QString request = metaDataOnly ? "requestMetadata/%1" : "resquestImage/%1";
+
+    //Define the database
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", request.arg(id));
+    database.setDatabaseName(projectPath());
+
+    //Create an sql connection
+    bool connected = database.open();
+    if(!connected) {
+        qDebug() << "cwProjectImageProvider:: Couldn't connect to database:" << ProjectPath;
+        return cwImageData();
+    }
+
+    //Setup the query
+    QSqlQuery query(database);
+    bool successful;
+    if(metaDataOnly) {
+        successful = query.prepare(RequestMetadataSQL);
+    } else {
+        successful = query.prepare(RequestImageSQL);
+    }
+
+    if(!successful) {
+        qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << RequestImageSQL;
+        return cwImageData();
+    }
+
+    //Set the id that we're searching for
+    query.bindValue(0, id);
+    query.exec();
+
+    //Extract the data
+    QSqlRecord record = query.record();
+    if(record.isEmpty()) {
+        qDebug() << "cwProjectImageProvider:: No data extracted for " << id;
+        return cwImageData();
+    }
+
+    //Get the first row
+    query.next();
+
+    QByteArray type = query.value(0).toByteArray();
+    int width = query.value(1).toInt();
+    int height = query.value(2).toInt();
+    QSize size = QSize(width, height);
+    int dotsPerMeter = query.value(3).toInt();
+
+    QByteArray imageData;
+    if(!metaDataOnly) {
+        imageData = query.value(4).toByteArray();
+        //Remove the zlib compression from the image
+        if(QString(type) == QString(cwProjectImageProvider::Dxt1_GZ_Extension)) {
+            //Decompress the QByteArray
+            imageData = qUncompress(imageData);
+        }
+    }
+
+    return cwImageData(size, dotsPerMeter, type, imageData);
 }

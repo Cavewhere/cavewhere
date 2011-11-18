@@ -14,16 +14,18 @@ class cwImageData
 {
 public:
    // cwImageData(int id);
-    cwImageData(QSize size, const QByteArray& format, const QByteArray& image);
-    //cwImageData(QSize size, QString type, const QByteArray& image, int id);
+    cwImageData();
+    cwImageData(QSize size, int dotsPerMeter, const QByteArray& format, const QByteArray& image);
 
     QSize size() const;
+    int dotsPerMeter() const;
     QByteArray format() const;
     QByteArray data() const;
    // int DatabaseID() const;
 
 private:
     QSize Size;
+    int DotsPerMeter;
     QByteArray Format;
     QByteArray Data;
     //int databaseId;
@@ -35,6 +37,13 @@ private:
   */
 inline QSize cwImageData::size() const {
     return Size;
+}
+
+/**
+  \brief Gets the resolution of the image
+  */
+inline int cwImageData::dotsPerMeter() const {
+    return DotsPerMeter;
 }
 
 /**

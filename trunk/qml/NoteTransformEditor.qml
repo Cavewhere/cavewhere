@@ -12,7 +12,7 @@ Rectangle {
     visible: noteTransform !== null
     color: style.floatingWidgetColor
     radius: style.floatingWidgetRadius
-    height: childrenRect.height + 10
+    height: childrenRect.height + 5
     width: 300
 
     Style {
@@ -33,9 +33,9 @@ Rectangle {
         anchors.leftMargin: 5
         anchors.rightMargin: 5
         y: 5
-        spacing: 5
+        spacing: 3
 
-        NorthUpInput {
+        NoteNorthUpInput {
             id: northUpInputId
             anchors.left: parent.left
             anchors.right: parent.right
@@ -43,80 +43,11 @@ Rectangle {
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
         }
 
-        Row {
-
+        NoteScaleInput {
+            id: scaleInputId
             anchors.left: parent.left
             anchors.right: parent.right
-
-            Button {
-                id: setLength
-            }
-
-            Text {
-                id: label
-                text: qsTr("Scale")
-            }
-
-            DoubleClickTextInput {
-                id: numberOfPixelsId
-                text: noteTransform.scaleNumerator.value
-                onFinishedEditting: noteTransform.scaleNumerator.value = newText
-            }
-
-            Text {
-                text: ":"
-            }
-
-            DoubleClickTextInput {
-                id: lengthId
-                text: noteTransform.scaleDenominator.value
-                onFinishedEditting: noteTransform.scaleDenominator.value = newText
-            }
-
-
-            Desktop.ComboBox {
-                id: denominatorUnits
-
-                Desktop.MenuItem {
-                    text: "mm"
-                }
-
-                Desktop.MenuItem {
-                    text: "cm"
-                }
-
-                Desktop.MenuItem {
-                    text: "m"
-                }
-
-                Desktop.MenuItem {
-                    text: "ft"
-                }
-            }
-
-            Text {
-                text: ":"
-            }
-
-            Desktop.ComboBox {
-                id: numeratorUnits
-
-                Desktop.MenuItem {
-                    text: "mm"
-                }
-
-                Desktop.MenuItem {
-                    text: "cm"
-                }
-
-                Desktop.MenuItem {
-                    text: "m"
-                }
-
-                Desktop.MenuItem {
-                    text: "ft"
-                }
-            }
+            noteTransform: editor.noteTransform
         }
 
 //        Row {

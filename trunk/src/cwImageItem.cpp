@@ -17,9 +17,6 @@ cwImageItem::cwImageItem(QDeclarativeItem *parent) :
 {
     //Called when the image is finished loading
     connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
-
-    //For testing
-//    connect(Camera, SIGNAL(viewChanged()), SLOT(OnCameraChanged()));
 }
 
 /**

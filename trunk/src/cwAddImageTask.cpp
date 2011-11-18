@@ -186,11 +186,17 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     QImage image;
     image.loadFromData(originalImageByteData, format.constData());
 
+    int dotsPerMeter = 0;
+    if(image.dotsPerMeterX() == image.dotsPerMeterY()) {
+        dotsPerMeter = image.dotsPerMeterX();
+    }
+
     //Write the image to the database
-    cwImageData originalImageData(image.size(), format, originalImageByteData);
+    cwImageData originalImageData(image.size(), dotsPerMeter, format, originalImageByteData);
     int imageId = cwProject::addImage(Database, originalImageData);
     imageIdContainer->setOriginal(imageId);
     imageIdContainer->setOriginalSize(image.size());
+    imageIdContainer->setOriginalDotsPerMeter(dotsPerMeter);
 
     return image;
 }
@@ -214,8 +220,10 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
     writer.setCompression(85);
     writer.write(scaledImage);
 
+    int dotMeter = imageIds->originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
+
     //Write the data to database
-    cwImageData iconImageData(scaledSize, format, jpgData);
+    cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
     int imageId = cwProject::addImage(Database, iconImageData);
     imageIds->setIcon(imageId);
 }
@@ -235,7 +243,7 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
     QSize scaledImageSize = scaledImage.size();
 
     for(int i = 0; i < numberOfLevels && isRunning(); i++) {
-        emit statusMessage(QString("Compressing %1 of %2 bold flavors in %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
+        emit statusMessage(QString("Compressing %1 of %2 bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
 
         //Rescaled the image
         scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
@@ -282,7 +290,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image) {
     outputData = qCompress(outputData, 9);
 
     //Add the image to the database
-    cwImageData iconImageData(image.size(), cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
+    cwImageData iconImageData(image.size(), 0, cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
     int imageId = cwProject::addImage(Database, iconImageData);
     return imageId;
  }
@@ -440,6 +448,18 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
     return outputData;
 }
 
+/**
+  Gets the number of dots per meter of the image
+
+  If the image doesn't have the same dots per meter in both the x and y direction, then
+  zero is returned.
+  */
+int cwAddImageTask::dotsPerMeter(QImage image) const {
+    if(image.dotsPerMeterX() != image.dotsPerMeterY()) {
+        return 0;
+    }
+    return image.dotsPerMeterX();
+}
 
 
 

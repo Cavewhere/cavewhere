@@ -271,11 +271,13 @@ void save(Archive &archive, const cwImage &image, const unsigned int) {
     int iconId = image.icon();
     QList<int> mipmapIds = image.mipmaps();
     QSize size = image.origianlSize();
+    int dotPerMeter = image.originalDotsPerMeter();
 
     archive << BOOST_SERIALIZATION_NVP(originalId);
     archive << BOOST_SERIALIZATION_NVP(iconId);
     archive << BOOST_SERIALIZATION_NVP(mipmapIds);
     archive << BOOST_SERIALIZATION_NVP(size);
+    archive << BOOST_SERIALIZATION_NVP(dotPerMeter);
 }
 
 template<class Archive>
@@ -284,16 +286,19 @@ void load(Archive &archive, cwImage &image, const unsigned int) {
     int iconId;
     QList<int> mipmapIds;
     QSize size;
+    int dotPerMeter;
 
     archive >> BOOST_SERIALIZATION_NVP(originalId);
     archive >> BOOST_SERIALIZATION_NVP(iconId);
     archive >> BOOST_SERIALIZATION_NVP(mipmapIds);
     archive >> BOOST_SERIALIZATION_NVP(size);
+    archive >> BOOST_SERIALIZATION_NVP(dotPerMeter);
 
     image.setOriginal(originalId);
     image.setOriginalSize(size);
     image.setIcon(iconId);
     image.setMipmaps(mipmapIds);
+    image.setOriginalDotsPerMeter(dotPerMeter);
 }
 
 ////////////////////////// cwTripCalibration //////////////////////////

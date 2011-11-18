@@ -59,7 +59,7 @@ cwQMLRegister::cwQMLRegister()
 
 void cwQMLRegister::registerQML()
 {
-    const char* uri = "Cavewhere";
+//    const char* uri = "Cavewhere";
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
     qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
@@ -71,11 +71,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
     qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
     qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
-    //qmlRegisterType<cwNoteItem>("Cavewhere", 1, 0, "NoteItem");
     qmlRegisterType<cwTreeView>("Cavewhere", 1, 0, "TreeView");
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
-    //    qmlRegisterType<QWidget>("Cavewhere", 1, 0, "QWidget");
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
     qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
@@ -101,5 +99,4 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwInteraction>("Cavewhere", 1, 0, "Interaction");
     qmlRegisterType<cwNorthArrowItem>("Cavewhere", 1, 0, "NorthArrowItem");
     qmlRegisterType<cwPositioner3D>("Cavewhere", 1, 0, "Positioner3D");
-//    qmlRegisterType<cwInteractionManager>("Cavewhere", 1, 0, "InteractionManager");
 }

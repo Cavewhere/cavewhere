@@ -4,8 +4,14 @@
 //    Id = id;
 //}
 
-cwImageData::cwImageData(QSize size, const QByteArray& format, const QByteArray& image) {
+cwImageData::cwImageData() :
+    DotsPerMeter(0)
+{
+}
+
+cwImageData::cwImageData(QSize size, int dotsPerMeter, const QByteArray& format, const QByteArray& image) {
     Size = size;
+    DotsPerMeter = dotsPerMeter;
     Format = format;
     Data = image;
 //    Id = -1;

@@ -55,7 +55,6 @@ Item {
         //anchors.left: parent.left
 
         onTextChanged: {
-            console.log("Text changed:" + text)
             textChangedAnimation.restart()
         }
 
@@ -122,10 +121,10 @@ Item {
                 activeFocusOnPress: false
 
                 Keys.onPressed: {
-                    if(event.key == Qt.Key_Return) {
+                    if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         commitChanges();
                         event.accepted = true
-                    } else if(event.key == Qt.Key_Escape) {
+                    } else if(event.key === Qt.Key_Escape) {
                         closeEditor();
                         event.accepted = true
                     }

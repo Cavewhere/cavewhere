@@ -8,6 +8,7 @@
 //Our includes
 #include "cwGLRenderer.h"
 #include "cwImage.h"
+#include "cwImageData.h"
 
 class cwImageItem : public cwGLRenderer
 {
@@ -52,6 +53,7 @@ private:
 
     //The project filename for this class
     cwImage Image;
+    cwImageData OriginalMetadata;  //This will never have image data, only the metadata
     float Rotation;
     QString ProjectFilename;
     QMatrix4x4 RotationModelMatrix;
@@ -90,14 +92,9 @@ private:
         QString Filename;
     };
 
+
 private slots:
      void ImageFinishedLoading();
-
-//     void OnCameraChanged() {
-//         QPoint center(width() / 2.0, height() / 2.0);
-//         QVector3D rotationCenter = Camera->unProject(center, 0.0, RotationModelMatrix);
-//         qDebug() << "Rotation center:" << rotationCenter;
-//     }
 
 };
 

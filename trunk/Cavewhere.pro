@@ -16,6 +16,10 @@ TEMPLATE = app
     DEFINES -= QMLJSDEBUGGER
 }
 
+OBJECTS_DIR = .obj
+UI_DIR = .ui
+MOC_DIR = .moc
+
 SOURCES += src/main.cpp \
     src/cwSurveyChunk.cpp \
     src/cwStation.cpp \
@@ -88,7 +92,6 @@ SOURCES += src/main.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
     src/cw3dRegionViewer.cpp \
-    src/cwSaveXMLProjectTask.cpp \
     src/cwImageDatabase.cpp \
     src/cwImage.cpp \
     src/cwImageData.cpp \
@@ -197,7 +200,6 @@ HEADERS  += \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
     src/cw3dRegionViewer.h \
-    src/cwSaveXMLProjectTask.h \
     src/cwImageDatabase.h \
     src/cwImage.h \
     src/cwImageData.h \
@@ -282,8 +284,12 @@ OTHER_FILES += \
     qml/LabelValueUnit.qml \
     qml/ClickTextInput.qml \
     qml/DoubleClickTextInput.qml \
-    qml/NorthUpInput.qml \
-    qml/Style.qml
+    qml/Style.qml \
+    qml/CoreClickTextInput.qml \
+    qml/NoteScaleInput.qml \
+    qml/Pallete.qml \
+    qml/UnitInput.qml \
+    qml/NoteNorthUpInput.qml
 
 RESOURCES += \
     icons.qrc
@@ -292,6 +298,8 @@ INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
 DEPENDPATH += INCLUDEPATH
 
 LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+
+QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 
 
 

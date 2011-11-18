@@ -34,6 +34,9 @@ public:
     void setOriginalSize(QSize size);
     QSize origianlSize() const;
 
+    void setOriginalDotsPerMeter(int dotsPerMeter);
+    int originalDotsPerMeter() const;
+
     bool operator ==(const cwImage& other);
     bool operator !=(const cwImage& other);
 
@@ -44,6 +47,7 @@ private:
     int IconId;
     int OriginalId;
     QSize OriginalSize;
+    int OriginalDotsPerMeter;
 };
 
 Q_DECLARE_METATYPE(cwImage)
@@ -125,6 +129,21 @@ inline void cwImage::setOriginalSize(QSize size) {
 inline QSize cwImage::origianlSize() const {
     return OriginalSize;
 }
+
+/**
+  \brief Sets the origianl dots per meter
+  */
+inline void cwImage::setOriginalDotsPerMeter(int dotsPerMeter) {
+    OriginalDotsPerMeter = dotsPerMeter;
+}
+
+/**
+  \brief Sets the original dots per meter
+  */
+inline int cwImage::originalDotsPerMeter() const {
+    return OriginalDotsPerMeter;
+}
+
 
 /**
   \brief Returns false if the image isn't valid and true if it is valid.

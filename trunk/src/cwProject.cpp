@@ -119,6 +119,7 @@ void cwProject::createDefaultSchema() {
             QString("shouldDelete BOOL,") + //If the image should be delete
             QString("width INTEGER,") + //The width of the image
             QString("height INTEGER,") + //The height of the image
+            QString("dotsPerMeter INTEGER,") + //The resolution of the image
             QString("imageData BLOB)"); //The blob that stores the image data
 
     couldPrepare = createImagesTable.prepare(query);
@@ -319,8 +320,8 @@ void cwProject::connectCave(cwCave* cave) {
   This static function takes a database and adds the imageData to the database
   */
 int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
-    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, imageData) "
-            "VALUES (?, ?, ?, ?, ?)";
+    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "
+            "VALUES (?, ?, ?, ?, ?, ?)";
 
     QSqlQuery query(database);
     bool successful = query.prepare(SQL);
@@ -334,7 +335,8 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
     query.bindValue(1, false);
     query.bindValue(2, imageData.size().width());
     query.bindValue(3, imageData.size().height());
-    query.bindValue(4, imageData.data());
+    query.bindValue(4, imageData.dotsPerMeter());
+    query.bindValue(5, imageData.data());
     query.exec();
 
     //Get the id of the last inserted id

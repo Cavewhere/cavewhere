@@ -58,6 +58,7 @@ private:
     void calculateNumberOfSteps();
     int numberOfMipmapLevels(QSize imageSize) const;
     QSize halfSize(QSize size) const;
+    int dotsPerMeter(QImage image) const;
 
     void IncreaseProgress();
 
@@ -100,8 +101,8 @@ inline QList<cwImage> cwAddImageTask::images() {
   */
 inline QSize cwAddImageTask::halfSize(QSize size) const {
      //Create the new width and height
-     return QSize(qMax(size.width() / 2, 1), qMax(size.height() / 2, 1));
- }
+    return QSize(qMax(size.width() / 2, 1), qMax(size.height() / 2, 1));
+}
 
 /**
   \brief This increases the current progress of the task

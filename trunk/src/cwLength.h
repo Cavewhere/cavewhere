@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QSharedDataPointer>
 #include <QSharedData>
+#include <QStringList>
 
 class cwLength : public QObject
 {
@@ -12,6 +13,7 @@ class cwLength : public QObject
 
     Q_PROPERTY(double value READ value WRITE setValue NOTIFY valueChanged)
     Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
+    Q_PROPERTY(QStringList unitNames READ unitNames NOTIFY unitNamesChanged)
 
     Q_ENUMS(Unit)
 public:
@@ -22,6 +24,7 @@ public:
         mm,
         cm,
         km,
+        pixels,
         Unitless
     };
 
@@ -37,6 +40,9 @@ public:
     Unit unit() const;
     void setUnit(Unit unit);
 
+    QStringList unitNames();
+    QString unitName(Unit unit);
+
     cwLength convertTo(Unit to) const;
     static double convert(double value, Unit from, Unit to);
     static double toMeters(Unit unit);
@@ -44,6 +50,7 @@ public:
 signals:
     void valueChanged();
     void unitChanged();
+    void unitNamesChanged();
 
 private:
 

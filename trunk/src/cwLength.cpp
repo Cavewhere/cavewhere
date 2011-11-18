@@ -1,4 +1,8 @@
+//Our includes
 #include "cwLength.h"
+
+//Qt includes
+#include <QDebug>
 
 cwLength::cwLength(QObject *parent) :
     QObject(parent),
@@ -34,6 +38,46 @@ void cwLength::setUnit(Unit unit) {
 
         Data->LengthUnit = unit;
         emit unitChanged();
+    }
+}
+
+/**
+  Returns all the unit names for the length object
+  */
+QStringList cwLength::unitNames()
+{
+    QStringList units;
+    for(int i = in; i <= Unitless; i++) {
+        qDebug() << "Unit names:" << unitName((Unit)i);
+        units.append(unitName((Unit)i));
+    }
+    return units;
+}
+
+/**
+  Converts the unit into a string
+  */
+QString cwLength::unitName(cwLength::Unit unit)
+{
+    switch(unit) {
+    case in:
+        return "in";
+    case ft:
+        return "ft";
+    case m:
+        return "m";
+    case mm:
+        return "mm";
+    case cm:
+        return "cm";
+    case km:
+        return "km";
+    case pixels:
+        return "pixel";
+    case Unitless:
+        return "none";
+    default:
+        return "error";
     }
 }
 
