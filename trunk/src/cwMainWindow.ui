@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>cwSurveyEditorMainWindow</class>
- <widget class="QMainWindow" name="cwSurveyEditorMainWindow">
+ <class>cwMainWindow</class>
+ <widget class="QMainWindow" name="cwMainWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -36,7 +36,7 @@
      <x>0</x>
      <y>0</y>
      <width>978</width>
-     <height>25</height>
+     <height>26</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -143,7 +143,7 @@
   <connection>
    <sender>actionQuit</sender>
    <signal>triggered()</signal>
-   <receiver>cwSurveyEditorMainWindow</receiver>
+   <receiver>cwMainWindow</receiver>
    <slot>close()</slot>
    <hints>
     <hint type="sourcelabel">
