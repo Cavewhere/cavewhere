@@ -12,8 +12,8 @@ Rectangle {
     visible: noteTransform !== null
     color: style.floatingWidgetColor
     radius: style.floatingWidgetRadius
-    height: childrenRect.height + 5
-    width: 300
+    height: column1.height + column1.y * 2.0
+    width: column1.width + column1.x * 2.0
 
     Style {
         id: style
@@ -27,26 +27,28 @@ Rectangle {
 
     Column {
         id: column1
-        anchors.left: parent.left
-        anchors.right: parent.right
+        x: 3
+        y: 3
+//        anchors.left: parent.left
+//        anchors.right: parent.right
         //anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        y: 5
+//        anchors.leftMargin: 5
+//        anchors.rightMargin: 5
+//        y: 5
         spacing: 3
 
         NoteNorthUpInput {
             id: northUpInputId
-            anchors.left: parent.left
-            anchors.right: parent.right
+//            anchors.left: parent.left
+//            anchors.right: parent.right
             noteTransform: editor.noteTransform
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
         }
 
         NoteScaleInput {
             id: scaleInputId
-            anchors.left: parent.left
-            anchors.right: parent.right
+//            anchors.left: parent.left
+//            anchors.right: parent.right
             noteTransform: editor.noteTransform
         }
 

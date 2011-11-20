@@ -8,13 +8,14 @@ Item {
     signal northUpInteractionActivated()
 
     height: childrenRect.height
+    width: row.width
 
     Row {
         id: row
         spacing: 5
 
-        anchors.left: parent.left
-        anchors.right: parent.right
+//        anchors.left: parent.left
+//        anchors.right: parent.right
 
         Button {
             id: setNorthButton
@@ -51,8 +52,8 @@ Item {
 
     HelpArea {
         id: helpAreaId
-        anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.left: row.left
+        anchors.right: row.right
         anchors.top: row.bottom
         anchors.topMargin: 4
 

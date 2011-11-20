@@ -69,10 +69,8 @@ QString cwLength::unitName(cwLength::Unit unit) {
         return "cm";
     case km:
         return "km";
-    case pixels:
-        return "pixel";
     case Unitless:
-        return "none";
+        return "unitless";
     default:
         return "error";
     }
@@ -129,7 +127,7 @@ double cwLength::toMeters(cwLength::Unit unit) {
     case km:
         return 1000;
     default:
-        return 1.0;
+        return 0.0;
     }
 }
 

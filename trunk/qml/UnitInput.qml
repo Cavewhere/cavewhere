@@ -18,7 +18,7 @@ Item {
     Text {
         id: textArea
         color: pallete.inputTextColor
-        text: numeratorMenu.selectedText
+        text: " " + numeratorMenu.selectedText
 
         MouseArea {
             anchors.fill: parent
@@ -32,7 +32,7 @@ Item {
     ContextMenu {
         id: numeratorMenu
         model: listModel
-        selectedIndex: 0
+        selectedIndex: unitInput.unit
 
         onSelectedIndexChanged: unitChanged(selectedIndex)
     }

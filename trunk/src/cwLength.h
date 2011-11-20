@@ -24,7 +24,6 @@ public:
         mm,
         cm,
         km,
-        pixels,
         Unitless
     };
 
