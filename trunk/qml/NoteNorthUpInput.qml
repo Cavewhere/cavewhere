@@ -4,6 +4,7 @@ import Cavewhere 1.0
 Item {
 
     property NoteTransform noteTransform
+    property HelpArea northUpHelp
 
     signal northUpInteractionActivated()
 
@@ -13,9 +14,6 @@ Item {
     Row {
         id: row
         spacing: 5
-
-//        anchors.left: parent.left
-//        anchors.right: parent.right
 
         Button {
             id: setNorthButton
@@ -29,7 +27,7 @@ Item {
 
         LabelWithHelp {
             id: labelId
-            helpArea: helpAreaId
+            helpArea: northUpHelp
             text: "North"
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -50,14 +48,5 @@ Item {
         }
     }
 
-    HelpArea {
-        id: helpAreaId
-        anchors.left: row.left
-        anchors.right: row.right
-        anchors.top: row.bottom
-        anchors.topMargin: 4
 
-        text: "You can set the direction of <b>north</b> relative to page for a scrap.
-        Cavewhere only uses <b>north</b> to help you automatically label stations."
-    }
 }

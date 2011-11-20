@@ -29,44 +29,33 @@ Rectangle {
         id: column1
         x: 3
         y: 3
-//        anchors.left: parent.left
-//        anchors.right: parent.right
-        //anchors.verticalCenter: parent.verticalCenter
-//        anchors.leftMargin: 5
-//        anchors.rightMargin: 5
-//        y: 5
         spacing: 3
 
         NoteNorthUpInput {
             id: northUpInputId
-//            anchors.left: parent.left
-//            anchors.right: parent.right
             noteTransform: editor.noteTransform
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
+            northUpHelp: northUpHelpArea
+        }
+
+        HelpArea {
+            id: northUpHelpArea
+            width: scaleInputId.width
+            text: "You can set the direction of <b>north</b> relative to page for a scrap.
+            Cavewhere only uses <b>north</b> to help you automatically label stations."
         }
 
         NoteScaleInput {
             id: scaleInputId
-//            anchors.left: parent.left
-//            anchors.right: parent.right
             noteTransform: editor.noteTransform
+            scaleHelp: scaleHelpAreaId
         }
 
-//        Row {
-//            Text {
-//                text: "PPI"
-//            }
-
-//            DoubleClickTextInput {
-//                id: ppiId
-//                text: noteTransform.pixelsPerInch
-//                onFinishedEditting: noteTransform.pixelsPerInch = newText
-//            }
-
-//            Text {
-//                text: "Pixels / in"
-//                font.italic: true
-//            }
-//        }
+        HelpArea {
+            id: scaleHelpAreaId
+            width: scaleInputId.width
+            text: "You can set the <b>scale</b> of the scrap.  Cavewhere only use <b>scale</b> to
+                    help you automatically label stations."
+        }
     }
 }
