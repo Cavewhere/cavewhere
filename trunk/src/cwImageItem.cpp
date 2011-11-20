@@ -3,6 +3,7 @@
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
 #include "cwProjectImageProvider.h"
+#include "cwImageProperties.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -11,12 +12,14 @@
 
 cwImageItem::cwImageItem(QDeclarativeItem *parent) :
     cwGLRenderer(parent),
+    ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
     LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this))
 {
     //Called when the image is finished loading
     connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
+    ImageProperties->setImage(Image);
 }
 
 /**
@@ -25,6 +28,7 @@ cwImageItem::cwImageItem(QDeclarativeItem *parent) :
 void cwImageItem::setImage(const cwImage& image) {
     if(Image != image) {
         Image = image;
+        ImageProperties->setImage(Image);
 
         //Load the notes in an asyn way
         LoadNoteWatcher->cancel(); //Cancel previous run, if still running

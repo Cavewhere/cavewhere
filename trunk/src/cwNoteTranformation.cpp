@@ -5,6 +5,7 @@
 
 //Qt includes
 #include <QVector2D>
+#include <QLineF>
 
 //Std includes
 #include <math.h>
@@ -78,6 +79,31 @@ double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const
 
     return northUp;
 }
+
+/**
+  This function calculates and returns a scale.  The p1 and p2 are two points in the image.  ImageSize is the size
+  of the image and dots per meter is the resolution of the image.  The scale is returned as a double.
+
+  p1 and p2 should be in normalized note coordinates
+  */
+double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
+                                           cwLength* length,
+                                           QSize imageSize, double dotsPerMeter)
+{
+    QLineF line(p1, p2);
+    double a = line.dx() * imageSize.width(); //a is in dots
+    double b = line.dy() * imageSize.height(); //b is in dots
+
+    //Use Pythagorean
+    double lengthInDots = sqrt(a * a + b * b);
+
+    //Compute the scale
+    double lengthInMetersOnPage = lengthInDots / dotsPerMeter;
+    double lengthInMetersInCave = length->convertTo(cwLength::m).value();
+    double scale = lengthInMetersOnPage / lengthInMetersInCave;
+    return scale;
+}
+
 
 /**
   This connects the length objects when the scale has changed.

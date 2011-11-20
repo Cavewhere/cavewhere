@@ -9,6 +9,7 @@
 #include "cwGLRenderer.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+class cwImageProperties;
 
 class cwImageItem : public cwGLRenderer
 {
@@ -18,12 +19,15 @@ class cwImageItem : public cwGLRenderer
     Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())
     Q_PROPERTY(float rotation READ rotation WRITE setRotation NOTIFY rotationChanged)
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix NOTIFY modelMatrixChanged)
+    Q_PROPERTY(cwImageProperties* imageProperties READ imageProperties NOTIFY imagePropertiesChanged)
 
 public:
     cwImageItem(QDeclarativeItem *parent = 0);
 
     void setImage(const cwImage& image);
     cwImage image() const;
+
+    cwImageProperties* imageProperties() const;
 
     void setRotation(float degrees);
     float rotation() const;
@@ -43,6 +47,7 @@ signals:
     void imageChanged();
     void projectFilenameChanged();
     void modelMatrixChanged();
+    void imagePropertiesChanged();
 
 protected:
     virtual void initializeGL();
@@ -53,6 +58,7 @@ private:
 
     //The project filename for this class
     cwImage Image;
+    cwImageProperties* ImageProperties; //!< The image properties of the current Image
     cwImageData OriginalMetadata;  //This will never have image data, only the metadata
     float Rotation;
     QString ProjectFilename;
@@ -126,4 +132,10 @@ inline QMatrix4x4 cwImageItem::modelMatrix() const {
     return RotationModelMatrix;
 }
 
+/**
+Gets imageProperties
+*/
+inline cwImageProperties* cwImageItem::imageProperties() const {
+    return ImageProperties;
+}
 #endif // CWIMAGEITEM_H

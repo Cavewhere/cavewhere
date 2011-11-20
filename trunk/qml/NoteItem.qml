@@ -51,6 +51,14 @@ ImageItem {
         transformUpdater: transformUpdaterId
     }
 
+    NoteScaleInteraction {
+        id: noteScaleInteraction
+        anchors.fill: parent
+        imageItem: noteArea
+        basePanZoomInteraction: panZoomInteraction
+        transformUpdater: transformUpdaterId
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [
@@ -58,7 +66,8 @@ ImageItem {
             addScrapInteraction,
             addStationInteraction,
             noteSelectionInteraction,
-            noteNorthUpInteraction
+            noteNorthUpInteraction,
+            noteScaleInteraction
         ]
         defaultInteraction: panZoomInteraction
     }
@@ -82,6 +91,7 @@ ImageItem {
         }
         interactionManager: interactionManagerId
         northInteraction: noteNorthUpInteraction
+        scaleInteraction: noteScaleInteraction
         z: 2
     }
 

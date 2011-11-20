@@ -7,6 +7,7 @@ Rectangle {
 
     property NoteTransform noteTransform
     property NoteNorthInteraction northInteraction
+    property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
 
     visible: noteTransform !== null
@@ -21,6 +22,12 @@ Rectangle {
 
     Binding {
         target: northInteraction
+        property: "noteTransform"
+        value: noteTransform
+    }
+
+    Binding {
+        target: scaleInteraction
         property: "noteTransform"
         value: noteTransform
     }
@@ -49,6 +56,7 @@ Rectangle {
             id: scaleInputId
             noteTransform: editor.noteTransform
             scaleHelp: scaleHelpAreaId
+            onScaleInteractionActivated: interactionManager.active(scaleInteraction)
         }
 
         HelpArea {

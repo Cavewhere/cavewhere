@@ -20,9 +20,7 @@ Item {
 
             width: 24
 
-            onClicked: {
-                interactionManager.active(northInteraction)
-            }
+            onClicked: northUpInteractionActivated()
         }
 
         LabelWithHelp {

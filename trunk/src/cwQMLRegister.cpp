@@ -51,7 +51,9 @@
 #include "cwInteraction.h"
 #include "cwNorthArrowItem.h"
 #include "cwPositioner3D.h"
-//#include "cwInteractionManager.h"
+#include "cwAbstract2PointItem.h"
+#include "cwScaleLengthItem.h"
+#include "cwImageProperties.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -99,4 +101,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwInteraction>("Cavewhere", 1, 0, "Interaction");
     qmlRegisterType<cwNorthArrowItem>("Cavewhere", 1, 0, "NorthArrowItem");
     qmlRegisterType<cwPositioner3D>("Cavewhere", 1, 0, "Positioner3D");
+    qmlRegisterType<cwAbstract2PointItem>();
+    qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
+    qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");
 }

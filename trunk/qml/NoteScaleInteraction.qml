@@ -7,10 +7,18 @@ Interaction {
     property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
     property NoteTransform noteTransform
+    property alias transformUpdater: scaleLengthItem.transformUpdater
 
-    Item {
+    focus: visible
+    Keys.onEscapePressed: {
+        interaction.state = ""
+        interaction.deactivate();
+    }
+
+    QtObject {
         id: privateData
         property variant firstLocation;
+        property variant secondLocation;
     }
 
     MouseArea {
@@ -33,20 +41,98 @@ Interaction {
         onClicked: {
             if(mouse.button === Qt.LeftButton) {
                 privateData.firstLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                scaleLengthItem.p1 = privateData.firstLocation
+                scaleLengthItem.p2 = scaleLengthItem.p1
                 interaction.state = "WaitForSecondClick"
             }
         }
     }
 
-    HelpBox {
-        text: "Click"
+    ScaleLengthItem {
+        id: scaleLengthItem
+        anchors.fill: parent
     }
 
     Rectangle {
-        Text {
+        id: lengthRect
 
+        visible: false
+
+        radius: style.floatingWidgetRadius
+        color: style.floatingWidgetColor
+
+        width: row.width + row.x * 2
+        height: row.height + row.y * 2
+
+        Style {
+            id: style
+        }
+
+        Length {
+            id: length
+        }
+
+        Row {
+            id: row
+
+            x: 3
+            y: 3
+
+            spacing: 3
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "<b>In cave length</b>"
+            }
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+
+                ClickTextInput {
+                    id: caveUnits
+                    text: length.value
+                    onFinishedEditting: length.value = newText
+                }
+
+                UnitInput {
+                    unitModel: length.unitNames
+                    unit: 2 //For meters
+                    onUnitChanged: length.unit = unit
+                }
+            }
+
+            Button {
+                anchors.verticalCenter: parent.verticalCenter
+
+                text: "Done"
+                onClicked: {
+                    var imageSize = imageItem.imageProperties.size
+                    var dotPerMeter = imageItem.imageProperties.dotsPerMeter
+                    var scale = noteTransform.calculateScale(privateData.firstLocation,
+                                                             privateData.secondLocation,
+                                                             length,
+                                                             imageSize,
+                                                             dotPerMeter);
+                    noteTransform.scaleNumerator.value = 1.0
+                    noteTransform.scaleNumerator.unit = Length.Unitless
+
+                    noteTransform.scaleDenominator.value = 1 / scale
+                    noteTransform.scaleDenominator.unit = Length.Unitless
+
+                    interaction.state = ""
+                    interaction.deactivate();
+                }
+            }
         }
     }
+
+
+    HelpBox {
+        id: helpBoxId
+        text: "<b>Click</b> the length's first point"
+        visible: true
+    }
+
 
     states: [
         State {
@@ -54,14 +140,45 @@ Interaction {
 
             PropertyChanges {
                 target: mouseAreaId
-                onClicked: {
-                    if(mouse.button === Qt.LeftButton) {
-                        var secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                        noteTransform.northUp = noteTransform.calculateNorth(privateData.firstLocation, secondLocation);
-                        interaction.state = ""
-                        interaction.deactivate();
+
+                hoverEnabled: true
+
+                onMousePositionChanged: {
+                    if(pressedButtons == Qt.RightButton) {
+                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                    } else {
+                        scaleLengthItem.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
                     }
                 }
+
+                onClicked: {
+                    if(mouse.button === Qt.LeftButton) {
+                        lengthRect.x = mouse.x - lengthRect.width * 0.5
+                        lengthRect.y = mouse.y + 10
+
+                        privateData.secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                        interaction.state = "WaitForDone"
+                    }
+                }
+            }
+
+            PropertyChanges {
+                target: helpBoxId
+                text: "<b> Click </b> the length's second point"
+            }
+        },
+
+        State {
+            name: "WaitForDone"
+
+            PropertyChanges {
+                target: lengthRect
+                visible: true
+            }
+
+            PropertyChanges {
+                target: helpBoxId
+                visible: false
             }
         }
     ]

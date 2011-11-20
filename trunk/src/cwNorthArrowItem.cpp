@@ -8,7 +8,7 @@
 #include <QPen>
 
 cwNorthArrowItem::cwNorthArrowItem(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent)
+    cwAbstract2PointItem(parent)
 {
     NorthTextHandler = new cwPositioner3D(this);
     NorthTextHandler->setPosition3D(QVector3D(.1, .1, 0));
@@ -16,8 +16,6 @@ cwNorthArrowItem::cwNorthArrowItem(QDeclarativeItem *parent) :
 
     NorthArrowLineHandler = new QDeclarativeItem(this);
     NorthArrowLine = new QGraphicsPathItem(NorthArrowLineHandler);
-
-    TransformUpdater = NULL;
 
     QFont font;
     font.setBold(true);
@@ -27,72 +25,11 @@ cwNorthArrowItem::cwNorthArrowItem(QDeclarativeItem *parent) :
     NorthText->setFont(font);
     NorthText->setPos(-NorthText->boundingRect().width() / 2.0, 0);
 
-    QPen pen;
-    pen.setWidthF(2.0);
-    pen.setCosmetic(true);
-    NorthArrowLine->setPen(pen);
-
-    connect(this, SIGNAL(visibleChanged()), SLOT(updateTransformUpdater()));
+    NorthArrowLine->setPen(LinePen);
 }
 
-
-/**
-Sets transformUpdater, This will transform the north area objects so they're correct
-*/
-void cwNorthArrowItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
-    if(TransformUpdater != transformUpdater) {
-        if(TransformUpdater != NULL) {
-            disconnectFromTransformer();
-        }
-
-        TransformUpdater = transformUpdater;
-
-        updateTransformUpdater();
-
-        emit transformUpdaterChanged();
-    }
-}
-
-/**
-Sets p1, The first point of the north up.  This is the bottom of the arrow, where
-N will be located
-*/
-void cwNorthArrowItem::setP1(QPointF p1) {
-    if(P1 != p1) {
-        P1 = p1;
-
-        NorthTextHandler->setPosition3D(QVector3D(P1));
-
-        emit p1Changed();
-    }
-}
-
-/**
-Sets p2, The second point of the north up.  This is the top of the arrow
-*/
-void cwNorthArrowItem::setP2(QPointF p2) {
-    if(P2 != p2) {
-        P2 = p2;
-
-        updateNorthArrowPath();
-
-        emit p2Changed();
-    }
-}
-
-/**
-  Updates the transformUpdater
-  */
-void cwNorthArrowItem::updateTransformUpdater() {
-    if(TransformUpdater != NULL) {
-        if(isVisible()) {
-            TransformUpdater->addPointItem(NorthTextHandler);
-            TransformUpdater->addTransformItem(NorthArrowLineHandler);
-            connect(TransformUpdater, SIGNAL(updated()), SLOT(updateNorthArrowPath()));
-        } else {
-            disconnectFromTransformer();
-        }
-    }
+void cwNorthArrowItem::p1Updated() {
+    NorthTextHandler->setPosition3D(QVector3D(P1));
 }
 
 /**
@@ -126,9 +63,18 @@ void cwNorthArrowItem::updateNorthArrowPath() {
 /**
   This removes all the items from the transformer
   */
-void cwNorthArrowItem::disconnectFromTransformer()
+void cwNorthArrowItem::disconnectTransformer()
 {
     TransformUpdater->removePointItem(NorthTextHandler);
     TransformUpdater->removeTransformItem(NorthArrowLineHandler);
     disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateNorthArrowPath()));
+}
+
+/**
+  Adds all items to the transformer and create a new connection to it
+  */
+void cwNorthArrowItem::connectTransformer() {
+    TransformUpdater->addPointItem(NorthTextHandler);
+    TransformUpdater->addTransformItem(NorthArrowLineHandler);
+    connect(TransformUpdater, SIGNAL(updated()), SLOT(updateNorthArrowPath()));
 }

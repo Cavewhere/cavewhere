@@ -6,6 +6,8 @@ Item {
     property NoteTransform noteTransform
     property HelpArea scaleHelp
 
+    signal scaleInteractionActivated()
+
     height: childrenRect.height
     width: inputRow.width
 
@@ -17,6 +19,8 @@ Item {
             id: setLength
             anchors.verticalCenter: parent.verticalCenter
             width: 24
+
+            onClicked: scaleInteractionActivated()
         }
 
         Row {

@@ -6,6 +6,7 @@
 #include <QSharedDataPointer>
 #include <QObject>
 #include <QPointF>
+#include <QSize>
 
 //Our includes
 class cwLength;
@@ -23,7 +24,6 @@ class cwNoteTranformation : public QObject
 
     Q_PROPERTY(double scale READ scale NOTIFY scaleChanged)
     Q_PROPERTY(double northUp READ northUp WRITE setNorthUp NOTIFY northUpChanged)
-//    Q_PROPERTY(double pixelsPerInch READ pixelsPerInch WRITE setPixelsPerInch NOTIFY pixelsPerInchChanged)
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator NOTIFY scaleNumeratorChanged)
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator NOTIFY scaleDenominatorChanged)
 
@@ -32,22 +32,21 @@ public:
     cwNoteTranformation(const cwNoteTranformation& other);
     const cwNoteTranformation& operator =(const cwNoteTranformation& other);
 
-    cwLength* scaleDenominator() const;
     cwLength* scaleNumerator() const;
+    cwLength* scaleDenominator() const;
     double scale() const;
 
     double northUp() const;
     void setNorthUp(double degrees);
 
-//    double pixelsPerInch() const;
-//    void setPixelsPerInch(double pixelsPerInch);
-
     Q_INVOKABLE double calculateNorth(QPointF noteP1, QPointF noteP2) const;
+    Q_INVOKABLE double calculateScale(QPointF noteP1, QPointF noteP2,
+                                      cwLength* length,
+                                      QSize imageSize, double dotsPerMeter);
 
 signals:
     void scaleChanged();
     void northUpChanged();
-//    void pixelsPerInchChanged();
     void scaleNumeratorChanged();
     void scaleDenominatorChanged();
 private:
@@ -76,13 +75,6 @@ private:
 inline double cwNoteTranformation::northUp() const {
     return Data->North;
 }
-
-///**
-//  Get's the resolution of the page of notes
-//  */
-//inline double cwNoteTranformation::pixelsPerInch() const {
-//    return Data->PixelsPerInch;
-//}
 
 /**
 Gets scaleDenominator

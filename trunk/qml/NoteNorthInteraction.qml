@@ -11,7 +11,7 @@ Interaction {
     property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
     property NoteTransform noteTransform
-    property TransformUpdater transformUpdater
+    property alias transformUpdater: northArrow.transformUpdater
 
     focus: visible
 
@@ -20,12 +20,10 @@ Interaction {
         interaction.deactivate();
     }
 
-    Item {
+    QtObject {
         id: privateData
         property variant firstLocation;
     }
-
-
 
     MouseArea {
         id: mouseAreaId
@@ -56,15 +54,8 @@ Interaction {
 
     NorthArrowItem {
         id: northArrow
-
         anchors.fill: parent
-        transformUpdater: interaction.transformUpdater
-
-        onVisibleChanged: {
-            console.log("Visiblity has changed" + visible)
-        }
     }
-
 
     HelpBox {
         id: helpBoxId
