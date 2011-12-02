@@ -353,10 +353,10 @@ Rectangle {
                 anchors.top:  carpetButtonArea.bottom
             }
 
-            PropertyChanges {
-                target: noteArea
-                state: ""
-            }
+//            PropertyChanges {
+//                target: noteArea
+//                state: ""
+//            }
         },
 
         State {

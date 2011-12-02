@@ -1,16 +1,44 @@
 //Our includes
 #include "cwScrapItem.h"
 #include "cwScrap.h"
+#include "cwTransformUpdater.h"
+#include "cwScrapStationView.h"
 
 //Qt includes
 #include <QGraphicsPolygonItem>
 #include <QPen>
+#include <QDeclarativeEngine>
 
 cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Scrap(NULL),
-    BorderItem(new QGraphicsPolygonItem(this))
+    TransformUpdater(NULL),
+    BorderItemHandler(new QDeclarativeItem(this)),
+    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
+    StationView(new cwScrapStationView(this))
 {
+    //Set the declarative context for the station view
+    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+    QDeclarativeEngine::setContextForObject(StationView, context);
+
+    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
+    setSelected(false);
+}
+
+cwScrapItem::cwScrapItem(QDeclarativeContext *context, QDeclarativeItem *parent) :
+    QDeclarativeItem(parent),
+    Scrap(NULL),
+    TransformUpdater(NULL),
+    BorderItemHandler(new QDeclarativeItem(this)),
+    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
+    StationView(new cwScrapStationView(this))
+{
+    StationView->setScrapItem(this);
+
+    //Set the declarative context for the station view
+    QDeclarativeEngine::setContextForObject(this, context);
+    QDeclarativeEngine::setContextForObject(StationView, context);
+
     BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
 }
@@ -25,6 +53,8 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
         }
 
         Scrap = scrap;
+
+        StationView->setScrap(Scrap);
 
         if(Scrap != NULL) {
             connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapGeometry()));
@@ -60,6 +90,32 @@ void cwScrapItem::setSelected(bool selected) {
         }
         BorderItem->setPen(pen);
 
+        if(!selected) {
+            StationView->clearSelection();
+        }
+
         emit selectedChanged();
     }
 }
+
+
+/**
+Sets transformUpdater
+*/
+void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
+    if(TransformUpdater != transformUpdater) {
+        if(TransformUpdater != NULL) {
+            TransformUpdater->removeTransformItem(BorderItemHandler);
+        }
+
+        TransformUpdater = transformUpdater;
+        StationView->setTransformUpdater(TransformUpdater);
+
+        if(TransformUpdater != NULL) {
+            TransformUpdater->addTransformItem(BorderItemHandler);
+        }
+
+        emit transformUpdaterChanged();
+    }
+}
+

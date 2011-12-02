@@ -22,7 +22,8 @@ class cwScrapView : public QDeclarativeItem
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
-    Q_PROPERTY(cwScrapItem* selectedScrap READ selectedScrap WRITE setSelectedScrap NOTIFY selectedScrapChanged)
+    Q_PROPERTY(cwScrapItem* selectedScrapItem READ selectedScrapItem  NOTIFY selectScrapIndexChanged)
+    Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
 
 public:
     explicit cwScrapView(QDeclarativeItem *parent = 0);
@@ -33,34 +34,37 @@ public:
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* updater);
 
-    cwScrapItem* selectedScrap() const;
-    void setSelectedScrap(cwScrapItem* selectedScrap);
+    cwScrapItem* selectedScrapItem() const;
+    void setSelectedScrapItem(cwScrapItem* selectedScrapItem);
 
     Q_INVOKABLE void clearSelection();
+    int selectScrapIndex() const;
+    void setSelectScrapIndex(int selectScrapIndex);
     Q_INVOKABLE void selectScrapAt(QPointF notePoint);
-    void selectScrapItem(cwScrapItem* scrapItem);
+    void setSelectScrap(cwScrap* scrap);
 
     QList<cwScrapItem*> scrapItemsAt(QPointF notePoint);
+    cwScrapItem* scrapItemAt(int index);
 
 signals:
     void noteChanged();
     void transformUpdaterChanged();
-    void selectedScrapChanged();
+    void selectScrapIndexChanged();
 
 public slots:
 
 private slots:
     void addScrapItem();
     void updateAllScraps();
+    void updateSelection();
 
 private:
     cwNote* Note;
 
     QList<cwScrapItem*> ScrapItems;
-    cwScrapItem* SelectedScrap; //!< The current select scrap, NULL if no scrapitem is selected
+    int SelectScrapIndex; //!< The current select scrap, -1 if no scrapitem is selected
 
     cwTransformUpdater* TransformUpdater;
-
 };
 
 /**
@@ -78,17 +82,16 @@ inline cwTransformUpdater* cwScrapView::transformUpdater() const {
 }
 
 /**
-Gets selectedScrap
-*/
-inline cwScrapItem* cwScrapView::selectedScrap() const {
-    return SelectedScrap;
-}
-
-/**
   Clears the current selection
   */
 inline void cwScrapView::clearSelection() {
-    setSelectedScrap(NULL);
+    setSelectScrapIndex(-1);
 }
 
+/**
+Gets selectScrapIndex
+*/
+inline int cwScrapView::selectScrapIndex() const {
+    return SelectScrapIndex;
+}
 #endif // CWSCRAPVIEW_H

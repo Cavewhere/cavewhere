@@ -91,7 +91,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
     qmlRegisterType<cwScrapView>("Cavewhere", 1, 0, "ScrapView");
     qmlRegisterType<cwTransformUpdater>("Cavewhere", 1, 0, "TransformUpdater");
-    qmlRegisterType<cwNoteStationView>("Cavewhere", 1, 0, "NoteStationView");
+//    qmlRegisterType<cwNoteStationView>("Cavewhere", 1, 0, "NoteStationView");
     qmlRegisterType<cwScrapStationView>("Cavewhere", 1, 0, "ScrapStationView");
     qmlRegisterType<cwScrap>("Cavewhere", 1, 0, "Scrap");
     qmlRegisterType<cwBaseNoteStationInteraction>("Cavewhere", 1, 0, "BaseNoteStationInteraction");

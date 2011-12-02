@@ -5,10 +5,12 @@
 #include "cwScrap.h"
 #include "cwScrapItem.h"
 
+//Qt includes
+#include <QDeclarativeEngine>
+
 cwScrapView::cwScrapView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Note(NULL),
-    SelectedScrap(NULL),
     TransformUpdater(NULL)
 {
 }
@@ -56,47 +58,48 @@ void cwScrapView::addScrapItem() {
     }
 
     //Create a new scrap item
-    cwScrapItem* scrapItem = new cwScrapItem(this);
+    cwScrapItem* scrapItem = new cwScrapItem(QDeclarativeEngine::contextForObject(this), this);
     scrapItem->setScrap(Note->scraps().last());
-    if(TransformUpdater != NULL) {
-        TransformUpdater->addTransformItem(scrapItem);
-    }
+    scrapItem->setTransformUpdater(TransformUpdater);
+    connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
+
     ScrapItems.append(scrapItem);
 
     //Select the scrapItem
+    setSelectScrapIndex(ScrapItems.size() - 1);
 
 }
 
-/**
+///**
 
-This select the scrapItem, if the scrap item isn't null, and is part of the
-  scrap view.  Otherwise this function does nothing
-*/
-void cwScrapView::setSelectedScrap(cwScrapItem* selectedScrap) {
-    if(SelectedScrap != selectedScrap) {
+//This select the scrapItem, if the scrap item isn't null, and is part of the
+//  scrap view.  Otherwise this function does nothing
+//*/
+//void cwScrapView::setSelectedScrap(cwScrapItem* selectedScrap) {
+//    if(SelectedScrap != selectedScrap) {
 
-        if(SelectedScrap != NULL) {
-            //Deselect the scrap
-            SelectedScrap->setSelected(false);
-        }
+//        if(SelectedScrap != NULL) {
+//            //Deselect the scrap
+//            SelectedScrap->setSelected(false);
+//        }
 
-        SelectedScrap = NULL;
+//        SelectedScrap = NULL;
 
-        if(selectedScrap != NULL) {
-            if(ScrapItems.contains(selectedScrap)) {
+//        if(selectedScrap != NULL) {
+//            if(ScrapItems.contains(selectedScrap)) {
 
-                SelectedScrap = selectedScrap;
+//                SelectedScrap = selectedScrap;
 
-                if(SelectedScrap != NULL) {
-                    //Select the new selectedScrap
-                    SelectedScrap->setSelected(true);
-                }
-            }
-        }
+//                if(SelectedScrap != NULL) {
+//                    //Select the new selectedScrap
+//                    SelectedScrap->setSelected(true);
+//                }
+//            }
+//        }
 
-        emit selectedScrapChanged();
-    }
-}
+//        emit selectedScrapChanged();
+//    }
+//}
 
 /**
     Gets the scrapItem at notePoint
@@ -118,6 +121,18 @@ QList<cwScrapItem*> cwScrapView::scrapItemsAt(QPointF notePoint) {
 }
 
 /**
+  \brief Gets the scrap item at the index
+
+  If the inde is out of bounds this return NULL
+  */
+cwScrapItem *cwScrapView::scrapItemAt(int index) {
+    if(index >= 0 && index < ScrapItems.size()) {
+        return ScrapItems[index];
+    }
+    return NULL;
+}
+
+/**
   \brief Selects the scrap at the notePoint
   */
 void cwScrapView::selectScrapAt(QPointF notePoint) {
@@ -127,7 +142,7 @@ void cwScrapView::selectScrapAt(QPointF notePoint) {
     }
 
     //Select the first item
-    setSelectedScrap(items.first());
+    setSelectedScrapItem(items.first());
 }
 
 /**
@@ -156,21 +171,21 @@ void cwScrapView::updateAllScraps() {
     if(ScrapItems.size() > numberOfScraps) {
         //Delete unused polygons
         for(int i = ScrapItems.size() - 1; i >= numberOfScraps; i--) {
-
-            if(ScrapItems[i] == SelectedScrap) {
-                setSelectedScrap(NULL);
+            if(ScrapItems[i] == selectedScrapItem()) {
+                setSelectedScrapItem(NULL);
             }
 
-            transformUpdater()->removeTransformItem(ScrapItems[i]);
             delete ScrapItems[i];
             ScrapItems.removeLast();
         }
     }
 
     if(ScrapItems.size() < numberOfScraps) {
+        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+
         //Add new scrap items
         for(int i = ScrapItems.size(); i < numberOfScraps; i++) {
-            ScrapItems.append(new cwScrapItem(this));
+            ScrapItems.append(new cwScrapItem(context, this));
         }
     }
 
@@ -181,9 +196,66 @@ void cwScrapView::updateAllScraps() {
         cwScrap* scrap = note()->scrap(i);
         cwScrapItem* scrapItem = ScrapItems[i];
         scrapItem->setScrap(scrap);
+        scrapItem->setTransformUpdater(TransformUpdater);
+        connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
+    }
+}
 
-        if(TransformUpdater != NULL) {
-            transformUpdater()->addTransformItem(scrapItem);
+/**
+    Sets selectScrapIndex
+*/
+void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
+    if(SelectScrapIndex != selectScrapIndex) {
+        //If selection index is valid
+        if(selectScrapIndex >= ScrapItems.size()) {
+            qDebug() << "Can't select invalid scrap of index" << selectScrapIndex << LOCATION;
+            return;
         }
+
+        //Remove the selection from the previous
+        cwScrapItem* oldScrapItem = selectedScrapItem();
+        if(oldScrapItem != NULL) {
+            oldScrapItem->setSelected(false);
+        }
+
+        if(selectScrapIndex >= 0) {
+            cwScrapItem* newScrapItem = ScrapItems[selectScrapIndex];
+            newScrapItem->setSelected(true);
+        }
+
+        SelectScrapIndex = selectScrapIndex;
+        emit selectScrapIndexChanged();
+    }
+}
+
+/**
+    Gets selectedScrap
+*/
+cwScrapItem* cwScrapView::selectedScrapItem() const {
+    if(selectScrapIndex() >= 0 && selectScrapIndex() < ScrapItems.size()) {
+//        Q_ASSERT(ScrapItems[selectScrapIndex()]->isSelected());
+        return ScrapItems[selectScrapIndex()];
+    }
+    return NULL;
+}
+
+/**
+    Selects the scrap by pointer
+  */
+void cwScrapView::setSelectedScrapItem(cwScrapItem* scrapItem) {
+    int index = ScrapItems.indexOf(scrapItem);
+    setSelectScrapIndex(index);
+}
+
+/**
+    This is a private slot
+
+    Called when a scrapItem has changed there selection, this will update the selection
+    model, to guaneteer that it is always up to date.
+  */
+void cwScrapView::updateSelection() {
+    cwScrapItem* scrapItem = qobject_cast<cwScrapItem*>(sender());
+    if(scrapItem != NULL) {
+        setSelectedScrapItem(scrapItem);
     }
 }

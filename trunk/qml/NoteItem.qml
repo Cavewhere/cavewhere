@@ -6,11 +6,16 @@ ImageItem {
 
     property Note note;
 
+//    //Private properties
+//    NoteTransform {
+//        id: defaultNoteTransform
+//    }
+
     glWidget: mainGLWidget
     projectFilename: project.filename
 
     clip: true
-    rotation: note != null ? note.rotate : 0
+    rotation: note !== null ? note.rotate : 0
 
     PanZoomInteraction {
         id: panZoomInteraction
@@ -30,7 +35,7 @@ ImageItem {
         id: addStationInteraction
         anchors.fill: parent
         scrapView: scrapViewId
-        noteStationView: noteStationViewId
+//        noteStationView: noteStationViewId
         basePanZoomInteraction: panZoomInteraction
         imageItem: noteArea
     }
@@ -87,7 +92,7 @@ ImageItem {
             if(scrapViewId.selectedScrap != null && scrapViewId.selectedScrap.scrap != null) {
                 return scrapViewId.selectedScrap.scrap.noteTransformation;
             }
-            return null
+            return null;
         }
         interactionManager: interactionManagerId
         northInteraction: noteNorthUpInteraction
@@ -102,13 +107,14 @@ ImageItem {
         transformUpdater: transformUpdaterId
     }
 
-    //For rendering note onto the note
-    NoteStationView {
-        id: noteStationViewId
-        note: noteArea.note
-        transformUpdater: transformUpdaterId
-        anchors.fill: parent
-    }
+//    //For rendering note onto the note
+//    NoteStationView {
+//        id: noteStationViewId
+//        note: noteArea.note
+//        transformUpdater: transformUpdaterId
+//        scrapView: scrapViewId
+//        anchors.fill: parent
+//    }
 
     WheelArea {
         id: wheelArea
@@ -152,6 +158,7 @@ ImageItem {
             to: ""
             ScriptAction {
                 script: {
+                    //console.log("State change to default!");
                     scrapViewId.clearSelection();
                     interactionManagerId.active(panZoomInteraction)
                 }

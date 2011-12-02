@@ -3,6 +3,7 @@
 #include "cwScrap.h"
 #include "cwTransformUpdater.h"
 #include "cwDebug.h"
+#include "cwScrapItem.h"
 
 //Qt includes
 #include <QDeclarativeComponent>
@@ -12,9 +13,12 @@
 
 cwScrapStationView::cwScrapStationView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
+//    NoteStationView(NULL),
     TransformUpdater(NULL),
     Scrap(NULL),
-    StationItemComponent(NULL)
+    StationItemComponent(NULL),
+    ScrapItem(NULL),
+    SelectedStationIndex(-1)
 {
 }
 
@@ -113,7 +117,8 @@ void cwScrapStationView::updateStationItemData(int index){
     QDeclarativeItem* stationItem = StationItems[index];
     stationItem->setProperty("stationId", index);
     stationItem->setProperty("stationView", QVariant::fromValue(this));
-    stationItem->setProperty("scrap", QVariant::fromValue(Scrap));
+    stationItem->setProperty("scrap", QVariant::fromValue(scrap()));
+    stationItem->setProperty("scrapItem", QVariant::fromValue(scrapItem()));
     stationItem->setParentItem(this);
 }
 
@@ -122,6 +127,11 @@ void cwScrapStationView::updateStationItemData(int index){
   */
 void cwScrapStationView::stationAdded() {
     createStationComponent();
+
+    if(StationItemComponent == NULL) {
+        qDebug() << "StationItemComponent bad" << LOCATION;
+        return;
+    }
 
     QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create());
     if(stationItem == NULL) {
@@ -199,14 +209,88 @@ void cwScrapStationView::updateAllStations() {
         }
     }
 
+    updateAllStationData();
+
+//    if(TransformUpdater != NULL) {
+//        TransformUpdater->update();
+    //    }
+}
+
+/**
+  \brief Goes through all the stations and updates there data
+  */
+void cwScrapStationView::updateAllStationData()
+{
     //Update all the station data
     for(int i = 0; i < StationItems.size(); i++) {
         updateStationItemData(i);
     }
-
-//    if(TransformUpdater != NULL) {
-//        TransformUpdater->update();
-//    }
 }
 
+/**
+Sets selectedStationIndex
+*/
+void cwScrapStationView::setSelectedStationIndex(int selectedStationIndex) {
+    if(SelectedStationIndex != selectedStationIndex) {
 
+       // scrapItem()->selectScrapStationView(this);
+
+        if(selectedStationIndex >= StationItems.size()) {
+            qDebug() << "Selected station index invalid" << selectedStationIndex << LOCATION;
+            return;
+        }
+
+        //Deselect the old index
+        QDeclarativeItem* oldStationItem = selectStationItem();
+        if(oldStationItem != NULL) {
+            oldStationItem->setProperty("selected", false);
+        }
+
+        //Select the new station item
+        if(selectedStationIndex >= 0) {
+            QDeclarativeItem* newStationItem = StationItems[selectedStationIndex];
+            if(!newStationItem->property("selected").toBool()) {
+                newStationItem->setProperty("selected", true);
+            }
+        }
+
+        SelectedStationIndex = selectedStationIndex;
+        emit selectedStationIndexChanged();
+    }
+}
+
+/**
+  Gets the currently select station item
+
+  If there's no select station item, this will return null
+  */
+QDeclarativeItem* cwScrapStationView::selectStationItem() const {
+    if(SelectedStationIndex >= 0 && SelectedStationIndex < StationItems.size()) {
+        return StationItems[SelectedStationIndex];
+    }
+    return NULL;
+}
+
+/**
+  \brief This gets the note station for the currently select station
+
+If no station is select, this returns an empty note station
+  */
+cwNoteStation cwScrapStationView::selectedNoteStation() const {
+    if(selectStationItem() != NULL) {
+        int stationIndex = selectedStationIndex();
+        return scrap()->station(stationIndex);
+    }
+    return cwNoteStation();
+}
+
+/**
+Sets scrapItem
+*/
+void cwScrapStationView::setScrapItem(cwScrapItem* scrapItem) {
+    if(ScrapItem != scrapItem) {
+        ScrapItem = scrapItem;
+        updateAllStationData();
+        emit scrapItemChanged();
+    }
+}

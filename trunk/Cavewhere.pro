@@ -116,7 +116,6 @@ SOURCES += src/main.cpp \
     src/cwWheelArea.cpp \
     src/cwNoteInteraction.cpp \
     src/cwScrapView.cpp \
-    src/cwNoteStationView.cpp \
     src/cwScrapStationView.cpp \
     src/cwLength.cpp \
     src/cwGlobals.cpp \
@@ -229,7 +228,6 @@ HEADERS  += \
     src/cwWheelArea.h \
     src/cwNoteInteraction.h \
     src/cwScrapView.h \
-    src/cwNoteStationView.h \
     src/cwScrapStationView.h \
     src/cwLength.h \
     src/cwGlobals.h \

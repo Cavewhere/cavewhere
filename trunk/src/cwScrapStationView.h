@@ -1,10 +1,15 @@
 #ifndef CWSCRAPSTATIONVIEW_H
 #define CWSCRAPSTATIONVIEW_H
 
+//Qt includes
 #include <QDeclarativeItem>
+
+//Our includes
 class cwTransformUpdater;
 class cwScrap;
 class cwImageItem;
+class cwScrapItem;
+#include "cwNoteStation.h"
 
 /**
   This class manages a list of station items that visualize all the stations in a scrap.
@@ -15,7 +20,8 @@ class cwScrapStationView : public QDeclarativeItem
 
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
-
+    Q_PROPERTY(int selectedStationIndex READ selectedStationIndex WRITE setSelectedStationIndex NOTIFY selectedStationIndexChanged)
+    Q_PROPERTY(cwScrapItem* scrapItem READ scrapItem WRITE setScrapItem NOTIFY scrapItemChanged)
 
 public:
     explicit cwScrapStationView(QDeclarativeItem *parent = 0);
@@ -26,13 +32,25 @@ public:
     cwScrap* scrap() const;
     void setScrap(cwScrap* scrap);
 
+    void clearSelection();
+    int selectedStationIndex() const;
+    void setSelectedStationIndex(int selectedStationIndex);
+    QDeclarativeItem* selectStationItem() const;
+    cwNoteStation selectedNoteStation() const;
+
+    cwScrapItem* scrapItem() const;
+    void setScrapItem(cwScrapItem* scrapItem);
+
 signals:
     void transformUpdaterChanged();
     void scrapChanged();
+    void selectedStationIndexChanged();
+    void scrapItemChanged();
 
 public slots:
 
 private:
+
     //Will keep the note stations at the correct location
     cwTransformUpdater* TransformUpdater;
 
@@ -41,6 +59,10 @@ private:
     //All the NoteStationItems
     QDeclarativeComponent* StationItemComponent;
     QList<QDeclarativeItem*> StationItems;
+
+    cwScrapItem* ScrapItem; //!< For selection and holding the scrap
+
+    int SelectedStationIndex; //!< The currently selected station index
 
     void createStationComponent();
     void addNewStationItem();
@@ -51,6 +73,7 @@ private slots:
     void stationRemoved(int stationIndex);
     void udpateStationPosition(int stationIndex);
     void updateAllStations();
+    void updateAllStationData();
 };
 
 Q_DECLARE_METATYPE(cwScrapStationView*)
@@ -67,6 +90,27 @@ inline cwTransformUpdater* cwScrapStationView::transformUpdater() const {
 */
 inline cwScrap* cwScrapStationView::scrap() const {
     return Scrap;
+}
+
+/**
+Gets selectedStationIndex
+*/
+inline int cwScrapStationView::selectedStationIndex() const {
+    return SelectedStationIndex;
+}
+
+/**
+  Gets scrapItem
+  */
+inline cwScrapItem* cwScrapStationView::scrapItem() const {
+    return ScrapItem;
+}
+
+/**
+  \brief Clears the selection
+  */
+inline void cwScrapStationView::clearSelection() {
+    setSelectedStationIndex(-1);
 }
 
 #endif // CWSCRAPSTATIONVIEW_H

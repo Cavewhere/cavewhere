@@ -1,19 +1,23 @@
 import QtQuick 1.0
 import Cavewhere 1.0
 
+/**
+    This class holds the geometry and interaction for a station on a page of notes
+  */
 Positioner3D {
     id: noteStation
 
     property ScrapStationView stationView;
+    property ScrapItem scrapItem;
     property Scrap scrap;
     property int stationId;
-    property alias selected: selectedBackground.visible;
+    property bool selected: false
 
     function updateItem() {
-        if(scrap != null) {
+        if(scrap !== null) {
             stationName.text = scrap.stationData(Scrap.StationName, stationId)
             var position = scrap.stationData(Scrap.StationPosition, stationId);
-            console.log("stationId:" + stationId + " SCrap:" + scrap + " Position:" + position.x + " " + position.y);
+//            console.log("stationId:" + stationId + " SCrap:" + scrap + " Position:" + position.x + " " + position.y);
             position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }
@@ -29,7 +33,8 @@ Positioner3D {
 
     onSelectedChanged: {
         if(selected) {
-            stationView.setSelectedStation(noteStation);
+            stationView.selectedStationIndex = stationId;
+            scrapItem.selected = true
             forceActiveFocus();
         }
     }
@@ -56,7 +61,7 @@ Positioner3D {
 
         opacity: .5
 
-        visible: false
+        visible: selected && scrapItem.selected
     }
 
     Image {
@@ -78,6 +83,7 @@ Positioner3D {
             onClicked: {
                 console.log("On selection");
                 noteStation.selected = true
+                scrapItem.selected = true
             }
 
             onReleased: ({ })
