@@ -43,6 +43,13 @@ cwScrapItem::cwScrapItem(QDeclarativeContext *context, QDeclarativeItem *parent)
     setSelected(false);
 }
 
+cwScrapItem::~cwScrapItem()
+{
+    if(TransformUpdater != NULL) {
+        TransformUpdater->removeTransformItem(BorderItemHandler);
+    }
+}
+
 /**
   Sets the scrap that this item will visualize
   */

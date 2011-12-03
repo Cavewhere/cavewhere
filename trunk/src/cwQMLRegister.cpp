@@ -43,7 +43,7 @@
 #include "cwTransformUpdater.h"
 #include "cwBaseNoteStationInteraction.h"
 #include "cwScrap.h"
-#include "cwNoteStationView.h"
+//#include "cwNoteStationView.h"
 #include "cwScrapStationView.h"
 #include "cwNoteTranformation.h"
 #include "cwScrapItem.h"

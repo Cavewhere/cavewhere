@@ -24,6 +24,7 @@ class cwScrapItem : public QDeclarativeItem
 public:
     explicit cwScrapItem(QDeclarativeItem *parent = 0);
     explicit cwScrapItem(QDeclarativeContext* context, QDeclarativeItem *parent = 0);
+    ~cwScrapItem();
 
     void setScrap(cwScrap* scrap);
     cwScrap* scrap() const;

@@ -104,6 +104,16 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
     return scale;
 }
 
+/**
+  \brief Get's the matrix that converts
+
+*/
+QMatrix4x4 cwNoteTranformation::matrix() const {
+    QMatrix4x4 matrix;
+    matrix.rotate(northUp(), 0.0, 0.0, 1.0);
+    matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
+    return matrix;
+}
 
 /**
   This connects the length objects when the scale has changed.

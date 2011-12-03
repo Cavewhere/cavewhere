@@ -1,7 +1,7 @@
 //Our includes
 #include "cwBaseNoteStationInteraction.h"
 #include "cwNoteStation.h"
-#include "cwNoteStationView.h"
+//#include "cwNoteStationView.h"
 #include "cwScrap.h"
 #include "cwScrapView.h"
 #include "cwScrapItem.h"
@@ -57,14 +57,8 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
     newNoteStation.setPositionOnNote(notePosition);
 
     //Try to guess the station name
-    QString stationName;
-//    if(NoteStationView != NULL) {
-//        cwScrapStationView* selectedStationView = NoteStationView->selectedScrapStationView();
-//        if(selectedStationView != NULL) {
-//            cwNoteStation selectedStation = selectedStationView->selectedNoteStation();
-//            stationName = scrap->guessNeighborStationName(selectedStation, notePosition);
-//        }
-//    }
+    cwNoteStation selectedStation = scrapItem->stationView()->selectedNoteStation();
+    QString stationName = scrap->guessNeighborStationName(selectedStation, notePosition);
 
     if(stationName.isEmpty()) {
         stationName = "Station Name";
@@ -75,13 +69,6 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
 
     //Get the last station in the list and select it
     scrapItem->stationView()->setSelectedStationIndex(scrap->numberOfStations() - 1);
-
-//    if(NoteStationView != NULL) {
-//        cwScrapStationView* selectedStationView = NoteStationView->selectedScrapStationView();
-//        if(selectedStationView != NULL) {
-//            selectedStationView->setSelectedStationIndex(scrap->numberOfStations() - 1);
-//        }
-//    }
 }
 
 ///**

@@ -25,7 +25,8 @@ class cwScrapStationView : public QDeclarativeItem
 
 public:
     explicit cwScrapStationView(QDeclarativeItem *parent = 0);
-    
+    ~cwScrapStationView();
+
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* updater);
 
@@ -35,7 +36,7 @@ public:
     void clearSelection();
     int selectedStationIndex() const;
     void setSelectedStationIndex(int selectedStationIndex);
-    QDeclarativeItem* selectStationItem() const;
+    QDeclarativeItem* selectedStationItem() const;
     cwNoteStation selectedNoteStation() const;
 
     cwScrapItem* scrapItem() const;
@@ -60,6 +61,10 @@ private:
     QDeclarativeComponent* StationItemComponent;
     QList<QDeclarativeItem*> StationItems;
 
+    //Shows the shot lines
+    QDeclarativeItem* ShotLinesHandler;
+    QGraphicsPathItem* ShotLines;
+
     cwScrapItem* ScrapItem; //!< For selection and holding the scrap
 
     int SelectedStationIndex; //!< The currently selected station index
@@ -68,12 +73,15 @@ private:
     void addNewStationItem();
     void updateStationItemData(int index);
 
+
+
 private slots:
     void stationAdded();
     void stationRemoved(int stationIndex);
     void udpateStationPosition(int stationIndex);
     void updateAllStations();
     void updateAllStationData();
+    void updateShotLines();
 };
 
 Q_DECLARE_METATYPE(cwScrapStationView*)

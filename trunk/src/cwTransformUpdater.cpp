@@ -65,7 +65,7 @@ void cwTransformUpdater::addPointItem(QGraphicsObject* object) {
   */
 void cwTransformUpdater::removePointItem(QGraphicsObject* object) {
     if(!PointItems.contains(object)) {
-        qDebug() << object << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
+        qDebug() << (void*)object << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
     }
     PointItems.remove(object);
 }

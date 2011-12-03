@@ -89,8 +89,8 @@ ImageItem {
         anchors.top: parent.top
         anchors.left: parent.left
         noteTransform: {
-            if(scrapViewId.selectedScrap != null && scrapViewId.selectedScrap.scrap != null) {
-                return scrapViewId.selectedScrap.scrap.noteTransformation;
+            if(scrapViewId.selectedScrapItem !== null && scrapViewId.selectedScrapItem.scrap !== null) {
+                return scrapViewId.selectedScrapItem.scrap.noteTransformation;
             }
             return null;
         }

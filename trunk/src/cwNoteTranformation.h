@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QPointF>
 #include <QSize>
+#include <QMatrix4x4>
 
 //Our includes
 class cwLength;
@@ -44,11 +45,14 @@ public:
                                       cwLength* length,
                                       QSize imageSize, double dotsPerMeter);
 
+    QMatrix4x4 matrix() const;
+
 signals:
     void scaleChanged();
     void northUpChanged();
     void scaleNumeratorChanged();
     void scaleDenominatorChanged();
+
 private:
     class PrivateData : public QSharedData {
     public:
