@@ -12,6 +12,7 @@ Item {
     property bool isEditting: false
     property variant validator;
 
+    signal clicked();
     signal startedEditting()
     signal finishedEditting(string newText)
 
@@ -83,7 +84,11 @@ Item {
             globalShadowTextInput.editor.visible = true
             globalShadowTextInput.textInput.forceActiveFocus() //focus = true
             globalShadowTextInput.textInput.selectAll();
-            globalShadowTextInput.textInput.validator = clickTextInput.validator
+
+            console.log("Validator:" + clickTextInput.validator)
+            if(clickTextInput.validator !== undefined) {
+                globalShadowTextInput.textInput.validator = clickTextInput.validator
+            }
 
             globalShadowTextInput.enabled = true
             doubleClickArea.enabled = false
@@ -106,7 +111,8 @@ Item {
                 PropertyChanges {
                     target: doubleClickArea
                     onDoubleClicked: openEdittor()
-                    onPressed: mouse.accepted = false
+                    onPressed: mouse.accepted = acceptMousePress
+                    onClicked: clickTextInput.clicked()
                 }
             },
 

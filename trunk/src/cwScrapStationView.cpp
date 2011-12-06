@@ -116,7 +116,8 @@ void cwScrapStationView::addNewStationItem() {
         qDebug() << "StationItemComponent isn't ready, ... THIS IS A BUG" << LOCATION;
     }
 
-    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create());
+    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create(context));
     if(stationItem == NULL) {
         qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
         return;
@@ -182,24 +183,22 @@ void cwScrapStationView::updateShotLines() {
         QMatrix4x4 dotPerMeter;
         cwImage noteImage = note->image();
         dotPerMeter.scale(noteImage.originalDotsPerMeter(), noteImage.originalDotsPerMeter(), 1.0);
-//        dotPerMeter = dotPerMeter.inverted();
 
         QMatrix4x4 noteStationOffset;
         noteStationOffset.translate(QVector3D(noteStation.positionOnNote()));
 
-        QMatrix4x4 toNormalizedNote = noteStationOffset * dotPerMeter * notePageAspect * noteTransformMatrix * offsetMatrix;
+        QMatrix4x4 toNormalizedNote = noteStationOffset *
+                dotPerMeter *
+                notePageAspect *
+                noteTransformMatrix *
+                offsetMatrix;
 
         //Go through all the neighboring stations and add the position to the line
         foreach(cwStationReference station, neighboringStations) {
 
             QVector3D currentPos = station.position();
 
-            qDebug() << "-----------------------------------";
-            qDebug() << "offsetMatrix: " << offsetMatrix.map(currentPos);
-
             QVector3D normalizeNotePos = toNormalizedNote.map(currentPos);
-
-            qDebug() << "NormalizedNotePos:" << normalizeNotePos;
 
             shotLines.moveTo(noteStation.positionOnNote());
             shotLines.lineTo(normalizeNotePos.toPointF());
@@ -220,11 +219,12 @@ void cwScrapStationView::stationAdded() {
         return;
     }
 
-    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create());
-    if(stationItem == NULL) {
-        qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
-        return;
-    }
+//    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+//    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create(context));
+//    if(stationItem == NULL) {
+//        qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
+//        return;
+//    }
 
     //Create a new station item
     addNewStationItem();

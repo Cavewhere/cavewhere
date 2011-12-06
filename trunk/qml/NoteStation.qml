@@ -22,6 +22,11 @@ Positioner3D {
         }
     }
 
+    function selectStation() {
+        noteStation.selected = true
+        scrapItem.selected = true
+    }
+
     width: 2
     height: 2
     z: 2
@@ -80,11 +85,7 @@ Positioner3D {
             property variant lastPoint;
             property bool ignoreLength;
 
-            onClicked: {
-                console.log("On selection");
-                noteStation.selected = true
-                scrapItem.selected = true
-            }
+            onClicked: selectStation()
 
             onReleased: ({ })
 
@@ -128,10 +129,9 @@ Positioner3D {
         onFinishedEditting: {
             scrap.setStationData(Note.StationName, stationId, newText);
             text = newText;
+            noteStation.forceActiveFocus();
         }
+
+        onClicked: selectStation()
     }
-
-
-
-
 }

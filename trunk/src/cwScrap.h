@@ -55,6 +55,9 @@ public:
 
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
+    QMatrix4x4 mapWorldToNoteMatrix(cwNoteStation stationOffset);
+//    QMatrix4x4 mapNoteToWorldMatrix(QPointF note);
+
 signals:
     //For scrap outline
     void insertedPoints(int begin, int end);
