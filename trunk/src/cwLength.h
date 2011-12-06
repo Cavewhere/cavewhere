@@ -1,6 +1,9 @@
 #ifndef CWLENGTH_H
 #define CWLENGTH_H
 
+//Our includes
+#include "cwUnits.h"
+
 //Qt includes
 #include <QObject>
 #include <QSharedDataPointer>
@@ -12,39 +15,27 @@ class cwLength : public QObject
     Q_OBJECT
 
     Q_PROPERTY(double value READ value WRITE setValue NOTIFY valueChanged)
-    Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
+    Q_PROPERTY(cwUnits::LengthUnit unit READ unit WRITE setUnit NOTIFY unitChanged)
     Q_PROPERTY(QStringList unitNames READ unitNames NOTIFY unitNamesChanged)
 
-    Q_ENUMS(Unit)
+//    Q_ENUMS(cwUnits::LengthUnit)
 public:
-    enum Unit {
-        in,
-        ft,
-        m,
-        mm,
-        cm,
-        km,
-        Unitless
-    };
-
-
     explicit cwLength(QObject *parent = 0);
-    cwLength(double value, Unit unit, QObject* parent = 0);
+    cwLength(double value, cwUnits::LengthUnit unit, QObject* parent = 0);
     cwLength(const cwLength& other);
     const cwLength& operator =(const cwLength& other);
 
     double value() const;
     void setValue(double value);
 
-    Unit unit() const;
-    void setUnit(Unit unit);
+    cwUnits::LengthUnit unit() const;
+    void setUnit(cwUnits::LengthUnit unit);
 
     QStringList unitNames();
-    QString unitName(Unit unit);
+    QString unitName(cwUnits::LengthUnit unit);
 
-    cwLength convertTo(Unit to) const;
-    static double convert(double value, Unit from, Unit to);
-    static double toMeters(Unit unit);
+    cwLength convertTo(cwUnits::LengthUnit to) const;
+    static double convert(double value, cwUnits::LengthUnit from, cwUnits::LengthUnit to);
 
 signals:
     void valueChanged();
@@ -56,18 +47,18 @@ private:
     class PrivateData : public QSharedData {
     public:
         PrivateData() :
-            LengthUnit(cwLength::Unitless),
+            LengthUnit(cwUnits::Unitless),
             Value(0.0)
         {
         }
 
-        PrivateData(double value, Unit unit) :
+        PrivateData(double value, cwUnits::LengthUnit unit) :
             LengthUnit(unit),
             Value(value)
             {
         }
 
-        cwLength::Unit LengthUnit;
+        cwUnits::LengthUnit LengthUnit;
         double Value;
     };
 
@@ -86,8 +77,29 @@ inline double cwLength::value() const {
 /**
     Get's the units of the value
   */
-inline cwLength::Unit cwLength::unit() const {
+inline cwUnits::LengthUnit cwLength::unit() const {
     return Data->LengthUnit;
+}
+
+/**
+  This converts the value from one length unit to another
+  */
+inline double cwLength::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthUnit to) {
+    return cwUnits::convert(value, from, to);
+}
+
+/**
+  Returns all the unit names for the length object
+  */
+inline QStringList cwLength::unitNames() {
+    return cwUnits::lengthUnitNames();
+}
+
+/**
+  Converts the unit into a string
+  */
+inline QString cwLength::unitName(cwUnits::LengthUnit unit) {
+    return cwUnits::unitName(unit);
 }
 
 #endif // CWLENGTH_H

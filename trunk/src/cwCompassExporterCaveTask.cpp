@@ -78,7 +78,8 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     float compassCorrections = calibrations->frontCompassCalibration();
     float clinoCorrections = calibrations->frontClinoCalibration();
     float tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
-                                             cwUnits::DecimalFeet, cwUnits::Meters);
+                                             cwUnits::ft,
+                                             cwUnits::m);
 
     stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
     stream << "FORMAT: DMMDLRUDLADB ";
@@ -137,7 +138,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
         float shotLength = cwUnits::convert(shot->distance().toDouble(),
                                             distanceUnit,
-                                            cwUnits::DecimalFeet);
+                                            cwUnits::ft);
 
         writeData(stream, "From", 12, from.name());
         stream << " ";
@@ -203,7 +204,7 @@ float cwCompassExportCaveTask::convertField(cwStationReference station,
         return 0.0;
     }
 
-    return cwUnits::convert(numValue, unit, cwUnits::DecimalFeet);
+    return cwUnits::convert(numValue, unit, cwUnits::ft);
 }
 
 /**

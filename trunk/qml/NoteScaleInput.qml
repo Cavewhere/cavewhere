@@ -133,10 +133,10 @@ Item {
             id: errorText
             color: "red"
             anchors.verticalCenter: parent.verticalCenter
-            visible: (noteTransform.scaleDenominator.unit === Length.Unitless ||
-                      noteTransform.scaleNumerator.unit === Length.Unitless) &&
-                     !(noteTransform.scaleDenominator.unit === Length.Unitless &&
-                      noteTransform.scaleNumerator.unit === Length.Unitless)
+            visible: (noteTransform.scaleDenominator.unit === Units.Unitless ||
+                      noteTransform.scaleNumerator.unit === Units.Unitless) &&
+                     !(noteTransform.scaleDenominator.unit === Units.Unitless &&
+                      noteTransform.scaleNumerator.unit === Units.Unitless)
             text: "Weird scaling units"
             font.italic: true
             font.bold: true

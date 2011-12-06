@@ -11,7 +11,7 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
     BackCompasssCalibration = 0.0f;
     BackClinoCalibration = 0.0f;
     Declination = 0.0f;
-    DistanceUnit = cwUnits::Meters;
+    DistanceUnit = cwUnits::m;
 }
 
 /**

@@ -54,6 +54,7 @@
 #include "cwAbstract2PointItem.h"
 #include "cwScaleLengthItem.h"
 #include "cwImageProperties.h"
+#include "cwUnits.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -104,4 +105,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwAbstract2PointItem>();
     qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
     qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");
+    qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
 }

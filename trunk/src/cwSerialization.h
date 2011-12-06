@@ -336,7 +336,7 @@ void load(Archive &archive, cwTripCalibration &calibration, const unsigned int) 
     float BackCompasssCalibration = 0.0;
     float BackClinoCalibration = 0.0;
     float Declination = 0.0;
-    int DistanceUnit = cwUnits::Meters;
+    int DistanceUnit = cwUnits::Unitless;
 
     archive >> BOOST_SERIALIZATION_NVP(CorrectedCompassBacksight);
     archive >> BOOST_SERIALIZATION_NVP(CorrectedClinoBacksight);

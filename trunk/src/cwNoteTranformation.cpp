@@ -13,8 +13,8 @@
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     QObject(parent),
     Data(new cwNoteTranformation::PrivateData()),
-    ScaleNumerator(new cwLength(1, cwLength::Unitless, this)),
-    ScaleDenominator(new cwLength(1, cwLength::Unitless, this))
+    ScaleNumerator(new cwLength(1, cwUnits::Unitless, this)),
+    ScaleDenominator(new cwLength(1, cwUnits::Unitless, this))
 {
     connectLengthObjects();
 }
@@ -56,8 +56,8 @@ void cwNoteTranformation::setNorthUp(double degrees) {
   For example, 1cm on the page of notes equals to 5m in the cave.
   */
 double cwNoteTranformation::scale() const {
-    double numerator = scaleNumerator()->convertTo(cwLength::m).value();
-    double denominator = scaleDenominator()->convertTo(cwLength::m).value();
+    double numerator = scaleNumerator()->convertTo(cwUnits::m).value();
+    double denominator = scaleDenominator()->convertTo(cwUnits::m).value();
     return   numerator / denominator;
 }
 
@@ -99,7 +99,7 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
 
     //Compute the scale
     double lengthInMetersOnPage = lengthInDots / dotsPerMeter;
-    double lengthInMetersInCave = length->convertTo(cwLength::m).value();
+    double lengthInMetersInCave = length->convertTo(cwUnits::m).value();
     double scale = lengthInMetersOnPage / lengthInMetersInCave;
     return scale;
 }

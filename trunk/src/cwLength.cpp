@@ -10,7 +10,7 @@ cwLength::cwLength(QObject *parent) :
 {
 }
 
-cwLength::cwLength(double value, Unit unit, QObject* parent) :
+cwLength::cwLength(double value, cwUnits::LengthUnit unit, QObject* parent) :
     QObject(parent),
     Data(new PrivateData(value, unit))
 {
@@ -30,7 +30,7 @@ cwLength::cwLength(const cwLength& other) :
 /**
   Sets the unit for the length
   */
-void cwLength::setUnit(Unit unit) {
+void cwLength::setUnit(cwUnits::LengthUnit unit) {
     if(Data->LengthUnit != unit) {
 //        //Update the value with a new value
 //        double newValue = convert(value(), Data->LengthUnit, unit);
@@ -38,41 +38,6 @@ void cwLength::setUnit(Unit unit) {
 
         Data->LengthUnit = unit;
         emit unitChanged();
-    }
-}
-
-/**
-  Returns all the unit names for the length object
-  */
-QStringList cwLength::unitNames() {
-    QStringList units;
-    for(int i = in; i <= Unitless; i++) {
-        units.append(unitName((Unit)i));
-    }
-    return units;
-}
-
-/**
-  Converts the unit into a string
-  */
-QString cwLength::unitName(cwLength::Unit unit) {
-    switch(unit) {
-    case in:
-        return "in";
-    case ft:
-        return "ft";
-    case m:
-        return "m";
-    case mm:
-        return "mm";
-    case cm:
-        return "cm";
-    case km:
-        return "km";
-    case Unitless:
-        return "unitless";
-    default:
-        return "error";
     }
 }
 
@@ -87,48 +52,12 @@ void cwLength::setValue(double value) {
 }
 
 /**
-  This converts the value from one length unit to another
-  */
-double cwLength::convert(double value, Unit from, Unit to) {
-    if(from == Unitless || to == Unitless) {
-        return value;
-    }
-
-    double fromFactor = toMeters(from);
-    double toFactor = toMeters(to);
-
-    return value * fromFactor / toFactor;
-}
-
-/**
   This convert the length to a new length and returns a new
   cwLength object with that value
   */
-cwLength cwLength::convertTo(Unit to) const {
+cwLength cwLength::convertTo(cwUnits::LengthUnit to) const {
     double convertedValue = convert(value(), unit(), to);
     return cwLength(convertedValue, to);
-}
-
-/**
-  Converts the unit to unit per meter
-  */
-double cwLength::toMeters(cwLength::Unit unit) {
-    switch(unit) {
-    case in:
-        return 0.0254;
-    case ft:
-        return 0.3048;
-    case m:
-        return 1.0;
-    case mm:
-        return 0.001;
-    case cm:
-        return 0.01;
-    case km:
-        return 1000;
-    default:
-        return 0.0;
-    }
 }
 
 /**

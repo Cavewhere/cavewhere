@@ -4,26 +4,39 @@
 
 //Qt includes
 #include <QMetaType>
+#include <QObject>
 
-class cwUnits
+
+class cwUnits : public QObject
 {
+    Q_OBJECT
+
+    Q_ENUMS(LengthUnit)
 public:
     enum LengthUnit {
-        Meters,
-        DecimalFeet,
-        NumberOfUnits
+        in,       //!< Inches
+        ft,       //!< Feet
+        yd,       //!< Yards
+        m,        //!< Meters
+        mm,       //!< Millimeters
+        cm,       //!< Centimeters
+        km,       //!< Kilometers
+        Unitless  //!< Invalid units or unit less
     };
 
 
     static double convert(double value,
-                          cwUnits::LengthUnit valuesUnit,
+                          cwUnits::LengthUnit from,
                           cwUnits::LengthUnit to);
 
+    static QStringList lengthUnitNames();
+    static QString unitName(cwUnits::LengthUnit unit);
+
     private:
-        static double UnitsToMeters[NumberOfUnits];
+        static double UnitsToMeters[Unitless + 1];
 
 };
 
-Q_DECLARE_METATYPE(cwUnits::LengthUnit)
+Q_DECLARE_METATYPE(cwUnits*)
 
 #endif // CWUNITCOVERTER_H
