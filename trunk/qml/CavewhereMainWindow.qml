@@ -68,5 +68,12 @@ Rectangle {
         }
     }
 
+    //There's only one shadow input text editor for the cavewhere program
+    //This make the input creation much faster for any thing that needs an editor
+    //Only one editor can be open at a time
+    GlobalShadowTextInput {
+        id: globalShadowTextInput
+    }
+
 
 }

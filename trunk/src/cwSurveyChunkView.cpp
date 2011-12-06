@@ -551,23 +551,29 @@ cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
+    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(view);
     Items[StationName] = setupItem(components->stationDelegate(),
+                                   context,
                                    cwSurveyChunk::StationNameRole,
                                    components->stationValidator());
 
     Items[Left]= setupItem(components->leftDelegate(),
+                           context,
                            cwSurveyChunk::StationLeftRole,
                            components->lrudValidator());
 
     Items[Right] = setupItem(components->rightDelegate(),
+                             context,
                              cwSurveyChunk::StationRightRole,
                              components->lrudValidator());
 
     Items[Up] = setupItem(components->upDelegate(),
+                          context,
                           cwSurveyChunk::StationUpRole,
                           components->lrudValidator());
 
     Items[Down] = setupItem(components->downDelegate(),
+                            context,
                            cwSurveyChunk::StationDownRole,
                            components->lrudValidator());
 
@@ -593,10 +599,11 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
   \brief Sets up a row declarative item
   */
 QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* component,
-                                           cwSurveyChunk::DataRole role,
-                                           QValidator* validator) {
+                                                    QDeclarativeContext* context,
+                                                    cwSurveyChunk::DataRole role,
+                                                    QValidator *validator) {
 
-    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(component->create());
+    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(component->create(context));
     item->setProperty("dataRole", role);
     item->setProperty("dataValidator", QVariant::fromValue(static_cast<QObject*>(validator)));
     return item;
@@ -615,23 +622,29 @@ cwSurveyChunkView::ShotRow::ShotRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
+    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(view);
     Items[Distance] = setupItem(components->distanceDelegate(),
+                                context,
                                 cwSurveyChunk::ShotDistanceRole,
                                 components->distanceValidator());
 
     Items[FrontCompass] = setupItem(components->frontCompassDelegate(),
+                                    context,
                                      cwSurveyChunk::ShotCompassRole,
                                      components->compassValidator());
 
     Items[BackCompass] = setupItem(components->backCompassDelegate(),
+                                   context,
                                    cwSurveyChunk::ShotBackCompassRole,
                                    components->compassValidator());
 
     Items[FrontClino]  = setupItem(components->frontClinoDelegate(),
+                                   context,
                                    cwSurveyChunk::ShotClinoRole,
                                    components->clinoValidator());
 
     Items[BackClino] = setupItem(components->backClinoDelegate(),
+                                 context,
                                  cwSurveyChunk::ShotBackClinoRole,
                                  components->clinoValidator());
 

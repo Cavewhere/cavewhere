@@ -293,7 +293,9 @@ OTHER_FILES += \
     qml/NoteScaleInput.qml \
     qml/Pallete.qml \
     qml/UnitInput.qml \
-    qml/NoteNorthUpInput.qml
+    qml/NoteNorthUpInput.qml \
+    qml/GlobalShadowTextInput.qml \
+    qml/DataBox.qml
 
 RESOURCES += \
     icons.qrc

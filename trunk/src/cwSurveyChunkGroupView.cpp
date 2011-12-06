@@ -22,6 +22,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
     if(ChunkQMLComponents == NULL) {
         QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+        context->contextProperty("globalShadowTextInput");
         ChunkQMLComponents = new cwSurveyChunkViewComponents(context, this);
     }
 
@@ -289,6 +290,7 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         cwSurveyChunk* chunk = Trip->chunk(i);
+
         if(chunk == NULL) { continue; }
 
         ChunkViews.insert(i, NULL);

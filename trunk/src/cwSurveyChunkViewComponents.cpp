@@ -17,7 +17,7 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
 {
     QDeclarativeEngine* engine = context->engine();
 
-    Delegate = new QDeclarativeComponent(engine, "qml/DataBox.qml");
+    Delegate = new QDeclarativeComponent(engine, "qml/DataBox.qml", this);
 //    StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
     TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
 //    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);

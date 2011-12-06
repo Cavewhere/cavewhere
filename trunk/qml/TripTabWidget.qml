@@ -1,4 +1,4 @@
-import QtQuick 1.0
+import QtQuick 1.1
 
 DataTabWidget {
     id: tripTabWidget
@@ -11,13 +11,13 @@ DataTabWidget {
     }
 
     //Comment this out, because it's slow
-//    SurveyEditor {
-//        property string label: "Data"
-//        property string icon: "qrc:icons/data.png"
+    SurveyEditor {
+        property string label: "Data"
+        property string icon: "qrc:icons/data.png"
 
-//        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
-//        //    text: "This is the Data page"
-//    }
+        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
+        //    text: "This is the Data page"
+    }
 
     NotesGallery {
         property string label: "Notes"

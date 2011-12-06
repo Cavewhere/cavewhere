@@ -1,4 +1,4 @@
-import QtQuick 1.0
+import QtQuick 1.1
 
 Item {
     id: clickTextInput
@@ -9,50 +9,39 @@ Item {
     property alias color: textArea.color
     property bool acceptMousePress: false  //This make the double click text box accept mouse clicks (This
     property bool doubleClickEdit: false
+    property bool isEditting: false
+    property variant validator;
 
     signal startedEditting()
     signal finishedEditting(string newText)
 
-    //border.width: 1
-
-    height: textArea.visible ? textArea.height : input.height
-    width: {
-        var width;
-        if(textArea.visible) {
-            width = textArea.width
-        } else {
-            width = input.width
-        }
-        if(width <= 0) {
-            width = 100
-        }
-        return width;
-    }
+    height: textArea.height
+    width: textArea.width
 
     function commitChanges() {
         closeEditor();
 
         //Emit the finishedEditting signal
-        finishedEditting(input.text)
+        finishedEditting(globalShadowTextInput.textInput.text)
     }
 
     function closeEditor() {
-        edittor.visible = false;
-        input.focus = false;
+        globalShadowTextInput.editor.visible = false;
+        globalShadowTextInput.textInput.focus = false;
+        globalShadowTextInput.textInput.validator = null;
 
-        globalMouseArea.enabled = false
-        globalMouseArea.parent = clickTextInput
-        globalMouseArea.ignoreFirstClick = false
-        doubleClickArea.enabled = true
+        globalShadowTextInput.enabled = false
+        doubleClickArea.enabled = true;
+        textArea.visible = true;
+        isEditting = false;
 
-        edittor.x = textArea.x
-        edittor.y = textArea.y
+        globalShadowTextInput.commitChanges.disconnect(commitChanges)
     }
 
     Text {
         id: textArea
-        visible: !input.visible
-        //anchors.left: parent.left
+
+        anchors.centerIn: parent
 
         onTextChanged: {
             textChangedAnimation.restart()
@@ -79,115 +68,57 @@ Item {
     }
 
     MouseArea {
-        id: globalMouseArea
-        anchors.fill: parent
-        enabled: false
-        parent: clickTextInput
+        id: doubleClickArea
 
-        property bool ignoreFirstClick: false
+        anchors.fill: textArea
+        enabled:  true
 
-        onPressed: {
-            if(ignoreFirstClick) {
-                ignoreFirstClick = false;
-                return;
-            }
+        function openEdittor() {
+            clickTextInput.startedEditting()
 
-            console.log("Global click area");
-            commitChanges()
-            mouse.accepted = false
+            textArea.visible = false
+
+            globalShadowTextInput.textInput.text = clickTextInput.text
+            globalShadowTextInput.textInput.font = textArea.font
+            globalShadowTextInput.editor.visible = true
+            globalShadowTextInput.textInput.forceActiveFocus() //focus = true
+            globalShadowTextInput.textInput.selectAll();
+            globalShadowTextInput.textInput.validator = clickTextInput.validator
+
+            globalShadowTextInput.enabled = true
+            doubleClickArea.enabled = false
+            isEditting = true
+
+            //Set the editor's position
+            var globalPosition = textArea.mapToItem(globalShadowTextInput, 0, 0)
+            globalShadowTextInput.editor.x = globalPosition.x
+            globalShadowTextInput.editor.y = globalPosition.y - 3
+
+            //Connect to commitChanges()
+            globalShadowTextInput.commitChanges.connect(commitChanges)
         }
 
-        ShadowRectangle {
-            id: edittor
-            visible: false; // true; //input.visible
+        states: [
+            State {
+                name: "DOUBLE-CLICK"
+                when: doubleClickEdit
 
-            x: textArea.x
-            y: textArea.y
+                PropertyChanges {
+                    target: doubleClickArea
+                    onDoubleClicked: openEdittor()
+                    onPressed: mouse.accepted = false
+                }
+            },
 
-            color: "white"
+            State {
+                name: "SIGNLE-CLICK"
+                when: !doubleClickEdit
 
-            width: input.width + 5
-            height: input.height + 5;
-
-            TextInput {
-                id: input
-                visible: edittor.visible
-                font: textArea.font
-                anchors.centerIn: parent;
-                //                x: textArea.x
-                //                y: textArea.y
-
-                selectByMouse: activeFocus;
-                activeFocusOnPress: false
-
-                Keys.onPressed: {
-                    if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        commitChanges();
-                        event.accepted = true
-                    } else if(event.key === Qt.Key_Escape) {
-                        closeEditor();
-                        event.accepted = true
-                    }
+                PropertyChanges {
+                    target: doubleClickArea
+                    onClicked: openEdittor()
                 }
             }
-
-        }
-
-        MouseArea {
-            id: doubleClickArea
-
-            x: edittor.x
-            y: edittor.y
-            width: clickTextInput.width
-            height: clickTextInput.height
-            enabled:  true
-
-            function openEdittor() {
-                console.log("Double click");
-                clickTextInput.startedEditting()
-
-                input.text = clickTextInput.text
-                edittor.visible = true;
-                input.focus = true;
-                input.selectAll();
-
-                //Change the globalMouseArea to fill the root
-                globalMouseArea.enabled = true
-                globalMouseArea.parent = rootObject
-                globalMouseArea.ignoreFirstClick = doubleClickEdit
-                doubleClickArea.enabled = false
-
-                var globalPosition = textArea.mapToItem(edittor, 0, 0)
-
-                edittor.x = globalPosition.x
-                edittor.y = globalPosition.y
-            }
-
-            states: [
-                State {
-                    name: "DOUBLE-CLICK"
-                    when: doubleClickEdit
-
-                    PropertyChanges {
-                        target: doubleClickArea
-
-                        onDoubleClicked: openEdittor()
-                        onPressed: mouse.accepted = acceptMousePress
-
-                    }
-                },
-
-                State {
-                    name: "SIGNLE-CLICK"
-                    when: !doubleClickEdit
-
-                    PropertyChanges {
-                        target: doubleClickArea
-
-                        onClicked: openEdittor()
-                    }
-                }
-            ]
-        }
+        ]
     }
 }

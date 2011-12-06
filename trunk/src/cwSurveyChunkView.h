@@ -89,6 +89,7 @@ private:
         int RowIndex;
 
         static QDeclarativeItem* setupItem(QDeclarativeComponent* component,
+                                           QDeclarativeContext* context,
                                            cwSurveyChunk::DataRole,
                                            QValidator* validator);
     };

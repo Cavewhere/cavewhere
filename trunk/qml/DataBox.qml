@@ -5,9 +5,9 @@ import "Navigation.js" as NavigationHandler
 NavigationRectangle {
     id: dataBox
 
-    property alias dataValue: dataTextInput.text
-    property alias edittorOpen: edittor.visible
-    property variant dataValidator
+    property alias dataValue: editor.text
+//    property alias editorOpen: edittor.visible
+    property alias dataValidator: editor.validator
     property variant surveyChunk; //For hooking up signals and slots in subclasses
     property int rowIndex: -1
     property int dataRole
@@ -24,9 +24,9 @@ NavigationRectangle {
 //    Behavior on y { PropertyAnimation { duration: 250 } }
 //    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
-    onDataValidatorChanged: {
-        dataTextInput.validator = dataValidator;
-    }
+//    onDataValidatorChanged: {
+//        dataTextInput.validator = dataValidator;
+//    }
 
     Rectangle {
         id: interalHighlight
@@ -35,53 +35,61 @@ NavigationRectangle {
         anchors.margins: 1;
         border.width: 1;
         color: Qt.rgba(0, 0, 0, 0);
-        visible: dataBox.focus || dataTextInput.focus
+        visible: dataBox.focus || editor.isEditting
     }
 
-
-    ShadowRectangle {
-        id: edittor
-        color: "white"
-        anchors.centerIn: parent;
-        width: dataTextInput.width > parent.width ? dataTextInput.width + 5 : parent.width + 5;
-        height: parent.height + 5;
-        visible: false;
-
-        TextInput {
-            id: dataTextInput
-           //validator: dataValidator != null ? dataValidator : null;
-            anchors.centerIn: parent
-            selectByMouse: true;
-        }
-    }
-
-
-
-    MouseArea {
+    ClickTextInput {
+        id: editor
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: {
-            dataBox.focus = true;
 
-            if(mouse.button == Qt.RightButton) {
-                dataBox.rightClicked(rowIndex); //Emit signal
-            }
-        }
-
-        onDoubleClicked: {
-            dataTextInput.focus = true;
-            var coords = mapToItem(dataTextInput, mouse.x, mouse.y);
-            var cursorPosition = dataTextInput.positionAt(coords.x);
-            dataTextInput.cursorPosition = cursorPosition;
-            dataBox.state = 'MiddleTyping';
+        onVisibleChanged: {
+            console.log("Visible changed!");
         }
     }
 
-    Text {
-        id: dataText
-        anchors.centerIn: parent
-        text: dataValue
-    }
+//    ShadowRectangle {
+//        id: edittor
+//        color: "white"
+//        anchors.centerIn: parent;
+//        width: dataTextInput.width > parent.width ? dataTextInput.width + 5 : parent.width + 5;
+//        height: parent.height + 5;
+//        visible: false;
+
+//        TextInput {
+//            id: dataTextInput
+//           //validator: dataValidator != null ? dataValidator : null;
+//            anchors.centerIn: parent
+//            selectByMouse: true;
+//        }
+//    }
+
+
+
+//    MouseArea {
+//        anchors.fill: parent
+//        acceptedButtons: Qt.LeftButton | Qt.RightButton
+//        onPressed: {
+//            dataBox.focus = true;
+
+//            if(mouse.button == Qt.RightButton) {
+//                dataBox.rightClicked(rowIndex); //Emit signal
+//            }
+//        }
+
+//        onDoubleClicked: {
+//            dataTextInput.focus = true;
+//            var coords = mapToItem(dataTextInput, mouse.x, mouse.y);
+//            var cursorPosition = dataTextInput.positionAt(coords.x);
+//            dataTextInput.cursorPosition = cursorPosition;
+//            dataBox.state = 'MiddleTyping';
+//        }
+//    }
+
+//    Text {
+//        id: dataText
+//        anchors.centerIn: parent
+//        text: dataValue
+//    }
 
 //    Keys.forwardTo: [dataTextInput]
 //    Keys.priority: Keys.AfterItem
@@ -146,16 +154,16 @@ NavigationRectangle {
         State {
             name: "MiddleTyping"
 
-            PropertyChanges {
-                target: edittor
-                visible: true
-            }
+//            PropertyChanges {
+//                target: edittor
+//                visible: true
+//            }
 
 
-            PropertyChanges {
-                target: dataText
-                visible: false
-            }
+//            PropertyChanges {
+//                target: dataText
+//                visible: false
+//            }
 
             PropertyChanges {
                 target: dataTextInput
@@ -189,16 +197,16 @@ NavigationRectangle {
             name: "EndTyping"
             extend: "MiddleTyping"
 
-            PropertyChanges {
-                target: edittor
-                visible: true
-            }
+//            PropertyChanges {
+//                target: edittor
+//                visible: true
+//            }
 
 
-            PropertyChanges {
-                target: dataText
-                visible: false
-            }
+//            PropertyChanges {
+//                target: dataText
+//                visible: false
+//            }
 
             PropertyChanges {
                 target: dataTextInput
