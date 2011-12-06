@@ -219,13 +219,6 @@ void cwScrapStationView::stationAdded() {
         return;
     }
 
-//    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-//    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create(context));
-//    if(stationItem == NULL) {
-//        qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
-//        return;
-//    }
-
     //Create a new station item
     addNewStationItem();
 
@@ -240,13 +233,14 @@ void cwScrapStationView::stationAdded() {
 void cwScrapStationView::stationRemoved(int stationIndex) {
     //Unselect the item that's going to be deleted
     if(stationIndex >= 0 || stationIndex < StationItems.size()) {
-//        if(SelectedNoteStation == StationItems[stationIndex]) {
-//            SelectedNoteStation = NULL;
-//        }
+        if(selectedStationIndex() == stationIndex) {
+            clearSelection();
+        }
 
         StationItems[stationIndex]->deleteLater();
         StationItems.removeAt(stationIndex);
-//        regenerateStationVertices();
+
+        updateAllStationData();
     }
 }
 
@@ -301,10 +295,6 @@ void cwScrapStationView::updateAllStations() {
     }
 
     updateAllStationData();
-
-//    if(TransformUpdater != NULL) {
-//        TransformUpdater->update();
-    //    }
 }
 
 /**
