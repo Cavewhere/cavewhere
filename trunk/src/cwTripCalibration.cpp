@@ -105,7 +105,7 @@ void cwTripCalibration::setDeclination(float declination) {
 }
 
 void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit unit) {
-    if(DistanceUnit == unit) {
+    if(DistanceUnit != unit) {
         DistanceUnit = unit;
         emit distanceUnitChanged(unit);
     }

@@ -218,6 +218,11 @@ void cwSurvexImporter::parseLine(QString line) {
 
         //Add the block to the structure
         CurrentBlock->addChildBlock(newBlock);
+
+        //Copy the calibrations
+        *(newBlock->calibration()) = *(CurrentBlock->calibration());
+
+        //Make the newBlock the current block
         CurrentBlock = newBlock;
 
         //Copy the last state variables
@@ -242,7 +247,7 @@ void cwSurvexImporter::parseLine(QString line) {
         exp = QRegExp("^\\s*\\*(\\w+)\\s*(.*)");
         if(line.contains(exp)) {
             QString command = exp.cap(1);
-            QString args = exp.cap(2).trimmed();
+            QString arg = exp.cap(2).trimmed();
 
             if(compare(command, "end")) {
                 cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
@@ -260,14 +265,16 @@ void cwSurvexImporter::parseLine(QString line) {
             } else if(compare(command, "data")) {
                 parseDataFormat(line);
             } else if(compare(command, "include")) {
-                loadFile(args);
+                loadFile(arg);
             } else if(compare(command, "date")) {
-                parseDate(args);
+                parseDate(arg);
             } else if(compare(command, "team")) {
-                parseTeamMember(args);
+                parseTeamMember(arg);
             } else if(compare(command, "calibrate")) {
-                parseCalibrate(args);
-            }  else {
+                parseCalibrate(arg);
+            } else if(compare(command, "units")) {
+                parseUnits(arg);
+            } else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
 
@@ -783,6 +790,60 @@ void cwSurvexImporter::parseCalibrate(QString line) {
     } else {
         addError("Couldn't read calibration");
     }
+}
+
+/**
+  This parses the units out of the survex importer
+  */
+void cwSurvexImporter::parseUnits(QString line) {
+    QRegExp reg("(TAPE|LENGTH|COMPASS|BEARING|CLINO|GRADIENT|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)\\s*");
+    reg.setCaseSensitivity(Qt::CaseInsensitive);
+
+    if(reg.exactMatch(line)) {
+        QString type = reg.cap(1).toLower();
+        QString unitString = reg.cap(2);
+
+        //Get the current calibration
+        cwTripCalibration* calibration = CurrentBlock->calibration();
+
+        if(type == "tape" || type == "length") {
+            cwUnits::LengthUnit unit = cwUnits::toLengthUnit(unitString);
+
+            //Make sure the units are good
+            if(unit == cwUnits::Unitless) {
+                addError(QString("Bad unit %1, good units are YARDS, FEET, METRIC, METRES, or METERS. Using meters instead.").arg(unitString));
+                calibration->setDistanceUnit(cwUnits::m);
+                return;
+            }
+
+            calibration->setDistanceUnit(unit);
+        } else if(type == "compass") {
+           addWarning("cavewhere cannot handle 'compass' units");
+        } else if(type == "bearing") {
+           addWarning("cavewhere cannot handle 'bearing' units");
+        } else if(type == "clino") {
+           addWarning("cavewhere cannot handle 'clino' units");
+        } else if(type == "gradient") {
+            addWarning("cavewhere cannot handle 'gradient' units");
+        } else if(type == "counter") {
+            addWarning("cavewhere cannot handle 'counter' units");
+        } else if(type == "depth") {
+            addWarning("cavewhere cannot handle 'depth' units");
+        } else if(type == "declination") {
+            addWarning("cavewhere cannot handle 'declination' units");
+        } else if(type == "x") {
+            addWarning("cavewhere cannot handle 'x' units");
+        } else if(type == "y") {
+            addWarning("cavewhere cannot handle 'y' units");
+        } else if(type == "z") {
+            addWarning("cavewhere cannot handle 'z' units");
+        }
+
+
+    } else {
+        addError("Couldn't read units");
+    }
+
 }
 
 /**

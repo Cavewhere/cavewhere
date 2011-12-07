@@ -169,6 +169,7 @@ private:
     void parseDate(QString args);
     void parseTeamMember(QString line);
     void parseCalibrate(QString line);
+    void parseUnits(QString line);
 
     void runStats(QString filename);
 };

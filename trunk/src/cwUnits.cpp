@@ -82,3 +82,43 @@ QString cwUnits::unitName(cwUnits::LengthUnit unit)
     }
 }
 
+/**
+  \brief Converts a string to the enumerate length
+
+  If the string doesn't match any of the units, this will return UnitLess
+  */
+cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
+    unitString = unitString.toLower();
+
+    if(unitString == "ft") {
+        return ft;
+    } else if(unitString == "feet") {
+        return ft;
+    } else if(unitString == "metric") {
+        return m;
+    } else if(unitString == "meters") {
+        return m;
+    } else if(unitString == "metres") {
+        return m;
+    } else if(unitString == "m") {
+        return m;
+    } else if(unitString == "yards") {
+        return yd;
+    } else if(unitString == "yd") {
+        return yd;
+    } else if(unitString == "in") {
+        return in;
+    } else if(unitString == "inches") {
+        return in;
+    } else if(unitString == "inch") {
+        return in;
+    } else if(unitString == "mm") {
+        return mm;
+    } else if(unitString == "cm") {
+        return cm;
+    } else if(unitString == "km") {
+        return km;
+    }
+    return Unitless;
+}
+

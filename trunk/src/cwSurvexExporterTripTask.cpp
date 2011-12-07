@@ -72,6 +72,8 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCali
     writeCalibration(stream, "BACKCLINO", calibrations->backClinoCalibration(), backClinoScale);
 
     writeCalibration(stream, "DECLINATION", calibrations->declination());
+
+    writeLengthUnits(stream, calibrations->distanceUnit());
 }
 
 void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, float value, float scale) {
@@ -88,6 +90,27 @@ void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString typ
     }
 
     stream << calibrationString << endl;
+}
+
+/**
+  \brief This writes length the units for the trip
+  */
+void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
+                                                cwUnits::LengthUnit unit) {
+    switch(unit) {
+        //The default type doesn't need to be written
+    case cwUnits::m:
+        return;
+    case cwUnits::ft:
+        stream << "*units tape feet" << endl;
+        break;
+    case cwUnits::yd:
+        stream << "*units tape yards" << endl;
+        break;
+    default:
+        //All other units are automatically converted to meters through toSupportedLength(QString length)
+        break;
+    }
 }
 
 /**
@@ -140,12 +163,30 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
     foreach(cwStationReference station, stations) {
         QString dataLine = dataLineTemplate
                 .arg(station.name(), TextPadding)
-                .arg(station.left(), TextPadding)
-                .arg(station.right(), TextPadding)
-                .arg(station.up(), TextPadding)
-                .arg(station.down(), TextPadding);
+                .arg(toSupportedLength(station.left()), TextPadding)
+                .arg(toSupportedLength(station.right()), TextPadding)
+                .arg(toSupportedLength(station.up()), TextPadding)
+                .arg(toSupportedLength(station.down()), TextPadding);
 
         stream << dataLine << endl;
+    }
+}
+
+/**
+  Survex only supports yard, ft, and meters
+
+  If the current calibration isn't in yard, feet or meters, then this function converts the
+  length into meters.
+*/
+QString cwSurvexExporterTripTask::toSupportedLength(QString length) const {
+    cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
+    switch(unit) {
+    case cwUnits::m:
+    case cwUnits::ft:
+    case cwUnits::yd:
+        return length;
+    default:
+        return QString("%1").arg(cwUnits::convert(length.toDouble(), unit, cwUnits::m));
     }
 }
 
@@ -164,7 +205,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = shot->distance();
+        QString distance = toSupportedLength(shot->distance());
         QString compass = shot->compass();
         QString backCompass = shot->backCompass();
         QString clino = shot->clino();

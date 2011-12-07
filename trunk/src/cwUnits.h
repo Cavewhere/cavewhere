@@ -31,6 +31,7 @@ public:
 
     static QStringList lengthUnitNames();
     static QString unitName(cwUnits::LengthUnit unit);
+    static cwUnits::LengthUnit toLengthUnit(QString unitString);
 
     private:
         static double UnitsToMeters[Unitless + 1];
