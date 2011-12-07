@@ -66,7 +66,8 @@ cwLength cwLength::convertTo(cwUnits::LengthUnit to) const {
 const cwLength & cwLength::operator =(const cwLength &other)
 {
     if(this != &other) {
-        Data = other.Data;
+        setUnit(other.unit());
+        setValue(other.value());
     }
     return *this;
 }

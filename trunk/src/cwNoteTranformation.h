@@ -54,18 +54,7 @@ signals:
     void scaleDenominatorChanged();
 
 private:
-    class PrivateData : public QSharedData {
-    public:
-        PrivateData() {
-            PixelsPerInch = 0.0;
-            North = 0.0;
-        }
-
-        double PixelsPerInch; //The number pixels per inch in the notes
-        double North;  //The north of the scarp, with page of notes without rotation, in degrees
-     };
-
-    QSharedDataPointer<PrivateData> Data;
+    double North;
     cwLength* ScaleNumerator; //!< This is the numerator of the scale, usually 1
     cwLength* ScaleDenominator; //!< The scale denominator
 
@@ -77,7 +66,7 @@ private:
   In degrees, the rotation of the page of notes such that north is aligned with the y axis.
   */
 inline double cwNoteTranformation::northUp() const {
-    return Data->North;
+    return North;
 }
 
 /**

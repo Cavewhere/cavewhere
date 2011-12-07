@@ -23,6 +23,7 @@ class cwScrap : public QObject
     Q_OBJECT
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
+    Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
 
     Q_ENUMS(StationDataRole)
 public:
@@ -53,10 +54,12 @@ public:
 
     cwNoteTranformation* noteTransformation() const;
 
+    bool calculateNoteTransform() const;
+    void setCalculateNoteTransform(bool calculateNoteTransform);
+
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
     QMatrix4x4 mapWorldToNoteMatrix(cwNoteStation stationOffset);
-//    QMatrix4x4 mapNoteToWorldMatrix(QPointF note);
 
 signals:
     //For scrap outline
@@ -70,14 +73,17 @@ signals:
     void stationRemoved(int index);
 
     void noteTransformationChanged();
-
+    void calculateNoteTransformChanged();
 private:
     //The outline of the scrap, in normalized points
     QPolygonF OutlinePoints;
 
     //The stations that the scrap owns
-    cwNoteTranformation* NoteTransformation;
     QList<cwNoteStation> Stations;
+
+    //The note transform, this is used for guessing the station name's for the user
+    cwNoteTranformation* NoteTransformation;
+    bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -87,11 +93,11 @@ private:
     bool pointOnLine(QLineF line, QPointF point);
 
     //For note station transformation, automatic calculation
-//    void updateNoteTransformation();
-//    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-//    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-//    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-//    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+    void updateNoteTransformation();
+    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
+    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
+    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
+    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
 
 private slots:
     void updateStationsWithNewCave();
@@ -150,5 +156,11 @@ inline cwNote* cwScrap::parentNote() const {
     return ParentNote;
 }
 
+/**
+Gets calculateNoteTransform
+*/
+inline bool cwScrap::calculateNoteTransform() const {
+    return CalculateNoteTransform;
+}
 
 #endif // CWSCRAP_H

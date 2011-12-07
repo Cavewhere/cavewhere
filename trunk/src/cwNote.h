@@ -39,7 +39,7 @@ public:
     cwTrip* parentTrip() const;
 
     QMatrix4x4 scaleMatrix() const;
-//    QMatrix4x4 noteTransformationMatrix() const;
+    QMatrix4x4 metersOnPageMatrix() const;
 
     void addScrap(cwScrap* scrap);
     cwScrap* scrap(int scrap);

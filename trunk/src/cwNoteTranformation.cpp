@@ -12,7 +12,7 @@
 
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     QObject(parent),
-    Data(new cwNoteTranformation::PrivateData()),
+    North(0.0),
     ScaleNumerator(new cwLength(1, cwUnits::Unitless, this)),
     ScaleDenominator(new cwLength(1, cwUnits::Unitless, this))
 {
@@ -22,7 +22,7 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
 
 cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
     QObject(NULL),
-    Data(other.Data),
+    North(other.North),
     ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
     ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
 {
@@ -31,7 +31,7 @@ cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
 
 const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
     if(this != &other) {
-        Data = other.Data;
+        setNorthUp(other.northUp());
         *ScaleNumerator = *(other.ScaleNumerator);
         *ScaleDenominator = *(other.ScaleDenominator);
     }
@@ -42,8 +42,8 @@ const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranforma
   In degrees, the rotation of the page of notes such that north is aligned with the y axis.
   */
 void cwNoteTranformation::setNorthUp(double degrees) {
-    if(Data->North != degrees) {
-        Data->North = degrees;
+    if(North != degrees) {
+        North = degrees;
         emit northUpChanged();
     }
 }

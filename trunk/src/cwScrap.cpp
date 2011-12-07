@@ -4,16 +4,20 @@
 #include "cwCave.h"
 #include "cwNote.h"
 #include "cwDebug.h"
+#include "cwLength.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QDebug>
 
 //Std includes
 #include <limits>
+#include <cmath>
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
+    CalculateNoteTransform(true),
     ParentNote(NULL)
 {
 
@@ -57,7 +61,7 @@ void cwScrap::addStation(cwNoteStation station) {
     qDebug() << "Station name:" << station.name();
 
     Stations.append(station);
-    //    updateNoteTransformation();
+    updateNoteTransformation();
 
     emit stationAdded();
 }
@@ -73,7 +77,7 @@ void cwScrap::removeStation(int index) {
     }
 
     Stations.removeAt(index);
-    //    updateNoteTransformation();
+    updateNoteTransformation();
 
     emit stationRemoved(index);
 }
@@ -114,6 +118,7 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
     case StationName:
         if(noteStation.station().name() != value.toString()) {
             noteStation.setName(value.toString());
+            updateNoteTransformation();
             emit stationNameChanged(noteStationIndex);
         }
         break;
@@ -121,6 +126,7 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
         if(noteStation.positionOnNote() != value.toPointF()) {
             QPointF clampedPosition = clampToScrap(value.toPointF());
             noteStation.setPositionOnNote(clampedPosition);
+            updateNoteTransformation();
             emit stationPositionChanged(noteStationIndex);
         }
         break;
@@ -138,152 +144,175 @@ cwNoteStation cwScrap::station(int stationId) {
     return Stations[stationId];
 }
 
-///**
-// This goes through all the station in this note and finds the note page's average transformatio.
+/**
+ This goes through all the station in this note and finds the note page's average transformatio.
 
-// This find the average scale and rotatation to north, based on the station locations on the page.
-//  */
-//void cwScrap::updateNoteTransformation() {
-//    //Get all the stations that make shots on the page of notes
-//    QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
-//    QList<cwNoteTranformation> transformations = calculateShotTransformations(shotStations);
-//    cwNoteTranformation averageTransformation = averageTransformations(transformations);
-//    NoteTransformation = averageTransformation;
+ This find the average scale and rotatation to north, based on the station locations on the page.
+  */
+void cwScrap::updateNoteTransformation() {
+    if(parentNote() == NULL) {
+        return;
+    }
 
-//    qDebug() << "NoteTransform:" << NoteTransformation.scale() << NoteTransformation.northUp();
-//}
+    if(!calculateNoteTransform()) {
+        //User is entering note transform manually
+        return;
+    }
 
-///**
-//  \brief Returns all the shots that are located on the page of notes
+    //Get all the stations that make shots on the page of notes
+    QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
+    QList<cwNoteTranformation> transformations = calculateShotTransformations(shotStations);
+    cwNoteTranformation averageTransformation = averageTransformations(transformations);
+    *NoteTransformation = averageTransformation;
 
-//  Currently this only works for plan shots.
+    //qDebug() << "NoteTransform:" << NoteTransformation.scale() << NoteTransformation.northUp();
+}
 
-//  This is a helper to updateNoteTransformation
-//  */
-//QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
-//    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
-//    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+/**
+  \brief Returns all the shots that are located on the page of notes
 
-//    //Find the valid stations
-//    QSet<cwNoteStation> validStationsSet;
-//    foreach(cwNoteStation noteStation, Stations) {
-//        if(noteStation.station().isValid() && noteStation.station().cave() != NULL) {
-//            validStationsSet.insert(noteStation);
-//        }
-//    }
+  Currently this only works for plan shots.
 
-//    //Get the parent trip of for these notes
-//    cwTrip* trip = parentNote()->parentTrip();
+  This is a helper to updateNoteTransformation
+  */
+QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
+    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
+    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
-//    //Go through all the valid stations get the
-//    QList<cwNoteStation> validStationList = validStationsSet.toList();
+    //Find the valid stations
+    QSet<cwNoteStation> validStationsSet;
+    foreach(cwNoteStation noteStation, Stations) {
+        if(noteStation.station().isValid() && noteStation.station().cave() != NULL) {
+            validStationsSet.insert(noteStation);
+        }
+    }
 
-//    //Generate all the neighbor list for each station
-//    QList< QSet< cwStationReference > > stationNeighbors;
-//    foreach(cwNoteStation station, validStationList) {
-//        QSet<cwStationReference> neighbors = trip->neighboringStations(station.station().name());
-//        stationNeighbors.append(neighbors);
-//    }
+    //Get the parent trip of for these notes
+    cwTrip* trip = parentNote()->parentTrip();
 
-//    QList< QPair<cwNoteStation, cwNoteStation> > shotList;
-//    for(int i = 0; i < validStationList.size(); i++) {
-//        for(int j = i; j < validStationList.size(); j++) {
-//            cwNoteStation station1 = validStationList[i];
-//            cwNoteStation station2 = validStationList[j];
+    //Go through all the valid stations get the
+    QList<cwNoteStation> validStationList = validStationsSet.toList();
 
-//            //Get neigbor lookup
-//            QSet< cwStationReference > neighborsStation1 = stationNeighbors[i];
-//            QSet< cwStationReference > neighborsStation2 = stationNeighbors[j];
+    //Generate all the neighbor list for each station
+    QList< QSet< cwStationReference > > stationNeighbors;
+    foreach(cwNoteStation station, validStationList) {
+        QSet<cwStationReference> neighbors = trip->neighboringStations(station.station().name());
+        stationNeighbors.append(neighbors);
+    }
 
-//            //See if they make up a shot
-//            if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
-//                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
-//            }
-//        }
-//    }
+    QList< QPair<cwNoteStation, cwNoteStation> > shotList;
+    for(int i = 0; i < validStationList.size(); i++) {
+        for(int j = i; j < validStationList.size(); j++) {
+            cwNoteStation station1 = validStationList[i];
+            cwNoteStation station2 = validStationList[j];
 
-//    return shotList;
-//}
+            //Get neigbor lookup
+            QSet< cwStationReference > neighborsStation1 = stationNeighbors[i];
+            QSet< cwStationReference > neighborsStation2 = stationNeighbors[j];
 
-///**
-//  This will create cwNoteTransformation for each shot in the list
-//  */
-//QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
-//    QList<cwNoteTranformation> transformations;
-//    for(int i = 0; i < shots.size(); i++) {
-//        QPair< cwNoteStation, cwNoteStation >& shot = shots[i];
-//        cwNoteTranformation transformation = calculateShotTransformation(shot.first, shot.second);
-//        transformations.append(transformation);
-//    }
+            //See if they make up a shot
+            if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
+                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
+            }
+        }
+    }
 
-//    return transformations;
-//}
+    return shotList;
+}
 
-///**
-//  This will caluclate the transfromation between station1 and station2
-//  */
-//cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
-//    QVector3D station1RealPos = station1.station().position();
-//    QVector3D station2RealPos = station2.station().position();
+/**
+  This will create cwNoteTransformation for each shot in the list
+  */
+QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
+    QList<cwNoteTranformation> transformations;
+    for(int i = 0; i < shots.size(); i++) {
+        QPair< cwNoteStation, cwNoteStation >& shot = shots[i];
+        cwNoteTranformation transformation = calculateShotTransformation(shot.first, shot.second);
+        transformations.append(transformation);
+    }
 
-//    //Remove the z
-//    station1RealPos.setZ(0.0);
-//    station2RealPos.setZ(0.0);
+    return transformations;
+}
 
-//    QVector3D station1NotePos(station1.positionOnNote());
-//    QVector3D station2NotePos(station2.positionOnNote());
+/**
+  This will caluclate the transfromation between station1 and station2
+  */
+cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
+    QVector3D station1RealPos = station1.station().position(); //In meters
+    QVector3D station2RealPos = station2.station().position();
 
-//    //Scale the normalized points into pixels
-//    QMatrix4x4 matrix = scaleMatrix();
-//    station1NotePos = matrix * station1NotePos;
-//    station2NotePos = matrix * station2NotePos;
+    //Remove the z for plan view
+    station1RealPos.setZ(0.0);
+    station2RealPos.setZ(0.0);
 
-//    QVector3D realVector = station2RealPos - station1RealPos;
-//    QVector3D noteVector = station2NotePos - station1NotePos;
+    QVector3D station1NotePos(station1.positionOnNote()); //In normalized coordinates
+    QVector3D station2NotePos(station2.positionOnNote());
 
-//    double noteVectorLength = noteVector.length();
-//    double realVectorLength = realVector.length();
+    //Scale the normalized points into pixels
+    QMatrix4x4 matrix = parentNote()->metersOnPageMatrix();
+    station1NotePos = matrix * station1NotePos; //Now in meters
+    station2NotePos = matrix * station2NotePos;
 
-//    //calculate the scale
-//    double scale = noteVectorLength / realVectorLength;
+    QVector3D realVector = station2RealPos - station1RealPos; //In meters
+    QVector3D noteVector = station2NotePos - station1NotePos; //In meters on page
 
-//    //calculate the north
-//    double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized()));
-//    angle = angle * 180.0 / acos(-1);
+    double lengthOnPage = noteVector.length(); //Length on page
+    double lengthInCave = realVector.length(); //Length in cave
 
-//    cwNoteTranformation noteTransform;
-//    noteTransform.setScale(scale);
-//    noteTransform.setNorthUp(angle);
+    //calculate the scale
+    double scale = lengthInCave / lengthOnPage;
 
-//    return noteTransform;
-//}
+    //calculate the north
+    double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized()));
+    angle = angle * cwGlobals::RadiansToDegrees;
 
-///**
-//  This will average all the transformatons into one transfromation
-//  */
-//cwNoteTranformation cwScrap::averageTransformations(QList< cwNoteTranformation > shotTransforms) {
+    cwNoteTranformation noteTransform;
+    noteTransform.scaleNumerator()->setValue(1);
+    noteTransform.scaleDenominator()->setValue(scale);
+    noteTransform.setNorthUp(angle);
 
-//    if(shotTransforms.empty()) {
-//        return cwNoteTranformation();
-//    }
+    return noteTransform;
+}
 
-//    double angleAverage = 0.0;
-//    double scaleAverage = 0.0;
+/**
+  This will average all the transformatons into one transfromation
+  */
+cwNoteTranformation cwScrap::averageTransformations(QList< cwNoteTranformation > shotTransforms) {
 
-//    foreach(cwNoteTranformation transformation, shotTransforms) {
-//        angleAverage  += transformation.northUp();
-//        scaleAverage += transformation.scale();
-//    }
+    if(shotTransforms.empty()) {
+        return cwNoteTranformation();
+    }
 
-//    angleAverage = angleAverage / (double)shotTransforms.size();
-//    scaleAverage = scaleAverage / (double)shotTransforms.size();
+    double angleAverage = 0.0;
+    double scaleAverage = 0.0;
 
-//    cwNoteTranformation transformation;
-//    transformation.setNorthUp(angleAverage);
-//    transformation.setScale(scaleAverage);
+    foreach(cwNoteTranformation transformation, shotTransforms) {
+        angleAverage  += transformation.northUp();
+        scaleAverage += transformation.scaleDenominator()->value();
+    }
 
-//    return transformation;
-//}
+    angleAverage = angleAverage / (double)shotTransforms.size();
+    scaleAverage = scaleAverage / (double)shotTransforms.size();
+
+    cwNoteTranformation transformation;
+    transformation.setNorthUp(angleAverage);
+    transformation.scaleDenominator()->setValue(scaleAverage);
+
+    return transformation;
+}
+
+/**
+Sets calculateNoteTransform
+
+If set to true, this will cause the scrap to automatically calculate the note
+transform
+*/
+void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
+    if(CalculateNoteTransform != calculateNoteTransform) {
+        CalculateNoteTransform = calculateNoteTransform;
+        emit calculateNoteTransformChanged();
+    }
+}
 
 /**
   This guess the station based on the position on the Notes
@@ -300,45 +329,45 @@ cwNoteStation cwScrap::station(int stationId) {
   \return An empty string if no station is within 5% of the guess
   */
 QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
-        if(parentNote() == NULL) { return QString(); }
-        if(parentNote()->parentTrip() == NULL) { return QString(); }
+    if(parentNote() == NULL) { return QString(); }
+    if(parentNote()->parentTrip() == NULL) { return QString(); }
 
-        cwTrip* parentTrip = parentNote()->parentTrip();
+    cwTrip* parentTrip = parentNote()->parentTrip();
 
-        QSet<cwStationReference> neigborStations = parentTrip->neighboringStations(previousStation.name());
+    QSet<cwStationReference> neigborStations = parentTrip->neighboringStations(previousStation.name());
 
-        //Make sure we have neigbors
-        if(neigborStations.isEmpty()) {
-            return QString();
+    //Make sure we have neigbors
+    if(neigborStations.isEmpty()) {
+        return QString();
+    }
+
+    //The matrix the maps the note station to the world coordinates
+    QMatrix4x4 worldToNoteMatrix = mapWorldToNoteMatrix(previousStation);
+
+    //The best station name
+    QString bestStationName;
+    double bestNormalizeError = 1.0;
+
+    foreach(cwStationReference station, neigborStations) {
+        QVector3D stationPosition = station.position();
+
+        //Figure out the predicited position of the station on the notes
+        QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
+
+        //Figure out the error between stationNotePosition and predictedPosition
+        QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
+        QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
+        double normalizedError = errorVector.length() / noteVector.length();
+
+        qDebug() << "Normalized error: " << normalizedError;
+
+        if(normalizedError < bestNormalizeError) {
+            //Station is probably the one
+            bestStationName = station.name();
         }
+    }
 
-        //The matrix the maps the note station to the world coordinates
-        QMatrix4x4 worldToNoteMatrix = mapWorldToNoteMatrix(previousStation);
-
-        //The best station name
-        QString bestStationName;
-        double bestNormalizeError = 1.0;
-
-        foreach(cwStationReference station, neigborStations) {
-            QVector3D stationPosition = station.position();
-
-            //Figure out the predicited position of the station on the notes
-            QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
-
-            //Figure out the error between stationNotePosition and predictedPosition
-            QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
-            QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
-            double normalizedError = errorVector.length() / noteVector.length();
-
-            qDebug() << "Normalized error: " << normalizedError;
-
-            if(normalizedError < bestNormalizeError) {
-                //Station is probably the one
-                bestStationName = station.name();
-            }
-        }
-
-        return bestStationName;
+    return bestStationName;
 }
 
 /**
@@ -358,21 +387,24 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
     noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
 
-    QMatrix4x4 notePageAspect = note->scaleMatrix().inverted(); //The note's aspect ratio
+    QMatrix4x4 dotsOnPageMatrix = note->metersOnPageMatrix().inverted();
+
+//    QMatrix4x4 notePageAspect = note->scaleMatrix().inverted(); //The note's aspect ratio
 
     QMatrix4x4 offsetMatrix;
     offsetMatrix.translate(-stationPos);
 
-    QMatrix4x4 dotPerMeter;
-    cwImage noteImage = note->image();
-    dotPerMeter.scale(noteImage.originalDotsPerMeter(), noteImage.originalDotsPerMeter(), 1.0);
+//    QMatrix4x4 dotPerMeter;
+//    cwImage noteImage = note->image();
+//    dotPerMeter.scale(noteImage.originalDotsPerMeter(), noteImage.originalDotsPerMeter(), 1.0);
 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
     QMatrix4x4 toNormalizedNote = noteStationOffset *
-            dotPerMeter *
-            notePageAspect *
+//            dotPerMeter *
+//            notePageAspect *
+            dotsOnPageMatrix *
             noteTransformMatrix *
             offsetMatrix;
 
@@ -424,53 +456,53 @@ QPointF cwScrap::clampToScrap(QPointF point) {
         return point;
     }
 
-//    double bestLength = std::numeric_limits<double>::max();
-//    QPointF bestPoint;
+    //    double bestLength = std::numeric_limits<double>::max();
+    //    QPointF bestPoint;
 
-//    //Go through all the lines in the polygon
-//    for(int i = 0; i < OutlinePoints.size(); i++) {
-//        QPointF p1 = OutlinePoints[i];
-//        QPointF p2 = i + 1 < OutlinePoints.size() ? OutlinePoints[i + 1] : OutlinePoints[0];
+    //    //Go through all the lines in the polygon
+    //    for(int i = 0; i < OutlinePoints.size(); i++) {
+    //        QPointF p1 = OutlinePoints[i];
+    //        QPointF p2 = i + 1 < OutlinePoints.size() ? OutlinePoints[i + 1] : OutlinePoints[0];
 
-//        //Create the lines to find the intesection
-//        QLineF line(p1, p2);
-//        QLineF normal = line.normalVector().unitVector();
-//        normal.translate(-line.p1());
-//        normal.translate(point);
+    //        //Create the lines to find the intesection
+    //        QLineF line(p1, p2);
+    //        QLineF normal = line.normalVector().unitVector();
+    //        normal.translate(-line.p1());
+    //        normal.translate(point);
 
-//        //Do the intesection
-//        QPointF interectionPoint;
-//        QLineF::IntersectType type = normal.intersect(line, &interectionPoint);
+    //        //Do the intesection
+    //        QPointF interectionPoint;
+    //        QLineF::IntersectType type = normal.intersect(line, &interectionPoint);
 
-//        if(type != QLineF::NoIntersection && pointOnLine(line, interectionPoint)) {
-//            //This is a good line add this line
-//            double length = QLineF(interectionPoint, point).length();
-//            if(length < bestLength) {
-//                bestLength = length;
-//                bestPoint = interectionPoint;
-//            }
-//        }
-//    }
+    //        if(type != QLineF::NoIntersection && pointOnLine(line, interectionPoint)) {
+    //            //This is a good line add this line
+    //            double length = QLineF(interectionPoint, point).length();
+    //            if(length < bestLength) {
+    //                bestLength = length;
+    //                bestPoint = interectionPoint;
+    //            }
+    //        }
+    //    }
 
-//    //Didn't find any good lines, find the nearest point
-//    if(bestLength == std::numeric_limits<double>::max()) {
-//        int bestIndex = -1;
+    //    //Didn't find any good lines, find the nearest point
+    //    if(bestLength == std::numeric_limits<double>::max()) {
+    //        int bestIndex = -1;
 
-//        //Find the nearest in the polygon to point
-//        for(int i = 0; i < OutlinePoints.size(); i++) {
-//            QPointF currentPoint = OutlinePoints[i];
-//            double currentLength = QLineF(currentPoint, point).length();
+    //        //Find the nearest in the polygon to point
+    //        for(int i = 0; i < OutlinePoints.size(); i++) {
+    //            QPointF currentPoint = OutlinePoints[i];
+    //            double currentLength = QLineF(currentPoint, point).length();
 
-//            if(currentLength < bestLength) {
-//                bestLength = currentLength;
-//                bestIndex = i;
-//            }
-//        }
+    //            if(currentLength < bestLength) {
+    //                bestLength = currentLength;
+    //                bestIndex = i;
+    //            }
+    //        }
 
-//        return OutlinePoints[bestIndex];
-//    }
+    //        return OutlinePoints[bestIndex];
+    //    }
 
-//    return bestPoint;
+    //    return bestPoint;
 
     //The best length and index
     double bestLength = std::numeric_limits<double>::max();

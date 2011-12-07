@@ -94,6 +94,21 @@ QMatrix4x4 cwNote::scaleMatrix() const {
 }
 
 /**
+  \brief Returns a matrix that can convert the normalize note coordinates to the physical
+  page distance in meters.  This is useful for converting normalized coordinates into
+  reallife coordinates.
+  */
+QMatrix4x4 cwNote::metersOnPageMatrix() const {
+    double dotsPerMeter = image().originalDotsPerMeter();
+    double metersPerDot = 1.0 / dotsPerMeter;
+
+    QMatrix4x4 metersPerDotsMatrix;
+    metersPerDotsMatrix.scale(metersPerDot, metersPerDot, 1.0);
+
+    return metersPerDotsMatrix * scaleMatrix();
+}
+
+/**
   This returns a matrix that's used to convert note coordinates into world coordinates.  Of corse with
   world coordinates, you must first offset the matrix.
   */
