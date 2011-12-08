@@ -812,7 +812,7 @@ void cwSurvexImporter::parseUnits(QString line) {
             //Make sure the units are good
             if(unit == cwUnits::Unitless) {
                 addError(QString("Bad unit %1, good units are YARDS, FEET, METRIC, METRES, or METERS. Using meters instead.").arg(unitString));
-                calibration->setDistanceUnit(cwUnits::m);
+                calibration->setDistanceUnit(cwUnits::Meters);
                 return;
             }
 

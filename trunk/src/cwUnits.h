@@ -14,13 +14,13 @@ class cwUnits : public QObject
     Q_ENUMS(LengthUnit)
 public:
     enum LengthUnit {
-        in,       //!< Inches
-        ft,       //!< Feet
-        yd,       //!< Yards
-        m,        //!< Meters
-        mm,       //!< Millimeters
-        cm,       //!< Centimeters
-        km,       //!< Kilometers
+        Inches,       //!< Inches
+        Feet,       //!< Feet
+        Yards,       //!< Yards
+        Meters,        //!< Meters
+        Millimeters,       //!< Millimeters
+        Centimeters,       //!< Centimeters
+        Kilometers,       //!< Kilometers
         Unitless  //!< Invalid units or unit less
     };
 

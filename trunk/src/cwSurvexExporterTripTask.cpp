@@ -99,12 +99,12 @@ void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
                                                 cwUnits::LengthUnit unit) {
     switch(unit) {
         //The default type doesn't need to be written
-    case cwUnits::m:
+    case cwUnits::Meters:
         return;
-    case cwUnits::ft:
+    case cwUnits::Feet:
         stream << "*units tape feet" << endl;
         break;
-    case cwUnits::yd:
+    case cwUnits::Yards:
         stream << "*units tape yards" << endl;
         break;
     default:
@@ -181,12 +181,12 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 QString cwSurvexExporterTripTask::toSupportedLength(QString length) const {
     cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
     switch(unit) {
-    case cwUnits::m:
-    case cwUnits::ft:
-    case cwUnits::yd:
+    case cwUnits::Meters:
+    case cwUnits::Feet:
+    case cwUnits::Yards:
         return length;
     default:
-        return QString("%1").arg(cwUnits::convert(length.toDouble(), unit, cwUnits::m));
+        return QString("%1").arg(cwUnits::convert(length.toDouble(), unit, cwUnits::Meters));
     }
 }
 

@@ -49,7 +49,7 @@ double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthU
 QStringList cwUnits::lengthUnitNames()
 {
     QStringList units;
-    for(int i = in; i <= Unitless; i++) {
+    for(int i = Inches; i <= Unitless; i++) {
         units.append(unitName((LengthUnit)i));
     }
     return units;
@@ -61,19 +61,19 @@ QStringList cwUnits::lengthUnitNames()
 QString cwUnits::unitName(cwUnits::LengthUnit unit)
 {
     switch(unit) {
-    case in:
+    case Inches:
         return "in";
-    case ft:
+    case Feet:
         return "ft";
-    case yd:
+    case Yards:
         return "yd";
-    case m:
+    case Meters:
         return "m";
-    case mm:
+    case Millimeters:
         return "mm";
-    case cm:
+    case Centimeters:
         return "cm";
-    case km:
+    case Kilometers:
         return "km";
     case Unitless:
         return "unitless";
@@ -91,33 +91,33 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
     unitString = unitString.toLower();
 
     if(unitString == "ft") {
-        return ft;
+        return Feet;
     } else if(unitString == "feet") {
-        return ft;
+        return Feet;
     } else if(unitString == "metric") {
-        return m;
+        return Meters;
     } else if(unitString == "meters") {
-        return m;
+        return Meters;
     } else if(unitString == "metres") {
-        return m;
+        return Meters;
     } else if(unitString == "m") {
-        return m;
+        return Meters;
     } else if(unitString == "yards") {
-        return yd;
+        return Yards;
     } else if(unitString == "yd") {
-        return yd;
+        return Yards;
     } else if(unitString == "in") {
-        return in;
+        return Inches;
     } else if(unitString == "inches") {
-        return in;
+        return Inches;
     } else if(unitString == "inch") {
-        return in;
+        return Inches;
     } else if(unitString == "mm") {
-        return mm;
+        return Millimeters;
     } else if(unitString == "cm") {
-        return cm;
+        return Centimeters;
     } else if(unitString == "km") {
-        return km;
+        return Kilometers;
     }
     return Unitless;
 }
