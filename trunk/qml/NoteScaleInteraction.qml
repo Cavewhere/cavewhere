@@ -96,7 +96,7 @@ Interaction {
 
                 UnitInput {
                     unitModel: length.unitNames
-                    unit: 2 //For meters
+                    unit: Units.Meters //For meters
                     onUnitChanged: length.unit = unit
                 }
             }
@@ -114,10 +114,10 @@ Interaction {
                                                              imageSize,
                                                              dotPerMeter);
                     noteTransform.scaleNumerator.value = 1.0
-                    noteTransform.scaleNumerator.unit = Length.Unitless
+                    noteTransform.scaleNumerator.unit = Units.Unitless
 
                     noteTransform.scaleDenominator.value = 1 / scale
-                    noteTransform.scaleDenominator.unit = Length.Unitless
+                    noteTransform.scaleDenominator.unit = Units.Unitless
 
                     interaction.state = ""
                     interaction.deactivate();
