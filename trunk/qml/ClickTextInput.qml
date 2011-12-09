@@ -6,5 +6,5 @@ CoreClickTextInput {
         id: pallete
     }
 
-    color: pallete.inputTextColor
+    color: readOnly ? pallete.normalTextColor : pallete.inputTextColor
 }

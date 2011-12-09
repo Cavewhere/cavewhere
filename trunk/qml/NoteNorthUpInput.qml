@@ -5,6 +5,7 @@ Item {
 
     property NoteTransform noteTransform
     property HelpArea northUpHelp
+    property alias enable: setNorthButton.visible
 
     signal northUpInteractionActivated()
 
@@ -32,7 +33,7 @@ Item {
 
         ClickTextInput {
             id: clickInput
-            color: "blue"
+            readOnly: !enable
             text: noteTransform.northUp.toFixed(2)
             onFinishedEditting: noteTransform.northUp = newText
             anchors.verticalCenter: parent.verticalCenter

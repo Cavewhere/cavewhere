@@ -5,6 +5,7 @@ import Cavewhere 1.0
 Item {
     property NoteTransform noteTransform
     property HelpArea scaleHelp
+    property bool autoScaling: false
 
     signal scaleInteractionActivated()
 
@@ -19,7 +20,7 @@ Item {
             id: setLength
             anchors.verticalCenter: parent.verticalCenter
             width: 24
-
+            visible: !autoScaling
             onClicked: scaleInteractionActivated()
         }
 
@@ -60,6 +61,7 @@ Item {
                             id: paperUnits
                             text: noteTransform.scaleNumerator.value.toFixed(0)
                             onFinishedEditting: noteTransform.scaleNumerator.value = newText
+                            readOnly: autoScaling
                         }
 
                         UnitInput {
@@ -97,7 +99,6 @@ Item {
                         text: "In Cave"
                     }
 
-
                     Row {
                         anchors.horizontalCenter: parent.horizontalCenter
 
@@ -105,6 +106,8 @@ Item {
                             id: caveUnits
                             text: noteTransform.scaleDenominator.value.toFixed(0)
                             onFinishedEditting: noteTransform.scaleDenominator.value = newText
+                            readOnly: autoScaling
+                            visible: !autoScaling || noteTransform.scaleDenominator.unit
                         }
 
                         UnitInput {

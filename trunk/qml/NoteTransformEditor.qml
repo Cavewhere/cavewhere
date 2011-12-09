@@ -38,11 +38,17 @@ Rectangle {
         y: 3
         spacing: 3
 
+        Desktop.CheckBox {
+            id: autoTransformCheckBox
+            text: "Auto Calculate"
+        }
+
         NoteNorthUpInput {
             id: northUpInputId
             noteTransform: editor.noteTransform
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
             northUpHelp: northUpHelpArea
+            enable: !autoTransformCheckBox.checked
         }
 
         HelpArea {
@@ -57,6 +63,7 @@ Rectangle {
             noteTransform: editor.noteTransform
             scaleHelp: scaleHelpAreaId
             onScaleInteractionActivated: interactionManager.active(scaleInteraction)
+            autoScaling: autoTransformCheckBox.checked
         }
 
         HelpArea {

@@ -11,6 +11,7 @@ Item {
     property bool doubleClickEdit: false
     property bool isEditting: false
     property variant validator;
+    property bool readOnly: false
 
     signal clicked();
     signal startedEditting()
@@ -106,7 +107,7 @@ Item {
         states: [
             State {
                 name: "DOUBLE-CLICK"
-                when: doubleClickEdit
+                when: doubleClickEdit && !clickTextInput.readOnly
 
                 PropertyChanges {
                     target: doubleClickArea
@@ -118,7 +119,7 @@ Item {
 
             State {
                 name: "SIGNLE-CLICK"
-                when: !doubleClickEdit
+                when: !doubleClickEdit && !clickTextInput.readOnly
 
                 PropertyChanges {
                     target: doubleClickArea
