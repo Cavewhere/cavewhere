@@ -88,15 +88,15 @@ ImageItem {
         id: noteTransformEditorId
         anchors.top: parent.top
         anchors.left: parent.left
-        noteTransform: {
-            if(scrapViewId.selectedScrapItem !== null && scrapViewId.selectedScrapItem.scrap !== null) {
-                return scrapViewId.selectedScrapItem.scrap.noteTransformation;
-            }
-            return null;
-        }
         interactionManager: interactionManagerId
         northInteraction: noteNorthUpInteraction
         scaleInteraction: noteScaleInteraction
+        scrap: {
+            if(scrapViewId.selectedScrapItem !== null) {
+                return scrapViewId.selectedScrapItem.scrap;
+            }
+            return null;
+        }
         z: 2
     }
 

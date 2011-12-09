@@ -93,7 +93,6 @@ private:
     bool pointOnLine(QLineF line, QPointF point);
 
     //For note station transformation, automatic calculation
-    void updateNoteTransformation();
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
     QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
     cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
@@ -101,7 +100,7 @@ private:
 
 private slots:
     void updateStationsWithNewCave();
-
+    void updateNoteTransformation();
 };
 
 Q_DECLARE_METATYPE(cwScrap*)

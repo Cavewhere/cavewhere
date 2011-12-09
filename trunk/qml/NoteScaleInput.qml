@@ -1,6 +1,7 @@
 import QtQuick 1.1
 import QtDesktop 0.1 as Destkop
 import Cavewhere 1.0
+import "Utils.js" as Utils
 
 Item {
     property NoteTransform noteTransform
@@ -59,9 +60,10 @@ Item {
 
                         ClickTextInput {
                             id: paperUnits
-                            text: noteTransform.scaleNumerator.value.toFixed(0)
+                            text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
                             onFinishedEditting: noteTransform.scaleNumerator.value = newText
                             readOnly: autoScaling
+                            visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
                         }
 
                         UnitInput {
@@ -104,10 +106,10 @@ Item {
 
                         ClickTextInput {
                             id: caveUnits
-                            text: noteTransform.scaleDenominator.value.toFixed(0)
+                            text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
                             onFinishedEditting: noteTransform.scaleDenominator.value = newText
                             readOnly: autoScaling
-                            visible: !autoScaling || noteTransform.scaleDenominator.unit
+                            visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
                         }
 
                         UnitInput {
@@ -129,7 +131,7 @@ Item {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             visible: !errorText.visible
-            text: "1:" + new Number((1 / noteTransform.scale).toFixed(1)).toString()
+            text: "1:" + Utils.fixed(1 / noteTransform.scale, 1)
         }
 
         Text {

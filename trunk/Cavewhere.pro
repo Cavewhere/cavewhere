@@ -296,7 +296,8 @@ OTHER_FILES += \
     qml/UnitInput.qml \
     qml/NoteNorthUpInput.qml \
     qml/GlobalShadowTextInput.qml \
-    qml/DataBox.qml
+    qml/DataBox.qml \
+    qml/Utils.js
 
 RESOURCES += \
     icons.qrc

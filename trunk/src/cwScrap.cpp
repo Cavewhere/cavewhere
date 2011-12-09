@@ -17,9 +17,9 @@
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
-    CalculateNoteTransform(true),
     ParentNote(NULL)
 {
+    setCalculateNoteTransform(true);
 
 }
 
@@ -163,9 +163,25 @@ void cwScrap::updateNoteTransformation() {
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
     QList<cwNoteTranformation> transformations = calculateShotTransformations(shotStations);
     cwNoteTranformation averageTransformation = averageTransformations(transformations);
-    *NoteTransformation = averageTransformation;
 
-    //qDebug() << "NoteTransform:" << NoteTransformation.scale() << NoteTransformation.northUp();
+    averageTransformation.scale();
+
+    NoteTransformation->scaleNumerator()->setValue(1.0);
+
+    //Figure out the unit scaling
+    double unitScale = 1.0; //scales the length for the units
+    if(NoteTransformation->scaleNumerator()->unit() != cwUnits::Unitless ||
+            NoteTransformation->scaleDenominator()->unit() != cwUnits::Unitless ) {
+
+        unitScale = cwUnits::convert(1.0,
+                                     NoteTransformation->scaleNumerator()->unit(),
+                                     NoteTransformation->scaleDenominator()->unit());
+    }
+
+    //Set the denominator
+    double denominator = averageTransformation.scaleDenominator()->value() * unitScale;
+    NoteTransformation->scaleDenominator()->setValue(denominator);
+    NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
 
 /**
@@ -310,6 +326,16 @@ transform
 void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
     if(CalculateNoteTransform != calculateNoteTransform) {
         CalculateNoteTransform = calculateNoteTransform;
+
+        if(CalculateNoteTransform) {
+            connect(noteTransformation()->scaleDenominator(), SIGNAL(unitChanged()), SLOT(updateNoteTransformation()));
+            connect(noteTransformation()->scaleNumerator(), SIGNAL(unitChanged()), SLOT(updateNoteTransformation()));
+            updateNoteTransformation();
+        } else {
+            disconnect(noteTransformation()->scaleDenominator(), NULL, this, NULL);
+            disconnect(noteTransformation()->scaleNumerator(), NULL, this, NULL);
+        }
+
         emit calculateNoteTransformChanged();
     }
 }

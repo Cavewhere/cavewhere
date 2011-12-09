@@ -5,7 +5,8 @@ import Cavewhere 1.0
 Rectangle {
     id: editor
 
-    property NoteTransform noteTransform
+    property Scrap scrap
+    property NoteTransform noteTransform: scrap.noteTransformation
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
@@ -41,6 +42,8 @@ Rectangle {
         Desktop.CheckBox {
             id: autoTransformCheckBox
             text: "Auto Calculate"
+            checked: scrap.calculateNoteTransform
+            onCheckedChanged: scrap.calculateNoteTransform = checked
         }
 
         NoteNorthUpInput {
