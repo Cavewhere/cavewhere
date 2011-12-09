@@ -4,6 +4,7 @@
 #
 #-------------------------------------------------
 
+
 QT       += core gui declarative xml opengl sql
 
 TARGET = Cavewhere
@@ -300,12 +301,31 @@ OTHER_FILES += \
 RESOURCES += \
     icons.qrc
 
-INCLUDEPATH += src src/utils . /usr/local/include /opt/local/include
+INCLUDEPATH += src src/utils .
 DEPENDPATH += INCLUDEPATH
 
-LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization
+unix {
+    INCLUDEPATH += /usr/local/include /opt/local/include
+    LIBS += -lz -lGLEW -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization -lboost_wserialization
+    QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
+}
 
-QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
+win32 {
+    INCLUDEPATH += C:/Users/saraf/cavewhere/glew-1.7.0/include
+    LIBS += -LC:/Users/saraf/cavewhere/glew-1.7.0/lib -lglew32
+
+    INCLUDEPATH += "C:/Program Files (x86)/GnuWin32/include"
+    LIBS += -L"C:/Program Files (x86)/GnuWin32/lib" -lzlib
+
+    INCLUDEPATH += "C:/Users/saraf/cavewhere/trunk/squish-1.11"
+    LIBS += -L"C:/Users/saraf/cavewhere/trunk/squish-1.11/lib/vs9" -lsquish
+
+    INCLUDEPATH += "C:/Users/saraf/cavewhere/sqlite-amalgamation-3070900"
+
+    INCLUDEPATH += "C:/Users/saraf/cavewhere/boost_1_48_0/boost_1_48_0"
+    LIBS += -L"C:\Users\saraf\cavewhere\boost_1_48_0\boost_1_48_0\bin.v2\libs\serialization\build\gcc-mingw-4.5.3\release\link-static\threading-multi" -lboost_serialization
+}
+
 
 
 
