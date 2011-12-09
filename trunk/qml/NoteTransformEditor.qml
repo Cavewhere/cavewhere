@@ -2,7 +2,7 @@ import QtQuick 1.1
 import QtDesktop 0.1 as Desktop
 import Cavewhere 1.0
 
-Rectangle {
+Item {
     id: editor
 
     property Scrap scrap
@@ -12,14 +12,9 @@ Rectangle {
     property InteractionManager interactionManager
 
     visible: noteTransform !== null
-    color: style.floatingWidgetColor
-    radius: style.floatingWidgetRadius
-    height: column1.height + column1.y * 2.0
-    width: column1.width + column1.x * 2.0
 
-    Style {
-        id: style
-    }
+    height: childrenRect.height
+    width: childrenRect.width
 
     Binding {
         target: northInteraction
@@ -33,18 +28,72 @@ Rectangle {
         value: noteTransform
     }
 
+    Style {
+        id: style
+    }
+
+
+    Text {
+        id: scrapInfoText
+        z: 1
+        anchors.right: checkBoxGroup.right
+        anchors.bottom: checkBoxGroup.top
+        anchors.rightMargin: 5
+
+        font.bold:  true
+        text: "Scrap Info"
+    }
+
+    Rectangle {
+        id: backgroundRect
+
+        color: style.floatingWidgetColor
+        radius: style.floatingWidgetRadius
+        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
+        width: checkBoxGroup.width + checkBoxGroup.x * 2.0
+        //        y: groupAreaRect.height / 2.0
+    }
+
+    Rectangle {
+        id: checkBoxGroup
+        border.width: 1
+        radius: style.floatingWidgetRadius
+        color: "#00000000"
+
+        anchors.top: autoTransformCheckBox.verticalCenter
+        anchors.left: column1.left
+        anchors.right: column1.right
+        anchors.bottom: column1.bottom
+
+        anchors.leftMargin: -3
+        anchors.rightMargin: -3
+        anchors.bottomMargin: -3
+    }
+
+    Rectangle {
+        color: backgroundRect.color
+        anchors.fill: autoTransformCheckBox
+    }
+
+    Desktop.CheckBox {
+        id: autoTransformCheckBox
+        text: "Auto Calculate"
+        checked: scrap.calculateNoteTransform
+        onCheckedChanged: scrap.calculateNoteTransform = checked
+        anchors.left: checkBoxGroup.left
+        anchors.leftMargin: 6
+
+        y: scrapInfoText.height / 2.0
+    }
+
     Column {
         id: column1
-        x: 3
-        y: 3
         spacing: 3
 
-        Desktop.CheckBox {
-            id: autoTransformCheckBox
-            text: "Auto Calculate"
-            checked: scrap.calculateNoteTransform
-            onCheckedChanged: scrap.calculateNoteTransform = checked
-        }
+        x: 6
+
+        anchors.top: checkBoxGroup.top
+        anchors.topMargin: 8
 
         NoteNorthUpInput {
             id: northUpInputId

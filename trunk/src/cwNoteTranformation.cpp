@@ -68,7 +68,7 @@ double cwNoteTranformation::scale() const {
   */
 double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const {
     //Figure out the vector between the points
-    QVector2D vectorBetweenPoints = QVector2D(noteP1) - QVector2D(noteP2);
+    QVector2D vectorBetweenPoints = QVector2D(noteP2) - QVector2D(noteP1);
 
     //Normalize it
     vectorBetweenPoints.normalize();
