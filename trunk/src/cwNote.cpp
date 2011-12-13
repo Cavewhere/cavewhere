@@ -140,8 +140,24 @@ void cwNote::addScrap(cwScrap* scrap) {
 /**
   \brief Gets all the scraps from the notes
   */
-QList<cwScrap*> cwNote::scraps() {
+QList<cwScrap*> cwNote::scraps() const {
     return Scraps;
+}
+
+/**
+  Sets the scraps for the note
+  */
+void cwNote::setScraps(QList<cwScrap *> scraps) {
+
+    Scraps = scraps;
+
+    //Go through all the scraps and set the parents
+    foreach(cwScrap* scrap, Scraps) {
+        scrap->setParent(this);
+        scrap->setParentNote(this);
+    }
+
+    emit scrapsReset();
 }
 
 /**
@@ -149,7 +165,7 @@ QList<cwScrap*> cwNote::scraps() {
 
   If the scrapIndex is out of bounds, this returns NULL
   */
-cwScrap* cwNote::scrap(int scrapIndex) {
+cwScrap* cwNote::scrap(int scrapIndex) const {
     if(scrapIndex >= 0 && scrapIndex < Scraps.size()) {
         return Scraps[scrapIndex];
     }

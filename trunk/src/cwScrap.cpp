@@ -49,6 +49,32 @@ void cwScrap::removePoint(int index) {
 }
 
 /**
+  \brief Resets all the points
+  */
+void cwScrap::setPoints(QVector<QPointF> points) {
+    OutlinePoints = points;
+    emit pointsReset();
+}
+
+/**
+  Resets all the stations in the scrap
+  */
+void cwScrap::setStations(QList<cwNoteStation> stations)  {
+    Stations = stations;
+
+    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
+        for(int i = 0; i < Stations.size(); i++) {
+            cwNoteStation& station = Stations[i];
+            station.setCave(parentNote()->parentTrip()->parentCave());
+        }
+    }
+
+    updateNoteTransformation();
+
+    emit stationsReset();
+}
+
+/**
   \brief Adds a station to the note
   */
 void cwScrap::addStation(cwNoteStation station) {
@@ -57,8 +83,6 @@ void cwScrap::addStation(cwNoteStation station) {
     if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
         station.setCave(parentNote()->parentTrip()->parentCave());
     }
-
-//    qDebug() << "Station name:" << station.name();
 
     Stations.append(station);
     updateNoteTransformation();

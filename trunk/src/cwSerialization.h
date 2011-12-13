@@ -12,6 +12,10 @@
 #include "cwSurveyChunk.h"
 #include "cwStationReference.h"
 #include "cwShot.h"
+#include "cwScrap.h"
+#include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
+#include "cwLength.h"
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -36,7 +40,10 @@ BOOST_SERIALIZATION_SPLIT_FREE(cwTripCalibration)
 BOOST_SERIALIZATION_SPLIT_FREE(cwSurveyChunk)
 BOOST_SERIALIZATION_SPLIT_FREE(cwStationReference)
 BOOST_SERIALIZATION_SPLIT_FREE(cwShot)
-
+BOOST_SERIALIZATION_SPLIT_FREE(cwScrap)
+BOOST_SERIALIZATION_SPLIT_FREE(cwNoteStation)
+BOOST_SERIALIZATION_SPLIT_FREE(cwNoteTranformation)
+BOOST_SERIALIZATION_SPLIT_FREE(cwLength)
 
 /**
   All the saving and loading for all the objects
@@ -245,23 +252,30 @@ void save(Archive &archive, const cwNote &note, const unsigned int) {
     //Save the notes
     cwImage image = note.image();
     float rotation = note.rotate();
+    QList<cwScrap*> scraps = note.scraps();
 
     archive << BOOST_SERIALIZATION_NVP(image);
     archive << BOOST_SERIALIZATION_NVP(rotation);
+    archive << BOOST_SERIALIZATION_NVP(scraps);
 }
 
 template<class Archive>
 void load(Archive &archive, cwNote &note, const unsigned int version) {
+    Q_UNUSED(version);
+
     //Load the notes
     cwImage image;
-    archive >> BOOST_SERIALIZATION_NVP(image);
-    note.setImage(image);
+    float rotation;
+    QList<cwScrap*> scraps;
 
-    if(version >= 1 ) {
-        float rotation;
-        archive >> BOOST_SERIALIZATION_NVP(rotation);
-        note.setRotate(rotation);
-    }
+    archive >> BOOST_SERIALIZATION_NVP(image);
+    archive >> BOOST_SERIALIZATION_NVP(rotation);
+    archive >> BOOST_SERIALIZATION_NVP(scraps);
+
+    note.setImage(image);
+    note.setRotate(rotation);
+    note.setScraps(scraps);
+
 }
 
 ///////////////////////////// cwImage ///////////////////////////////
@@ -452,6 +466,131 @@ void load(Archive &archive, cwShot &shot, const unsigned int) {
     shot.setBackCompass(BackCompass);
     shot.setClino(Clino);
     shot.setBackClino(BackClino);
+}
+
+////////////////////////// cwScrap ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwScrap &scrap, const unsigned int version) {
+    Q_UNUSED(version);
+
+    QVector<QPointF> outlinePoints = scrap.points();
+    QList<cwNoteStation> stations = scrap.stations();
+    cwNoteTranformation* noteTransformion = scrap.noteTransformation();
+    bool calulateNoteTransform = scrap.calculateNoteTransform();
+
+    archive << BOOST_SERIALIZATION_NVP(outlinePoints);
+    archive << BOOST_SERIALIZATION_NVP(stations);
+    archive << BOOST_SERIALIZATION_NVP(noteTransformion);
+    archive << BOOST_SERIALIZATION_NVP(calulateNoteTransform);
+}
+
+template<class Archive>
+void load(Archive &archive, cwScrap &scrap, const unsigned int version) {
+    Q_UNUSED(version)
+
+    QVector<QPointF> outlinePoints;
+    QList<cwNoteStation> stations;
+    cwNoteTranformation* noteTransformion;
+    bool calulateNoteTransform;
+
+    archive >> BOOST_SERIALIZATION_NVP(outlinePoints);
+    archive >> BOOST_SERIALIZATION_NVP(stations);
+    archive >> BOOST_SERIALIZATION_NVP(noteTransformion);
+    archive >> BOOST_SERIALIZATION_NVP(calulateNoteTransform);
+
+    scrap.setPoints(outlinePoints);
+    scrap.setStations(stations);
+
+    //Make a copy of the noteTransform's information
+    *(scrap.noteTransformation()) = *noteTransformion;
+    delete noteTransformion; //Delete it
+
+    scrap.setCalculateNoteTransform(calulateNoteTransform);
+}
+
+////////////////////////// cwNoteStation ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwNoteStation &noteStation, const unsigned int version) {
+    Q_UNUSED(version);
+
+    cwStationReference stationReference = noteStation.station();
+    QPointF positionOnNote = noteStation.positionOnNote();
+
+    archive << BOOST_SERIALIZATION_NVP(stationReference);
+    archive << BOOST_SERIALIZATION_NVP(positionOnNote);
+}
+
+template<class Archive>
+void load(Archive &archive, cwNoteStation &noteStation, const unsigned int version) {
+    Q_UNUSED(version)
+
+    cwStationReference stationReference;
+    QPointF positionOnNote;
+
+    archive >> BOOST_SERIALIZATION_NVP(stationReference);
+    archive >> BOOST_SERIALIZATION_NVP(positionOnNote);
+
+    noteStation.setStation(stationReference);
+    noteStation.setPositionOnNote(positionOnNote);
+}
+
+////////////////////////// cwNoteTranformation ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwNoteTranformation &transform, const unsigned int version) {
+    Q_UNUSED(version);
+
+    double northUp = transform.northUp();
+    cwLength* scaleNumerator = transform.scaleNumerator();
+    cwLength* scaleDenominator = transform.scaleDenominator();
+
+    archive << BOOST_SERIALIZATION_NVP(northUp);
+    archive << BOOST_SERIALIZATION_NVP(scaleNumerator);
+    archive << BOOST_SERIALIZATION_NVP(scaleDenominator);
+}
+
+template<class Archive>
+void load(Archive &archive, cwNoteTranformation &noteStation, const unsigned int version) {
+    Q_UNUSED(version)
+
+    double northUp;
+    cwLength* scaleNumerator;
+    cwLength* scaleDenominator;
+
+    archive >> BOOST_SERIALIZATION_NVP(northUp);
+    archive >> BOOST_SERIALIZATION_NVP(scaleNumerator);
+    archive >> BOOST_SERIALIZATION_NVP(scaleDenominator);
+
+    noteStation.setNorthUp(northUp);
+    noteStation.scaleNumerator()->setValue(scaleNumerator->value());
+    noteStation.scaleNumerator()->setUnit(scaleNumerator->unit());
+    noteStation.scaleDenominator()->setValue(scaleDenominator->value());
+    noteStation.scaleDenominator()->setUnit(scaleDenominator->unit());
+}
+
+////////////////////////// cwNoteTranformation ////////////////////////////////////////
+template<class Archive>
+void save(Archive &archive, const cwLength &length, const unsigned int version) {
+    Q_UNUSED(version);
+
+    double value = length.value();
+    int unit = length.unit();
+
+    archive << BOOST_SERIALIZATION_NVP(value);
+    archive << BOOST_SERIALIZATION_NVP(unit);
+}
+
+template<class Archive>
+void load(Archive &archive, cwLength &length, const unsigned int version) {
+    Q_UNUSED(version)
+
+    double value;
+    int unit;
+
+    archive >> BOOST_SERIALIZATION_NVP(value);
+    archive >> BOOST_SERIALIZATION_NVP(unit);
+
+    length.setValue(value);
+    length.setUnit((cwUnits::LengthUnit)unit);
 }
 
 

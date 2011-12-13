@@ -41,12 +41,15 @@ public:
     void addPoint(QPointF point);
     void insertPoint(int index, QPointF point);
     void removePoint(int index);
-    QVector<QPointF> points();
+    QVector<QPointF> points() const;
+    void setPoints(QVector<QPointF> points);
+
     int numberOfPoints() const;
 
     void addStation(cwNoteStation station);
     Q_INVOKABLE void removeStation(int stationId);
     const QList<cwNoteStation>& stations() const;
+    void setStations(QList<cwNoteStation> stations);
     cwNoteStation station(int stationId);
     int numberOfStations() const;
     Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
@@ -65,12 +68,14 @@ signals:
     //For scrap outline
     void insertedPoints(int begin, int end);
     void removedPoints(int begin, int end);
+    void pointsReset();
 
     //For stations
     void stationAdded();
     void stationPositionChanged(int noteStationIndex);
     void stationNameChanged(int noteStationIndex);
     void stationRemoved(int index);
+    void stationsReset();
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
@@ -113,9 +118,9 @@ inline void cwScrap::addPoint(QPointF point) {
 }
 
 /**
-  \brief Gets all the bound points in the scrap
+  \brief Gets all the bound points in the scrappoi
   */
-inline QVector<QPointF> cwScrap::points() {
+inline QVector<QPointF> cwScrap::points() const {
     return OutlinePoints;
 }
 
@@ -139,6 +144,7 @@ inline int cwScrap::numberOfStations() const {
 inline const QList<cwNoteStation>& cwScrap::stations() const {
     return Stations;
 }
+
 
 /**
   Gets the station note transformation,  This is the note page real scale and
