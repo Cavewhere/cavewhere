@@ -4,10 +4,12 @@
 
 //Qt includes
 #include <QList>
+#include <QVector>
 #include <QVector3D>
 #include <QString>
 #include <QDate>
 #include <QSize>
+#include <QPointF>
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -23,6 +25,7 @@ BOOST_SERIALIZATION_SPLIT_FREE(QString)
 BOOST_SERIALIZATION_SPLIT_FREE(QVector3D)
 BOOST_SERIALIZATION_SPLIT_FREE(QDate)
 BOOST_SERIALIZATION_SPLIT_FREE(QSize)
+BOOST_SERIALIZATION_SPLIT_FREE(QPointF)
 
 namespace boost {
 namespace  serialization {
@@ -53,6 +56,30 @@ void load(Archive &archive, QVector3D &vector, const unsigned int) {
     archive >> BOOST_SERIALIZATION_NVP(z);
 
     vector = QVector3D(x, y, z);
+}
+
+///////////////////////////// QVector3D ///////////////////////////////
+template<class Archive>
+void save(Archive &archive, const QPointF &point, const unsigned int) {
+
+    double x = point.x();
+    double y = point.y();
+
+    archive << BOOST_SERIALIZATION_NVP(x);
+    archive << BOOST_SERIALIZATION_NVP(y);
+}
+
+template<class Archive>
+void load(Archive &archive, QPointF &point, const unsigned int) {
+
+    double x;
+    double y;
+
+    archive >> BOOST_SERIALIZATION_NVP(x);
+    archive >> BOOST_SERIALIZATION_NVP(y);
+
+    point.setX(x);
+    point.setY(y);
 }
 
 //////////////////////////////// QString /////////////////////////////////////////////
@@ -102,6 +129,39 @@ inline void load(Archive &ar, QList<U > &t, const uint /* file_version */ )
 /// non intrusive save/load member functions
 template<class Archive, class U >
 inline void serialize(Archive &ar, QList<U> &t, const uint file_version )
+{
+    boost::serialization::split_free( ar, t, file_version);
+}
+
+/////////////////////////////// QVector //////////////////////////////////////
+
+//---------------------------------------------------------------------------
+/// Saves a QList object to a collection
+template<class Archive, class U >
+inline void save(Archive &ar, const QVector< U > &t, const uint  file_version  )
+{
+    Q_UNUSED(file_version);
+    boost::serialization::stl::save_collection< Archive, QVector<U> >(ar, t);
+}
+
+//---------------------------------------------------------------------------
+/// Loads a QList object from a collection
+template<class Archive, class U>
+inline void load(Archive &ar, QVector<U > &t, const uint  file_version  )
+{
+    Q_UNUSED(file_version);
+    boost::serialization::stl::load_collection<
+            Archive,
+            QVector<U>,
+            boost::serialization::stl::archive_input_seq<Archive, QVector<U> >,
+            boost::serialization::stl::no_reserve_imp< QVector<U> > >(ar, t);
+}
+
+//---------------------------------------------------------------------------
+/// split non-intrusive serialization function member into separate
+/// non intrusive save/load member functions
+template<class Archive, class U >
+inline void serialize(Archive &ar, QVector<U> &t, const uint file_version )
 {
     boost::serialization::split_free( ar, t, file_version);
 }

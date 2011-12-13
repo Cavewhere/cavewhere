@@ -42,8 +42,9 @@ public:
     QMatrix4x4 metersOnPageMatrix() const;
 
     void addScrap(cwScrap* scrap);
-    cwScrap* scrap(int scrap);
-    QList<cwScrap*> scraps();
+    cwScrap* scrap(int scrap) const;
+    QList<cwScrap*> scraps() const;
+    void setScraps(QList<cwScrap*> scraps);
 
 
 signals:
@@ -55,6 +56,7 @@ signals:
 
     //For scraps
     void scrapAdded();
+    void scrapsReset();
 
     //When ever the trip parent has changed
     void parentTripChanged();
