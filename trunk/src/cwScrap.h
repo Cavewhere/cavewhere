@@ -34,6 +34,8 @@ public:
     };
 
     explicit cwScrap(QObject *parent = 0);
+    cwScrap(const cwScrap& other);
+    const cwScrap& operator =(const cwScrap& other);
 
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
@@ -102,6 +104,8 @@ private:
     QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
     cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
     cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+
+    const cwScrap& copy(const cwScrap& other);
 
 private slots:
     void updateStationsWithNewCave();

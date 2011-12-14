@@ -17,13 +17,6 @@ cwNote::cwNote(QObject *parent) :
     DisplayRotation = 0.0;
 }
 
-//void cwNote::setImagePath(const QString& imagePath) {
-//    if(ImagePath != imagePath) {
-//        ImagePath = imagePath;
-//        emit imagePathChanged();
-//    }
-//}
-
 cwNote::cwNote(const cwNote& object) :
     QObject(NULL),
     ParentTrip(NULL)
@@ -43,6 +36,30 @@ cwNote& cwNote::operator=(const cwNote& object) {
 void cwNote::copy(const cwNote& object) {
     ImageIds = object.ImageIds;
     DisplayRotation = object.DisplayRotation;
+
+    //Delete extra scraps
+    for(int i = Scraps.size() - 1; i >= object.scraps().size(); i--) {
+        Scraps.at(i)->deleteLater();
+        Scraps.removeLast();
+    }
+
+    Q_ASSERT(Scraps.size() <= object.scraps().size());
+
+    //Update already created scraps
+    for(int i = 0; i < Scraps.size(); i++) {
+        cwScrap* oldScrap = object.scraps().at(i);
+        cwScrap* newScrap = object.scraps().at(i);
+        *oldScrap = *newScrap;
+    }
+
+    //Add new scraps if needed
+    for(int i = Scraps.size(); i < object.scraps().size(); i++) {
+        cwScrap* scrap = new cwScrap(object.scrap(i));
+        setupScrap(scrap);
+        Scraps.append(scrap);
+    }
+
+    Q_ASSERT(Scraps.size() == object.scraps().size());
 }
 
 /**
@@ -108,19 +125,6 @@ QMatrix4x4 cwNote::metersOnPageMatrix() const {
     return metersPerDotsMatrix * scaleMatrix();
 }
 
-/**
-  This returns a matrix that's used to convert note coordinates into world coordinates.  Of corse with
-  world coordinates, you must first offset the matrix.
-  */
-//QMatrix4x4 cwNote::noteTransformationMatrix() const {
-//    //Transformation matrix for maniplating the points
-//    cwNoteTranformation transformation = stationNoteTransformation();
-//    QMatrix4x4 matrix;
-//    matrix.rotate(transformation.northUp(), 0.0, 0.0, 1.0);
-//    matrix.scale(transformation.scale(), transformation.scale(), 1.0);
-//    matrix = matrix * scaleMatrix().inverted();  //The matrix that converts a real point into a notePosition
-//    return matrix;
-//}
 
 /**
   \Brief adds a scrap to the notes
@@ -131,8 +135,7 @@ void cwNote::addScrap(cwScrap* scrap) {
         return;
     }
 
-    scrap->setParent(this);
-    scrap->setParentNote(this);
+    setupScrap(scrap);
     Scraps.append(scrap);
     emit scrapAdded();
 }
@@ -153,8 +156,7 @@ void cwNote::setScraps(QList<cwScrap *> scraps) {
 
     //Go through all the scraps and set the parents
     foreach(cwScrap* scrap, Scraps) {
-        scrap->setParent(this);
-        scrap->setParentNote(this);
+        setupScrap(scrap);
     }
 
     emit scrapsReset();
@@ -170,4 +172,12 @@ cwScrap* cwNote::scrap(int scrapIndex) const {
         return Scraps[scrapIndex];
     }
     return NULL;
+}
+
+/**
+  \brief Sets up the scraps data
+  */
+void cwNote::setupScrap(cwScrap *scrap) {
+    scrap->setParent(this);
+    scrap->setParentNote(this);
 }

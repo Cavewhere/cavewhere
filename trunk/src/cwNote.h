@@ -75,17 +75,7 @@ private:
     QList<cwScrap*> Scraps;
 
     void copy(const cwNote& object);
-
-//    //For note station transformation
-//    void updateNoteTransformation();
-//    QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-//    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-//    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-//    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
-
-    //Guess station name
-//    void guessStationName(cwNoteStation& station);
-
+    void setupScrap(cwScrap* scrap);
 };
 
 Q_DECLARE_METATYPE(cwNote*)

@@ -30,11 +30,6 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
 
     //Copy all the stations
     Stations = chunk.Stations;
-//    Stations.reserve(chunk.Stations.size());
-//    foreach(cwStationReference station, chunk.Stations) {
-//        cwStationReference* newStation = new cwStationReference(*station);
-//        Stations.append(newStation);
-//    }
 
     //Copy all the shots
     Shots.reserve(chunk.Shots.size());
