@@ -69,7 +69,7 @@ Item {
                         UnitInput {
                             unitModel: noteTransform.scaleNumerator.unitNames
                             unit: noteTransform.scaleNumerator.unit
-                            onUnitChanged: noteTransform.scaleNumerator.unit = unit
+                            onNewUnit: noteTransform.scaleNumerator.unit = unit
                         }
 
                     }
@@ -115,7 +115,7 @@ Item {
                         UnitInput {
                             unitModel: noteTransform.scaleDenominator.unitNames
                             unit: noteTransform.scaleDenominator.unit
-                            onUnitChanged: noteTransform.scaleDenominator.unit = unit
+                            onNewUnit: noteTransform.scaleDenominator.unit = unit
                         }
                     }
                 }

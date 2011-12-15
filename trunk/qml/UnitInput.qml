@@ -6,10 +6,19 @@ Item {
     property variant unitModel
     property int unit
 
-    signal unitChanged(int unit)
+    signal newUnit(int unit)
 
     width: textArea.width
     height: textArea.height
+
+    onUnitChanged: {
+//        listModel.clear()
+//        for(var unit in unitModel) {
+//            listModel.append({"text": unitModel[unit]})
+//        }
+//        numeratorMenu.rebuildMenu()
+//        numeratorMenu.selectedIndex = unitInput.unit
+    }
 
     Pallete {
         id: pallete
@@ -33,7 +42,6 @@ Item {
         id: numeratorMenu
         model: listModel
         selectedIndex: unitInput.unit
-
         onSelectedIndexChanged: unitChanged(selectedIndex)
     }
 
