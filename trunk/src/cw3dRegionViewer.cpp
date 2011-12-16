@@ -38,7 +38,7 @@ cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
     Terrain->setCamera(Camera);
     Terrain->setShaderDebugger(ShaderDebugger);
     Terrain->setNumberOfLevels(10);
-    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
+//    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
     LinePlot = new cwGLLinePlot(this);
     LinePlot->setCamera(Camera);

@@ -58,7 +58,7 @@ void cwScrap::addStation(cwNoteStation station) {
         station.setCave(parentNote()->parentTrip()->parentCave());
     }
 
-    qDebug() << "Station name:" << station.name();
+//    qDebug() << "Station name:" << station.name();
 
     Stations.append(station);
     updateNoteTransformation();

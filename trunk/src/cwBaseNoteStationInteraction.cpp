@@ -26,7 +26,7 @@ cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QDeclarativeItem *par
 
   */
 void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
-    qDebug() << "Add station!" << notePosition;
+//    qDebug() << "Add station!" << notePosition;
 
     //Make sure we have a scrap view
     if(ScrapView == NULL) {

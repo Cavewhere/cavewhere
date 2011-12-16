@@ -4,6 +4,8 @@ import Cavewhere 1.0
 import "Utils.js" as Utils
 
 Item {
+    id: scaleInput
+
     property NoteTransform noteTransform
     property HelpArea scaleHelp
     property bool autoScaling: false
@@ -46,7 +48,7 @@ Item {
 
                 Column {
                     id: columnOnPaper
-                    anchors.verticalCenter: parent.verticalCenter
+//                    anchors.verticalCenter: parent.verticalCenter
                     x: 3
 
                     Text {
@@ -60,16 +62,24 @@ Item {
 
                         ClickTextInput {
                             id: paperUnits
-                            text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
-                            onFinishedEditting: noteTransform.scaleNumerator.value = newText
+                            text: ""
+                            onFinishedEditting: ( { } )
+                            visible: false
+
+                            //                            text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
+                            //                            onFinishedEditting: noteTransform.scaleNumerator.value = newText
                             readOnly: autoScaling
-                            visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+                            //                            visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
                         }
 
                         UnitInput {
-                            unitModel: noteTransform.scaleNumerator.unitNames
-                            unit: noteTransform.scaleNumerator.unit
-                            onNewUnit: noteTransform.scaleNumerator.unit = unit
+                            id: paperUnitInput
+                            unitModel: null
+                            unit: Units.Unitless
+                            onNewUnit: ( { } )
+                            //                                                        unitModel: noteTransform.scaleNumerator.unitNames
+                            //                            unit: noteTransform.scaleNumerator.unit
+                            //                            onNewUnit: noteTransform.scaleNumerator.unit = unit
                         }
 
                     }
@@ -93,7 +103,7 @@ Item {
                 Column {
                     id: columnInCave
                     x: 3
-                    anchors.verticalCenter: parent.verticalCenter
+                   // anchors.verticalCenter: parent.verticalCenter
 
                     Text {
                         id: inCaveId
@@ -106,16 +116,24 @@ Item {
 
                         ClickTextInput {
                             id: caveUnits
-                            text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
-                            onFinishedEditting: noteTransform.scaleDenominator.value = newText
+                            text: ""
+                            onFinishedEditting: ( { } )
                             readOnly: autoScaling
-                            visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
+                            visible: false
+
+//                            text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
+//                            onFinishedEditting: noteTransform.scaleDenominator.value = newText
+//                            visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
                         }
 
                         UnitInput {
-                            unitModel: noteTransform.scaleDenominator.unitNames
-                            unit: noteTransform.scaleDenominator.unit
-                            onNewUnit: noteTransform.scaleDenominator.unit = unit
+                            id: caveUnitInput
+                            unitModel: null
+                            unit: Units.Unitless
+                            onNewUnit: ( { } )
+                            //                            unitModel: noteTransform.scaleDenominator.unitNames
+//                            unit: noteTransform.scaleDenominator.unit
+//                            onNewUnit: noteTransform.scaleDenominator.unit = unit
                         }
                     }
                 }
@@ -129,25 +147,70 @@ Item {
         }
 
         Text {
+            id: scaleText
             anchors.verticalCenter: parent.verticalCenter
             visible: !errorText.visible
-            text: "1:" + Utils.fixed(1 / noteTransform.scale, 1)
+            text: ""
         }
 
         Text {
             id: errorText
             color: "red"
             anchors.verticalCenter: parent.verticalCenter
-            visible: (noteTransform.scaleDenominator.unit === Units.Unitless ||
-                      noteTransform.scaleNumerator.unit === Units.Unitless) &&
-                     !(noteTransform.scaleDenominator.unit === Units.Unitless &&
-                      noteTransform.scaleNumerator.unit === Units.Unitless)
+            visible: false
             text: "Weird scaling units"
             font.italic: true
             font.bold: true
         }
-
     }
 
+    states: [
+        State {
+            when: noteTransform !== null
+
+            PropertyChanges {
+                target: paperUnits
+                text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
+                onFinishedEditting: noteTransform.scaleNumerator.value = newText
+                visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+            }
+
+            PropertyChanges {
+                target: paperUnitInput
+                unitModel: noteTransform.scaleNumerator.unitNames
+                unit: noteTransform.scaleNumerator.unit
+                onNewUnit: noteTransform.scaleNumerator.unit = unit
+            }
+
+            PropertyChanges {
+                target: caveUnits
+                text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
+                onFinishedEditting: noteTransform.scaleDenominator.value = newText
+                visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
+            }
+
+            PropertyChanges {
+                target: caveUnitInput
+                unitModel: noteTransform.scaleDenominator.unitNames
+                unit: noteTransform.scaleDenominator.unit
+                onNewUnit: noteTransform.scaleDenominator.unit = unit
+            }
+
+            PropertyChanges {
+                target: scaleText
+                text: "1:" + Utils.fixed(1 / noteTransform.scale, 1)
+            }
+
+            PropertyChanges {
+                target: errorText
+                visible: (noteTransform.scaleDenominator.unit === Units.Unitless ||
+                          noteTransform.scaleNumerator.unit === Units.Unitless) &&
+                         !(noteTransform.scaleDenominator.unit === Units.Unitless &&
+                          noteTransform.scaleNumerator.unit === Units.Unitless)
+
+            }
+        }
+
+    ]
 
 }

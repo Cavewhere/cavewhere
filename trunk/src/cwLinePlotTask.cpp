@@ -100,7 +100,7 @@ void cwLinePlotTask::runTask() {
   \brief Exports the data to
   */
 void cwLinePlotTask::exportData() {
-    qDebug() << "Status" << status();
+//    qDebug() << "Status" << status();
     SurvexExporter->setData(*Region);
     SurvexExporter->start();
 }
@@ -110,7 +110,7 @@ void cwLinePlotTask::exportData() {
   cavern on the data
   */
 void cwLinePlotTask::runCavern() {
-    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();;
+//    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();;
     CavernTask->start();
 }
 
@@ -119,13 +119,13 @@ void cwLinePlotTask::runCavern() {
   into compress xml file
   */
 void cwLinePlotTask::convertToXML() {
-    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
+//    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
 
 void cwLinePlotTask::readXML() {
-    qDebug() << "Reading xml" << "Status" << status();
+//    qDebug() << "Reading xml" << "Status" << status();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
@@ -136,7 +136,7 @@ void cwLinePlotTask::readXML() {
   This will generate the centerline geometry for the data
   */
 void cwLinePlotTask::generateCenterlineGeometry() {
-    qDebug() << "Generating centerline geometry" << status();
+//    qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
 }
@@ -145,7 +145,7 @@ void cwLinePlotTask::generateCenterlineGeometry() {
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::linePlotTaskComplete() {
-    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
+//    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
 

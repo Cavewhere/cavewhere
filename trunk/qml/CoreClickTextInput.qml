@@ -86,7 +86,7 @@ Item {
             globalShadowTextInput.textInput.forceActiveFocus() //focus = true
             globalShadowTextInput.textInput.selectAll();
 
-            console.log("Validator:" + clickTextInput.validator)
+//            console.log("Validator:" + clickTextInput.validator)
             if(clickTextInput.validator !== undefined) {
                 globalShadowTextInput.textInput.validator = clickTextInput.validator
             }

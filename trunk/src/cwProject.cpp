@@ -34,7 +34,7 @@ cwProject::cwProject(QObject* parent) :
     //Creates a temp directory for the project
     createTempProjectFile();
 
-    qDebug() << "DatabaseFile:" << ProjectFile;
+//    qDebug() << "DatabaseFile:" << ProjectFile;
 
     //Create the caving the caving region that this project mantaines
     Region = new cwCavingRegion(this);
@@ -69,7 +69,7 @@ void cwProject::createTempProjectFile() {
         qDebug() << "Couldn't open temp project file: " << ProjectFile;
         return;
     }
-    qDebug() << "Database is valid: " << ProjectDatabase.isValid();
+//    qDebug() << "Database is valid: " << ProjectDatabase.isValid();
 
     //Create default schema
     createDefaultSchema();

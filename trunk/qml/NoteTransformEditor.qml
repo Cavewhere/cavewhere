@@ -6,7 +6,7 @@ Item {
     id: editor
 
     property Scrap scrap
-    property NoteTransform noteTransform: scrap.noteTransformation
+    property NoteTransform noteTransform
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
@@ -78,8 +78,8 @@ Item {
     Desktop.CheckBox {
         id: autoTransformCheckBox
         text: "Auto Calculate"
-        checked: scrap.calculateNoteTransform
-        onCheckedChanged: scrap.calculateNoteTransform = checked
+//        checked: scrap.calculateNoteTransform
+//        onCheckedChanged: scrap.calculateNoteTransform = checked
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
 
@@ -125,4 +125,23 @@ Item {
                     help you automatically label stations."
         }
     }
+
+    states: [
+        State {
+            when: scrap !== null
+
+            PropertyChanges {
+                target: editor
+                noteTransform: scrap.noteTransformation
+            }
+
+            PropertyChanges {
+                target: autoTransformCheckBox
+                checked: scrap.calculateNoteTransform
+                onCheckedChanged: scrap.calculateNoteTransform = checked
+            }
+
+        }
+
+    ]
 }

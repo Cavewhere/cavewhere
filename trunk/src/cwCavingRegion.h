@@ -22,7 +22,6 @@ public:
     explicit cwCavingRegion(QObject *parent = NULL);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
-    ~cwCavingRegion() { qDebug() << "Deleted:" << this; }
 
     bool hasCaves() const;
     Q_INVOKABLE int caveCount() const;

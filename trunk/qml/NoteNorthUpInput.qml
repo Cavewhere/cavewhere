@@ -34,8 +34,8 @@ Item {
         ClickTextInput {
             id: clickInput
             readOnly: !enable
-            text: noteTransform.northUp.toFixed(2)
-            onFinishedEditting: noteTransform.northUp = newText
+            text: ""
+            onFinishedEditting: ( { } )
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -46,6 +46,19 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
         }
     }
+
+    states: [
+        State {
+            when: noteTransform !== null
+
+            PropertyChanges {
+                target: clickInput
+                text: noteTransform.northUp.toFixed(2)
+                onFinishedEditting: noteTransform.northUp = newText
+            }
+        }
+
+    ]
 
 
 }

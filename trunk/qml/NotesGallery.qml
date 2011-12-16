@@ -182,7 +182,7 @@ Rectangle {
 
             spacing: 3
 
-            anchors.centerIn: parent
+//            anchors.centerIn: parent
 
             IconButton {
                 id: rotateIconButtonId
@@ -242,7 +242,7 @@ Rectangle {
         color: "#EEEEEE"
         Row {
             spacing: 3
-            anchors.centerIn: parent
+            //anchors.centerIn: parent
 
             IconButton {
                 iconSource: "qrc:icons/back.png"

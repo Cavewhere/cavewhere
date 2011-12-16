@@ -45,7 +45,6 @@ Positioner3D {
     }
 
     Keys.onDeletePressed: {
-        console.log("Delete pressed!");
         scrap.removeStation(stationId);
     }
 

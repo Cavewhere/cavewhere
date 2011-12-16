@@ -230,14 +230,14 @@ void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
         //qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->status() == cwTask::Stopped) {
-            qDebug() << "Running the task";
+//            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
             QMetaObject::invokeMethod(LinePlotTask, "setData", Qt::AutoConnection,
                                       Q_ARG(cwCavingRegion, *Region));
             LinePlotTask->start();
         } else {
             //Restart the survex
-            qDebug() << "Restart plot task";
+//            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
