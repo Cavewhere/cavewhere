@@ -23,6 +23,10 @@ cwScrap::cwScrap(QObject *parent) :
 
 }
 
+cwScrap::cwScrap(const cwScrap& other) : QObject(NULL) {
+    copy(other);
+}
+
 /**
   \brief Inserts a point in scrap
   */
@@ -613,4 +617,26 @@ bool cwScrap::pointOnLine(QLineF line, QPointF point) {
 
     return point.x() >= minX && point.x() <= maxX &&
             point.y() >= minY && point.y() <= maxY;
+}
+
+const cwScrap & cwScrap::operator =(const cwScrap &other) {
+    return copy(other);
+}
+
+/**
+  \brief The copy constructor for the scrap
+  */
+const cwScrap & cwScrap::copy(const cwScrap &other) {
+    if(&other == this) {
+        return *this;
+    }
+
+    OutlinePoints = other.OutlinePoints;
+    Stations = other.Stations;
+    *NoteTransformation = *(other.NoteTransformation);
+    setCalculateNoteTransform(other.CalculateNoteTransform);
+
+    emit stationsReset();
+
+    return *this;
 }
