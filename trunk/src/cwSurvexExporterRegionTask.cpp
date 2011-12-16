@@ -45,15 +45,10 @@ void cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion
   \brief Runs the survex exporter task
   */
 void cwSurvexExporterRegionTask::runTask() {
-    QTime time;
-    time.start();
-
     openOutputFile();
     writeRegion(OutputStream, Region);
     closeOutputFile();
     done();
-
-    qDebug() << "Write survex time:" << time.elapsed() << "ms";
 }
 
 /**

@@ -214,9 +214,6 @@ void cwProject::load(QString filename) {
 void cwProject::UpdateRegionData(cwCavingRegion* region) {
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
 
-    //Clear the undo / redo stack
-    qDebug() << "Copying region:" << region;
-
     //Copy the data from the loaded region
     *Region = *region;
 

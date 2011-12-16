@@ -90,8 +90,6 @@ void cwPlotSauceTask::privateSetSurvex3DFile(QString survex3dFilename) {
 }
 
 void cwPlotSauceTask::plotSauceFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) {
-    qDebug() << "PlotSauce has finish, outputfile:" << outputXMLFile();
-    //qDebug() << PlotSauceProcess->readAllStandardOutput();
     done();
 }
 
