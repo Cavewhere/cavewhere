@@ -164,23 +164,7 @@ void cwScrap::updateNoteTransformation() {
     QList<cwNoteTranformation> transformations = calculateShotTransformations(shotStations);
     cwNoteTranformation averageTransformation = averageTransformations(transformations);
 
-    averageTransformation.scale();
-
-    NoteTransformation->scaleNumerator()->setValue(1.0);
-
-    //Figure out the unit scaling
-    double unitScale = 1.0; //scales the length for the units
-    if(NoteTransformation->scaleNumerator()->unit() != cwUnits::Unitless ||
-            NoteTransformation->scaleDenominator()->unit() != cwUnits::Unitless ) {
-
-        unitScale = cwUnits::convert(1.0,
-                                     NoteTransformation->scaleNumerator()->unit(),
-                                     NoteTransformation->scaleDenominator()->unit());
-    }
-
-    //Set the denominator
-    double denominator = averageTransformation.scaleDenominator()->value() * unitScale;
-    NoteTransformation->scaleDenominator()->setValue(denominator);
+    noteTransformation()->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
 

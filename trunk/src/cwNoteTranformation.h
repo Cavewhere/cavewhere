@@ -23,7 +23,7 @@ class cwNoteTranformation : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(double scale READ scale NOTIFY scaleChanged)
+    Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY scaleChanged)
     Q_PROPERTY(double northUp READ northUp WRITE setNorthUp NOTIFY northUpChanged)
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator NOTIFY scaleNumeratorChanged)
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator NOTIFY scaleDenominatorChanged)
@@ -35,6 +35,8 @@ public:
 
     cwLength* scaleNumerator() const;
     cwLength* scaleDenominator() const;
+
+    void setScale(double scale);
     double scale() const;
 
     double northUp() const;

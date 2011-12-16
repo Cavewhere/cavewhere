@@ -124,3 +124,38 @@ void cwNoteTranformation::connectLengthObjects() {
     connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
     connect(ScaleDenominator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
 }
+
+/**
+  \brief This sets the scale for the tranformation
+
+  This will always set the numerator to 1, but keep the numerator and denominator's
+  units the same.
+
+  */
+void cwNoteTranformation::setScale(double newScale)
+{
+    if(newScale == scale()) { return; }
+
+    disconnect(ScaleNumerator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
+    disconnect(ScaleDenominator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
+
+    scaleNumerator()->setValue(1.0);
+
+    //Figure out the unit scaling
+    double unitScale = 1.0; //scales the length for the units
+    if(scaleNumerator()->unit() != cwUnits::Unitless ||
+            scaleDenominator()->unit() != cwUnits::Unitless ) {
+
+        unitScale = cwUnits::convert(1.0,
+                                     scaleNumerator()->unit(),
+                                     scaleDenominator()->unit());
+    }
+
+    double denominator = 1.0 / newScale * unitScale;
+    scaleDenominator()->setValue(denominator);
+
+    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
+    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
+
+    emit scaleChanged();
+}

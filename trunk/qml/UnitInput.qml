@@ -42,7 +42,7 @@ Item {
         id: numeratorMenu
         model: listModel
         selectedIndex: unitInput.unit
-        onSelectedIndexChanged: unitChanged(selectedIndex)
+        onSelectedIndexChanged: newUnit(selectedIndex)
     }
 
     ListModel {
