@@ -2,6 +2,7 @@
 #include "cwSurvexExporterRegionTask.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QTime>
@@ -20,8 +21,8 @@ cwSurvexExporterRegionTask::cwSurvexExporterRegionTask(QObject* parent) :
   \brief Sets the data for the task
   */
 void cwSurvexExporterRegionTask::setData(const cwCavingRegion& region) {
-    if(isRunning()) {
-        qWarning() << "Can't set data for survexExporterRegionTask because it's already running";
+    if(!isReady()) {
+        qWarning() << "Can't set data for survexExporterRegionTask because it's already running" << LOCATION;
         return;
     }
     *Region = region;

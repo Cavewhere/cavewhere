@@ -61,7 +61,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
   \brief Set's the data for the line plot task
   */
 void cwLinePlotTask::setData(cwCavingRegion region) {
-    if(status() == Running) {
+    if(!isReady()) {
         qWarning() << "Can't set cave data for LinePlotTask, while it's running";
         return;
     }

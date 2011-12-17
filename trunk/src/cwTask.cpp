@@ -1,5 +1,6 @@
 //Our includes
 #include "cwTask.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QMutexLocker>
@@ -14,7 +15,7 @@ cwTask::cwTask(QObject *parent) :
     QObject(parent)
 {
     NumberOfSteps = 0;
-    CurrentStatus = Stopped;
+    CurrentStatus = Ready;
     ParentTask = NULL;
 }
 
@@ -26,7 +27,7 @@ cwTask::cwTask(QObject *parent) :
   Does nothing if this is already running
 */
 void cwTask::setParentTask(cwTask* parentTask) {
-    if(status() != Stopped) {
+    if(!isReady()) {
         qWarning("Can't set task's parent, when the task is running!");
         return;
     }
@@ -124,7 +125,8 @@ This function is thread safe
 void cwTask::start() {
     {
         QWriteLocker locker(&StatusLocker);
-        if(CurrentStatus != Stopped) {
+        if(CurrentStatus != Ready) {
+            qDebug() << "Can't start the task because it isn't ready" << LOCATION;
             return;
         }
 
@@ -177,13 +179,15 @@ void cwTask::done() {
     if(CurrentStatus == Restart) {
         emit stopped();
         emit shouldRerun();
-    } else if(CurrentStatus == Running) {
-        emit finished();
-    } else {
-        emit stopped();
-    }
+    } else if(CurrentStatus == Stopped) {
+        privateStop();
 
-    privateStop();
+        CurrentStatus = Ready;
+        emit stopped();
+    } else if(CurrentStatus == Running) {
+        CurrentStatus = Ready;
+        emit finished();
+    }
 }
 
 /**

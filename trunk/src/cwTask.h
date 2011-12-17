@@ -14,6 +14,7 @@ class cwTask : public QObject
     Q_OBJECT
 public:
     enum Status {
+        Ready,
         PreparingToStart,
         Running,
         Stopped,
@@ -28,6 +29,7 @@ public:
     int numberOfSteps() const;
     Status status() const;
     bool isRunning() const;
+    bool isReady() const;
 
     //Do not move this to a slot!!! You will break things
     void stop();
@@ -70,5 +72,12 @@ private:
     Q_INVOKABLE void changeThreads(QThread* thread);
 
 };
+
+/**
+  Returns if the task is ready
+  */
+inline bool cwTask::isReady() const {
+    return status() == Ready;
+}
 
 #endif // CWTASK_H

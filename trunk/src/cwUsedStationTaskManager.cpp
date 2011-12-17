@@ -56,7 +56,7 @@ void cwUsedStationTaskManager::setCave(cwCave* cave) {
 void cwUsedStationTaskManager::calculateUsedStations() {
     if(Cave.isNull()) { return; }
 
-    if(Task->status() == cwTask::Stopped) {
+    if(Task->isReady()) {
         QList<QString> stationNames = allCaveStationNames();
 
         QMetaObject::invokeMethod(Task, //Object

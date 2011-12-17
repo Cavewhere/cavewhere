@@ -229,11 +229,10 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
         //qDebug() << "----Run survex----" << LinePlotTask->status();
-        if(LinePlotTask->status() == cwTask::Stopped) {
+        if(LinePlotTask->isReady()) {
 //            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
-            QMetaObject::invokeMethod(LinePlotTask, "setData", Qt::AutoConnection,
-                                      Q_ARG(cwCavingRegion, *Region));
+            LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
@@ -248,7 +247,7 @@ void cwLinePlotManager::runSurvex() {
   */
 void cwLinePlotManager::updateLinePlot() {
     if(GLLinePlot == NULL) { return; }
-    if(LinePlotTask->status() != cwTask::Stopped) { return; }
+    if(!LinePlotTask->isReady()) { return; }
 
     GLLinePlot->setPoints(LinePlotTask->stationPositions());
     GLLinePlot->setIndexes(LinePlotTask->linePlotIndexData());
