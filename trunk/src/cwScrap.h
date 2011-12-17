@@ -40,6 +40,9 @@ public:
     void setParentNote(cwNote* trip);
     cwNote* parentNote() const;
 
+    void setParentCave(cwCave* cave);
+    cwCave* parentCave() const;
+
     void addPoint(QPointF point);
     void insertPoint(int index, QPointF point);
     void removePoint(int index);
@@ -94,6 +97,7 @@ private:
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
+    cwCave* ParentCave;
 
     //Clamps a pointF that's in note coordinates to the scrap
     QPointF clampToScrap(QPointF point);
@@ -165,11 +169,21 @@ inline cwNote* cwScrap::parentNote() const {
     return ParentNote;
 }
 
+
+
 /**
 Gets calculateNoteTransform
 */
 inline bool cwScrap::calculateNoteTransform() const {
     return CalculateNoteTransform;
 }
+
+/**
+    \brief Gets the parent cave
+  */
+inline cwCave *cwScrap::parentCave() const {
+    return ParentCave;
+}
+
 
 #endif // CWSCRAP_H

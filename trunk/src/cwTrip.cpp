@@ -294,6 +294,8 @@ void cwTrip::setParentCave(cwCave* parentCave) {
         foreach(cwSurveyChunk* chunk, Chunks) {
             chunk->updateStationsWithNewCave();
         }
+
+        Notes->setParentCave(ParentCave);
     }
 }
 

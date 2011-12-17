@@ -17,13 +17,18 @@
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
-    ParentNote(NULL)
+    ParentNote(NULL),
+    ParentCave(NULL)
 {
     setCalculateNoteTransform(true);
-
 }
 
-cwScrap::cwScrap(const cwScrap& other) : QObject(NULL) {
+cwScrap::cwScrap(const cwScrap& other)
+    : QObject(NULL),
+      NoteTransformation(new cwNoteTranformation(this)),
+      ParentNote(NULL),
+      ParentCave(NULL)
+{
     copy(other);
 }
 
@@ -397,8 +402,6 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
         QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
         double normalizedError = errorVector.length() / noteVector.length();
 
-        qDebug() << "Normalized error: " << normalizedError;
-
         if(normalizedError < bestNormalizeError) {
             //Station is probably the one
             bestStationName = station.name();
@@ -461,6 +464,7 @@ void cwScrap::setParentNote(cwNote* note) {
         ParentNote = note;
 
         if(ParentNote != NULL) {
+            ParentCave = parentNote()->parentCave();
             connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
 
@@ -469,16 +473,8 @@ void cwScrap::setParentNote(cwNote* note) {
 }
 
 void cwScrap::updateStationsWithNewCave() {
-    //Go through all the stations and update the cave
-    cwCave* cave = NULL;
-    if(parentNote() != NULL) {
-        if(parentNote()->parentTrip() != NULL) {
-            cave = parentNote()->parentTrip()->parentCave();
-        }
-    }
-
     for(int i = 0; i < Stations.size(); i++) {
-        Stations[i].setCave(cave);
+        Stations[i].setCave(parentCave());
     }
 }
 
@@ -639,4 +635,14 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     emit stationsReset();
 
     return *this;
+}
+
+/**
+    \brief Set the parent cave for the scrap
+  */
+void cwScrap::setParentCave(cwCave *cave) {
+    if(cave != ParentCave) {
+        ParentCave = cave;
+        updateStationsWithNewCave();
+    }
 }

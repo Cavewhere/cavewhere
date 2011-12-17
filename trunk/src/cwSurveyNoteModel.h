@@ -32,6 +32,9 @@ public:
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
 
+    void setParentCave(cwCave* cave);
+    cwCave* parentCave() const;
+
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
@@ -47,6 +50,7 @@ private:
     QList<cwNote*> Notes;
 
     cwTrip* ParentTrip;
+    cwCave* ParentCave;
 
     void initModel();
     void copy(const cwSurveyNoteModel& object);
@@ -68,6 +72,14 @@ inline QList<cwNote*> cwSurveyNoteModel::notes() const {
   */
 inline cwTrip* cwSurveyNoteModel::parentTrip() const {
     return ParentTrip;
+}
+
+
+/**
+  \brief Gets the parent cave for the survey note model
+  */
+inline cwCave* cwSurveyNoteModel::parentCave() const {
+    return ParentCave;
 }
 
 #endif // CWSURVEYNOTEMODEL_H

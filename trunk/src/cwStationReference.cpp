@@ -24,25 +24,31 @@ cwStationReference::cwStationReference(QString name) :
 void cwStationReference::setCave(cwCave* cave) {
     if(Cave == cave) { return; }
 
+    if(Cave != NULL) {
+        Cave->removeStation(name());
+    }
+
     Cave = cave;
 
-    //The cave already has a station named this
-    if(Cave->hasStation(name())) {
-        //Overwrite that station
-        QSharedPointer<cwStation> caveStation = cave->station(name()).toStrongRef();
+    if(Cave != NULL) {
+        //The cave already has a station named this
+        if(Cave->hasStation(name())) {
+            //Overwrite that station
+            QSharedPointer<cwStation> caveStation = cave->station(name()).toStrongRef();
 
-//        //Copy the data from this object
-//        caveStation->setDown(SharedStation->down());
-//        caveStation->setLeft(SharedStation->left());
-//        caveStation->setRight(SharedStation->right());
-//        caveStation->setUp(SharedStation->up());
-//        caveStation->setPosition(SharedStation->position());
+            //        //Copy the data from this object
+            //        caveStation->setDown(SharedStation->down());
+            //        caveStation->setLeft(SharedStation->left());
+            //        caveStation->setRight(SharedStation->right());
+            //        caveStation->setUp(SharedStation->up());
+            //        caveStation->setPosition(SharedStation->position());
 
-        //Set that station to this object
-        SharedStation = caveStation;
-    } else {
-        //Add this station to the cave
-        Cave->addStation(SharedStation);
+            //Set that station to this object
+            SharedStation = caveStation;
+        } else {
+            //Add this station to the cave
+            Cave->addStation(SharedStation);
+        }
     }
 }
 

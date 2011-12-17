@@ -11,7 +11,8 @@ QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProject
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent),
-    ParentTrip(NULL)
+    ParentTrip(NULL),
+    ParentCave(NULL)
 {
     ImagePathString = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
 
@@ -27,7 +28,8 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
 
 cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
     QAbstractListModel(NULL),
-    ParentTrip(NULL)
+    ParentTrip(NULL),
+    ParentCave(NULL)
 {
     copy(object);
 }
@@ -158,6 +160,20 @@ void cwSurveyNoteModel::setParentTrip(cwTrip* trip) {
         setParent(ParentTrip);
         foreach(cwNote* note, Notes) {
             note->setParentTrip(ParentTrip);
+            note->setParentCave(trip->parentCave());
         }
     }
 }
+
+/**
+  \brief Set the parent cave
+  */
+void cwSurveyNoteModel::setParentCave(cwCave *cave) {
+    if(ParentCave != cave) {
+        ParentCave = cave;
+        foreach(cwNote* note, Notes) {
+            note->setParentCave(ParentCave);
+        }
+    }
+}
+

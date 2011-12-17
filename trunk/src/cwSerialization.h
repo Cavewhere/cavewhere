@@ -96,7 +96,6 @@ void save(Archive & archive, const cwCave& cave, const unsigned int /*version*/)
 
     //Save all the trips
     QList<cwTrip*> trips = cave.trips();
-    qDebug() << "Number of trips:" << trips.size();
     archive << BOOST_SERIALIZATION_NVP(trips);
 
 }
@@ -213,6 +212,7 @@ void load(Archive &archive, cwTrip &trip, const unsigned int) {
     archive >> BOOST_SERIALIZATION_NVP(noteModel);
     cwSurveyNoteModel* tripNoteModel = trip.notes();
     *tripNoteModel = noteModel;
+    tripNoteModel->setParentTrip(&trip);
 
     //Load the calibration for the notes
     cwTripCalibration tripCalibration;

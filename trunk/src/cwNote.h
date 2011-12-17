@@ -38,6 +38,9 @@ public:
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
 
+    void setParentCave(cwCave* cave);
+    cwCave* parentCave() const;
+
     QMatrix4x4 scaleMatrix() const;
     QMatrix4x4 metersOnPageMatrix() const;
 
@@ -65,6 +68,7 @@ public slots:
 
 private:
     cwTrip* ParentTrip;
+    cwCave* ParentCave;
 
     cwImage ImageIds;
     float DisplayRotation;  //!< Display rotation of the notes, don't confuse this with NoteTransform's rotation
@@ -109,6 +113,12 @@ inline float cwNote::rotate() const {
     return DisplayRotation;
 }
 
+/**
+  Sets the parent cave for the note
+  */
+inline cwCave *cwNote::parentCave() const {
+    return ParentCave;
+}
 
 
 

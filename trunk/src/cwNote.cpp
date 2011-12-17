@@ -12,14 +12,16 @@
 
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
-    ParentTrip(NULL)
+    ParentTrip(NULL),
+    ParentCave(NULL)
 {
     DisplayRotation = 0.0;
 }
 
 cwNote::cwNote(const cwNote& object) :
     QObject(NULL),
-    ParentTrip(NULL)
+    ParentTrip(NULL),
+    ParentCave(NULL)
 {
     copy(object);
 }
@@ -54,7 +56,8 @@ void cwNote::copy(const cwNote& object) {
 
     //Add new scraps if needed
     for(int i = Scraps.size(); i < object.scraps().size(); i++) {
-        cwScrap* scrap = new cwScrap(object.scrap(i));
+        cwScrap* otherScrap = object.scrap(i);
+        cwScrap* scrap = new cwScrap(*otherScrap);
         setupScrap(scrap);
         Scraps.append(scrap);
     }
@@ -97,6 +100,7 @@ void cwNote::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         ParentTrip = trip;
         setParent(trip);
+        setParentCave(trip->parentCave());
     }
 }
 
@@ -180,4 +184,19 @@ cwScrap* cwNote::scrap(int scrapIndex) const {
 void cwNote::setupScrap(cwScrap *scrap) {
     scrap->setParent(this);
     scrap->setParentNote(this);
+    scrap->setParentCave(ParentCave);
 }
+
+/**
+  \brief Sets the parent cave
+  */
+void cwNote::setParentCave(cwCave *cave) {
+    if(ParentCave != cave) {
+        ParentCave = cave;
+        foreach(cwScrap* scrap, Scraps) {
+            scrap->setParentCave(ParentCave);
+        }
+    }
+}
+
+
