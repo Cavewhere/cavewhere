@@ -549,7 +549,7 @@ void save(Archive &archive, const cwNoteTranformation &transform, const unsigned
 }
 
 template<class Archive>
-void load(Archive &archive, cwNoteTranformation &noteStation, const unsigned int version) {
+void load(Archive &archive, cwNoteTranformation &transform, const unsigned int version) {
     Q_UNUSED(version)
 
     double northUp;
@@ -560,11 +560,11 @@ void load(Archive &archive, cwNoteTranformation &noteStation, const unsigned int
     archive >> BOOST_SERIALIZATION_NVP(scaleNumerator);
     archive >> BOOST_SERIALIZATION_NVP(scaleDenominator);
 
-    noteStation.setNorthUp(northUp);
-    noteStation.scaleNumerator()->setValue(scaleNumerator->value());
-    noteStation.scaleNumerator()->setUnit(scaleNumerator->unit());
-    noteStation.scaleDenominator()->setValue(scaleDenominator->value());
-    noteStation.scaleDenominator()->setUnit(scaleDenominator->unit());
+    transform.setNorthUp(northUp);
+    transform.scaleNumerator()->setValue(scaleNumerator->value());
+    transform.scaleNumerator()->setUnit(scaleNumerator->unit());
+    transform.scaleDenominator()->setValue(scaleDenominator->value());
+    transform.scaleDenominator()->setUnit(scaleDenominator->unit());
 }
 
 ////////////////////////// cwNoteTranformation ////////////////////////////////////////
