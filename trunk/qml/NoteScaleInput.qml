@@ -48,7 +48,6 @@ Item {
 
                 Column {
                     id: columnOnPaper
-//                    anchors.verticalCenter: parent.verticalCenter
                     x: 3
 
                     Text {
@@ -57,34 +56,14 @@ Item {
                         text: "On Paper"
                     }
 
-                    Row {
+                    LengthInput {
+                        id: onPaperLengthInput
                         anchors.horizontalCenter: parent.horizontalCenter
-
-                        ClickTextInput {
-                            id: paperUnits
-                            text: ""
-                            onFinishedEditting: ( { } )
-                            visible: false
-
-                            //                            text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
-                            //                            onFinishedEditting: noteTransform.scaleNumerator.value = newText
-                            readOnly: autoScaling
-                            //                            visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
-                        }
-
-                        UnitInput {
-                            id: paperUnitInput
-                            unitModel: null
-                            unit: Units.Unitless
-                            onNewUnit: ( { } )
-                            //                                                        unitModel: noteTransform.scaleNumerator.unitNames
-                            //                            unit: noteTransform.scaleNumerator.unit
-                            //                            onNewUnit: noteTransform.scaleNumerator.unit = unit
-                        }
-
+                        length: null
+                        valueVisible: false
+                        valueReadOnly: autoScaling
                     }
                 }
-
             }
 
             Text {
@@ -103,7 +82,6 @@ Item {
                 Column {
                     id: columnInCave
                     x: 3
-                   // anchors.verticalCenter: parent.verticalCenter
 
                     Text {
                         id: inCaveId
@@ -111,30 +89,12 @@ Item {
                         text: "In Cave"
                     }
 
-                    Row {
+                    LengthInput {
+                        id: inCaveLengthInput
                         anchors.horizontalCenter: parent.horizontalCenter
-
-                        ClickTextInput {
-                            id: caveUnits
-                            text: ""
-                            onFinishedEditting: ( { } )
-                            readOnly: autoScaling
-                            visible: false
-
-//                            text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
-//                            onFinishedEditting: noteTransform.scaleDenominator.value = newText
-//                            visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
-                        }
-
-                        UnitInput {
-                            id: caveUnitInput
-                            unitModel: null
-                            unit: Units.Unitless
-                            onNewUnit: ( { } )
-                            //                            unitModel: noteTransform.scaleDenominator.unitNames
-//                            unit: noteTransform.scaleDenominator.unit
-//                            onNewUnit: noteTransform.scaleDenominator.unit = unit
-                        }
+                        length: null
+                        valueVisible: false
+                        valueReadOnly: autoScaling
                     }
                 }
             }
@@ -169,31 +129,15 @@ Item {
             when: noteTransform !== null
 
             PropertyChanges {
-                target: paperUnits
-                text: Utils.fixed(noteTransform.scaleNumerator.value, 2)
-                onFinishedEditting: noteTransform.scaleNumerator.value = newText
-                visible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+                target: onPaperLengthInput
+                length: noteTransform.scaleNumerator
+                valueVisible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
             }
 
             PropertyChanges {
-                target: paperUnitInput
-                unitModel: noteTransform.scaleNumerator.unitNames
-                unit: noteTransform.scaleNumerator.unit
-                onNewUnit: noteTransform.scaleNumerator.unit = unit
-            }
-
-            PropertyChanges {
-                target: caveUnits
-                text: Utils.fixed(noteTransform.scaleDenominator.value, 2);
-                onFinishedEditting: noteTransform.scaleDenominator.value = newText
-                visible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
-            }
-
-            PropertyChanges {
-                target: caveUnitInput
-                unitModel: noteTransform.scaleDenominator.unitNames
-                unit: noteTransform.scaleDenominator.unit
-                onNewUnit: noteTransform.scaleDenominator.unit = unit
+                target: inCaveLengthInput
+                length: noteTransform.scaleDenominator
+                valueVisible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
             }
 
             PropertyChanges {

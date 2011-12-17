@@ -70,6 +70,7 @@ Interaction {
 
         Length {
             id: length
+            unit: Units.Meters
         }
 
         Row {
@@ -85,20 +86,9 @@ Interaction {
                 text: "<b>In cave length</b>"
             }
 
-            Row {
+            LengthInput {
+                length: length
                 anchors.verticalCenter: parent.verticalCenter
-
-                ClickTextInput {
-                    id: caveUnits
-                    text: length.value
-                    onFinishedEditting: length.value = newText
-                }
-
-                UnitInput {
-                    unitModel: length.unitNames
-                    unit: Units.Meters //For meters
-                    onNewUnit: length.unit = unit
-                }
             }
 
             Button {
@@ -115,10 +105,6 @@ Interaction {
                                                              dotPerMeter);
 
                     noteTransform.scale = scale
-//                    noteTransform.scaleNumerator.unit = Units.Unitless
-
-//                    noteTransform.scaleDenominator.value = 1 / scale
-//                    noteTransform.scaleDenominator.unit = Units.Unitless
 
                     interaction.state = ""
                     interaction.deactivate();
