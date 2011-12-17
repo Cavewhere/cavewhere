@@ -12,12 +12,7 @@ Item {
     height: textArea.height
 
     onUnitChanged: {
-//        listModel.clear()
-//        for(var unit in unitModel) {
-//            listModel.append({"text": unitModel[unit]})
-//        }
-//        numeratorMenu.rebuildMenu()
-//        numeratorMenu.selectedIndex = unitInput.unit
+        numeratorMenu.selectedIndex = unitInput.unit
     }
 
     Pallete {
