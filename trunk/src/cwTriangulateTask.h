@@ -19,11 +19,24 @@ public:
     void setPolygon(QPolygonF polygon);
 
     //Outputs of the task
-    QVector<QVector3D> triangles() const;
+    QVector<QVector3D> trianglePoints() const;
+    QVector<int> triangleIndices() const;
 
 signals:
     
 public slots:
+
+protected:
+    virtual void runTask();
+
+
+private:
+    //Inputs
+    QPolygonF Polygon;
+
+    //Outputs
+    QVector<QVector3D> TrianglePoints;
+    QVector<int> TriangleIndices;
     
 };
 

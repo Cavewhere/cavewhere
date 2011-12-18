@@ -21,6 +21,9 @@ OBJECTS_DIR = .obj
 UI_DIR = .ui
 MOC_DIR = .moc
 
+#Defines for triangle
+DEFINES += TRILIBRARY ANSI_DECLARATORS
+
 SOURCES += src/main.cpp \
     src/cwSurveyChunk.cpp \
     src/cwStation.cpp \
@@ -127,7 +130,13 @@ SOURCES += src/main.cpp \
     src/cwMainWindow.cpp \
     src/cwScaleLengthItem.cpp \
     src/cwAbstract2PointItem.cpp \
-    src/cwImageProperties.cpp
+    src/cwImageProperties.cpp \
+    src/cwTriangulateTask.cpp \
+    src/triangle/triangle.c \
+    src/cwScrapManager.cpp \
+    src/cwTriangulateStation.cpp \
+    src/cwTriangulateInData.cpp \
+    src/cwTriangulatedData.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -240,7 +249,13 @@ HEADERS  += \
     src/cwMainWindow.h \
     src/cwScaleLengthItem.h \
     src/cwAbstract2PointItem.h \
-    src/cwImageProperties.h
+    src/cwImageProperties.h \
+    src/cwTriangulateTask.h \
+    src/triangle/triangle.h \
+    src/cwScrapManager.h \
+    src/cwTriangulateStation.h \
+    src/cwTriangulateInData.h \
+    src/cwTriangulatedData.h
 
 
 

@@ -58,6 +58,12 @@ signals:
     void rotateChanged(float rotate);
 
     //For scraps
+    void insertedScraps(int begin, int end);
+    void beginInsertingScraps(int begin, int end);
+
+    int beginRemovingScraps(int begin, int end);
+    void removedScraps(int begin, int end);
+
     void scrapAdded();
     void scrapsReset();
 
