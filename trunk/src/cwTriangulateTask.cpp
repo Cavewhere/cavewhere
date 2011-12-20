@@ -50,6 +50,8 @@ void cwTriangulateTask::runTask() {
     //Crop all the scrap data
     cropScraps();
 
+    //Triangulate scraps
+    triangulateScraps();
 
     done();
 }
@@ -69,4 +71,65 @@ void cwTriangulateTask::cropScraps() {
         triangulatedData.setCroppedImage(CropTask->croppedImage());
         TriangulatedScraps.append(triangulatedData);
     }
+}
+
+/**
+  \brief triangulate the scrap data
+  */
+void cwTriangulateTask::triangulateScraps() {
+    //For each scrap
+    for(int i = 0; i < Scraps.size(); i++) {
+        triangulateScrap(i);
+    }
+}
+
+/**
+    \brief triangulate the scrap data
+  */
+void cwTriangulateTask::triangulateScrap(int index) {
+    cwTriangulateInData& scrapData = Scraps[index];
+    QRectF bounds = scrapData.outline().boundingRect();
+
+    cwImage croppedImage = TriangulatedScraps[index].croppedImage();
+    PointGrid pointGrid = createPointGrid(bounds, croppedImage, scrapData.noteTransform());
+
+
+
+}
+
+/**
+    \brief Creates a point grid
+
+    This is a regualar grid that has grid resolution of a meter.
+
+    \param PointGridSize is the size in normalize note coordinates of the grid.
+    \param scrapImage is used to get the original size and dotPerMeter
+
+    This returns a regualar grid.
+*/
+cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, cwImage scrapImage, const cwNoteTranformation &noteTransform) {
+    PointGrid grid;
+
+    QSize scrapImageSize = scrapImage.origianlSize();
+    double sizeOnPaperX = scrapImageSize.width() / scrapImage.originalDotsPerMeter(); //in meters
+    double sizeOnPaperY = scrapImageSize.height() / scrapImage.originalDotsPerMeter(); //in meters
+
+    double pointsPerMeter = 1.0; //Grid resolution
+    double scale = noteTransform.scale();
+    grid.GridSize.setWidth((int)(sizeOnPaperX * scale * pointsPerMeter));
+    grid.GridSize.setHeight((int)(sizeOnPaperY * scale * pointsPerMeter));
+    grid.Points.resize(grid.GridSize.width() * grid.GridSize.height());
+
+    double xDelta = bounds.width() / grid.GridSize.width(); //xDelta in normalized note coordinates
+    double yDelta = bounds.height() / grid.GridSize.height();
+
+    for(int y = 0; y < grid.GridSize.height(); y++) {
+        for(int x = 0; x < grid.GridSize.width(); x++) {
+            QPointF gridPoint = bounds.topLeft() + QPointF(x * xDelta, y * yDelta);
+            int index = y * grid.GridSize.width() + x;
+            grid.Points[index] = gridPoint;
+        }
+    }
+
+    return grid;
 }

@@ -5,6 +5,8 @@
 #include "cwTask.h"
 #include "cwTriangulateInData.h"
 #include "cwTriangulatedData.h"
+#include "cwImage.h"
+#include "cwNoteTranformation.h"
 class cwCropImageTask;
 
 //Qt include
@@ -34,6 +36,12 @@ protected:
 
 
 private:
+    class PointGrid {
+    public:
+        QSize GridSize;
+        QVector<QPointF> Points;
+    };
+
     //Inputs
     QList<cwTriangulateInData> Scraps;
     QString ProjectFilename;
@@ -45,6 +53,10 @@ private:
     cwCropImageTask* CropTask;
 
     void cropScraps();
+
+    void triangulateScraps();
+    void triangulateScrap(int index);
+    PointGrid createPointGrid(QRectF bounds, cwImage scrapImage, const cwNoteTranformation &noteTransform);
 
 };
 

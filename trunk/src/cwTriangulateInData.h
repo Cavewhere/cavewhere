@@ -8,6 +8,7 @@
 //Qt includes
 #include "cwImage.h"
 #include "cwTriangulateStation.h"
+#include "cwNoteTranformation.h"
 
 class cwTriangulateInData
 {
@@ -23,12 +24,19 @@ public:
     QList<cwTriangulateStation> stations() const;
     void setStations(QList<cwTriangulateStation> stations);
 
+    cwNoteTranformation noteTransform() const;
+    void setNoteTransform(cwNoteTranformation noteTransform);
+
+
+
+
 private:
     class PrivateData : public QSharedData {
     public:
-        cwImage noteImage;
-        QPolygonF outline;
-        QList<cwTriangulateStation> stations;
+        cwImage NoteImage;
+        QPolygonF Outline;
+        cwNoteTranformation NoteTransform;
+        QList<cwTriangulateStation> Stations;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -39,41 +47,55 @@ private:
 Get NoteImage
 */
 inline cwImage cwTriangulateInData::noteImage() const {
-    return Data->noteImage;
+    return Data->NoteImage;
 }
 
 /**
 Sets NoteImage
 */
 inline void cwTriangulateInData::setNoteImage(cwImage noteImage) {
-    Data->noteImage = noteImage;
+    Data->NoteImage = noteImage;
 }
 
 /**
 Get variableName
 */
 inline QPolygonF cwTriangulateInData::outline() const {
-    return Data->outline;
+    return Data->Outline;
 }
 
 /**
 Sets variableName
 */
 inline void cwTriangulateInData::setOutline(QPolygonF outline) {
-    Data->outline = outline;
+    Data->Outline = outline;
 }
 
 /**
   Get variableName
   */
 inline QList<cwTriangulateStation> cwTriangulateInData::stations() const {
-    return Data->stations;
+    return Data->Stations;
 }
 
 /**
   Sets variableName
   */
 inline void cwTriangulateInData::setStations(QList<cwTriangulateStation> stations) {
-    Data->stations = stations;
+    Data->Stations = stations;
+}
+
+/**
+  Get variableName
+  */
+inline cwNoteTranformation cwTriangulateInData::noteTransform() const {
+    return Data->NoteTransform;
+}
+
+/**
+  Sets variableName
+  */
+inline void cwTriangulateInData::setNoteTransform(cwNoteTranformation noteTransform) {
+    Data->NoteTransform = noteTransform;
 }
 #endif // CWTRIANGULATEINDATA_H
