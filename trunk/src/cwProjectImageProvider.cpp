@@ -116,14 +116,14 @@ QString cwProjectImageProvider::projectPath() const {
 /**
   Gets the metadata of the original image
   */
-cwImageData cwProjectImageProvider::originalMetadata(const cwImage &image) {
+cwImageData cwProjectImageProvider::originalMetadata(const cwImage &image) const {
     return data(image.original(), true); //Only get the metadata of the original
 }
 
 /**
   Gets the metadata of the image at id
   */
-cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) {
+cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
     QString databaseName = QString("resquestImage/%1").arg(id);
     if(QSqlDatabase::contains(databaseName)) {
         QSqlDatabase::removeDatabase(databaseName);
@@ -187,4 +187,17 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) {
     }
 
     return cwImageData(size, dotsPerMeter, type, imageData);
+}
+
+/**
+  \brief Gets a QImage from the image provider.  If the image at id is null, then
+  this will return a empty image
+  */
+QImage cwProjectImageProvider::image(int id) const
+{
+    cwImageData imageData = data(id);
+    if(imageData.format() != cwProjectImageProvider::Dxt1_GZ_Extension) {
+        return QImage::fromData(imageData.data(), imageData.format());
+    }
+    return QImage();
 }

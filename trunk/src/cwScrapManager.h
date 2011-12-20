@@ -13,6 +13,10 @@ class cwTrip;
 class cwSurveyNoteModel;
 class cwScrap;
 class cwNote;
+class cwTriangulateTask;
+class cwProject;
+#include "cwNoteStation.h"
+#include "cwTriangulateInData.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -25,15 +29,23 @@ public:
     explicit cwScrapManager(QObject *parent = 0);
     
     void setRegion(cwCavingRegion* region);
+    void setProject(cwProject* project);
+
 
 signals:
     
 public slots:
+    void updateAllScraps();
 
 private:
     cwCavingRegion* Region;
 
     QSet<cwScrap*> Scraps;
+
+    //The task that'll be run
+    QThread* TriangulateThread;
+    cwTriangulateTask* TriangulateTask;
+    cwProject* Project;
 
     void connectAllCaves();
     void connectCave(cwCave* cave);
@@ -43,6 +55,8 @@ private:
     void connectScrapes(QList<cwScrap *> scraps);
 
     void updateScrapGeometry(QList<cwScrap *> scraps);
+    cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
+    QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations) const;
 
 private slots:
     void cavesInserted(int begin, int end);
@@ -55,6 +69,7 @@ private slots:
     void scrapRemoved(int begin, int end);
     void updateScrapPoints();
 
+    void taskFinished();
 
 };
 

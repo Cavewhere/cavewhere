@@ -29,6 +29,7 @@ cwScrap::cwScrap(const cwScrap& other)
       ParentNote(NULL),
       ParentCave(NULL)
 {
+    setCalculateNoteTransform(true);
     copy(other);
 }
 

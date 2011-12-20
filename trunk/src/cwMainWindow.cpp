@@ -11,6 +11,7 @@
 #include "cwCompassExporterCaveTask.h"
 #include "cwImportSurvexDialog.h"
 #include "cwProjectImageProvider.h"
+#include "cwScrapManager.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -105,6 +106,12 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(this);
     LinePlotManager->setRegion(Region);
+
+    //Setup the scrap manager
+    ScrapManager = new cwScrapManager(this);
+    ScrapManager->setProject(Project);
+    ScrapManager->setRegion(Region);
+    connect(actionCompute_Scraps, SIGNAL(triggered()), ScrapManager, SLOT(updateAllScraps()));
 
     ExportThread = new QThread(this);
 

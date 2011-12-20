@@ -96,22 +96,8 @@ void cwAddImageTask::calculateNumberOfSteps() {
   \brief This tries to add the image to the database
   */
 void cwAddImageTask::tryAddingImagesToDatabase() {
-    //SQLITE begin transation
-    QString beginTransationQuery = "BEGIN IMMEDIATE TRANSACTION";
-    QSqlQuery query = Database.exec(beginTransationQuery);
-    QSqlError error = query.lastError();
-
-    //Check if there's error
-    if(error.isValid()) {
-        if(error.number() == SQLITE_BUSY) {
-            //The database is busy, try to get a lock in 500ms
-            QTimer::singleShot(500, this, SLOT(tryAddingImagesToDatabase()));
-            return;
-        } else {
-            qDebug() << "Load Images error: " << error;
-            return;
-        }
-    }
+    bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
+    if(!good) { return; }
 
     //Go through all the images
     for(int i = 0; i < ImagePaths.size() && isRunning(); i++) {
@@ -135,22 +121,7 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
       //  emit progressed(i + 1);
     }
 
-    //If the task isn't running
-    if(isRunning()) {
-        //Commit the data
-        QString commitTransationQuery = "COMMIT";
-        QSqlQuery query = Database.exec(commitTransationQuery);
-        if(query.lastError().isValid()) {
-            qDebug() << "Couldn't commit transaction:" << query.lastError();
-        }
-    } else {
-        //Roll back the commited images
-        QString rollbackTransationQuery = "ROLLBACK";
-        QSqlQuery query = Database.exec(rollbackTransationQuery);
-        if(query.lastError().isValid()) {
-            qDebug() << "Couldn't rollback transaction:" << query.lastError();
-        }
-    }
+    endTransation();
 }
 
 

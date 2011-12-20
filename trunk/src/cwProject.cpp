@@ -315,6 +315,8 @@ void cwProject::connectCave(cwCave* cave) {
   \brief Adds an image to the project file
 
   This static function takes a database and adds the imageData to the database
+
+  This returns the id of the image in the database
   */
 int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
     QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "

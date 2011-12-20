@@ -5,6 +5,7 @@
 #include <QSize>
 #include <QString>
 #include <QByteArray>
+#include <QSharedData>
 
 /**
   This class stores
@@ -13,7 +14,6 @@
 class cwImageData
 {
 public:
-   // cwImageData(int id);
     cwImageData();
     cwImageData(QSize size, int dotsPerMeter, const QByteArray& format, const QByteArray& image);
 
@@ -21,29 +21,31 @@ public:
     int dotsPerMeter() const;
     QByteArray format() const;
     QByteArray data() const;
-   // int DatabaseID() const;
 
 private:
-    QSize Size;
-    int DotsPerMeter;
-    QByteArray Format;
-    QByteArray Data;
-    //int databaseId;
+    class PrivateData : public QSharedData {
+    public:
+        QSize Size;
+        int DotsPerMeter;
+        QByteArray Format;
+        QByteArray Data;
+    };
 
+    QSharedDataPointer<PrivateData> Data;
 };
 
 /**
   \brief This gets the image data size
   */
 inline QSize cwImageData::size() const {
-    return Size;
+    return Data->Size;
 }
 
 /**
   \brief Gets the resolution of the image
   */
 inline int cwImageData::dotsPerMeter() const {
-    return DotsPerMeter;
+    return Data->DotsPerMeter;
 }
 
 /**
@@ -52,22 +54,14 @@ inline int cwImageData::dotsPerMeter() const {
   This is usually a jpg, or a compress opengl format
   */
 inline QByteArray cwImageData::format() const {
-    return Format;
+    return Data->Format;
 }
 
 /**
   \brief This gets the image data
   */
 inline QByteArray cwImageData::data() const {
-    return Data;
+    return Data->Data;
 }
-
-/**
-  \brief Gets the database id.  This is the unique id that the database has
-  stored for the image
-  */
-//inline int cwImageData::DatabaseID() const {
-//    return databaseId;
-//}
 
 #endif // CWIMAGEDATA_H

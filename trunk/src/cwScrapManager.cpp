@@ -6,11 +6,22 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"
+#include "cwTriangulateTask.h"
+#include "cwProject.h"
+
+//Qt includes
+#include <QThread>
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
-    Region(NULL)
+    Region(NULL),
+    TriangulateThread(new QThread(this)),
+    TriangulateTask(new cwTriangulateTask()),
+    Project(NULL)
 {
+    TriangulateTask->setThread(TriangulateThread);
+
+    connect(TriangulateTask, SIGNAL(finished()), SLOT(taskFinished()));
 
 }
 
@@ -33,6 +44,34 @@ void cwScrapManager::setRegion(cwCavingRegion* region) {
 
         connectAllCaves();
     }
+}
+
+/**
+  \brief Sets the project for the scrap manager
+  */
+void cwScrapManager::setProject(cwProject *project) {
+    Project = project;
+}
+
+/**
+  This function is for testing
+
+  This will gather all the scraps from all the caves, and trips, and notes and regenerate
+  all there geometry
+  */
+void cwScrapManager::updateAllScraps() {
+
+    //Get all the scraps for the whole region
+    QList<cwScrap*> scraps;
+    foreach(cwCave* cave, Region->caves()) {
+        foreach(cwTrip* trip, cave->trips()) {
+            foreach(cwNote* note, trip->notes()->notes()) {
+                scraps.append(note->scraps());
+            }
+        }
+    }
+
+    updateScrapGeometry(scraps);
 }
 
 void cwScrapManager::connectAllCaves() {
@@ -88,9 +127,46 @@ void cwScrapManager::connectScrapes(QList<cwScrap*> scraps) {
   3. Morph the geometry to the station positions
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
+    //Create the scrap data list
+    QList<cwTriangulateInData> scrapData;
+    foreach(cwScrap* scrap, scraps) {
+        qDebug() << "Update scrap geometry for: " << scrap;
+        scrapData.append(mapScrapToTriangulateInData(scrap));
+    }
 
-
+    if(TriangulateTask->isReady()) {
+        TriangulateTask->setProjectFilename(Project->filename());
+        TriangulateTask->setScrapData(scrapData);
+        TriangulateTask->start();
+    }
 }
+
+/**
+    Extracts data from the cwScrap and puts it into a cwTriangulateInData
+  */
+cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
+    cwTriangulateInData data;
+    data.setNoteImage(scrap->parentNote()->image());
+    data.setOutline(scrap->points());
+    data.setStations(mapNoteStationsToTriangulateStation(scrap->stations()));
+    return data;
+}
+
+/**
+  Extracts the note station's position and note position
+  */
+QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations) const {
+    QList<cwTriangulateStation> stations;
+    foreach(cwNoteStation noteStation, noteStations) {
+        cwTriangulateStation station;
+        station.setName(noteStation.name());
+        station.setNotePosition(noteStation.positionOnNote());
+        station.setPosition(noteStation.station().position());
+        stations.append(cwTriangulateStation(station));
+    }
+    return stations;
+}
+
 
 void cwScrapManager::cavesInserted(int begin, int end) {
 
@@ -126,4 +202,12 @@ void cwScrapManager::scrapRemoved(int begin, int end) {
 
 void cwScrapManager::updateScrapPoints() {
 
+}
+
+/**
+  \brief Triangulation task has finished
+  */
+void cwScrapManager::taskFinished() {
+    QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
+    qDebug() << "Task finished!";
 }

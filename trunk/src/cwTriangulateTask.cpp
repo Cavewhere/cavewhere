@@ -1,61 +1,72 @@
 //Our includes
 #include "cwTriangulateTask.h"
+#include "cwCropImageTask.h"
 #include "cwDebug.h"
-
-//Triangle includes
-#include "triangle/triangle.h"
 
 //Qt includes
 #include <QDebug>
 
 cwTriangulateTask::cwTriangulateTask(QObject *parent) :
-    cwTask(parent)
+    cwTask(parent),
+    CropTask(new cwCropImageTask(this))
 {
+    CropTask->setParentTask(this);
+
 }
 
-//Input so the triangle task
-void cwTriangulateTask::setPolygon(QPolygonF polygon) {
+void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
     if(isReady()) {
-        Polygon = polygon;
+        Scraps = scraps;
     } else {
-        qDebug() << "Can't set the polygon while the task is still running" << LOCATION;
+        qDebug() << "Can't set scraps while the task is still running" << LOCATION;
     }
 }
 
-/**
-  \brief Gets all the triangle points
-  */
-QVector<QVector3D> cwTriangulateTask::trianglePoints() const {
-    if(!isReady()) {
-        qDebug() << "Can't get triangle points when triangulate task is still running" << LOCATION;
-        return QVector<QVector3D>();
+void cwTriangulateTask::setProjectFilename(QString filename)
+{
+    if(isReady()) {
+        ProjectFilename = filename;
+    } else {
+        qDebug() << "Can't set project filename while the task is still running" << LOCATION;
     }
-    return TrianglePoints;
 }
 
-/**
-  \brief Gets all the triangle indices
-  */
-QVector<int> cwTriangulateTask::triangleIndices() const {
-    if(!isReady()) {
-        qDebug() << "Can't get triangle indices when triangulate task is still running" << LOCATION;
-        return QVector<int>();
+QList<cwTriangulatedData> cwTriangulateTask::triangulatedScrapData() const {
+    if(isReady()) {
+        return TriangulatedScraps;
+    } else {
+        qDebug() << "Can't get scrap data because the task is still running" << LOCATION;
     }
-    return TriangleIndices;
-
+    return QList<cwTriangulatedData>();
 }
 
 /**
   \brief Does the triangulation
   */
 void cwTriangulateTask::runTask() {
+    TriangulatedScraps.clear();
+    TriangulatedScraps.reserve(Scraps.size());
 
-    triangulateio input;
-    triangulateio output;
-
-
-
-
+    //Crop all the scrap data
+    cropScraps();
 
 
+    done();
+}
+
+/**
+    This runs the cropping task on all the scraps
+  */
+void cwTriangulateTask::cropScraps() {
+    foreach(cwTriangulateInData data, Scraps) {
+        QRectF cropArea = data.outline().boundingRect();
+        CropTask->setOriginal(data.noteImage());
+        CropTask->setRectF(cropArea);
+        CropTask->setDatabaseFilename(ProjectFilename);
+        CropTask->start();
+
+        cwTriangulatedData triangulatedData;
+        triangulatedData.setCroppedImage(CropTask->croppedImage());
+        TriangulatedScraps.append(triangulatedData);
+    }
 }

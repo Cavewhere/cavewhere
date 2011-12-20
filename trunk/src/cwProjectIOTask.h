@@ -20,13 +20,15 @@ public:
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
 
+
 protected:
     //For database access
     QString DatabasePath;
     QSqlDatabase Database; //sqlite database
 
     bool connectToDatabase(QString connectionName);
-
+    bool beginTransation(const char *restartSlot = NULL);
+    void endTransation();
 
 };
 

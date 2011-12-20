@@ -23,8 +23,9 @@ public:
     virtual QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
     QByteArray requestImageData(int id, QSize* size, QByteArray* type = NULL);
 
-    cwImageData originalMetadata(const cwImage& image);
-    cwImageData data(int id, bool metaDataOnly = false);
+    cwImageData originalMetadata(const cwImage& image) const;
+    cwImageData data(int id, bool metaDataOnly = false) const;
+    QImage image(int id) const;
 
 public slots:
     void setProjectPath(QString projectPath);

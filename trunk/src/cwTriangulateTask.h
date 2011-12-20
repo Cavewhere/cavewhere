@@ -3,6 +3,9 @@
 
 //Our includes
 #include "cwTask.h"
+#include "cwTriangulateInData.h"
+#include "cwTriangulatedData.h"
+class cwCropImageTask;
 
 //Qt include
 #include <QPolygonF>
@@ -16,11 +19,11 @@ public:
     explicit cwTriangulateTask(QObject *parent = 0);
     
     //Input so the triangle task
-    void setPolygon(QPolygonF polygon);
+    void setScrapData(QList<cwTriangulateInData> scraps);
+    void setProjectFilename(QString filename);
 
     //Outputs of the task
-    QVector<QVector3D> trianglePoints() const;
-    QVector<int> triangleIndices() const;
+    QList<cwTriangulatedData> triangulatedScrapData() const;
 
 signals:
     
@@ -32,12 +35,17 @@ protected:
 
 private:
     //Inputs
-    QPolygonF Polygon;
+    QList<cwTriangulateInData> Scraps;
+    QString ProjectFilename;
 
     //Outputs
-    QVector<QVector3D> TrianglePoints;
-    QVector<int> TriangleIndices;
-    
+    QList<cwTriangulatedData> TriangulatedScraps;
+
+    //Sub tasks
+    cwCropImageTask* CropTask;
+
+    void cropScraps();
+
 };
 
 #endif // CWTRIANGULATETASK_H

@@ -67,8 +67,15 @@
     <addaction name="ActionUndo"/>
     <addaction name="ActionRedo"/>
    </widget>
+   <widget class="QMenu" name="menuRun">
+    <property name="title">
+     <string>Run</string>
+    </property>
+    <addaction name="actionCompute_Scraps"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
+   <addaction name="menuRun"/>
   </widget>
   <action name="actionQuit">
    <property name="text">
@@ -125,6 +132,11 @@
   <action name="actionLoad">
    <property name="text">
     <string>Load</string>
+   </property>
+  </action>
+  <action name="actionCompute_Scraps">
+   <property name="text">
+    <string>Compute Scraps</string>
    </property>
   </action>
  </widget>

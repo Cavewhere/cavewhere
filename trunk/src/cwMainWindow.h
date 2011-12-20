@@ -15,6 +15,7 @@ class cwRegionTreeModel;
 class cwLinePlotManager;
 class cwProject;
 class cwProjectImageProvider;
+class cwScrapManager;
 
 //Qt includes
 #include <QString>
@@ -71,6 +72,9 @@ private:
 
     //Loop closer manager
     cwLinePlotManager* LinePlotManager;
+
+    //The scrap manager that generates all the opengl scrap geometry
+    cwScrapManager* ScrapManager;
 
     //For undo and redo
     QAction* UndoAction;

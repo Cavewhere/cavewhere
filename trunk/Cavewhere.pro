@@ -136,7 +136,8 @@ SOURCES += src/main.cpp \
     src/cwScrapManager.cpp \
     src/cwTriangulateStation.cpp \
     src/cwTriangulateInData.cpp \
-    src/cwTriangulatedData.cpp
+    src/cwTriangulatedData.cpp \
+    src/cwCropImageTask.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -255,7 +256,8 @@ HEADERS  += \
     src/cwScrapManager.h \
     src/cwTriangulateStation.h \
     src/cwTriangulateInData.h \
-    src/cwTriangulatedData.h
+    src/cwTriangulatedData.h \
+    src/cwCropImageTask.h
 
 
 
