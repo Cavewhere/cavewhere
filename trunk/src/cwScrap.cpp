@@ -18,7 +18,8 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     ParentNote(NULL),
-    ParentCave(NULL)
+    ParentCave(NULL),
+    CalculateNoteTransform(false)
 {
     setCalculateNoteTransform(true);
 }
@@ -27,7 +28,8 @@ cwScrap::cwScrap(const cwScrap& other)
     : QObject(NULL),
       NoteTransformation(new cwNoteTranformation(this)),
       ParentNote(NULL),
-      ParentCave(NULL)
+      ParentCave(NULL),
+      CalculateNoteTransform(false)
 {
     setCalculateNoteTransform(true);
     copy(other);

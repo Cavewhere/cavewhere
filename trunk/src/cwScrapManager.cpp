@@ -8,6 +8,7 @@
 #include "cwScrap.h"
 #include "cwTriangulateTask.h"
 #include "cwProject.h"
+#include "cwTriangulateInData.h"
 
 //Qt includes
 #include <QThread>
@@ -149,6 +150,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteImage(scrap->parentNote()->image());
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations()));
+    data.setNoteTransform(*(scrap->noteTransformation()));
     return data;
 }
 
