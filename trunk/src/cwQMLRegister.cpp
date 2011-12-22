@@ -55,6 +55,8 @@
 #include "cwScaleLengthItem.h"
 #include "cwImageProperties.h"
 #include "cwUnits.h"
+#include "cwGLScraps.h"
+#include "cwScrapManager.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -106,4 +108,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
     qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");
     qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
+    qmlRegisterType<cwGLScraps>("Cavewhere", 1, 0, "GLScraps");
+    qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
 }

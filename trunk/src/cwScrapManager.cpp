@@ -9,6 +9,8 @@
 #include "cwTriangulateTask.h"
 #include "cwProject.h"
 #include "cwTriangulateInData.h"
+#include "cwDebug.h"
+#include "cwGLScraps.h"
 
 //Qt includes
 #include <QThread>
@@ -18,7 +20,8 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     Region(NULL),
     TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
-    Project(NULL)
+    Project(NULL),
+    GLScraps(NULL)
 {
     TriangulateTask->setThread(TriangulateThread);
 
@@ -128,6 +131,10 @@ void cwScrapManager::connectScrapes(QList<cwScrap*> scraps) {
   3. Morph the geometry to the station positions
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
+    foreach(cwScrap* scrap, scraps) {
+        WaitingForUpdate.append(QWeakPointer<cwScrap>(scrap));
+    }
+
     //Create the scrap data list
     QList<cwTriangulateInData> scrapData;
     foreach(cwScrap* scrap, scraps) {
@@ -211,5 +218,25 @@ void cwScrapManager::updateScrapPoints() {
   */
 void cwScrapManager::taskFinished() {
     QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
+
+    //Make sure there's the same amount of data
+    if(WaitingForUpdate.size() != scrapDataset.size()) {
+        qDebug() << "Scrap size mismatch" << LOCATION;
+        return;
+    }
+
+    //This can have major problems, if the scrap has already been deleted!!!
+    //Undo and redo wont like this
+    for(int i = 0; i < WaitingForUpdate.size(); i++) {
+        QWeakPointer<cwScrap> weakPtrScrap = WaitingForUpdate[i];
+        if(!weakPtrScrap.isNull()) {
+            cwScrap* scrap = weakPtrScrap.data();
+            scrap->setTriangulationData(scrapDataset[i]);
+        }
+    }
+
+    GLScraps->setCavingRegion(Region);
+    GLScraps->updateGeometry();
+
     qDebug() << "Task finished!";
 }

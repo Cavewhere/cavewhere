@@ -20,8 +20,6 @@ class QGLWidget;
 class cwMouseEventTransition;
 class cwGLShader;
 class cwShaderDebugger;
-class cwGLTerrain;
-class cwGLLinePlot;
 class cwCavingRegion;
 class cwCave;
 #include <cwStation.h>

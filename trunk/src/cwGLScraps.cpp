@@ -1,0 +1,131 @@
+//Our includes
+#include "cwGLScraps.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwNote.h"
+#include "cwScrap.h"
+#include "cwCamera.h"
+#include "cwSurveyNoteModel.h"
+#include "cwGLShader.h"
+#include "cwShaderDebugger.h"
+
+cwGLScraps::cwGLScraps(QObject *parent) :
+    cwGLObject(parent),
+    Region(NULL)
+{
+}
+
+/**
+  \brief This goes through all the scraps in the region and uploads the data to the graphics card.
+
+  This will clear all previously stored data
+  */
+void cwGLScraps::updateGeometry() {
+    if(Region == NULL) { return; }
+
+    Scraps.clear();
+
+    foreach(cwCave* cave, Region->caves()) {
+        foreach(cwTrip* trip, cave->trips()) {
+            foreach(cwNote* note, trip->notes()->notes()) {
+                foreach(cwScrap* scrap, note->scraps()) {
+                    Scraps.append(GLScrap(scrap->triangulationData()));
+                }
+            }
+        }
+    }
+}
+
+void cwGLScraps::initialize() {
+    initializeShaders();
+}
+
+void cwGLScraps::draw() {
+    Program->bind();
+
+    QMatrix4x4 scale;
+    scale.scale(10.0, 10.0, 10.0);
+
+    Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * scale);
+    Program->enableAttributeArray(vVertex);
+
+    foreach(GLScrap scrap, Scraps) {
+        scrap.IndexBuffer.bind();
+        scrap.PointBuffer.bind();
+
+        Program->setAttributeBuffer(vVertex, GL_FLOAT, 0, 3);
+
+
+        glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, NULL);
+
+        scrap.IndexBuffer.release();
+        scrap.PointBuffer.release();
+    }
+
+    Program->release();
+}
+
+/**
+  \brief This initilizes the shaders for the scraps
+  */
+void cwGLScraps::initializeShaders() {
+    cwGLShader* scrapVertexShader = new cwGLShader(QGLShader::Vertex);
+    scrapVertexShader->setSourceFile("shaders/scrap.vert");
+
+    cwGLShader* scrapFragmentShader = new cwGLShader(QGLShader::Fragment);
+    scrapFragmentShader->setSourceFile("shaders/scrap.frag");
+
+    cwGLShader* scrapGeometryShader = new cwGLShader(QGLShader::Geometry);
+    scrapGeometryShader->setSourceFile("shaders/tileVertex.geom");
+
+    Program = new QGLShaderProgram(this);
+    Program->addShader(scrapVertexShader);
+    Program->addShader(scrapFragmentShader);
+    Program->addShader(scrapGeometryShader);
+
+    Program->setGeometryInputType(GL_TRIANGLES);
+    Program->setGeometryOutputType(GL_TRIANGLE_STRIP);
+
+
+
+    bool linkingErrors = Program->link();
+    if(!linkingErrors) {
+        qDebug() << "Linking errors:" << Program->log();
+    }
+
+
+
+    shaderDebugger()->addShaderProgram(Program);
+    UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
+    vVertex = Program->attributeLocation("vVertex");
+    Program->setUniformValue("colorBG", Qt::green);
+
+//    UniformModelMatrix = Program->uniformLocation("ModelMatrix");
+}
+
+cwGLScraps::GLScrap::GLScrap() : NumberOfIndices(0) {
+
+}
+
+cwGLScraps::GLScrap::GLScrap(cwTriangulatedData data) {
+    PointBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
+    PointBuffer.create();
+    PointBuffer.bind();
+    int pointBufferSize = data.points().size() * sizeof(QVector3D);
+    PointBuffer.allocate(data.points().constData(), pointBufferSize);
+    PointBuffer.release();
+
+    qDebug() << "Data points: " << (data.indices().size() / 3.0);
+
+    IndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
+    IndexBuffer.create();
+    IndexBuffer.bind();
+    int indexBufferSize = data.indices().size() * sizeof(uint);
+    IndexBuffer.allocate(data.indices().constData(), indexBufferSize);
+    IndexBuffer.release();
+
+    NumberOfIndices = data.indices().size();
+}
+
+

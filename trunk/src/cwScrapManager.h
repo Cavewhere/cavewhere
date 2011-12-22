@@ -15,6 +15,7 @@ class cwScrap;
 class cwNote;
 class cwTriangulateTask;
 class cwProject;
+class cwGLScraps;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 
@@ -31,6 +32,8 @@ public:
     void setRegion(cwCavingRegion* region);
     void setProject(cwProject* project);
 
+    Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
+
 
 signals:
     
@@ -40,12 +43,17 @@ public slots:
 private:
     cwCavingRegion* Region;
 
+    QList<QWeakPointer<cwScrap> > WaitingForUpdate;
+
     QSet<cwScrap*> Scraps;
 
     //The task that'll be run
     QThread* TriangulateThread;
     cwTriangulateTask* TriangulateTask;
     cwProject* Project;
+
+    //For testing only
+    cwGLScraps* GLScraps;
 
     void connectAllCaves();
     void connectCave(cwCave* cave);
@@ -72,5 +80,15 @@ private slots:
     void taskFinished();
 
 };
+
+
+/**
+  \brief Sets the gl scraps for the manager
+  */
+inline void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
+{
+    GLScraps = glScraps;
+}
+
 
 #endif // CWSCRAPMANAGER_H

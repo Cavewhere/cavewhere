@@ -137,7 +137,8 @@ SOURCES += src/main.cpp \
     src/cwTriangulateInData.cpp \
     src/cwTriangulatedData.cpp \
     src/cwCropImageTask.cpp \
-    src/utils/cwTriangulate.cpp
+    src/utils/cwTriangulate.cpp \
+    src/cwGLScraps.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -257,7 +258,8 @@ HEADERS  += \
     src/cwTriangulateInData.h \
     src/cwTriangulatedData.h \
     src/cwCropImageTask.h \
-    src/utils/cwTriangulate.h
+    src/utils/cwTriangulate.h \
+    src/cwGLScraps.h
 
 
 
@@ -287,6 +289,9 @@ OTHER_FILES += \
     shaders/NoteItem.vsh \
     shaders/NoteItem.frag \
     shaders/NoteItem.vert \
+    shaders/tileVertex.vert \
+    shaders/tileVertex.frag \
+    shaders/tileVertex.geom \
     qml/FileDialog.qml \
     qml/ButtonGroup.qml \
     qml/Splitter.qml \
@@ -315,7 +320,10 @@ OTHER_FILES += \
     qml/GlobalShadowTextInput.qml \
     qml/DataBox.qml \
     qml/Utils.js \
-    qml/LengthInput.qml
+    qml/LengthInput.qml \
+    qml/CavewhereMainWindow.qml \
+    shaders/scrap.vert \
+    shaders/scrap.frag
 
 RESOURCES += \
     icons.qrc

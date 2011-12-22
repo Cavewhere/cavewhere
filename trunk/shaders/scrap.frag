@@ -22,7 +22,7 @@ void main() {
  // vec4 color = vec4(sin(vAngle), gTriangleDistance.x, cos(vAngle), 1.0);
   float triangleDistance = min(gTriangleDistance.x, min(gTriangleDistance.y, gTriangleDistance.z));
 
-  vec4 sauce = vec4(0.2, 0.2, 0.2, 1.0); //(0.5, 0.5, 1.0, 1.0);
+  vec4 sauce = vec4(0.0, 1.0, 0.0, 1.0); //(0.5, 0.5, 1.0, 1.0);
   //vec4 sauce = vec4(colorBG, 1.0);
   gl_FragColor = amplify(triangleDistance, 85.0, -0.1) * sauce;
 //  float r = abs(cos(vAngle) * (gPosition.x + gPosition.y) / 500.0);

@@ -17,9 +17,9 @@
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
+    CalculateNoteTransform(false),
     ParentNote(NULL),
-    ParentCave(NULL),
-    CalculateNoteTransform(false)
+    ParentCave(NULL)
 {
     setCalculateNoteTransform(true);
 }
@@ -27,9 +27,9 @@ cwScrap::cwScrap(QObject *parent) :
 cwScrap::cwScrap(const cwScrap& other)
     : QObject(NULL),
       NoteTransformation(new cwNoteTranformation(this)),
+      CalculateNoteTransform(false),
       ParentNote(NULL),
-      ParentCave(NULL),
-      CalculateNoteTransform(false)
+      ParentCave(NULL)
 {
     setCalculateNoteTransform(true);
     copy(other);
@@ -454,6 +454,9 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
 
     return toNormalizedNote;
 }
+
+
+
 
 /**
   \brief Sets the parent trip

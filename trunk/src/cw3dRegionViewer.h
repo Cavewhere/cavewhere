@@ -7,12 +7,16 @@
 
 //Our includes
 #include "cwGLRenderer.h"
+class cwGLTerrain;
+class cwGLLinePlot;
+class cwGLScraps;
 
 class cw3dRegionViewer : public cwGLRenderer
 {
     Q_OBJECT
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
+    Q_PROPERTY(cwGLScraps* scraps READ scraps)
 
 public:
     cw3dRegionViewer(QDeclarativeItem *parent = 0);
@@ -21,6 +25,7 @@ public:
 
 public slots:
     cwGLLinePlot* linePlot();
+    cwGLScraps* scraps() const;
 
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
@@ -84,6 +89,7 @@ private:
     //The terrain that's rendered
     cwGLTerrain* Terrain;
     cwGLLinePlot* LinePlot;
+    cwGLScraps* Scraps;
 
     //For rendering label
     cwCavingRegion* Region;
@@ -98,6 +104,11 @@ private:
   \brief Returns the object that renderes the line plot
   */
 inline cwGLLinePlot* cw3dRegionViewer::linePlot() { return LinePlot; }
+
+inline cwGLScraps *cw3dRegionViewer::scraps() const
+{
+    return Scraps;
+}
 
 /**
   \brief Returns the caving region that's owned by the renderer

@@ -46,7 +46,8 @@ Rectangle {
 
             Component.onCompleted: {
                 //Setup the linePlotManager with the glLinePlot
-               linePlotManager.setGLLinePlot(linePlot);
+                linePlotManager.setGLLinePlot(linePlot);
+                scrapManager.setGLScraps(scraps);
             }
         }
 

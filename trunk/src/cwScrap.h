@@ -10,6 +10,7 @@
 //Our includes
 #include <cwNoteTranformation.h>
 #include <cwNoteStation.h>
+#include <cwTriangulatedData.h>
 class cwNote;
 
 /**
@@ -69,6 +70,9 @@ public:
 
     QMatrix4x4 mapWorldToNoteMatrix(cwNoteStation stationOffset);
 
+    void setTriangulationData(cwTriangulatedData data);
+    cwTriangulatedData triangulationData() const;
+
 signals:
     //For scrap outline
     void insertedPoints(int begin, int end);
@@ -98,6 +102,9 @@ private:
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
     cwCave* ParentCave;
+
+    //For rendering, points in note coordinates
+    cwTriangulatedData TriangulationData;
 
     //Clamps a pointF that's in note coordinates to the scrap
     QPointF clampToScrap(QPointF point);
@@ -184,6 +191,21 @@ inline bool cwScrap::calculateNoteTransform() const {
 inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
+
+/**
+  \brief Sets the triangulation data
+  */
+inline void cwScrap::setTriangulationData(cwTriangulatedData data) {
+    TriangulationData = data;
+}
+
+/**
+  \brief Gets the triangulation data
+  */
+inline cwTriangulatedData cwScrap::triangulationData() const {
+    return TriangulationData;
+}
+
 
 
 #endif // CWSCRAP_H

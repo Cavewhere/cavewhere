@@ -145,7 +145,7 @@ inline int cwTriangulateTask::PointGrid::index(int x, int y) const {
   This is useful for converting an index into x, y indices
   */
 inline QPoint cwTriangulateTask::PointGrid::xyIndices(int index) const {
-    return QPoint(index / GridSize.width(), index % GridSize.width());
+    return QPoint(index % GridSize.width(), index / GridSize.width());
 }
 
 /**

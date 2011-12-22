@@ -49,6 +49,7 @@ void cwGLTerrain::initialize() {
     shaderDebugger()->addShaderProgram(TileProgram);
     UniformModelViewProjectionMatrix = TileProgram->uniformLocation("ModelViewProjectionMatrix");
     UniformModelMatrix = TileProgram->uniformLocation("ModelMatrix");
+    TileProgram->setUniformValue("colorBG", Qt::gray);
 
     EdgeTile->setCamera(camera());
     RegularTile->setCamera(camera());

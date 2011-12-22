@@ -312,14 +312,19 @@ QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTa
         QPointF bottomRight = grid.Points[quad.bottomRight()];
 
         QPolygonF quadPolygon;
-        quadPolygon.reserve(4);
+        quadPolygon.reserve(5);
         quadPolygon.append(topLeft);
         quadPolygon.append(topRight);
-        quadPolygon.append(bottomLeft);
         quadPolygon.append(bottomRight);
+        quadPolygon.append(bottomLeft);
+        quadPolygon.append(topLeft);
 
         //Find the intersection
         QPolygonF intesection = scrapOutline.intersected(quadPolygon);
+        if(intesection.first() == intesection.last()) {
+            intesection.pop_back();
+        }
+
 
         //Triangluate polygon!
         QVector<QPointF> triangles;
@@ -327,6 +332,12 @@ QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTa
 
         if(!couldTrianglate) {
             qDebug() << "Couldn't triangulate ... Non-simple polygon?! " << LOCATION;
+
+            foreach(QPointF point, intesection) {
+                qDebug() << point.x() << point.y();
+            }
+            qDebug() << "-------------------------------";
+
         }
 
         allTriangles += triangles;

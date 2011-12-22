@@ -287,6 +287,7 @@ void cwMainWindow::reloadQML() {
     context->setContextProperty("region", Region);
     context->setContextProperty("mainGLWidget", glWidget);
     context->setContextProperty("linePlotManager", LinePlotManager);
+    context->setContextProperty("scrapManager", ScrapManager);
     context->setContextProperty("project", Project);
 
     //This allow to extra image data from the project's image database

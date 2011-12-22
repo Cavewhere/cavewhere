@@ -14,6 +14,7 @@
 #include "cwCave.h"
 #include "cwStation.h"
 #include "cw3dRegionViewer.h"
+#include "cwGLScraps.h"
 
 //Qt includes
 #include <QPainter>
@@ -44,6 +45,9 @@ cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
     LinePlot->setCamera(Camera);
     LinePlot->setShaderDebugger(ShaderDebugger);
 
+    Scraps = new cwGLScraps(this);
+    Scraps->setCamera(Camera);
+    Scraps->setShaderDebugger(ShaderDebugger);
 }
 
 /**
@@ -69,6 +73,7 @@ void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     Terrain->draw();
+    Scraps->draw();
     LinePlot->draw();
 
    glDisable(GL_DEPTH_TEST);
@@ -82,6 +87,7 @@ void cw3dRegionViewer::initializeGL() {
     resetView();
 
     Terrain->initialize();
+    Scraps->initialize();
     LinePlot->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
