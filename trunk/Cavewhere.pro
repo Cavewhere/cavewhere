@@ -132,12 +132,12 @@ SOURCES += src/main.cpp \
     src/cwAbstract2PointItem.cpp \
     src/cwImageProperties.cpp \
     src/cwTriangulateTask.cpp \
-    src/triangle/triangle.c \
     src/cwScrapManager.cpp \
     src/cwTriangulateStation.cpp \
     src/cwTriangulateInData.cpp \
     src/cwTriangulatedData.cpp \
-    src/cwCropImageTask.cpp
+    src/cwCropImageTask.cpp \
+    src/utils/cwTriangulate.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -252,12 +252,12 @@ HEADERS  += \
     src/cwAbstract2PointItem.h \
     src/cwImageProperties.h \
     src/cwTriangulateTask.h \
-    src/triangle/triangle.h \
     src/cwScrapManager.h \
     src/cwTriangulateStation.h \
     src/cwTriangulateInData.h \
     src/cwTriangulatedData.h \
-    src/cwCropImageTask.h
+    src/cwCropImageTask.h \
+    src/utils/cwTriangulate.h
 
 
 

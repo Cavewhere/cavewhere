@@ -24,8 +24,8 @@ public:
     QVector<QVector2D> texCoords() const;
     void setTexCoords(QVector<QVector2D> texCoords);
 
-    QVector<int> indices() const;
-    void setIndices(QVector<int> indices);
+    QVector<uint> indices() const;
+    void setIndices(QVector<uint> indices);
 
 private:
     class PrivateData : public QSharedData {
@@ -33,7 +33,7 @@ private:
         cwImage croppedImage;
         QVector<QVector3D> points;
         QVector<QVector2D> texCoords;
-        QVector<int> indices;
+        QVector<uint> indices;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -84,14 +84,14 @@ inline void cwTriangulatedData::setTexCoords(QVector<QVector2D> texCoords) {
 /**
   Get variableName
   */
-inline QVector<int> cwTriangulatedData::indices() const {
+inline QVector<uint> cwTriangulatedData::indices() const {
     return Data->indices;
 }
 
 /**
   Sets variableName
   */
-inline void cwTriangulatedData::setIndices(QVector<int> indices) {
+inline void cwTriangulatedData::setIndices(QVector<uint> indices) {
     Data->indices = indices;
 }
 #endif // CWTRIANGULATEDATA_H

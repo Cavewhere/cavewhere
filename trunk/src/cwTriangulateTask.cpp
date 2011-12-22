@@ -2,6 +2,10 @@
 #include "cwTriangulateTask.h"
 #include "cwCropImageTask.h"
 #include "cwDebug.h"
+#include "utils/cwTriangulate.h"
+
+//Utils includes
+#include "utils/Forsyth.h"
 
 //Qt includes
 #include <QDebug>
@@ -100,7 +104,8 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Creates list of quads that are on the edges or in the scrap
     QuadDatabase quads = createQuads(pointGrid, gridPointsInScrap);
 
-    qDebug() << "Quad database:" << quads.FullQuads.size() << quads.PartialQuads.size();
+    //Triangulate the quads (this will update the outputs data)
+    createTriangles(pointGrid, gridPointsInScrap, quads, index);
 }
 
 /**
@@ -187,14 +192,14 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
                     pointsInScrap.contains(quad.bottomLeft()) &&
                     pointsInScrap.contains(quad.bottomRight())) {
                 //Quad is completely in the outline
-                quadDatabase.FullQuads.append(index);
+                quadDatabase.FullQuads.append(quad);
 
             } else if(pointsInScrap.contains(quad.topLeft()) ||
                       pointsInScrap.contains(quad.topRight()) ||
                        pointsInScrap.contains(quad.bottomLeft()) ||
                        pointsInScrap.contains(quad.bottomRight())) {
                 //Edge case
-                quadDatabase.PartialQuads.append(index);
+                quadDatabase.PartialQuads.append(quad);
 
             }
         }
@@ -203,6 +208,175 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
     return quadDatabase;
 }
 
+/**
+    This triangulates the database of quads.
+
+    grid - used to extract the point data
+    database - used to extract to topology
+    index - the location of where the point data will be stored in the output
+ */
+void cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
+                                        const QSet<int> pointsContainedInOutline,
+                                        const cwTriangulateTask::QuadDatabase &database,
+                                        int index) {
+
+    cwTriangulateInData& inScrapData = Scraps[index];
+    cwTriangulatedData& outScrapData = TriangulatedScraps[index];
+
+    //Resize the outputScrapData to have all points contained in the scrap outline
+    QVector<QVector3D> points;
+    points.resize(pointsContainedInOutline.size());
+
+    //Create a map between indices in grid, and indices in the output
+    QHash<int, int> mapGridToOutputIndices;
+    int current = 0;
+    foreach(int gridIndex, pointsContainedInOutline) {
+        points[current] = QVector3D(grid.Points[gridIndex]);
+        mapGridToOutputIndices[gridIndex] = current;
+        current++;
+    }
+
+    //Do triangulation
+    QVector<uint> fullTriangleIndices = createTrianglesFull(database, mapGridToOutputIndices);
+    QVector<QPointF> partialTriangles = createTrianglesPartial(grid, database, inScrapData.outline());
+
+    //Get the final triangle set
+    mergeFullAndPartialTriangles(points, fullTriangleIndices, partialTriangles);
+
+    //Optimize triangle indices for graphics card triangle cache preformance
+    QVector<uint> optimizedIndices;
+    optimizedIndices.reserve(fullTriangleIndices.size());
+    optimizedIndices.resize(fullTriangleIndices.size());
+
+    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
+                           fullTriangleIndices.size(),
+                           points.size(),
+                           optimizedIndices.data(),
+                           24); //Optimize for 24 triangle count
+
+    //Set the output's data
+    outScrapData.setPoints(points);
+    outScrapData.setIndices(optimizedIndices);
+}
+
+/**
+    This will go through all full quads in the database and create triangles for them.
+
+    The outputed triangles will be in counter clockwis order
+
+    The grid is used to get the quad
+  */
+QVector<uint> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::QuadDatabase &database,
+                                                    const QHash<int, int> &mapGridToOutput) {
+
+    QVector<uint> triangles;
+
+    //For all the quads
+    foreach(const Quad& quad, database.FullQuads) {
+        //Map the quad to the new outputIndices
+        uint topLeft = (uint)mapGridToOutput.value(quad.topLeft(), 0);
+        uint topRight = (uint)mapGridToOutput.value(quad.topRight(), 0);
+        uint bottomLeft = (uint)mapGridToOutput.value(quad.bottomLeft(), 0);
+        uint bottomRight = (uint)mapGridToOutput.value(quad.bottomRight(), 0);
+
+        //Top triangle
+        triangles.append(topLeft);
+        triangles.append(bottomLeft);
+        triangles.append(topRight);
+
+        //Bottom triangle
+        triangles.append(bottomLeft);
+        triangles.append(bottomRight);
+        triangles.append(topRight);
+    }
+
+    return triangles;
+}
+
+/**
+  This function calculates the edge condition where there are partial boxes
+
+  This function will create a small polygon that's the intersection between the full outline
+  and partial quad.
+  */
+QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTask::PointGrid& grid,
+                                                             const cwTriangulateTask::QuadDatabase &database,
+                                                             const QPolygonF& scrapOutline) {
+
+    QVector<QPointF> allTriangles;
+
+    foreach(const Quad& quad, database.PartialQuads) {
+        QPointF topLeft = grid.Points[quad.topLeft()];
+        QPointF topRight = grid.Points[quad.topRight()];
+        QPointF bottomLeft = grid.Points[quad.bottomLeft()];
+        QPointF bottomRight = grid.Points[quad.bottomRight()];
+
+        QPolygonF quadPolygon;
+        quadPolygon.reserve(4);
+        quadPolygon.append(topLeft);
+        quadPolygon.append(topRight);
+        quadPolygon.append(bottomLeft);
+        quadPolygon.append(bottomRight);
+
+        //Find the intersection
+        QPolygonF intesection = scrapOutline.intersected(quadPolygon);
+
+        //Triangluate polygon!
+        QVector<QPointF> triangles;
+        bool couldTrianglate = cwTriangulate::Process(intesection, triangles);
+
+        if(!couldTrianglate) {
+            qDebug() << "Couldn't triangulate ... Non-simple polygon?! " << LOCATION;
+        }
+
+        allTriangles += triangles;
+    }
+
+    return allTriangles;
+}
+/**
+    This function will add the unAddTriangles into indices.  It will also add triangle's points into
+    points.  This function will attemp to reuse points such all of pointSet's points are unique.
+
+    This function assumes that the points in pointSet are already unique before calling this functions.
+  */
+void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSet,
+                                                     QVector<uint> &indices,
+                                                     const QVector<QPointF>& unAddedTriangles)
+{
+    static const float PointTolerance = 0.000001;
+
+    foreach(QPointF unAddedPoint, unAddedTriangles) {
+
+        bool foundExistIndex = false;
+        uint index;
+
+        //Search for the point in the point set
+        //This is a slow linear search, could be replace with a kd-tree of the pointSet
+        //Good enough for now...
+        for(int i = 0; i < pointSet.size(); i++) {
+            const QVector3D& point = pointSet[i];
+            float xDelta = fabs((float)unAddedPoint.x() - point.x());
+            float yDelta = fabs((float)unAddedPoint.y() - point.y());
+
+            if(xDelta <= PointTolerance && yDelta <= PointTolerance) {
+                //Hey we found the point
+                index = (uint)i;
+                foundExistIndex = true;
+                break;
+            }
+        }
+
+        //If we didn't find the index this is a new point, so add it to the pointSet
+        if(!foundExistIndex) {
+            index = (uint)pointSet.size(); //The last index
+            pointSet.append(QVector3D(unAddedPoint));
+        }
+
+        //The next index for the triangles
+        indices.append(index);
+    }
+}
 
 /**
   \brief This is a helper function that gets the quad at an origin
