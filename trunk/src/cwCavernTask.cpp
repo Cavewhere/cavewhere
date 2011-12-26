@@ -98,6 +98,6 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
   */
 void cwCavernTask::cavernFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) {
 //    qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
-//    qDebug() << CavernProcess->readAllStandardOutput();
+    qDebug() << CavernProcess->readAllStandardOutput();
     done();
 }

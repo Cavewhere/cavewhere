@@ -3,6 +3,7 @@
 #include "cwShaderDebugger.h"
 #include "cwGLShader.h"
 #include "cwCamera.h"
+#include "cwGlobalDirectory.h"
 
 //Std includes
 #include <limits>
@@ -26,10 +27,10 @@ void cwGLLinePlot::initialize() {
   */
 void cwGLLinePlot::initializeShaders() {
     cwGLShader* linePlotVertexShader = new cwGLShader(QGLShader::Vertex);
-    linePlotVertexShader->setSourceFile("shaders/LinePlot.vert");
+    linePlotVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.vert");
 
     cwGLShader* linePlotFragmentShader = new cwGLShader(QGLShader::Fragment);
-    linePlotFragmentShader->setSourceFile("shaders/LinePlot.frag");
+    linePlotFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.frag");
 
     ShaderProgram = new QGLShaderProgram(this);
     ShaderProgram->addShader(linePlotVertexShader);

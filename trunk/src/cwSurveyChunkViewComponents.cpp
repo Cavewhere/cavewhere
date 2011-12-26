@@ -4,7 +4,7 @@
 #include "cwDistanceValidator.h"
 #include "cwClinoValidator.h"
 #include "cwCompassValidator.h"
-
+#include "cwGlobalDirectory.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -17,9 +17,9 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
 {
     QDeclarativeEngine* engine = context->engine();
 
-    Delegate = new QDeclarativeComponent(engine, "qml/DataBox.qml", this);
+    Delegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
 //    StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
-    TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
+    TitleDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
 //    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
 //    RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
 //    UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);

@@ -9,6 +9,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
+#include "cwGlobalDirectory.h"
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
@@ -71,13 +72,13 @@ void cwGLScraps::draw() {
   */
 void cwGLScraps::initializeShaders() {
     cwGLShader* scrapVertexShader = new cwGLShader(QGLShader::Vertex);
-    scrapVertexShader->setSourceFile("shaders/scrap.vert");
+    scrapVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.vert");
 
     cwGLShader* scrapFragmentShader = new cwGLShader(QGLShader::Fragment);
-    scrapFragmentShader->setSourceFile("shaders/scrap.frag");
+    scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
 
     cwGLShader* scrapGeometryShader = new cwGLShader(QGLShader::Geometry);
-    scrapGeometryShader->setSourceFile("shaders/tileVertex.geom");
+    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
 
     Program = new QGLShaderProgram(this);
     Program->addShader(scrapVertexShader);

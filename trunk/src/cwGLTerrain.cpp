@@ -8,6 +8,7 @@
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
 #include "cwCamera.h"
+#include "cwGlobalDirectory.h"
 
 cwGLTerrain::cwGLTerrain(QObject *parent) :
     cwGLObject(parent)
@@ -25,13 +26,13 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
 void cwGLTerrain::initialize() {
 
     cwGLShader* tileVertexShader = new cwGLShader(QGLShader::Vertex);
-    tileVertexShader->setSourceFile("shaders/tileVertex.vert");
+    tileVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.vert");
 
     cwGLShader* tileFragmentShader = new cwGLShader(QGLShader::Fragment);
-    tileFragmentShader->setSourceFile("shaders/tileVertex.frag");
+    tileFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.frag");
 
     cwGLShader* tileGeometryShader = new cwGLShader(QGLShader::Geometry);
-    tileGeometryShader->setSourceFile("shaders/tileVertex.geom");
+    tileGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
 
     TileProgram = new QGLShaderProgram(this);
     TileProgram->addShader(tileVertexShader);

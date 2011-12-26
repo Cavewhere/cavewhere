@@ -6,6 +6,7 @@
 #include "cwScrapItem.h"
 #include "cwNote.h"
 #include "cwTrip.h"
+#include "cwGlobalDirectory.h"
 
 //Qt includes
 #include <QDeclarativeComponent>
@@ -101,7 +102,7 @@ void cwScrapStationView::createStationComponent() {
     if(StationItemComponent == NULL) {
         QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
         if(context == NULL) { return; }
-        StationItemComponent = new QDeclarativeComponent(context->engine(), "qml/NoteStation.qml", this);
+        StationItemComponent = new QDeclarativeComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
         if(StationItemComponent->isError()) {
             qDebug() << "Notecomponent errors:" << StationItemComponent->errorString();
         }

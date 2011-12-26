@@ -4,6 +4,7 @@
 #include "cwShaderDebugger.h"
 #include "cwProjectImageProvider.h"
 #include "cwImageProperties.h"
+#include "cwGlobalDirectory.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -154,10 +155,10 @@ void cwImageItem::initializeGL() {
   */
 void cwImageItem::initializeShaders() {
     cwGLShader* imageVertexShader = new cwGLShader(QGLShader::Vertex);
-    imageVertexShader->setSourceFile("shaders/NoteItem.vert");
+    imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
 
     cwGLShader* imageFragmentShader = new cwGLShader(QGLShader::Fragment);
-    imageFragmentShader->setSourceFile("shaders/NoteItem.frag");
+    imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
 
     ImageProgram = new QGLShaderProgram(this);
     ImageProgram->addShader(imageVertexShader);

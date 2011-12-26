@@ -8,6 +8,7 @@
 #include "cwSurveyChunk.h"
 #include "cwCavingRegion.h"
 #include "cwImage.h"
+#include "cwGlobalDirectory.h"
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +25,8 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationDomain("cavewhere.com");
     QApplication::setApplicationName("Cavewhere");
     QApplication::setApplicationVersion("0.1");
+
+    cwGlobalDirectory::setupBaseDirectory();
 
     cwMainWindow w;
     w.show();

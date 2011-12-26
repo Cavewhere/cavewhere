@@ -12,6 +12,7 @@
 #include "cwImportSurvexDialog.h"
 #include "cwProjectImageProvider.h"
 #include "cwScrapManager.h"
+#include "cwGlobalDirectory.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -117,7 +118,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("/home/blitz/bcc.cw");
+    Project->load("bcc.cw");
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window
@@ -296,7 +297,7 @@ void cwMainWindow::reloadQML() {
     connect(Project, SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
     context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
 
-    DeclarativeView->setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
+    DeclarativeView->setSource(QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/CavewhereMainWindow.qml"));
 
     //Allow for the DoubleClickTextInput to work correctly
     context->setContextProperty("rootObject", DeclarativeView->rootObject());
