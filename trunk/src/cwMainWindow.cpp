@@ -415,6 +415,7 @@ QGLWidget* cwMainWindow::createGLWidget() {
     QGLFormat format;
 //    format.setSamples(8);
     format.setSampleBuffers(true);
+    format.setSwapInterval(1);
 
     QGLWidget* glWidget = new QGLWidget(format, this);
     glWidget->makeCurrent();

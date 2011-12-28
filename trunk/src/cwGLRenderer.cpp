@@ -96,7 +96,7 @@ void cwGLRenderer::copyRenderFramebufferToTextures() {
         glBlitFramebufferEXT(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
                           0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
                           GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-                          GL_LINEAR);
+                          GL_NEAREST);
 
         glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
         glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);

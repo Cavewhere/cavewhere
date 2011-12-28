@@ -71,17 +71,21 @@ void cwGLLinePlot::initializeBuffers() {
 }
 
 void cwGLLinePlot::draw() {
+    ShaderProgram->bind();
+
+    ShaderProgram->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
+    ShaderProgram->enableAttributeArray(vVertex);
+
     LinePlotVertexBuffer.bind();
     LinePlotIndexBuffer.bind();
 
-    ShaderProgram->bind();
     ShaderProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 3);
-    ShaderProgram->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
 
     glDrawElements(GL_LINES, IndexBufferSize, GL_UNSIGNED_INT, NULL);
 
     LinePlotVertexBuffer.release();
     LinePlotIndexBuffer.release();
+
     ShaderProgram->release();
 }
 

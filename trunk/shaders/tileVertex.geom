@@ -1,9 +1,10 @@
+#version 120
+#extension GL_EXT_geometry_shader4 : enable
+
 // simple geometry shader
 
 // these lines enable the geometry shader support.
 //#version 330
-#version 120
-#extension GL_EXT_geometry_shader4 : enable
 
 //layout(triangles) in;
 //layout(triangle_strip, max_vertices=3) out;
