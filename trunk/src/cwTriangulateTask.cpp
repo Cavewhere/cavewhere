@@ -126,13 +126,20 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperY = scrapImageSize.height() / (double)scrapImage.originalDotsPerMeter(); //in meters
 
     double pointsPerMeter = 1.0; //Grid resolution
-    double scale = noteTransform.scale();
-    grid.GridSize.setWidth((int)(sizeOnPaperX / scale * (double)pointsPerMeter));
-    grid.GridSize.setHeight((int)(sizeOnPaperY / scale * (double)pointsPerMeter));
-    grid.Points.resize(grid.GridSize.width() * grid.GridSize.height());
+    double scale = noteTransform.scale(); //scale for the notes
 
-    double xDelta = bounds.width() / (double)grid.GridSize.width(); //xDelta in normalized note coordinates
-    double yDelta = bounds.height() / (double)grid.GridSize.height();
+    double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
+    double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
+
+    double xDelta = bounds.width() / sizeInCaveX;
+    double yDelta = bounds.height() / sizeInCaveY;
+
+    double numberOfPointsX = sizeInCaveX * (double)pointsPerMeter;
+    double numberOfPointsY = sizeInCaveY * (double)pointsPerMeter;
+
+    grid.GridSize.setWidth((int)(numberOfPointsX) + 1);
+    grid.GridSize.setHeight((int)(numberOfPointsY) + 1);
+    grid.Points.resize(grid.GridSize.width() * grid.GridSize.height());
 
     for(int y = 0; y < grid.GridSize.height(); y++) {
         for(int x = 0; x < grid.GridSize.width(); x++) {
