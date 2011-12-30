@@ -125,15 +125,22 @@ private:
     QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
     QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap);
 
+    //For triangulation
     cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
     QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
     QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
     void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
 
+    //For transformation from note coords to local note coords
     QMatrix4x4 localNormalizedCoordinates(const QRectF& bounds) const;
     QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords) const;
     QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords) const;
-    QVector<QVector3D> morphPoints(const QVector<QVector3D> &normalizedPoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);
+
+    //For morphing
+    QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);
+    QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point, const QList<cwTriangulateStation>& stations, const QPolygonF& scrapOutline) const;
+    QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations, const QMatrix4x4 &toWorldCoords, const QVector3D &point);
+
 };
 
 /**

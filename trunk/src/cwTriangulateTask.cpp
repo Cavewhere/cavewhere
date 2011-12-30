@@ -117,7 +117,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
     //Morph the points
-    QVector<QVector3D> points = morphPoints(localNotePoints, scrapData, toLocal, croppedImage);
+    QVector<QVector3D> points = morphPoints(triangleData.points(), scrapData, toLocal, croppedImage);
 
     //For testing
     cwTriangulatedData& outScrapData = TriangulatedScraps[index];
@@ -468,7 +468,7 @@ QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D>
 /**
   \brief This function morphs the points so the texture image aligns with the lineplot
   */
-QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& localNotePoints,
+QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& notePoints,
                                                   const cwTriangulateInData& scrapData,
                                                   const QMatrix4x4& toLocal,
                                                   const cwImage& croppedImage) {
@@ -487,29 +487,188 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& loca
     QMatrix4x4 toMetersInCave;
     toMetersInCave.scale(scrapScale, scrapScale, 1.0);
 
-    QMatrix4x4 toRealCoords = toMetersInCave * toMetersOnPaper * toPixels;
+    QMatrix4x4 toWorldCoords = toMetersInCave * toMetersOnPaper * toPixels * toLocal;
 
-    //For testing
-    cwTriangulateStation station = scrapData.stations().first();
-    QPointF stationOnNote = toRealCoords * toLocal * station.notePosition();
-    QVector3D stationPos = station.position();
+//    //For testing
+//    cwTriangulateStation station = scrapData.stations().first();
+//    QPointF stationOnNote = toWorldCoords * station.notePosition();
+//    QVector3D stationPos = station.position();
 
-    QMatrix4x4 offsetToFirstStation;
-    offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
-    offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
+//    QMatrix4x4 offsetToFirstStation;
+//    offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
+//    offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
 
-    QMatrix4x4 localToScene = offsetToFirstStation * toRealCoords;
+//    QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords;
 
     QVector<QVector3D> points;
-    points.reserve(localNotePoints.size());
-    points.resize(localNotePoints.size());
-    for(int i = 0; i < localNotePoints.size(); i++) {
-        points[i] = localToScene.map(localNotePoints[i]);
+    points.reserve(notePoints.size());
+    points.resize(notePoints.size());
+    for(int i = 0; i < notePoints.size(); i++) {
+
+        //Figure out which stations are visible to this point
+        QList<cwTriangulateStation> visibleStations = stationsVisibleToPoint(notePoints[i],
+                                                                             scrapData.stations(),
+                                                                             scrapData.outline());
+
+        //Based on the visible stations morph point into the scene coords
+        points[i] = morphPoint(visibleStations, toWorldCoords, notePoints[i]);
+
+//        points[i] = noteToScene.map();
     }
 
     //qDebug() << "Points:" << points;
 
     return points;
+}
+
+/**
+  \brief Get's a list of station that are visible to the point.
+
+  This shot a ray between point and each station.  If the ray interects any of the
+  polygon's lines, then the station isn't added to the list visble points
+
+  The point should be in normalize note cooridanets.  This isn't local note coordinates
+  */
+QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVector3D &point,
+                                                                      const QList<cwTriangulateStation> &stations,
+                                                                      const QPolygonF &scrapOutline) const{
+
+    QList<QLineF> polygonLines;
+    //For all the lines it the polygon
+    int isClosed = (int)(!scrapOutline.isClosed());
+    int numPoints = scrapOutline.size() + isClosed;
+    for(int i = 0; i < numPoints - 1; i++) {
+        int p1Index = i % scrapOutline.size();
+        int p2Index = (i + 1) % scrapOutline.size();
+
+        QLineF line(scrapOutline[p1Index], scrapOutline[p2Index]);
+        polygonLines.append(line);
+    }
+
+    QList<cwTriangulateStation> visibleStations;
+
+    //For each station
+    foreach(cwTriangulateStation station, stations) {
+
+        //Create a line between the point and the station
+        QLineF ray(station.notePosition(), point.toPointF());
+
+        //The flag if the station should be added
+        bool shouldAdd = true;
+
+        //Do all the intersections
+        foreach(QLineF line, polygonLines) {
+            if(ray.intersect(line, NULL) == QLineF::BoundedIntersection) {
+                shouldAdd = false;
+                break;
+            }
+        }
+
+        if(shouldAdd) {
+            visibleStations.append(station);
+        }
+    }
+
+    //If the point has no visibleStation, we need to figure out which station are
+    //closest and uses those,  Uses the shot intersection?
+    if(visibleStations.size() < 2 && !stations.isEmpty()) {
+
+        //For debugging for now, this should be really obvious that this code is
+        //wrong
+        if(visibleStations.size() == 1) {
+            visibleStations.append(stations.first());
+        }
+        visibleStations.append(stations.first());
+    }
+
+    return visibleStations;
+
+}
+
+/**
+  \brief This morphs a single point based on the stations
+  that are visible to it.
+
+  This preforms a weighted average based on distance.
+
+  \param visibleStations - The visible stations that the point can see
+  \param toWorldCoords - The matrix that can translate a note coordinate into a world coordinate (this doesn't include offset)
+  \param point - The point that's going to be morphed, this is in original note coordinates
+  */
+QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visibleStations,
+                                        const QMatrix4x4& toWorldCoords,
+                                        const QVector3D &point)
+{
+
+    //Calculate all distances the from the visibleStations, to point in note coordinates
+    QVector<double> distances;
+    distances.reserve(visibleStations.size());
+    int onTopOfStationIndex = -1;
+    for(int i = 0; i < visibleStations.size(); i++) {
+        double distance = QLineF(visibleStations[i].notePosition(), point.toPointF()).length();
+        if(distance != 0.0) {
+
+            //The inverse distance is give a high weight for points near stations
+            double inverseDistance = 1.0 / (distance * distance);  //This is the function that allows the weight to be calculated correctly
+            distances.append(inverseDistance);
+        } else {
+            //This is a special case where the point is on station
+            onTopOfStationIndex = i;
+            break;
+        }
+    }
+
+    //Special case, where point is on station
+    if(onTopOfStationIndex > -1) {
+        //Just return the station's position in world coordinates
+        return visibleStations[onTopOfStationIndex].position();
+    }
+
+    //Calculate the sum the distances
+    double sum = 0.0;
+    foreach(double distance, distances) {
+        sum += distance;
+    }
+
+    //Calculate the weights for each station
+    QVector<double> weights;
+    weights.reserve(distances.size());
+    weights.resize(distances.size());
+    for(int i = 0; i < distances.size(); i++) {
+        weights[i] = distances[i] / sum;
+    }
+
+    //Get the point's position in respect to each station
+    QVector<QVector3D> pointInRespectToStations;
+    pointInRespectToStations.reserve(visibleStations.size());
+    foreach(cwTriangulateStation station, visibleStations) {
+
+        //Setup the transformation
+        QPointF stationOnNote = toWorldCoords * station.notePosition(); //In world coordinates
+        QVector3D stationPos = station.position(); //In world coordianets
+
+        QMatrix4x4 offsetToFirstStation;
+        offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
+        offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
+
+        QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords; //outputs in world coordinates
+
+        //Do the transformation
+        QVector3D pointInRespectToCurrentStation = noteToScene.map(point);
+
+        //Add to point list
+        pointInRespectToStations.append(pointInRespectToCurrentStation);
+    }
+
+    Q_ASSERT(pointInRespectToStations.size() == weights.size());
+
+    //Use the weights to find the final position
+    QVector3D weightPosition;
+    for(int i = 0; i < pointInRespectToStations.size(); i++) {
+        weightPosition += weights[i] * pointInRespectToStations[i];
+    }
+
+    return weightPosition;
 }
 
 /**
