@@ -92,18 +92,12 @@ void cwImageTexture::uploadImageToGraphicsCard() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
-        qDebug() << "DXT1 size: " << size.width() << size.height() << imageData.size() << imageData.size() % 8 << glGetError();
-//        qDebug() << "DXT1 size check:" << (size.width() / 4) * (size.height() / 4) * 8;
-
-
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
             trueMipmapLevel++;
         }
-
-        qDebug() << "Error: " << glGetError();
     }
 
     release();

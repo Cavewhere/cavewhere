@@ -130,8 +130,10 @@ private:
     QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
     void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
 
-    QVector<QVector2D> mapTexCoords(const QRectF& bounds, const QVector<QVector3D>& normalizeNoteCoords);
-
+    QMatrix4x4 localNormalizedCoordinates(const QRectF& bounds) const;
+    QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords) const;
+    QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords) const;
+    QVector<QVector3D> morphPoints(const QVector<QVector3D> &normalizedPoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);
 };
 
 /**

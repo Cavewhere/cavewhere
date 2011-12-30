@@ -160,29 +160,6 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
       //  emit progressed(i + 1);
     }
 
-
-//    //Go through all the images
-//    for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
-//        QString imagePath = NewImagePaths[i];
-
-//        //Where the database image ideas are stored
-//        cwImage imageIds;
-
-//        //Copy the original image to the database
-//        QImage originalImage = copyOriginalImage(imagePath, &imageIds);
-
-//        //Create a icon image
-//        createIcon(originalImage, imagePath, &imageIds);
-
-//        //Create mipmaps
-//        createMipmaps(originalImage, imagePath, &imageIds);
-
-//        //Add image ids to the list of images that are returned
-//        Images.append(imageIds);
-
-//      //  emit progressed(i + 1);
-//    }
-
     endTransation();
 }
 
@@ -220,18 +197,6 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     image.loadFromData(originalImageByteData, format.constData());
 
     *imageIdContainer = addImageToDatabase(image, format, originalImageByteData);
-
-//    int dotsPerMeter = 0;
-//    if(image.dotsPerMeterX() == image.dotsPerMeterY()) {
-//        dotsPerMeter = image.dotsPerMeterX();
-//    }
-
-//    //Write the image to the database
-//    cwImageData originalImageData(image.size(), dotsPerMeter, format, originalImageByteData);
-//    int imageId = cwProject::addImage(Database, originalImageData);
-//    imageIdContainer->setOriginal(imageId);
-//    imageIdContainer->setOriginalSize(image.size());
-//    imageIdContainer->setOriginalDotsPerMeter(dotsPerMeter);
 
     return image;
 }

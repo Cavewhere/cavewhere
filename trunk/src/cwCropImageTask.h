@@ -49,13 +49,13 @@ private:
     //For writting the cropped image
     cwAddImageTask* AddImageTask;
 
-    cwImageData cropImage(int imageId) const;
+//    cwImageData cropImage(int imageId) const;
     QRect mapNormalizedToIndex(QRectF normalized, QSize size) const;
 
-    QByteArray cropDxt1Image(const QByteArray& dxt1Data, QSize size, QRect cropArea) const;
+//    QByteArray cropDxt1Image(const QByteArray& dxt1Data, QSize size, QRect cropArea) const;
 
 private slots:
-    void tryCroppingImage();
+//    void tryCroppingImage();
 
 };
 

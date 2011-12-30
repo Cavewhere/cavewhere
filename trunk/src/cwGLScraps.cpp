@@ -48,10 +48,7 @@ void cwGLScraps::initialize() {
 void cwGLScraps::draw() {
     Program->bind();
 
-    QMatrix4x4 scale;
-    scale.scale(10.0, 10.0, 10.0);
-
-    Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * scale);
+    Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
     Program->enableAttributeArray(vVertex);
     Program->enableAttributeArray(vScrapTexCoords);
 

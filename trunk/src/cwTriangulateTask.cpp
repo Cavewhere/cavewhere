@@ -107,13 +107,22 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Triangulate the quads (this will update the outputs data)
     cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
 
+    //Create the matrix that converts the normalized coords to the normalized coords
+    QMatrix4x4 toLocal = localNormalizedCoordinates(bounds);
+
+    //Convert the normalized points to local note points
+    QVector<QVector3D> localNotePoints = mapToLocalNoteCoordinates(toLocal, triangleData.points());
+
     //Create the texture coordinates
-    QVector<QVector2D> texCoords = mapTexCoords(bounds, triangleData.points());
+    QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
+
+    //Morph the points
+    QVector<QVector3D> points = morphPoints(localNotePoints, scrapData, toLocal, croppedImage);
 
     //For testing
     cwTriangulatedData& outScrapData = TriangulatedScraps[index];
     outScrapData.setIndices(triangleData.indices());
-    outScrapData.setPoints(triangleData.points());
+    outScrapData.setPoints(points);
     outScrapData.setTexCoords(texCoords);
 }
 
@@ -407,16 +416,10 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 }
 
 /**
-    This takes the bounds of the cropped scrap and the point list of normalized cooridates of the original image.
-
-    This will tranform the normalized coordinates into local normalized coordinates such that
-    the cropped image can be textured in opengl
-
-    This function will produces texcoordinates
+  Maps the bounds into local normalized coordinates
   */
-QVector<QVector2D> cwTriangulateTask::mapTexCoords(const QRectF &bounds,
-                                                   const QVector<QVector3D> &normalizeNoteCoords) {
-
+QMatrix4x4 cwTriangulateTask::localNormalizedCoordinates(const QRectF &bounds) const
+{
     float xScale = 1 / bounds.width();
     float yScale = 1 / bounds.height();
 
@@ -426,16 +429,87 @@ QVector<QVector2D> cwTriangulateTask::mapTexCoords(const QRectF &bounds,
     matrix.scale(xScale, yScale, 1.0);
     matrix.translate(topLeft.x(), topLeft.y());
 
-    QVector<QVector2D> texCoords;
-    texCoords.reserve(normalizeNoteCoords.size());
+    return matrix;
+}
 
-    foreach(QVector3D coord, normalizeNoteCoords) {
-        QVector2D texCoord = matrix.map(coord).toVector2D();
-        qDebug() << "TexCoord:" << texCoord;
+QVector<QVector3D> cwTriangulateTask::mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D> &normalizeNoteCoords) const {
+    QVector<QVector3D> mappedCoords;
+    mappedCoords.reserve(normalizeNoteCoords.size());
+    mappedCoords.resize(normalizeNoteCoords.size());
+
+    for(int i = 0; i < normalizeNoteCoords.size(); i++) {
+        mappedCoords[i] = toLocal.map(normalizeNoteCoords[i]);
+    }
+
+    return mappedCoords;
+}
+
+/**
+    This takes the bounds of the cropped scrap and the point list of normalized cooridates of the original image.
+
+    This will tranform the normalized coordinates into local normalized coordinates such that
+    the cropped image can be textured in opengl
+
+    This function will produces texcoordinates
+  */
+QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D> &localNoteCoords) const {
+
+    QVector<QVector2D> texCoords;
+    texCoords.reserve(localNoteCoords.size());
+
+    foreach(QVector3D coord, localNoteCoords) {
+        QVector2D texCoord = coord.toVector2D();
         texCoords.append(texCoord);
     }
 
     return texCoords;
+}
+
+/**
+  \brief This function morphs the points so the texture image aligns with the lineplot
+  */
+QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& localNotePoints,
+                                                  const cwTriangulateInData& scrapData,
+                                                  const QMatrix4x4& toLocal,
+                                                  const cwImage& croppedImage) {
+
+    QSize imageSize = croppedImage.origianlSize();
+    double metersPerDot = 1.0 / (double)croppedImage.originalDotsPerMeter();
+    double scrapScale = 1.0 /scrapData.noteTransform().scale();
+
+    //For right now try to map
+    QMatrix4x4 toPixels;
+    toPixels.scale(imageSize.width(), imageSize.height(), 1.0);
+
+    QMatrix4x4 toMetersOnPaper;
+    toMetersOnPaper.scale(metersPerDot, metersPerDot, 1.0);
+
+    QMatrix4x4 toMetersInCave;
+    toMetersInCave.scale(scrapScale, scrapScale, 1.0);
+
+    QMatrix4x4 toRealCoords = toMetersInCave * toMetersOnPaper * toPixels;
+
+    //For testing
+    cwTriangulateStation station = scrapData.stations().first();
+    QPointF stationOnNote = toRealCoords * toLocal * station.notePosition();
+    QVector3D stationPos = station.position();
+
+    QMatrix4x4 offsetToFirstStation;
+    offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
+    offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
+
+    QMatrix4x4 localToScene = offsetToFirstStation * toRealCoords;
+
+    QVector<QVector3D> points;
+    points.reserve(localNotePoints.size());
+    points.resize(localNotePoints.size());
+    for(int i = 0; i < localNotePoints.size(); i++) {
+        points[i] = localToScene.map(localNotePoints[i]);
+    }
+
+    //qDebug() << "Points:" << points;
+
+    return points;
 }
 
 /**
