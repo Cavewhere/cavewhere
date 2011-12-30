@@ -139,7 +139,8 @@ SOURCES += src/main.cpp \
     src/cwCropImageTask.cpp \
     src/utils/cwTriangulate.cpp \
     src/cwGLScraps.cpp \
-    src/cwGlobalDirectory.cpp
+    src/cwGlobalDirectory.cpp \
+    src/cwImageTexture.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -261,7 +262,8 @@ HEADERS  += \
     src/cwCropImageTask.h \
     src/utils/cwTriangulate.h \
     src/cwGLScraps.h \
-    src/cwGlobalDirectory.h
+    src/cwGlobalDirectory.h \
+    src/cwImageTexture.h
 
 
 
@@ -326,7 +328,8 @@ OTHER_FILES += \
     qml/CavewhereMainWindow.qml \
     shaders/scrap.vert \
     shaders/scrap.frag \
-    installer/mac/installMac.sh
+    installer/mac/installMac.sh \
+    shaders/scrap.geom
 
 RESOURCES += \
     icons.qrc

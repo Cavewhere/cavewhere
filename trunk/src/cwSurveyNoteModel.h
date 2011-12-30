@@ -55,7 +55,7 @@ private:
     void initModel();
     void copy(const cwSurveyNoteModel& object);
 
-private slots:
+public slots:
     void addNotesWithNewImages(QList<cwImage> images);
 
 };

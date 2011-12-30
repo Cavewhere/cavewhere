@@ -9,6 +9,7 @@
 #include "cwGLRenderer.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+class cwImageTexture;
 class cwImageProperties;
 
 class cwImageItem : public cwGLRenderer
@@ -59,20 +60,15 @@ private:
     //The project filename for this class
     cwImage Image;
     cwImageProperties* ImageProperties; //!< The image properties of the current Image
-    cwImageData OriginalMetadata;  //This will never have image data, only the metadata
     float Rotation;
-    QString ProjectFilename;
+    //QString ProjectFilename;
     QMatrix4x4 RotationModelMatrix;
     QPointF RotationCenter;
-
-    //For loading the image from disk
-    QFutureWatcher<QPair<QByteArray, QSize> >* LoadNoteWatcher;
 
     //For rendering
     int vVertex; //!< The attribute location of the vVertex
     int ModelViewProjectionMatrix; //!< The attribute location for modelViewProjection matrix
-    GLuint NoteTexture; //!< The texture id for rendering the notes to the screen
-    QSize ImageSize; //!< The size of the biggest mipmap
+    cwImageTexture* NoteTexture;
     QGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
     QGLBuffer NoteVertexBuffer; //!< The vertex buffer
 
@@ -80,27 +76,8 @@ private:
     void initializeVertexBuffers();
     void initializeTexture();
 
-    /**
-      This class allow use to load the mipmaps in a thread way
-      from the database
-
-      The project filename must be set so we can load the data
-*/
-    class LoadImage {
-    public:
-        LoadImage(QString projectFilename) :
-            Filename(projectFilename) {    }
-
-        typedef QPair<QByteArray, QSize> result_type;
-
-        QPair<QByteArray, QSize> operator()(int imageId);
-
-        QString Filename;
-    };
-
-
 private slots:
-     void ImageFinishedLoading();
+     void imageFinishedLoading();
 
 };
 
@@ -119,13 +96,6 @@ inline float cwImageItem::rotation() const {
 }
 
 /**
-  \brief Gets the project Filename
-  */
-inline QString cwImageItem::projectFilename() const {
-    return ProjectFilename;
-}
-
-/**
   \brief Gets the model matrix
   */
 inline QMatrix4x4 cwImageItem::modelMatrix() const {
@@ -138,4 +108,5 @@ Gets imageProperties
 inline cwImageProperties* cwImageItem::imageProperties() const {
     return ImageProperties;
 }
+
 #endif // CWIMAGEITEM_H

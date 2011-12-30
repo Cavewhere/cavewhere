@@ -178,35 +178,45 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
 
 
 void cwScrapManager::cavesInserted(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::cavesRemoved(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::tripsInserted(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::tripsRemoved(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::notesInserted(QModelIndex parent, int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    Q_UNUSED(parent);
 }
 
 void cwScrapManager::notesRemoved(QModelIndex parent, int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    Q_UNUSED(parent);
 }
 
 void cwScrapManager::scrapInserted(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::scrapRemoved(int begin, int end) {
-
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
 }
 
 void cwScrapManager::updateScrapPoints() {
@@ -232,6 +242,12 @@ void cwScrapManager::taskFinished() {
         if(!weakPtrScrap.isNull()) {
             cwScrap* scrap = weakPtrScrap.data();
             scrap->setTriangulationData(scrapDataset[i]);
+
+            //For debugging should be removed
+            QList<cwImage> images;
+            images.append(scrapDataset[i].croppedImage());
+
+            scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
         }
     }
 
@@ -239,4 +255,13 @@ void cwScrapManager::taskFinished() {
     GLScraps->updateGeometry();
 
     qDebug() << "Task finished!";
+}
+
+/**
+  \brief Sets the gl scraps for the manager
+  */
+void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
+{
+    GLScraps = glScraps;
+    GLScraps->setProject(Project);
 }

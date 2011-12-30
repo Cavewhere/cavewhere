@@ -1,4 +1,5 @@
 //Our includes
+#include "cwImageTexture.h"
 #include "cwGLScraps.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -10,6 +11,8 @@
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
 #include "cwGlobalDirectory.h"
+#include "cwProject.h"
+
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
@@ -31,7 +34,7 @@ void cwGLScraps::updateGeometry() {
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
                 foreach(cwScrap* scrap, note->scraps()) {
-                    Scraps.append(GLScrap(scrap->triangulationData()));
+                    Scraps.append(GLScrap(scrap->triangulationData(), project()));
                 }
             }
         }
@@ -50,19 +53,29 @@ void cwGLScraps::draw() {
 
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * scale);
     Program->enableAttributeArray(vVertex);
+    Program->enableAttributeArray(vScrapTexCoords);
+
+    glEnable(GL_TEXTURE_2D);
 
     foreach(GLScrap scrap, Scraps) {
         scrap.IndexBuffer.bind();
-        scrap.PointBuffer.bind();
 
+        scrap.PointBuffer.bind();
         Program->setAttributeBuffer(vVertex, GL_FLOAT, 0, 3);
 
+        scrap.TexCoords.bind();
+        Program->setAttributeBuffer(vScrapTexCoords, GL_FLOAT, 0, 2);
+
+        scrap.Texture->bind();
 
         glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, NULL);
 
         scrap.IndexBuffer.release();
         scrap.PointBuffer.release();
+        scrap.TexCoords.release();
     }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     Program->release();
 }
@@ -78,7 +91,7 @@ void cwGLScraps::initializeShaders() {
     scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
 
     cwGLShader* scrapGeometryShader = new cwGLShader(QGLShader::Geometry);
-    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
+    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
 
     Program = new QGLShaderProgram(this);
     Program->addShader(scrapVertexShader);
@@ -88,28 +101,31 @@ void cwGLScraps::initializeShaders() {
     Program->setGeometryInputType(GL_TRIANGLES);
     Program->setGeometryOutputType(GL_TRIANGLE_STRIP);
 
-
-
     bool linkingErrors = Program->link();
     if(!linkingErrors) {
         qDebug() << "Linking errors:" << Program->log();
     }
 
-
-
     shaderDebugger()->addShaderProgram(Program);
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     vVertex = Program->attributeLocation("vVertex");
+    vScrapTexCoords = Program->attributeLocation("vScrapTexCoords");
     Program->setUniformValue("colorBG", Qt::green);
+    Program->setUniformValue("Texture", 0);
 
 //    UniformModelMatrix = Program->uniformLocation("ModelMatrix");
 }
 
-cwGLScraps::GLScrap::GLScrap() : NumberOfIndices(0) {
+cwGLScraps::GLScrap::GLScrap() :
+    NumberOfIndices(0),
+    Texture(NULL)
+{
 
 }
 
-cwGLScraps::GLScrap::GLScrap(cwTriangulatedData data) {
+cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project) :
+    Texture(new cwImageTexture())
+{
     PointBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
     PointBuffer.create();
     PointBuffer.bind();
@@ -117,16 +133,36 @@ cwGLScraps::GLScrap::GLScrap(cwTriangulatedData data) {
     PointBuffer.allocate(data.points().constData(), pointBufferSize);
     PointBuffer.release();
 
-    qDebug() << "Data points: " << (data.indices().size() / 3.0);
-
     IndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
     IndexBuffer.create();
     IndexBuffer.bind();
     int indexBufferSize = data.indices().size() * sizeof(uint);
     IndexBuffer.allocate(data.indices().constData(), indexBufferSize);
     IndexBuffer.release();
-
     NumberOfIndices = data.indices().size();
+
+    TexCoords = QGLBuffer(QGLBuffer::VertexBuffer);
+    TexCoords.create();
+    TexCoords.bind();
+    int texCoordSize = data.texCoords().size() * sizeof(QVector2D);
+    TexCoords.allocate(data.texCoords().constData(), texCoordSize);
+    TexCoords.release();
+
+    //Upload the texture to the graphics card
+    Texture->setProject(project->filename());
+    Texture->setImage(data.croppedImage());
 }
+
+
+/**
+Sets project
+*/
+void cwGLScraps::setProject(cwProject* project) {
+    if(Project != project) {
+        Project = project;
+        emit projectChanged();
+    }
+}
+
 
 

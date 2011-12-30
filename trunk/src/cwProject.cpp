@@ -253,10 +253,10 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
     addImageTask->setThread(LoadSaveThread);
 
     //Set the project path
-    addImageTask->setProjectPath(filename());
+    addImageTask->setDatabaseFilename(filename());
 
     //Set all the noteImagePath
-    addImageTask->setImagesPath(noteImagePath);
+    addImageTask->setNewImagesPath(noteImagePath);
 
     //Run the addImageTask, in an asyncus way
     addImageTask->start();

@@ -5,6 +5,7 @@
 #include "cwProjectImageProvider.h"
 #include "cwImageProperties.h"
 #include "cwGlobalDirectory.h"
+#include "cwImageTexture.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -16,10 +17,11 @@ cwImageItem::cwImageItem(QDeclarativeItem *parent) :
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this))
+    NoteTexture(new cwImageTexture(this))
 {
     //Called when the image is finished loading
-    connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
+    connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
+    connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
     ImageProperties->setImage(Image);
 }
 
@@ -30,11 +32,7 @@ void cwImageItem::setImage(const cwImage& image) {
     if(Image != image) {
         Image = image;
         ImageProperties->setImage(Image);
-
-        //Load the notes in an asyn way
-        LoadNoteWatcher->cancel(); //Cancel previous run, if still running
-        QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
-        LoadNoteWatcher->setFuture(future);
+        NoteTexture->setImage(Image);
     }
 }
 
@@ -75,58 +73,14 @@ void cwImageItem::setRotation(float degrees) {
 }
 
 /**
-  Set the project filename
-
-  The project filename allow this imageItem to extra data from disk.
-  */
-void cwImageItem::setProjectFilename(QString projectFilename) {
-    if(projectFilename != ProjectFilename) {
-        ProjectFilename = projectFilename;
-        emit projectFilenameChanged();
-    }
-}
-
-/**
   The image has complete loading it self
   */
-void cwImageItem::ImageFinishedLoading() {
-    GLWidget->makeCurrent();
-
-    QList<QPair<QByteArray, QSize> >mipmaps = LoadNoteWatcher->future().results();
-
-    if(mipmaps.empty()) { return; }
-
-    //Load the data into opengl
-    glBindTexture(GL_TEXTURE_2D, NoteTexture);
-
-    //Get the max texture size
-    GLint maxTextureSize;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-
-    int trueMipmapLevel = 0;
-    for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
-
-        //Get the mipmap data
-        QPair<QByteArray, QSize> image = mipmaps.at(mipmapLevel);
-        QByteArray imageData = image.first;
-        QSize size = image.second;
-
-        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
-            glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
-                                   size.width(), size.height(), 0,
-                                   imageData.size(), imageData.data());
-            trueMipmapLevel++;
-        }
-    }
-
-   // glGenerateMipmap(GL_TEXTURE_2D); //Generate the mipmaps for NoteTexture
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    ImageSize = mipmaps.first().second;
+void cwImageItem::imageFinishedLoading() {
+    QSize imageSize = Image.origianlSize();
     resizeGL();
 
     QMatrix4x4 newViewMatrix;
-    newViewMatrix.scale(ImageSize.width(), ImageSize.height(), 1.0);
+    newViewMatrix.scale(imageSize.width(), imageSize.height(), 1.0);
 
     //Center the page of notes in the middle
     QPoint center(width() / 2.0, height() / 2.0);
@@ -206,13 +160,7 @@ void cwImageItem::initializeVertexBuffers() {
   */
 void cwImageItem::initializeTexture() {
     //Generate the color texture
-    glGenTextures(1, &NoteTexture);
-    glBindTexture(GL_TEXTURE_2D, NoteTexture);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
-    glBindTexture(GL_TEXTURE_2D, 0);
+    NoteTexture->initialize();
 }
 
 
@@ -221,13 +169,14 @@ void cwImageItem::initializeTexture() {
   */
 void cwImageItem::resizeGL() {
 
-    if(!ImageSize.isValid()) { return; }
+    QSize imageSize = Image.origianlSize();
+    if(!imageSize.isValid()) { return; }
 
     QSize windowSize(width(), height());
 
     QTransform transformer;
     transformer.rotate(Rotation);
-    QRectF rotatedImageRect = transformer.mapRect(QRectF(QPointF(), ImageSize));
+    QRectF rotatedImageRect = transformer.mapRect(QRectF(QPointF(), imageSize));
 
     QSize scaledImageSize = rotatedImageRect.size().toSize();
     scaledImageSize.scale(windowSize, Qt::KeepAspectRatio);
@@ -235,8 +184,8 @@ void cwImageItem::resizeGL() {
     float changeInWidth = windowSize.width() / (float)scaledImageSize.width();
     float changeInHeight = windowSize.height() / (float)scaledImageSize.height();
 
-    float widthProjection = ImageSize.width() * changeInWidth;
-    float heightProjection = ImageSize.height() * changeInHeight;
+    float widthProjection = imageSize.width() * changeInWidth;
+    float heightProjection = imageSize.height() * changeInHeight;
 
     QPoint center(width() / 2.0, height() / 2.0);
     QVector3D oldViewCenter = Camera->unProject(center, 0.0);
@@ -254,8 +203,6 @@ void cwImageItem::resizeGL() {
     Camera->setViewMatrix(viewMatrix);
 
     Camera->setViewport(QRect(QPoint(0.0, 0.0), windowSize));
-
-//    updateQMLTransformItem();
 }
 
 /**
@@ -275,30 +222,15 @@ void cwImageItem::paintFramebuffer() {
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
 
     glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, NoteTexture);
+    NoteTexture->bind();
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
     NoteVertexBuffer.release();
     ImageProgram->release();
-    glBindTexture(GL_TEXTURE_2D, 0);
+    NoteTexture->release();
 }
 
-/**
-  \brief Allow QtConturrent to create a QImage
-
-  This returns a opengl formatted image
-  */
-QPair<QByteArray, QSize> cwImageItem::LoadImage::operator ()(int imageId) {
-    //Extract the image data from the imageProvider
-    cwProjectImageProvider imageProvidor;
-    imageProvidor.setProjectPath(Filename);
-
-    QSize size;
-    QByteArray imageData = imageProvidor.requestImageData(imageId, &size);
-
-    return QPair<QByteArray, QSize>(imageData, size);
-}
 
 /**
   This converts a mouse click into note coordinates
@@ -309,4 +241,20 @@ QPointF cwImageItem::mapQtViewportToNote(QPoint qtViewportCoordinate) {
     QPoint glViewportPoint = Camera->mapToGLViewport(qtViewportCoordinate);
     QVector3D notePosition = Camera->unProject(glViewportPoint, 0.0, RotationModelMatrix);
     return notePosition.toPointF();
+}
+
+/**
+  Set the project filename
+
+  The project filename allow this imageItem to extra data from disk.
+  */
+void cwImageItem::setProjectFilename(QString projectFilename) {
+    NoteTexture->setProject(projectFilename);
+}
+
+/**
+  \brief Gets the project Filename
+  */
+QString cwImageItem::projectFilename() const {
+    return NoteTexture->project();
 }

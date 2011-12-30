@@ -3,6 +3,7 @@
 #include "cwProject.h"
 #include "cwImageData.h"
 #include "cwProjectImageProvider.h"
+#include "cwDebug.h"
 //#include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
@@ -43,6 +44,9 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   */
 void cwAddImageTask::runTask() {
 
+    //Clear all previous data
+    Images.clear();
+
     //Clear the current progress
     Progress = QAtomicInt(0);
 
@@ -74,11 +78,22 @@ void cwAddImageTask::runTask() {
   The number of steps are equal = sum of all pixels in each mipmap
   */
 void cwAddImageTask::calculateNumberOfSteps() {
-    int numberOfSteps = 0;
-    foreach(QString imagePath, ImagePaths) {
+
+    QList<QSize> sizes;
+    sizes.reserve(NewImagePaths.size() + Images.size());
+
+    foreach(QString imagePath, NewImagePaths) {
         QImageReader reader(imagePath);
         QSize imageSize = reader.size();
+        sizes.append(imageSize);
+    }
 
+    foreach(QImage image, NewImages) {
+        sizes.append(image.size());
+    }
+
+    int numberOfSteps = 0;
+    foreach(QSize imageSize, sizes) {
         int numberOfMipmapLevel = numberOfMipmapLevels(imageSize);
         for(int i = 0; i < numberOfMipmapLevel; i++) {
             int iterWidth = imageSize.width() / 4 + 1;
@@ -99,9 +114,12 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
     bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
     if(!good) { return; }
 
-    //Go through all the images
-    for(int i = 0; i < ImagePaths.size() && isRunning(); i++) {
-        QString imagePath = ImagePaths[i];
+    //Database image, original image
+    QList< PrivateImageData > images;
+
+    //Go through all the images strings
+    for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
+        QString imagePath = NewImagePaths[i];
 
         //Where the database image ideas are stored
         cwImage imageIds;
@@ -109,17 +127,61 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         //Copy the original image to the database
         QImage originalImage = copyOriginalImage(imagePath, &imageIds);
 
+        images.append(PrivateImageData(imageIds, originalImage, imagePath));
+    }
+
+    //Go through all the images
+    for(int i = 0; i < NewImages.size() && isRunning(); i++) {
+        QImage originalImage = NewImages[i];
+
+        //Where the database image ideas are stored
+        cwImage imageIds;
+
+        copyOriginalImage(originalImage, &imageIds);
+
+        images.append(PrivateImageData(imageIds, originalImage));
+    }
+
+    //Go through all the images
+    for(int i = 0; i < images.size() && isRunning(); i++) {
+        cwImage& imageIds = images[i].Id;
+        const QImage& originalImage = images[i].OriginalImage;
+        const QString name = images[i].Name;
+
         //Create a icon image
-        createIcon(originalImage, imagePath, &imageIds);
+        createIcon(originalImage, name, &imageIds);
 
         //Create mipmaps
-        createMipmaps(originalImage, imagePath, &imageIds);
+        createMipmaps(originalImage, name, &imageIds);
 
         //Add image ids to the list of images that are returned
         Images.append(imageIds);
 
       //  emit progressed(i + 1);
     }
+
+
+//    //Go through all the images
+//    for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
+//        QString imagePath = NewImagePaths[i];
+
+//        //Where the database image ideas are stored
+//        cwImage imageIds;
+
+//        //Copy the original image to the database
+//        QImage originalImage = copyOriginalImage(imagePath, &imageIds);
+
+//        //Create a icon image
+//        createIcon(originalImage, imagePath, &imageIds);
+
+//        //Create mipmaps
+//        createMipmaps(originalImage, imagePath, &imageIds);
+
+//        //Add image ids to the list of images that are returned
+//        Images.append(imageIds);
+
+//      //  emit progressed(i + 1);
+//    }
 
     endTransation();
 }
@@ -157,19 +219,60 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     QImage image;
     image.loadFromData(originalImageByteData, format.constData());
 
+    *imageIdContainer = addImageToDatabase(image, format, originalImageByteData);
+
+//    int dotsPerMeter = 0;
+//    if(image.dotsPerMeterX() == image.dotsPerMeterY()) {
+//        dotsPerMeter = image.dotsPerMeterX();
+//    }
+
+//    //Write the image to the database
+//    cwImageData originalImageData(image.size(), dotsPerMeter, format, originalImageByteData);
+//    int imageId = cwProject::addImage(Database, originalImageData);
+//    imageIdContainer->setOriginal(imageId);
+//    imageIdContainer->setOriginalSize(image.size());
+//    imageIdContainer->setOriginalDotsPerMeter(dotsPerMeter);
+
+    return image;
+}
+
+/**
+    \brief this adds the image to the database
+  */
+void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
+{
+    QByteArray format = "jpg";
+    QByteArray imageData;
+    QBuffer buffer(&imageData);
+
+    QImageWriter writer(&buffer, format);
+    writer.write(image);
+
+    *imageIds = addImageToDatabase(image, format, imageData);
+}
+
+/**
+  \brief Adds the image to the database
+  */
+cwImage cwAddImageTask::addImageToDatabase(const QImage &image,
+                                           const QByteArray &format,
+                                           const QByteArray &imageData)
+{
     int dotsPerMeter = 0;
     if(image.dotsPerMeterX() == image.dotsPerMeterY()) {
         dotsPerMeter = image.dotsPerMeterX();
     }
 
     //Write the image to the database
-    cwImageData originalImageData(image.size(), dotsPerMeter, format, originalImageByteData);
+    cwImageData originalImageData(image.size(), dotsPerMeter, format, imageData);
     int imageId = cwProject::addImage(Database, originalImageData);
-    imageIdContainer->setOriginal(imageId);
-    imageIdContainer->setOriginalSize(image.size());
-    imageIdContainer->setOriginalDotsPerMeter(dotsPerMeter);
 
-    return image;
+    cwImage imageIdContainer;
+    imageIdContainer.setOriginal(imageId);
+    imageIdContainer.setOriginalSize(image.size());
+    imageIdContainer.setOriginalDotsPerMeter(dotsPerMeter);
+
+    return imageIdContainer;
 }
 
 /**

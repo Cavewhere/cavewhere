@@ -28,7 +28,7 @@ bool cwProjectIOTask::connectToDatabase(QString connectionName) {
     Database.setDatabaseName(DatabasePath);
     bool connected = Database.open();
     if(!connected) {
-        qDebug() << "Couldn't connect to database for LoadImageTask:" << DatabasePath;
+        qDebug() << "Couldn't connect to database for LoadImageTask:" << DatabasePath << LOCATION;
         stop();
     }
 

@@ -125,10 +125,12 @@ private:
     QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
     QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap);
 
-    void createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, int index);
+    cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
     QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
     QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
     void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
+
+    QVector<QVector2D> mapTexCoords(const QRectF& bounds, const QVector<QVector3D>& normalizeNoteCoords);
 
 };
 

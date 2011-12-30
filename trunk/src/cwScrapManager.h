@@ -82,13 +82,6 @@ private slots:
 };
 
 
-/**
-  \brief Sets the gl scraps for the manager
-  */
-inline void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
-{
-    GLScraps = glScraps;
-}
 
 
 #endif // CWSCRAPMANAGER_H

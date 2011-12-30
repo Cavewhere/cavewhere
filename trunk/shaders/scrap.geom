@@ -1,0 +1,49 @@
+#version 120
+#extension GL_EXT_geometry_shader4 : enable
+
+// simple geometry shader
+
+// these lines enable the geometry shader support.
+//#version 330
+
+//layout(triangles) in;
+//layout(triangle_strip, max_vertices=3) out;
+
+varying in vec3 vPosition[3];
+varying in vec2 vTexCoord[3];
+
+varying out vec3 gTriangleDistance;
+varying out vec3 gPosition;
+varying out vec2 gTexCoord;
+
+//in vec3 vPosition;
+
+void main( void )
+{
+	//for( int i = 0 ; i < gl_VerticesIn ; i++ )
+	//{
+	gl_Position = gl_PositionIn[0];
+	gTriangleDistance = vec3(1.0, 0.0, 0.0);
+	gPosition = vPosition[0];
+        gTexCoord = vTexCoord[0];
+	EmitVertex();
+
+	gl_Position = gl_PositionIn[1];
+	gTriangleDistance = vec3(0.0, 1.0, 0.0);
+	gPosition = vPosition[1];
+        gTexCoord = vTexCoord[1];
+	EmitVertex();
+
+	gl_Position = gl_PositionIn[2];
+	gTriangleDistance = vec3(0.0, 0.0, 1.0);
+	gPosition = vPosition[2];
+        gTexCoord = vTexCoord[2];
+	EmitVertex();
+	
+	
+	//}
+	//gl_Position = gl_PositionIn[0];
+	//EmitVertex();
+
+	EndPrimitive();
+}

@@ -47,7 +47,7 @@ private:
     cwProjectImageProvider ImageProvider;
 
     //For writting the cropped image
-//    cwAddImageTask* AddImageTask;
+    cwAddImageTask* AddImageTask;
 
     cwImageData cropImage(int imageId) const;
     QRect mapNormalizedToIndex(QRectF normalized, QSize size) const;

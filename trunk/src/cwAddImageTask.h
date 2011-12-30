@@ -29,8 +29,14 @@ public:
     cwAddImageTask(QObject* parent = NULL);
 
     //////////////// Parameters //////////////////
-    void setProjectPath(QString projectPath);
-    void setImagesPath(QStringList imagePaths);
+//    void setProjectPath(QString projectPath);
+
+    //Option 1 for using
+    void setNewImagesPath(QStringList imagePaths);
+
+    //Option 2 for using
+    void setNewImages(QList<QImage> images);
+
 
     ///////////// Results ///////////////////
     QList<cwImage> images();
@@ -42,7 +48,25 @@ protected:
     virtual void runTask();
 
 private:
-    QStringList ImagePaths;
+    class PrivateImageData {
+    public:
+        PrivateImageData() { }
+        PrivateImageData(cwImage id, QImage original, QString name = QString("default image")) :
+            Id(id),
+            OriginalImage(original),
+            Name(name)
+        {
+
+        }
+
+
+        cwImage Id;
+        QImage OriginalImage;
+        QString Name;
+    };
+
+    QStringList NewImagePaths;
+    QList<QImage> NewImages;
 
     QList<cwImage> Images;
     QStringList Errors;
@@ -50,6 +74,9 @@ private:
     QAtomicInt Progress;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);
+    void copyOriginalImage(const QImage& image, cwImage* imageIds);
+    cwImage addImageToDatabase(const QImage& image, const QByteArray& format, const QByteArray& imageData);
+
     void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
     int saveToDXT1Format(QImage image);
@@ -72,9 +99,9 @@ private slots:
 
   The images will store the relitive path to the project directory
   */
-inline void cwAddImageTask::setProjectPath(QString projectPath) {
-    DatabasePath = projectPath;
-}
+//inline void cwAddImageTask::setProjectPath(QString projectPath) {
+//    DatabasePath = projectPath;
+//}
 
 /**
   \brief Sets the databasePath
@@ -82,8 +109,15 @@ inline void cwAddImageTask::setProjectPath(QString projectPath) {
   This should be set before calling start!  And shouldn't be changed until the task
   has finished
   */
-inline void cwAddImageTask::setImagesPath(QStringList imagePaths) {
-    ImagePaths = imagePaths;
+inline void cwAddImageTask::setNewImagesPath(QStringList imagePaths) {
+    NewImagePaths = imagePaths;
+}
+
+/**
+  \brief Sets the images that will be added to the database
+  */
+inline void cwAddImageTask::setNewImages(QList<QImage> images) {
+    NewImages = images;
 }
 
 /**

@@ -105,7 +105,16 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QuadDatabase quads = createQuads(pointGrid, gridPointsInScrap);
 
     //Triangulate the quads (this will update the outputs data)
-    createTriangles(pointGrid, gridPointsInScrap, quads, index);
+    cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
+
+    //Create the texture coordinates
+    QVector<QVector2D> texCoords = mapTexCoords(bounds, triangleData.points());
+
+    //For testing
+    cwTriangulatedData& outScrapData = TriangulatedScraps[index];
+    outScrapData.setIndices(triangleData.indices());
+    outScrapData.setPoints(triangleData.points());
+    outScrapData.setTexCoords(texCoords);
 }
 
 /**
@@ -221,14 +230,13 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
     grid - used to extract the point data
     database - used to extract to topology
     index - the location of where the point data will be stored in the output
+
+    This returns the points that make up the polygon (these are in original note cooridates, before cropping)
  */
-void cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
+cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
                                         const QSet<int> pointsContainedInOutline,
                                         const cwTriangulateTask::QuadDatabase &database,
-                                        int index) {
-
-    cwTriangulateInData& inScrapData = Scraps[index];
-    cwTriangulatedData& outScrapData = TriangulatedScraps[index];
+                                        const cwTriangulateInData &inScrapData) {
 
     //Resize the outputScrapData to have all points contained in the scrap outline
     QVector<QVector3D> points;
@@ -262,8 +270,10 @@ void cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid
                            24); //Optimize for 24 triangle count
 
     //Set the output's data
-    outScrapData.setPoints(points);
-    outScrapData.setIndices(optimizedIndices);
+    cwTriangulatedData data;
+    data.setIndices(optimizedIndices);
+    data.setPoints(points);
+    return data;
 }
 
 /**
@@ -394,6 +404,38 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
         //The next index for the triangles
         indices.append(index);
     }
+}
+
+/**
+    This takes the bounds of the cropped scrap and the point list of normalized cooridates of the original image.
+
+    This will tranform the normalized coordinates into local normalized coordinates such that
+    the cropped image can be textured in opengl
+
+    This function will produces texcoordinates
+  */
+QVector<QVector2D> cwTriangulateTask::mapTexCoords(const QRectF &bounds,
+                                                   const QVector<QVector3D> &normalizeNoteCoords) {
+
+    float xScale = 1 / bounds.width();
+    float yScale = 1 / bounds.height();
+
+    QPointF topLeft = -bounds.topLeft();
+
+    QMatrix4x4 matrix;
+    matrix.scale(xScale, yScale, 1.0);
+    matrix.translate(topLeft.x(), topLeft.y());
+
+    QVector<QVector2D> texCoords;
+    texCoords.reserve(normalizeNoteCoords.size());
+
+    foreach(QVector3D coord, normalizeNoteCoords) {
+        QVector2D texCoord = matrix.map(coord).toVector2D();
+        qDebug() << "TexCoord:" << texCoord;
+        texCoords.append(texCoord);
+    }
+
+    return texCoords;
 }
 
 /**

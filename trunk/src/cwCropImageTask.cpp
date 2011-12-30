@@ -12,8 +12,8 @@
 #include <QImageWriter>
 
 cwCropImageTask::cwCropImageTask(QObject* parent) : cwProjectIOTask(parent) {
-//    AddImageTask = new cwAddImageTask(this);
-//    AddImageTask->setParentTask(this);
+    AddImageTask = new cwAddImageTask(this);
+    AddImageTask->setParentTask(this);
 
 }
 
@@ -45,14 +45,34 @@ cwImage cwCropImageTask::croppedImage() const {
 void cwCropImageTask::runTask() {
 
     ImageProvider.setProjectPath(DatabasePath);
-//    AddImageTask->setDatabaseFilename(DatabasePath);
 
-    bool connected = connectToDatabase("CropImageTask");
-    if(connected) {
-        tryCroppingImage();
+    cwImageData imageData = ImageProvider.data(Original.original());
+    QRect cropArea = mapNormalizedToIndex(CropRect, imageData.size());
+    QImage image = QImage::fromData(imageData.data(), imageData.format());
+    QImage croppedImage = image.copy(cropArea);
 
-        Database.close();
-    }
+    QList<QImage> images;
+    images.append(croppedImage);
+
+    AddImageTask->setDatabaseFilename(databaseFilename());
+    AddImageTask->setNewImages(images);
+    AddImageTask->start();
+
+    //    AddImageTask->setDatabaseFilename(DatabasePath);
+
+//    bool connected = connectToDatabase("CropImageTask");
+//    if(connected) {
+//        tryCroppingImage();
+
+//        Database.close();
+//    }
+
+    Q_ASSERT(AddImageTask->isReady());
+
+    QList<cwImage> croppedImages = AddImageTask->images();
+    Q_ASSERT(croppedImages.size() == 1);
+
+    CroppedImage = croppedImages.first();
 
     done();
 }
@@ -76,6 +96,7 @@ cwImageData cwCropImageTask::cropImage(int imageId) const {
     if(imageData.format() == cwProjectImageProvider::Dxt1_GZ_Extension) {
         //Crop the DXT1 data
         croppedData = cropDxt1Image(imageData.data(), imageData.size(), cropArea);
+        croppedData = qCompress(croppedData);
     } else {
         //Some other format that QImage can handle
         QImage image = QImage::fromData(imageData.data(), imageData.format());
@@ -147,24 +168,32 @@ QByteArray cwCropImageTask::cropDxt1Image(const QByteArray &dxt1Data, QSize size
     int y = cropArea.y() / 4;
     int width = cropArea.width() / 4;
     int height = cropArea.height() / 4;
-    if(width % 4 == 0) { width += 1; }
-    if(height % 4 == 0) { height += 1; }
-    QByteArray cropDxt1Image(width * height, 0); //Create a completely black image
+    if(cropArea.width() % 4 != 0) { width += 1; }
+    if(cropArea.height() % 4 != 0) { height += 1; }
 
-    width = qMin(width, numBlockSizeX - x); //Make sure the width is in the bounds of the dxt1 format
+    QByteArray cropDxt1Image(width * height * sizeOfBlock, 0); //Create a completely black image
+   // QByteArray cropDxt1Image(dxt1Data.size(), 0);
+
+ //   width = qMin(width, numBlockSizeX - x); //Make sure the width is in the bounds of the dxt1 format
 
 
-    //For each scan line in the dxt formate
-    for(int row = 0; row < height && row + y < numBlockSizeY; row++) {
-        int fromIndex = numBlockSizeX * (row + y) + x;
-        int toIndex = row * width;
+//    //For each scan line in the dxt formate
+//    for(int row = 0; row < height && row + y < numBlockSizeY; row++) {
+//        int fromIndex = numBlockSizeX * (row + y) + x;
+//        int toIndex = row * width;
 
-        Q_ASSERT(fromIndex <= dxt1Data.size() - width);
-        Q_ASSERT(toIndex <= cropDxt1Image.size() - width);
+//        Q_ASSERT(fromIndex <= dxt1Data.size() - width);
+//        Q_ASSERT(toIndex <= cropDxt1Image.size() - width);
 
-        //Copy each scanline
-        memcpy(&(cropDxt1Image.data()[toIndex]), &(dxt1Data.constData()[fromIndex]), width);
-    }
+//        //Copy each scanline
+//        memcpy(&(cropDxt1Image.data()[toIndex]), &(dxt1Data.constData()[fromIndex]), width);
+//    }
+
+    memcpy(cropDxt1Image.data(), dxt1Data.constData(), cropDxt1Image.size());
+
+    QSize cropSize(width * 4, height * 4);
+
+    qDebug() << "CroppedDxt1Image:" << cropDxt1Image.size() << cropArea.size() << "Finalsize:" << cropSize;
 
     return cropDxt1Image;
 }

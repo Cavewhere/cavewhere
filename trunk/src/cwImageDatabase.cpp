@@ -56,7 +56,7 @@ void cwImageDatabaseManager::addImages(QStringList imagePath) {
     }
 
     //AddImageTask->setDatabasePath(Project->projectPath());
-    AddImageTask->setImagesPath(imagePath);
+    AddImageTask->setNewImagesPath(imagePath);
     AddImageTask->start();
 }
 
