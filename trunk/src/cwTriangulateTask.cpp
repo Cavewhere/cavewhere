@@ -129,7 +129,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
 /**
     \brief Creates a point grid
 
-    This is a regualar grid that has grid resolution of a meter.
+    This is a regualar grid that has grid  of a meter.
 
     \param PointGridSize is the size in normalize note coordinates of the grid.
     \param scrapImage is used to get the original size and dotPerMeter
@@ -149,8 +149,8 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
     double sizeInCaveY = sizeOnPaperY / scale; //in meters in cave
 
-    double xDelta = bounds.width() / sizeInCaveX;
-    double yDelta = bounds.height() / sizeInCaveY;
+    double xDelta = bounds.width() / sizeInCaveX / pointsPerMeter;
+    double yDelta = bounds.height() / sizeInCaveY / pointsPerMeter;
 
     double numberOfPointsX = sizeInCaveX * (double)pointsPerMeter;
     double numberOfPointsY = sizeInCaveY * (double)pointsPerMeter;
@@ -475,7 +475,6 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
     QSize imageSize = croppedImage.origianlSize();
     double metersPerDot = 1.0 / (double)croppedImage.originalDotsPerMeter();
-    double scrapScale = 1.0 /scrapData.noteTransform().scale();
 
     //For right now try to map
     QMatrix4x4 toPixels;
@@ -484,39 +483,23 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     QMatrix4x4 toMetersOnPaper;
     toMetersOnPaper.scale(metersPerDot, metersPerDot, 1.0);
 
-    QMatrix4x4 toMetersInCave;
-    toMetersInCave.scale(scrapScale, scrapScale, 1.0);
+    QMatrix4x4 toMetersInCave = scrapData.noteTransform().matrix();
 
     QMatrix4x4 toWorldCoords = toMetersInCave * toMetersOnPaper * toPixels * toLocal;
-
-//    //For testing
-//    cwTriangulateStation station = scrapData.stations().first();
-//    QPointF stationOnNote = toWorldCoords * station.notePosition();
-//    QVector3D stationPos = station.position();
-
-//    QMatrix4x4 offsetToFirstStation;
-//    offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
-//    offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
-
-//    QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords;
 
     QVector<QVector3D> points;
     points.reserve(notePoints.size());
     points.resize(notePoints.size());
     for(int i = 0; i < notePoints.size(); i++) {
 
-        //Figure out which stations are visible to this point
-        QList<cwTriangulateStation> visibleStations = stationsVisibleToPoint(notePoints[i],
-                                                                             scrapData.stations(),
-                                                                             scrapData.outline());
+//        //Figure out which stations are visible to this point
+//        QList<cwTriangulateStation> visibleStations = stationsVisibleToPoint(notePoints[i],
+//                                                                             scrapData.stations(),
+//                                                                             scrapData.outline());
 
         //Based on the visible stations morph point into the scene coords
-        points[i] = morphPoint(visibleStations, toWorldCoords, notePoints[i]);
-
-//        points[i] = noteToScene.map();
+        points[i] = morphPoint(scrapData.stations(), toWorldCoords, notePoints[i]);
     }
-
-    //qDebug() << "Points:" << points;
 
     return points;
 }
@@ -584,10 +567,54 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
 
         //For debugging for now, this should be really obvious that this code is
         //wrong
-        if(visibleStations.size() == 1) {
-            visibleStations.append(stations.first());
+
+        visibleStations.clear();
+
+        //The two closest stations
+        cwTriangulateStation station1;
+        cwTriangulateStation station2;
+        double distance1 = std::numeric_limits<double>::max();
+        double distance2 = distance1;
+
+        foreach(cwTriangulateStation station, stations) {
+            double length = QLineF(point2D, station1.notePosition()).length();
+
+            //Heristic
+            if(station1.name().isEmpty()) {
+                distance1 = length;
+                station1 = station;
+                continue;
+            }
+
+            if(length < distance1) {
+                //Push distance1 to distance2
+                distance2 = distance1;
+                station2 = station1;
+
+                distance1 = length;
+                station1 = station;
+                continue;
+            }
+
+            if(station2.name().isEmpty()) {
+                distance2 = length;
+                station2 = station;
+                continue;
+            }
+
+            if(length < distance2) {
+                distance2 = length;
+                station2 = station;
+            }
         }
-        visibleStations.append(stations.first());
+
+        visibleStations.append(station1);
+        visibleStations.append(station1);
+
+//        if(visibleStations.size() == 1) {
+//            visibleStations.append(stations.first());
+//        }
+//        visibleStations.append(stations.first());
     }
 
     return visibleStations;
