@@ -70,12 +70,17 @@ double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const
     //Figure out the vector between the points
     QVector2D vectorBetweenPoints = QVector2D(noteP2) - QVector2D(noteP1);
 
+    double offset = 0.0;
+    if(noteP1.x() < noteP1.y()) {
+        offset = 360.0;
+    }
+
     //Normalize it
     vectorBetweenPoints.normalize();
 
     //Find the angle between the north vector
     double dot = QVector2D::dotProduct(vectorBetweenPoints, QVector2D(0.0, 1.0));
-    double northUp = acos(dot) * cwGlobals::RadiansToDegrees;
+    double northUp = offset - acos(dot) * cwGlobals::RadiansToDegrees;
 
     return northUp;
 }
@@ -110,7 +115,7 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
 */
 QMatrix4x4 cwNoteTranformation::matrix() const {
     QMatrix4x4 matrix;
-    matrix.rotate(northUp(), 0.0, 0.0, 1.0);
+    matrix.rotate(-northUp(), 0.0, 0.0, 1.0);
     matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
     return matrix;
 }
