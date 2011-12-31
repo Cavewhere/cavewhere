@@ -143,7 +143,7 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperX = scrapImageSize.width() / (double)scrapImage.originalDotsPerMeter(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / (double)scrapImage.originalDotsPerMeter(); //in meters
 
-    double pointsPerMeter = 1.0; //Grid resolution
+    double pointsPerMeter = 2; //Grid resolution
     double scale = noteTransform.scale(); //scale for the notes
 
     double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
@@ -547,20 +547,29 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
 
     QList<cwTriangulateStation> visibleStations;
 
+    QPointF point2D = point.toPointF();
+    double errorTolerance = 1.0e-6;
+
     //For each station
     foreach(cwTriangulateStation station, stations) {
 
         //Create a line between the point and the station
-        QLineF ray(station.notePosition(), point.toPointF());
+        QLineF ray(point2D,station.notePosition());
 
         //The flag if the station should be added
         bool shouldAdd = true;
 
         //Do all the intersections
+        QPointF intersectionPoint;
         foreach(QLineF line, polygonLines) {
-            if(ray.intersect(line, NULL) == QLineF::BoundedIntersection) {
-                shouldAdd = false;
-                break;
+            if(ray.intersect(line, &intersectionPoint) == QLineF::BoundedIntersection) {
+                double percentX = fabs(intersectionPoint.x() - point2D.x()) / point2D.x();
+                double percentY = fabs(intersectionPoint.y() - point2D.y()) / point2D.y();
+
+                if(percentX >= errorTolerance || percentY >= errorTolerance) {
+                    shouldAdd = false;
+                    break;
+                }
             }
         }
 
@@ -582,7 +591,6 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
     }
 
     return visibleStations;
-
 }
 
 /**

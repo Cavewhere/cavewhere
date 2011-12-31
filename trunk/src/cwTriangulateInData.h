@@ -28,8 +28,6 @@ public:
     void setNoteTransform(cwNoteTranformation noteTransform);
 
 
-
-
 private:
     class PrivateData : public QSharedData {
     public:
