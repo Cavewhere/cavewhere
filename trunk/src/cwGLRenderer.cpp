@@ -113,6 +113,7 @@ void cwGLRenderer::renderTextureFramebuffer() {
 
     glBegin(GL_QUADS);
     glTexCoord2f(0.0, 1.0);
+    glColor3f(1.0f, 1.0f, 1.0f);
     glVertex2f(0, 0);
 
     glTexCoord2f(0.0, 0.0);
