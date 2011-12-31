@@ -24,5 +24,9 @@ void main() {
 
   vec4 sauce = vec4(gTexCoord, 0.0, 1.0); //(0.5, 0.5, 1.0, 1.0);
   vec4 textureSample = texture2D(Texture, gTexCoord);
-  gl_FragColor = amplify(triangleDistance, 85.0, 0.0) * textureSample;
+
+  float amplifyValue = amplify(triangleDistance, 85.0, 0.0);
+
+
+  gl_FragColor = (1.0 - amplifyValue) * vec4(0.0, 0.2, .0, 1.0) + amplifyValue * textureSample;
 }
