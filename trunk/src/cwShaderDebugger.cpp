@@ -53,6 +53,8 @@ void cwShaderDebugger::recompileShader(QString path) {
         }
     }
 
+    qDebug() << "Sauce:" << ShaderSourceWatcher->files();
+
     cwGLShader* shader = FileNameToShader.value(path, NULL);
     QGLShaderProgram* program = NULL;
     if(shader != NULL) {
@@ -80,6 +82,10 @@ void cwShaderDebugger::recompileShader(QString path) {
     } else {
         qDebug() << "\t" << qPrintable(program->log());
     }
+
+    //There's a bug in the Qfilesystemwatcher, this is a work around
+    ShaderSourceWatcher->removePath(path);
+    ShaderSourceWatcher->addPath(path);
 
     emit shaderReloaded(shader);
 
