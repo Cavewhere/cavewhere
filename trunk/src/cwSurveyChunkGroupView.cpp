@@ -38,6 +38,8 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
         ChunkViews.clear();
         ChunkBoundingRects.clear();
 
+
+
         if(Trip != NULL) {
             //Add chunks to the view
             AddChunks(0, Trip->numberOfChunks() - 1);
@@ -46,6 +48,8 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
         }
 
         emit tripChanged();
+        emit contentHeightChanged();
+        emit contentWidthChanged();
     }
 }
 
@@ -429,7 +433,7 @@ float cwSurveyChunkGroupView::contentHeight() const {
 }
 
 float cwSurveyChunkGroupView::contentWidth() const {
-    if(ChunkBoundingRects.isEmpty()) { return 0.0; }
+    if(ChunkBoundingRects.isEmpty()) { return 500.0; }
 //    qDebug() << "Children width: " << childrenBoundingRect().width();
     return childrenBoundingRect().width();
 }

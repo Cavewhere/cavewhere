@@ -266,7 +266,6 @@ HEADERS  += \
     src/cwImageTexture.h
 
 
-
 FORMS    += src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
     src/cwTaskProgressDialog.ui
@@ -329,7 +328,8 @@ OTHER_FILES += \
     shaders/scrap.vert \
     shaders/scrap.frag \
     installer/mac/installMac.sh \
-    shaders/scrap.geom
+    shaders/scrap.geom \
+    qml/SurveyEditor.qml
 
 RESOURCES += \
     icons.qrc

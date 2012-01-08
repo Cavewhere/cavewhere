@@ -6,12 +6,12 @@ Rectangle {
     default property alias content: pageArea.children
     property int currentPageIndex: 0
 
-    onCurrentPageIndexChanged: setOpacities()
-    Component.onCompleted: setOpacities()
+    onCurrentPageIndexChanged: setVisible()
+    Component.onCompleted: setVisible()
 
-    function setOpacities() {
+    function setVisible() {
         for (var i = 0; i < pageArea.children.length; ++i) {
-            pageArea.children[i].opacity = (i == currentPageIndex ? 1 : 0)
+            pageArea.children[i].visible = (i == currentPageIndex ? 1 : 0)
         }
     }
 

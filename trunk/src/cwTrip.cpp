@@ -134,13 +134,6 @@ void cwTrip::setCalibration(cwTripCalibration* calibration) {
 //}
 
 /**
-  \brief Gets the number of chunks in a trip
-  */
-int cwTrip::numberOfChunks() const {
-    return Chunks.size();
-}
-
-/**
   \brief Remove the chunks
   */
 void cwTrip::removeChunks(int begin, int end) {
@@ -156,6 +149,7 @@ void cwTrip::removeChunks(int begin, int end) {
     }
 
     emit chunksRemoved(begin, end);
+    emit numberOfChunksChanged();
 }
 
 /**
@@ -174,6 +168,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
     Chunks.insert(row, chunk);
 
     emit chunksInserted(row, row);
+    emit numberOfChunksChanged();
 }
 
 /**
@@ -181,6 +176,17 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
   */
  void cwTrip::addChunk(cwSurveyChunk* chunk) {
      insertChunk(numberOfChunks(), chunk);
+ }
+
+ /**
+    This creates a new chunk that has one shot and two stations.
+
+    This will append the chunk to the end of the chunk list
+   */
+ void cwTrip::addNewChunk() {
+     cwSurveyChunk* chunk = new cwSurveyChunk(this);
+     chunk->appendNewShot(); //Creates a valid chunk
+     addChunk(chunk);
  }
 
 /**

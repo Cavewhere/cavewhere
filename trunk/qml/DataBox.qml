@@ -42,9 +42,9 @@ NavigationRectangle {
         id: editor
         anchors.fill: parent
 
-        onVisibleChanged: {
-            console.log("Visible changed!");
-        }
+//        onVisibleChanged: {
+//            console.log("Visible changed!");
+//        }
     }
 
 //    ShadowRectangle {

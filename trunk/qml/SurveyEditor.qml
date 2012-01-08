@@ -11,8 +11,8 @@ Rectangle {
     Flickable {
         id: flickArea
 
-        contentHeight: view.contentHeight
-        width: view.contentWidth
+        contentHeight: view.contentHeight + spaceAddBar.height
+        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth)
 
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -32,11 +32,12 @@ Rectangle {
             }
         }
 
+
+
         SurveyChunkGroupView {
             id: view
 
-            anchors.fill: parent
-            anchors.margins: 10;
+            width: view.contentWidth
 
             viewportX: flickArea.contentX;
             viewportY: flickArea.contentY;
@@ -45,8 +46,40 @@ Rectangle {
 
             onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
         }
+
+        Image {
+            id: spaceAddBar
+            source: "qrc:icons/spacebar.png"
+
+
+            y: view.contentHeight
+            anchors.horizontalCenter: view.horizontalCenter
+
+            Text {
+                anchors.centerIn: parent
+                text: {
+                    if(currentTrip) {
+                        if(currentTrip.numberOfChunks === 0) {
+                            return "Press <b>Space</b> to start";
+                        } else {
+                            return "Press <b>Space</b> to add another data block";
+                        }
+                    } else {
+                        return "Error: Current trip is null";
+                    }
+                }
+            }
+        }
     }
 
+    Keys.onSpacePressed: {
+        //Add chunk
+        currentTrip.addNewChunk();
+    }
+
+    onVisibleChanged: {
+        focus = visible
+    }
 
 //    NotesGallery {
 //        anchors.left: flickArea.right

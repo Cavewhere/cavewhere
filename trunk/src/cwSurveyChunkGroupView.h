@@ -30,18 +30,18 @@ public:
     void setTrip(cwTrip* trip);
     cwTrip* trip() const;
 
-    Q_INVOKABLE float contentHeight() const;
-    Q_INVOKABLE float contentWidth() const;
+    float contentHeight() const;
+    float contentWidth() const;
 
-    Q_INVOKABLE float viewportX() const;
-    Q_INVOKABLE float viewportY() const;
-    Q_INVOKABLE float viewportWidth() const;
-    Q_INVOKABLE float viewportHeight() const;
+    float viewportX() const;
+    float viewportY() const;
+    float viewportWidth() const;
+    float viewportHeight() const;
 
-    Q_INVOKABLE void setViewportX(float x);
-    Q_INVOKABLE void setViewportY(float y);
-    Q_INVOKABLE void setViewportWidth(float width);
-    Q_INVOKABLE void setViewportHeight(float height);
+    void setViewportX(float x);
+    void setViewportY(float y);
+    void setViewportWidth(float width);
+    void setViewportHeight(float height);
 
     /// The group view allows wants this rectangle visible
     /// Usually this is attached to a flickable qml object

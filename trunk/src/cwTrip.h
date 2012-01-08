@@ -27,6 +27,7 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
+    Q_PROPERTY(int numberOfChunks READ numberOfChunks NOTIFY numberOfChunksChanged)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -50,6 +51,7 @@ public:
     void removeChunks(int begin, int end);
     void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
+    Q_INVOKABLE void addNewChunk();
 
     int numberOfChunks() const;
     cwSurveyChunk* chunk(int i) const;
@@ -73,9 +75,11 @@ signals:
     void teamChanged();
     void calibrationChanged();
     void notesChanged();
+    void numberOfChunksChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
+
 
 protected:
     QList<cwSurveyChunk*> Chunks;
@@ -117,6 +121,13 @@ private:
 
 
 };
+
+/**
+Gets numberOfChunks
+*/
+inline int cwTrip::numberOfChunks() const {
+    return chunks().size();
+}
 
 /**
   \brief Get's the name of the survey trip

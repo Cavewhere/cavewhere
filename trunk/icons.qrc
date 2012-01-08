@@ -49,5 +49,6 @@
         <file>icons/back.png</file>
         <file>icons/select.png</file>
         <file>icons/rotate.png</file>
+        <file>icons/spacebar.png</file>
     </qresource>
 </RCC>
