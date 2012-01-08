@@ -28,13 +28,6 @@ cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
 }
 
 /**
-  \brief Gets a cave by it's name
-
-  If the cave doesn't exist then this returns null
-  */
-
-
-/**
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
@@ -53,8 +46,13 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
     //Add new caves
     Caves.reserve(object.Caves.size());
     foreach(cwCave* cave, object.Caves) {
+
+        //Strange copying to make sure the newCaves are
+        //On the correct thread
         cwCave* newCave = new cwCave(*cave);
+        newCave->moveToThread(thread());
         newCave->setParent(this);
+
         Caves.append(newCave);
     }
 

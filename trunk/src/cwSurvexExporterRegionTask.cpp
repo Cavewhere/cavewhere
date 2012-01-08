@@ -31,24 +31,41 @@ void cwSurvexExporterRegionTask::setData(const cwCavingRegion& region) {
 /**
   \brief Outputs region to the stream
   */
-void cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion* region) {
+bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion* region) {
+    if(!checkData()) {
+        return false;
+    }
+
     TotalProgress = 0;
 
     for(int i = 0; i < region->caveCount(); i++) {
         cwCave* cave = region->cave(i);
-        CaveExporter->writeCave(stream, cave);
+        bool good = CaveExporter->writeCave(stream, cave);
         stream << endl;
+
+        if(!good) {
+            return false;
+        }
     }
 
+    return true;
 }
 
 /**
   \brief Runs the survex exporter task
   */
 void cwSurvexExporterRegionTask::runTask() {
-    openOutputFile();
-    writeRegion(OutputStream, Region);
-    closeOutputFile();
+    if(openOutputFile()) {
+        bool good = writeRegion(OutputStream, Region);
+        closeOutputFile();
+
+        if(!good) {
+            stop();
+        }
+    } else {
+        stop();
+    }
+
     done();
 }
 
@@ -57,4 +74,16 @@ void cwSurvexExporterRegionTask::runTask() {
   */
 void cwSurvexExporterRegionTask::UpdateProgress(int /*tripProgress*/) {
 
+}
+
+/**
+    This makes sure that the data is good
+  */
+bool cwSurvexExporterRegionTask::checkData() {
+    if(!Region->hasCaves()) {
+        //No caves to process
+        Errors.append("No caves to do loop closure");
+        return false;
+    }
+    return true;
 }

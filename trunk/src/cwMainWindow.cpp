@@ -118,7 +118,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Project->load("bcc.cw");
+  //  Project->load("bcc.cw");
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window

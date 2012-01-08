@@ -53,7 +53,7 @@ void cwShaderDebugger::recompileShader(QString path) {
         }
     }
 
-    qDebug() << "Sauce:" << ShaderSourceWatcher->files();
+   // qDebug() << "Sauce:" << ShaderSourceWatcher->files();
 
     cwGLShader* shader = FileNameToShader.value(path, NULL);
     QGLShaderProgram* program = NULL;

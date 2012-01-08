@@ -60,14 +60,15 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 /**
   \brief Set's the data for the line plot task
   */
-void cwLinePlotTask::setData(cwCavingRegion region) {
+void cwLinePlotTask::setData(const cwCavingRegion& region) {
     if(!isReady()) {
         qWarning() << "Can't set cave data for LinePlotTask, while it's running";
         return;
     }
 
-    *Region = region;
     Region->setParent(this);
+    *Region = region;
+
 
     //Incode the the cave's index into the cave's name
     for(int i = 0; i < Region->caveCount(); i++) {
@@ -85,13 +86,6 @@ void cwLinePlotTask::setData(cwCavingRegion region) {
   4. Update the survey data
   */
 void cwLinePlotTask::runTask() {
-    //Can't run with null data
-//    if(Region == NULL) {
-//        qWarning() << "Can't run line plot task with no data"
-//        stop();
-//        done();
-//        return;
-//    }
     Time.start();
     exportData();
 }

@@ -13,7 +13,9 @@ public:
 
     void setData(const cwCavingRegion& region);
 
-    void writeRegion(QTextStream& stream, cwCavingRegion* region);
+    bool writeRegion(QTextStream& stream, cwCavingRegion* region);
+
+
 
 protected:
     virtual void runTask();
@@ -26,6 +28,8 @@ private:
     cwCavingRegion* Region;
     int TotalProgress;
 
+    //Makes sure the region has caves
+    bool checkData();
 };
 
 #endif // CWSURVEXEXPORTERREGIONTASK_H

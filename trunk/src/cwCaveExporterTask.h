@@ -14,16 +14,19 @@ public:
     cwCaveExporterTask(QObject* parent = 0);
 
     void setData(const cwCave& cave);
-    virtual void writeCave(QTextStream& stream, cwCave* cave) = 0;
+    virtual bool writeCave(QTextStream& stream, cwCave* cave) = 0;
 
 protected:
     cwCave* Cave;
     int TotalProgress;
 
     virtual void runTask();
+    bool checkData();
 
 protected slots:
     void UpdateProgress(int tripProgress);
+
+
 };
 
 #endif // CWCAVEEXPORTERTASK_H

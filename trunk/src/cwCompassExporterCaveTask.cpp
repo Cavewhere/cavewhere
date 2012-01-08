@@ -21,7 +21,7 @@ cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
 /**
   Writes all the trips to the data stream
   */
-void cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+bool cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     //Haven't done anything
     TotalProgress = 0;
 
@@ -32,6 +32,8 @@ void cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         TotalProgress += trip->numberOfStations();
         stream << CompassNewLine;
     }
+
+    return true;
 }
 
 /**

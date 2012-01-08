@@ -25,16 +25,34 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   \brief Starts running the export cave task
   */
 void cwCaveExporterTask::runTask() {
-    if(openOutputFile()) {
-        writeCave(OutputStream, Cave);
+    if(checkData() && openOutputFile()) {
+        bool good = writeCave(OutputStream, Cave);
         closeOutputFile();
+
+        if(!good) {
+            stop();
+        }
+    } else {
+        stop();
     }
     done();
 }
+
 
 /**
   \brief Updates the progress of the cave task
   */
 void cwCaveExporterTask::UpdateProgress(int /*tripProgress*/) {
 
+}
+
+/**
+  \brief Checks if the cave has trips in it before running
+  */
+bool cwCaveExporterTask::checkData() {
+    if(!Cave->hasTrips()) {
+        Errors.append(QString("No trips to do loop closure in %1").arg(Cave->name()));
+        return false;
+    }
+    return true;
 }

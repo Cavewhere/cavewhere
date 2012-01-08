@@ -31,7 +31,7 @@ protected:
     virtual void runTask();
 
 public slots:
-    void setData(cwCavingRegion region);
+    void setData(const cwCavingRegion &region);
 
 private slots:
     void exportData();

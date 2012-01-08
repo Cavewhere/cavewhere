@@ -29,7 +29,7 @@ void cwScaleLengthItem::connectTransformer() {
     We need to disconnect it
   */
 void cwScaleLengthItem::disconnectTransformer() {
-    TransformUpdater->addTransformItem(LengthHandler);
+    TransformUpdater->removeTransformItem(LengthHandler);
     disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateScaleLengthPath()));
 }
 

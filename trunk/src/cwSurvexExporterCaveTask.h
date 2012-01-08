@@ -15,7 +15,7 @@ class cwSurvexExporterCaveTask : public cwCaveExporterTask
 public:
     explicit cwSurvexExporterCaveTask(QObject *parent = 0);
 
-    void writeCave(QTextStream& stream, cwCave* cave);
+    bool writeCave(QTextStream& stream, cwCave* cave);
 
 private:
     cwSurvexExporterTripTask* TripExporter;

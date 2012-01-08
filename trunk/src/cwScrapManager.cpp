@@ -41,10 +41,10 @@ void cwScrapManager::setRegion(cwCavingRegion* region) {
 
     if(Region != NULL) {
         //Connect all signal from the region
-        connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
-        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(updateCaveScrapGeometry(int, int)));
-        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
-        connect(Region, SIGNAL(removedCaves(int,int)), SLOT(updateCaveScrapGeometry(int, int)));
+//        connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
+//        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(updateCaveScrapGeometry(int, int)));
+//        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
+//        connect(Region, SIGNAL(removedCaves(int,int)), SLOT(updateCaveScrapGeometry(int, int)));
 
         connectAllCaves();
     }

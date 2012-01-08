@@ -16,7 +16,14 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
 /**
   \brief Writes the cave data to the stream
   */
-void cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
+
+    if(!checkData()) {
+        if(isRunning()) {
+            stop();
+        }
+        return false;
+    }
 
     stream << "*begin " << cave->name() << endl << endl;
 
@@ -32,5 +39,8 @@ void cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     }
 
     stream << "*end ; End of " << cave->name() << endl;
+
+    return true;
 }
+
 
