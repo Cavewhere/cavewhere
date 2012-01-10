@@ -429,13 +429,27 @@ QGLWidget* cwMainWindow::createGLWidget() {
   of the window will be half the size of the screen
   */
 void cwMainWindow::initialWindowShape() {
-    QRect screenGeometry = QApplication::desktop()->screenGeometry();
+    QRect screenGeometry;
+    if(QApplication::desktop()->screenCount() == 2) {
+        int primaryScreenId = QApplication::desktop()->primaryScreen();
+        int secondaryScreenId = primaryScreenId == 0 ? 1 : 0;
+
+        QRect primaryScreen = QApplication::desktop()->screenGeometry(primaryScreenId);
+        QRect secondarySceen = QApplication::desktop()->screenGeometry(secondaryScreenId);
+
+        secondarySceen.moveLeft(primaryScreen.width());
+
+        screenGeometry = secondarySceen;
+    } else {
+        //Use the screen geometry of the primary screen
+        screenGeometry = QApplication::desktop()->availableGeometry();
+    }
 
     double size = 0.8;
     double position = (1.0 - size) / 2.0;
 
-    int x = qRound(screenGeometry.width() * position);
-    int y = qRound(screenGeometry.height() * position);
+    int x = screenGeometry.x() + qRound(screenGeometry.width() * position);
+    int y = screenGeometry.y() + qRound(screenGeometry.height() * position);
     int width = qRound(screenGeometry.width() * size);
     int height = qRound(screenGeometry.height() * size);
 
