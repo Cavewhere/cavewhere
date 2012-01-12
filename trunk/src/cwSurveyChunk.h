@@ -109,6 +109,9 @@ private:
     QVariant stationData(DataRole role, int index) const;
     QVariant shotData(DataRole role, int index) const;
 
+    void setStationData(DataRole role, int index, const QVariant &data);
+    void setShotData(DataRole role, int index, const QVariant &data);
+
 };
 
 /**

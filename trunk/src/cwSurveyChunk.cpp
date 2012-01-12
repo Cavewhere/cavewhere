@@ -4,6 +4,7 @@
 #include "cwShot.h"
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QHash>
@@ -424,7 +425,7 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
   \brief Helper function to data
   */
 QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
-    if(index < 0 || index >= Stations.size()) { return QVariant(); }
+    if(index < 0 || index >= Shots.size()) { return QVariant(); }
 
     cwShot* shot = Shots[index];
 
@@ -444,12 +445,117 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
     }
 }
 
+/**
+  \brief Sets the station's data for role, index, and data
+  */
+void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+    if(index < 0 || index >= Stations.size()) {
+        qDebug() << QString("Can't set station data for role \"%1\" at index: \"%2\" with data: \"%3\"")
+                    .arg(role).arg(index).arg(data.toString()) << LOCATION;
+        return;
+    }
+
+    if(!data.canConvert<QString>()) {
+        qDebug() << "Can't convert data to variant" << LOCATION;
+        return;
+    }
+
+    QString dataString = data.toString();
+    cwStationReference& station = Stations[index];
+
+    switch (role) {
+    case StationNameRole:
+        station.setName(dataString);
+        dataChanged(role, index, data);
+        break;
+    case StationLeftRole:
+        station.setLeft(dataString);
+        dataChanged(role, index, data);
+        break;
+    case StationRightRole:
+        station.setRight(dataString);
+        dataChanged(role, index, data);
+        break;
+    case StationUpRole:
+        station.setUp(dataString);
+        dataChanged(role, index, data);
+        break;
+    case StationDownRole:
+        station.setDown(dataString);
+        dataChanged(role, index, data);
+        break;
+    default:
+        qDebug() << "Can't find role:" << role << LOCATION;
+    }
+}
+
+/**
+  \brief Sets the shot's data for role, index, and data
+  */
+void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+    if(index < 0 || index >= Shots.size()) {
+        qDebug() << QString("Can't set shot data for role \"%1\" at index: \"%2\" with data: \"%3\"")
+                    .arg(role).arg(index).arg(data.toString()) << LOCATION;
+        return;
+    }
+
+    if(!data.canConvert<QString>()) {
+        qDebug() << "Can't convert data to variant" << LOCATION;
+        return;
+    }
+
+    QString dataString = data.toString();
+    cwShot* shot = Shots[index];
+
+    switch(role) {
+    case ShotDistanceRole:
+        shot->setDistance(dataString);
+        dataChanged(role, index, data);
+        break;
+    case ShotCompassRole:
+        shot->setCompass(dataString);
+        dataChanged(role, index, data);
+        break;
+    case ShotBackCompassRole:
+        shot->setBackCompass(dataString);
+        dataChanged(role, index, data);
+        break;
+    case ShotClinoRole:
+        shot->setClino(dataString);
+        dataChanged(role, index, data);
+        break;
+    case ShotBackClinoRole:
+        shot->setBackClino(dataString);
+        dataChanged(role, index, data);
+        break;
+    default:
+        qDebug() << "Can't find role:" << role << LOCATION;
+    }
+}
+
 
 /**
   \brief Set's the chunk data based on a role
   */
-void cwSurveyChunk::setData(DataRole /*role*/, int /*index*/, QVariant /*data*/) {
-   // qDebug() << "Role:" << role << "Index:" << index << "Data:" << data;
+void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
+    switch (role) {
+    case StationNameRole:
+    case StationLeftRole:
+    case StationRightRole:
+    case StationUpRole:
+    case StationDownRole:
+        setStationData(role, index, data);
+        break;
+    case ShotDistanceRole:
+    case ShotCompassRole:
+    case ShotBackCompassRole:
+    case ShotClinoRole:
+    case ShotBackClinoRole:
+        setShotData(role, index, data);
+        break;
+    default:
+        qDebug() << "Can't find role:" << role << LOCATION;
+    }
 }
 
 /**
