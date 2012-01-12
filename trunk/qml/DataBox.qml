@@ -38,14 +38,29 @@ NavigationRectangle {
         visible: dataBox.focus || editor.isEditting
     }
 
+    MouseArea {
+        anchors.fill: parent
+
+        onPressed: {
+            dataBox.focus = true
+        }
+
+        onDoubleClicked: {
+            editor.focus = true;
+        }
+    }
+
     ClickTextInput {
         id: editor
         anchors.fill: parent
+
 
 //        onVisibleChanged: {
 //            console.log("Visible changed!");
 //        }
     }
+
+
 
 //    ShadowRectangle {
 //        id: edittor

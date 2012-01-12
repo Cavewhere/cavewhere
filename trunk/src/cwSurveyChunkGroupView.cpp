@@ -27,29 +27,34 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
     }
 
     if(Trip != trip) {
+        if(Trip != NULL) {
+            disconnect(Trip, NULL, this, NULL);
+        }
+
         Trip = trip;
 
-        //Clear the current view
-        foreach(cwSurveyChunkView* view, ChunkViews) {
-            if(view != NULL) {
-                view->deleteLater();
-            }
-        }
-        ChunkViews.clear();
-        ChunkBoundingRects.clear();
-
-
-
         if(Trip != NULL) {
-            //Add chunks to the view
-            AddChunks(0, Trip->numberOfChunks() - 1);
+            //Clear the current view
+            foreach(cwSurveyChunkView* view, ChunkViews) {
+                if(view != NULL) {
+                    view->deleteLater();
+                }
+            }
+            ChunkViews.clear();
+            ChunkBoundingRects.clear();
 
-            connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+
+            if(Trip != NULL) {
+                //Add chunks to the view
+                AddChunks(0, Trip->numberOfChunks() - 1);
+
+                connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+            }
+
+            emit tripChanged();
+            emit contentHeightChanged();
+            emit contentWidthChanged();
         }
-
-        emit tripChanged();
-        emit contentHeightChanged();
-        emit contentWidthChanged();
     }
 }
 

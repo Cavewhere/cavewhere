@@ -72,7 +72,7 @@ Item {
     MouseArea {
         id: doubleClickArea
 
-        anchors.fill: textArea
+        anchors.fill: parent
         enabled:  true
 
         function openEdittor() {
@@ -96,9 +96,12 @@ Item {
             isEditting = true
 
             //Set the editor's position
-            var globalPosition = textArea.mapToItem(globalShadowTextInput, 0, 0)
-            globalShadowTextInput.editor.x = globalPosition.x
+            var globalPosition = clickTextInput.mapToItem(globalShadowTextInput, 0, 0)
+            globalShadowTextInput.editor.x = globalPosition.x - 3
             globalShadowTextInput.editor.y = globalPosition.y - 3
+
+            globalShadowTextInput.minWidth = clickTextInput.width + 6
+            globalShadowTextInput.minHeight = clickTextInput.height + 6
 
             //Connect to commitChanges()
             globalShadowTextInput.commitChanges.connect(commitChanges)

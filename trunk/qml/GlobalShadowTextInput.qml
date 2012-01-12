@@ -5,6 +5,8 @@ MouseArea {
 
     property alias textInput: input
     property alias editor: shadowEditor
+    property int minWidth: 0
+    property int minHeight: 0
 
     signal commitChanges()
 
@@ -12,8 +14,6 @@ MouseArea {
     enabled: false
 
     onPressed: {
-
-        console.log("Global click area");
         commitChanges()
         mouse.accepted = false
     }
@@ -24,8 +24,8 @@ MouseArea {
 
         color: "white"
 
-        width: input.width + 5
-        height: input.height + 5;
+        width:  minWidth > input.width + 6 ? minWidth : input.width  + 6
+        height: minHeight > input.height + 6 ? minHeight : input.height + 6
 
         TextInput {
             id: input
