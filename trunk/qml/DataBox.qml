@@ -1,4 +1,4 @@
-import Qt 4.7
+import QtQuick 1.1
 import Cavewhere 1.0
 import "Navigation.js" as NavigationHandler
 
@@ -41,7 +41,7 @@ NavigationRectangle {
     MouseArea {
         anchors.fill: parent
 
-        onPressed: {
+        onClicked: {
             dataBox.focus = true
         }
 
@@ -50,16 +50,19 @@ NavigationRectangle {
         }
     }
 
-    ClickTextInput {
+    DoubleClickTextInput {
         id: editor
         anchors.fill: parent
 
+        onFinishedEditting: {
+            console.debug("NewText:" + newText)
+             surveyChunk.setData(dataRole, rowIndex, newText)
+        }
 
 //        onVisibleChanged: {
 //            console.log("Visible changed!");
 //        }
     }
-
 
 
 //    ShadowRectangle {
@@ -110,7 +113,7 @@ NavigationRectangle {
 //    Keys.priority: Keys.AfterItem
 
     Keys.onPressed: {
-        //console.log("Key has been pressed");
+        console.log("Key has been pressed" + event.key);
 
         NavigationHandler.HandleTabEvent(event, dataBox);
         NavigationHandler.HandleArrowEvent(event, dataBox);
@@ -119,7 +122,7 @@ NavigationRectangle {
             if(event.key == Qt.Key_Backspace) {
                 //console.log("Back pressed")
                 state = 'EndTyping';
-                dataTextInput.focus = true;
+                editor.openEditor()
                 dataValue = dataValue.substring(0, dataValue.length - 1);
                 return;
             }
@@ -129,10 +132,10 @@ NavigationRectangle {
             //dataTextInput.Keys.onPressed(event);
 
             //var oldDataValue = dataValue;
-            if(dataTextInput.validator.validate(event.text) > 0 && event.text.length > 0) {
+            if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
                 dataBox.state = 'EndTyping'
-                dataTextInput.focus = true
                 dataValue = event.text
+                editor.openEditor()
             } //else {
                 //dataValue = oldDataValue;
             //}
@@ -144,25 +147,26 @@ NavigationRectangle {
     }
 
     Keys.onEnterPressed: {
+        console.debug("Enter pressed!")
         state = 'MiddleTyping';
-        dataTextInput.focus = true;
+        editor.openEditor()
     }
 
     Keys.onReturnPressed: {
         state = 'MiddleTyping';
-        dataTextInput.focus = true;
+        editor.openEditor()
     }
 
     Keys.onDeletePressed: {
         //console.log("Delete pressed")
         state = 'EndTyping';
         dataValue = '';
-        dataTextInput.focus = true;
+        editor.openEditor();
     }
 
-    onDataValueChanged: {
-        surveyChunk.setData(dataRole, rowIndex, dataValue);
-    }
+//    onDataValueChanged: {
+//        surveyChunk.setData(dataRole, rowIndex, dataValue);
+//    }
 
     states: [
 
@@ -181,17 +185,14 @@ NavigationRectangle {
 //            }
 
             PropertyChanges {
-                target: dataTextInput
+                target: globalShadowTextInput.editor
                 Keys.onPressed: {
+                    console.log("Get key" + event.key);
                     NavigationHandler.HandleTabEvent(event, dataBox);
-                    NavigationHandler.EnterNavigation(event, dataBox);
+//                    NavigationHandler.EnterNavigation(event, dataBox);
                     if(event.accepted) {
                         dataBox.state = ''; //Default state
                     }
-                }
-
-                Keys.onEscapePressed: {
-                    dataBox.state = ''; //Default state
                 }
 
                 onFocusChanged: {
@@ -200,6 +201,19 @@ NavigationRectangle {
                     }
                 }
             }
+
+            PropertyChanges {
+                target: globalShadowTextInput
+
+                onEscapePressed: {
+                    dataBox.state = ''; //Default state
+                }
+
+                onEnterPressed: {
+                    dataBox.nextTabObject.focus = true
+                }
+            }
+
 
             PropertyChanges {
                 target: dataBox
@@ -224,10 +238,10 @@ NavigationRectangle {
 //            }
 
             PropertyChanges {
-                target: dataTextInput
+                target: globalShadowTextInput.editor
 
                 Keys.onPressed: {
-                    //console.log("Get key" + event.key);
+
                     NavigationHandler.HandleTabEvent(event, dataBox);
                     NavigationHandler.HandleArrowEvent(event, dataBox);
                     NavigationHandler.EnterNavigation(event, dataBox);

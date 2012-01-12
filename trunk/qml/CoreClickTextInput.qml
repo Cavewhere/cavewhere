@@ -38,6 +38,40 @@ Item {
         isEditting = false;
 
         globalShadowTextInput.commitChanges.disconnect(commitChanges)
+        globalShadowTextInput.closeEditor.disconnect(closeEditor)
+    }
+
+    function openEditor() {
+        clickTextInput.startedEditting()
+
+        textArea.visible = false
+
+        globalShadowTextInput.textInput.text = clickTextInput.text
+        globalShadowTextInput.textInput.font = textArea.font
+        globalShadowTextInput.editor.visible = true
+        globalShadowTextInput.textInput.forceActiveFocus() //focus = true
+        globalShadowTextInput.textInput.selectAll();
+
+//            console.log("Validator:" + clickTextInput.validator)
+        if(clickTextInput.validator !== undefined) {
+            globalShadowTextInput.textInput.validator = clickTextInput.validator
+        }
+
+        globalShadowTextInput.enabled = true
+        doubleClickArea.enabled = false
+        isEditting = true
+
+        //Set the editor's position
+        var globalPosition = clickTextInput.mapToItem(globalShadowTextInput, 0, 0)
+        globalShadowTextInput.editor.x = globalPosition.x - 3
+        globalShadowTextInput.editor.y = globalPosition.y - 3
+
+        globalShadowTextInput.minWidth = clickTextInput.width + 6
+        globalShadowTextInput.minHeight = clickTextInput.height + 6
+
+        //Connect to commitChanges()
+        globalShadowTextInput.commitChanges.connect(commitChanges)
+        globalShadowTextInput.closeEditor.connect(closeEditor)
     }
 
     Text {
@@ -75,37 +109,7 @@ Item {
         anchors.fill: parent
         enabled:  true
 
-        function openEdittor() {
-            clickTextInput.startedEditting()
 
-            textArea.visible = false
-
-            globalShadowTextInput.textInput.text = clickTextInput.text
-            globalShadowTextInput.textInput.font = textArea.font
-            globalShadowTextInput.editor.visible = true
-            globalShadowTextInput.textInput.forceActiveFocus() //focus = true
-            globalShadowTextInput.textInput.selectAll();
-
-//            console.log("Validator:" + clickTextInput.validator)
-            if(clickTextInput.validator !== undefined) {
-                globalShadowTextInput.textInput.validator = clickTextInput.validator
-            }
-
-            globalShadowTextInput.enabled = true
-            doubleClickArea.enabled = false
-            isEditting = true
-
-            //Set the editor's position
-            var globalPosition = clickTextInput.mapToItem(globalShadowTextInput, 0, 0)
-            globalShadowTextInput.editor.x = globalPosition.x - 3
-            globalShadowTextInput.editor.y = globalPosition.y - 3
-
-            globalShadowTextInput.minWidth = clickTextInput.width + 6
-            globalShadowTextInput.minHeight = clickTextInput.height + 6
-
-            //Connect to commitChanges()
-            globalShadowTextInput.commitChanges.connect(commitChanges)
-        }
 
         states: [
             State {
@@ -114,7 +118,7 @@ Item {
 
                 PropertyChanges {
                     target: doubleClickArea
-                    onDoubleClicked: openEdittor()
+                    onDoubleClicked: openEditor()
                     onPressed: mouse.accepted = acceptMousePress
                     onClicked: clickTextInput.clicked()
                 }
@@ -126,7 +130,7 @@ Item {
 
                 PropertyChanges {
                     target: doubleClickArea
-                    onClicked: openEdittor()
+                    onClicked: openEditor()
                 }
             }
         ]

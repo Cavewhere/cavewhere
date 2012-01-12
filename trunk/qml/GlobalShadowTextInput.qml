@@ -9,6 +9,9 @@ MouseArea {
     property int minHeight: 0
 
     signal commitChanges()
+    signal closeEditor()
+    signal enterPressed()
+    signal escapePressed()
 
     anchors.fill: parent
     enabled: false
@@ -37,9 +40,11 @@ MouseArea {
 
             Keys.onPressed: {
                 if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    commitChanges();
+                    enterPressed()
+                    commitChanges()
                     event.accepted = true
                 } else if(event.key === Qt.Key_Escape) {
+                    escapePressed()
                     closeEditor();
                     event.accepted = true
                 }

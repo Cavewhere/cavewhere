@@ -329,7 +329,16 @@ OTHER_FILES += \
     shaders/scrap.frag \
     installer/mac/installMac.sh \
     shaders/scrap.geom \
-    qml/SurveyEditor.qml
+    qml/SurveyEditor.qml \
+    qml/StationBox.qml \
+    qml/ShotDistanceDataBox.qml \
+    qml/FrontClinoReadBox.qml \
+    qml/BackClinoReadBox.qml \
+    qml/FrontCompassReadBox.qml \
+    qml/BackClinoReadBox.qml \
+    qml/ClinoReadBox.qml \
+    qml/CompassReadBox.qml \
+    qml/ReadingBox.qml
 
 RESOURCES += \
     icons.qrc
