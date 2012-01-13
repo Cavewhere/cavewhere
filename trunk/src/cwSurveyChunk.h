@@ -62,7 +62,7 @@ signals:
     void stationsRemoved(int beginIndex, int endIndex);
     void shotsRemoved(int beginIndex, int endIndex);
 
-    void dataChanged(DataRole mainRole, int index, QVariant data);
+    void dataChanged(cwSurveyChunk::DataRole mainRole, int index, QVariant data);
 
 public slots:
     int stationCount() const;

@@ -135,6 +135,10 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
     }
 
     if(SurveyChunk != chunk) {
+        if(SurveyChunk != NULL) {
+            disconnect(SurveyChunk, NULL, this, NULL);
+        }
+
         SurveyChunk = chunk;
 
         //SetupDelegates();
@@ -147,6 +151,7 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         connect(SurveyChunk, SIGNAL(stationsAdded(int,int)), SLOT(addStations(int,int)));
         connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
         connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
+        connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int,QVariant)), SLOT(updateData(cwSurveyChunk::DataRole,int,QVariant)));
 
         emit modelChanged();
     }

@@ -21,6 +21,10 @@ MouseArea {
         mouse.accepted = false
     }
 
+    function clearSelection() {
+        input.select(input.cursorPosition, input.cursorPosition)
+    }
+
     ShadowRectangle {
         id: shadowEditor
         visible: false; // true; //input.visible

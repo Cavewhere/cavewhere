@@ -6,7 +6,6 @@ NavigationRectangle {
     id: dataBox
 
     property alias dataValue: editor.text
-//    property alias editorOpen: edittor.visible
     property alias dataValidator: editor.validator
     property variant surveyChunk; //For hooking up signals and slots in subclasses
     property int rowIndex: -1
@@ -21,12 +20,12 @@ NavigationRectangle {
     color : "white"
 
     //This causes memory leaks in qt 4.7.1!!!
-//    Behavior on y { PropertyAnimation { duration: 250 } }
-//    Behavior on opacity  { PropertyAnimation { duration: 250 } }
+    //    Behavior on y { PropertyAnimation { duration: 250 } }
+    //    Behavior on opacity  { PropertyAnimation { duration: 250 } }
 
-//    onDataValidatorChanged: {
-//        dataTextInput.validator = dataValidator;
-//    }
+    //    onDataValidatorChanged: {
+    //        dataTextInput.validator = dataValidator;
+    //    }
 
     Rectangle {
         id: interalHighlight
@@ -55,90 +54,32 @@ NavigationRectangle {
         anchors.fill: parent
 
         onFinishedEditting: {
-            console.debug("NewText:" + newText)
-             surveyChunk.setData(dataRole, rowIndex, newText)
+            surveyChunk.setData(dataRole, rowIndex, newText)
         }
 
-//        onVisibleChanged: {
-//            console.log("Visible changed!");
-//        }
+        onStartedEditting: {
+            dataBox.state = 'MiddleTyping';
+        }
     }
 
-
-//    ShadowRectangle {
-//        id: edittor
-//        color: "white"
-//        anchors.centerIn: parent;
-//        width: dataTextInput.width > parent.width ? dataTextInput.width + 5 : parent.width + 5;
-//        height: parent.height + 5;
-//        visible: false;
-
-//        TextInput {
-//            id: dataTextInput
-//           //validator: dataValidator != null ? dataValidator : null;
-//            anchors.centerIn: parent
-//            selectByMouse: true;
-//        }
-//    }
-
-
-
-//    MouseArea {
-//        anchors.fill: parent
-//        acceptedButtons: Qt.LeftButton | Qt.RightButton
-//        onPressed: {
-//            dataBox.focus = true;
-
-//            if(mouse.button == Qt.RightButton) {
-//                dataBox.rightClicked(rowIndex); //Emit signal
-//            }
-//        }
-
-//        onDoubleClicked: {
-//            dataTextInput.focus = true;
-//            var coords = mapToItem(dataTextInput, mouse.x, mouse.y);
-//            var cursorPosition = dataTextInput.positionAt(coords.x);
-//            dataTextInput.cursorPosition = cursorPosition;
-//            dataBox.state = 'MiddleTyping';
-//        }
-//    }
-
-//    Text {
-//        id: dataText
-//        anchors.centerIn: parent
-//        text: dataValue
-//    }
-
-//    Keys.forwardTo: [dataTextInput]
-//    Keys.priority: Keys.AfterItem
-
     Keys.onPressed: {
-        console.log("Key has been pressed" + event.key);
-
-        NavigationHandler.HandleTabEvent(event, dataBox);
-        NavigationHandler.HandleArrowEvent(event, dataBox);
+        NavigationHandler.handleTabEvent(event, dataBox);
+        NavigationHandler.handleArrowEvent(event, dataBox);
 
         if(!event.accepted) {
-            if(event.key == Qt.Key_Backspace) {
-                //console.log("Back pressed")
+            if(event.key === Qt.Key_Backspace) {
                 state = 'EndTyping';
                 editor.openEditor()
                 dataValue = dataValue.substring(0, dataValue.length - 1);
                 return;
             }
 
-            //dataBox.state = 'EndTyping';
-
-            //dataTextInput.Keys.onPressed(event);
-
-            //var oldDataValue = dataValue;
             if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
                 dataBox.state = 'EndTyping'
-                dataValue = event.text
                 editor.openEditor()
-            } //else {
-                //dataValue = oldDataValue;
-            //}
+                globalShadowTextInput.textInput.text  = event.text
+                globalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
+            }
         }
     }
 
@@ -147,50 +88,31 @@ NavigationRectangle {
     }
 
     Keys.onEnterPressed: {
-        console.debug("Enter pressed!")
-        state = 'MiddleTyping';
         editor.openEditor()
     }
 
     Keys.onReturnPressed: {
-        state = 'MiddleTyping';
         editor.openEditor()
     }
 
     Keys.onDeletePressed: {
-        //console.log("Delete pressed")
-        state = 'EndTyping';
         dataValue = '';
         editor.openEditor();
+        state = 'EndTyping';
     }
-
-//    onDataValueChanged: {
-//        surveyChunk.setData(dataRole, rowIndex, dataValue);
-//    }
 
     states: [
 
         State {
             name: "MiddleTyping"
 
-//            PropertyChanges {
-//                target: edittor
-//                visible: true
-//            }
-
-
-//            PropertyChanges {
-//                target: dataText
-//                visible: false
-//            }
-
             PropertyChanges {
                 target: globalShadowTextInput.editor
                 Keys.onPressed: {
-                    console.log("Get key" + event.key);
-                    NavigationHandler.HandleTabEvent(event, dataBox);
-//                    NavigationHandler.EnterNavigation(event, dataBox);
+                    NavigationHandler.handleTabEvent(event, dataBox);
                     if(event.accepted) {
+                        //Have the editor commit changes
+                        editor.commitChanges()
                         dataBox.state = ''; //Default state
                     }
                 }
@@ -226,28 +148,17 @@ NavigationRectangle {
             name: "EndTyping"
             extend: "MiddleTyping"
 
-//            PropertyChanges {
-//                target: edittor
-//                visible: true
-//            }
-
-
-//            PropertyChanges {
-//                target: dataText
-//                visible: false
-//            }
-
             PropertyChanges {
                 target: globalShadowTextInput.editor
 
                 Keys.onPressed: {
 
-                    NavigationHandler.HandleTabEvent(event, dataBox);
-                    NavigationHandler.HandleArrowEvent(event, dataBox);
-                    NavigationHandler.EnterNavigation(event, dataBox);
+                    NavigationHandler.handleTabEvent(event, dataBox);
+                    NavigationHandler.handleArrowEvent(event, dataBox);
+                    NavigationHandler.enterNavigation(event, dataBox);
                     if(event.accepted) {
+                        editor.commitChanges()
                         dataBox.state = ''; //Default state
-
                     }
                 }
 
@@ -256,7 +167,10 @@ NavigationRectangle {
                         dataBox.state = '';
                     }
                 }
+            }
 
+            PropertyChanges {
+                target: globalShadowTextInput.textInput
                 cursorPosition: text.length
             }
 
@@ -266,6 +180,4 @@ NavigationRectangle {
             }
         }
     ]
-
-
 }
