@@ -67,7 +67,7 @@ void cwQMLRegister::registerQML()
 //    const char* uri = "Cavewhere";
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
-    qmlRegisterType<cwSurveyChunk>();//"Cavewhere", 1, 0, "cwSurveyChunk");
+    qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
     qmlRegisterType<cwTrip>();

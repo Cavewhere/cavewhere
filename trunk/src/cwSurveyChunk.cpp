@@ -372,27 +372,48 @@ bool cwSurveyChunk::canRemoveShot(int shotIndex, Direction station) {
     return true;
 }
 
-
 /**
-  \brief Get's the chunk data based on a role
+  Returns true if role will modify or read station data
   */
-QVariant cwSurveyChunk::data(DataRole role, int index) const {
-
+bool cwSurveyChunk::isStationRole(cwSurveyChunk::DataRole role) const {
     switch (role) {
     case StationNameRole:
     case StationLeftRole:
     case StationRightRole:
     case StationUpRole:
     case StationDownRole:
-        return stationData(role, index);
+        return true;
+    default:
+        return false;
+    }
+}
+
+/**
+  Returns true if the role will modify or read shot data
+  */
+bool cwSurveyChunk::isShotRole(cwSurveyChunk::DataRole role) const {
+    switch(role) {
     case ShotDistanceRole:
     case ShotCompassRole:
     case ShotBackCompassRole:
     case ShotClinoRole:
     case ShotBackClinoRole:
-        return shotData(role, index);
-
+        return true;
     default:
+        return false;
+    }
+}
+
+
+/**
+  \brief Get's the chunk data based on a role
+  */
+QVariant cwSurveyChunk::data(DataRole role, int index) const {
+    if(isStationRole(role)) {
+        return stationData(role, index);
+    } else if(isShotRole(role)) {
+        return shotData(role, index);
+    } else {
         return QVariant();
     }
 }
@@ -538,22 +559,11 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
   \brief Set's the chunk data based on a role
   */
 void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
-    switch (role) {
-    case StationNameRole:
-    case StationLeftRole:
-    case StationRightRole:
-    case StationUpRole:
-    case StationDownRole:
+    if(isStationRole(role)) {
         setStationData(role, index, data);
-        break;
-    case ShotDistanceRole:
-    case ShotCompassRole:
-    case ShotBackCompassRole:
-    case ShotClinoRole:
-    case ShotBackClinoRole:
+    } else if(isShotRole(role)) {
         setShotData(role, index, data);
-        break;
-    default:
+    } else {
         qDebug() << "Can't find role:" << role << LOCATION;
     }
 }

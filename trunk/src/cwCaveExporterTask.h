@@ -21,7 +21,9 @@ protected:
     int TotalProgress;
 
     virtual void runTask();
+
     bool checkData();
+    bool checkData(cwCave* cave);
 
 protected slots:
     void UpdateProgress(int tripProgress);

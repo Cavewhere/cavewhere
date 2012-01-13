@@ -18,7 +18,7 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
   */
 bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 
-    if(!checkData()) {
+    if(!checkData(cave)) {
         if(isRunning()) {
             stop();
         }

@@ -584,7 +584,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     foreach(QDeclarativeItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
-        item->setProperty("surveyChunk", QVariant::fromValue(static_cast<QObject*>(view->model())));
+        item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setParentItem(view);
         item->setParent(view);
     }
@@ -655,7 +655,7 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
 
     foreach(QDeclarativeItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
-        item->setProperty("surveyChunk", QVariant::fromValue(static_cast<QObject*>(view->model())));
+        item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setParentItem(view);
         item->setParent(view);
     }

@@ -55,6 +55,9 @@ public:
     bool hasStation(QString stationName) const;
     QSet<cwStationReference> neighboringStations(QString stationName) const;
 
+    Q_INVOKABLE bool isStationRole(cwSurveyChunk::DataRole role) const;
+    Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
+
 signals:
     void stationsAdded(int beginIndex, int endIndex);
     void shotsAdded(int beginIndex, int endIndex);
@@ -114,6 +117,8 @@ private:
 
 };
 
+Q_DECLARE_METATYPE(cwSurveyChunk*)
+
 /**
   \brief Gets the parent trip for this chunk
   */
@@ -138,6 +143,8 @@ inline QList<cwStationReference> cwSurveyChunk::stations() const {
 inline QList<cwShot*> cwSurveyChunk::shots() const {
     return Shots;
 }
+
+
 
 
 #endif // CWSurveyChunk_H

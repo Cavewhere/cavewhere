@@ -39,6 +39,8 @@ void cwCaveExporterTask::runTask() {
 }
 
 
+
+
 /**
   \brief Updates the progress of the cave task
   */
@@ -50,8 +52,15 @@ void cwCaveExporterTask::UpdateProgress(int /*tripProgress*/) {
   \brief Checks if the cave has trips in it before running
   */
 bool cwCaveExporterTask::checkData() {
-    if(!Cave->hasTrips()) {
-        Errors.append(QString("No trips to do loop closure in %1").arg(Cave->name()));
+    checkData(Cave);
+}
+
+/**
+  \brief Checks if the cave has trips in it before running
+  */
+bool cwCaveExporterTask::checkData(cwCave* cave) {
+    if(!cave->hasTrips()) {
+        Errors.append(QString("No trips to do loop closure in %1").arg(cave->name()));
         return false;
     }
     return true;

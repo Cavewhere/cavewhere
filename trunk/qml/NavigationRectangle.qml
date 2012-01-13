@@ -1,7 +1,7 @@
 import Qt 4.7
 
 
-Rectangle {
+Item {
     id: tabRectangle;
 
     property variant nextTabObject

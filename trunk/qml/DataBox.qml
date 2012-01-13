@@ -7,17 +7,14 @@ NavigationRectangle {
 
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
-    property variant surveyChunk; //For hooking up signals and slots in subclasses
+    property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
     property int rowIndex: -1
     property int dataRole
 
     signal rightClicked(int index)
     signal splitOn(int index)
 
-    border.color: "lightgray"
-    border.width: 1
-
-    color : "white"
+    //color : Qt.rgba(201, 230, 245, 255);
 
     //This causes memory leaks in qt 4.7.1!!!
     //    Behavior on y { PropertyAnimation { duration: 250 } }
@@ -26,16 +23,6 @@ NavigationRectangle {
     //    onDataValidatorChanged: {
     //        dataTextInput.validator = dataValidator;
     //    }
-
-    Rectangle {
-        id: interalHighlight
-        border.color: "black";
-        anchors.fill: parent;
-        anchors.margins: 1;
-        border.width: 1;
-        color: Qt.rgba(0, 0, 0, 0);
-        visible: dataBox.focus || editor.isEditting
-    }
 
     MouseArea {
         anchors.fill: parent
@@ -47,6 +34,83 @@ NavigationRectangle {
         onDoubleClicked: {
             editor.focus = true;
         }
+    }
+
+
+    Rectangle {
+        id: backgroundStation
+        anchors.fill: parent
+        color: "#DDF2FF"
+        visible:  rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isStationRole(dataRole)
+
+    }
+
+    Rectangle {
+        id: backgroundDistance
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 0.0 : 0.5
+                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
+            }
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 0.5 : 1.0
+                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
+            }
+        }
+        visible: dataRole === SurveyChunk.ShotDistanceRole
+    }
+
+    Rectangle {
+        id: backgroundFrontsites
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 0.0 : 1.0
+                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
+            }
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 1.0 : 0.0
+                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
+            }
+        }
+        visible: rowIndex % 2 === 0 &&
+                 (dataRole === SurveyChunk.ShotClinoRole || dataRole === SurveyChunk.ShotCompassRole)
+    }
+
+    Rectangle {
+        id: backgroundBacksites
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 1.0 : 0.0
+                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
+            }
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 0.0 : 1.0
+                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
+            }
+        }
+        visible: rowIndex % 2 === 1 &&
+                 (dataRole === SurveyChunk.ShotBackClinoRole || dataRole === SurveyChunk.ShotBackCompassRole)
+    }
+
+    Rectangle {
+        id: border
+        anchors.fill: parent
+        border.color: "lightgray"
+        color: "#00000000"
+        border.width: 1
+    }
+
+    Rectangle {
+        id: interalHighlight
+        border.color: "black"
+        anchors.fill: parent
+        anchors.margins: 1
+        border.width: 1
+        color: "#00000000"
+        visible: dataBox.focus || editor.isEditting
     }
 
     DoubleClickTextInput {
