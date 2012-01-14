@@ -28,7 +28,7 @@ NavigationRectangle {
     function deletePressed() {
         dataValue = '';
         editor.openEditor();
-        state = 'EndTyping';
+        state = 'MiddleTyping';
     }
 
     MouseArea {
@@ -66,7 +66,6 @@ NavigationRectangle {
         id: backgroundShot
         anchors.fill: parent
         color: "#DDF2FF"
-
         visible: rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isShotRole(dataRole)
     }
 
@@ -112,7 +111,7 @@ NavigationRectangle {
             }
 
             if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-                dataBox.state = 'EndTyping'
+                dataBox.state = 'MiddleTyping'
                 editor.openEditor()
                 globalShadowTextInput.textInput.text  = event.text
                 globalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
@@ -143,14 +142,29 @@ NavigationRectangle {
             name: "MiddleTyping"
 
             PropertyChanges {
-                target: globalShadowTextInput.editor
+                target: globalShadowTextInput.textInput
                 Keys.onPressed: {
+                    if(event.key === Qt.Key_Tab ||
+                       event.key === 1 + Qt.Key_Tab ||
+                            event.key === Qt.Key_Left ||
+                            event.key === Qt.Key_Right ||
+                            event.key === Qt.Key_Up ||
+                            event.key === Qt.Key_Down)  {
+                            editor.commitChanges()
+                    }
+
                     NavigationHandler.handleTabEvent(event, dataBox);
+                    NavigationHandler.handleArrowEvent(event, dataBox);
                     if(event.accepted) {
                         //Have the editor commit changes
-                        editor.commitChanges()
                         dataBox.state = ''; //Default state
                     }
+                }
+
+                Keys.onSpacePressed: {
+                    editor.commitChanges();
+                    dataBox.state = '';
+                    surveyChunk.parentTrip.addNewChunk();
                 }
 
                 onFocusChanged: {
@@ -169,6 +183,7 @@ NavigationRectangle {
                 }
 
                 onEnterPressed: {
+                    editor.commitChanges();
                     dataBox.nextTabObject.focus = true
                 }
             }
@@ -179,42 +194,42 @@ NavigationRectangle {
                 z: 1
             }
 
-        },
-
-        State {
-            name: "EndTyping"
-            extend: "MiddleTyping"
-
-            PropertyChanges {
-                target: globalShadowTextInput.editor
-
-                Keys.onPressed: {
-
-                    NavigationHandler.handleTabEvent(event, dataBox);
-                    NavigationHandler.handleArrowEvent(event, dataBox);
-                    NavigationHandler.enterNavigation(event, dataBox);
-                    if(event.accepted) {
-                        editor.commitChanges()
-                        dataBox.state = ''; //Default state
-                    }
-                }
-
-                onFocusChanged: {
-                    if(!focus) {
-                        dataBox.state = '';
-                    }
-                }
-            }
-
-            PropertyChanges {
-                target: globalShadowTextInput.textInput
-                cursorPosition: text.length
-            }
-
-            PropertyChanges {
-                target: dataBox
-                z: 1
-            }
         }
+
+//        State {
+//            name: "EndTyping"
+//            extend: "MiddleTyping"
+
+//            PropertyChanges {
+//                target: globalShadowTextInput.editor
+
+//                Keys.onPressed: {
+
+//                    NavigationHandler.handleTabEvent(event, dataBox);
+//                    NavigationHandler.handleArrowEvent(event, dataBox);
+//                    NavigationHandler.enterNavigation(event, dataBox);
+//                    if(event.accepted) {
+//                        editor.commitChanges()
+//                        dataBox.state = ''; //Default state
+//                    }
+//                }
+
+//                onFocusChanged: {
+//                    if(!focus) {
+//                        dataBox.state = '';
+//                    }
+//                }
+//            }
+
+//            PropertyChanges {
+//                target: globalShadowTextInput.textInput
+//                cursorPosition: text.length
+//            }
+
+//            PropertyChanges {
+//                target: dataBox
+//                z: 1
+//            }
+//        }
     ]
 }

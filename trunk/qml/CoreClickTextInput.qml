@@ -21,10 +21,10 @@ Item {
     width: textArea.width
 
     function commitChanges() {
-        closeEditor();
-
         //Emit the finishedEditting signal
         finishedEditting(globalShadowTextInput.textInput.text)
+
+        closeEditor();
     }
 
     function closeEditor() {

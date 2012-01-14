@@ -46,6 +46,7 @@ void cwLinePlotGeometryTask::runTask() {
   */
 void cwLinePlotGeometryTask::addStationPositions(cwCave* cave) {
     QList< QWeakPointer<cwStation> > stations = cave->stations();
+    qDebug() << "Stations:" << stations.size();
     foreach( QWeakPointer<cwStation> station, stations) {
 
         QSharedPointer<cwStation> fullStation = station.toStrongRef();
@@ -84,12 +85,14 @@ void cwLinePlotGeometryTask::addShotLines(cwCave* cave) {
                 cwStationReference station = chunk->station(stationIndex);
 
                 //Look up the index
-                unsigned int stationIndex = StationIndexLookup.value(station.station().data(), 0);
+                if(StationIndexLookup.contains(station.station().data())) {
+                    unsigned int stationIndex = StationIndexLookup.value(station.station().data(), 0);
 
-                IndexData.append(previousStationIndex);
-                IndexData.append(stationIndex);
+                    IndexData.append(previousStationIndex);
+                    IndexData.append(stationIndex);
 
-                previousStationIndex = stationIndex;
+                    previousStationIndex = stationIndex;
+                }
             }
         }
     }
