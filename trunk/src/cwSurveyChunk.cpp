@@ -11,6 +11,7 @@
 #include <QDebug>
 #include <QVariant>
 #include <QSet>
+#include <QRegExp>
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
@@ -405,6 +406,47 @@ bool cwSurveyChunk::isShotRole(cwSurveyChunk::DataRole role) const {
     }
 }
 
+/**
+    This returns what next station should be.  This will first check
+    if the last station is empty.  If the last station isn't empty then
+    this function will return an empty string.
+  */
+QString cwSurveyChunk::guessLastStationName() const {
+    //Need a least two stations for this to work.
+    if(stations().size() < 2) {
+        return QString();
+    }
+
+    if(stations().last().name().isEmpty()) {
+        int secondToLastStation = stations().size() - 2;
+        QString stationName = stations().at(secondToLastStation).name();
+        QString nextStation = guessNextStation(stationName);
+        return nextStation;
+    }
+
+    return QString();
+}
+
+/**
+  Guess the next station name by a station name.  The station name
+  must be any set of letter and the numbers.  Such as A23 would work, but 32A
+  wouldn't work. Stations that don't work, will return an empty string.
+  */
+QString cwSurveyChunk::guessNextStation(QString stationName) const {
+    //Look for numbers to increament
+    QRegExp regexp("(\\D*)(\\d+)");
+    if(regexp.exactMatch(stationName)) {
+        QString surveyNamePrefix = regexp.cap(1);
+        QString stationNumberString = regexp.cap(2);
+
+        int stationNumber = stationNumberString.toInt();
+        stationNumber++;
+
+        return QString("%1%2").arg(surveyNamePrefix).arg(stationNumber);
+    }
+
+    return QString();
+}
 
 /**
   \brief Get's the chunk data based on a role

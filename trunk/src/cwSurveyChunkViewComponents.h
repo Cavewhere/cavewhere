@@ -55,7 +55,7 @@ public slots:
 
 private:
     QDeclarativeComponent* Delegate;
-    //    QDeclarativeComponent* StationDelegate;
+    QDeclarativeComponent* StationDelegate;
     QDeclarativeComponent* TitleDelegate;
     //    QDeclarativeComponent* LeftDelegate;
     //    QDeclarativeComponent* RightDelegate;
@@ -82,8 +82,8 @@ inline QDeclarativeComponent* cwSurveyChunkViewComponents::titleDelegate() const
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::stationDelegate() const {
-    return Delegate;
-    //    return StationDelegate;
+    //return Delegate;
+    return StationDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::leftDelegate() const {

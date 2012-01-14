@@ -81,7 +81,7 @@ void cwGLLinePlot::draw() {
 
     ShaderProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 3);
 
-    glDrawElements(GL_LINES, IndexBufferSize, GL_UNSIGNED_INT, NULL);
+  //  glDrawElements(GL_LINES, IndexBufferSize, GL_UNSIGNED_INT, NULL);
 
     LinePlotVertexBuffer.release();
     LinePlotIndexBuffer.release();

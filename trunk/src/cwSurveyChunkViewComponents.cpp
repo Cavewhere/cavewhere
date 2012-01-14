@@ -18,7 +18,7 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
     QDeclarativeEngine* engine = context->engine();
 
     Delegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
-//    StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
+    StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
     TitleDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
 //    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
 //    RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
@@ -32,7 +32,7 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
 
     //Print error if there are any
     printErrors(Delegate);
-//    printErrors(StationDelegate);
+    printErrors(StationDelegate);
     printErrors(TitleDelegate);
 //    printErrors(LeftDelegate);
 //    printErrors(RightDelegate);

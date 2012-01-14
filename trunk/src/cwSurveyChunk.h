@@ -60,6 +60,9 @@ public:
     Q_INVOKABLE bool isStationRole(cwSurveyChunk::DataRole role) const;
     Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
 
+    Q_INVOKABLE QString guessLastStationName() const;
+    QString guessNextStation(QString stationName) const;
+
 signals:
     void parentTripChanged();
 
