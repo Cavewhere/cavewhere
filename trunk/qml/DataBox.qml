@@ -142,7 +142,7 @@ NavigationRectangle {
             name: "MiddleTyping"
 
             PropertyChanges {
-                target: globalShadowTextInput.textInput
+                target: globalShadowTextInput.editor
                 Keys.onPressed: {
                     if(event.key === Qt.Key_Tab ||
                        event.key === 1 + Qt.Key_Tab ||
@@ -161,16 +161,22 @@ NavigationRectangle {
                     }
                 }
 
-                Keys.onSpacePressed: {
-                    editor.commitChanges();
-                    dataBox.state = '';
-                    surveyChunk.parentTrip.addNewChunk();
-                }
+
 
                 onFocusChanged: {
                     if(!focus) {
                         dataBox.state = '';
                     }
+                }
+            }
+
+            PropertyChanges {
+                target: globalShadowTextInput.textInput
+
+                Keys.onSpacePressed: {
+                    editor.commitChanges();
+                    dataBox.state = '';
+                    surveyChunk.parentTrip.addNewChunk();
                 }
             }
 
@@ -188,48 +194,10 @@ NavigationRectangle {
                 }
             }
 
-
             PropertyChanges {
                 target: dataBox
                 z: 1
             }
-
         }
-
-//        State {
-//            name: "EndTyping"
-//            extend: "MiddleTyping"
-
-//            PropertyChanges {
-//                target: globalShadowTextInput.editor
-
-//                Keys.onPressed: {
-
-//                    NavigationHandler.handleTabEvent(event, dataBox);
-//                    NavigationHandler.handleArrowEvent(event, dataBox);
-//                    NavigationHandler.enterNavigation(event, dataBox);
-//                    if(event.accepted) {
-//                        editor.commitChanges()
-//                        dataBox.state = ''; //Default state
-//                    }
-//                }
-
-//                onFocusChanged: {
-//                    if(!focus) {
-//                        dataBox.state = '';
-//                    }
-//                }
-//            }
-
-//            PropertyChanges {
-//                target: globalShadowTextInput.textInput
-//                cursorPosition: text.length
-//            }
-
-//            PropertyChanges {
-//                target: dataBox
-//                z: 1
-//            }
-//        }
     ]
 }
