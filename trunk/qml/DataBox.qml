@@ -163,6 +163,7 @@ NavigationRectangle {
                 target: globalShadowTextInput
 
                 onEscapePressed: {
+                    dataBox.focus = true;
                     dataBox.state = ''; //Default state
                 }
 
