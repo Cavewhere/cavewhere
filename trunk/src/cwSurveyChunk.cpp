@@ -73,6 +73,7 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
         ParentTrip = trip;
         setParent(trip);
         updateStationsWithNewCave();
+        emit parentTripChanged();
     }
 }
 

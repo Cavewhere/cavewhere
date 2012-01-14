@@ -17,6 +17,8 @@ class cwSurveyChunk : public QObject {
     Q_OBJECT
     Q_ENUMS(DataRole)
 
+    Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
+
 public:
     enum Direction {
         Above,
@@ -59,6 +61,8 @@ public:
     Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
 
 signals:
+    void parentTripChanged();
+
     void stationsAdded(int beginIndex, int endIndex);
     void shotsAdded(int beginIndex, int endIndex);
 

@@ -8,11 +8,12 @@ NavigationRectangle {
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
     property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
+
     property int rowIndex: -1
     property int dataRole
 
-    signal rightClicked(int index)
-    signal splitOn(int index)
+//    signal rightClicked(int index)
+//    signal splitOn(int index)
 
     //color : Qt.rgba(201, 230, 245, 255);
 
@@ -120,7 +121,7 @@ NavigationRectangle {
     }
 
     Keys.onSpacePressed: {
-        dataBox.splitOn(rowIndex); //Emit signal
+        surveyChunk.parentTrip.addNewChunk();
     }
 
     Keys.onEnterPressed: {
