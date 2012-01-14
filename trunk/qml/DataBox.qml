@@ -36,63 +36,31 @@ NavigationRectangle {
         }
     }
 
-
     Rectangle {
         id: backgroundStation
         anchors.fill: parent
+
+        gradient: Gradient {
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 1.0 : 0.0
+                color:  "#DDF2FF"
+            }
+            GradientStop {
+                position: rowIndex % 2 === 0 ? 0.4 : 0.6
+                color:  "white"
+            }
+        }
+
+        visible: surveyChunk !== null && surveyChunk.isStationRole(dataRole)
+
+    }
+
+    Rectangle {
+        id: backgroundShot
+        anchors.fill: parent
         color: "#DDF2FF"
-        visible:  rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isStationRole(dataRole)
 
-    }
-
-    Rectangle {
-        id: backgroundDistance
-        anchors.fill: parent
-        gradient: Gradient {
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 0.0 : 0.5
-                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
-            }
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 0.5 : 1.0
-                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
-            }
-        }
-        visible: dataRole === SurveyChunk.ShotDistanceRole
-    }
-
-    Rectangle {
-        id: backgroundFrontsites
-        anchors.fill: parent
-        gradient: Gradient {
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 0.0 : 1.0
-                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
-            }
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 1.0 : 0.0
-                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
-            }
-        }
-        visible: rowIndex % 2 === 0 &&
-                 (dataRole === SurveyChunk.ShotClinoRole || dataRole === SurveyChunk.ShotCompassRole)
-    }
-
-    Rectangle {
-        id: backgroundBacksites
-        anchors.fill: parent
-        gradient: Gradient {
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 1.0 : 0.0
-                color: rowIndex % 2 === 0 ? "#DDF2FF" : "white"
-            }
-            GradientStop {
-                position: rowIndex % 2 === 0 ? 0.0 : 1.0
-                color: rowIndex % 2 === 0 ? "white" : "#DDF2FF"
-            }
-        }
-        visible: rowIndex % 2 === 1 &&
-                 (dataRole === SurveyChunk.ShotBackClinoRole || dataRole === SurveyChunk.ShotBackCompassRole)
+        visible: rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isShotRole(dataRole)
     }
 
     Rectangle {
