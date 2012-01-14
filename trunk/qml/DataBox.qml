@@ -24,6 +24,12 @@ NavigationRectangle {
     //        dataTextInput.validator = dataValidator;
     //    }
 
+    function deletePressed() {
+        dataValue = '';
+        editor.openEditor();
+        state = 'EndTyping';
+    }
+
     MouseArea {
         anchors.fill: parent
 
@@ -100,9 +106,7 @@ NavigationRectangle {
 
         if(!event.accepted) {
             if(event.key === Qt.Key_Backspace) {
-                state = 'EndTyping';
-                editor.openEditor()
-                dataValue = dataValue.substring(0, dataValue.length - 1);
+                deletePressed();
                 return;
             }
 
@@ -128,10 +132,9 @@ NavigationRectangle {
     }
 
     Keys.onDeletePressed: {
-        dataValue = '';
-        editor.openEditor();
-        state = 'EndTyping';
+        deletePressed()
     }
+
 
     states: [
 
