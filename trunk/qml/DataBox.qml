@@ -161,8 +161,6 @@ NavigationRectangle {
                     }
                 }
 
-
-
                 onFocusChanged: {
                     if(!focus) {
                         dataBox.state = '';
@@ -171,7 +169,7 @@ NavigationRectangle {
             }
 
             PropertyChanges {
-                target: globalShadowTextInput.textInput
+                target: editor
 
                 Keys.onSpacePressed: {
                     editor.commitChanges();

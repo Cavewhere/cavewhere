@@ -115,49 +115,50 @@ void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
     connect(chunk, SIGNAL(shotsRemoved(int,int)), SLOT(runSurvex()));
     connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(runSurvex()));
     connect(chunk, SIGNAL(stationsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(shotsAdded(int,int)), SLOT(connectAddedShots(int,int)));
-    connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(connectAddedStations(int,int)));
-    connectShots(chunk);
-    connectStations(chunk);
+    connect(chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int,QVariant)), SLOT(runSurvex()));
+//    connect(chunk, SIGNAL(shotsAdded(int,int)), SLOT(connectAddedShots(int,int)));
+//    connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(connectAddedStations(int,int)));
+//    connectShots(chunk);
+//    connectStations(chunk);
 }
 
-/**
-  \brief Connects all the shots in the trip
-  */
-void cwLinePlotManager::connectShots(cwSurveyChunk* chunk) {
-    for(int i = 0; i < chunk->shotCount(); i++) {
-        cwShot* shot = chunk->shot(i);
-        connectShot(shot);
-    }
-}
-
-/**
-  \brief connects a shot
-  */
-void cwLinePlotManager::connectShot(cwShot* /*shot*/) {
-//    connect(shot, SIGNAL(DistanceChanged()), SLOT(runSurvex()));
-//    connect(shot, SIGNAL(CompassChanged()), SLOT(runSurvex()));
-//    connect(shot, SIGNAL(BackCompassChanged()), SLOT(runSurvex()));
-//    connect(shot, SIGNAL(ClinoChanged()), SLOT(runSurvex()));
-//    connect(shot, SIGNAL(BackClinoChanged()), SLOT(runSurvex()));
-}
-
-/**
-  \brief Connects all the stations in the trip to this object
-  */
-void cwLinePlotManager::connectStations(cwSurveyChunk* /*chunk*/) {
-//    for(int i = 0; i < chunk->StationCount(); i++) {
-//        cwStationReference station = chunk->Station(i);
-//        connectStation(station);
+///**
+//  \brief Connects all the shots in the trip
+//  */
+//void cwLinePlotManager::connectShots(cwSurveyChunk* chunk) {
+//    for(int i = 0; i < chunk->shotCount(); i++) {
+//        cwShot* shot = chunk->shot(i);
+//        connectShot(shot);
 //    }
-}
+//}
 
-/**
-  \brief Connect to the station
-  */
-void cwLinePlotManager::connectStation(cwStationReference* /*station*/) {
-//    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
-}
+///**
+//  \brief connects a shot
+//  */
+//void cwLinePlotManager::connectShot(cwShot* /*shot*/) {
+////    connect(shot, SIGNAL(DistanceChanged()), SLOT(runSurvex()));
+////    connect(shot, SIGNAL(CompassChanged()), SLOT(runSurvex()));
+////    connect(shot, SIGNAL(BackCompassChanged()), SLOT(runSurvex()));
+////    connect(shot, SIGNAL(ClinoChanged()), SLOT(runSurvex()));
+////    connect(shot, SIGNAL(BackClinoChanged()), SLOT(runSurvex()));
+//}
+
+///**
+//  \brief Connects all the stations in the trip to this object
+//  */
+//void cwLinePlotManager::connectStations(cwSurveyChunk* /*chunk*/) {
+////    for(int i = 0; i < chunk->StationCount(); i++) {
+////        cwStationReference station = chunk->Station(i);
+////        connectStation(station);
+////    }
+//}
+
+///**
+//  \brief Connect to the station
+//  */
+//void cwLinePlotManager::connectStation(cwStationReference* /*station*/) {
+////    connect(station, SIGNAL(nameChanged()), SLOT(runSurvex()));
+//}
 
 /**
   \brief Called when the region adds more caves
@@ -191,27 +192,27 @@ void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
     }
 }
 
-/**
-  \brief Called when the chunks add more stations
-  */
-void cwLinePlotManager::connectAddedStations(int /*beginIndex*/, int /*endIndex*/) {
+///**
+//  \brief Called when the chunks add more stations
+//  */
+//void cwLinePlotManager::connectAddedStations(int /*beginIndex*/, int /*endIndex*/) {
+////    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
+////    for(int i = beginIndex; i <= endIndex; i++) {
+////        cwStationReference station = chunk->Station(i);
+////        connectStation(station);
+////    }
+//}
+
+///**
+//  \brief Called when the chunks add more shots
+//  */
+//void cwLinePlotManager::connectAddedShots(int beginIndex, int endIndex) {
 //    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
 //    for(int i = beginIndex; i <= endIndex; i++) {
-//        cwStationReference station = chunk->Station(i);
-//        connectStation(station);
+//        cwShot* shot = chunk->shot(i);
+//        connectShot(shot);
 //    }
-}
-
-/**
-  \brief Called when the chunks add more shots
-  */
-void cwLinePlotManager::connectAddedShots(int beginIndex, int endIndex) {
-    cwSurveyChunk* chunk = static_cast<cwSurveyChunk*>(sender());
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwShot* shot = chunk->shot(i);
-        connectShot(shot);
-    }
-}
+//}
 /**
   \brief The region is going to be destroyed
 
@@ -228,15 +229,15 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
-        //qDebug() << "----Run survex----" << LinePlotTask->status();
+        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
-//            qDebug() << "Running the task";
+            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-//            qDebug() << "Restart plot task";
+            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }

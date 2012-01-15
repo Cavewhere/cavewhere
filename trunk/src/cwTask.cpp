@@ -126,7 +126,7 @@ void cwTask::start() {
     {
         QWriteLocker locker(&StatusLocker);
         if(CurrentStatus != Ready) {
-            qDebug() << "Can't start the task because it isn't ready" << LOCATION;
+            qDebug() << "Can't start the task because it isn't ready, CurrentStatus:" << CurrentStatus << LOCATION;
             return;
         }
 
@@ -143,9 +143,9 @@ void cwTask::start() {
 
   */
 void cwTask::restart() {
-    QWriteLocker locker(&StatusLocker);
+    if(!isReady()) {
+        QWriteLocker locker(&StatusLocker);
 
-    if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
         //Stop the tasks, and it's children
         privateStop();
 
@@ -177,11 +177,11 @@ void cwTask::done() {
 
     //If the task is still running, this means that the task has finished, without error
     if(CurrentStatus == Restart) {
+        CurrentStatus = Ready;
         emit stopped();
         emit shouldRerun();
     } else if(CurrentStatus == Stopped) {
         privateStop();
-
         CurrentStatus = Ready;
         emit stopped();
     } else if(CurrentStatus == Running) {
@@ -237,11 +237,13 @@ void cwTask::changeThreads(QThread* thread) {
   calling this function
   */
 void cwTask::privateStop() {
-    CurrentStatus = Stopped;
+    if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
+        CurrentStatus = Stopped;
 
-    //Go through all children and stop them
-    foreach(cwTask* child, ChildTasks) {
-        child->privateStop();
+        //Go through all children and stop them
+        foreach(cwTask* child, ChildTasks) {
+            child->privateStop();
+        }
     }
 }
 
