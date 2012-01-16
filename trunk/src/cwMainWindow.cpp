@@ -118,7 +118,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 
     reloadQML();
 
-  //  Project->load("bcc.cw");
+    Project->load("bcc.cw");
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window
@@ -413,7 +413,6 @@ void cwMainWindow::initGLEW() {
   */
 QGLWidget* cwMainWindow::createGLWidget() {
     QGLFormat format;
-//    format.setSamples(8);
     format.setSampleBuffers(true);
     format.setSwapInterval(1);
 
@@ -445,6 +444,7 @@ void cwMainWindow::initialWindowShape() {
         screenGeometry = QApplication::desktop()->availableGeometry();
     }
 
+    //double size = 0.8;
     double size = 0.8;
     double position = (1.0 - size) / 2.0;
 

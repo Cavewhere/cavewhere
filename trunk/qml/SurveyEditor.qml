@@ -8,6 +8,8 @@ Rectangle {
 
     anchors.fill: parent
 
+
+
     Flickable {
         id: flickArea
 
@@ -79,6 +81,15 @@ Rectangle {
         }
     }
 
+    NoteExplorer {
+        noteModel: currentTrip.notes
+        anchors.left: flickArea.right
+        anchors.right: parent.right
+        anchors.top: area.top
+        anchors.bottom: area.bottom
+        clip: true
+    }
+
     Keys.onSpacePressed: {
         //Add chunk
         currentTrip.addNewChunk();
@@ -88,14 +99,7 @@ Rectangle {
         focus = visible
     }
 
-    NoteExplorer {
-        noteModel: currentTrip.notes
-        anchors.left: flickArea.right
-        anchors.right: parent.right
-        anchors.top: area.top
-        anchors.bottom: area.bottom
-        clip: true
-    }
+
 
 //    NotesGallery {
 //        anchors.left: flickArea.right

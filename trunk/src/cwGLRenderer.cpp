@@ -80,7 +80,10 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     copyRenderFramebufferToTextures();
 
     //Render the copied framebuffer
+    glPushAttrib(GL_SCISSOR_BIT );
+    glEnable(GL_SCISSOR_TEST);
     renderTextureFramebuffer();
+    glPopAttrib();
 
     painter->endNativePainting();
 }
