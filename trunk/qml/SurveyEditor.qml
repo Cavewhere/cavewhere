@@ -51,7 +51,6 @@ Rectangle {
             id: spaceAddBar
             source: "qrc:icons/spacebar.png"
 
-
             y: view.contentHeight
             anchors.horizontalCenter: view.horizontalCenter
 
@@ -87,6 +86,15 @@ Rectangle {
 
     onVisibleChanged: {
         focus = visible
+    }
+
+    NoteExplorer {
+        noteModel: currentTrip.notes
+        anchors.left: flickArea.right
+        anchors.right: parent.right
+        anchors.top: area.top
+        anchors.bottom: area.bottom
+        clip: true
     }
 
 //    NotesGallery {

@@ -27,7 +27,6 @@
 #include "cwGlobalUndoStack.h"
 #include "cwGLRenderer.h"
 #include "cwGLLinePlot.h"
-#include "cwSurveyNoteModel.h"
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwImageDatabase.h"

@@ -339,7 +339,9 @@ OTHER_FILES += \
     qml/ClinoReadBox.qml \
     qml/CompassReadBox.qml \
     qml/ReadingBox.qml \
-    qml/Navigation.js
+    qml/Navigation.js \
+    qml/ImageExplorer.qml \
+    qml/NoteExplorer.qml
 
 RESOURCES += \
     icons.qrc

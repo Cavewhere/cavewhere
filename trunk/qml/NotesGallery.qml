@@ -151,7 +151,6 @@ Rectangle {
             onCurrentIndexChanged: {
                 if(currentItem != null) {
                     currentNote = currentItem.noteObject
-                   // noteArea.rotation = currentNote.rotate;
                     noteArea.image = currentItem.noteObject.image;
                 }
             }
