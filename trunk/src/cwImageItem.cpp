@@ -209,10 +209,7 @@ void cwImageItem::resizeGL() {
   \brief Draws the note item
   */
 void cwImageItem::paintFramebuffer() {
-//    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if(!Image.isValid()) { return; }
-
-   // glDisable(GL_DEPTH_TEST);
 
     NoteVertexBuffer.bind();
 

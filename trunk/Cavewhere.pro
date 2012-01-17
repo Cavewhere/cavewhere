@@ -341,7 +341,8 @@ OTHER_FILES += \
     qml/ReadingBox.qml \
     qml/Navigation.js \
     qml/ImageExplorer.qml \
-    qml/NoteExplorer.qml
+    qml/NoteExplorer.qml \
+    qml/NotesGallery.qml
 
 RESOURCES += \
     icons.qrc

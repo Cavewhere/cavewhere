@@ -13,12 +13,27 @@ ImageExplorer {
 
         snapMode: ListView.SnapOneItem
         orientation: ListView.Horizontal
+        spacing: 10
+        interactive: false
+
+        highlightMoveDuration: 200
 
         delegate: ImageExplorer {
             width: view.width
             height: view.height
             image: model.image
             rotation: model.noteObject.rotate
+
+            hasPrevious: view.currentIndex - 1 >= 0
+            hasNext: view.currentIndex + 1 < view.count
+
+            onNextImage: {
+                view.currentIndex = Math.min(view.count - 1, view.currentIndex + 1)
+            }
+
+            onPreviousImage: {
+                view.currentIndex = Math.max(0, view.currentIndex - 1)
+            }
         }
     }
 }

@@ -79,11 +79,15 @@ void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QW
     //Copy the render buffer
     copyRenderFramebufferToTextures();
 
-    //Render the copied framebuffer
-    glPushAttrib(GL_SCISSOR_BIT );
-    glEnable(GL_SCISSOR_TEST);
-    renderTextureFramebuffer();
-    glPopAttrib();
+    //Render the texture framebuffer
+    if(painter->hasClipping()) {
+        glPushAttrib(GL_SCISSOR_BIT );
+        glEnable(GL_SCISSOR_TEST);
+        renderTextureFramebuffer();
+        glPopAttrib();
+    } else {
+        renderTextureFramebuffer();
+    }
 
     painter->endNativePainting();
 }
@@ -140,7 +144,7 @@ void cwGLRenderer::renderTextureFramebuffer() {
 void cwGLRenderer::privateInitializeGL() {
     //Genereate the multi sample buffer for anti aliasing
     MultiSampleFramebuffer = new QGLFramebufferObject(QSize(1, 1));
-    HasBlit = MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
+    HasBlit = false; //MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
 
     if(HasBlit) {
         //Generate the texture framebuffer for rendering

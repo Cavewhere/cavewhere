@@ -5,32 +5,70 @@ import Cavewhere 1.0
 ImageItem {
     id: noteArea
 
+    property bool hasPrevious: false
+    property bool hasNext: false
+
     signal nextImage()
     signal previousImage()
 
     glWidget: mainGLWidget
     projectFilename: project.filename
 
-    MouseArea {
-        anchors.left: parent.left
-        anchors.right: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
+    PanZoomInteraction {
+        id: panZoomInteraction
+        anchors.fill: parent
+        camera: noteArea.camera
+    }
 
-        onClicked: {
-            previousImage()
+    InteractionManager {
+        id: interactionManagerId
+        interactions: [
+            panZoomInteraction,
+        ]
+        defaultInteraction: panZoomInteraction
+    }
+
+    WheelArea {
+        id: wheelArea
+        anchors.fill: parent
+        onVerticalScroll: panZoomInteraction.zoom(delta, position)
+    }
+
+    Rectangle {
+        visible: hasPrevious
+
+        width: 30
+        height: 50
+
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: 10
+
+        MouseArea {
+            anchors.fill: parent
+
+            onClicked: {
+                previousImage()
+            }
         }
     }
 
-    MouseArea {
-        anchors.left: parent.left
-        anchors.right: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
+    Rectangle {
+        visible: hasNext
 
-        onClicked: {
-            nextImage()
+        width: 30
+        height: 50
+
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        anchors.rightMargin: 10
+
+        MouseArea {
+            anchors.fill: parent
+
+            onClicked: {
+                nextImage()
+            }
         }
     }
-
 }
