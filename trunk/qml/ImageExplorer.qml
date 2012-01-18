@@ -34,18 +34,22 @@ ImageItem {
         onVerticalScroll: panZoomInteraction.zoom(delta, position)
     }
 
-    Rectangle {
+    Image {
         visible: hasPrevious
 
-        width: 30
-        height: 50
+        source: mouseAreaPrevious.containsMouse ?  "qrc:icons/previousPressed.png" : "qrc:icons/previousUnPressArrow.png"
+
+        opacity: 0.75
 
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: 10
 
         MouseArea {
+            id: mouseAreaPrevious
             anchors.fill: parent
+
+            hoverEnabled: true
 
             onClicked: {
                 previousImage()
@@ -53,18 +57,22 @@ ImageItem {
         }
     }
 
-    Rectangle {
+    Image {
         visible: hasNext
 
-        width: 30
-        height: 50
+        source: mouseAreaNext.containsMouse ?  "qrc:icons/nextPressed.png" : "qrc:icons/nextUnPressArrow.png"
+
+        opacity: 0.75
 
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: 10
 
         MouseArea {
+            id: mouseAreaNext
             anchors.fill: parent
+
+            hoverEnabled: true
 
             onClicked: {
                 nextImage()

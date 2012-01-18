@@ -50,5 +50,9 @@
         <file>icons/select.png</file>
         <file>icons/rotate.png</file>
         <file>icons/spacebar.png</file>
+        <file>icons/nextPressed.png</file>
+        <file>icons/nextUnPressArrow.png</file>
+        <file>icons/previousPressed.png</file>
+        <file>icons/previousUnPressArrow.png</file>
     </qresource>
 </RCC>
