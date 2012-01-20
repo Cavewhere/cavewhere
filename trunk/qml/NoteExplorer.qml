@@ -46,7 +46,7 @@ ImageExplorer {
         visible: view.currentIndex + 1 < view.count
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
-        anchors.leftMargin: 10
+        anchors.rightMargin: 10
         anchors.topMargin: 10
 
         onClicked: {
