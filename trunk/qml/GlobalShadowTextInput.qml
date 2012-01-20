@@ -27,7 +27,7 @@ MouseArea {
 
     ShadowRectangle {
         id: shadowEditor
-        visible: false; // true; //input.visible
+        visible: false;
 
         color: "white"
 
@@ -36,7 +36,7 @@ MouseArea {
 
         TextInput {
             id: input
-            visible: editor.visible
+            visible: shadowEditor.visible
             anchors.centerIn: parent;
 
             selectByMouse: activeFocus;
@@ -52,6 +52,17 @@ MouseArea {
                     closeEditor();
                     event.accepted = true
                 }
+            }
+        }
+
+        MouseArea {
+            id: borderArea
+
+            anchors.fill: parent
+
+            onPressed: {
+                input.forceActiveFocus()
+                mouse.accepted = true
             }
         }
     }

@@ -49,10 +49,9 @@ Item {
         globalShadowTextInput.textInput.text = clickTextInput.text
         globalShadowTextInput.textInput.font = textArea.font
         globalShadowTextInput.editor.visible = true
-        globalShadowTextInput.textInput.forceActiveFocus() //focus = true
+        globalShadowTextInput.textInput.forceActiveFocus()
         globalShadowTextInput.textInput.selectAll();
 
-//            console.log("Validator:" + clickTextInput.validator)
         if(clickTextInput.validator !== undefined) {
             globalShadowTextInput.textInput.validator = clickTextInput.validator
         }

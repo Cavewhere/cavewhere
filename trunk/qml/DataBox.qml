@@ -34,12 +34,10 @@ NavigationRectangle {
     MouseArea {
         anchors.fill: parent
 
+        enabled: !editor.isEditting
+
         onClicked: {
             dataBox.focus = true
-        }
-
-        onDoubleClicked: {
-            editor.focus = true;
         }
     }
 
