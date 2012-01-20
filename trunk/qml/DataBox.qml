@@ -144,16 +144,17 @@ NavigationRectangle {
                 target: globalShadowTextInput.editor
                 Keys.onPressed: {
                     if(event.key === Qt.Key_Tab ||
-                       event.key === 1 + Qt.Key_Tab ||
-                            event.key === Qt.Key_Left ||
-                            event.key === Qt.Key_Right ||
-                            event.key === Qt.Key_Up ||
-                            event.key === Qt.Key_Down)  {
+                       event.key === 1 + Qt.Key_Tab //||
+//                            event.key === Qt.Key_Left ||
+//                            event.key === Qt.Key_Right ||
+//                            event.key === Qt.Key_Up ||
+//                            event.key === Qt.Key_Down
+                            )  {
                             editor.commitChanges()
                     }
 
                     NavigationHandler.handleTabEvent(event, dataBox);
-                    NavigationHandler.handleArrowEvent(event, dataBox);
+//                    NavigationHandler.handleArrowEvent(event, dataBox);
                     if(event.accepted) {
                         //Have the editor commit changes
                         dataBox.state = ''; //Default state
