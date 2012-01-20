@@ -159,17 +159,6 @@ private:
 
     //Where all the survey chunk view's delegates are stored
     cwSurveyChunkViewComponents* QMLComponents;
-    //    QDeclarativeComponent* StationDelegate;
-    //    QDeclarativeComponent* TitleDelegate;
-    //    QDeclarativeComponent* LeftDelegate;
-    //    QDeclarativeComponent* RightDelegate;
-    //    QDeclarativeComponent* UpDelegate;
-    //    QDeclarativeComponent* DownDelegate;
-    //    QDeclarativeComponent* DistanceDelegate;
-    //    QDeclarativeComponent* FrontCompassDelegate;
-    //    QDeclarativeComponent* BackCompassDelegate;
-    //    QDeclarativeComponent* FrontClinoDelegate;
-    //    QDeclarativeComponent* BackClinoDelegate;
 
     QDeclarativeItem* StationTitle;
     QDeclarativeItem* DistanceTitle;
@@ -190,7 +179,6 @@ private:
     const cwSurveyChunkView* ChunkAbove;
 
     void createTitlebar();
-    void setupDelegates();
 
     void positionStationRow(StationRow row, int index);
     void positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());

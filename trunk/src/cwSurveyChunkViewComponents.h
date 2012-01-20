@@ -57,15 +57,8 @@ private:
     QDeclarativeComponent* Delegate;
     QDeclarativeComponent* StationDelegate;
     QDeclarativeComponent* TitleDelegate;
-    //    QDeclarativeComponent* LeftDelegate;
-    //    QDeclarativeComponent* RightDelegate;
-    //    QDeclarativeComponent* UpDelegate;
-    //    QDeclarativeComponent* DownDelegate;
-    //    QDeclarativeComponent* DistanceDelegate;
-    //    QDeclarativeComponent* FrontCompassDelegate;
-    //    QDeclarativeComponent* BackCompassDelegate;
-    //    QDeclarativeComponent* FrontClinoDelegate;
-    //    QDeclarativeComponent* BackClinoDelegate;
+    QDeclarativeComponent* FrontSiteDelegate;
+    QDeclarativeComponent* BackSiteDelegate;
 
     cwStationValidator* StationValidator;
     cwDistanceValidator* DistanceValidator;
@@ -112,23 +105,19 @@ inline QDeclarativeComponent* cwSurveyChunkViewComponents::distanceDelegate() co
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontCompassDelegate() const {
-    return Delegate;
-    //    return FrontCompassDelegate;
+    return FrontSiteDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::backCompassDelegate() const {
-    return Delegate;
-    //    return BackCompassDelegate;
+    return BackSiteDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontClinoDelegate() const {
-    return Delegate;
-    //    return FrontClinoDelegate;
+    return FrontSiteDelegate;
 }
 
 inline QDeclarativeComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
-    return Delegate;
-    //    return BackClinoDelegate;
+    return BackSiteDelegate;
 }
 
 inline QValidator* cwSurveyChunkViewComponents::stationValidator() const {

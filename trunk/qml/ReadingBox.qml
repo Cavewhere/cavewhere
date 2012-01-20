@@ -13,5 +13,4 @@ DataBox {
         anchors.topMargin: 1
         font.pixelSize: 10
     }
-
 }

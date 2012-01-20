@@ -20,7 +20,9 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
     Delegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
     StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
     TitleDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
-//    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
+    FrontSiteDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
+    BackSiteDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
+    //    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
 //    RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
 //    UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
 //    DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);

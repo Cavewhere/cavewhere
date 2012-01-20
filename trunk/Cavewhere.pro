@@ -332,10 +332,6 @@ OTHER_FILES += \
     qml/SurveyEditor.qml \
     qml/StationBox.qml \
     qml/ShotDistanceDataBox.qml \
-    qml/FrontClinoReadBox.qml \
-    qml/BackClinoReadBox.qml \
-    qml/FrontCompassReadBox.qml \
-    qml/BackClinoReadBox.qml \
     qml/ClinoReadBox.qml \
     qml/CompassReadBox.qml \
     qml/ReadingBox.qml \
@@ -343,7 +339,9 @@ OTHER_FILES += \
     qml/ImageExplorer.qml \
     qml/NoteExplorer.qml \
     qml/NotesGallery.qml \
-    qml/ImageArrowNavigation.qml
+    qml/ImageArrowNavigation.qml \
+    qml/FrontSightReadingBox.qml \
+    qml/BackSightReadingBox.qml
 
 RESOURCES += \
     icons.qrc

@@ -517,33 +517,6 @@ void cwSurveyChunkView::createTitlebar() {
 }
 
 /**
-  Sets up the QML components that are used to create QML objects in
-  this view
-  */
-void cwSurveyChunkView::setupDelegates() {
-    //    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-    //    if(context == NULL) { return; }
-
-    //    QDeclarativeEngine* engine = context->engine();
-    //    if(engine == NULL) { return; }
-
-
-    //    if(StationDelegate == NULL) {
-    //        StationDelegate = new QDeclarativeComponent(engine, "qml/StationBox.qml", this);
-    //        TitleDelegate = new QDeclarativeComponent(engine, "qml/TitleLabel.qml", this);
-    //        LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
-    //        RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
-    //        UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
-    //        DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
-    //        DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
-    //        FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
-    //        BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
-    //        FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
-    //        BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
-    //    }
-}
-
-/**
   \brief Constructor for a station row
   */
 cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
@@ -607,6 +580,10 @@ QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* compo
                                                     QDeclarativeContext* context,
                                                     cwSurveyChunk::DataRole role,
                                                     QValidator *validator) {
+    if(component->isError()) {
+        qWarning() << component->errorString();
+        return NULL;
+    }
 
     QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(component->create(context));
     item->setProperty("dataRole", role);
