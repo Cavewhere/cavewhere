@@ -23,17 +23,34 @@ ImageExplorer {
             height: view.height
             image: model.image
             rotation: model.noteObject.rotate
+        }
+    }
 
-            hasPrevious: view.currentIndex - 1 >= 0
-            hasNext: view.currentIndex + 1 < view.count
+    ImageArrowNavigation {
+        highlightedImageSource: "qrc:icons/previousPressed.png"
+        imageSource: "qrc:icons/previousUnPressArrow.png"
+        visible: view.currentIndex - 1 >= 0
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: 10
+        anchors.topMargin: 10
 
-            onNextImage: {
-                view.currentIndex = Math.min(view.count - 1, view.currentIndex + 1)
-            }
+        onClicked: {
+            view.currentIndex = Math.max(0, view.currentIndex - 1)
+        }
+    }
 
-            onPreviousImage: {
-                view.currentIndex = Math.max(0, view.currentIndex - 1)
-            }
+    ImageArrowNavigation {
+        highlightedImageSource: "qrc:icons/nextPressed.png"
+        imageSource: "qrc:icons/nextUnPressArrow.png"
+        visible: view.currentIndex + 1 < view.count
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        anchors.leftMargin: 10
+        anchors.topMargin: 10
+
+        onClicked: {
+            view.currentIndex = Math.min(view.count - 1, view.currentIndex + 1)
         }
     }
 }

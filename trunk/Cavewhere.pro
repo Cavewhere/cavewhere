@@ -342,7 +342,8 @@ OTHER_FILES += \
     qml/Navigation.js \
     qml/ImageExplorer.qml \
     qml/NoteExplorer.qml \
-    qml/NotesGallery.qml
+    qml/NotesGallery.qml \
+    qml/ImageArrowNavigation.qml
 
 RESOURCES += \
     icons.qrc

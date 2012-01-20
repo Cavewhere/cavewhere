@@ -121,8 +121,7 @@ Item {
         HelpArea {
             id: scaleHelpAreaId
             width: scaleInputId.width
-            text: "You can set the <b>scale</b> of the scrap.  Cavewhere only use <b>scale</b> to
-                    help you automatically label stations."
+            text: "You can set the <b>scale</b> of the scrap."
         }
     }
 
