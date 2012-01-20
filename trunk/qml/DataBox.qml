@@ -141,17 +141,26 @@ NavigationRectangle {
             name: "MiddleTyping"
 
             PropertyChanges {
-                target: globalShadowTextInput.editor
+                target: globalShadowTextInput.textInput
                 Keys.onPressed: {
                     if(event.key === Qt.Key_Tab ||
-                       event.key === 1 + Qt.Key_Tab //||
+                       event.key === 1 + Qt.Key_Tab ||
+                           event.key === Qt.Key_Space)
+                            //||
 //                            event.key === Qt.Key_Left ||
 //                            event.key === Qt.Key_Right ||
 //                            event.key === Qt.Key_Up ||
-//                            event.key === Qt.Key_Down
-                            )  {
+//                            event.key === Qt.Key_Down)
+                    {
                             editor.commitChanges()
                     }
+
+                    if(event.key === Qt.Key_Space) {
+                        surveyChunk.parentTrip.addNewChunk();
+                    }
+
+                    //Use teh default keyhanding that the GlobalShadowTextInput has
+                    defaultKeyHandling(event);
 
                     NavigationHandler.handleTabEvent(event, dataBox);
 //                    NavigationHandler.handleArrowEvent(event, dataBox);
@@ -165,16 +174,6 @@ NavigationRectangle {
                     if(!focus) {
                         dataBox.state = '';
                     }
-                }
-            }
-
-            PropertyChanges {
-                target: editor
-
-                Keys.onSpacePressed: {
-                    editor.commitChanges();
-                    dataBox.state = '';
-                    surveyChunk.parentTrip.addNewChunk();
                 }
             }
 

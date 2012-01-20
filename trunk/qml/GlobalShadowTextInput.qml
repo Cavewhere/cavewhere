@@ -42,7 +42,7 @@ MouseArea {
             selectByMouse: activeFocus;
             activeFocusOnPress: false
 
-            Keys.onPressed: {
+            function defaultKeyHandling(event) {
                 if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     enterPressed()
                     commitChanges()
@@ -52,6 +52,10 @@ MouseArea {
                     closeEditor();
                     event.accepted = true
                 }
+            }
+
+            Keys.onPressed: {
+                defaultKeyHandling(event)
             }
         }
 
