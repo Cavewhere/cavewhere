@@ -325,7 +325,6 @@ void cwTrip::NameCommand::undo() {
 }
 
 cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
-    if(Trip.isNull()) { return; }
     Trip = trip;
     NewDate = date;
     OldDate = Trip.data()->date();
