@@ -34,6 +34,17 @@ MouseArea {
         width:  minWidth > input.width + 6 ? minWidth : input.width  + 6
         height: minHeight > input.height + 6 ? minHeight : input.height + 6
 
+        MouseArea {
+            id: borderArea
+
+            anchors.fill: parent
+
+            onPressed: {
+                input.forceActiveFocus()
+                mouse.accepted = true
+            }
+        }
+
         TextInput {
             id: input
             visible: shadowEditor.visible
@@ -56,17 +67,6 @@ MouseArea {
 
             Keys.onPressed: {
                 defaultKeyHandling(event)
-            }
-        }
-
-        MouseArea {
-            id: borderArea
-
-            anchors.fill: parent
-
-            onPressed: {
-                input.forceActiveFocus()
-                mouse.accepted = true
             }
         }
     }
