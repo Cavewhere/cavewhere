@@ -104,9 +104,16 @@ void cwTrip::setDate(QDate date) {
   */
 void cwTrip::setTeam(cwTeam* team) {
     if(team != Team) {
-        Team->deleteLater(); //Delete the old team
+        if(Team != NULL)  {
+            Team->deleteLater(); //Delete the old team
+        }
+
         Team = team;
-        Team->setParent(this);
+
+        if(Team != NULL) {
+            Team->setParent(this);
+        }
+
         emit teamChanged();
     }
 }

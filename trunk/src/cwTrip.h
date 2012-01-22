@@ -27,6 +27,7 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
+    Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
     Q_PROPERTY(int numberOfChunks READ numberOfChunks NOTIFY numberOfChunksChanged)
 
 public:

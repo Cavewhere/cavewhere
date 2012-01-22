@@ -56,6 +56,7 @@
 #include "cwUnits.h"
 #include "cwGLScraps.h"
 #include "cwScrapManager.h"
+#include "cwTeam.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -69,7 +70,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
-    qmlRegisterType<cwTrip>();
+    qmlRegisterType<cwTrip>("Cavewhere", 1, 0, "Trip");
     qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
     qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");
@@ -109,4 +110,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
     qmlRegisterType<cwGLScraps>("Cavewhere", 1, 0, "GLScraps");
     qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
+    qmlRegisterType<cwTeam>("Cavewhere", 1, 0, "cwTeam");
 }

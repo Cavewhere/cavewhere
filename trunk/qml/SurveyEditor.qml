@@ -13,7 +13,7 @@ Rectangle {
     Flickable {
         id: flickArea
 
-        contentHeight: view.contentHeight + spaceAddBar.height
+        contentHeight: teamTable.height + view.contentHeight + spaceAddBar.height
         width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth)
 
         anchors.top: parent.top
@@ -34,10 +34,15 @@ Rectangle {
             }
         }
 
-
+        TeamTable {
+            id: teamTable
+            model: currentTrip !== null ? currentTrip.team : null
+        }
 
         SurveyChunkGroupView {
             id: view
+
+            y: teamTable.height
 
             width: view.contentWidth
 
@@ -53,7 +58,7 @@ Rectangle {
             id: spaceAddBar
             source: "qrc:icons/spacebar.png"
 
-            y: view.contentHeight
+            y: view.y + view.contentHeight
             anchors.horizontalCenter: view.horizontalCenter
 
             Text {
@@ -82,7 +87,7 @@ Rectangle {
     }
 
     NoteExplorer {
-        noteModel: currentTrip.notes
+        noteModel: currentTrip !== null ? currentTrip.notes : null
         anchors.left: flickArea.right
         anchors.right: parent.right
         anchors.top: area.top

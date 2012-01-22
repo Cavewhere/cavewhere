@@ -13,7 +13,9 @@ class cwTeam : public QAbstractListModel
 public:
     enum {
         NameRole,
-        SurveyRolesRole
+
+        //In a sublist
+        JobRole
     } Roles;
 
     explicit cwTeam(QObject *parent = 0);

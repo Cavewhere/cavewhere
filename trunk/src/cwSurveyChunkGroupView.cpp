@@ -78,7 +78,7 @@ void cwSurveyChunkGroupView::setViewportX(float x) {
 void cwSurveyChunkGroupView::setViewportY(float y) {
     if(ViewportArea.y() != y) {
         //qDebug() << "Set viewport y:" << y;
-        ViewportArea.moveTop(y);
+        ViewportArea.moveTop(y - this->y());
         UpdateActiveChunkViews();
         emit viewportYChanged();
     }

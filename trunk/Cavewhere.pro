@@ -341,7 +341,8 @@ OTHER_FILES += \
     qml/NotesGallery.qml \
     qml/ImageArrowNavigation.qml \
     qml/FrontSightReadingBox.qml \
-    qml/BackSightReadingBox.qml
+    qml/BackSightReadingBox.qml \
+    qml/TeamTable.qml
 
 RESOURCES += \
     icons.qrc

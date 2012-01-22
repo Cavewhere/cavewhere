@@ -1,8 +1,9 @@
 import QtQuick 1.1
+import Cavewhere 1.0
 
 DataTabWidget {
     id: tripTabWidget
-    property variant currentTrip:  null
+    property Trip currentTrip:  null
 
     Text {
         property string label: "Overview"
@@ -15,7 +16,7 @@ DataTabWidget {
         property string label: "Data"
         property string icon: "qrc:icons/data.png"
 
-        currentTrip: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip : null
+        currentTrip: tripTabWidget.currentTrip
         //    text: "This is the Data page"
     }
 
@@ -23,7 +24,7 @@ DataTabWidget {
         property string label: "Notes"
         property string icon: "qrc:icons/notes.png"
 
-        notesModel: tripTabWidget.currentTrip != null ? tripTabWidget.currentTrip.notes : null
+        notesModel: tripTabWidget.currentTrip !== null ? tripTabWidget.currentTrip.notes : null
 
         onImagesAdded: {
             currentTrip.notes.addFromFiles(images, project);

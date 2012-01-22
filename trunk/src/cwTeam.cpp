@@ -43,8 +43,8 @@ QVariant cwTeam::data(const QModelIndex &index, int role) const {
     switch(role) {
     case NameRole:
         return teamMember.name();
-    case SurveyRolesRole:
-        return teamMember.roles();
+    case JobRole:
+        return teamMember.jobs();
     }
     return QVariant();
 }
@@ -55,6 +55,6 @@ QVariant cwTeam::data(const QModelIndex &index, int role) const {
 void cwTeam::setupRoles() {
     QHash<int, QByteArray> roles;
     roles[NameRole] = "name";
-    roles[SurveyRolesRole] = "roles";
+    roles[JobRole] = "job";
     setRoleNames(roles);
 }

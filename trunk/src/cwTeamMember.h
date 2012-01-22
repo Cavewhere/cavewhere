@@ -9,25 +9,25 @@ class cwTeamMember
 {
 public:
     explicit cwTeamMember();
-    cwTeamMember(QString name, QStringList roles);
+    cwTeamMember(QString name, QStringList jobs);
 
     void setName(QString name);
     QString name() const;
 
-    void setRoles(QStringList roles);
-    QStringList roles() const;
+    void setJobs(QStringList jobs);
+    QStringList jobs() const;
 
 private:
     QString Name;
-    QStringList Roles;
+    QStringList Jobs;
 };
 
 inline QString cwTeamMember::name() const {
     return Name;
 }
 
-inline QStringList cwTeamMember::roles() const {
-    return Roles;
+inline QStringList cwTeamMember::jobs() const {
+    return Jobs;
 }
 
 

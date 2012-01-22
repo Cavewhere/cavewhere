@@ -5,7 +5,7 @@ cwTeamMember::cwTeamMember() {
 
 cwTeamMember::cwTeamMember(QString name, QStringList roles) {
     Name = name;
-    Roles = roles;
+    Jobs = roles;
 }
 
 /**
@@ -18,6 +18,6 @@ void cwTeamMember::setName(QString name) {
 /**
   Sets the roles of a team member
   */
-void cwTeamMember::setRoles(QStringList roles)  {
-    Roles = roles;
+void cwTeamMember::setJobs(QStringList roles)  {
+    Jobs = roles;
 }
