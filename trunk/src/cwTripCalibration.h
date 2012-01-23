@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QStringList>
 
 //Our includes
 #include "cwUnits.h"
@@ -13,12 +14,16 @@ class cwTripCalibration : public QObject
 
     Q_PROPERTY(bool correctedCompassBacksight READ hasCorrectedCompassBacksight WRITE setCorrectedCompassBacksight NOTIFY correctedCompassBacksightChanged)
     Q_PROPERTY(bool correctedClinoBacksight READ hasCorrectedClinoBacksight WRITE setCorrectedClinoBacksight NOTIFY correctedClinoBacksightChanged)
-    Q_PROPERTY(float tapeCalibration READ tapeCalibration WRITE setTapeCalibration NOTIFY tapeCalibrationChanged)
-    Q_PROPERTY(float frontCompassCalibration READ frontCompassCalibration WRITE setFrontCompassCalibration NOTIFY frontCompassCalibrationChanged)
-    Q_PROPERTY(float backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
-    Q_PROPERTY(float backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
-    Q_PROPERTY(float declination READ declination WRITE setDeclination NOTIFY declinationChanged)
+    Q_PROPERTY(double tapeCalibration READ tapeCalibration WRITE setTapeCalibration NOTIFY tapeCalibrationChanged)
+    Q_PROPERTY(double frontCompassCalibration READ frontCompassCalibration WRITE setFrontCompassCalibration NOTIFY frontCompassCalibrationChanged)
+    Q_PROPERTY(double frontClinoCalibration READ frontClinoCalibration WRITE setFrontClinoCalibration NOTIFY frontClinoCalibrationChanged)
+    Q_PROPERTY(double backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
+    Q_PROPERTY(double backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
+    Q_PROPERTY(double declination READ declination WRITE setDeclination NOTIFY declinationChanged)
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
+    Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
+
+
 
 public:
     explicit cwTripCalibration(QObject *parent = 0);
@@ -31,49 +36,55 @@ public:
     void setCorrectedClinoBacksight(bool isCorrected);
     bool hasCorrectedClinoBacksight() const;
 
-    void setTapeCalibration(float tapeCalibration);
-    float tapeCalibration() const;
+    void setTapeCalibration(double tapeCalibration);
+    double tapeCalibration() const;
 
-    void setFrontCompassCalibration(float calibration);
-    float frontCompassCalibration() const;
+    void setFrontCompassCalibration(double calibration);
+    double frontCompassCalibration() const;
 
-    void setFrontClinoCalibration(float calibration);
-    float frontClinoCalibration() const;
+    void setFrontClinoCalibration(double calibration);
+    double frontClinoCalibration() const;
 
-    void setBackCompassCalibration(float calibration);
-    float backCompassCalibration() const;
+    void setBackCompassCalibration(double calibration);
+    double backCompassCalibration() const;
 
-    void setBackClinoCalibration(float calibration);
-    float backClinoCalibration() const;
+    void setBackClinoCalibration(double calibration);
+    double backClinoCalibration() const;
 
-    void setDeclination(float declination);
-    float declination() const;
+    void setDeclination(double declination);
+    double declination() const;
 
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit unit);
 
+    QStringList supportedUnits() const;
+
+    Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
+    Q_INVOKABLE int mapToSupportUnit(int lengthUnit);
+
 signals:
     void correctedCompassBacksightChanged(bool corrected);
     void correctedClinoBacksightChanged(bool corrected);
-    void tapeCalibrationChanged(float calibration);
-    void frontCompassCalibrationChanged(float calibration);
-    void frontClinoCalibrationChanged(float calibration);
-    void backCompassCalibrationChanged(float calibration);
-    void backClinoCalibrationChanged(float calibration);
-    void declinationChanged(float declination);
+    void tapeCalibrationChanged(double calibration);
+    void frontCompassCalibrationChanged(double calibration);
+    void frontClinoCalibrationChanged(double calibration);
+    void backCompassCalibrationChanged(double calibration);
+    void backClinoCalibrationChanged(double calibration);
+    void declinationChanged(double declination);
     void distanceUnitChanged(cwUnits::LengthUnit unit);
+    void supportedUnitsChanged();
 
 public slots:
 
 private:
     bool CorrectedCompassBacksight;
     bool CorrectedClinoBacksight;
-    float TapeCalibration;
-    float FrontCompassCalibration;
-    float FrontClinoCalibration;
-    float BackCompasssCalibration;
-    float BackClinoCalibration;
-    float Declination;
+    double TapeCalibration;
+    double FrontCompassCalibration;
+    double FrontClinoCalibration;
+    double BackCompasssCalibration;
+    double BackClinoCalibration;
+    double Declination;
     cwUnits::LengthUnit DistanceUnit;
 
     cwTripCalibration& copy(const cwTripCalibration& object);
@@ -87,32 +98,34 @@ inline bool cwTripCalibration::hasCorrectedClinoBacksight() const {
     return CorrectedClinoBacksight;
 }
 
-inline float cwTripCalibration::tapeCalibration() const {
+inline double cwTripCalibration::tapeCalibration() const {
     return TapeCalibration;
 }
 
-inline float cwTripCalibration::frontCompassCalibration() const {
+inline double cwTripCalibration::frontCompassCalibration() const {
     return FrontCompassCalibration;
 }
 
-inline float cwTripCalibration::frontClinoCalibration() const {
+inline double cwTripCalibration::frontClinoCalibration() const {
     return FrontClinoCalibration;
 }
 
-inline float cwTripCalibration::backCompassCalibration() const {
+inline double cwTripCalibration::backCompassCalibration() const {
     return BackCompasssCalibration;
 }
 
-inline float cwTripCalibration::backClinoCalibration() const {
+inline double cwTripCalibration::backClinoCalibration() const {
     return BackClinoCalibration;
 }
 
-inline float cwTripCalibration::declination() const {
+inline double cwTripCalibration::declination() const {
     return Declination;
 }
 
 inline cwUnits::LengthUnit cwTripCalibration::distanceUnit() const {
     return DistanceUnit;
 }
+
+
 
 #endif // CWTRIPCALIBRATION_H

@@ -342,7 +342,17 @@ OTHER_FILES += \
     qml/ImageArrowNavigation.qml \
     qml/FrontSightReadingBox.qml \
     qml/BackSightReadingBox.qml \
-    qml/TeamTable.qml
+    qml/TeamTable.qml \
+    qml/SectionLabel.qml \
+    qml/BreakLine.qml \
+    qml/RemoveButton.qml \
+    qml/AddButton.qml \
+    qml/CalibrationEditor.qml \
+    qml/CheckableGroupBox.qml \
+    qml/GroupBox.qml \
+    qml/TapeCalibrationEditor.qml \
+    qml/FrontSightCalibrationEditor.qml \
+    qml/BackSightCalibrationEditor.qml
 
 RESOURCES += \
     icons.qrc

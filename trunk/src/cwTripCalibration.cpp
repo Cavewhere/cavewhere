@@ -62,42 +62,42 @@ void cwTripCalibration::setCorrectedClinoBacksight(bool isCorrected) {
     }
 }
 
-void cwTripCalibration::setTapeCalibration(float tapeCalibration) {
+void cwTripCalibration::setTapeCalibration(double tapeCalibration) {
     if(tapeCalibration != TapeCalibration) {
         TapeCalibration = tapeCalibration;
         emit tapeCalibrationChanged(TapeCalibration);
     }
 }
 
-void cwTripCalibration::setFrontCompassCalibration(float calibration) {
+void cwTripCalibration::setFrontCompassCalibration(double calibration) {
     if(FrontCompassCalibration != calibration) {
         FrontCompassCalibration = calibration;
         emit frontCompassCalibrationChanged(FrontCompassCalibration);
     }
 }
 
-void cwTripCalibration::setFrontClinoCalibration(float calibration) {
+void cwTripCalibration::setFrontClinoCalibration(double calibration) {
     if(FrontClinoCalibration != calibration) {
         FrontClinoCalibration = calibration;
         emit frontClinoCalibrationChanged(FrontClinoCalibration);
     }
 }
 
-void cwTripCalibration::setBackCompassCalibration(float calibration) {
+void cwTripCalibration::setBackCompassCalibration(double calibration) {
     if(BackCompasssCalibration != calibration) {
         BackCompasssCalibration = calibration;
         emit backCompassCalibrationChanged(BackCompasssCalibration);
     }
 }
 
-void cwTripCalibration::setBackClinoCalibration(float calibration) {
+void cwTripCalibration::setBackClinoCalibration(double calibration) {
     if(BackClinoCalibration != calibration) {
         BackClinoCalibration = calibration;
         emit backClinoCalibrationChanged(BackClinoCalibration);
     }
 }
 
-void cwTripCalibration::setDeclination(float declination) {
+void cwTripCalibration::setDeclination(double declination) {
     if(Declination != declination) {
         Declination = declination;
         emit declinationChanged(Declination);
@@ -109,5 +109,46 @@ void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit unit) {
         DistanceUnit = unit;
         emit distanceUnitChanged(unit);
     }
+}
+
+/**
+    Gets supported units that the trip calibration supports
+*/
+QStringList cwTripCalibration::supportedUnits() const {
+    QStringList list;
+    list.append("m");
+    list.append("ft");
+    return list;
+}
+
+/**
+  This converts the supportedUnitIndex into cwUnit::LengthUnit
+  */
+int cwTripCalibration::mapToLengthUnit(int supportedUnitIndex)
+{
+    switch(supportedUnitIndex) {
+    case 0:
+        return cwUnits::Meters;
+    case 1:
+        return cwUnits::Feet;
+    default:
+        return cwUnits::Unitless;
+    }
+}
+
+/**
+  This converts the length units into support length unit
+  */
+int cwTripCalibration::mapToSupportUnit(int lengthUnit)
+{
+    switch(lengthUnit) {
+    case cwUnits::Meters:
+        return 0;
+    case cwUnits::Feet:
+        return 1;
+    default:
+        return -1;
+    }
+
 }
 

@@ -5,7 +5,7 @@ Text {
 
     property HelpArea helpArea
 
-    font.bold: true
+//    font.bold: true
     font.underline: false
 
     MouseArea {

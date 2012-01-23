@@ -44,12 +44,8 @@ FocusScope {
                     height: 16
                     anchors.verticalCenter: parent.verticalCenter
 
-                    IconButton {
+                    RemoveButton {
                         id: removeButton
-                        iconSource: "qrc:icons/minusCircleLight.png"
-                        hoverIconSource: "qrc:icons/minusCircleDark.png"
-                        sourceSize: Qt.size(15, 15);
-
                         anchors.fill: parent
                         visible: caveDelegate.selected
 

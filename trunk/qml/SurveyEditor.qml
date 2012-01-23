@@ -33,54 +33,71 @@ Rectangle {
                 contentY = r.y+r.height-height;
             }
         }
+        Column {
 
-        TeamTable {
-            id: teamTable
-            model: currentTrip !== null ? currentTrip.team : null
-        }
+            spacing: 5
 
-        SurveyChunkGroupView {
-            id: view
-
-            y: teamTable.height
-
-            width: view.contentWidth
-
-            viewportX: flickArea.contentX;
-            viewportY: flickArea.contentY;
-            viewportWidth: flickArea.width;
-            viewportHeight: flickArea.height;
-
-            onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
-        }
-
-        Image {
-            id: spaceAddBar
-            source: "qrc:icons/spacebar.png"
-
-            y: view.y + view.contentHeight
-            anchors.horizontalCenter: view.horizontalCenter
-
-            Text {
-                anchors.centerIn: parent
-                text: {
-                    if(currentTrip) {
-                        if(currentTrip.numberOfChunks === 0) {
-                            return "Press <b>Space</b> to start";
-                        } else {
-                            return "Press <b>Space</b> to add another data block";
-                        }
-                    } else {
-                        return "Error: Current trip is null";
-                    }
-                }
+            TeamTable {
+                id: teamTable
+                model: currentTrip !== null ? currentTrip.team : null
+                width: view.contentWidth
             }
 
-            MouseArea {
-                anchors.fill: parent
+            BreakLine { }
 
-                onClicked: {
-                    currentTrip.addNewChunk();
+            CalibrationEditor {
+                width: view.contentWidth
+                calibration: currentTrip.calibration
+            }
+
+            BreakLine { }
+
+            SectionLabel {
+                text: "Data"
+            }
+
+            SurveyChunkGroupView {
+                id: view
+
+                height: contentHeight
+                width: view.contentWidth
+
+                viewportX: flickArea.contentX;
+                viewportY: flickArea.contentY;
+                viewportWidth: flickArea.width;
+                viewportHeight: flickArea.height;
+
+                onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
+            }
+
+            Image {
+                id: spaceAddBar
+                source: "qrc:icons/spacebar.png"
+
+         //       y: view.y + view.contentHeight
+                anchors.horizontalCenter: view.horizontalCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: {
+                        if(currentTrip) {
+                            if(currentTrip.numberOfChunks === 0) {
+                                return "Press <b>Space</b> to start";
+                            } else {
+                                return "Press <b>Space</b> to add another data block";
+                            }
+                        } else {
+                            return "Error: Current trip is null";
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+
+                    onClicked: {
+                        currentTrip.addNewChunk();
+                    }
                 }
             }
         }
@@ -103,14 +120,5 @@ Rectangle {
     onVisibleChanged: {
         focus = visible
     }
-
-
-
-//    NotesGallery {
-//        anchors.left: flickArea.right
-//        anchors.right: parent.right
-//        anchors.top: area.top
-//        anchors.bottom: area.bottom
-//    }
 }
 

@@ -32,7 +32,6 @@ Item {
         id: style
     }
 
-
     Text {
         id: scrapInfoText
         z: 1
@@ -78,8 +77,6 @@ Item {
     Desktop.CheckBox {
         id: autoTransformCheckBox
         text: "Auto Calculate"
-//        checked: scrap.calculateNoteTransform
-//        onCheckedChanged: scrap.calculateNoteTransform = checked
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
 

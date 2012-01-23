@@ -57,6 +57,7 @@
 #include "cwGLScraps.h"
 #include "cwScrapManager.h"
 #include "cwTeam.h"
+#include "cwTripCalibration.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -110,5 +111,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
     qmlRegisterType<cwGLScraps>("Cavewhere", 1, 0, "GLScraps");
     qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
-    qmlRegisterType<cwTeam>("Cavewhere", 1, 0, "cwTeam");
+    qmlRegisterType<cwTeam>("Cavewhere", 1, 0, "Team");
+    qmlRegisterType<cwTripCalibration>("Cavewhere", 1, 0, "Calibration");
 }

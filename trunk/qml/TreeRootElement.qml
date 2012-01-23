@@ -74,14 +74,12 @@ Rectangle {
             rootElement.clicked();
         }
 
-        Button {
+        AddButton {
             id: addButton
 
             anchors.right: parent.right
             anchors.rightMargin: 5
             anchors.verticalCenter: parent.verticalCenter
-
-            iconSource: "qrc:icons/plus.png"
 
             onClicked: {
                 //Add a cave
