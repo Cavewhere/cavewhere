@@ -32,6 +32,9 @@ public:
     cwSurveyChunk* model();
     void setModel(cwSurveyChunk* chunk);
 
+    void setFrontSights(bool hasFrontSights);
+    void setBackSights(bool hasBackSights);
+
     QRectF boundingRect() const;
 
     static float elementHeight();
@@ -174,6 +177,10 @@ private:
     //For keeping the current object visible
     QDeclarativeItem* FocusedItem;
 
+    //For showing front sites only or backsights only
+    bool HasFrontSights;
+    bool HasBackSights;
+
     //For setting the navigation for the last and first object
     const cwSurveyChunkView* ChunkBelow;
     const cwSurveyChunkView* ChunkAbove;
@@ -182,12 +189,11 @@ private:
 
     void positionStationRow(StationRow row, int index);
     void positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
-    void connectStation(cwStationReference* station, StationRow row);
 
     void positionShotRow(ShotRow row, int index);
-    void connectShot(cwShot* shot, ShotRow row);
 
     void updateNavigation();
+    void updateAllNavigation();
     void updateStationTabNavigation(int index);
     void updateShotTabNavigation(int index);
     void lrudTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next);
@@ -212,6 +218,9 @@ private:
     void updateShotRowData(int index);
 
     bool interfaceValid();
+
+    QDeclarativeItem* leftBoxOfLeftLRUD(const ShotRow& shot);
+
 };
 
 //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)

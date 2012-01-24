@@ -101,6 +101,9 @@ private slots:
 
     void HandleSplitChunk(cwSurveyChunk* newChunk);
 
+    void updateChunksFrontSights();
+    void updateChunksBackSights();
+
 };
 
 //inline float cwSurveyChunkGroupView::contentHeight() const { return ContentArea.height(); }

@@ -4,6 +4,7 @@
 #include "cwSurveyChunkView.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyChunkViewComponents.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QDeclarativeEngine>
@@ -49,6 +50,8 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
                 AddChunks(0, Trip->numberOfChunks() - 1);
 
                 connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+                connect(Trip->calibrations(), SIGNAL(frontSightsChanged()), SLOT(updateChunksFrontSights()));
+                connect(Trip->calibrations(), SIGNAL(backSightsChanged()), SLOT(updateChunksBackSights()));
             }
 
             emit tripChanged();
@@ -237,6 +240,10 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         QDeclarativeEngine::setContextForObject(chunkView, context);
         chunkView->setQMLComponents(ChunkQMLComponents);
 
+        //Set the chunkview rendering frontSights or backsights
+        chunkView->setFrontSights(Trip->calibrations()->hasFrontSights());
+        chunkView->setBackSights(Trip->calibrations()->hasBackSights());
+
         //Set the model for the view
         chunkView->setModel(chunk);
 
@@ -356,6 +363,28 @@ void cwSurveyChunkGroupView::HandleSplitChunk(cwSurveyChunk *newChunk) {
     int insertIndex = ChunkViews.indexOf(chunkView, firstIndex) + 1;
 
     Trip->insertChunk(insertIndex, newChunk);
+}
+
+/**
+    \brief Updates all the chunks so they can either render with front sights or not
+  */
+void cwSurveyChunkGroupView::updateChunksFrontSights() {
+    foreach(cwSurveyChunkView* chunkView, ChunkViews) {
+        if(chunkView != NULL) {
+            chunkView->setFrontSights(Trip->calibrations()->hasFrontSights());
+        }
+    }
+}
+
+/**
+   \brief Updates all the chunks so they can either render with back sights or not
+  */
+void cwSurveyChunkGroupView::updateChunksBackSights() {
+    foreach(cwSurveyChunkView* chunkView, ChunkViews) {
+        if(chunkView != NULL) {
+            chunkView->setBackSights(Trip->calibrations()->hasBackSights());
+        }
+    }
 }
 
 /**

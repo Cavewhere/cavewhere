@@ -22,8 +22,11 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     SurveyChunk(NULL),
     QMLComponents(NULL),
     FocusedItem(NULL),
+    HasFrontSights(true),
+    HasBackSights(true),
     ChunkBelow(NULL),
     ChunkAbove(NULL)
+
 
 {
     connect(this, SIGNAL(focusChanged(bool)), SLOT(setFocusForFirstStation(bool)));
@@ -141,8 +144,6 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
 
         SurveyChunk = chunk;
 
-        //SetupDelegates();
-
         clear();
         addStations(0, SurveyChunk->stationCount() - 1);
         addShots(0, SurveyChunk->shotCount() - 1);
@@ -154,6 +155,32 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int,QVariant)), SLOT(updateData(cwSurveyChunk::DataRole,int,QVariant)));
 
         emit modelChanged();
+    }
+}
+
+/**
+  \brief If this is set to true, this will all the user to edit the front sights
+
+  If false, the user will not be able to see the front sights
+  */
+void cwSurveyChunkView::setFrontSights(bool hasFrontSights) {
+    if(HasFrontSights != hasFrontSights) {
+        HasFrontSights = hasFrontSights;
+        updatePositionsAfterIndex(0); //Update all the rows
+        updateAllNavigation();
+    }
+}
+
+/**
+  \brief If this is set to true, this will all the user to edit the back sights
+
+  If false, the user will not be able to see the back sights
+  */
+void cwSurveyChunkView::setBackSights(bool hasBackSights) {
+    if(HasBackSights != hasBackSights) {
+        HasBackSights = hasBackSights;
+        updatePositionsAfterIndex(0); //Update all the rows
+        updateAllNavigation();
     }
 }
 
@@ -353,10 +380,6 @@ void cwSurveyChunkView::addShots(int beginIndex, int endIndex) {
 
         //Position the row in the correct place
         positionShotRow(row, i);
-
-        //Hock up the signals and slots with the model's data
-        cwShot* shot = SurveyChunk->shot(i);
-        connectShot(shot, row);
 
         //Queue the index for navigation update
         ShotNavigationQueue.append(i);
@@ -677,67 +700,36 @@ void cwSurveyChunkView::positionElement(QDeclarativeItem* item, const QDeclarati
 }
 
 /**
-  \brief Hooks up the model to the qml, for the station row
-  */
-void cwSurveyChunkView::connectStation(cwStationReference* /*station*/, StationRow /*row*/) {
-    //    QVariant stationObject = QVariant::fromValue(static_cast<QObject*>(station));
-
-    //    QVector<QDeclarativeItem*> items = row.items();
-    //    foreach(QDeclarativeItem* item, items) {
-    //        item->setProperty("dataObject", stationObject);
-    //        item->setProperty("rowIndex", row.rowIndex());
-    //        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnStation(int)));
-    //        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnStation(int)));
-    //        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-    //    }
-}
-
-/**
   \brief Positions the shot row in the object
   */
 void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
     positionElement(row.distance(), DistanceTitle, index);
 
-    float halfAzimuthHeight = AzimuthTitle->height() / 2.0 + 1.0;
-    float halfClinoHeight = ClinoTitle->height() / 2.0 + 1.0;
-    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), halfAzimuthHeight));
-    positionElement(row.backCompass(), AzimuthTitle, index, halfAzimuthHeight, QSize(AzimuthTitle->width(), halfAzimuthHeight));
-    positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), halfClinoHeight));
-    positionElement(row.backClino(), ClinoTitle, index, halfClinoHeight, QSize(ClinoTitle->width(), halfClinoHeight));
+    row.frontCompass()->setProperty("visible", HasFrontSights);
+    row.backCompass()->setProperty("visible", HasBackSights);
+    row.frontClino()->setProperty("visible", HasFrontSights);
+    row.backClino()->setProperty("visible", HasBackSights);
+
+    //Has only one
+    float azimuthHeight = AzimuthTitle->height() + 2.0;
+    float clinoHeight = ClinoTitle->height() + 2.0;
+    float backAzimuthY = 0.0;
+    float backClinoY = 0.0;
+
+    //Has both back and front sight
+    if(HasFrontSights && HasBackSights) {
+        azimuthHeight = AzimuthTitle->height() / 2.0 + 1.0;
+        clinoHeight = ClinoTitle->height() / 2.0 + 1.0;
+        backAzimuthY = azimuthHeight;
+        backClinoY = clinoHeight;
+    }
+
+    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), azimuthHeight));
+    positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), clinoHeight));
+
+    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width(), azimuthHeight));
+    positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight));
 }
-
-/**
-  \brief Hooks up the model to the qml, for the shot row
-  */
-void cwSurveyChunkView::connectShot(cwShot* /*shot*/, ShotRow /*row*/) {
-    //    QVariant shotObject = QVariant::fromValue(static_cast<QObject*>(shot));
-
-    //    QVector<QDeclarativeItem*> items = row.items();
-    //    foreach(QDeclarativeItem* item, items) {
-    //        item->setProperty("dataObject", shotObject);
-    //        item->setProperty("rowIndex", row.rowIndex());
-    //        connect(item, SIGNAL(rightClicked(int)), SLOT(RightClickOnShot(int)));
-    //        connect(item, SIGNAL(splitOn(int)), SLOT(SplitOnShot(int)));
-    //        connect(item, SIGNAL(focusChanged(bool)), SLOT(SetChildActiveFocus(bool)));
-    //    }
-}
-
-//void cwSurveyChunkView::StationFocusChanged(bool focus) {
-//    qDebug() << "Focus changed:" << focus;
-//    if(!Model || Model->StationCount() == 0) { return; }
-//    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(sender());
-//    if(item == NULL) { return; }
-//    cwStation* station = qobject_cast<cwStation*>(item->property("dataObject").value<QObject*>());
-//    if(station == NULL) { return; }
-
-//    //If this is the last station
-//    int lastIndex = Model->StationCount() - 1;
-//    if(station == Model->Station(lastIndex)) {
-//        Model->AppendNewShot();
-//    }
-
-
-//}
 
 /**
   \brief Called when this item get's focus
@@ -839,6 +831,25 @@ void cwSurveyChunkView::updateNavigation() {
 }
 
 /**
+  \brief This will update all the navigation for all the rows
+  */
+void cwSurveyChunkView::updateAllNavigation()
+{
+    StationNavigationQueue.clear();
+    ShotNavigationQueue.clear();
+
+    for(int i = 0; i < StationRows.size(); i++) {
+        StationNavigationQueue.append(i);
+    }
+
+    for(int i = 0; i < ShotRows.size(); i++) {
+        ShotNavigationQueue.append(i);
+    }
+
+    updateNavigation();
+}
+
+/**
   \brief Helper function to Update Navigation
 
   Update the tab order for the staton row at index
@@ -855,15 +866,22 @@ void cwSurveyChunkView::updateStationTabNavigation(int index) {
     if(index == 0) {
         //Special case for this row
         setTabOrder(currentRow.stationName(), previousRow.down(), nextRow.stationName());
-        lrudTabNavigation(currentRow, nextShotRow.backClino(), nextRow.left());
+
+        //Handle all the cases for backsite and frontsite
+        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(nextShotRow);
+        lrudTabNavigation(currentRow, previousBox, nextRow.left());
 
     } else if(index == 1) {
         //Special case for this row
         setTabOrder(currentRow.stationName(), previousRow.stationName(), previousShotRow.distance());
         lrudTabNavigation(currentRow, previousRow.down(), nextRow.stationName());
+
     } else {
         setTabOrder(currentRow.stationName(), previousRow.down(), previousShotRow.distance());
-        lrudTabNavigation(currentRow, previousShotRow.backClino(), nextRow.stationName());
+
+        //Handle all the cases for backsite and frontsite
+        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
+        lrudTabNavigation(currentRow, previousBox, nextRow.stationName());
     }
 }
 
@@ -885,16 +903,52 @@ void cwSurveyChunkView::updateShotTabNavigation(int index) {
     StationRow fromStationRow = getStationRow(index);
     StationRow toStationRow = getStationRow(index + 1);
 
-    setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
-    setTabOrder(row.frontCompass(), row.distance(), row.backCompass());
-    setTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
-    setTabOrder(row.frontClino(), row.backCompass(), row.backClino());
+    if(HasFrontSights && HasBackSights) {
+        //Has both front and backsights
+        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
+        setTabOrder(row.frontCompass(), row.distance(), row.backCompass());
+        setTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
+        setTabOrder(row.frontClino(), row.backCompass(), row.backClino());
 
-    if(index == 0) {
-        //Special case for this row
-        setTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
+        if(index == 0) {
+            //Special case for this row
+            setTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
+        } else {
+            setTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
+        }
+    } else if(HasFrontSights) {
+        //Has only backsights
+        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
+        setTabOrder(row.frontCompass(), row.distance(), row.frontClino());
+
+        if(index == 0) {
+            //Special case for this row
+            setTabOrder(row.frontClino(), row.frontCompass(), fromStationRow.left());
+        } else {
+            setTabOrder(row.frontClino(), row.frontCompass(), toStationRow.left());
+        }
+    } else if(HasBackSights) {
+        //Has only backsights
+        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
+        setTabOrder(row.backCompass(), row.distance(), row.backClino());
+
+        if(index == 0) {
+            //Special case for this row
+            setTabOrder(row.backClino(), row.backCompass(), fromStationRow.left());
+        } else {
+            setTabOrder(row.backClino(), row.backCompass(), toStationRow.left());
+        }
     } else {
-        setTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
+        //Doesn't have back or front
+        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
+        setTabOrder(row.backCompass(), row.distance(), row.backClino());
+
+        if(index == 0) {
+            //Special case for this row
+            setTabOrder(row.distance(), toStationRow.stationName(), fromStationRow.left());
+        } else {
+            setTabOrder(row.distance(), toStationRow.stationName(), toStationRow.left());
+        }
     }
 }
 
@@ -915,16 +969,28 @@ void cwSurveyChunkView::updateStationArrowNavigation(int index) {
     ShotRow previousShotRow = getShotRow(index - 1);
     ShotRow nextShotRow = getShotRow(index);
 
+    //Handle all the cases for backsite and frontsite
+    QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
+
     setArrowNavigation(currentRow.stationName(), NULL, previousShotRow.distance(), previousRow.stationName(), nextRow.stationName());
-    setArrowNavigation(currentRow.left(), previousShotRow.backClino(), currentRow.right(), previousRow.left(), nextRow.left());
+    setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
     setArrowNavigation(currentRow.right(), currentRow.left(), currentRow.up(), previousRow.right(), nextRow.right());
     setArrowNavigation(currentRow.up(), currentRow.right(), currentRow.down(), previousRow.up(), nextRow.up());
     setArrowNavigation(currentRow.down(), currentRow.up(), NULL, previousRow.down(), nextRow.down());
 
     if(index == 0) {
         //Special case
+
+        if(HasFrontSights) {
+            previousBox = nextShotRow.frontClino();
+        } else if(HasBackSights) {
+            previousBox = nextShotRow.backClino();
+        } else {
+            previousBox = nextShotRow.distance();
+        }
+
         setArrowNavigation(currentRow.stationName(), NULL, nextShotRow.distance(), previousRow.stationName(), nextRow.stationName());
-        setArrowNavigation(currentRow.left(), nextShotRow.frontClino(), currentRow.right(), previousRow.left(), nextRow.left());
+        setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
     }
 }
 
@@ -939,11 +1005,23 @@ void cwSurveyChunkView::updateShotArrowNavigaton(int index) {
     ShotRow row = getNavigationShotRow(index);
     ShotRow nextRow = getNavigationShotRow(index + 1);
 
-    setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
-    setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
-    setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
-    setArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
-    setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
+    if(HasFrontSights && HasBackSights) {
+        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
+        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
+        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
+        setArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
+        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
+    } else if(HasFrontSights) {
+        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
+        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.frontCompass(), nextRow.frontCompass());
+        setArrowNavigation(row.frontClino(), row.frontCompass(), toStationRow.left(), previousRow.frontClino(), nextRow.frontClino());
+    } else if(HasBackSights) {
+        setArrowNavigation(row.distance(), toStationRow.stationName(), row.backCompass(), previousRow.distance(), nextRow.distance());
+        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), previousRow.backCompass(), nextRow.backCompass());
+        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), previousRow.backClino(), nextRow.backClino());
+    } else {
+        setArrowNavigation(row.distance(), toStationRow.stationName(), toStationRow.left(), previousRow.distance(), nextRow.distance());
+    }
 }
 
 
@@ -1091,6 +1169,20 @@ bool cwSurveyChunkView::interfaceValid() {
     if(StationRows.empty() || ShotRows.empty()) { return false; }
     if(StationRows.size() - 1 != ShotRows.size()) { return false; }
     return true;
+}
+
+/**
+  Gets the box to the left of the left LRUD data box.
+  */
+QDeclarativeItem* cwSurveyChunkView::leftBoxOfLeftLRUD(const cwSurveyChunkView::ShotRow &shot)
+{
+    if(HasBackSights) {
+        return shot.backClino();
+    } else if(HasFrontSights) {
+        return shot.frontClino();
+    } else {
+        return shot.distance();
+    }
 }
 
 /**
