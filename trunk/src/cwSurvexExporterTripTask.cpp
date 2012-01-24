@@ -1,3 +1,4 @@
+//Our includes
 #include "cwSurvexExporterTripTask.h"
 #include "cwTrip.h"
 #include "cwStationReference.h"
@@ -59,6 +60,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
   This will write all the calibrations for the trip to the stream
   */
 void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations) {
+    writeLengthUnits(stream, calibrations->distanceUnit());
 
     writeCalibration(stream, "TAPE", calibrations->tapeCalibration());
     writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration());
@@ -72,8 +74,6 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCali
     writeCalibration(stream, "BACKCLINO", calibrations->backClinoCalibration(), backClinoScale);
 
     writeCalibration(stream, "DECLINATION", calibrations->declination());
-
-    writeLengthUnits(stream, calibrations->distanceUnit());
 }
 
 void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, float value, float scale) {
