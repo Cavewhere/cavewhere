@@ -12,7 +12,7 @@ Rectangle {
     Flickable {
         id: flickArea
 
-        contentHeight: teamTable.height + view.contentHeight + spaceAddBar.height
+        contentHeight: column.height
         width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth)
 
         anchors.top: parent.top
@@ -33,6 +33,7 @@ Rectangle {
             }
         }
         Column {
+            id: column
 
             spacing: 5
 
