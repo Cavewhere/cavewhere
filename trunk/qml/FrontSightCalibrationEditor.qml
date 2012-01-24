@@ -7,11 +7,9 @@ CheckableGroupBox {
 
     property Calibration calibration
 
-    anchors.left: parent.left
-    anchors.right: parent.right
     anchors.margins: 3
     contentHeight: frontSightContent.height
-    text: checked ? "<b>Front Sights</b>" : "Front Sights"
+    text: "<b>Front Sights</b>"
 
     Column {
         id: frontSightContent
@@ -19,43 +17,20 @@ CheckableGroupBox {
         anchors.right: parent.right
 
         Row {
-            spacing: 15
+            spacing: 3
 
-            Row {
-                spacing: 3
-
-                LabelWithHelp {
-                    id: compassCalibrationLabel
-                    text: "Compass calibration"
-                    helpArea: clinoCalibarationHelpArea
-                }
-
-                ClickTextInput {
-                    id: clinoCalInput
-                    text: Utils.fixed(calibration.frontCompassCalibration, 2)
-
-                    onFinishedEditting: {
-                        calibration.frontCompassCalibration = newText
-                    }
-                }
+            LabelWithHelp {
+                id: compassCalibrationLabel
+                text: "Compass calibration"
+                helpArea: compassCalibarationHelpArea
             }
 
-            Row {
-                spacing: 3
+            ClickTextInput {
+                id: clinoCalInput
+                text: Utils.fixed(calibration.frontCompassCalibration, 2)
 
-                LabelWithHelp {
-                    id: clinoCalibrationLabel
-                    text: "Clino calibration"
-                    helpArea: compassCalibarationHelpArea
-                }
-
-                ClickTextInput {
-                    id: compassCalInput
-                    text: Utils.fixed(calibration.frontClinoCalibration, 2)
-
-                    onFinishedEditting: {
-                        calibration.frontClinoCalibration = newText
-                    }
+                onFinishedEditting: {
+                    calibration.frontCompassCalibration = newText
                 }
             }
         }
@@ -66,6 +41,27 @@ CheckableGroupBox {
             anchors.right: parent.right
             text: "Help text for the compass calibration"
         }
+
+        Row {
+            spacing: 3
+
+            LabelWithHelp {
+                id: clinoCalibrationLabel
+                text: "Clino calibration"
+                helpArea: clinoCalibarationHelpArea
+            }
+
+            ClickTextInput {
+                id: compassCalInput
+                text: Utils.fixed(calibration.frontClinoCalibration, 2)
+
+                onFinishedEditting: {
+                    calibration.frontClinoCalibration = newText
+                }
+            }
+        }
+
+
 
         HelpArea {
             id: clinoCalibarationHelpArea

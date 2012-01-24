@@ -13,6 +13,7 @@
 #include "cwProjectImageProvider.h"
 #include "cwScrapManager.h"
 #include "cwGlobalDirectory.h"
+#include "cwGlobalQMLData.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -67,7 +68,8 @@ static QmlJsDebuggingEnabler enableDebuggingHelper;
 
 cwMainWindow::cwMainWindow(QWidget *parent) :
     QMainWindow(parent),
-    SurvexExporter(NULL)
+    SurvexExporter(NULL),
+    Data(new cwGlobalQMLData(this))
 {
     setupUi(this);
 
@@ -95,30 +97,16 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
-    //Create the project, this saves and load data
-    Project = new cwProject(this);
 
-    Region = Project->cavingRegion(); //new cwCavingRegion(this);
-    Region->setUndoStack(UndoStack);
+    Data->region()->setUndoStack(UndoStack);
 
-    RegionTreeModel = new cwRegionTreeModel(this);
-    RegionTreeModel->setCavingRegion(Region);
-
-    //Setup the loop closer
-    LinePlotManager = new cwLinePlotManager(this);
-    LinePlotManager->setRegion(Region);
-
-    //Setup the scrap manager
-    ScrapManager = new cwScrapManager(this);
-    ScrapManager->setProject(Project);
-    ScrapManager->setRegion(Region);
-    connect(actionCompute_Scraps, SIGNAL(triggered()), ScrapManager, SLOT(updateAllScraps()));
+    connect(actionCompute_Scraps, SIGNAL(triggered()), Data->scrapManager(), SLOT(updateAllScraps()));
 
     ExportThread = new QThread(this);
 
     reloadQML();
 
-    Project->load("bcc.cw");
+    Data->project()->load("bcc.cw");
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window
@@ -220,7 +208,7 @@ void cwMainWindow::openExportSurvexRegionFileDialog() {
 void cwMainWindow::exportSurvexRegion(QString filename) {
     cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
     exportTask->setOutputFile(filename);
-    exportTask->setData(*Region);
+    exportTask->setData(*(Data->region()));
     connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
     connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
     exportTask->setThread(ExportThread);
@@ -242,9 +230,9 @@ void cwMainWindow::openExportCompassCaveFileDialog() {
   */
 void cwMainWindow::exportCaveToCompass(QString filename) {
         if(filename.isEmpty()) { return; }
-        if(!Region->hasCaves()) { return; }
+        if(!Data->region()->hasCaves()) { return; }
 
-        cwCave* cave = Region->cave(0);
+        cwCave* cave = Data->region()->cave(0);
         if(cave != NULL) {
             cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
             exportTask->setOutputFile(filename);
@@ -260,7 +248,7 @@ void cwMainWindow::exportCaveToCompass(QString filename) {
   \brief Opens the suvrex import dialog
   */
 void cwMainWindow::importSurvex() {
-    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Region, this);
+    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Data->region(), this);
     survexImportDialog->setUndoStack(UndoStack);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     survexImportDialog->open();
@@ -282,19 +270,17 @@ void cwMainWindow::reloadQML() {
     QDeclarativeContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
+    //Register all the qml types
     cwQMLRegister::registerQML();
 
-    context->setContextProperty("regionModel", RegionTreeModel);
-    context->setContextProperty("region", Region);
-    context->setContextProperty("mainGLWidget", glWidget);
-    context->setContextProperty("linePlotManager", LinePlotManager);
-    context->setContextProperty("scrapManager", ScrapManager);
-    context->setContextProperty("project", Project);
+    //Update the data class
+    Data->setGLWidget(glWidget);
+    context->setContextObject(Data);
 
     //This allow to extra image data from the project's image database
     cwProjectImageProvider* imageProvider = new cwProjectImageProvider();
-    imageProvider->setProjectPath(Project->filename());
-    connect(Project, SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+    imageProvider->setProjectPath(Data->project()->filename());
+    connect(Data->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
     context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
 
     DeclarativeView->setSource(QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/CavewhereMainWindow.qml"));
@@ -377,7 +363,7 @@ void cwMainWindow::updateRedoText(QString redoText) {
   \brief Saves the project
   */
 void cwMainWindow::save() {
-    Project->save();
+    Data->project()->save();
 }
 
 /**
@@ -388,7 +374,7 @@ void cwMainWindow::load() {
     loadDialog->setFileMode(QFileDialog::ExistingFile);
     loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
     loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    loadDialog->open(Project, SLOT(load(QString)));
+    loadDialog->open(Data->project(), SLOT(load(QString)));
 }
 
 /**

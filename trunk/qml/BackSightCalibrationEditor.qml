@@ -8,11 +8,9 @@ CheckableGroupBox {
 
     property Calibration calibration
 
-    anchors.left: parent.left
-    anchors.right: parent.right
     anchors.margins: 3
     contentHeight: frontSightContent.height
-    text: checked ? "<b>Back Sights</b>" : "Back Sights"
+    text: "<b>Back Sights</b>"
 
     Column {
         id: frontSightContent
@@ -20,43 +18,20 @@ CheckableGroupBox {
         anchors.right: parent.right
 
         Row {
-            spacing: 15
+            spacing: 3
 
-            Row {
-                spacing: 3
-
-                LabelWithHelp {
-                    id: compassCalibrationLabel
-                    text: "Compass calibration"
-                    helpArea: clinoCalibarationHelpArea
-                }
-
-                ClickTextInput {
-                    id: clinoCalInput
-                    text: Utils.fixed(calibration.backCompassCalibration, 2)
-
-                    onFinishedEditting: {
-                        calibration.backCompassCalibration = newText
-                    }
-                }
+            LabelWithHelp {
+                id: compassCalibrationLabel
+                text: "Compass calibration"
+                helpArea: compassCalibarationHelpArea
             }
 
-            Row {
-                spacing: 3
+            ClickTextInput {
+                id: clinoCalInput
+                text: Utils.fixed(calibration.backCompassCalibration, 2)
 
-                LabelWithHelp {
-                    id: clinoCalibrationLabel
-                    text: "Clino calibration"
-                    helpArea: compassCalibarationHelpArea
-                }
-
-                ClickTextInput {
-                    id: compassCalInput
-                    text: Utils.fixed(calibration.backClinoCalibration, 2)
-
-                    onFinishedEditting: {
-                        calibration.backClinoCalibration = newText
-                    }
+                onFinishedEditting: {
+                    calibration.backCompassCalibration = newText
                 }
             }
         }
@@ -68,6 +43,25 @@ CheckableGroupBox {
             text: "Help text for the compass calibration"
         }
 
+        Row {
+            spacing: 3
+
+            LabelWithHelp {
+                id: clinoCalibrationLabel
+                text: "Clino calibration"
+                helpArea: clinoCalibarationHelpArea
+            }
+
+            ClickTextInput {
+                id: compassCalInput
+                text: Utils.fixed(calibration.backClinoCalibration, 2)
+
+                onFinishedEditting: {
+                    calibration.backClinoCalibration = newText
+                }
+            }
+        }
+
         HelpArea {
             id: clinoCalibarationHelpArea
             anchors.left: parent.left
@@ -75,24 +69,42 @@ CheckableGroupBox {
             text: "Help text for the clino calibration"
         }
 
-        Column {
-            spacing: 3
-            Desktop.CheckBox {
-                id: compassCorrected
-                text: "Corrected <i>Compass</i> Back Sights"
+        BreakLine {}
+
+        Row {
+            InformationButton {
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: {
+                    correctedCompassHelpArea.visible = !correctedCompassHelpArea.visible
+                }
             }
 
             Desktop.CheckBox {
-                id: clinoCorrected
-                text: "Corrected <i>Clino</i> Back Sights"
+                id: compassCorrected
+                text: "Corrected <i>Compass</i>"
             }
         }
+
 
         HelpArea {
             id: correctedCompassHelpArea
             anchors.left: parent.left
             anchors.right: parent.right
             text: "Help text for the corrected compass calibration"
+        }
+
+        Row {
+            InformationButton {
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: {
+                    correctedClinoHelpArea.visible = !correctedClinoHelpArea.visible
+                }
+            }
+
+            Desktop.CheckBox {
+                id: clinoCorrected
+                text: "Corrected <i>Clino</i>"
+            }
         }
 
         HelpArea {

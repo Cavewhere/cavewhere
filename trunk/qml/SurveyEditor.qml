@@ -4,11 +4,10 @@ import Cavewhere 1.0
 Rectangle {
     id: area
 
-    property alias currentTrip: view.trip
-
     anchors.fill: parent
 
-
+    property alias currentTrip: view.trip
+    property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
 
     Flickable {
         id: flickArea
@@ -47,7 +46,7 @@ Rectangle {
 
             CalibrationEditor {
                 width: view.contentWidth
-                calibration: currentTrip.calibration
+                calibration: currentTrip === null ? null : currentTrip.calibration
             }
 
             BreakLine { }
@@ -112,13 +111,13 @@ Rectangle {
         clip: true
     }
 
-    Keys.onSpacePressed: {
-        //Add chunk
-        currentTrip.addNewChunk();
-    }
+//    Keys.onSpacePressed: {
+//        //Add chunk
+//        currentTrip.addNewChunk();
+//    }
 
-    onVisibleChanged: {
-        focus = visible
-    }
+//    onVisibleChanged: {
+//        focus = visible
+//    }
 }
 

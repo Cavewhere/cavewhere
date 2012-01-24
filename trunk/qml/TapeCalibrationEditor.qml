@@ -7,11 +7,9 @@ GroupBox {
 
     property Calibration calibration
 
-    anchors.left: parent.left
-    anchors.right: parent.right
     anchors.margins: 3
     contentHeight: tapeContent.height
-    text: "Tape"
+    text: "Distance"
 
     Column {
         id: tapeContent

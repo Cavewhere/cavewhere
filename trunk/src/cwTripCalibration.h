@@ -23,8 +23,6 @@ class cwTripCalibration : public QObject
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
     Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
 
-
-
 public:
     explicit cwTripCalibration(QObject *parent = 0);
     cwTripCalibration(const cwTripCalibration& object);

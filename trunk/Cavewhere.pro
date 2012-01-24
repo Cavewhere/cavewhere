@@ -140,7 +140,8 @@ SOURCES += src/main.cpp \
     src/utils/cwTriangulate.cpp \
     src/cwGLScraps.cpp \
     src/cwGlobalDirectory.cpp \
-    src/cwImageTexture.cpp
+    src/cwImageTexture.cpp \
+    src/cwGlobalQMLData.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -263,7 +264,8 @@ HEADERS  += \
     src/utils/cwTriangulate.h \
     src/cwGLScraps.h \
     src/cwGlobalDirectory.h \
-    src/cwImageTexture.h
+    src/cwImageTexture.h \
+    src/cwGlobalQMLData.h
 
 
 FORMS    += src/cwMainWindow.ui \
@@ -352,7 +354,9 @@ OTHER_FILES += \
     qml/GroupBox.qml \
     qml/TapeCalibrationEditor.qml \
     qml/FrontSightCalibrationEditor.qml \
-    qml/BackSightCalibrationEditor.qml
+    qml/BackSightCalibrationEditor.qml \
+    qml/DeclainationEditor.qml \
+    qml/InformationButton.qml
 
 RESOURCES += \
     icons.qrc

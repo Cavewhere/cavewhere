@@ -17,6 +17,7 @@ Item {
     Rectangle {
         id: checkBoxGroup
         border.width: 1
+        border.color: "gray"
         radius: style.floatingWidgetRadius
         color: "#00000000"
 

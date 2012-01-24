@@ -7,7 +7,7 @@ Rectangle {
     id: calibrationEditor
     property Calibration calibration
 
-//    color: style.floatingWidgetColor
+    //    color: style.floatingWidgetColor
     radius: 8
     height: childrenRect.height
 
@@ -26,50 +26,88 @@ Rectangle {
             text: "Calibration"
         }
 
-        Row {
-
-            anchors.left: parent.left
-            anchors.leftMargin: 6
-
-            spacing: 3
-
-            LabelWithHelp {
-                id: declination
-                text: "Declination"
-                helpArea: declinationHelp
-            }
-
-            ClickTextInput {
-                id: tapeCalInput
-                text: Utils.fixed(calibration.declination, 2)
-
-                onFinishedEditting: {
-                    calibration.declination = newText
-                }
-            }
-        }
-
-        HelpArea {
-            id: declinationHelp
-            text: "Declination help"
+        Item {
             anchors.left: parent.left
             anchors.right: parent.right
+            height: childrenRect.height
+
+            DeclainationEditor {
+                calibration: calibrationEditor.calibration
+                anchors.left: parent.left
+                anchors.right: parent.horizontalCenter
+            }
+
+            //            Column {
+            //                anchors.left: parent.left
+            //                anchors.right: parent.horizontalCenter
+            //                anchors.top: parent.top
+            //                anchors.topMargin: 15
+
+            //                Row {
+            //                    spacing: 3
+
+            //                    anchors.horizontalCenter: parent.horizontalCenter
+
+            //                    LabelWithHelp {
+            //                        id: declination
+            //                        text: "Declination"
+            //                        helpArea: declinationHelp
+            //                    }
+
+            //                    ClickTextInput {
+            //                        id: tapeCalInput
+            //                        text: Utils.fixed(calibration.declination, 2)
+
+            //                        onFinishedEditting: {
+            //                            calibration.declination = newText
+            //                        }
+            //                    }
+
+
+            //                }
+
+            //                HelpArea {
+            //                    id: declinationHelp
+            //                    text: "Declination help"
+            //                    anchors.left: parent.left
+            //                    anchors.right: parent.right
+            //                }
+            //            }
+
+            TapeCalibrationEditor {
+                id: tapeEditor
+                calibration: calibrationEditor.calibration
+                anchors.left: parent.horizontalCenter
+                anchors.right: parent.right
+            }
         }
 
-        TapeCalibrationEditor {
-            calibration: calibrationEditor.calibration
-        }
 
-        FrontSightCalibrationEditor {
-            id: frontSightCalibrationEditor
-            calibration: calibrationEditor.calibration
-            contentsVisible: checked
-        }
 
-        BackSightCalibrationEditor {
-            id: backSightCalibrationEditor
-            calibration: calibrationEditor.calibration
-            contentsVisible: checked
+
+        Item {
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            height: childrenRect.height
+
+            FrontSightCalibrationEditor {
+                id: frontSightCalibrationEditor
+                calibration: calibrationEditor.calibration
+                contentsVisible: checked
+
+                anchors.left: parent.left
+                anchors.right: parent.horizontalCenter
+            }
+
+            BackSightCalibrationEditor {
+                id: backSightCalibrationEditor
+                calibration: calibrationEditor.calibration
+                contentsVisible: checked
+
+                anchors.left: parent.horizontalCenter
+                anchors.right: parent.right
+            }
         }
     }
 }

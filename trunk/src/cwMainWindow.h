@@ -6,16 +6,8 @@
 #include "ui_cwMainWindow.h"
 class cwSurvexImporter;
 class cwSurvexExporter;
-class cwTrip;
-class cwCave;
-class cwSurveyNoteModel;
 class cwImportSurvexDialog;
-class cwCavingRegion;
-class cwRegionTreeModel;
-class cwLinePlotManager;
-class cwProject;
-class cwProjectImageProvider;
-class cwScrapManager;
+class cwGlobalQMLData;
 
 //Qt includes
 #include <QString>
@@ -63,18 +55,10 @@ protected slots:
 private:
     cwSurvexExporter* SurvexExporter;
 
-    //Survey data
-    cwCavingRegion* Region;
-    cwRegionTreeModel* RegionTreeModel;
-    //QTreeView* RegionTreeView;
+    //The global objects that all qml objects have access to
+    cwGlobalQMLData* Data;
 
     QThread* ExportThread;
-
-    //Loop closer manager
-    cwLinePlotManager* LinePlotManager;
-
-    //The scrap manager that generates all the opengl scrap geometry
-    cwScrapManager* ScrapManager;
 
     //For undo and redo
     QAction* UndoAction;
@@ -82,9 +66,6 @@ private:
 
     //Undo / redo
     QUndoStack* UndoStack;
-
-    //Save / Load
-    cwProject* Project;
 
     QGLWidget* createGLWidget();
     void initGLEW();

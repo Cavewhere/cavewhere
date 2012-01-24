@@ -54,5 +54,7 @@
         <file>icons/nextUnPressArrow.png</file>
         <file>icons/previousPressed.png</file>
         <file>icons/previousUnPressArrow.png</file>
+        <file>icons/Information.png</file>
+        <file>icons/InformationDark.png</file>
     </qresource>
 </RCC>
