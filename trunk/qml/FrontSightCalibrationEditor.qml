@@ -4,12 +4,22 @@ import Cavewhere 1.0
 import "Utils.js" as Utils
 
 CheckableGroupBox {
+    id: calibrationEditor
 
     property Calibration calibration
 
     anchors.margins: 3
     contentHeight: frontSightContent.height
     text: "<b>Front Sights</b>"
+    checked: calibration.frontSights
+
+    onCalibrationChanged: {
+        checked = calibration.frontSights
+    }
+
+    onCheckedChanged: {
+        calibration.frontSights = checked
+    }
 
     Column {
         id: frontSightContent

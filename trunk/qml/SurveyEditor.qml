@@ -36,17 +36,17 @@ Rectangle {
 
             spacing: 5
 
-            TeamTable {
-                id: teamTable
-                model: currentTrip !== null ? currentTrip.team : null
+            CalibrationEditor {
                 width: view.contentWidth
+                calibration: currentTrip === null ? null : currentTrip.calibration
             }
 
             BreakLine { }
 
-            CalibrationEditor {
+            TeamTable {
+                id: teamTable
+                model: currentTrip !== null ? currentTrip.team : null
                 width: view.contentWidth
-                calibration: currentTrip === null ? null : currentTrip.calibration
             }
 
             BreakLine { }

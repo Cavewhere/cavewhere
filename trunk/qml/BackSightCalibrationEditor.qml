@@ -11,6 +11,17 @@ CheckableGroupBox {
     anchors.margins: 3
     contentHeight: frontSightContent.height
     text: "<b>Back Sights</b>"
+    checked: calibration.backSights
+
+    onCalibrationChanged: {
+        checked = calibration.backSights
+        compassCorrected.checked = calibration.correctedCompassBacksight
+        clinoCorrected.checked = calibration.correctedClinoBacksight
+    }
+
+    onCheckedChanged: {
+        calibration.backSights = checked
+    }
 
     Column {
         id: frontSightContent
@@ -82,6 +93,12 @@ CheckableGroupBox {
             Desktop.CheckBox {
                 id: compassCorrected
                 text: "Corrected <i>Compass</i>"
+
+                checked: calibration.correctedCompassBacksight
+
+                onCheckedChanged: {
+                    calibration.correctedCompassBacksight = checked
+                }
             }
         }
 
@@ -104,6 +121,12 @@ CheckableGroupBox {
             Desktop.CheckBox {
                 id: clinoCorrected
                 text: "Corrected <i>Clino</i>"
+
+                checked: calibration.correctedClinoBacksight
+
+                onCheckedChanged: {
+                    calibration.correctedClinoBacksight = checked
+                }
             }
         }
 

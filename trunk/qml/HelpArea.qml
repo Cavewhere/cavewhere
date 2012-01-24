@@ -4,6 +4,9 @@ Rectangle {
     id: helpArea
 
     property alias text: helpText.text
+    property alias imageSource: icon.source
+    property bool animationToVisible: true
+    property bool animationToInvisible: true
 
     color: "gray"
     height: 0
@@ -22,11 +25,22 @@ Rectangle {
         }
     }
 
+    Image {
+        id: icon
+        anchors.left: parent.left
+        anchors.leftMargin: 5
+        anchors.verticalCenter: parent.verticalCenter
+        source: "qrc:icons/Information20x20.png"
+        width: sourceSize.width
+        height: sourceSize.height
+
+    }
+
     Text {
         id: helpText
 
         //anchors.top: parent.top
-        anchors.left: parent.left
+        anchors.left: icon.right
         anchors.right: parent.right
         anchors.margins: 5
         anchors.verticalCenter: parent.verticalCenter
@@ -59,13 +73,14 @@ Rectangle {
             to: "VISIBLE"
 
             SequentialAnimation {
+
                 PropertyAction { target: privateData; property: "inTransition"; value: true }
                 PropertyAnimation {
                     target: helpArea
                     property: "height"
                     from: 0
                     to: helpText.height + 10
-                    duration: 200
+                    duration: animationToVisible ? 200 : 0
                 }
                 PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
@@ -76,6 +91,7 @@ Rectangle {
             to: ""
 
             SequentialAnimation {
+
                 PropertyAction { target: privateData; property: "inTransition"; value: true }
                 PropertyAction { target: helpArea; property: "visible"; value: true }
 
@@ -83,7 +99,7 @@ Rectangle {
                     target: helpArea
                     property: "height"
                     to: 0
-                    duration: 200
+                    duration: animationToInvisible ? 200 : 0
                 }
 
                 PropertyAction { target: helpArea; property: "visible"; value: false }

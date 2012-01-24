@@ -356,7 +356,8 @@ OTHER_FILES += \
     qml/FrontSightCalibrationEditor.qml \
     qml/BackSightCalibrationEditor.qml \
     qml/DeclainationEditor.qml \
-    qml/InformationButton.qml
+    qml/InformationButton.qml \
+    qml/ErrorHelpArea.qml
 
 RESOURCES += \
     icons.qrc

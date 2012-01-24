@@ -34,7 +34,7 @@ BOOST_CLASS_VERSION(cwStation, 1)
 BOOST_CLASS_VERSION(cwTrip, 1)
 BOOST_CLASS_VERSION(cwSurveyNoteModel, 1)
 BOOST_CLASS_VERSION(cwImage, 1)
-BOOST_CLASS_VERSION(cwTripCalibration, 1)
+BOOST_CLASS_VERSION(cwTripCalibration, 2)
 BOOST_CLASS_VERSION(cwSurveyChunk, 1)
 BOOST_CLASS_VERSION(cwStationReference, 1)
 BOOST_CLASS_VERSION(cwShot, 1)
@@ -346,7 +346,8 @@ namespace boost {
 
     ////////////////////////// cwTripCalibration //////////////////////////
     template<class Archive>
-    void save(Archive &archive, const cwTripCalibration &calibration, const unsigned int) {
+    void save(Archive &archive, const cwTripCalibration &calibration, const unsigned int version) {
+        Q_UNUSED(version)
 
         bool CorrectedCompassBacksight = calibration.hasCorrectedCompassBacksight();
         bool CorrectedClinoBacksight = calibration.hasCorrectedClinoBacksight();
@@ -357,6 +358,8 @@ namespace boost {
         float BackClinoCalibration= calibration.backClinoCalibration();
         float Declination = calibration.declination();
         int DistanceUnit = (int)calibration.distanceUnit();
+        bool hasFrontSights = calibration.hasFrontSights();
+        bool hasBackSights = calibration.hasBackSights();
 
         archive << BOOST_SERIALIZATION_NVP(CorrectedCompassBacksight);
         archive << BOOST_SERIALIZATION_NVP(CorrectedClinoBacksight);
@@ -367,10 +370,13 @@ namespace boost {
         archive << BOOST_SERIALIZATION_NVP(BackClinoCalibration);
         archive << BOOST_SERIALIZATION_NVP(Declination);
         archive << BOOST_SERIALIZATION_NVP(DistanceUnit);
+        archive << BOOST_SERIALIZATION_NVP(hasFrontSights);
+        archive << BOOST_SERIALIZATION_NVP(hasBackSights);
     }
 
     template<class Archive>
-    void load(Archive &archive, cwTripCalibration &calibration, const unsigned int) {
+    void load(Archive &archive, cwTripCalibration &calibration, const unsigned int version) {
+
         bool CorrectedCompassBacksight = false;
         bool CorrectedClinoBacksight = false;
         float TapeCalibration = 0.0;
@@ -400,6 +406,17 @@ namespace boost {
         calibration.setBackClinoCalibration(BackClinoCalibration);
         calibration.setDeclination(Declination);
         calibration.setDistanceUnit((cwUnits::LengthUnit)DistanceUnit);
+
+        if(version == 2) {
+            bool hasFrontSights;
+            bool hasBackSights;
+
+            archive >> BOOST_SERIALIZATION_NVP(hasFrontSights);
+            archive >> BOOST_SERIALIZATION_NVP(hasBackSights);
+
+            calibration.setFrontSights(hasFrontSights);
+            calibration.setBackSights(hasBackSights);
+        }
     }
 
     //////////////////////// cwSurveyChunk ////////////////////////////////

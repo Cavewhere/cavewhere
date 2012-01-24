@@ -12,6 +12,8 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
     BackClinoCalibration = 0.0f;
     Declination = 0.0f;
     DistanceUnit = cwUnits::Meters;
+    FrontSights = true;
+    BackSights = true;
 }
 
 /**
@@ -44,6 +46,8 @@ cwTripCalibration& cwTripCalibration::copy(const cwTripCalibration& object) {
     BackClinoCalibration = object.BackClinoCalibration;
     Declination = object.Declination;
     DistanceUnit = object.DistanceUnit;
+    FrontSights = object.FrontSights;
+    BackSights = object.BackSights;
 
     return *this;
 }
@@ -52,6 +56,7 @@ void cwTripCalibration::setCorrectedCompassBacksight(bool isCorrected) {
     if(isCorrected != CorrectedCompassBacksight) {
         CorrectedCompassBacksight = isCorrected;
         emit correctedCompassBacksightChanged(isCorrected);
+        emit calibrationsChanged();
     }
 }
 
@@ -59,6 +64,7 @@ void cwTripCalibration::setCorrectedClinoBacksight(bool isCorrected) {
     if(isCorrected != CorrectedClinoBacksight) {
         CorrectedClinoBacksight = isCorrected;
         emit correctedClinoBacksightChanged(isCorrected);
+        emit calibrationsChanged();
     }
 }
 
@@ -66,6 +72,7 @@ void cwTripCalibration::setTapeCalibration(double tapeCalibration) {
     if(tapeCalibration != TapeCalibration) {
         TapeCalibration = tapeCalibration;
         emit tapeCalibrationChanged(TapeCalibration);
+        emit calibrationsChanged();
     }
 }
 
@@ -73,6 +80,7 @@ void cwTripCalibration::setFrontCompassCalibration(double calibration) {
     if(FrontCompassCalibration != calibration) {
         FrontCompassCalibration = calibration;
         emit frontCompassCalibrationChanged(FrontCompassCalibration);
+        emit calibrationsChanged();
     }
 }
 
@@ -80,6 +88,7 @@ void cwTripCalibration::setFrontClinoCalibration(double calibration) {
     if(FrontClinoCalibration != calibration) {
         FrontClinoCalibration = calibration;
         emit frontClinoCalibrationChanged(FrontClinoCalibration);
+        emit calibrationsChanged();
     }
 }
 
@@ -87,6 +96,7 @@ void cwTripCalibration::setBackCompassCalibration(double calibration) {
     if(BackCompasssCalibration != calibration) {
         BackCompasssCalibration = calibration;
         emit backCompassCalibrationChanged(BackCompasssCalibration);
+        emit calibrationsChanged();
     }
 }
 
@@ -94,6 +104,7 @@ void cwTripCalibration::setBackClinoCalibration(double calibration) {
     if(BackClinoCalibration != calibration) {
         BackClinoCalibration = calibration;
         emit backClinoCalibrationChanged(BackClinoCalibration);
+        emit calibrationsChanged();
     }
 }
 
@@ -101,6 +112,7 @@ void cwTripCalibration::setDeclination(double declination) {
     if(Declination != declination) {
         Declination = declination;
         emit declinationChanged(Declination);
+        emit calibrationsChanged();
     }
 }
 
@@ -108,6 +120,7 @@ void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit unit) {
     if(DistanceUnit != unit) {
         DistanceUnit = unit;
         emit distanceUnitChanged(unit);
+        emit calibrationsChanged();
     }
 }
 
@@ -150,5 +163,26 @@ int cwTripCalibration::mapToSupportUnit(int lengthUnit)
         return -1;
     }
 
+}
+
+/**
+Sets frontSights
+*/
+void cwTripCalibration::setFrontSights(bool frontSights) {
+    if(FrontSights != frontSights) {
+        FrontSights = frontSights;
+        emit frontSightsChanged();
+    }
+}
+
+
+/**
+Sets backSights
+*/
+void cwTripCalibration::setBackSights(bool backSights) {
+    if(BackSights != backSights) {
+        BackSights = backSights;
+        emit backSightsChanged();
+    }
 }
 

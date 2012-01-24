@@ -9,7 +9,7 @@ Item {
     property alias text: checkbox.text
     property bool contentsVisible: true
     property int contentHeight
-    default property alias contentChildren: contentArea.children
+    default property alias contentData: contentArea.data
 
     height: contentsVisible ? checkbox.height + contentHeight + 3 : checkbox.height
 

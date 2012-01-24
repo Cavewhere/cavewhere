@@ -22,6 +22,8 @@ class cwTripCalibration : public QObject
     Q_PROPERTY(double declination READ declination WRITE setDeclination NOTIFY declinationChanged)
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
     Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
+    Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
+    Q_PROPERTY(bool backSights READ hasBackSights WRITE setBackSights NOTIFY backSightsChanged)
 
 public:
     explicit cwTripCalibration(QObject *parent = 0);
@@ -55,6 +57,13 @@ public:
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit unit);
 
+    bool hasBackSights() const;
+    void setBackSights(bool hasBackSights);
+
+    bool hasFrontSights() const;
+    void setFrontSights(bool hasFrontSights);
+
+
     QStringList supportedUnits() const;
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
@@ -71,6 +80,9 @@ signals:
     void declinationChanged(double declination);
     void distanceUnitChanged(cwUnits::LengthUnit unit);
     void supportedUnitsChanged();
+    void frontSightsChanged();
+    void backSightsChanged();
+    void calibrationsChanged(); //Emited when ever any of calibrations have changed
 
 public slots:
 
@@ -84,6 +96,8 @@ private:
     double BackClinoCalibration;
     double Declination;
     cwUnits::LengthUnit DistanceUnit;
+    bool BackSights; //!<
+    bool FrontSights; //!<
 
     cwTripCalibration& copy(const cwTripCalibration& object);
 };
@@ -124,6 +138,19 @@ inline cwUnits::LengthUnit cwTripCalibration::distanceUnit() const {
     return DistanceUnit;
 }
 
+/**
+    Gets frontSights, this returns true if the trip is using front sights
+*/
+inline bool cwTripCalibration::hasFrontSights() const {
+    return FrontSights;
+}
+
+/**
+Gets backSights
+*/
+inline bool cwTripCalibration::hasBackSights() const {
+    return BackSights;
+}
 
 
 #endif // CWTRIPCALIBRATION_H
