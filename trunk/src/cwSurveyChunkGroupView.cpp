@@ -364,7 +364,11 @@ void cwSurveyChunkGroupView::UpdateChunkHeight() {
   will be in the visible area
   */
 void cwSurveyChunkGroupView::SetEnsureVisibleRect(QRectF rect) {
-    EnsureVisibleArea = rect;
+    float extraHeight = cwSurveyChunkView::elementHeight() * 3;
+    rect.setHeight(rect.height() + extraHeight);
+    rect.moveTop(rect.top() - extraHeight / 2.0);
+
+    EnsureVisibleArea = mapRectToParent(rect);
     emit ensureVisibleRectChanged();
 }
 

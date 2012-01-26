@@ -49,6 +49,7 @@ public:
     Q_INVOKABLE void tab(int rowIndex, int role);
     Q_INVOKABLE void previousTab(int rowIndex, int role);
     Q_INVOKABLE void navigationArrow(int rowIndex, int role, int key);
+    Q_INVOKABLE void ensureDataBoxVisible(int rowIndex, int role);
 
 signals:
     void modelChanged();
@@ -210,8 +211,6 @@ private:
 
     bool interfaceValid();
 
-    QDeclarativeItem* leftBoxOfLeftLRUD(const ShotRow& shot);
-
     QDeclarativeItem* tabFromStation(int rowIndex);
     QDeclarativeItem* tabFromClino(int rowIndex);
     QDeclarativeItem* tabFromBackClino(int rowIndex);
@@ -227,6 +226,8 @@ private:
     QDeclarativeItem* navArrowUpDown(int rowIndex, int role, Qt::Key key);
 
     void setItemFocus(QDeclarativeItem* item);
+
+    QDeclarativeItem* databox(int rowIndex, int role);
 
 };
 

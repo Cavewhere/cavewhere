@@ -232,6 +232,15 @@ void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
     setItemFocus(navItem);
 }
 
+void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
+    QDeclarativeItem* dataBox = databox(rowIndex, role);
+    if(dataBox != NULL) {
+        QRectF localRect = dataBox->mapRectToParent(dataBox->childrenBoundingRect());
+        QRectF parentRect = mapRectToParent(localRect);
+        emit ensureVisibleChanged(parentRect);
+    }
+}
+
 /**
   Moves the focus to the left
   */
@@ -412,6 +421,36 @@ void cwSurveyChunkView::setItemFocus(QDeclarativeItem *item) {
     if(item != NULL) {
         item->setFocus(true);
     }
+}
+
+/**
+  Gets the data box at rowIndex and role
+  */
+QDeclarativeItem *cwSurveyChunkView::databox(int rowIndex, int role)
+{
+    switch((cwSurveyChunk::DataRole)role) {
+    case cwSurveyChunk::StationNameRole:
+        return getNavigationStationRow(rowIndex).stationName();
+    case cwSurveyChunk::ShotDistanceRole:
+        return getNavigationShotRow(rowIndex).distance();
+    case cwSurveyChunk::ShotCompassRole:
+        return getNavigationShotRow(rowIndex).frontCompass();
+    case cwSurveyChunk::ShotBackCompassRole:
+        return getNavigationShotRow(rowIndex).backCompass();
+    case cwSurveyChunk::ShotClinoRole:
+        return getNavigationShotRow(rowIndex).frontClino();
+    case cwSurveyChunk::ShotBackClinoRole:
+        return getNavigationShotRow(rowIndex).backClino();
+    case cwSurveyChunk::StationLeftRole:
+        return getNavigationStationRow(rowIndex).left();
+    case cwSurveyChunk::StationRightRole:
+        return getNavigationStationRow(rowIndex).right();
+    case cwSurveyChunk::StationUpRole:
+        return getNavigationStationRow(rowIndex).up();
+    case cwSurveyChunk::StationDownRole:
+        return getNavigationStationRow(rowIndex).down();
+    }
+    return NULL;
 }
 
 /**
@@ -1038,7 +1077,7 @@ void cwSurveyChunkView::setChildActiveFocus(bool focus) {
     if(FocusedItem != NULL) {
         QRectF localRect = FocusedItem->mapRectToParent(FocusedItem->childrenBoundingRect());
         QRectF parentRect = mapRectToParent(localRect);
-        ensureVisibleChanged(parentRect);
+        emit ensureVisibleChanged(parentRect);
     }
 }
 
@@ -1230,20 +1269,6 @@ bool cwSurveyChunkView::interfaceValid() {
     if(StationRows.empty() || ShotRows.empty()) { return false; }
     if(StationRows.size() - 1 != ShotRows.size()) { return false; }
     return true;
-}
-
-/**
-  Gets the box to the left of the left LRUD data box.
-  */
-QDeclarativeItem* cwSurveyChunkView::leftBoxOfLeftLRUD(const cwSurveyChunkView::ShotRow &shot)
-{
-    if(HasBackSights) {
-        return shot.backClino();
-    } else if(HasFrontSights) {
-        return shot.frontClino();
-    } else {
-        return shot.distance();
-    }
 }
 
 /**

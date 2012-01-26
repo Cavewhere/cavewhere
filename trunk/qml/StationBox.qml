@@ -6,6 +6,9 @@ DataBox {
 
     onFocusChanged: {
         if(focus) {
+            //Make sure it's visible to the user
+            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+
             var lastStationIndex = surveyChunk.stationCount() - 1
 
             //Try to guess for new stations what the next station is

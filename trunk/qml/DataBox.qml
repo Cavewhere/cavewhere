@@ -144,6 +144,12 @@ Item {
         deletePressed()
     }
 
+    onFocusChanged: {
+        if(focus) {
+            //Make sure it's visible to the user
+            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+        }
+    }
 
     states: [
 
