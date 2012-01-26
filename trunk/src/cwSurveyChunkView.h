@@ -48,6 +48,7 @@ public:
 
     Q_INVOKABLE void tab(int rowIndex, int role);
     Q_INVOKABLE void previousTab(int rowIndex, int role);
+    Q_INVOKABLE void navigationArrow(int rowIndex, int role, int key);
 
 signals:
     void modelChanged();
@@ -234,6 +235,14 @@ private:
     QDeclarativeItem* tabFromDown(int rowIndex);
     QDeclarativeItem* previousTabFromStation(int rowIndex);
     QDeclarativeItem* previousTabFromLeft(int rowIndex);
+
+    QDeclarativeItem* navArrowLeft(int rowIndex, int role);
+    QDeclarativeItem* navArrowRight(int rowIndex, int role);
+    QDeclarativeItem* navArrowUp(int rowIndex, int role);
+    QDeclarativeItem* navArrowDown(int rowIndex, int role);
+    QDeclarativeItem* navArrowUpDown(int rowIndex, int role, Qt::Key key);
+
+    void setItemFocus(QDeclarativeItem* item);
 
 };
 

@@ -13,8 +13,8 @@ NavigationRectangle {
     property int rowIndex: -1
     property int dataRole
 
-//    signal rightClicked(int index)
-//    signal splitOn(int index)
+    //    signal rightClicked(int index)
+    //    signal splitOn(int index)
 
     //color : Qt.rgba(201, 230, 245, 255);
 
@@ -30,6 +30,17 @@ NavigationRectangle {
         dataValue = '';
         editor.openEditor();
         state = 'MiddleTyping';
+    }
+
+    function handleTab(event) {
+        if(event.key === Qt.Key_Tab) {
+            surveyChunkView.tab(rowIndex, dataRole)
+            event.accepted = true
+        } else if(event.key === 1 + Qt.Key_Tab) {
+            //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
+            surveyChunkView.previousTab(rowIndex, dataRole)
+            event.accepted = true
+        }
     }
 
     MouseArea {
@@ -101,28 +112,19 @@ NavigationRectangle {
     }
 
     Keys.onPressed: {
-        if(event.key === Qt.Key_Tab) {
-            surveyChunkView.tab(rowIndex, dataRole)
-        } else if(event.key === 1 + Qt.Key_Tab) {
-            //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            surveyChunkView.previousTab(rowIndex, dataRole)
+        handleTab(event);
+        surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
+
+        if(event.key === Qt.Key_Backspace) {
+            deletePressed();
+            return;
         }
 
-//        NavigationHandler.handleTabEvent(event, dataBox);
-        NavigationHandler.handleArrowEvent(event, dataBox);
-
-        if(!event.accepted) {
-            if(event.key === Qt.Key_Backspace) {
-                deletePressed();
-                return;
-            }
-
-            if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
-                dataBox.state = 'MiddleTyping'
-                editor.openEditor()
-                globalShadowTextInput.textInput.text  = event.text
-                globalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
-            }
+        if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
+            dataBox.state = 'MiddleTyping'
+            editor.openEditor()
+            globalShadowTextInput.textInput.text  = event.text
+            globalShadowTextInput.clearSelection() //GlobalShowTextInput is what's opened from editor.openEditor
         }
     }
 
@@ -152,15 +154,15 @@ NavigationRectangle {
                 target: globalShadowTextInput.textInput
                 Keys.onPressed: {
                     if(event.key === Qt.Key_Tab ||
-                       event.key === 1 + Qt.Key_Tab ||
-                           event.key === Qt.Key_Space)
-                            //||
-//                            event.key === Qt.Key_Left ||
-//                            event.key === Qt.Key_Right ||
-//                            event.key === Qt.Key_Up ||
-//                            event.key === Qt.Key_Down)
+                            event.key === 1 + Qt.Key_Tab ||
+                            event.key === Qt.Key_Space)
+                        //||
+                        //                            event.key === Qt.Key_Left ||
+                        //                            event.key === Qt.Key_Right ||
+                        //                            event.key === Qt.Key_Up ||
+                        //                            event.key === Qt.Key_Down)
                     {
-                            editor.commitChanges()
+                        editor.commitChanges()
                     }
 
                     if(event.key === Qt.Key_Space) {
@@ -170,8 +172,9 @@ NavigationRectangle {
                     //Use teh default keyhanding that the GlobalShadowTextInput has
                     defaultKeyHandling(event);
 
-                    NavigationHandler.handleTabEvent(event, dataBox);
-//                    NavigationHandler.handleArrowEvent(event, dataBox);
+                    dataBox.handleTab(event);
+//                    NavigationHandler.handleTabEvent(event, dataBox);
+//                    //                    NavigationHandler.handleArrowEvent(event, dataBox);
                     if(event.accepted) {
                         //Have the editor commit changes
                         dataBox.state = ''; //Default state
