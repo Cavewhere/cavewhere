@@ -161,12 +161,6 @@ private:
     //This is called when station data is changed for this view
     QMap<cwStationReference, int> StationToIndex;
 
-    //Stations and shots are added to the navigation queue
-    //When the are added and remove.  The navigation queue
-    //The navigation queues are checked by UpdateNavigation()
-    QList<int> StationNavigationQueue;
-    QList<int> ShotNavigationQueue;
-
     //Where all the survey chunk view's delegates are stored
     cwSurveyChunkViewComponents* QMLComponents;
 
@@ -198,16 +192,6 @@ private:
     void positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
 
     void positionShotRow(ShotRow row, int index);
-
-    void updateNavigation();
-    void updateAllNavigation();
-    void updateStationTabNavigation(int index);
-    void updateShotTabNavigation(int index);
-    void lrudTabNavigation(StationRow row, QDeclarativeItem* previous, QDeclarativeItem* next);
-    void setTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next);
-    void updateStationArrowNavigation(int index);
-    void updateShotArrowNavigaton(int index);
-    void setArrowNavigation(QDeclarativeItem* item, QDeclarativeItem* left, QDeclarativeItem* right, QDeclarativeItem* up, QDeclarativeItem* down);
 
     ShotRow getShotRow(int index);
     ShotRow getNavigationShotRow(int index);
