@@ -34,7 +34,7 @@ cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
 }
 
 cwSurveyChunkView::~cwSurveyChunkView() {
-
+//    qDebug() << "I'm destroyed " << this;
 }
 
 /**
@@ -98,6 +98,77 @@ void cwSurveyChunkView::setNavigation(const cwSurveyChunkView* above, const cwSu
 
 void cwSurveyChunkView::setQMLComponents(cwSurveyChunkViewComponents* components) {
     QMLComponents = components;
+}
+
+/**
+  This tabs to the next databox
+
+  This uses adapted tabbing techinque that tries to tab to the next logical, empty
+  cell. This function might get evil...
+  */
+void cwSurveyChunkView::tab(int rowIndex, int role) {
+    QDeclarativeItem* nextItem = NULL;
+
+    ShotRow shotRow = getNavigationShotRow(rowIndex);
+    StationRow stationRow = getNavigationStationRow(rowIndex);
+
+    switch((cwSurveyChunk::DataRole)role) {
+    case cwSurveyChunk::StationNameRole:
+        nextItem = tabFromStation(rowIndex);
+        break;
+    case cwSurveyChunk::ShotDistanceRole:
+        if(HasFrontSights) {
+            nextItem = shotRow.frontCompass();
+        } else {
+            nextItem = shotRow.backCompass();
+        }
+        break;
+    case cwSurveyChunk::ShotCompassRole:
+        if(HasBackSights) {
+            nextItem = shotRow.backCompass();
+        } else {
+            nextItem = shotRow.frontClino();
+        }
+        break;
+    case cwSurveyChunk::ShotBackCompassRole:
+        if(HasFrontSights) {
+            nextItem = shotRow.frontClino();
+        } else {
+            nextItem = shotRow.backClino();
+        }
+        break;
+    case cwSurveyChunk::ShotClinoRole:
+        nextItem = tabFromClino(rowIndex);
+        break;
+    case cwSurveyChunk::ShotBackClinoRole:
+        nextItem = tabFromBackClino(rowIndex);
+        break;
+    case cwSurveyChunk::StationLeftRole:
+        nextItem = stationRow.right();
+        break;
+    case cwSurveyChunk::StationRightRole:
+        nextItem = stationRow.up();
+        break;
+    case cwSurveyChunk::StationUpRole:
+        nextItem = stationRow.down();
+        break;
+    case cwSurveyChunk::StationDownRole:
+        nextItem = tabFromDown(rowIndex);
+        break;
+    }
+
+    if(nextItem != NULL) {
+        nextItem->setProperty("focus", true);
+    }
+}
+
+/**
+  This tabs to the next databox
+  */
+void cwSurveyChunkView::previousTab(int rowIndex, int role) {
+    QDeclarativeItem* previousItem = NULL;
+
+
 }
 
 /**
@@ -575,12 +646,13 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
 
     Items[Down] = setupItem(components->downDelegate(),
                             context,
-                           cwSurveyChunk::StationDownRole,
-                           components->lrudValidator());
+                            cwSurveyChunk::StationDownRole,
+                            components->lrudValidator());
 
     foreach(QDeclarativeItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
+        item->setProperty("surveyChunkView", QVariant::fromValue(view));
         item->setParentItem(view);
         item->setParent(view);
     }
@@ -635,8 +707,8 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
 
     Items[FrontCompass] = setupItem(components->frontCompassDelegate(),
                                     context,
-                                     cwSurveyChunk::ShotCompassRole,
-                                     components->compassValidator());
+                                    cwSurveyChunk::ShotCompassRole,
+                                    components->compassValidator());
 
     Items[BackCompass] = setupItem(components->backCompassDelegate(),
                                    context,
@@ -656,6 +728,7 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
     foreach(QDeclarativeItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
+        item->setProperty("surveyChunkView", QVariant::fromValue(view));
         item->setParentItem(view);
         item->setParent(view);
     }
@@ -856,33 +929,38 @@ void cwSurveyChunkView::updateAllNavigation()
   */
 void cwSurveyChunkView::updateStationTabNavigation(int index) {
 
-    StationRow previousRow = getNavigationStationRow(index - 1);
-    StationRow currentRow = getNavigationStationRow(index);
-    StationRow nextRow = getNavigationStationRow(index + 1);
+//    StationRow previousRow = getNavigationStationRow(index - 1);
+//    StationRow currentRow = getNavigationStationRow(index);
+//    StationRow nextRow = getNavigationStationRow(index + 1);
 
-    ShotRow previousShotRow = getShotRow(index - 1);
-    ShotRow nextShotRow = getShotRow(index);
+//    //This make it more intutive the user is trying to tab from the last down
+//    if(nextRow.stationName() == NULL) {
+//        nextRow = currentRow;
+//    }
 
-    if(index == 0) {
-        //Special case for this row
-        setTabOrder(currentRow.stationName(), previousRow.down(), nextRow.stationName());
+//    ShotRow previousShotRow = getShotRow(index - 1);
+//    ShotRow nextShotRow = getShotRow(index);
 
-        //Handle all the cases for backsite and frontsite
-        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(nextShotRow);
-        lrudTabNavigation(currentRow, previousBox, nextRow.left());
+//    if(index == 0) {
+//        //Special case for this row
+//        setTabOrder(currentRow.stationName(), previousRow.down(), nextRow.stationName());
 
-    } else if(index == 1) {
-        //Special case for this row
-        setTabOrder(currentRow.stationName(), previousRow.stationName(), previousShotRow.distance());
-        lrudTabNavigation(currentRow, previousRow.down(), nextRow.stationName());
+//        //Handle all the cases for backsite and frontsite
+//        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(nextShotRow);
+//        lrudTabNavigation(currentRow, previousBox, nextRow.left());
 
-    } else {
-        setTabOrder(currentRow.stationName(), previousRow.down(), previousShotRow.distance());
+//    } else if(index == 1) {
+//        //Special case for this row
+//        setTabOrder(currentRow.stationName(), previousRow.stationName(), previousShotRow.distance());
+//        lrudTabNavigation(currentRow, previousRow.down(), nextRow.stationName());
 
-        //Handle all the cases for backsite and frontsite
-        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
-        lrudTabNavigation(currentRow, previousBox, nextRow.stationName());
-    }
+//    } else {
+//        setTabOrder(currentRow.stationName(), previousRow.down(), previousShotRow.distance());
+
+//        //Handle all the cases for backsite and frontsite
+//        QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
+//        lrudTabNavigation(currentRow, previousBox, nextRow.stationName());
+//    }
 }
 
 /**
@@ -899,57 +977,57 @@ void cwSurveyChunkView::lrudTabNavigation(StationRow row, QDeclarativeItem* prev
   \brief Updates the tab order for the shot
   */
 void cwSurveyChunkView::updateShotTabNavigation(int index) {
-    ShotRow row = getShotRow(index);
-    StationRow fromStationRow = getStationRow(index);
-    StationRow toStationRow = getStationRow(index + 1);
+//    ShotRow row = getShotRow(index);
+//    StationRow fromStationRow = getStationRow(index);
+//    StationRow toStationRow = getStationRow(index + 1);
 
-    if(HasFrontSights && HasBackSights) {
-        //Has both front and backsights
-        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
-        setTabOrder(row.frontCompass(), row.distance(), row.backCompass());
-        setTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
-        setTabOrder(row.frontClino(), row.backCompass(), row.backClino());
+//    if(HasFrontSights && HasBackSights) {
+//        //Has both front and backsights
+//        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
+//        setTabOrder(row.frontCompass(), row.distance(), row.backCompass());
+//        setTabOrder(row.backCompass(), row.frontCompass(), row.frontClino());
+//        setTabOrder(row.frontClino(), row.backCompass(), row.backClino());
 
-        if(index == 0) {
-            //Special case for this row
-            setTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
-        } else {
-            setTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
-        }
-    } else if(HasFrontSights) {
-        //Has only backsights
-        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
-        setTabOrder(row.frontCompass(), row.distance(), row.frontClino());
+//        if(index == 0) {
+//            //Special case for this row
+//            setTabOrder(row.backClino(), row.frontClino(), fromStationRow.left());
+//        } else {
+//            setTabOrder(row.backClino(), row.frontClino(), toStationRow.left());
+//        }
+//    } else if(HasFrontSights) {
+//        //Has only backsights
+//        setTabOrder(row.distance(), toStationRow.stationName(), row.frontCompass());
+//        setTabOrder(row.frontCompass(), row.distance(), row.frontClino());
 
-        if(index == 0) {
-            //Special case for this row
-            setTabOrder(row.frontClino(), row.frontCompass(), fromStationRow.left());
-        } else {
-            setTabOrder(row.frontClino(), row.frontCompass(), toStationRow.left());
-        }
-    } else if(HasBackSights) {
-        //Has only backsights
-        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
-        setTabOrder(row.backCompass(), row.distance(), row.backClino());
+//        if(index == 0) {
+//            //Special case for this row
+//            setTabOrder(row.frontClino(), row.frontCompass(), fromStationRow.left());
+//        } else {
+//            setTabOrder(row.frontClino(), row.frontCompass(), toStationRow.left());
+//        }
+//    } else if(HasBackSights) {
+//        //Has only backsights
+//        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
+//        setTabOrder(row.backCompass(), row.distance(), row.backClino());
 
-        if(index == 0) {
-            //Special case for this row
-            setTabOrder(row.backClino(), row.backCompass(), fromStationRow.left());
-        } else {
-            setTabOrder(row.backClino(), row.backCompass(), toStationRow.left());
-        }
-    } else {
-        //Doesn't have back or front
-        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
-        setTabOrder(row.backCompass(), row.distance(), row.backClino());
+//        if(index == 0) {
+//            //Special case for this row
+//            setTabOrder(row.backClino(), row.backCompass(), fromStationRow.left());
+//        } else {
+//            setTabOrder(row.backClino(), row.backCompass(), toStationRow.left());
+//        }
+//    } else {
+//        //Doesn't have back or front
+//        setTabOrder(row.distance(), toStationRow.stationName(), row.backCompass());
+//        setTabOrder(row.backCompass(), row.distance(), row.backClino());
 
-        if(index == 0) {
-            //Special case for this row
-            setTabOrder(row.distance(), toStationRow.stationName(), fromStationRow.left());
-        } else {
-            setTabOrder(row.distance(), toStationRow.stationName(), toStationRow.left());
-        }
-    }
+//        if(index == 0) {
+//            //Special case for this row
+//            setTabOrder(row.distance(), toStationRow.stationName(), fromStationRow.left());
+//        } else {
+//            setTabOrder(row.distance(), toStationRow.stationName(), toStationRow.left());
+//        }
+//    }
 }
 
 void cwSurveyChunkView::setTabOrder(QDeclarativeItem* item, QDeclarativeItem* previous, QDeclarativeItem* next) {
@@ -962,66 +1040,66 @@ void cwSurveyChunkView::setTabOrder(QDeclarativeItem* item, QDeclarativeItem* pr
   \brief Sets the navigation for the station item
   */
 void cwSurveyChunkView::updateStationArrowNavigation(int index) {
-    StationRow previousRow = getNavigationStationRow(index - 1);
-    StationRow currentRow = getNavigationStationRow(index);
-    StationRow nextRow = getNavigationStationRow(index + 1);
+//    StationRow previousRow = getNavigationStationRow(index - 1);
+//    StationRow currentRow = getNavigationStationRow(index);
+//    StationRow nextRow = getNavigationStationRow(index + 1);
 
-    ShotRow previousShotRow = getShotRow(index - 1);
-    ShotRow nextShotRow = getShotRow(index);
+//    ShotRow previousShotRow = getShotRow(index - 1);
+//    ShotRow nextShotRow = getShotRow(index);
 
-    //Handle all the cases for backsite and frontsite
-    QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
+//    //Handle all the cases for backsite and frontsite
+//    QDeclarativeItem* previousBox = leftBoxOfLeftLRUD(previousShotRow);
 
-    setArrowNavigation(currentRow.stationName(), NULL, previousShotRow.distance(), previousRow.stationName(), nextRow.stationName());
-    setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
-    setArrowNavigation(currentRow.right(), currentRow.left(), currentRow.up(), previousRow.right(), nextRow.right());
-    setArrowNavigation(currentRow.up(), currentRow.right(), currentRow.down(), previousRow.up(), nextRow.up());
-    setArrowNavigation(currentRow.down(), currentRow.up(), NULL, previousRow.down(), nextRow.down());
+//    setArrowNavigation(currentRow.stationName(), NULL, previousShotRow.distance(), previousRow.stationName(), nextRow.stationName());
+//    setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
+//    setArrowNavigation(currentRow.right(), currentRow.left(), currentRow.up(), previousRow.right(), nextRow.right());
+//    setArrowNavigation(currentRow.up(), currentRow.right(), currentRow.down(), previousRow.up(), nextRow.up());
+//    setArrowNavigation(currentRow.down(), currentRow.up(), NULL, previousRow.down(), nextRow.down());
 
-    if(index == 0) {
-        //Special case
+//    if(index == 0) {
+//        //Special case
 
-        if(HasFrontSights) {
-            previousBox = nextShotRow.frontClino();
-        } else if(HasBackSights) {
-            previousBox = nextShotRow.backClino();
-        } else {
-            previousBox = nextShotRow.distance();
-        }
+//        if(HasFrontSights) {
+//            previousBox = nextShotRow.frontClino();
+//        } else if(HasBackSights) {
+//            previousBox = nextShotRow.backClino();
+//        } else {
+//            previousBox = nextShotRow.distance();
+//        }
 
-        setArrowNavigation(currentRow.stationName(), NULL, nextShotRow.distance(), previousRow.stationName(), nextRow.stationName());
-        setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
-    }
+//        setArrowNavigation(currentRow.stationName(), NULL, nextShotRow.distance(), previousRow.stationName(), nextRow.stationName());
+//        setArrowNavigation(currentRow.left(), previousBox, currentRow.right(), previousRow.left(), nextRow.left());
+//    }
 }
 
 /**
   \brief Sets the navigation for shot item
   */
 void cwSurveyChunkView::updateShotArrowNavigaton(int index) {
-    StationRow fromStationRow = getStationRow(index);
-    StationRow toStationRow = getStationRow(index + 1);
+//    StationRow fromStationRow = getStationRow(index);
+//    StationRow toStationRow = getStationRow(index + 1);
 
-    ShotRow previousRow = getNavigationShotRow(index - 1);
-    ShotRow row = getNavigationShotRow(index);
-    ShotRow nextRow = getNavigationShotRow(index + 1);
+//    ShotRow previousRow = getNavigationShotRow(index - 1);
+//    ShotRow row = getNavigationShotRow(index);
+//    ShotRow nextRow = getNavigationShotRow(index + 1);
 
-    if(HasFrontSights && HasBackSights) {
-        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
-        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
-        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
-        setArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
-        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
-    } else if(HasFrontSights) {
-        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
-        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.frontCompass(), nextRow.frontCompass());
-        setArrowNavigation(row.frontClino(), row.frontCompass(), toStationRow.left(), previousRow.frontClino(), nextRow.frontClino());
-    } else if(HasBackSights) {
-        setArrowNavigation(row.distance(), toStationRow.stationName(), row.backCompass(), previousRow.distance(), nextRow.distance());
-        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), previousRow.backCompass(), nextRow.backCompass());
-        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), previousRow.backClino(), nextRow.backClino());
-    } else {
-        setArrowNavigation(row.distance(), toStationRow.stationName(), toStationRow.left(), previousRow.distance(), nextRow.distance());
-    }
+//    if(HasFrontSights && HasBackSights) {
+//        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
+//        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.backCompass(), row.backCompass());
+//        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), row.frontCompass(), nextRow.frontCompass());
+//        setArrowNavigation(row.frontClino(), row.frontCompass(), fromStationRow.left(), previousRow.backClino(), row.backClino());
+//        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), row.frontClino(), nextRow.frontClino());
+//    } else if(HasFrontSights) {
+//        setArrowNavigation(row.distance(), toStationRow.stationName(), row.frontCompass(), previousRow.distance(), nextRow.distance());
+//        setArrowNavigation(row.frontCompass(), row.distance(), row.frontClino(), previousRow.frontCompass(), nextRow.frontCompass());
+//        setArrowNavigation(row.frontClino(), row.frontCompass(), toStationRow.left(), previousRow.frontClino(), nextRow.frontClino());
+//    } else if(HasBackSights) {
+//        setArrowNavigation(row.distance(), toStationRow.stationName(), row.backCompass(), previousRow.distance(), nextRow.distance());
+//        setArrowNavigation(row.backCompass(), row.distance(), row.backClino(), previousRow.backCompass(), nextRow.backCompass());
+//        setArrowNavigation(row.backClino(), row.backCompass(), toStationRow.left(), previousRow.backClino(), nextRow.backClino());
+//    } else {
+//        setArrowNavigation(row.distance(), toStationRow.stationName(), toStationRow.left(), previousRow.distance(), nextRow.distance());
+//    }
 }
 
 
@@ -1079,10 +1157,19 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::getShotRow(int index) {
   */
 cwSurveyChunkView::StationRow cwSurveyChunkView::getNavigationStationRow(int index) {
     if(index == -1) {
+        if(ChunkAbove == NULL) {
+            //This will try to get the parent to set the chunk above, if there is one
+            emit needChunkAbove();
+        }
+
         if(ChunkAbove != NULL && !ChunkAbove->StationRows.isEmpty()) {
-            return ChunkAbove->StationRows.last();
+                return ChunkAbove->StationRows.last();
         }
     } else if(index == StationRows.size()) {
+        if(ChunkBelow == NULL) {
+            emit needChunkBelow();
+        }
+
         if(ChunkBelow != NULL && !ChunkBelow->StationRows.isEmpty()) {
             return ChunkBelow->StationRows.first();
         }
@@ -1183,6 +1270,109 @@ QDeclarativeItem* cwSurveyChunkView::leftBoxOfLeftLRUD(const cwSurveyChunkView::
     } else {
         return shot.distance();
     }
+}
+
+/**
+  This finds the next tab item from the station at rowIndex
+  */
+QDeclarativeItem *cwSurveyChunkView::tabFromStation(int rowIndex) {
+    //If not the first station
+    if(rowIndex != 0) {
+        //Check to make sure the previous row's distance has data in itShotRow
+        QString distanceData = SurveyChunk->data(cwSurveyChunk::ShotDistanceRole, rowIndex - 1).toString();
+        if(distanceData.isEmpty()) {
+            ShotRow previousShotRow = getNavigationShotRow(rowIndex - 1);
+            return previousShotRow.distance();
+        }
+    }
+
+    //If not the last station
+    if(rowIndex < SurveyChunk->stationCount() - 1) {
+        //Try to move to the next station if empty
+        QString nextStationName = SurveyChunk->data(cwSurveyChunk::StationNameRole, rowIndex + 1).toString();
+        if(nextStationName.isEmpty()) {
+            StationRow nextStationRow = getNavigationStationRow(rowIndex + 1);
+            return nextStationRow.stationName();
+        }
+
+        //Try to move ot the next shot if empty
+        QString distanceData = SurveyChunk->data(cwSurveyChunk::ShotDistanceRole, rowIndex).toString();
+        if(distanceData.isEmpty()) {
+            ShotRow nextShotRow = getNavigationShotRow(rowIndex);
+            return nextShotRow.distance();
+        }
+    }
+
+    //If not the first station
+    if(rowIndex != 0) {
+        ShotRow previousShotRow = getNavigationShotRow(rowIndex - 1);
+        return previousShotRow.distance();
+    } else {
+        StationRow nextStationRow = getNavigationStationRow(rowIndex + 1);
+        return nextStationRow.stationName();
+    }
+}
+
+/**
+  This holds the logic for the tab navigation from the clino databox
+  */
+QDeclarativeItem *cwSurveyChunkView::tabFromClino(int rowIndex) {
+    if(HasBackSights) {
+        //Go to the backsight entry box
+        return getNavigationShotRow(rowIndex).backClino();
+    }
+
+    return tabFromClinoToLRUD(rowIndex);
+}
+
+/**
+  This holds the logic for the tab navigation from the clino databox
+  */
+QDeclarativeItem *cwSurveyChunkView::tabFromBackClino(int rowIndex) {
+    return tabFromClinoToLRUD(rowIndex);
+}
+
+QDeclarativeItem *cwSurveyChunkView::tabFromClinoToLRUD(int rowIndex) {
+    //Go to the LRUD area
+    //    QString leftFromStation = SurveyChunk->data(cwSurveyChunk::StationLeftRole, rowIndex).toString();
+    //    if(leftFromStation.isEmpty()) {
+    if(rowIndex == 0) {
+        return getNavigationStationRow(rowIndex).left();
+    }
+    //    }
+
+    return getNavigationStationRow(rowIndex + 1).left();
+}
+
+QDeclarativeItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
+    int nextRowIndex = rowIndex + 1;
+    cwSurveyChunk* currentSurveyChunk = SurveyChunk;
+
+    //If the next tab should go to the next chunk
+    if(nextRowIndex >= SurveyChunk->stationCount()) {
+        QDeclarativeItem* nextStation = getNavigationStationRow(nextRowIndex).stationName();
+
+        if(nextStation == NULL) {
+            //Check to make sure the current row has a station name
+            QString currentStationName = currentSurveyChunk->data(cwSurveyChunk::StationNameRole, rowIndex).toString();
+            if(currentStationName.isEmpty()) {
+                return getNavigationStationRow(rowIndex).stationName();
+            }
+        } else {
+            return nextStation;
+        }
+    }
+
+    QString nextRowStationName = currentSurveyChunk->data(cwSurveyChunk::StationNameRole, nextRowIndex).toString();
+    if(nextRowStationName.isEmpty()) {
+        return getNavigationStationRow(nextRowIndex).stationName();
+    }
+
+    if(rowIndex == 0) {
+        return getNavigationStationRow(nextRowIndex).left();
+    }
+
+    return getNavigationStationRow(nextRowIndex).stationName();
 }
 
 /**

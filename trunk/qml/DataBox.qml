@@ -8,6 +8,7 @@ NavigationRectangle {
     property alias dataValue: editor.text
     property alias dataValidator: editor.validator
     property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
+    property SurveyChunkView surveyChunkView;
 
     property int rowIndex: -1
     property int dataRole
@@ -100,7 +101,17 @@ NavigationRectangle {
     }
 
     Keys.onPressed: {
-        NavigationHandler.handleTabEvent(event, dataBox);
+        if(event.key === Qt.Key_Tab) {
+            surveyChunkView.tab(rowIndex, dataRole)
+        } else if(event.key === 1 + Qt.Key_Tab) {
+            //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
+            if(previousTabObject !== null) {
+                previousTabObject.focus = true;
+                event.accepted = true;
+            }
+        }
+
+//        NavigationHandler.handleTabEvent(event, dataBox);
         NavigationHandler.handleArrowEvent(event, dataBox);
 
         if(!event.accepted) {

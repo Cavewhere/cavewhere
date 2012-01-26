@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QDeclarativeItem>
+#include <QSignalMapper>
 class QModelIndex;
 
 //Our includes
@@ -48,6 +49,7 @@ public:
     /// That keeps this rectangle visible
     Q_INVOKABLE QRectF ensureVisibleRect() const;
 
+
 signals:
     void tripChanged();
     void contentHeightChanged();
@@ -73,8 +75,10 @@ private:
     cwSurveyChunkViewComponents* ChunkQMLComponents; //The components for creating a chunk
     QList<cwSurveyChunkView*> ChunkViews; //The active chunks
     QList<QRectF> ChunkBoundingRects;  //Sorted in ascending order by y position
-   // QList<float> ChunkYPositions; //All the chunk y positions, should be sorted ascending
+    QSet<int> ChunkViewsWhiteList; //Prevents the chunk at index from being deleted
 
+    QSignalMapper* NeedChunkAboveMapper;
+    QSignalMapper* NeedChunkBelowMapper;
 
     //The viewport area, what is seen by the user
     QRectF ViewportArea;
@@ -92,6 +96,10 @@ private:
 
     void SetFocus(int index);
 
+    void updateAboveBelowAndPosition(int index);
+
+    void forceAllocateChunk(int chunkIndex, int allocatedChunkIndex);
+
 private slots:
     //void InsertRows(int start, int end);
     void AddChunks(int beginIndex, int endIndex);
@@ -103,6 +111,9 @@ private slots:
 
     void updateChunksFrontSights();
     void updateChunksBackSights();
+
+    void forceAllocateChunkAbove(int index);
+    void forceAllocateChunkBelow(int index);
 
 };
 

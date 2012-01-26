@@ -46,11 +46,17 @@ public:
 
     void setQMLComponents(cwSurveyChunkViewComponents* components);
 
+    Q_INVOKABLE void tab(int rowIndex, int role);
+    Q_INVOKABLE void previousTab(int rowIndex, int role);
+
 signals:
     void modelChanged();
 
     void createdNewChunk(cwSurveyChunk* chunk);
     void ensureVisibleChanged(QRectF rect);
+
+    void needChunkAbove(); //Always hook up with a direct connection
+    void needChunkBelow(); //Always hook up with a direct connection
 
 public slots:
 
@@ -221,7 +227,15 @@ private:
 
     QDeclarativeItem* leftBoxOfLeftLRUD(const ShotRow& shot);
 
+    QDeclarativeItem* tabFromStation(int rowIndex);
+    QDeclarativeItem* tabFromClino(int rowIndex);
+    QDeclarativeItem* tabFromBackClino(int rowIndex);
+    QDeclarativeItem* tabFromClinoToLRUD(int rowIndex);
+    QDeclarativeItem* tabFromDown(int rowIndex);
+
 };
+
+Q_DECLARE_METATYPE(cwSurveyChunkView*)
 
 //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)
 

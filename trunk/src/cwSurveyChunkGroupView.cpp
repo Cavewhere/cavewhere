@@ -5,6 +5,7 @@
 #include "cwSurveyChunk.h"
 #include "cwSurveyChunkViewComponents.h"
 #include "cwTripCalibration.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QDeclarativeEngine>
@@ -16,8 +17,14 @@
 cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
     QDeclarativeItem(parent),
     Trip(NULL),
-    ChunkQMLComponents(NULL)
+    ChunkQMLComponents(NULL),
+    NeedChunkAboveMapper(new QSignalMapper(this)),
+    NeedChunkBelowMapper(new QSignalMapper(this))
 {
+    connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkAbove(int)));
+    connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
+
+
 }
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
@@ -141,7 +148,7 @@ void cwSurveyChunkGroupView::keyPressEvent(QKeyEvent *event) {
   \brief Updates active chunks
 
   This will check what chunks should be shown, and which chunk should be hidden
-  The hidden chunks will be deleted.  New views may be created, if nessary
+  The hidden chunks will be deleted (exept if whitelisted) New views may be created, if nessary
   */
 void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
     QPair<int, int> range = VisableRange();
@@ -163,32 +170,18 @@ void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
 
     //Create views that don't exist
     for(int i = range.first; i <= range.second; i++) {
+        //Remove elements from white list
+        ChunkViewsWhiteList.remove(i);
+
+        //Create the chunk view
         CreateChunkView(i);
     }
 
     //Update the positions off all the visible elements
     //and the navigation
     for(int i = range.first; i <= range.second; i++) {
-        ChunkViews[i]->setY(ChunkBoundingRects[i].top());
-
-        //Update the navigation for the chunk
-        cwSurveyChunkView* aboveChunk = NULL;
-        cwSurveyChunkView* belowChunk = NULL;
-
-        int aboveIndex = i - 1;
-        int belowIndex = i + 1;
-
-        if(aboveIndex >= 0 && aboveIndex < ChunkViews.size()) {
-            aboveChunk = ChunkViews[aboveIndex];
-        }
-
-        if(belowIndex >= 0 && belowIndex < ChunkViews.size()) {
-            belowChunk = ChunkViews[belowIndex];
-        }
-
-        ChunkViews[i]->setNavigation(aboveChunk, belowChunk);
+        updateAboveBelowAndPosition(i);
     }
-
 
     if(oldContentWidth != contentWidth()) {
         emit contentWidthChanged();
@@ -206,8 +199,7 @@ QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
     QList<QRectF>::iterator firstIter = qLowerBound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.topLeft(), QSize(1, 1)), lessThanChunkRect);
     QList<QRectF>::iterator lastIter = qLowerBound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.bottomLeft(), QSize(1, 1)), lessThanChunkRect);
 
-
-    //qDebug() << "First: " << firstIter - ChunkBoundingRects.begin() << " Second: " << lastIter - ChunkBoundingRects.begin();
+   // qDebug() << "First: " << firstIter - ChunkBoundingRects.begin() << " Second: " << lastIter - ChunkBoundingRects.begin() << ViewportArea;
 //    if(firstIter != ChunkBoundingRects.end()) {
 //        qDebug() << "Viewport:" << ViewportArea << "Chunk" << *firstIter;
 //    }
@@ -256,9 +248,11 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //Make sure the chunkView keeps the visiblity for items when focused
         connect(chunkView, SIGNAL(ensureVisibleChanged(QRectF)), SLOT(SetEnsureVisibleRect(QRectF)));
 
-        //Update the position of the view at index i
-
-        //UpdatePosition(index);
+        //Connect the force allocation for the chunk
+        connect(chunkView, SIGNAL(needChunkAbove()), NeedChunkAboveMapper, SLOT(map()));
+        NeedChunkAboveMapper->setMapping(chunkView, index);
+        connect(chunkView, SIGNAL(needChunkBelow()), NeedChunkBelowMapper, SLOT(map()));
+        NeedChunkBelowMapper->setMapping(chunkView, index);
 
         ChunkViews[index] = chunkView;
         //qDebug() << "Chunk Bounding box:" << index << chunkView->boundingRect();
@@ -272,7 +266,8 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
   sets the index to NULL
   */
 void cwSurveyChunkGroupView::DeleteChunkView(int index) {
-    if(ChunkViews[index] != NULL) {
+    if(ChunkViews[index] != NULL && !ChunkViewsWhiteList.contains(index)) {
+//        qDebug() << "Deleting" << ChunkViews[index];
         ChunkViews[index]->deleteLater();
         ChunkViews[index] = NULL;
     }
@@ -288,6 +283,32 @@ void cwSurveyChunkGroupView::SetFocus(int index) {
     CreateChunkView(index); //Make sure the chunk exists;
     cwSurveyChunkView* surveyChunk = ChunkViews.at(index);
     surveyChunk->setFocus(true);
+}
+
+/**
+  \brief Sets the chunk's above and below chunk
+
+  This also set's the chunk's bounding rect
+  */
+void cwSurveyChunkGroupView::updateAboveBelowAndPosition(int index) {
+    ChunkViews[index]->setY(ChunkBoundingRects[index].top());
+
+    //Update the navigation for the chunk
+    cwSurveyChunkView* aboveChunk = NULL;
+    cwSurveyChunkView* belowChunk = NULL;
+
+    int aboveIndex = index - 1;
+    int belowIndex = index + 1;
+
+    if(aboveIndex >= 0 && aboveIndex < ChunkViews.size()) {
+        aboveChunk = ChunkViews[aboveIndex];
+    }
+
+    if(belowIndex >= 0 && belowIndex < ChunkViews.size()) {
+        belowChunk = ChunkViews[belowIndex];
+    }
+
+    ChunkViews[index]->setNavigation(aboveChunk, belowChunk);
 }
 
 /**
@@ -385,6 +406,63 @@ void cwSurveyChunkGroupView::updateChunksBackSights() {
             chunkView->setBackSights(Trip->calibrations()->hasBackSights());
         }
     }
+}
+
+/**
+  This will try to create the chunk above index, if it doesn't already exist.
+
+  The created chunk will be blacklisted, if it has been created.  What happens is
+  is the chunkview hasn't been created yet, because it's note visible to the user.
+  This is mostly to support keyboard interaction (Tabs and arrows).  Once the scrap
+  is visible, it'll be removed from the blacklist. The blacklist prevents the scrap
+  from being delete when it's not being shown.
+
+  This will also update the chunk at index, with the new allocated scrap
+  */
+void cwSurveyChunkGroupView::forceAllocateChunkAbove(int index) {
+    if(index > 0) {
+        int chunkAbove = index - 1;
+        forceAllocateChunk(index, chunkAbove);
+    }
+}
+
+/**
+  This will try to create the chunk below index, if it doesn't already exist.
+
+  The created chunk will be blacklisted, if it has been created.  What happens is
+  is the chunkview hasn't been created yet, because it's note visible to the user.
+  This is mostly to support keyboard interaction (Tabs and arrows).  Once the scrap
+  is visible, it'll be removed from the blacklist. The blacklist prevents the scrap
+  from being delete when it's not being shown
+  */
+void cwSurveyChunkGroupView::forceAllocateChunkBelow(int index) {
+    if(index < ChunkViews.size() - 1) {
+        int chunkBelow = index + 1;
+        forceAllocateChunk(index, chunkBelow);
+    }
+}
+
+/**
+  This will try to create the chunk at allocatedChunkIndex, if it doesn't already exist.
+
+  The created chunk will be blacklisted, if it has been created.  What happens is
+  is the chunkview hasn't been created yet, because it's note visible to the user.
+  This is mostly to support keyboard interaction (Tabs and arrows).  Once the scrap
+  is visible, it'll be removed from the blacklist. The blacklist prevents the scrap
+  from being delete when it's not being shown
+  */
+void cwSurveyChunkGroupView::forceAllocateChunk(int chunkIndex, int allocatedChunkIndex) {
+    if(ChunkViews[allocatedChunkIndex] == NULL) {
+        qDebug() << "Force allocated ChunkView alread exist at:" << allocatedChunkIndex << LOCATION;
+        return;
+    }
+
+    ChunkViewsWhiteList.insert(allocatedChunkIndex);
+    CreateChunkView(allocatedChunkIndex);
+
+    //Update the below and above
+    updateAboveBelowAndPosition(allocatedChunkIndex);
+    updateAboveBelowAndPosition(chunkIndex);
 }
 
 /**
