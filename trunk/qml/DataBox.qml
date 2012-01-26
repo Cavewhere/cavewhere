@@ -173,8 +173,7 @@ NavigationRectangle {
                     defaultKeyHandling(event);
 
                     dataBox.handleTab(event);
-//                    NavigationHandler.handleTabEvent(event, dataBox);
-//                    //                    NavigationHandler.handleArrowEvent(event, dataBox);
+
                     if(event.accepted) {
                         //Have the editor commit changes
                         dataBox.state = ''; //Default state
@@ -198,7 +197,7 @@ NavigationRectangle {
 
                 onEnterPressed: {
                     editor.commitChanges();
-                    dataBox.nextTabObject.focus = true
+                    dataBox.focus = true
                 }
             }
 
