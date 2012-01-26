@@ -2,7 +2,7 @@ import QtQuick 1.1
 import Cavewhere 1.0
 import "Navigation.js" as NavigationHandler
 
-NavigationRectangle {
+Item {
     id: dataBox
 
     property alias dataValue: editor.text
