@@ -22,7 +22,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
     NeedChunkBelowMapper(new QSignalMapper(this))
 {
     connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkAbove(int)));
-    connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
+    connect(NeedChunkBelowMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
 
 
 }
@@ -452,7 +452,7 @@ void cwSurveyChunkGroupView::forceAllocateChunkBelow(int index) {
   from being delete when it's not being shown
   */
 void cwSurveyChunkGroupView::forceAllocateChunk(int chunkIndex, int allocatedChunkIndex) {
-    if(ChunkViews[allocatedChunkIndex] == NULL) {
+    if(ChunkViews[allocatedChunkIndex] != NULL) {
         qDebug() << "Force allocated ChunkView alread exist at:" << allocatedChunkIndex << LOCATION;
         return;
     }

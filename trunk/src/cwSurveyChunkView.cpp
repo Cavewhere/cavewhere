@@ -168,7 +168,58 @@ void cwSurveyChunkView::tab(int rowIndex, int role) {
 void cwSurveyChunkView::previousTab(int rowIndex, int role) {
     QDeclarativeItem* previousItem = NULL;
 
+    ShotRow shotRow = getNavigationShotRow(rowIndex);
+    StationRow stationRow = getNavigationStationRow(rowIndex);
 
+    switch((cwSurveyChunk::DataRole)role) {
+    case cwSurveyChunk::StationNameRole:
+        previousItem = previousTabFromStation(rowIndex);
+        break;
+    case cwSurveyChunk::ShotDistanceRole: {
+        previousItem = getNavigationStationRow(rowIndex + 1).stationName();
+        break;
+    }
+    case cwSurveyChunk::ShotCompassRole:
+        previousItem = shotRow.distance();
+        break;
+    case cwSurveyChunk::ShotBackCompassRole:
+        if(HasFrontSights) {
+            previousItem = shotRow.frontCompass();
+        } else {
+            previousItem = shotRow.distance();
+        }
+        break;
+    case cwSurveyChunk::ShotClinoRole:
+        if(HasBackSights) {
+            previousItem = shotRow.backCompass();
+        } else {
+            previousItem = shotRow.frontCompass();
+        }
+        break;
+    case cwSurveyChunk::ShotBackClinoRole:
+        if(HasFrontSights) {
+            previousItem = shotRow.frontClino();
+        } else {
+            previousItem = shotRow.backCompass();
+        }
+        break;
+    case cwSurveyChunk::StationLeftRole:
+            previousItem = previousTabFromLeft(rowIndex);
+        break;
+    case cwSurveyChunk::StationRightRole:
+        previousItem = stationRow.left();
+        break;
+    case cwSurveyChunk::StationUpRole:
+        previousItem = stationRow.right();
+        break;
+    case cwSurveyChunk::StationDownRole:
+        previousItem = stationRow.up();
+        break;
+    }
+
+    if(previousItem != NULL) {
+        previousItem->setProperty("focus", true);
+    }
 }
 
 /**
@@ -1373,6 +1424,39 @@ QDeclarativeItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
     }
 
     return getNavigationStationRow(nextRowIndex).stationName();
+}
+
+/**
+  When the user presses shift tab from a station
+  */
+QDeclarativeItem *cwSurveyChunkView::previousTabFromStation(int rowIndex) {
+    StationRow stationRow = getNavigationStationRow(rowIndex - 1);
+    if(rowIndex == 1) {
+        return stationRow.stationName();
+    }
+    return stationRow.down();
+}
+
+/**
+  When the user presses shift tab from a left databox
+  */
+QDeclarativeItem *cwSurveyChunkView::previousTabFromLeft(int rowIndex) {
+    if(rowIndex == 1) {
+        return getNavigationStationRow(rowIndex - 1).down();
+    }
+
+    ShotRow shotRow;
+    if(rowIndex == 0) {
+       shotRow = getNavigationShotRow(rowIndex);
+    } else {
+       shotRow = getNavigationShotRow(rowIndex - 1);
+    }
+
+    if(HasBackSights) {
+        return shotRow.backClino();
+    } else {
+        return shotRow.frontClino();
+    }
 }
 
 /**

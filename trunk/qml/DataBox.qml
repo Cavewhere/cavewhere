@@ -105,10 +105,7 @@ NavigationRectangle {
             surveyChunkView.tab(rowIndex, dataRole)
         } else if(event.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            if(previousTabObject !== null) {
-                previousTabObject.focus = true;
-                event.accepted = true;
-            }
+            surveyChunkView.previousTab(rowIndex, dataRole)
         }
 
 //        NavigationHandler.handleTabEvent(event, dataBox);

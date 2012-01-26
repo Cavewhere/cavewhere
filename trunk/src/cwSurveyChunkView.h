@@ -232,6 +232,8 @@ private:
     QDeclarativeItem* tabFromBackClino(int rowIndex);
     QDeclarativeItem* tabFromClinoToLRUD(int rowIndex);
     QDeclarativeItem* tabFromDown(int rowIndex);
+    QDeclarativeItem* previousTabFromStation(int rowIndex);
+    QDeclarativeItem* previousTabFromLeft(int rowIndex);
 
 };
 
