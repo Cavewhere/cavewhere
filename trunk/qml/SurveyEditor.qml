@@ -32,6 +32,7 @@ Rectangle {
                 contentY = r.y+r.height-height;
             }
         }
+
         Column {
             id: column
 
@@ -74,22 +75,13 @@ Rectangle {
                 id: spaceAddBar
                 source: "qrc:icons/spacebar.png"
 
-         //       y: view.y + view.contentHeight
                 anchors.horizontalCenter: view.horizontalCenter
+
+                visible: currentTrip !== null && currentTrip.numberOfChunks > 0
 
                 Text {
                     anchors.centerIn: parent
-                    text: {
-                        if(currentTrip) {
-                            if(currentTrip.numberOfChunks === 0) {
-                                return "Press <b>Space</b> to start";
-                            } else {
-                                return "Press <b>Space</b> to add another data block";
-                            }
-                        } else {
-                            return "Error: Current trip is null";
-                        }
-                    }
+                    text: "Press <b>Space</b> to add another data block";
                 }
 
                 MouseArea {
@@ -98,6 +90,16 @@ Rectangle {
                     onClicked: {
                         currentTrip.addNewChunk();
                     }
+                }
+            }
+
+            AddButton {
+                text: "Add Survey Data"
+                anchors.horizontalCenter: view.horizontalCenter
+                visible: currentTrip !== null && currentTrip.numberOfChunks === 0
+
+                onClicked: {
+                    currentTrip.addNewChunk()
                 }
             }
         }
@@ -111,14 +113,5 @@ Rectangle {
         anchors.bottom: area.bottom
         clip: true
     }
-
-//    Keys.onSpacePressed: {
-//        //Add chunk
-//        currentTrip.addNewChunk();
-//    }
-
-//    onVisibleChanged: {
-//        focus = visible
-//    }
 }
 
