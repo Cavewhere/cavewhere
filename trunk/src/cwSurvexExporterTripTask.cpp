@@ -214,14 +214,13 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }
         if(compass.isEmpty() && backCompass.isEmpty()) {
-           if(clino.compare("up", Qt::CaseInsensitive) != 0 &&
-                   clino.compare("down", Qt::CaseInsensitive) != 0 &&
-                   backClino.compare("up", Qt::CaseInsensitive) != 0 &&
-                   backClino.compare("down", Qt::CaseInsensitive) != 0) {
+            if(clino.compare("up", Qt::CaseInsensitive) != 0 &&
+                    clino.compare("down", Qt::CaseInsensitive) != 0 &&
+                    backClino.compare("up", Qt::CaseInsensitive) != 0 &&
+                    backClino.compare("down", Qt::CaseInsensitive) != 0) {
                Errors.append(QString("Error: No compass reading for %1 to %2")
                              .arg(fromStation.name())
                              .arg(toStation.name()));
-               continue;
            }
         }
 
@@ -229,7 +228,6 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
             Errors.append(QString("Error: No Clino reading for %1 to %2")
                           .arg(fromStation.name())
                           .arg(toStation.name()));
-            continue;
         }
 
         if(compass.isEmpty()) { compass = "-"; }
