@@ -79,12 +79,20 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     float declination = calibrations->declination();
     float compassCorrections = calibrations->frontCompassCalibration();
     float clinoCorrections = calibrations->frontClinoCalibration();
+
     float tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
-                                             cwUnits::Feet,
-                                             cwUnits::Meters);
+                     calibrations->distanceUnit(),
+                     cwUnits::Feet);
 
     stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
-    stream << "FORMAT: DMMDLRUDLADB ";
+    stream << "FORMAT: DMMDLRUDLAD";
+
+    if(calibrations->hasBackSights()) {
+        stream << "B ";
+    } else {
+        stream << "N ";
+    }
+
     stream << "CORRECTIONS: " << QString("%1 %2 %3")
               .arg(compassCorrections, 0, 'f', 2)
               .arg(clinoCorrections, 0, 'f', 2)
@@ -153,6 +161,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << formatFloat(convertField(from, Up, distanceUnit)) << " ";
         stream << formatFloat(convertField(from, Right, distanceUnit)) << " ";
         stream << formatFloat(convertField(from, Down, distanceUnit)) << " ";
+
         stream << formatFloat(convertField(trip, shot, BackCompass)) << " ";
         stream << formatFloat(convertField(trip, shot, BackClino)) << " ";
         stream << CompassNewLine;
