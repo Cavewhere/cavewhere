@@ -168,9 +168,9 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
-        qDebug() << "----Run survex----" << LinePlotTask->status();
+//        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
-            qDebug() << "Running the task";
+//            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
             LinePlotTask->setData(*Region);
             LinePlotTask->start();

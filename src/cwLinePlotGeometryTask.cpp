@@ -46,7 +46,7 @@ void cwLinePlotGeometryTask::runTask() {
   */
 void cwLinePlotGeometryTask::addStationPositions(cwCave* cave) {
     QList< QWeakPointer<cwStation> > stations = cave->stations();
-    qDebug() << "Stations:" << stations.size();
+//    qDebug() << "Stations:" << stations.size();
     foreach( QWeakPointer<cwStation> station, stations) {
 
         QSharedPointer<cwStation> fullStation = station.toStrongRef();
