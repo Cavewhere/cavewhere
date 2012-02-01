@@ -4,6 +4,7 @@ ShadowRectangle {
     id: helpBox
 
     property alias text: textId.text
+    property alias font: textId.font
 
     width: textId.width + 10
     height: textId.height + 10
@@ -41,6 +42,33 @@ ShadowRectangle {
                 to: 1.0;
                 duration: 200
             }
+        },
+
+        Transition {
+            from: "VISIBLE"
+            SequentialAnimation {
+                PropertyAction {
+                    target: helpBox
+                    property: "visible"
+                    value: true
+                }
+
+                NumberAnimation {
+                    target: helpBox;
+                    property: "opacity";
+                    from: 1.0
+                    to: 0.0;
+                    duration: 200
+                }
+
+                PropertyAction {
+                    target: helpBox
+                    property: "visible"
+                    value: false
+                }
+            }
+
+
         }
     ]
 

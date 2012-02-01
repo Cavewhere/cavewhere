@@ -8,8 +8,8 @@ class cwDistanceValidator : public cwValidator
     Q_OBJECT
 public:
     explicit cwDistanceValidator(QObject *parent = 0);
-    State validate( QString & input, int & pos ) const;
-    Q_INVOKABLE int validate( QString input ) const;
+    virtual State validate( QString & input, int & pos ) const;
+    Q_INVOKABLE virtual int validate( QString input ) const;
 
 signals:
 

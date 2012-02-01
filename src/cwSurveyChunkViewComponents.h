@@ -37,17 +37,11 @@ public:
     QDeclarativeComponent* frontClinoDelegate() const;
     QDeclarativeComponent* backClinoDelegate() const;
 
-    QValidator* stationValidator() const;
-    QValidator* lrudValidator() const;
-    QValidator* distanceValidator() const;
-    QValidator* compassValidator() const;
-    QValidator* clinoValidator() const;
-
-    QVariant stationValidatorAsVariant() const;
-    QVariant lrudValidatorAsVariant() const;
-    QVariant distanceValidatorAsVariant() const;
-    QVariant compassValidatorAsVariant() const;
-    QVariant clinoValidatorAsVariant() const;
+    cwValidator* stationValidator() const;
+    cwValidator* lrudValidator() const;
+    cwValidator* distanceValidator() const;
+    cwValidator* compassValidator() const;
+    cwValidator* clinoValidator() const;
 
 signals:
 
@@ -120,45 +114,24 @@ inline QDeclarativeComponent* cwSurveyChunkViewComponents::backClinoDelegate() c
     return BackSiteDelegate;
 }
 
-inline QValidator* cwSurveyChunkViewComponents::stationValidator() const {
+inline cwValidator *cwSurveyChunkViewComponents::stationValidator() const {
     return StationValidator;
 }
 
-inline QValidator* cwSurveyChunkViewComponents::lrudValidator() const  {
+inline cwValidator *cwSurveyChunkViewComponents::lrudValidator() const  {
     return DistanceValidator;
 }
 
-inline QValidator* cwSurveyChunkViewComponents::distanceValidator() const  {
+inline cwValidator* cwSurveyChunkViewComponents::distanceValidator() const  {
     return DistanceValidator;
 }
 
-inline QValidator* cwSurveyChunkViewComponents::compassValidator() const  {
+inline cwValidator* cwSurveyChunkViewComponents::compassValidator() const  {
     return CompassValidator;
 }
 
-inline QValidator* cwSurveyChunkViewComponents::clinoValidator() const   {
+inline cwValidator *cwSurveyChunkViewComponents::clinoValidator() const   {
     return ClinoValidator;
 }
-
-inline QVariant cwSurveyChunkViewComponents::stationValidatorAsVariant() const   {
-    return QVariant::fromValue(static_cast<QObject*>(stationValidator()));
-}
-
-inline QVariant cwSurveyChunkViewComponents::lrudValidatorAsVariant() const   {
-    return QVariant::fromValue(static_cast<QObject*>(lrudValidator()));
-}
-
-inline QVariant cwSurveyChunkViewComponents::distanceValidatorAsVariant() const   {
-    return QVariant::fromValue(static_cast<QObject*>(distanceValidator()));
-}
-
-inline QVariant cwSurveyChunkViewComponents::compassValidatorAsVariant() const   {
-    return QVariant::fromValue(static_cast<QObject*>(compassValidator()));
-}
-
-inline QVariant cwSurveyChunkViewComponents::clinoValidatorAsVariant() const   {
-    return QVariant::fromValue(static_cast<QObject*>(clinoValidator()));
-}
-
 
 #endif // CWSURVEYCHUNKVIEWCOMPONENTS_H

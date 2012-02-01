@@ -1,4 +1,5 @@
 import QtQuick 1.1
+import Cavewhere 1.0
 
 Item {
     id: clickTextInput
@@ -10,8 +11,9 @@ Item {
     property bool acceptMousePress: false  //This make the double click text box accept mouse clicks (This
     property bool doubleClickEdit: false
     property bool isEditting: false
-    property variant validator;
+    property Validator validator;
     property bool readOnly: false
+    property string errorText
 
     signal clicked();
     signal startedEditting()
@@ -22,9 +24,23 @@ Item {
 
     function commitChanges() {
         //Emit the finishedEditting signal
-        finishedEditting(globalShadowTextInput.textInput.text)
-
-        closeEditor();
+        if(validator !== null) {
+            var accepted = 2;
+            if(validator.validate(globalShadowTextInput.textInput.text) === accepted) {
+                finishedEditting(globalShadowTextInput.textInput.text)
+                closeEditor();
+                return true;
+            } else {
+                globalShadowTextInput.errorHelpBox.text = validator.errorText
+                globalShadowTextInput.errorHelpBox.visible = true
+                globalShadowTextInput.textInput.focus = true
+                return false;
+            }
+        } else {
+            finishedEditting(globalShadowTextInput.textInput.text);
+            closeEditor();
+            return true;
+        }
     }
 
     function closeEditor() {
@@ -36,9 +52,9 @@ Item {
         doubleClickArea.enabled = true;
         textArea.visible = true;
         isEditting = false;
+        globalShadowTextInput.errorHelpBox.visible = false;
 
-        globalShadowTextInput.commitChanges.disconnect(commitChanges)
-        globalShadowTextInput.closeEditor.disconnect(closeEditor)
+        globalShadowTextInput.coreClickInput = null
     }
 
     function openEditor() {
@@ -52,7 +68,7 @@ Item {
         globalShadowTextInput.textInput.forceActiveFocus()
         globalShadowTextInput.textInput.selectAll();
 
-        if(clickTextInput.validator !== undefined) {
+        if(clickTextInput.validator !== null) {
             globalShadowTextInput.textInput.validator = clickTextInput.validator
         }
 
@@ -69,8 +85,7 @@ Item {
         globalShadowTextInput.minHeight = clickTextInput.height + 6
 
         //Connect to commitChanges()
-        globalShadowTextInput.commitChanges.connect(commitChanges)
-        globalShadowTextInput.closeEditor.connect(closeEditor)
+        globalShadowTextInput.coreClickInput = clickTextInput
     }
 
     Text {
@@ -134,4 +149,6 @@ Item {
             }
         ]
     }
+
+
 }

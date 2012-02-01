@@ -168,7 +168,8 @@ Item {
                         //                            event.key === Qt.Key_Up ||
                         //                            event.key === Qt.Key_Down)
                     {
-                        editor.commitChanges()
+                        var commited = editor.commitChanges()
+                        if(!commited) { return; }
                     }
 
                     if(event.key === Qt.Key_Space) {
@@ -202,8 +203,10 @@ Item {
                 }
 
                 onEnterPressed: {
-                    editor.commitChanges();
-                    dataBox.focus = true
+                    var commited = editor.commitChanges();
+                    if(commited) {
+                        dataBox.focus = true
+                    }
                 }
             }
 

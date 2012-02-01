@@ -14,6 +14,7 @@ class QValidator;
 class cwStation;
 class cwShot;
 class cwSurveyChunkViewComponents;
+class cwValidator;
 #include "cwStationReference.h"
 
 
@@ -102,7 +103,7 @@ private:
         static QDeclarativeItem* setupItem(QDeclarativeComponent* component,
                                            QDeclarativeContext* context,
                                            cwSurveyChunk::DataRole,
-                                           QValidator* validator);
+                                           cwValidator* validator);
     };
 
     class StationRow : public Row {

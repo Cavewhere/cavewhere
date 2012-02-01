@@ -7,9 +7,9 @@ MouseArea {
     property alias editor: shadowEditor
     property int minWidth: 0
     property int minHeight: 0
+    property alias errorHelpBox: errorHelpBoxItem
+    property CoreClickTextInput coreClickInput
 
-    signal commitChanges()
-    signal closeEditor()
     signal enterPressed()
     signal escapePressed()
 
@@ -17,7 +17,11 @@ MouseArea {
     enabled: false
 
     onPressed: {
-        commitChanges()
+        var commited = coreClickInput.commitChanges()
+        if(!commited) {
+            coreClickInput.closeEditor()
+        }
+
         mouse.accepted = false
     }
 
@@ -56,11 +60,11 @@ MouseArea {
             function defaultKeyHandling(event) {
                 if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     enterPressed()
-                    commitChanges()
-                    event.accepted = true
+                    var commited = coreClickInput.commitChanges()
+                    event.accepted = commited
                 } else if(event.key === Qt.Key_Escape) {
                     escapePressed()
-                    closeEditor();
+                    coreClickInput.closeEditor();
                     event.accepted = true
                 }
             }
@@ -69,5 +73,15 @@ MouseArea {
                 defaultKeyHandling(event)
             }
         }
+
+        ErrorHelpBox {
+            id: errorHelpBoxItem
+            y: parent.height + 10
+            visible: false
+            anchors.bottom: undefined
+            anchors.bottomMargin: 0
+        }
     }
+
+
 }

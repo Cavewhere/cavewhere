@@ -72,6 +72,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
     qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
     qmlRegisterType<cwTrip>("Cavewhere", 1, 0, "Trip");
+    qmlRegisterType<cwValidator>("Cavewhere", 1, 0, "Validator");
     qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
     qmlRegisterType<cwStationValidator>("Cavewhere", 1, 0, "StationValidator");
     qmlRegisterType<cwCompassValidator>("Cavewhere", 1, 0, "CompassValidator");

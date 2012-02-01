@@ -7,6 +7,7 @@
 #include "cwStationValidator.h"
 #include "cwDistanceValidator.h"
 #include "cwDebug.h"
+#include "cwValidator.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -921,7 +922,7 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
 QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* component,
                                                     QDeclarativeContext* context,
                                                     cwSurveyChunk::DataRole role,
-                                                    QValidator *validator) {
+                                                    cwValidator *validator) {
     if(component->isError()) {
         qWarning() << component->errorString();
         return NULL;
@@ -929,7 +930,7 @@ QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* compo
 
     QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(component->create(context));
     item->setProperty("dataRole", role);
-    item->setProperty("dataValidator", QVariant::fromValue(static_cast<QObject*>(validator)));
+    item->setProperty("dataValidator", QVariant::fromValue(validator));
     return item;
 }
 

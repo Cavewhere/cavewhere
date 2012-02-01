@@ -3,7 +3,11 @@ import QtQuick 1.1
 
 HelpArea {
 
-    color: "#FF6736"
+    Style {
+        id: style
+    }
+
+    color: style.errorBackground
     imageSource: "qrc:icons/stopSignError.png"
 
 }
