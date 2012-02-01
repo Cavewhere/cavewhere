@@ -5,6 +5,9 @@
 #include <QVector3D>
 #include <QVariant>
 
+//Our includes
+#include "cwReadingStates.h"
+
 class cwStation {
 
 public:
@@ -23,10 +26,16 @@ public:
     cwStation(QString name, float left, float right, float up, float down);
 
     QString name() const;
-    QString left() const;
-    QString right() const;
-    QString up() const;
-    QString down() const;
+    double left() const;
+    double right() const;
+    double up() const;
+    double down() const;
+
+    cwDistanceStates::State leftInputState() const;
+    cwDistanceStates::State rightInputState() const;
+    cwDistanceStates::State upInputState() const;
+    cwDistanceStates::State downInputState() const;
+
     QVector3D position() const;
 
     void setData(QVariant data, DataRoles role);
@@ -34,54 +43,77 @@ public:
 
     bool isValid() const { return !Name.isEmpty(); }
 
-public slots:
-    void setName(QString Name);
-    void setLeft(QString left);
-    void setRight(QString right);
-    void setUp(QString up);
-    void setDown(QString down);
+public:
+    bool setName(QString Name);
+
+    bool setLeft(QString left);
+    bool setLeft(double left);
+
+    bool setRight(QString right);
+    bool setRight(double right);
+
+    bool setUp(QString up);
+    bool setUp(double up);
+
+    bool setDown(QString down);
+    bool setDown(double down);
+
     void setPosition(QVector3D position); //This is set by the loop closer
 
 protected:
     QString Name;
 
-    QString Left;
-    QString Right;
-    QString Up;
-    QString Down;
+    cwDistanceStates::State LeftState;
+    cwDistanceStates::State RightState;
+    cwDistanceStates::State UpState;
+    cwDistanceStates::State DownState;
+
+    double Left;
+    double Right;
+    double Up;
+    double Down;
 
     QVector3D Position;
+
+    bool checkLRUDValue(double value) const;
+    bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);
+    bool setDoubleValue(double& setValue, cwDistanceStates::State& state, double value);
 };
 
 inline QString cwStation::name() const { return Name; }
-inline QString cwStation::left() const { return Left; }
-inline QString cwStation::right() const { return Right; }
-inline QString cwStation::up() const { return Up; }
-inline QString cwStation::down() const { return Down; }
+inline double cwStation::left() const { return Left; }
+inline double cwStation::right() const { return Right; }
+inline double cwStation::up() const { return Up; }
+inline double cwStation::down() const { return Down; }
+
+inline cwDistanceStates::State cwStation::leftInputState() const {
+    return LeftState;
+}
+
+inline cwDistanceStates::State cwStation::rightInputState() const {
+    return RightState;
+}
+
+inline cwDistanceStates::State cwStation::upInputState() const {
+    return DownState;
+}
+
+inline cwDistanceStates::State cwStation::downInputState() const {
+    return UpState;
+}
+
 inline QVector3D cwStation::position() const { return Position; }
 
-inline void cwStation::setName(QString name) {
-    Name = name;
-}
-
-inline void cwStation::setLeft(QString left) {
-    Left = left;
-}
-
-inline void cwStation::setRight(QString right) {
-    Right = right;
-}
-
-inline void cwStation::setUp(QString up) {
-    Up = up;
-}
-
-inline void cwStation::setDown(QString down) {
-    Down = down;
-}
 
 inline void cwStation::setPosition(QVector3D position) {
     Position = position;
 }
+
+inline bool cwStation::checkLRUDValue(double value) const
+{
+    return value >= 0.0;
+}
+
+
 
 #endif // cwStation_H

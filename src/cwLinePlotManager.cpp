@@ -117,7 +117,7 @@ void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
     connect(chunk, SIGNAL(shotsRemoved(int,int)), SLOT(runSurvex()));
     connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(runSurvex()));
     connect(chunk, SIGNAL(stationsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int,QVariant)), SLOT(runSurvex()));
+    connect(chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(runSurvex()));
 }
 
 /**

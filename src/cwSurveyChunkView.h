@@ -63,7 +63,7 @@ signals:
 
 public slots:
 
-    void updateData(cwSurveyChunk::DataRole, int index, const QVariant& data);
+    void updateData(cwSurveyChunk::DataRole, int index);
 
 protected:
 
@@ -205,8 +205,8 @@ private:
     void updateIndexes(int index);
     void updateDimensions();
 
-    void updateShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
-    void updateStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data);
+    void updateShotData(cwSurveyChunk::DataRole role, int index);
+    void updateStationData(cwSurveyChunk::DataRole role, int index);
     void updateStationRowData(int index);
     void updateShotRowData(int index);
 

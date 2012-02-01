@@ -473,16 +473,29 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
     case StationNameRole:
         return station.name();
     case StationLeftRole:
-        return station.left();
+        if(station.leftInputState() == cwDistanceStates::Valid) {
+            return station.left();
+        }
+        break;
     case StationRightRole:
-        return station.right();
+        if(station.rightInputState() == cwDistanceStates::Valid) {
+            return station.right();
+        }
+        break;
     case StationUpRole:
-        return station.up();
+        if(station.upInputState() == cwDistanceStates::Valid) {
+            return station.up();
+        }
+        break;
     case StationDownRole:
-        return station.down();
+        if(station.downInputState() == cwDistanceStates::Valid) {
+            return station.down();
+        }
+        break;
     default:
         return QVariant();
     }
+    return QVariant();
 }
 
 /**
@@ -530,23 +543,23 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     switch (role) {
     case StationNameRole:
         station.setName(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case StationLeftRole:
         station.setLeft(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case StationRightRole:
         station.setRight(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case StationUpRole:
         station.setUp(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case StationDownRole:
         station.setDown(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     default:
         qDebug() << "Can't find role:" << role << LOCATION;
@@ -574,23 +587,23 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     switch(role) {
     case ShotDistanceRole:
         shot->setDistance(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case ShotCompassRole:
         shot->setCompass(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case ShotBackCompassRole:
         shot->setBackCompass(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case ShotClinoRole:
         shot->setClino(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     case ShotBackClinoRole:
         shot->setBackClino(dataString);
-        dataChanged(role, index, data);
+        dataChanged(role, index);
         break;
     default:
         qDebug() << "Can't find role:" << role << LOCATION;

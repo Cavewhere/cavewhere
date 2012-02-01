@@ -147,10 +147,10 @@ namespace boost {
     template<class Archive>
     void save(Archive &archive, const cwStation &station, const unsigned int) {
         QString name = station.name();
-        QString left = station.left();
-        QString right = station.right();
-        QString up = station.up();
-        QString down = station.down();
+        double left = station.left();
+        double right = station.right();
+        double up = station.up();
+        double down = station.down();
         QVector3D position = station.position();
 
         archive << BOOST_SERIALIZATION_NVP(name);
@@ -164,10 +164,10 @@ namespace boost {
     template<class Archive>
     void load(Archive &archive, cwStation &station, const unsigned int) {
         QString name;
-        QString left;
-        QString right;
-        QString up;
-        QString down;
+        double left;
+        double right;
+        double up;
+        double down;
         QVector3D position;
 
         archive >> BOOST_SERIALIZATION_NVP(name);

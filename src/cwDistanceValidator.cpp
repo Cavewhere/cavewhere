@@ -19,7 +19,19 @@ QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) co
     QDoubleValidator validator;
     validator.setBottom(0);
     validator.setNotation(QDoubleValidator::StandardNotation);
-    return validator.validate(input, pos);
+    QValidator::State state = validator.validate(input, pos);
+
+    if(state == QValidator::Acceptable) {
+        //Just make sure we can convert the input
+        bool okay;
+        input.toDouble(&okay);
+        if(!okay) {
+            //The validator is dump ... this handle use case input="5,5"
+            return QValidator::Invalid;
+        }
+    }
+
+    return state;
 }
 
 int cwDistanceValidator::validate( QString input ) const {

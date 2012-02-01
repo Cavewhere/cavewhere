@@ -163,10 +163,10 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
     foreach(cwStationReference station, stations) {
         QString dataLine = dataLineTemplate
                 .arg(station.name(), TextPadding)
-                .arg(toSupportedLength(station.left()), TextPadding)
-                .arg(toSupportedLength(station.right()), TextPadding)
-                .arg(toSupportedLength(station.up()), TextPadding)
-                .arg(toSupportedLength(station.down()), TextPadding);
+                .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
+                .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
+                .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
+                .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
 
         stream << dataLine << endl;
     }
@@ -178,15 +178,19 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterTripTask::toSupportedLength(QString length) const {
+QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceStates::State state) const {
+    if(state == cwDistanceStates::Empty) {
+        return "-";
+    }
+
     cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
     switch(unit) {
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return length;
+        return QString("%1").arg(length);
     default:
-        return QString("%1").arg(cwUnits::convert(length.toDouble(), unit, cwUnits::Meters));
+        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
     }
 }
 
@@ -205,7 +209,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot->distance());
+        QString distance = toSupportedLength(shot->distance().toDouble(), cwDistanceStates::Valid);
         QString compass = shot->compass();
         QString backCompass = shot->backCompass();
         QString clino = shot->clino();

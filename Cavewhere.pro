@@ -265,7 +265,8 @@ HEADERS  += \
     src/cwGLScraps.h \
     src/cwGlobalDirectory.h \
     src/cwImageTexture.h \
-    src/cwGlobalQMLData.h
+    src/cwGlobalQMLData.h \
+    src/cwReadingStates.h
 
 
 FORMS    += src/cwMainWindow.ui \

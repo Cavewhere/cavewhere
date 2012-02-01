@@ -457,21 +457,21 @@ QDeclarativeItem *cwSurveyChunkView::databox(int rowIndex, int role)
 /**
   \brief This update the survey chunk's data
   */
-void cwSurveyChunkView::updateData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+void cwSurveyChunkView::updateData(cwSurveyChunk::DataRole role, int index) {
     switch (role) {
     case cwSurveyChunk::StationNameRole:
     case cwSurveyChunk::StationLeftRole:
     case cwSurveyChunk::StationRightRole:
     case cwSurveyChunk::StationUpRole:
     case cwSurveyChunk::StationDownRole:
-        updateStationData(role, index, data);
+        updateStationData(role, index);
         break;
     case cwSurveyChunk::ShotDistanceRole:
     case cwSurveyChunk::ShotCompassRole:
     case cwSurveyChunk::ShotBackCompassRole:
     case cwSurveyChunk::ShotClinoRole:
     case cwSurveyChunk::ShotBackClinoRole:
-        updateShotData(role, index, data);
+        updateShotData(role, index);
         break;
     }
 }
@@ -506,7 +506,7 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         connect(SurveyChunk, SIGNAL(stationsAdded(int,int)), SLOT(addStations(int,int)));
         connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
         connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
-        connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int,QVariant)), SLOT(updateData(cwSurveyChunk::DataRole,int,QVariant)));
+        connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
 
         emit modelChanged();
     }
@@ -1437,7 +1437,7 @@ void cwSurveyChunkView::updateDimensions() {
 
    data - The data that the view will be updated with
   */
-void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) {
     if(index < 0 || index >= ShotRows.size()) { return; }
 
     QDeclarativeItem* shotItem;
@@ -1461,6 +1461,7 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index, 
         return;
     }
 
+    QVariant data = SurveyChunk->data(role, index);
     shotItem->setProperty("dataValue", data);
 }
 
@@ -1480,7 +1481,7 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index, 
 
    data - The data that the view will be updated with
   */
-void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int index, const QVariant& data) {
+void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int index) {
     if(index < 0 || index >= StationRows.size()) {
         return;
     }
@@ -1506,6 +1507,7 @@ void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int inde
         return;
     }
 
+    QVariant data = SurveyChunk->data(role, index);
     stationItem->setProperty("dataValue", data);
 }
 
@@ -1520,24 +1522,19 @@ void cwSurveyChunkView::updateStationRowData(int index) {
     }
 
     updateStationData(cwSurveyChunk::StationNameRole,
-                      index,
-                      SurveyChunk->data(cwSurveyChunk::StationNameRole, index));
+                      index);
 
     updateStationData(cwSurveyChunk::StationLeftRole,
-                      index,
-                      SurveyChunk->data(cwSurveyChunk::StationLeftRole, index));
+                      index);
 
     updateStationData(cwSurveyChunk::StationRightRole,
-                      index,
-                      SurveyChunk->data(cwSurveyChunk::StationRightRole, index));
+                      index);
 
     updateStationData(cwSurveyChunk::StationUpRole,
-                      index,
-                      SurveyChunk->data(cwSurveyChunk::StationUpRole, index));
+                      index);
 
     updateStationData(cwSurveyChunk::StationDownRole,
-                      index,
-                      SurveyChunk->data(cwSurveyChunk::StationDownRole, index));
+                      index);
 
 
 }
@@ -1551,24 +1548,19 @@ void cwSurveyChunkView::updateShotRowData(int index) {
     if(index < 0 || index >= ShotRows.size()) { return; }
 
     updateShotData(cwSurveyChunk::ShotDistanceRole,
-                   index,
-                   SurveyChunk->data(cwSurveyChunk::ShotDistanceRole, index));
+                   index);
 
 
     updateShotData(cwSurveyChunk::ShotCompassRole,
-                   index,
-                   SurveyChunk->data(cwSurveyChunk::ShotCompassRole, index));
+                   index);
 
     updateShotData(cwSurveyChunk::ShotBackCompassRole,
-                   index,
-                   SurveyChunk->data(cwSurveyChunk::ShotBackCompassRole, index));
+                   index);
 
     updateShotData(cwSurveyChunk::ShotClinoRole,
-                   index,
-                   SurveyChunk->data(cwSurveyChunk::ShotClinoRole, index));
+                   index);
 
     updateShotData(cwSurveyChunk::ShotBackClinoRole,
-                   index,
-                   SurveyChunk->data(cwSurveyChunk::ShotBackClinoRole, index));
+                   index);
 
 }

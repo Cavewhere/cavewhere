@@ -4,6 +4,7 @@
 //Our includes
 #include "cwExporterTask.h"
 #include "cwUnits.h"
+#include "cwReadingStates.h"
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
@@ -42,7 +43,7 @@ private:
     void writeShotData(QTextStream& stream, cwTrip* trip);
     void writeLRUDData(QTextStream& stream, cwTrip* trip);
 
-    QString toSupportedLength(QString length) const;
+    QString toSupportedLength(double length, cwDistanceStates::State) const;
 };
 
 #endif // CWSURVEXEXPORTERTRIPTASK_H

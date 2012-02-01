@@ -29,11 +29,16 @@ public:
     cwCave* cave() const;
 
     QString name() const;
-    QString left() const;
-    QString right() const;
-    QString up() const;
-    QString down() const;
+    double left() const;
+    double right() const;
+    double up() const;
+    double down() const;
     QVector3D position() const;
+
+    cwDistanceStates::State leftInputState() const;
+    cwDistanceStates::State rightInputState() const;
+    cwDistanceStates::State upInputState() const;
+    cwDistanceStates::State downInputState() const;
 
     bool isValid() const { return SharedStation->isValid(); }
 
@@ -74,19 +79,19 @@ inline QString cwStationReference::name() const {
     return SharedStation->name();
 }
 
-inline QString cwStationReference::left() const {
+inline double cwStationReference::left() const {
     return SharedStation->left();
 }
 
-inline QString cwStationReference::right() const {
+inline double cwStationReference::right() const {
     return SharedStation->right();
 }
 
-inline QString cwStationReference::up() const {
+inline double cwStationReference::up() const {
     return SharedStation->up();
 }
 
-inline QString cwStationReference::down() const {
+inline double cwStationReference::down() const {
     return SharedStation->down();
 }
 
@@ -94,6 +99,25 @@ inline QVector3D cwStationReference::position() const {
     return SharedStation->position();
 }
 
+inline cwDistanceStates::State cwStationReference::leftInputState() const
+{
+    return SharedStation->leftInputState();
+}
+
+inline cwDistanceStates::State cwStationReference::rightInputState() const
+{
+    return SharedStation->rightInputState();
+}
+
+inline cwDistanceStates::State cwStationReference::upInputState() const
+{
+    return SharedStation->upInputState();
+}
+
+inline cwDistanceStates::State cwStationReference::downInputState() const
+{
+    return SharedStation->downInputState();
+}
 
 
 inline QSharedPointer<cwStation> cwStationReference::station() const {
