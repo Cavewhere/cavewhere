@@ -18,6 +18,7 @@
 #include "cwLength.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
+#include "cwReadingStates.h"
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -34,7 +35,7 @@ BOOST_CLASS_VERSION(cwStation, 1)
 BOOST_CLASS_VERSION(cwTrip, 1)
 BOOST_CLASS_VERSION(cwSurveyNoteModel, 1)
 BOOST_CLASS_VERSION(cwImage, 1)
-BOOST_CLASS_VERSION(cwTripCalibration, 2)
+BOOST_CLASS_VERSION(cwTripCalibration, 1)
 BOOST_CLASS_VERSION(cwSurveyChunk, 1)
 BOOST_CLASS_VERSION(cwStationReference, 1)
 BOOST_CLASS_VERSION(cwShot, 1)
@@ -151,6 +152,11 @@ namespace boost {
         double right = station.right();
         double up = station.up();
         double down = station.down();
+        int leftState = station.leftInputState();
+        int rightState = station.rightInputState();
+        int upState = station.upInputState();
+        int downState = station.downInputState();
+
         QVector3D position = station.position();
 
         archive << BOOST_SERIALIZATION_NVP(name);
@@ -158,6 +164,10 @@ namespace boost {
         archive << BOOST_SERIALIZATION_NVP(right);
         archive << BOOST_SERIALIZATION_NVP(up);
         archive << BOOST_SERIALIZATION_NVP(down);
+        archive << BOOST_SERIALIZATION_NVP(leftState);
+        archive << BOOST_SERIALIZATION_NVP(rightState);
+        archive << BOOST_SERIALIZATION_NVP(upState);
+        archive << BOOST_SERIALIZATION_NVP(downState);
         archive << BOOST_SERIALIZATION_NVP(position);
     }
 
@@ -168,6 +178,11 @@ namespace boost {
         double right;
         double up;
         double down;
+        int leftState;
+        int rightState;
+        int upState;
+        int downState;
+
         QVector3D position;
 
         archive >> BOOST_SERIALIZATION_NVP(name);
@@ -175,6 +190,10 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(right);
         archive >> BOOST_SERIALIZATION_NVP(up);
         archive >> BOOST_SERIALIZATION_NVP(down);
+        archive >> BOOST_SERIALIZATION_NVP(leftState);
+        archive >> BOOST_SERIALIZATION_NVP(rightState);
+        archive >> BOOST_SERIALIZATION_NVP(upState);
+        archive >> BOOST_SERIALIZATION_NVP(downState);
         archive >> BOOST_SERIALIZATION_NVP(position);
 
         station = cwStation(name);
@@ -182,10 +201,13 @@ namespace boost {
         station.setRight(right);
         station.setUp(up);
         station.setDown(down);
+        station.setLeftInputState((cwDistanceStates::State)leftState);
+        station.setRightInputState((cwDistanceStates::State)rightState);
+        station.setUpInputState((cwDistanceStates::State)upState);
+        station.setDownInputState((cwDistanceStates::State)downState);
+
         station.setPosition(position);
     }
-
-
 
     ///////////////////////////// cwTrip ///////////////////////////////
     template<class Archive>
@@ -376,6 +398,7 @@ namespace boost {
 
     template<class Archive>
     void load(Archive &archive, cwTripCalibration &calibration, const unsigned int version) {
+        Q_UNUSED(version)
 
         bool CorrectedCompassBacksight = false;
         bool CorrectedClinoBacksight = false;
@@ -386,6 +409,8 @@ namespace boost {
         float BackClinoCalibration = 0.0;
         float Declination = 0.0;
         int DistanceUnit = cwUnits::Unitless;
+        bool hasFrontSights;
+        bool hasBackSights;
 
         archive >> BOOST_SERIALIZATION_NVP(CorrectedCompassBacksight);
         archive >> BOOST_SERIALIZATION_NVP(CorrectedClinoBacksight);
@@ -396,6 +421,8 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(BackClinoCalibration);
         archive >> BOOST_SERIALIZATION_NVP(Declination);
         archive >> BOOST_SERIALIZATION_NVP(DistanceUnit);
+        archive >> BOOST_SERIALIZATION_NVP(hasFrontSights);
+        archive >> BOOST_SERIALIZATION_NVP(hasBackSights);
 
         calibration.setCorrectedCompassBacksight(CorrectedCompassBacksight);
         calibration.setCorrectedClinoBacksight(CorrectedClinoBacksight);
@@ -406,17 +433,8 @@ namespace boost {
         calibration.setBackClinoCalibration(BackClinoCalibration);
         calibration.setDeclination(Declination);
         calibration.setDistanceUnit((cwUnits::LengthUnit)DistanceUnit);
-
-        if(version == 2) {
-            bool hasFrontSights;
-            bool hasBackSights;
-
-            archive >> BOOST_SERIALIZATION_NVP(hasFrontSights);
-            archive >> BOOST_SERIALIZATION_NVP(hasBackSights);
-
-            calibration.setFrontSights(hasFrontSights);
-            calibration.setBackSights(hasBackSights);
-        }
+        calibration.setFrontSights(hasFrontSights);
+        calibration.setBackSights(hasBackSights);
     }
 
     //////////////////////// cwSurveyChunk ////////////////////////////////
@@ -479,39 +497,66 @@ namespace boost {
     template<class Archive>
     void save(Archive &archive, const cwShot &shot, const unsigned int) {
 
-        QString Distance = shot.distance();
-        QString Compass = shot.compass();
-        QString BackCompass = shot.backCompass();
-        QString Clino = shot.clino();
-        QString BackClino = shot.backClino();
+        double Distance = shot.distance();
+        double Compass = shot.compass();
+        double BackCompass = shot.backCompass();
+        double Clino = shot.clino();
+        double BackClino = shot.backClino();
+        int distanceState = shot.distanceState();
+        int compassState = shot.compassState();
+        int backCompassState = shot.backCompassState();
+        int clinoState = shot.clinoState();
+        int backClinoState = shot.backClinoState();
 
         archive << BOOST_SERIALIZATION_NVP(Distance);
         archive << BOOST_SERIALIZATION_NVP(Compass);
         archive << BOOST_SERIALIZATION_NVP(BackCompass);
         archive << BOOST_SERIALIZATION_NVP(Clino);
         archive << BOOST_SERIALIZATION_NVP(BackClino);
+        archive << BOOST_SERIALIZATION_NVP(distanceState);
+        archive << BOOST_SERIALIZATION_NVP(compassState);
+        archive << BOOST_SERIALIZATION_NVP(backCompassState);
+        archive << BOOST_SERIALIZATION_NVP(clinoState);
+        archive << BOOST_SERIALIZATION_NVP(backClinoState);
     }
 
     template<class Archive>
     void load(Archive &archive, cwShot &shot, const unsigned int) {
 
-        QString Distance;
-        QString Compass;
-        QString BackCompass;
-        QString Clino;
-        QString BackClino;
+        double Distance;
+        double Compass;
+        double BackCompass;
+        double Clino;
+        double BackClino;
+
+        int distanceState;
+        int compassState;
+        int backCompassState;
+        int clinoState;
+        int backClinoState;
 
         archive >> BOOST_SERIALIZATION_NVP(Distance);
         archive >> BOOST_SERIALIZATION_NVP(Compass);
         archive >> BOOST_SERIALIZATION_NVP(BackCompass);
         archive >> BOOST_SERIALIZATION_NVP(Clino);
         archive >> BOOST_SERIALIZATION_NVP(BackClino);
+        archive >> BOOST_SERIALIZATION_NVP(distanceState);
+        archive >> BOOST_SERIALIZATION_NVP(compassState);
+        archive >> BOOST_SERIALIZATION_NVP(backCompassState);
+        archive >> BOOST_SERIALIZATION_NVP(clinoState);
+        archive >> BOOST_SERIALIZATION_NVP(backClinoState);
 
         shot.setDistance(Distance);
         shot.setCompass(Compass);
         shot.setBackCompass(BackCompass);
         shot.setClino(Clino);
         shot.setBackClino(BackClino);
+
+        shot.setDistanceState((cwDistanceStates::State)distanceState);
+        shot.setCompassState((cwCompassStates::State)compassState);
+        shot.setBackCompassState((cwCompassStates::State)backCompassState);
+        shot.setClinoState((cwClinoStates::State)clinoState);
+        shot.setBackClinoState((cwClinoStates::State)backClinoState);
     }
 
     ////////////////////////// cwScrap ////////////////////////////////////////

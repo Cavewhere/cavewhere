@@ -19,10 +19,23 @@ QValidator::State cwCompassValidator::validate( QString & input, int & pos ) con
     validator.setTop(360);
     validator.setBottom(0);
     validator.setNotation(QDoubleValidator::StandardNotation);
-    return validator.validate(input, pos);
+    QValidator::State state = validator.validate(input, pos);
+
+    if(state == QValidator::Acceptable) {
+        //Just make sure we can convert the input
+        bool okay;
+        double value = input.toDouble(&okay);
+        if(!okay || !check(value)) {
+            //The validator is dump ... this handle use case input="5,5"
+            return QValidator::Invalid;
+        }
+    }
+
+    return state;
 }
 
 int cwCompassValidator::validate( QString input ) const {
     int pos = 0;
     return (int)validate(input, pos);
 }
+

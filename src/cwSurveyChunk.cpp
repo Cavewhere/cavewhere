@@ -508,18 +508,48 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
 
     switch(role) {
     case ShotDistanceRole:
-        return shot->distance();
+        if(shot->distanceState() == cwDistanceStates::Valid) {
+            return shot->distance();
+        }
+        break;
     case ShotCompassRole:
-        return shot->compass();
+        if(shot->compassState() == cwCompassStates::Valid) {
+            return shot->compass();
+        }
+        break;
     case ShotBackCompassRole:
-        return shot->backCompass();
-    case ShotClinoRole:
-        return shot->clino();
+        if(shot->backCompassState() == cwCompassStates::Valid) {
+            return shot->backCompass();
+        }
+    case ShotClinoRole: {
+        switch(shot->clinoState()) {
+        case cwClinoStates::Valid:
+            return shot->clino();
+            case cwClinoStates::Empty:
+            return QVariant();
+        case cwClinoStates::Down:
+            return "Down";
+        case cwClinoStates::Up:
+            return "Up";
+        }
+        break;
+    }
     case ShotBackClinoRole:
-        return shot->backClino();
+        switch(shot->backClinoState()) {
+        case cwClinoStates::Valid:
+            return shot->backClino();
+            case cwClinoStates::Empty:
+            return QVariant();
+        case cwClinoStates::Down:
+            return "Down";
+        case cwClinoStates::Up:
+            return "Up";
+        }
+        break;
     default:
         return QVariant();
     }
+    return QVariant();
 }
 
 /**

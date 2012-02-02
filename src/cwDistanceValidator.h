@@ -11,10 +11,20 @@ public:
     virtual State validate( QString & input, int & pos ) const;
     Q_INVOKABLE virtual int validate( QString input ) const;
 
+    static bool check(double);
+
 signals:
 
 public slots:
 
 };
+
+/**
+    Checks to make sure value is correct, greater than 0.0
+  */
+inline bool cwDistanceValidator::check(double value) {
+    return value >= 0.0;
+}
+
 
 #endif // CWDISTANCEVALIDATOR_H

@@ -102,6 +102,11 @@ bool cwStation::setLeft(double left)
     return setDoubleValue(Left, LeftState, left);
 }
 
+void cwStation::setLeftInputState(cwDistanceStates::State state)
+{
+    setPrivateLRUDState(LeftState, state);
+}
+
 /**
     Must be a valid length, or empty
   */
@@ -112,6 +117,11 @@ bool cwStation::setRight(QString right) {
 bool cwStation::setRight(double right)
 {
     return setDoubleValue(Right, RightState, right);
+}
+
+void cwStation::setRightInputState(cwDistanceStates::State state)
+{
+    setPrivateLRUDState(RightState, state);
 }
 
 /**
@@ -126,6 +136,11 @@ bool cwStation::setUp(double up)
     return setDoubleValue(Up, UpState, up);
 }
 
+void cwStation::setUpInputState(cwDistanceStates::State state)
+{
+    setPrivateLRUDState(UpState, state);
+}
+
 /**
     Must be a valid length, or empty
   */
@@ -135,6 +150,11 @@ bool cwStation::setDown(QString down) {
 
 bool cwStation::setDown(double down) {
     return setDoubleValue(Down, DownState, down);
+}
+
+void cwStation::setDownInputState(cwDistanceStates::State state)
+{
+    setPrivateLRUDState(DownState, state);
 }
 
 bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
@@ -159,6 +179,25 @@ bool cwStation::setDoubleValue(double &setValue, cwDistanceStates::State &state,
         return true;
     }
     return false;
+}
+
+/**
+  Sets the LRUD State, this function uses a switch statement to verify the newState
+  */
+void cwStation::setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState)
+{
+    //We need this switch statement because serialization class (or any other class) could send in interger
+    switch(newState) {
+    case cwDistanceStates::Empty:
+        memberState = cwDistanceStates::Empty;
+        break;
+    case cwDistanceStates::Valid:
+        memberState = cwDistanceStates::Valid;
+        break;
+    default:
+        memberState = cwDistanceStates::Empty;
+        break;
+    }
 }
 
 bool cwStation::setName(QString name) {

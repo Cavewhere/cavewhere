@@ -44,6 +44,8 @@ private:
     void writeLRUDData(QTextStream& stream, cwTrip* trip);
 
     QString toSupportedLength(double length, cwDistanceStates::State) const;
+    QString compassToString(double compass, cwCompassStates::State) const;
+    QString clinoToString(double clino, cwClinoStates::State) const;
 };
 
 #endif // CWSURVEXEXPORTERTRIPTASK_H

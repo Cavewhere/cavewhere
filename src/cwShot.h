@@ -5,6 +5,8 @@
 class cwSurveyChunk;
 class cwStation;
 class cwStationReference;
+class cwValidator;
+#include "cwReadingStates.h"
 
 //Qt includes
 #include <QVariant>
@@ -18,22 +20,37 @@ public:
     cwShot(QString distance,
            QString compass, QString backCompass,
            QString clino, QString backClino);
-    cwShot(const cwShot& shot);
 
-    QString distance() const;
+    double distance() const;
     void setDistance(QString distance);
+    void setDistance(double distance);
+    void setDistanceState(cwDistanceStates::State state);
 
-    QString compass() const;
+    double compass() const;
     void setCompass(QString compass);
+    void setCompass(double compass);
+    void setCompassState(cwCompassStates::State state);
 
-    QString backCompass() const;
+    double backCompass() const;
     void setBackCompass(QString backCompass);
+    void setBackCompass(double backCompass);
+    void setBackCompassState(cwCompassStates::State state);
 
-    QString clino() const;
+    double clino() const;
     void setClino(QString backClino);
+    void setClino(double clino);
+    void setClinoState(cwClinoStates::State state);
 
-    QString backClino() const;
+    double backClino() const;
     void setBackClino(QString backClino);
+    void setBackClino(double backClino);
+    void setBackClinoState(cwClinoStates::State state);
+
+    cwDistanceStates::State distanceState() const;
+    cwCompassStates::State compassState() const;
+    cwCompassStates::State backCompassState() const;
+    cwClinoStates::State clinoState() const;
+    cwClinoStates::State backClinoState() const;
 
     void setParentChunk(cwSurveyChunk* parentChunk);
     cwSurveyChunk* parentChunk() const;
@@ -42,31 +59,75 @@ public:
     cwStationReference fromStation() const;
 
 private:
-    QString Distance;
-    QString Compass;
-    QString BackCompass;
-    QString Clino;
-    QString BackClino;
+    enum ValidState {
+        Invalid,
+        ValidEmpty,
+        ValidDouble,
+        ValidString
+    };
+
+
+    double Distance;
+    double Compass;
+    double BackCompass;
+    double Clino;
+    double BackClino;
+
+    cwDistanceStates::State DistanceState;
+    cwCompassStates::State CompassState;
+    cwCompassStates::State BackCompassState;
+    cwClinoStates::State ClinoState;
+    cwClinoStates::State BackClinoState;
+
     cwSurveyChunk* ParentChunk;
+
+    ValidState setValueWithString(const cwValidator& validator, double& memberData, int& memberState, QString newValue);
+    void setClinoValueWithString(double& memberData, int& memberState, QString newValue);
+    void setPrivateCompass(double& memberData, cwCompassStates::State& state, double value);
+    void setPrivateClino(double& memberData, cwClinoStates::State& state, double value);
+
+    void setPrivateCompassState(cwCompassStates::State& memberState, cwCompassStates::State newState);
+    void setPrivateClinoState(cwClinoStates::State& memberState, cwClinoStates::State newState);
+
 };
 
-inline QString cwShot::distance() const {
+inline cwDistanceStates::State cwShot::distanceState() const {
+    return DistanceState;
+}
+
+inline cwCompassStates::State cwShot::compassState() const {
+    return CompassState;
+}
+
+inline cwCompassStates::State cwShot::backCompassState() const {
+    return BackCompassState;
+}
+
+inline cwClinoStates::State cwShot::clinoState() const {
+    return ClinoState;
+}
+
+inline cwClinoStates::State cwShot::backClinoState() const {
+    return BackClinoState;
+}
+
+inline double cwShot::distance() const {
     return Distance;
 }
 
-inline QString cwShot::compass() const {
+inline double cwShot::compass() const {
     return Compass;
 }
 
-inline QString cwShot::backCompass() const {
+inline double cwShot::backCompass() const {
     return BackCompass;
 }
 
-inline QString cwShot::clino() const {
+inline double cwShot::clino() const {
     return Clino;
 }
 
-inline QString cwShot::backClino() const {
+inline double cwShot::backClino() const {
     return BackClino;
 }
 

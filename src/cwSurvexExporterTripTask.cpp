@@ -195,6 +195,36 @@ QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceSta
 }
 
 /**
+  This converts a compass bearing into a string based on the state.
+  */
+QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassStates::State state) const
+{
+    switch(state) {
+    case cwCompassStates::Empty:
+        return QString("-");
+    case cwCompassStates::Valid:
+        return QString("%1").arg(compass);
+    }
+}
+
+/**
+  This converts a clino into a string based on the state.
+  */
+QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::State state) const
+{
+    switch(state) {
+    case cwClinoStates::Empty:
+        return QString("-");
+    case cwClinoStates::Valid:
+        return QString("%1").arg(clino);
+    case cwClinoStates::Down:
+        return QString("DOWN");
+    case cwClinoStates::Up:
+        return QString("UP");
+    }
+}
+
+/**
   \brief Writes a chunk to a stream
   */
 void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
@@ -209,11 +239,11 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot->distance().toDouble(), cwDistanceStates::Valid);
-        QString compass = shot->compass();
-        QString backCompass = shot->backCompass();
-        QString clino = shot->clino();
-        QString backClino = shot->backClino();
+        QString distance = toSupportedLength(shot->distance(), cwDistanceStates::Valid);
+        QString compass = compassToString(shot->compass(), shot->compassState());
+        QString backCompass = compassToString(shot->backCompass(), shot->backCompassState());
+        QString clino = clinoToString(shot->clino(), shot->clinoState());
+        QString backClino = clinoToString(shot->backClino(), shot->backClinoState());
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }

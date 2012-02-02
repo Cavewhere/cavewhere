@@ -11,11 +11,20 @@ public:
 
     State validate( QString & input, int & pos ) const;
     Q_INVOKABLE int validate( QString input ) const;
+    static bool check(double);
 
 signals:
 
 public slots:
 
 };
+
+/**
+  Checks to make sure the value is correct, greater than 0.0
+  */
+inline bool cwCompassValidator::check(double value) {
+    return value >= 0.0 && value < 360.0;
+}
+
 
 #endif // CWCOMPASSVALIDATOR_H

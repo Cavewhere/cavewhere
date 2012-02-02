@@ -146,7 +146,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         cwStationReference from = shot->fromStation();
         cwStationReference to = shot->toStation();
 
-        float shotLength = cwUnits::convert(shot->distance().toDouble(),
+        float shotLength = cwUnits::convert(shot->distance(),
                                             distanceUnit,
                                             cwUnits::Feet);
 

@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwReadingStates.h"
+#include "cwDistanceValidator.h"
 
 class cwStation {
 
@@ -36,29 +37,31 @@ public:
     cwDistanceStates::State upInputState() const;
     cwDistanceStates::State downInputState() const;
 
-    QVector3D position() const;
-
     void setData(QVariant data, DataRoles role);
     QVariant data(DataRoles role) const;
 
-    bool isValid() const { return !Name.isEmpty(); }
-
-public:
     bool setName(QString Name);
 
     bool setLeft(QString left);
     bool setLeft(double left);
+    void setLeftInputState(cwDistanceStates::State state);
 
     bool setRight(QString right);
     bool setRight(double right);
+    void setRightInputState(cwDistanceStates::State state);
 
     bool setUp(QString up);
     bool setUp(double up);
+    void setUpInputState(cwDistanceStates::State state);
 
     bool setDown(QString down);
     bool setDown(double down);
+    void setDownInputState(cwDistanceStates::State state);
 
+    QVector3D position() const;
     void setPosition(QVector3D position); //This is set by the loop closer
+
+    bool isValid() const { return !Name.isEmpty(); }
 
 protected:
     QString Name;
@@ -78,6 +81,7 @@ protected:
     bool checkLRUDValue(double value) const;
     bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);
     bool setDoubleValue(double& setValue, cwDistanceStates::State& state, double value);
+    void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
 };
 
 inline QString cwStation::name() const { return Name; }
@@ -95,11 +99,11 @@ inline cwDistanceStates::State cwStation::rightInputState() const {
 }
 
 inline cwDistanceStates::State cwStation::upInputState() const {
-    return DownState;
+    return UpState;
 }
 
 inline cwDistanceStates::State cwStation::downInputState() const {
-    return UpState;
+    return DownState;
 }
 
 inline QVector3D cwStation::position() const { return Position; }
@@ -111,7 +115,7 @@ inline void cwStation::setPosition(QVector3D position) {
 
 inline bool cwStation::checkLRUDValue(double value) const
 {
-    return value >= 0.0;
+    return cwDistanceValidator::check(value);
 }
 
 

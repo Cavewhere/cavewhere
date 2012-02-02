@@ -22,11 +22,25 @@ QValidator::State cwClinoValidator::validate ( QString & input, int & pos ) cons
     doubleValidator.setNotation(QDoubleValidator::StandardNotation);
     QValidator::State state = doubleValidator.validate(input, pos);
 
-    if(state == QValidator::Invalid) {
+    switch(state) {
+    case QValidator::Invalid: {
         QRegExpValidator upDownValidator;
         QRegExp regexp("up|down", Qt::CaseInsensitive);
         upDownValidator.setRegExp(regexp);
         return upDownValidator.validate(input, pos);
+    }
+    case QValidator::Acceptable: {
+        //Just make sure we can convert the input
+        bool okay;
+        double value = input.toDouble(&okay);
+        if(!okay || !check(value)) {
+            //The validator is dump ... this handle use case input="5,5"
+            return QValidator::Invalid;
+        }
+        break;
+    }
+    default:
+        break;
     }
 
     return state;
@@ -36,3 +50,5 @@ int cwClinoValidator::validate( QString input ) const {
     int pos = 0;
     return (int)validate(input, pos);
 }
+
+

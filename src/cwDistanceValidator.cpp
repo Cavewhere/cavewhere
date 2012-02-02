@@ -24,8 +24,8 @@ QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) co
     if(state == QValidator::Acceptable) {
         //Just make sure we can convert the input
         bool okay;
-        input.toDouble(&okay);
-        if(!okay) {
+        double value = input.toDouble(&okay);
+        if(!okay || !check(value)) {
             //The validator is dump ... this handle use case input="5,5"
             return QValidator::Invalid;
         }
@@ -38,3 +38,4 @@ int cwDistanceValidator::validate( QString input ) const {
     int pos = 0;
     return (int)validate(input, pos);
 }
+
