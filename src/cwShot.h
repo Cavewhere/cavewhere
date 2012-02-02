@@ -9,7 +9,7 @@ class cwValidator;
 #include "cwReadingStates.h"
 
 //Qt includes
-#include <QVariant>
+#include <QSharedDataPointer>
 
 class cwShot
 {
@@ -20,6 +20,7 @@ public:
     cwShot(QString distance,
            QString compass, QString backCompass,
            QString clino, QString backClino);
+    cwShot(const cwShot& shot);
 
     double distance() const;
     void setDistance(QString distance);
@@ -66,19 +67,24 @@ private:
         ValidString
     };
 
+    class PrivateData : public QSharedData {
+    public:
+        PrivateData();
 
-    double Distance;
-    double Compass;
-    double BackCompass;
-    double Clino;
-    double BackClino;
+        double Distance;
+        double Compass;
+        double BackCompass;
+        double Clino;
+        double BackClino;
 
-    cwDistanceStates::State DistanceState;
-    cwCompassStates::State CompassState;
-    cwCompassStates::State BackCompassState;
-    cwClinoStates::State ClinoState;
-    cwClinoStates::State BackClinoState;
+        cwDistanceStates::State DistanceState;
+        cwCompassStates::State CompassState;
+        cwCompassStates::State BackCompassState;
+        cwClinoStates::State ClinoState;
+        cwClinoStates::State BackClinoState;
+    };
 
+    QSharedDataPointer<PrivateData> Data;
     cwSurveyChunk* ParentChunk;
 
     ValidState setValueWithString(const cwValidator& validator, double& memberData, int& memberState, QString newValue);
@@ -92,43 +98,43 @@ private:
 };
 
 inline cwDistanceStates::State cwShot::distanceState() const {
-    return DistanceState;
+    return Data->DistanceState;
 }
 
 inline cwCompassStates::State cwShot::compassState() const {
-    return CompassState;
+    return Data->CompassState;
 }
 
 inline cwCompassStates::State cwShot::backCompassState() const {
-    return BackCompassState;
+    return Data->BackCompassState;
 }
 
 inline cwClinoStates::State cwShot::clinoState() const {
-    return ClinoState;
+    return Data->ClinoState;
 }
 
 inline cwClinoStates::State cwShot::backClinoState() const {
-    return BackClinoState;
+    return Data->BackClinoState;
 }
 
 inline double cwShot::distance() const {
-    return Distance;
+    return Data->Distance;
 }
 
 inline double cwShot::compass() const {
-    return Compass;
+    return Data->Compass;
 }
 
 inline double cwShot::backCompass() const {
-    return BackCompass;
+    return Data->BackCompass;
 }
 
 inline double cwShot::clino() const {
-    return Clino;
+    return Data->Clino;
 }
 
 inline double cwShot::backClino() const {
-    return BackClino;
+    return Data->BackClino;
 }
 
 

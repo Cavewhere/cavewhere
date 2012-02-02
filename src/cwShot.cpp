@@ -10,16 +10,7 @@
 
 
 cwShot::cwShot() :
-    Distance(0.0),
-    Compass(0.0),
-    BackCompass(0.0),
-    Clino(0.0),
-    BackClino(0.0),
-    DistanceState(cwDistanceStates::Empty),
-    CompassState(cwCompassStates::Empty),
-    BackCompassState(cwCompassStates::Empty),
-    ClinoState(cwClinoStates::Empty),
-    BackClinoState(cwClinoStates::Empty),
+    Data(new PrivateData()),
     ParentChunk(NULL) {
 }
 
@@ -28,6 +19,7 @@ cwShot::cwShot(QString distance,
                QString backCompass,
                QString clino,
                QString backClino) :
+    Data(new PrivateData()),
     ParentChunk(NULL)
 {
 
@@ -39,14 +31,35 @@ cwShot::cwShot(QString distance,
     ParentChunk = NULL;
 }
 
+cwShot::cwShot(const cwShot &shot) :
+    Data(shot.Data),
+    ParentChunk(NULL)
+{
+}
+
+cwShot::PrivateData::PrivateData() :
+    Distance(0.0),
+    Compass(0.0),
+    BackCompass(0.0),
+    Clino(0.0),
+    BackClino(0.0),
+    DistanceState(cwDistanceStates::Empty),
+    CompassState(cwCompassStates::Empty),
+    BackCompassState(cwCompassStates::Empty),
+    ClinoState(cwClinoStates::Empty),
+    BackClinoState(cwClinoStates::Empty)
+{
+
+}
+
 void cwShot::setDistance(QString distance) {
-    setValueWithString(cwDistanceValidator(), Distance, (int&)DistanceState, distance);
+    setValueWithString(cwDistanceValidator(), Data->Distance, (int&)Data->DistanceState, distance);
 }
 
 void cwShot::setDistance(double distance) {
     if(cwDistanceValidator::check(distance)) {
-        Distance = distance;
-        DistanceState = cwDistanceStates::Valid;
+        Data->Distance = distance;
+        Data->DistanceState = cwDistanceStates::Valid;
     }
 }
 
@@ -55,25 +68,25 @@ void cwShot::setDistanceState(cwDistanceStates::State state)
     //We need this switch statement because serialization class (or any other class) could send in interger
     switch(state) {
     case cwDistanceStates::Empty:
-        DistanceState = cwDistanceStates::Empty;
+        Data->DistanceState = cwDistanceStates::Empty;
         break;
     case cwDistanceStates::Valid:
-        DistanceState = cwDistanceStates::Valid;
+        Data->DistanceState = cwDistanceStates::Valid;
         break;
     default:
-        DistanceState = cwDistanceStates::Empty;
+        Data->DistanceState = cwDistanceStates::Empty;
         break;
     }
 }
 
 void cwShot::setCompass(QString compass) {
-    setValueWithString(cwCompassValidator(), Compass, (int&)CompassState, compass);
+    setValueWithString(cwCompassValidator(), Data->Compass, (int&)Data->CompassState, compass);
 }
 
 /// Sets the front sight compass for the shot
 void cwShot::setCompass(double compass)
 {
-    setPrivateCompass(Compass, CompassState, compass);
+    setPrivateCompass(Data->Compass, Data->CompassState, compass);
 }
 
 /**
@@ -81,17 +94,17 @@ void cwShot::setCompass(double compass)
   */
 void cwShot::setCompassState(cwCompassStates::State state)
 {
-    setPrivateCompassState(CompassState, state);
+    setPrivateCompassState(Data->CompassState, state);
 }
 
 /// Sets the back sight compass for the shot
 void cwShot::setBackCompass(QString backCompass) {
-    setValueWithString(cwCompassValidator(), BackCompass, (int&)BackCompassState, backCompass);
+    setValueWithString(cwCompassValidator(), Data->BackCompass, (int&)Data->BackCompassState, backCompass);
 }
 
 void cwShot::setBackCompass(double backCompass)
 {
-    setPrivateCompass(BackCompass, BackCompassState, backCompass);
+    setPrivateCompass(Data->BackCompass, Data->BackCompassState, backCompass);
 }
 
 /**
@@ -99,35 +112,35 @@ void cwShot::setBackCompass(double backCompass)
   */
 void cwShot::setBackCompassState(cwCompassStates::State state)
 {
-    setPrivateCompassState(BackCompassState, state);
+    setPrivateCompassState(Data->BackCompassState, state);
 }
 
 void cwShot::setClino(QString clino) {
-    setClinoValueWithString(Clino, (int&)ClinoState, clino);
+    setClinoValueWithString(Data->Clino, (int&)Data->ClinoState, clino);
 }
 
 void cwShot::setClino(double clino)
 {
-    setPrivateClino(Clino, ClinoState, clino);
+    setPrivateClino(Data->Clino, Data->ClinoState, clino);
 }
 
 void cwShot::setClinoState(cwClinoStates::State state)
 {
-    setPrivateClinoState(ClinoState, state);
+    setPrivateClinoState(Data->ClinoState, state);
 }
 
 void cwShot::setBackClino(QString backClino) {
-    setClinoValueWithString(BackClino, (int&)BackClinoState, backClino);
+    setClinoValueWithString(Data->BackClino, (int&)Data->BackClinoState, backClino);
 }
 
 void cwShot::setBackClino(double backClino)
 {
-    setPrivateClino(BackClino, BackClinoState, backClino);
+    setPrivateClino(Data->BackClino, Data->BackClinoState, backClino);
 }
 
 void cwShot::setBackClinoState(cwClinoStates::State state)
 {
-    setPrivateClinoState(BackClinoState, state);
+    setPrivateClinoState(Data->BackClinoState, state);
 }
 
 /**
