@@ -52,7 +52,7 @@ void cwCaveExporterTask::UpdateProgress(int /*tripProgress*/) {
   \brief Checks if the cave has trips in it before running
   */
 bool cwCaveExporterTask::checkData() {
-    checkData(Cave);
+    return checkData(Cave);
 }
 
 /**
