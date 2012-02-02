@@ -59,8 +59,9 @@ public:
     cwStationReference station(int index) const;
 
     int shotCount() const;
-    cwShot* shot(int index) const;
-    int indexOfShot(cwShot* shot) const;
+//    cwShot shot(int index) const;
+    cwSurveyChunk* parentChunkOfShot(int shotIndex) const;
+    int chunkShotIndex(int shotIndex) const;
 
 signals:
     void nameChanged();

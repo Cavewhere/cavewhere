@@ -142,11 +142,11 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
     cwUnits::LengthUnit distanceUnit = trip->calibrations()->distanceUnit();
 
     for(int i = 0; i < chunk->shotCount(); i++) {
-        cwShot* shot = chunk->shot(i);
-        cwStationReference from = shot->fromStation();
-        cwStationReference to = shot->toStation();
+        cwShot shot = chunk->shot(i);
+        cwStationReference from = chunk->station(i);
+        cwStationReference to = chunk->station(i + 1);
 
-        float shotLength = cwUnits::convert(shot->distance(),
+        float shotLength = cwUnits::convert(shot.distance(),
                                             distanceUnit,
                                             cwUnits::Feet);
 
@@ -223,7 +223,7 @@ float cwCompassExportCaveTask::convertField(cwStationReference station,
 
   This will convert the shot's compass and clino data such that it works correctly in compass
   */
-float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotField field) {
+float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot shot, ShotField field) {
 
     QString frontSite;
     QString backSite;
@@ -231,13 +231,13 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot* shot, ShotFiel
     switch(field) {
     case Compass:
     case BackCompass:
-        frontSite = shot->compass();
-        backSite = shot->backCompass();
+        frontSite = shot.compass();
+        backSite = shot.backCompass();
         break;
     case Clino:
     case BackClino:
-        frontSite = shot->clino();
-        backSite = shot->backClino();
+        frontSite = shot.clino();
+        backSite = shot.backClino();
     }
 
     float value = 0.0f;

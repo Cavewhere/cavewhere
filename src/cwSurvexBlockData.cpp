@@ -157,37 +157,43 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      return numShots;
  }
 
- /**
-   \brief Gets the shot at an index
+// /**
+//   \brief Gets the shot at an index
 
-   \param index - the index of the shot
+//   \param index - the index of the shot
+//   */
+// cwShot cwSurvexBlockData::shot(int index) const {
+//     foreach(cwSurveyChunk* chunk, Chunks) {
+//         if(index < chunk->shotCount()) {
+//             return chunk->shot(index);
+//         }
+//         index -= chunk->shotCount();
+//     }
+//     return cwShot();
+// }
+
+ /**
+   Get's the parent cwSurveyChunk at shot index
    */
- cwShot* cwSurvexBlockData::shot(int index) const {
+ cwSurveyChunk *cwSurvexBlockData::parentChunkOfShot(int shotIndex) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
-         if(index < chunk->shotCount()) {
-             return chunk->shot(index);
+         if(shotIndex < chunk->shotCount()) {
+             return chunk;
          }
-         index -= chunk->shotCount();
+         shotIndex -= chunk->shotCount();
      }
      return NULL;
  }
 
- /**
-   \brief Get's the index of the shot
-
-   If the shot doesn't in this block, then -1 is return
-   */
- int cwSurvexBlockData::indexOfShot(cwShot* shot) const {
-     int index = 0;
+ int cwSurvexBlockData::chunkShotIndex(int shotIndex) const
+ {
      foreach(cwSurveyChunk* chunk, Chunks) {
-         for(int i = 0; i < chunk->shotCount(); i++) {
-             cwShot* chunkShot = chunk->shot(i);
-             if(shot == chunkShot) {
-                 return index;
-             }
-             index++;
+         if(shotIndex < chunk->shotCount()) {
+             return shotIndex;
          }
+         shotIndex -= chunk->shotCount();
      }
      return -1;
  }
+
 

@@ -10,17 +10,15 @@
 
 
 cwShot::cwShot() :
-    Data(new PrivateData()),
-    ParentChunk(NULL) {
-}
+    Data(new PrivateData())
+{    }
 
 cwShot::cwShot(QString distance,
                QString compass,
                QString backCompass,
                QString clino,
                QString backClino) :
-    Data(new PrivateData()),
-    ParentChunk(NULL)
+    Data(new PrivateData())
 {
 
     setDistance(distance);
@@ -28,12 +26,10 @@ cwShot::cwShot(QString distance,
     setBackCompass(backCompass);
     setClino(clino);
     setBackClino(backClino);
-    ParentChunk = NULL;
 }
 
 cwShot::cwShot(const cwShot &shot) :
-    Data(shot.Data),
-    ParentChunk(NULL)
+    Data(shot.Data)
 {
 }
 
@@ -141,42 +137,6 @@ void cwShot::setBackClino(double backClino)
 void cwShot::setBackClinoState(cwClinoStates::State state)
 {
     setPrivateClinoState(Data->BackClinoState, state);
-}
-
-/**
-  Sets the parent chunk
-  */
-void cwShot::setParentChunk(cwSurveyChunk* parentChunk) {
-    ParentChunk = parentChunk;
-}
-
-/**
-  \brief The parent chunk that this shot is connected to
-  */
-cwSurveyChunk* cwShot::parentChunk() const {
-    return ParentChunk;
-}
-
-/**
-  \brief The to station of this shot
-  */
-cwStationReference cwShot::toStation() const {
-    cwSurveyChunk* chunk = parentChunk();
-    if(chunk != NULL) {
-        return chunk->toFromStations(this).second;
-    }
-    return cwStationReference();
-}
-
-/**
-  \brief The from station of these shot
-  */
-cwStationReference cwShot::fromStation() const {
-    cwSurveyChunk* chunk = parentChunk();
-    if(chunk != NULL) {
-        return chunk->toFromStations(this).first;
-    }
-    return cwStationReference();
 }
 
 /**

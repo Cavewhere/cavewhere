@@ -46,7 +46,7 @@ private:
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 
     float convertField(cwStationReference station, StationLRUDField field, cwUnits::LengthUnit unit);
-    float convertField(cwTrip* trip, cwShot* shot, ShotField field);
+    float convertField(cwTrip* trip, cwShot shot, ShotField field);
     QString formatFloat(float value);
 
     QString convertFromDownUp(QString clinoReading);

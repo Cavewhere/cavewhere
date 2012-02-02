@@ -144,7 +144,7 @@ private:
     cwStationReference createOrLookupStation(QString stationName);
     void addShotToCurrentChunk(cwStationReference fromStation,
                                cwStationReference toStation,
-                               cwShot* shot);
+                               cwShot shot);
 
     void parsePassageData(QString line);
 

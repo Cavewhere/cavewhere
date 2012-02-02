@@ -235,15 +235,15 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
 
         cwStationReference fromStation = chunk->station(i);
         cwStationReference toStation = chunk->station(i + 1);
-        cwShot* shot = chunk->shot(i);
+        cwShot shot = chunk->shot(i);
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot->distance(), cwDistanceStates::Valid);
-        QString compass = compassToString(shot->compass(), shot->compassState());
-        QString backCompass = compassToString(shot->backCompass(), shot->backCompassState());
-        QString clino = clinoToString(shot->clino(), shot->clinoState());
-        QString backClino = clinoToString(shot->backClino(), shot->backClinoState());
+        QString distance = toSupportedLength(shot.distance(), cwDistanceStates::Valid);
+        QString compass = compassToString(shot.compass(), shot.compassState());
+        QString backCompass = compassToString(shot.backCompass(), shot.backCompassState());
+        QString clino = clinoToString(shot.clino(), shot.clinoState());
+        QString backClino = clinoToString(shot.backClino(), shot.backClinoState());
 
         //Make sure the model is good
         if(distance.isEmpty()) { continue; }

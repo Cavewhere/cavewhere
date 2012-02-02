@@ -441,7 +441,7 @@ namespace boost {
     template<class Archive>
     void save(Archive &archive, const cwSurveyChunk &chunk, const unsigned int) {
         QList<cwStationReference> stations = chunk.stations();
-        QList<cwShot*> shots = chunk.shots();
+        QList<cwShot> shots = chunk.shots();
 
         archive << BOOST_SERIALIZATION_NVP(stations);
         archive << BOOST_SERIALIZATION_NVP(shots);
@@ -452,7 +452,7 @@ namespace boost {
     void load(Archive &archive, cwSurveyChunk &chunk, const unsigned int) {
 
         QList<cwStationReference> stations;
-        QList<cwShot*> shots;;
+        QList<cwShot> shots;;
 
         archive >> BOOST_SERIALIZATION_NVP(stations);
         archive >> BOOST_SERIALIZATION_NVP(shots);
@@ -465,7 +465,7 @@ namespace boost {
         for(int i = 0; i < stations.count() - 1; i++) {
             cwStationReference fromStation = stations[i];
             cwStationReference toStation = stations[i + 1];
-            cwShot* shot = shots[i];
+            cwShot shot = shots[i];
 
             chunk.appendShot(fromStation, toStation, shot);
         }

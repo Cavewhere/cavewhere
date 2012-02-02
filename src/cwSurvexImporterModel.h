@@ -5,6 +5,7 @@
 class cwSurvexGlobalData;
 class cwSurvexBlockData;
 class cwShot;
+class cwSurveyChunk;
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -25,10 +26,9 @@ public:
     void setSurvexData(cwSurvexGlobalData* data);
 
     cwSurvexBlockData* toBlockData(const QModelIndex& index) const;
-    cwShot* toShot(const QModelIndex& index) const;
+    cwSurveyChunk* surveyChunk(cwSurvexBlockData* parentBlock, int shotIndex);
 
     QModelIndex toIndex(cwSurvexBlockData* block);
-    QModelIndex toIndex(cwShot* shot);
 
 signals:
 
@@ -48,19 +48,18 @@ private:
     };
 
     cwSurvexGlobalData* GlobalData;
-    QHash<void*, Type> PointerTypeLookup;
 
     QVariant NameColumnData(const QModelIndex & index, int role) const;
     QVariant NameColumnDisplayData(const QModelIndex& index) const;
     QVariant NameColumnIconData(const QModelIndex& index) const;
 
-    QModelIndex createAndRegisterIndex(int row, void* object, Type type) const;
-
     void connectBlock(cwSurvexBlockData* block);
+
+    bool isBlock(const QModelIndex& index) const;
+    bool isShot(const QModelIndex& index) const;
 
 private slots:
     void blockDataChanged();
-    void shotDataChanged();
 
 };
 

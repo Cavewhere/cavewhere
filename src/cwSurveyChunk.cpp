@@ -34,18 +34,7 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
     Stations = chunk.Stations;
 
     //Copy all the shots
-    Shots.reserve(chunk.Shots.size());
-    foreach(cwShot* shot, chunk.Shots) {
-        cwShot* newShot = new cwShot(*shot);
-        newShot->setParentChunk(this);
-        Shots.append(newShot);
-    }
-}
-
-cwSurveyChunk::~cwSurveyChunk() {
-    foreach(cwShot* shot, Shots) {
-        delete shot;
-    }
+    Shots = chunk.Shots;
 }
 
 /**
@@ -89,11 +78,11 @@ int cwSurveyChunk::shotCount() const {
     return Shots.size();
 }
 
-cwShot* cwSurveyChunk::shot(int index) const {
+cwShot cwSurveyChunk::shot(int index) const {
     if(shotIndexCheck(index)) {
         return Shots[index];
     }
-    return NULL;
+    return cwShot();
 }
 
 /**
@@ -116,7 +105,7 @@ void cwSurveyChunk::appendNewShot() {
         }
 
         if(Shots.size() != 1) {
-            Shots.append(new cwShot());
+            Shots.append(cwShot());
             emit shotsAdded(0, 0);
         }
         return;
@@ -134,9 +123,7 @@ void cwSurveyChunk::appendNewShot() {
     }
 
     cwStationReference toStation = createNewStation();
-    cwShot* shot = new cwShot();
-
-    appendShot(fromStation, toStation, shot);
+    appendShot(fromStation, toStation, cwShot());
 }
 
 /**
@@ -151,9 +138,9 @@ void cwSurveyChunk::appendNewShot() {
   isn't equal to the last station in the chunk.  If toStation isn't the last station,
   you need to create a new cwSurveyChunk and call this function again
   */
-void cwSurveyChunk::appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot) {
+void cwSurveyChunk::appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot shot) {
     //qDebug() << "Trying to add shot";
-    if(!canAddShot(fromStation, toStation, shot)) { return; }
+    if(!canAddShot(fromStation, toStation)) { return; }
 
     int index;
     int firstIndex = Stations.size();
@@ -163,7 +150,6 @@ void cwSurveyChunk::appendShot(cwStationReference fromStation, cwStationReferenc
 
     index = Shots.size();
     Shots.append(shot);
-    shot->setParentChunk(this);
     emit shotsAdded(index, index);
 
     index = Stations.size();
@@ -190,10 +176,10 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
 
         //Get the current stations and shots
         cwStationReference station = Stations[i];
-        cwShot* currentShot = shot(i - 1);
+        cwShot currentShot = shot(i - 1);
 
         newChunk->Stations.append(station);
-        if(currentShot != NULL) {
+        if(currentShot.isValid()) {
             newChunk->Shots.append(currentShot);
         }
     }
@@ -205,7 +191,7 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     //Remove the stations and shots from the list
     int shotIndex = stationIndex - 1;
     QList<cwStationReference>::iterator stationIter = Stations.begin() + stationIndex;
-    QList<cwShot*>::iterator shotIter = Shots.begin() + shotIndex;
+    QList<cwShot>::iterator shotIter = Shots.begin() + shotIndex;
     Stations.erase(stationIter, Stations.end());
     Shots.erase(shotIter, Shots.end());
 
@@ -241,10 +227,9 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
     }
 
     cwStationReference station = createNewStation();
-    cwShot* shot = new cwShot();
 
     Stations.insert(stationIndex, station);
-    Shots.insert(shotIndex, shot);
+    Shots.insert(shotIndex, cwShot());
 
     emit stationsAdded(stationIndex, stationIndex);
     emit shotsAdded(shotIndex, shotIndex);
@@ -267,12 +252,11 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     }
 
     cwStationReference station = createNewStation();
-    cwShot* shot = new cwShot();
 
     Stations.insert(stationIndex, station);
     emit stationsAdded(stationIndex, stationIndex);
 
-    Shots.insert(shotIndex, shot);
+    Shots.insert(shotIndex, cwShot());
     emit shotsAdded(shotIndex, shotIndex);
 }
 
@@ -282,31 +266,49 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
 
   \returns true if AddShot() will be successfull or will do nothing
   */
-bool cwSurveyChunk::canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation, cwShot* shot) {
+bool cwSurveyChunk::canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation) {
     return !fromStation.station().isNull() &&
             !toStation.station().isNull() &&
-            shot != NULL &&
             (Stations.empty() || Stations.last() == fromStation);
 }
 
-/**
-  \brief Returns the two and from stations at shot
+///**
+//  \brief Returns the two and from stations at shot
 
-  This first find the shot and the get's the to and from station.
-  */
-QPair<cwStationReference, cwStationReference> cwSurveyChunk::toFromStations(const cwShot* shot) const {
-    if(!isValid()) { return QPair<cwStationReference, cwStationReference>(); }
-    //if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(NULL, NULL); }
+//  This first find the shot and the get's the to and from station.
+//  */
+//QPair<cwStationReference, cwStationReference> cwSurveyChunk::toFromStations(const cwShot &shot) const {
+//    if(!isValid()) { return QPair<cwStationReference, cwStationReference>(); }
+//    //if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(NULL, NULL); }
 
-    for(int i = 0; i < Shots.size(); i++) {
-        if(Shots[i] == shot) {
-            return QPair<cwStationReference, cwStationReference>(Stations[i], Stations[i + 1]);
-        }
-    }
+//    for(int i = 0; i < Shots.size(); i++) {
+//        if(Shots[i].sameIntervalPointer(shot)) {
+//            return QPair<cwStationReference, cwStationReference>(Stations[i], Stations[i + 1]);
+//        }
+//    }
 
-    return QPair<cwStationReference, cwStationReference>();
-}
+//    return QPair<cwStationReference, cwStationReference>();
+//}
 
+///**
+//  \brief Returns the to and from stations at shot
+
+//  This first find the shot and the get's the to  station.
+//  */
+//cwStationReference cwSurveyChunk::toStation(const cwShot &shot) const
+//{
+//    return toFromStations(shot).second;
+//}
+
+///**
+//  \brief Returns the from stations at shot
+
+//  This first find the shot and the get's the  from station.
+//  */
+//cwStationReference cwSurveyChunk::fromStation(const cwShot &shot) const
+//{
+//    return toFromStations(shot).first;
+//}
 
 /**
   \brief Removes a shot and a station from the chunk
@@ -504,27 +506,27 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
 QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
     if(index < 0 || index >= Shots.size()) { return QVariant(); }
 
-    cwShot* shot = Shots[index];
+    const cwShot& shot = Shots[index];
 
     switch(role) {
     case ShotDistanceRole:
-        if(shot->distanceState() == cwDistanceStates::Valid) {
-            return shot->distance();
+        if(shot.distanceState() == cwDistanceStates::Valid) {
+            return shot.distance();
         }
         break;
     case ShotCompassRole:
-        if(shot->compassState() == cwCompassStates::Valid) {
-            return shot->compass();
+        if(shot.compassState() == cwCompassStates::Valid) {
+            return shot.compass();
         }
         break;
     case ShotBackCompassRole:
-        if(shot->backCompassState() == cwCompassStates::Valid) {
-            return shot->backCompass();
+        if(shot.backCompassState() == cwCompassStates::Valid) {
+            return shot.backCompass();
         }
     case ShotClinoRole: {
-        switch(shot->clinoState()) {
+        switch(shot.clinoState()) {
         case cwClinoStates::Valid:
-            return shot->clino();
+            return shot.clino();
             case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:
@@ -535,9 +537,9 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
         break;
     }
     case ShotBackClinoRole:
-        switch(shot->backClinoState()) {
+        switch(shot.backClinoState()) {
         case cwClinoStates::Valid:
-            return shot->backClino();
+            return shot.backClino();
             case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:
@@ -612,27 +614,27 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     }
 
     QString dataString = data.toString();
-    cwShot* shot = Shots[index];
+    cwShot& shot = Shots[index];
 
     switch(role) {
     case ShotDistanceRole:
-        shot->setDistance(dataString);
+        shot.setDistance(dataString);
         dataChanged(role, index);
         break;
     case ShotCompassRole:
-        shot->setCompass(dataString);
+        shot.setCompass(dataString);
         dataChanged(role, index);
         break;
     case ShotBackCompassRole:
-        shot->setBackCompass(dataString);
+        shot.setBackCompass(dataString);
         dataChanged(role, index);
         break;
     case ShotClinoRole:
-        shot->setClino(dataString);
+        shot.setClino(dataString);
         dataChanged(role, index);
         break;
     case ShotBackClinoRole:
-        shot->setBackClino(dataString);
+        shot.setBackClino(dataString);
         dataChanged(role, index);
         break;
     default:

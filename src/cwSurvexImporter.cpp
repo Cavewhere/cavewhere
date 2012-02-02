@@ -477,12 +477,12 @@ void cwSurvexImporter::parseNormalData(QString line) {
     cwStationReference fromStation = createOrLookupStation(fromStationName);
     cwStationReference toStation = createOrLookupStation(toStationName);
 
-    cwShot* shot = new cwShot();
-    shot->setDistance(extractData(data, Distance));
-    shot->setCompass(extractData(data, Compass));
-    shot->setBackCompass(extractData(data, BackCompass));
-    shot->setClino(extractData(data, Clino));
-    shot->setBackClino(extractData(data, BackClino));
+    cwShot shot;
+    shot.setDistance(extractData(data, Distance));
+    shot.setCompass(extractData(data, Compass));
+    shot.setBackCompass(extractData(data, BackCompass));
+    shot.setClino(extractData(data, Clino));
+    shot.setBackClino(extractData(data, BackClino));
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }
@@ -534,7 +534,7 @@ cwStationReference cwSurvexImporter::createOrLookupStation(QString stationName) 
   */
 void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
                                              cwStationReference toStation,
-                                             cwShot* shot) {
+                                             cwShot shot) {
     cwSurveyChunk* chunk;
     if(CurrentBlock->chunkCount() == 0) {
         //Create a new chunk
@@ -544,23 +544,23 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
         chunk = CurrentBlock->chunks().last(); //Chunks.last();
     }
 
-    if(chunk->canAddShot(fromStation, toStation, shot)) {
+    if(chunk->canAddShot(fromStation, toStation)) {
         chunk->appendShot(fromStation, toStation, shot);
     } else {
         if(!chunk->isValid()) {
             //error
-            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation .name() << shot;
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name();
             return;
         }
 
         chunk = new cwSurveyChunk();
         CurrentBlock->addChunk(chunk);
         //Chunks.append(chunk);
-        if(chunk->canAddShot(fromStation, toStation, shot)) {
+        if(chunk->canAddShot(fromStation, toStation)) {
             chunk->appendShot(fromStation, toStation, shot);
         } else {
             //error
-            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name() << shot;
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name();
             return;
         }
     }

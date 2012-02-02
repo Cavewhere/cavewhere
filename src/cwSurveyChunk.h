@@ -2,8 +2,8 @@
 #define CWSurveyChunk_H
 
 //Our includes
-#include <cwStationReference.h>
-class cwShot;
+#include "cwStationReference.h"
+#include "cwShot.h"
 class cwTrip;
 class cwCave;
 
@@ -40,10 +40,9 @@ public:
 
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
-    virtual ~cwSurveyChunk();
 
     bool isValid() const;
-    bool canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation, cwShot* shot);
+    bool canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation);
 
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
@@ -52,7 +51,7 @@ public:
     void updateStationsWithNewCave();
 
     QList<cwStationReference> stations() const;
-    QList<cwShot*> shots() const;
+    QList<cwShot> shots() const;
 
     bool hasStation(QString stationName) const;
     QSet<cwStationReference> neighboringStations(QString stationName) const;
@@ -80,12 +79,14 @@ public slots:
     QList<int> indicesOfStation(QString stationName) const;
 
     int shotCount() const;
-    cwShot* shot(int index) const;
+    cwShot shot(int index) const;
 
-    QPair<cwStationReference, cwStationReference> toFromStations(const cwShot* shot) const;
+//    QPair<cwStationReference, cwStationReference> toFromStations(const cwShot& shot) const;
+//    cwStationReference toStation(const cwShot& shot) const;
+//    cwStationReference fromStation(const cwShot& shot) const;
 
     void appendNewShot();
-    void appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot* shot);
+    void appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot shot);
 
     cwSurveyChunk* splitAtStation(int stationIndex);
 
@@ -103,7 +104,7 @@ public slots:
 
 private:
     QList<cwStationReference> Stations;
-    QList<cwShot*> Shots;
+    QList<cwShot> Shots;
     cwTrip* ParentTrip;
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
@@ -147,7 +148,7 @@ inline QList<cwStationReference> cwSurveyChunk::stations() const {
 
   You shouldn't modify the shot data from this list
   */
-inline QList<cwShot*> cwSurveyChunk::shots() const {
+inline QList<cwShot> cwSurveyChunk::shots() const {
     return Shots;
 }
 

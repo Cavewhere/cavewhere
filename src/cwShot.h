@@ -15,7 +15,7 @@ class cwShot
 {
 
 public:
-    explicit cwShot();
+    cwShot();
 
     cwShot(QString distance,
            QString compass, QString backCompass,
@@ -53,11 +53,9 @@ public:
     cwClinoStates::State clinoState() const;
     cwClinoStates::State backClinoState() const;
 
-    void setParentChunk(cwSurveyChunk* parentChunk);
-    cwSurveyChunk* parentChunk() const;
+    bool isValid() const;
 
-    cwStationReference toStation() const;
-    cwStationReference fromStation() const;
+    bool sameIntervalPointer(const cwShot& other) const;
 
 private:
     enum ValidState {
@@ -85,7 +83,6 @@ private:
     };
 
     QSharedDataPointer<PrivateData> Data;
-    cwSurveyChunk* ParentChunk;
 
     ValidState setValueWithString(const cwValidator& validator, double& memberData, int& memberState, QString newValue);
     void setClinoValueWithString(double& memberData, int& memberState, QString newValue);
@@ -137,5 +134,15 @@ inline double cwShot::backClino() const {
     return Data->BackClino;
 }
 
+inline bool cwShot::isValid() const {
+    return distanceState() == cwDistanceStates::Valid;
+}
+
+/**
+  This return's true if the other shot has the same intertal point as this shot
+  */
+inline bool cwShot::sameIntervalPointer(const cwShot& other) const {
+    return Data == other.Data;
+}
 
 #endif // CSHOT_H
