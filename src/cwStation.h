@@ -4,6 +4,7 @@
 //Qt includes
 #include <QVector3D>
 #include <QVariant>
+#include <QSharedDataPointer>
 
 //Our includes
 #include "cwReadingStates.h"
@@ -24,7 +25,6 @@ public:
     cwStation();
     cwStation(const cwStation& station);
     cwStation(QString name);
-    cwStation(QString name, float left, float right, float up, float down);
 
     QString name() const;
     double left() const;
@@ -61,22 +61,30 @@ public:
     QVector3D position() const;
     void setPosition(QVector3D position); //This is set by the loop closer
 
-    bool isValid() const { return !Name.isEmpty(); }
+    bool isValid() const { return !Data->Name.isEmpty(); }
 
-protected:
-    QString Name;
+private:
+    class PrivateData : public QSharedData {
+    public:
+        PrivateData();
+        PrivateData(QString name);
 
-    cwDistanceStates::State LeftState;
-    cwDistanceStates::State RightState;
-    cwDistanceStates::State UpState;
-    cwDistanceStates::State DownState;
+        QString Name;
 
-    double Left;
-    double Right;
-    double Up;
-    double Down;
+        cwDistanceStates::State LeftState;
+        cwDistanceStates::State RightState;
+        cwDistanceStates::State UpState;
+        cwDistanceStates::State DownState;
 
-    QVector3D Position;
+        double Left;
+        double Right;
+        double Up;
+        double Down;
+
+        QVector3D Position;
+    };
+
+    QSharedDataPointer<PrivateData> Data;
 
     bool checkLRUDValue(double value) const;
     bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);
@@ -84,33 +92,33 @@ protected:
     void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
 };
 
-inline QString cwStation::name() const { return Name; }
-inline double cwStation::left() const { return Left; }
-inline double cwStation::right() const { return Right; }
-inline double cwStation::up() const { return Up; }
-inline double cwStation::down() const { return Down; }
+inline QString cwStation::name() const { return Data->Name; }
+inline double cwStation::left() const { return Data->Left; }
+inline double cwStation::right() const { return Data->Right; }
+inline double cwStation::up() const { return Data->Up; }
+inline double cwStation::down() const { return Data->Down; }
 
 inline cwDistanceStates::State cwStation::leftInputState() const {
-    return LeftState;
+    return Data->LeftState;
 }
 
 inline cwDistanceStates::State cwStation::rightInputState() const {
-    return RightState;
+    return Data->RightState;
 }
 
 inline cwDistanceStates::State cwStation::upInputState() const {
-    return UpState;
+    return Data->UpState;
 }
 
 inline cwDistanceStates::State cwStation::downInputState() const {
-    return DownState;
+    return Data->DownState;
 }
 
-inline QVector3D cwStation::position() const { return Position; }
+inline QVector3D cwStation::position() const { return Data->Position; }
 
 
 inline void cwStation::setPosition(QVector3D position) {
-    Position = position;
+    Data->Position = position;
 }
 
 inline bool cwStation::checkLRUDValue(double value) const

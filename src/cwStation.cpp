@@ -6,6 +6,17 @@
 #include <QDebug>
 
 cwStation::cwStation() :
+    Data(new PrivateData())
+
+{ }
+
+cwStation::cwStation(QString name) :
+    Data(new PrivateData(name))
+{
+
+}
+
+cwStation::PrivateData::PrivateData() :
     LeftState(cwDistanceStates::Empty),
     RightState(cwDistanceStates::Empty),
     UpState(cwDistanceStates::Empty),
@@ -13,11 +24,11 @@ cwStation::cwStation() :
     Left(0.0),
     Right(0.0),
     Up(0.0),
-    Down(0.0)
+    Down(0.0) {
 
-{ }
+}
 
-cwStation::cwStation(QString name) :
+cwStation::PrivateData::PrivateData(QString name) :
     Name(name),
     LeftState(cwDistanceStates::Empty),
     RightState(cwDistanceStates::Empty),
@@ -30,18 +41,6 @@ cwStation::cwStation(QString name) :
 {
 
 }
-
-
-cwStation::cwStation(QString name, float left, float right, float up, float down) :
-        Name(name)
-{
-    setLeft(QString("%1").arg(left));
-    setRight(QString("%1").arg(right));
-    setUp(QString("%1").arg(up));
-    setDown(QString("%1").arg(down));
-}
-
-
 
 /**
   \brief Sets the data in the station
@@ -94,67 +93,67 @@ QVariant cwStation::data(DataRoles role) const {
     Must be a valid length
   */
 bool cwStation::setLeft(QString left) {
-    return setStringValue(Left, LeftState, left);
+    return setStringValue(Data->Left, Data->LeftState, left);
 }
 
 bool cwStation::setLeft(double left)
 {
-    return setDoubleValue(Left, LeftState, left);
+    return setDoubleValue(Data->Left, Data->LeftState, left);
 }
 
 void cwStation::setLeftInputState(cwDistanceStates::State state)
 {
-    setPrivateLRUDState(LeftState, state);
+    setPrivateLRUDState(Data->LeftState, state);
 }
 
 /**
     Must be a valid length, or empty
   */
 bool cwStation::setRight(QString right) {
-    return setStringValue(Right, RightState, right);
+    return setStringValue(Data->Right, Data->RightState, right);
 }
 
 bool cwStation::setRight(double right)
 {
-    return setDoubleValue(Right, RightState, right);
+    return setDoubleValue(Data->Right, Data->RightState, right);
 }
 
 void cwStation::setRightInputState(cwDistanceStates::State state)
 {
-    setPrivateLRUDState(RightState, state);
+    setPrivateLRUDState(Data->RightState, state);
 }
 
 /**
     Must be a valid length, or empty
   */
 bool cwStation::setUp(QString up) {
-    return setStringValue(Up, UpState, up);
+    return setStringValue(Data->Up, Data->UpState, up);
 }
 
 bool cwStation::setUp(double up)
 {
-    return setDoubleValue(Up, UpState, up);
+    return setDoubleValue(Data->Up, Data->UpState, up);
 }
 
 void cwStation::setUpInputState(cwDistanceStates::State state)
 {
-    setPrivateLRUDState(UpState, state);
+    setPrivateLRUDState(Data->UpState, state);
 }
 
 /**
     Must be a valid length, or empty
   */
 bool cwStation::setDown(QString down) {
-    return setStringValue(Down, DownState, down);
+    return setStringValue(Data->Down, Data->DownState, down);
 }
 
 bool cwStation::setDown(double down) {
-    return setDoubleValue(Down, DownState, down);
+    return setDoubleValue(Data->Down, Data->DownState, down);
 }
 
 void cwStation::setDownInputState(cwDistanceStates::State state)
 {
-    setPrivateLRUDState(DownState, state);
+    setPrivateLRUDState(Data->DownState, state);
 }
 
 bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
@@ -203,7 +202,7 @@ void cwStation::setPrivateLRUDState(cwDistanceStates::State &memberState, cwDist
 bool cwStation::setName(QString name) {
     cwStationValidator validator;
     if(QValidator::Acceptable == validator.validate(name)) {
-        Name = name;
+        Data->Name = name;
         return true;
     }
     return false;
