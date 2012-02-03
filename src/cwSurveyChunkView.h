@@ -196,7 +196,7 @@ private:
     StationRow getStationRow(int index);
     StationRow getNavigationStationRow(int index);
 
-    void updateLastRowBehaviour();
+//    void updateLastRowBehaviour();
     void updatePositionsAfterIndex(int index);
     void updateIndexes(int index);
     void updateDimensions();

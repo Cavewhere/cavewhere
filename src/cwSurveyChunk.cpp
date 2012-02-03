@@ -762,3 +762,20 @@ QList<int> cwSurveyChunk::indicesOfStation(QString stationName) const {
     return indices;
 }
 
+/**
+Sets editting
+
+If this is set to true, the survey chunk will try to keep and empty shot and station a the end of
+the chunk.  The station and shot are automatically added, when true.  Once set to false, the survey chunk
+will clamp any extra empty stations and shots data off the end.  This allows the user to add station while editting.
+
+This is an interaction thing.
+*/
+void cwSurveyChunk::setEditting(bool editting) {
+    if(Editting != editting) {
+        Editting = editting;
+        emit edittingChanged();
+    }
+}
+
+

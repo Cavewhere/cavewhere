@@ -676,7 +676,7 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
     }
 
     //Connect the last station's in the view
-    updateLastRowBehaviour();
+//    updateLastRowBehaviour();
 
     //Update the positions for all rows after endIndex
     updatePositionsAfterIndex(endIndex + 1);
@@ -1200,20 +1200,20 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::getStationRow(int index) {
 /**
   \brief This handles editor behaviour of the last rows
   */
-void cwSurveyChunkView::updateLastRowBehaviour() {
-    int lastIndex = StationRows.size() - 1;
-    int secondToLastIndex = StationRows.size() - 2;
-    StationRow lastRow = getStationRow(lastIndex);
-    StationRow secondLastRow = getStationRow(secondToLastIndex);
+//void cwSurveyChunkView::updateLastRowBehaviour() {
+//    int lastIndex = StationRows.size() - 1;
+//    int secondToLastIndex = StationRows.size() - 2;
+//    StationRow lastRow = getStationRow(lastIndex);
+//    StationRow secondLastRow = getStationRow(secondToLastIndex);
 
-    if(lastRow.stationName() != NULL) {
-        connect(lastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
-    }
+//    if(lastRow.stationName() != NULL) {
+//        connect(lastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
+//    }
 
-    if(secondLastRow.stationName() != NULL) {
-        connect(secondLastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
-    }
-}
+//    if(secondLastRow.stationName() != NULL) {
+//        connect(secondLastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
+//    }
+//}
 
 /**
   \brief Updates the position in the view
