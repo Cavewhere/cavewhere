@@ -4,10 +4,10 @@
 //Our includes
 #include "cwCaveExporterTask.h"
 #include "cwUnits.h"
+#include "cwStation.h"
 class cwCave;
 class cwTrip;
 class cwSurveyChunk;
-class cwStationReference;
 class cwShot;
 
 class cwCompassExportCaveTask : public cwCaveExporterTask
@@ -45,7 +45,7 @@ private:
     void writeData(QTextStream& stream, QString fieldName, int fieldLength, QString data);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 
-    float convertField(cwStationReference station, StationLRUDField field, cwUnits::LengthUnit unit);
+    float convertField(cwStation station, StationLRUDField field, cwUnits::LengthUnit unit);
     float convertField(cwTrip* trip, cwShot shot, ShotField field);
     QString formatFloat(float value);
 

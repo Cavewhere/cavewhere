@@ -2,7 +2,8 @@
 #define CWSurveyChunk_H
 
 //Our includes
-#include "cwStationReference.h"
+//#include "cwStationReference.h"
+#include "cwStation.h"
 #include "cwShot.h"
 class cwTrip;
 class cwCave;
@@ -42,19 +43,19 @@ public:
     cwSurveyChunk(const cwSurveyChunk& chunk);
 
     bool isValid() const;
-    bool canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation);
+    bool canAddShot(const cwStation& fromStation, const cwStation& toStation);
 
     void setParentTrip(cwTrip* trip);
     cwTrip* parentTrip() const;
 
     cwCave* parentCave() const;
-    void updateStationsWithNewCave();
+//    void updateStationsWithNewCave();
 
-    QList<cwStationReference> stations() const;
+    QList<cwStation> stations() const;
     QList<cwShot> shots() const;
 
     bool hasStation(QString stationName) const;
-    QSet<cwStationReference> neighboringStations(QString stationName) const;
+    QSet<cwStation> neighboringStations(QString stationName) const;
 
     Q_INVOKABLE bool isStationRole(cwSurveyChunk::DataRole role) const;
     Q_INVOKABLE bool isShotRole(cwSurveyChunk::DataRole role) const;
@@ -75,7 +76,7 @@ signals:
 
 public slots:
     int stationCount() const;
-    cwStationReference station(int index) const;
+    cwStation station(int index) const;
     QList<int> indicesOfStation(QString stationName) const;
 
     int shotCount() const;
@@ -86,7 +87,7 @@ public slots:
 //    cwStationReference fromStation(const cwShot& shot) const;
 
     void appendNewShot();
-    void appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot shot);
+    void appendShot(cwStation fromStation, cwStation toStation, cwShot shot);
 
     cwSurveyChunk* splitAtStation(int stationIndex);
 
@@ -103,7 +104,7 @@ public slots:
     void setData(DataRole role, int index, QVariant data);
 
 private:
-    QList<cwStationReference> Stations;
+    QList<cwStation> Stations;
     QList<cwShot> Shots;
     cwTrip* ParentTrip;
 
@@ -139,7 +140,7 @@ inline cwTrip* cwSurveyChunk::parentTrip() const {
 
   You shouldn't modify the station data from this list
   */
-inline QList<cwStationReference> cwSurveyChunk::stations() const {
+inline QList<cwStation> cwSurveyChunk::stations() const {
     return Stations;
 }
 

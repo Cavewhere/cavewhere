@@ -115,7 +115,7 @@ private:
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
-    QMap<QString, cwStationReference> StationLookup;
+    QMap<QString, cwStation> StationLookup;
 
     //For progress
     int TotalNumberOfLines;
@@ -141,9 +141,9 @@ private:
 
     void parseNormalData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
-    cwStationReference createOrLookupStation(QString stationName);
-    void addShotToCurrentChunk(cwStationReference fromStation,
-                               cwStationReference toStation,
+    cwStation createOrLookupStation(QString stationName);
+    void addShotToCurrentChunk(cwStation fromStation,
+                               cwStation toStation,
                                cwShot shot);
 
     void parsePassageData(QString line);

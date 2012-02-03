@@ -112,7 +112,8 @@ void cwStationReference::setDown(QString down) {
 
 void cwStationReference::setPosition(QVector3D position) {
     Q_ASSERT(!SharedStation.isNull());
-    SharedStation->setPosition(position);
+    Q_UNUSED(position)
+    //    SharedStation->setPosition(position);
 }
 
 

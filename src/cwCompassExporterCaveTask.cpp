@@ -143,8 +143,8 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
     for(int i = 0; i < chunk->shotCount(); i++) {
         cwShot shot = chunk->shot(i);
-        cwStationReference from = chunk->station(i);
-        cwStationReference to = chunk->station(i + 1);
+        cwStation from = chunk->station(i);
+        cwStation to = chunk->station(i + 1);
 
         float shotLength = cwUnits::convert(shot.distance(),
                                             distanceUnit,
@@ -167,7 +167,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
         stream << CompassNewLine;
     }
 
-    cwStationReference lastStation = chunk->station(chunk->stationCount() - 1);
+    cwStation lastStation = chunk->station(chunk->stationCount() - 1);
     writeData(stream, "From", 12, lastStation.name());
     stream << " ";
     writeData(stream, "To", 12, lastStation.name() + "lrud");
@@ -189,7 +189,7 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
   This will convert the value into decimal feet
   */
-float cwCompassExportCaveTask::convertField(cwStationReference station,
+float cwCompassExportCaveTask::convertField(cwStation station,
                                        StationLRUDField field,
                                        cwUnits::LengthUnit unit) {
 

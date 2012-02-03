@@ -474,8 +474,8 @@ void cwSurvexImporter::parseNormalData(QString line) {
     }
 
     //Create the from and to stations
-    cwStationReference fromStation = createOrLookupStation(fromStationName);
-    cwStationReference toStation = createOrLookupStation(toStationName);
+    cwStation fromStation = createOrLookupStation(fromStationName);
+    cwStation toStation = createOrLookupStation(toStationName);
 
     cwShot shot;
     shot.setDistance(extractData(data, Distance));
@@ -508,8 +508,8 @@ QString cwSurvexImporter::extractData(const QStringList data, DataFormatType typ
   \param stationName - The name of the station
   \returns A new station of a station that's already exists
   */
-cwStationReference cwSurvexImporter::createOrLookupStation(QString stationName) {
-    if(stationName.isEmpty()) { return cwStationReference(); }
+cwStation cwSurvexImporter::createOrLookupStation(QString stationName) {
+    if(stationName.isEmpty()) { return cwStation(); }
 
     //Create the survex prefix
     QString fullName = fullStationName(stationName);
@@ -520,7 +520,7 @@ cwStationReference cwSurvexImporter::createOrLookupStation(QString stationName) 
     }
 
     //Create the stations
-    cwStationReference station(stationName);
+    cwStation station(stationName);
     StationLookup[fullName] = station;
     return station;
 }
@@ -532,8 +532,8 @@ cwStationReference cwSurvexImporter::createOrLookupStation(QString stationName) 
   is the last station in the chunk or will create a new survey chunk.  If a
   new survey chunk is created, it'll be added to the end of the list of chunks.
   */
-void cwSurvexImporter::addShotToCurrentChunk(cwStationReference fromStation,
-                                             cwStationReference toStation,
+void cwSurvexImporter::addShotToCurrentChunk(cwStation fromStation,
+                                             cwStation toStation,
                                              cwShot shot) {
     cwSurveyChunk* chunk;
     if(CurrentBlock->chunkCount() == 0) {
@@ -585,7 +585,7 @@ void cwSurvexImporter::parsePassageData(QString line) {
     }
 
     //Create or find a station from the name
-    cwStationReference station = createOrLookupStation(stationName);
+    cwStation station = createOrLookupStation(stationName);
     station.setLeft(extractData(data, Left));
     station.setRight(extractData(data, Right));
     station.setUp(extractData(data, Up));

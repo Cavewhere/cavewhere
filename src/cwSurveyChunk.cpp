@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurveyChunk.h"
-#include "cwStationReference.h"
+//#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwTrip.h"
 #include "cwCave.h"
@@ -62,16 +62,16 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         ParentTrip = trip;
         setParent(trip);
-        updateStationsWithNewCave();
+//        updateStationsWithNewCave();
         emit parentTripChanged();
     }
 }
 
-cwStationReference cwSurveyChunk::station(int index) const {
+cwStation cwSurveyChunk::station(int index) const {
     if(stationIndexCheck(index)) {
         return Stations[index];
     }
-    return cwStationReference();
+    return cwStation();
 }
 
 int cwSurveyChunk::shotCount() const {
@@ -96,11 +96,7 @@ void cwSurveyChunk::appendNewShot() {
     if(!isValid() && Stations.size() <= 2 && Shots.size() <= 1) {
         //Make valid
         for(int i = Stations.size(); i < 2; i++) {
-
-            //Create a new station
-            cwStationReference station = createNewStation();
-
-            Stations.append(station);
+            Stations.append(cwStation());
             emit stationsAdded(i, i);
         }
 
@@ -112,17 +108,15 @@ void cwSurveyChunk::appendNewShot() {
     }
 
 
-    cwStationReference fromStation;
-    if(Stations.isEmpty()) {
-        fromStation = createNewStation();
-    } else {
+    cwStation fromStation;
+    if(!Stations.isEmpty()) {
         fromStation = Stations.last();
         if(!fromStation.isValid()) {
             return;
         }
     }
 
-    cwStationReference toStation = createNewStation();
+    cwStation toStation;
     appendShot(fromStation, toStation, cwShot());
 }
 
@@ -138,7 +132,7 @@ void cwSurveyChunk::appendNewShot() {
   isn't equal to the last station in the chunk.  If toStation isn't the last station,
   you need to create a new cwSurveyChunk and call this function again
   */
-void cwSurveyChunk::appendShot(cwStationReference fromStation, cwStationReference toStation, cwShot shot) {
+void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwShot shot) {
     //qDebug() << "Trying to add shot";
     if(!canAddShot(fromStation, toStation)) { return; }
 
@@ -169,13 +163,13 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     if(stationIndex < 1 || stationIndex >= Stations.size()) { return NULL; }
 
     cwSurveyChunk* newChunk = new cwSurveyChunk(this);
-    newChunk->Stations.append(createNewStation()); //Add an empty station to the front
+    newChunk->Stations.append(cwStation()); //Add an empty station to the front
 
     //Copy the points from one chunk to another
     for(int i = stationIndex; i < Stations.size(); i++) {
 
         //Get the current stations and shots
-        cwStationReference station = Stations[i];
+        cwStation station = Stations[i];
         cwShot currentShot = shot(i - 1);
 
         newChunk->Stations.append(station);
@@ -190,7 +184,7 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
 
     //Remove the stations and shots from the list
     int shotIndex = stationIndex - 1;
-    QList<cwStationReference>::iterator stationIter = Stations.begin() + stationIndex;
+    QList<cwStation>::iterator stationIter = Stations.begin() + stationIndex;
     QList<cwShot>::iterator shotIter = Shots.begin() + shotIndex;
     Stations.erase(stationIter, Stations.end());
     Shots.erase(shotIter, Shots.end());
@@ -226,7 +220,7 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
         stationIndex++;
     }
 
-    cwStationReference station = createNewStation();
+    cwStation station;
 
     Stations.insert(stationIndex, station);
     Shots.insert(shotIndex, cwShot());
@@ -251,7 +245,7 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
         shotIndex++;
     }
 
-    cwStationReference station = createNewStation();
+    cwStation station;
 
     Stations.insert(stationIndex, station);
     emit stationsAdded(stationIndex, stationIndex);
@@ -266,10 +260,9 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
 
   \returns true if AddShot() will be successfull or will do nothing
   */
-bool cwSurveyChunk::canAddShot(const cwStationReference& fromStation, const cwStationReference& toStation) {
-    return !fromStation.station().isNull() &&
-            !toStation.station().isNull() &&
-            (Stations.empty() || Stations.last() == fromStation);
+bool cwSurveyChunk::canAddShot(const cwStation& fromStation, const cwStation& toStation) {
+    Q_UNUSED(toStation);
+    return Stations.empty() || Stations.last().name().compare(fromStation.name(), Qt::CaseInsensitive) == 0;
 }
 
 ///**
@@ -469,7 +462,7 @@ QVariant cwSurveyChunk::data(DataRole role, int index) const {
 QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
     if(index < 0 || index >= Stations.size()) { return QVariant(); }
 
-    const cwStationReference& station = Stations[index];
+    const cwStation& station = Stations[index];
 
     switch (role) {
     case StationNameRole:
@@ -570,7 +563,7 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     }
 
     QString dataString = data.toString();
-    cwStationReference& station = Stations[index];
+    cwStation& station = Stations[index];
 
     switch (role) {
     case StationNameRole:
@@ -682,21 +675,21 @@ int cwSurveyChunk::index(int index, Direction direction) {
     return -1;
 }
 
-/**
-  Uses the parent trip and updates all the stations in this chunk
-  with the new cave.
+///**
+//  Uses the parent trip and updates all the stations in this chunk
+//  with the new cave.
 
-  If the parent trip is null or parent trip's cave is null, this
-  does nothing
-  */
-void cwSurveyChunk::updateStationsWithNewCave() {
-    if(ParentTrip == NULL || ParentTrip->parentCave() == NULL) { return; }
+//  If the parent trip is null or parent trip's cave is null, this
+//  does nothing
+//  */
+//void cwSurveyChunk::updateStationsWithNewCave() {
+//    if(ParentTrip == NULL || ParentTrip->parentCave() == NULL) { return; }
 
-    for(int i = 0; i < Stations.size(); i++) {
-        cwCave* cave = ParentTrip->parentCave();
-        Stations[i].setCave(cave);
-    }
-}
+//    for(int i = 0; i < Stations.size(); i++) {
+//        cwCave* cave = ParentTrip->parentCave();
+//        Stations[i].setCave(cave);
+//    }
+//}
 
 /**
   \brief This creates a new station in the chunk
@@ -704,12 +697,12 @@ void cwSurveyChunk::updateStationsWithNewCave() {
   The station will be owned by this chunk, and the parent cave will be set
   for the station
   */
-cwStationReference cwSurveyChunk::createNewStation() {
-    //Create a new station
-    cwStationReference station; // = new cwStationReference();
-    station.setCave(parentCave());
-    return station;
-}
+//cwStationReference cwSurveyChunk::createNewStation() {
+//    //Create a new station
+//    cwStationReference station; // = new cwStationReference();
+//    station.setCave(parentCave());
+//    return station;
+//}
 
 /**
   \brief Returns true if the survey chunk has a station
@@ -717,7 +710,7 @@ cwStationReference cwSurveyChunk::createNewStation() {
 bool cwSurveyChunk::hasStation(QString stationName) const {
 
     //Linear search...
-    foreach(cwStationReference station, Stations) {
+    foreach(cwStation station, Stations) {
         if(station.name().compare(stationName, Qt::CaseInsensitive) == 0) {
             return true;
         }
@@ -732,19 +725,19 @@ bool cwSurveyChunk::hasStation(QString stationName) const {
 
   If the survey chunk doesn't have stationName, in this, an empty list
   */
-QSet<cwStationReference> cwSurveyChunk::neighboringStations(QString stationName) const {
+QSet<cwStation> cwSurveyChunk::neighboringStations(QString stationName) const {
     if(!hasStation(stationName)) {
-        return QSet<cwStationReference>();
+        return QSet<cwStation>();
     }
 
     //Get all the indices of the station
     QList<int> stationIndices = indicesOfStation(stationName);
 
     //Create a unique set of neighboring stations
-    QSet<cwStationReference> neighbors;
+    QSet<cwStation> neighbors;
     foreach(int index, stationIndices) {
-        cwStationReference previousShot = station(index - 1);
-        cwStationReference nextShot = station(index + 1);
+        cwStation previousShot = station(index - 1);
+        cwStation nextShot = station(index + 1);
 
         if(previousShot.isValid()) { neighbors.insert(previousShot); }
         if(nextShot.isValid()) { neighbors.insert(nextShot); }

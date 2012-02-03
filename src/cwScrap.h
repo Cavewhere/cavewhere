@@ -119,7 +119,7 @@ private:
     const cwScrap& copy(const cwScrap& other);
 
 private slots:
-    void updateStationsWithNewCave();
+//    void updateStationsWithNewCave();
     void updateNoteTransformation();
 };
 

@@ -10,6 +10,11 @@ cwStation::cwStation() :
 
 { }
 
+cwStation::cwStation(const cwStation &station) :
+    Data(station.Data)
+{
+}
+
 cwStation::cwStation(QString name) :
     Data(new PrivateData(name))
 {
@@ -62,9 +67,9 @@ void cwStation::setData(QVariant data, DataRoles role) {
     case DownRole:
         setDown(data.toString());
         break;
-    case PositionRole:
-        setPosition(data.value<QVector3D>());
-        break;
+//    case PositionRole:
+//        setPosition(data.value<QVector3D>());
+//        break;
     }
 }
 
@@ -83,8 +88,8 @@ QVariant cwStation::data(DataRoles role) const {
         return up();
     case DownRole:
         return down();
-    case PositionRole:
-        return position();
+//    case PositionRole:
+//        return position();
     }
     return QVariant();
 }
@@ -155,6 +160,7 @@ void cwStation::setDownInputState(cwDistanceStates::State state)
 {
     setPrivateLRUDState(Data->DownState, state);
 }
+
 
 bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
     if(value.isEmpty()) {

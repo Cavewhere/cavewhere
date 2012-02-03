@@ -550,7 +550,6 @@ void cwSurveyChunkView::clear() {
 
     StationRows.clear();
     ShotRows.clear();
-    StationToIndex.clear();
 
     createTitlebar();
 }
@@ -674,10 +673,6 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
 
         //Position the row in the correct place
         positionStationRow(row, i);
-
-        //Hock up the signals and slots with the models data
-        cwStationReference station = SurveyChunk->station(i);
-        StationToIndex[station] = i;
     }
 
     //Connect the last station's in the view
@@ -749,10 +744,6 @@ void cwSurveyChunkView::removeStations(int beginIndex, int endIndex) {
                 item->deleteLater();
             }
         }
-
-        //Remove the station from the look up
-        cwStationReference station = SurveyChunk->station(i);
-        StationToIndex.remove(station);
 
         //Remove the row from the station rows
         StationRows.removeAt(i);

@@ -67,8 +67,8 @@ QVariant cwSurvexImporterModel::NameColumnDisplayData(const QModelIndex& index) 
         cwSurveyChunk* parentSurveyChunk = parentBlock->parentChunkOfShot(shotIndex);
         int localChunkShotIndex = parentBlock->chunkShotIndex(shotIndex);
 
-        cwStationReference fromStation = parentSurveyChunk->station(localChunkShotIndex);
-        cwStationReference toStation = parentSurveyChunk->station(localChunkShotIndex + 1);
+        cwStation fromStation = parentSurveyChunk->station(localChunkShotIndex);
+        cwStation toStation = parentSurveyChunk->station(localChunkShotIndex + 1);
 
         QString fromStationName;
         QString toStationName;

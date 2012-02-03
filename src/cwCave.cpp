@@ -320,15 +320,15 @@ cwCave::StationDataCommand::StationDataCommand(cwCave* cave,
     case cwStation::DownRole:
         commandText = QString("Station %1's down to %1").arg(station->name()).arg(data.toString());
         break;
-    case cwStation::PositionRole: {
-        QVector3D position = data.value<QVector3D>();
-        commandText = QString("Station %1's position to %1, %2, %3")
-                .arg(station->name())
-                .arg(position.x())
-                .arg(position.y())
-                .arg(position.z());
-        break;
-    }
+//    case cwStation::PositionRole: {
+//        QVector3D position = data.value<QVector3D>();
+//        commandText = QString("Station %1's position to %1, %2, %3")
+//                .arg(station->name())
+//                .arg(position.x())
+//                .arg(position.y())
+//                .arg(position.z());
+//        break;
+//    }
     }
     setText(commandText);
 }

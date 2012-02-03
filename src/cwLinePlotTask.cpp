@@ -211,7 +211,8 @@ void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
        return;
    }
 
-   sharedStation->setPosition(position);
+   //This need's to be updated with something else, populate a model?
+//   sharedStation->setPosition(position);
 
   // qDebug() << "Station:" << name << "Position:" << position;
 }

@@ -74,12 +74,12 @@ void cwScrap::setPoints(QVector<QPointF> points) {
 void cwScrap::setStations(QList<cwNoteStation> stations)  {
     Stations = stations;
 
-    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
-        for(int i = 0; i < Stations.size(); i++) {
-            cwNoteStation& station = Stations[i];
-            station.setCave(parentNote()->parentTrip()->parentCave());
-        }
-    }
+//    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
+//        for(int i = 0; i < Stations.size(); i++) {
+//            cwNoteStation& station = Stations[i];
+//            station.setCave(parentNote()->parentTrip()->parentCave());
+//        }
+//    }
 
     updateNoteTransformation();
 
@@ -91,10 +91,10 @@ void cwScrap::setStations(QList<cwNoteStation> stations)  {
   */
 void cwScrap::addStation(cwNoteStation station) {
 
-    //Reference the cave to the station
-    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
-        station.setCave(parentNote()->parentTrip()->parentCave());
-    }
+//    //Reference the cave to the station
+//    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
+//        station.setCave(parentNote()->parentTrip()->parentCave());
+//    }
 
     Stations.append(station);
     updateNoteTransformation();
@@ -218,7 +218,7 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     //Find the valid stations
     QSet<cwNoteStation> validStationsSet;
     foreach(cwNoteStation noteStation, Stations) {
-        if(noteStation.station().isValid() && noteStation.station().cave() != NULL) {
+        if(noteStation.station().isValid()) { // && noteStation.station().cave() != NULL) {
             validStationsSet.insert(noteStation);
         }
     }
@@ -230,9 +230,9 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     QList<cwNoteStation> validStationList = validStationsSet.toList();
 
     //Generate all the neighbor list for each station
-    QList< QSet< cwStationReference > > stationNeighbors;
+    QList< QSet< cwStation > > stationNeighbors;
     foreach(cwNoteStation station, validStationList) {
-        QSet<cwStationReference> neighbors = trip->neighboringStations(station.station().name());
+        QSet<cwStation> neighbors = trip->neighboringStations(station.station().name());
         stationNeighbors.append(neighbors);
     }
 
@@ -243,8 +243,8 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
             cwNoteStation station2 = validStationList[j];
 
             //Get neigbor lookup
-            QSet< cwStationReference > neighborsStation1 = stationNeighbors[i];
-            QSet< cwStationReference > neighborsStation2 = stationNeighbors[j];
+            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
+            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
 
             //See if they make up a shot
             if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
@@ -274,8 +274,8 @@ QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair 
   This will caluclate the transfromation between station1 and station2
   */
 cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
-    QVector3D station1RealPos = station1.station().position(); //In meters
-    QVector3D station2RealPos = station2.station().position();
+    QVector3D station1RealPos; // = station1.station().position(); //In meters
+    QVector3D station2RealPos; // = station2.station().position();
 
     //Remove the z for plan view
     station1RealPos.setZ(0.0);
@@ -380,7 +380,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
 
     cwTrip* parentTrip = parentNote()->parentTrip();
 
-    QSet<cwStationReference> neigborStations = parentTrip->neighboringStations(previousStation.name());
+    QSet<cwStation> neigborStations = parentTrip->neighboringStations(previousStation.name());
 
     //Make sure we have neigbors
     if(neigborStations.isEmpty()) {
@@ -394,8 +394,8 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     QString bestStationName;
     double bestNormalizeError = 1.0;
 
-    foreach(cwStationReference station, neigborStations) {
-        QVector3D stationPosition = station.position();
+    foreach(cwStation station, neigborStations) {
+        QVector3D stationPosition; // = station.position();
 
         //Figure out the predicited position of the station on the notes
         QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
@@ -425,7 +425,7 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
     }
 
     //The position of the selected station
-    QVector3D stationPos = referenceStation.station().position();
+    QVector3D stationPos; // = referenceStation.station().position();
 
     //Create the matrix to covert global position into note position
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
@@ -474,15 +474,15 @@ void cwScrap::setParentNote(cwNote* note) {
             connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
 
-        updateStationsWithNewCave();
+//        updateStationsWithNewCave();
     }
 }
 
-void cwScrap::updateStationsWithNewCave() {
-    for(int i = 0; i < Stations.size(); i++) {
-        Stations[i].setCave(parentCave());
-    }
-}
+//void cwScrap::updateStationsWithNewCave() {
+//    for(int i = 0; i < Stations.size(); i++) {
+//        Stations[i].setCave(parentCave());
+//    }
+//}
 
 /**
   Clamps the point within the scrap
@@ -649,6 +649,6 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
 void cwScrap::setParentCave(cwCave *cave) {
     if(cave != ParentCave) {
         ParentCave = cave;
-        updateStationsWithNewCave();
+//        updateStationsWithNewCave();
     }
 }

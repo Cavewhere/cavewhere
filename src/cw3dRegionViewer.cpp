@@ -326,15 +326,15 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
   screen coordinates.  This is a helper function to renderStationLabels
   */
 QVector3D cw3dRegionViewer::TransformPoint::operator()(QWeakPointer<cwStation> station) {
-    QSharedPointer<cwStation> strongStation = station.toStrongRef();
+//    QSharedPointer<cwStation> strongStation = station.toStrongRef();
 
-    if(strongStation.isNull()) {
-        return QVector3D();
-    }
+//    if(strongStation.isNull()) {
+//        return QVector3D();
+//    }
 
-    QVector3D normalizeSceenCoordinate =  ModelViewProjection * strongStation->position();
-    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
-    return viewportCoord;
+//    QVector3D normalizeSceenCoordinate =  ModelViewProjection * strongStation->position();
+//    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
+//    return viewportCoord;
 }
 
 /**

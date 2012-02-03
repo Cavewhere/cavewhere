@@ -21,8 +21,8 @@ void cwNoteStation::setPositionOnNote(QPointF point) {
 /**
   Sets the station that this note will refer to
   */
-void cwNoteStation::setStation(const cwStationReference& reference) {
-    if(Data->Station != reference) {
-        Data->Station = reference;
+void cwNoteStation::setStation(const cwStation &station) {
+    if(Data->Station != station) {
+        Data->Station = station;
     }
 }

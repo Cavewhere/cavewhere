@@ -159,8 +159,8 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 
     stream << dataLineComment << endl;
 
-    QList<cwStationReference> stations = trip->uniqueStations();
-    foreach(cwStationReference station, stations) {
+    QList<cwStation> stations = trip->uniqueStations();
+    foreach(cwStation station, stations) {
         QString dataLine = dataLineTemplate
                 .arg(station.name(), TextPadding)
                 .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
@@ -233,8 +233,8 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         //Make sure we can still be run
         if(!parentIsRunning() && !isRunning()) { return; }
 
-        cwStationReference fromStation = chunk->station(i);
-        cwStationReference toStation = chunk->station(i + 1);
+        cwStation fromStation = chunk->station(i);
+        cwStation toStation = chunk->station(i + 1);
         cwShot shot = chunk->shot(i);
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }

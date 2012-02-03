@@ -136,14 +136,14 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    Returns null if the index is out of bounds. The index is out of bound when index >=
    stationCount()
    */
- cwStationReference cwSurvexBlockData::station(int index) const {
+ cwStation cwSurvexBlockData::station(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(index < chunk->stationCount()) {
              return chunk->station(index);
          }
          index -= chunk->stationCount();
      }
-     return cwStationReference();
+     return cwStation();
  }
 
 /**

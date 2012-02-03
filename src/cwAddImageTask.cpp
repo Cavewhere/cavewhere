@@ -416,7 +416,7 @@ public:
                 }
         }
 
-        CompressMasked(sourceRgba, mask, block.BlockData, Flags, Metric);
+        CompressMasked(sourceRgba, mask, block.BlockData, Flags);
 
         emit Task->IncreaseProgress();
     }

@@ -159,10 +159,6 @@ private:
     QList<StationRow> StationRows;
     QList<ShotRow> ShotRows;
 
-    //This holds a reverse look up to station vs row and shot's verse rows
-    //This is called when station data is changed for this view
-    QMap<cwStationReference, int> StationToIndex;
-
     //Where all the survey chunk view's delegates are stored
     cwSurveyChunkViewComponents* QMLComponents;
 

@@ -14,14 +14,14 @@ class cwNoteStation
 public:
     cwNoteStation();
 
-    void setStation(const cwStationReference& referance);
-    cwStationReference station() const;
+    void setStation(const cwStation& station);
+    cwStation station() const;
 
     void setPositionOnNote(QPointF point);
     QPointF positionOnNote() const;
 
-    void setCave(cwCave* cave);
-    cwCave* cave() const;
+//    void setCave(cwCave* cave);
+//    cwCave* cave() const;
 
     void setName(QString name);
     QString name() const;
@@ -37,7 +37,7 @@ private:
         PrivateData() { }
 
         QPointF PositionOnNote;
-        cwStationReference Station;
+        cwStation Station;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -54,7 +54,7 @@ inline bool cwNoteStation::operator ==(const cwNoteStation& otherStation) const 
 /**
   Gets the station
   */
-inline cwStationReference cwNoteStation::station() const {
+inline cwStation cwNoteStation::station() const {
     return Data->Station;
 }
 
@@ -67,19 +67,19 @@ inline QPointF cwNoteStation::positionOnNote() const {
     return Data->PositionOnNote;
 }
 
-/**
-  \brief Sets the cave for the station
-  */
-inline void cwNoteStation::setCave(cwCave* cave) {
-    Data->Station.setCave(cave);
-}
+///**
+//  \brief Sets the cave for the station
+//  */
+//inline void cwNoteStation::setCave(cwCave* cave) {
+//    Data->Station.setCave(cave);
+//}
 
-/**
-  \brief Gets the cave for the station
-  */
-inline cwCave* cwNoteStation::cave() const {
-    return Data->Station.cave();
-}
+///**
+//  \brief Gets the cave for the station
+//  */
+//inline cwCave* cwNoteStation::cave() const {
+//    return Data->Station.cave();
+//}
 
 /**
   \brief Gets the station's name

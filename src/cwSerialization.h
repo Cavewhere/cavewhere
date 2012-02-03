@@ -157,7 +157,7 @@ namespace boost {
         int upState = station.upInputState();
         int downState = station.downInputState();
 
-        QVector3D position = station.position();
+//        QVector3D position = station.position();
 
         archive << BOOST_SERIALIZATION_NVP(name);
         archive << BOOST_SERIALIZATION_NVP(left);
@@ -168,7 +168,7 @@ namespace boost {
         archive << BOOST_SERIALIZATION_NVP(rightState);
         archive << BOOST_SERIALIZATION_NVP(upState);
         archive << BOOST_SERIALIZATION_NVP(downState);
-        archive << BOOST_SERIALIZATION_NVP(position);
+//        archive << BOOST_SERIALIZATION_NVP(position);
     }
 
     template<class Archive>
@@ -183,7 +183,7 @@ namespace boost {
         int upState;
         int downState;
 
-        QVector3D position;
+//        QVector3D position;
 
         archive >> BOOST_SERIALIZATION_NVP(name);
         archive >> BOOST_SERIALIZATION_NVP(left);
@@ -194,7 +194,7 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(rightState);
         archive >> BOOST_SERIALIZATION_NVP(upState);
         archive >> BOOST_SERIALIZATION_NVP(downState);
-        archive >> BOOST_SERIALIZATION_NVP(position);
+//        archive >> BOOST_SERIALIZATION_NVP(position);
 
         station = cwStation(name);
         station.setLeft(left);
@@ -206,7 +206,7 @@ namespace boost {
         station.setUpInputState((cwDistanceStates::State)upState);
         station.setDownInputState((cwDistanceStates::State)downState);
 
-        station.setPosition(position);
+//        station.setPosition(position);
     }
 
     ///////////////////////////// cwTrip ///////////////////////////////
@@ -440,7 +440,7 @@ namespace boost {
     //////////////////////// cwSurveyChunk ////////////////////////////////
     template<class Archive>
     void save(Archive &archive, const cwSurveyChunk &chunk, const unsigned int) {
-        QList<cwStationReference> stations = chunk.stations();
+        QList<cwStation> stations = chunk.stations();
         QList<cwShot> shots = chunk.shots();
 
         archive << BOOST_SERIALIZATION_NVP(stations);
@@ -451,7 +451,7 @@ namespace boost {
     template<class Archive>
     void load(Archive &archive, cwSurveyChunk &chunk, const unsigned int) {
 
-        QList<cwStationReference> stations;
+        QList<cwStation> stations;
         QList<cwShot> shots;;
 
         archive >> BOOST_SERIALIZATION_NVP(stations);
@@ -463,8 +463,8 @@ namespace boost {
         }
 
         for(int i = 0; i < stations.count() - 1; i++) {
-            cwStationReference fromStation = stations[i];
-            cwStationReference toStation = stations[i + 1];
+            cwStation fromStation = stations[i];
+            cwStation toStation = stations[i + 1];
             cwShot shot = shots[i];
 
             chunk.appendShot(fromStation, toStation, shot);
@@ -604,10 +604,10 @@ namespace boost {
     void save(Archive &archive, const cwNoteStation &noteStation, const unsigned int version) {
         Q_UNUSED(version);
 
-        cwStationReference stationReference = noteStation.station();
+        cwStation station = noteStation.station();
         QPointF positionOnNote = noteStation.positionOnNote();
 
-        archive << BOOST_SERIALIZATION_NVP(stationReference);
+        archive << BOOST_SERIALIZATION_NVP(station);
         archive << BOOST_SERIALIZATION_NVP(positionOnNote);
     }
 
@@ -615,13 +615,13 @@ namespace boost {
     void load(Archive &archive, cwNoteStation &noteStation, const unsigned int version) {
         Q_UNUSED(version)
 
-        cwStationReference stationReference;
+        cwStation station;
         QPointF positionOnNote;
 
-        archive >> BOOST_SERIALIZATION_NVP(stationReference);
+        archive >> BOOST_SERIALIZATION_NVP(station);
         archive >> BOOST_SERIALIZATION_NVP(positionOnNote);
 
-        noteStation.setStation(stationReference);
+        noteStation.setStation(station);
         noteStation.setPositionOnNote(positionOnNote);
     }
 

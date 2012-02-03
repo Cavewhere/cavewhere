@@ -55,7 +55,7 @@ void cwLinePlotGeometryTask::addStationPositions(cwCave* cave) {
         StationIndexLookup.insert(fullStation.data(), PointData.size());
 
         //Lookup the stations position
-        PointData.append(fullStation->position());
+//        PointData.append(fullStation->position());
     }
 }
 
@@ -68,32 +68,32 @@ void cwLinePlotGeometryTask::addStationPositions(cwCave* cave) {
   OpenGL can the draw lines between the point data and the indexData
   */
 void cwLinePlotGeometryTask::addShotLines(cwCave* cave) {
-    //Go through all the trips in the cave
-    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
-        cwTrip* trip = cave->trip(tripIndex);
+//    //Go through all the trips in the cave
+//    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
+//        cwTrip* trip = cave->trip(tripIndex);
 
-        //Go through all the chunks in the trip
-        foreach(cwSurveyChunk* chunk, trip->chunks()) {
+//        //Go through all the chunks in the trip
+//        foreach(cwSurveyChunk* chunk, trip->chunks()) {
 
-            if(chunk->stationCount() < 2) { continue; }
+//            if(chunk->stationCount() < 2) { continue; }
 
-            cwStationReference firstStation = chunk->station(0);
-            unsigned int previousStationIndex = StationIndexLookup.value(firstStation.station().data(), 0);
+//            cwStationReference firstStation = chunk->station(0);
+//            unsigned int previousStationIndex = StationIndexLookup.value(firstStation.station().data(), 0);
 
-            //Go through all the the stations/shots in the chunk
-            for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
-                cwStationReference station = chunk->station(stationIndex);
+//            //Go through all the the stations/shots in the chunk
+//            for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
+//                cwStationReference station = chunk->station(stationIndex);
 
-                //Look up the index
-                if(StationIndexLookup.contains(station.station().data())) {
-                    unsigned int stationIndex = StationIndexLookup.value(station.station().data(), 0);
+//                //Look up the index
+//                if(StationIndexLookup.contains(station.station().data())) {
+//                    unsigned int stationIndex = StationIndexLookup.value(station.station().data(), 0);
 
-                    IndexData.append(previousStationIndex);
-                    IndexData.append(stationIndex);
+//                    IndexData.append(previousStationIndex);
+//                    IndexData.append(stationIndex);
 
-                    previousStationIndex = stationIndex;
-                }
-            }
-        }
-    }
+//                    previousStationIndex = stationIndex;
+//                }
+//            }
+//        }
+//    }
 }

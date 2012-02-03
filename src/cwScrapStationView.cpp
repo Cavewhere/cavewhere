@@ -164,13 +164,13 @@ void cwScrapStationView::updateShotLines() {
         cwTrip* trip = note->parentTrip();
 
         QString stationName = noteStation.name();
-        QSet<cwStationReference> neighboringStations = trip->neighboringStations(stationName);
+        QSet<cwStation> neighboringStations = trip->neighboringStations(stationName);
 
         //The lines we are creating
         QPainterPath shotLines; //In normalized note coordinates
 
         //The position of the selected station
-        QVector3D selectedStationPos = noteStation.station().position();
+        QVector3D selectedStationPos; // = noteStation.station().position();
 
         //Create the matrix to covert global position into note position
         QMatrix4x4 noteTransformMatrix = scrap()->noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
@@ -195,9 +195,9 @@ void cwScrapStationView::updateShotLines() {
                 offsetMatrix;
 
         //Go through all the neighboring stations and add the position to the line
-        foreach(cwStationReference station, neighboringStations) {
+        foreach(cwStation station, neighboringStations) {
 
-            QVector3D currentPos = station.position();
+            QVector3D currentPos; // = station.position();
 
             QVector3D normalizeNotePos = toNormalizedNote.map(currentPos);
 

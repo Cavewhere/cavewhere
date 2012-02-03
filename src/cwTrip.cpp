@@ -263,10 +263,10 @@ bool cwTrip::hasStation(QString stationName) const {
   The trip has a surveyChunks, a survey chunk has shots and stations.  If the stationName exists
   in the trip it will have neighboring stations, if there's at least one shot.
   */
-QSet<cwStationReference> cwTrip::neighboringStations(QString stationName) const {
-    QSet<cwStationReference> neighbors;
+QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
+    QSet<cwStation> neighbors;
     foreach(cwSurveyChunk* chunk, Chunks) {
-        QSet<cwStationReference> chunkNeighbors = chunk->neighboringStations(stationName);
+        QSet<cwStation> chunkNeighbors = chunk->neighboringStations(stationName);
         neighbors.unite(chunkNeighbors);
     }
     return neighbors;
@@ -278,11 +278,11 @@ QSet<cwStationReference> cwTrip::neighboringStations(QString stationName) const 
   A station may come up more than once on a trip, but only returns
   unique stations for this trip.
   */
-QList< cwStationReference > cwTrip::uniqueStations() const {
-    QMap<QString, cwStationReference> lookup;
+QList< cwStation > cwTrip::uniqueStations() const {
+    QMap<QString, cwStation> lookup;
     foreach(cwSurveyChunk* chunk, Chunks) {
         for(int i = 0; i < chunk->stationCount(); i++) {
-            cwStationReference station = chunk->station(i);
+            cwStation station = chunk->station(i);
             lookup[station.name()] = station;
         }
     }
@@ -304,9 +304,9 @@ void cwTrip::setParentCave(cwCave* parentCave) {
         ParentCave = parentCave;
         setParent(parentCave);
 
-        foreach(cwSurveyChunk* chunk, Chunks) {
-            chunk->updateStationsWithNewCave();
-        }
+//        foreach(cwSurveyChunk* chunk, Chunks) {
+//            chunk->updateStationsWithNewCave();
+//        }
 
         Notes->setParentCave(ParentCave);
     }

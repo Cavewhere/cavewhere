@@ -4,6 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QSharedPointer>
+#include <QVector3D>
 //#include <QDebug>
 
 //Our includes
@@ -96,7 +97,8 @@ inline double cwStationReference::down() const {
 }
 
 inline QVector3D cwStationReference::position() const {
-    return SharedStation->position();
+    return QVector3D();
+//    return SharedStation->position();
 }
 
 inline cwDistanceStates::State cwStationReference::leftInputState() const

@@ -2,8 +2,7 @@
 #define cwStation_H
 
 //Qt includes
-#include <QVector3D>
-#include <QVariant>
+//#include <QVector3D>
 #include <QSharedDataPointer>
 
 //Our includes
@@ -18,8 +17,8 @@ public:
         LeftRole,
         RightRole,
         UpRole,
-        DownRole,
-        PositionRole
+        DownRole
+//        PositionRole
     };
 
     cwStation();
@@ -58,10 +57,13 @@ public:
     bool setDown(double down);
     void setDownInputState(cwDistanceStates::State state);
 
-    QVector3D position() const;
-    void setPosition(QVector3D position); //This is set by the loop closer
+//    QVector3D position() const;
+//    void setPosition(QVector3D position); //This is set by the loop closer
 
     bool isValid() const { return !Data->Name.isEmpty(); }
+
+    bool operator ==(const cwStation& station) const;
+    bool operator !=(const cwStation& station) const;
 
 private:
     class PrivateData : public QSharedData {
@@ -81,7 +83,7 @@ private:
         double Up;
         double Down;
 
-        QVector3D Position;
+//        QVector3D Position;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -91,6 +93,10 @@ private:
     bool setDoubleValue(double& setValue, cwDistanceStates::State& state, double value);
     void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
 };
+
+inline uint qHash(const cwStation& station) {
+    return qHash(station.name());
+}
 
 inline QString cwStation::name() const { return Data->Name; }
 inline double cwStation::left() const { return Data->Left; }
@@ -114,18 +120,28 @@ inline cwDistanceStates::State cwStation::downInputState() const {
     return Data->DownState;
 }
 
-inline QVector3D cwStation::position() const { return Data->Position; }
+//inline QVector3D cwStation::position() const { return Data->Position; }
 
 
-inline void cwStation::setPosition(QVector3D position) {
-    Data->Position = position;
-}
+//inline void cwStation::setPosition(QVector3D position) {
+//    Data->Position = position;
+//}
 
 inline bool cwStation::checkLRUDValue(double value) const
 {
     return cwDistanceValidator::check(value);
 }
 
+
+inline bool cwStation::operator ==(const cwStation &station) const
+{
+    return station.name().compare(station.name()) == 0;
+}
+
+inline bool cwStation::operator !=(const cwStation &station) const
+{
+    return ! operator ==(station);
+}
 
 
 #endif // cwStation_H

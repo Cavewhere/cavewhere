@@ -3,9 +3,9 @@
 
 //Our includes
 #include "cwUnits.h"
+#include "cwStation.h"
 class cwSurveyChunk;
 class cwCave;
-class cwStationReference;
 class cwTeam;
 class cwTripCalibration;
 class cwSurveyNoteModel;
@@ -62,12 +62,12 @@ public:
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave();
 
-    QList< cwStationReference > uniqueStations() const;
+    QList< cwStation > uniqueStations() const;
 
     //Network operations
     int numberOfStations() const;
     bool hasStation(QString stationName) const;
-    QSet<cwStationReference> neighboringStations(QString stationName) const;
+    QSet<cwStation> neighboringStations(QString stationName) const;
 
 signals:
     void nameChanged(QString name);

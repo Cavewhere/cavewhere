@@ -170,7 +170,7 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
         cwTriangulateStation station;
         station.setName(noteStation.name());
         station.setNotePosition(noteStation.positionOnNote());
-        station.setPosition(noteStation.station().position());
+        //station.setPosition(noteStation.station().position());
         stations.append(cwTriangulateStation(station));
     }
     return stations;

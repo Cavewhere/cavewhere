@@ -56,7 +56,7 @@ public:
     QList<cwSurvexBlockData*> childBlocks();
 
     int stationCount() const;
-    cwStationReference station(int index) const;
+    cwStation station(int index) const;
 
     int shotCount() const;
 //    cwShot shot(int index) const;
