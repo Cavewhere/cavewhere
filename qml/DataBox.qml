@@ -9,6 +9,7 @@ Item {
     property alias dataValidator: editor.validator
     property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
     property SurveyChunkView surveyChunkView;
+    property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
 
     property int rowIndex: -1
     property int dataRole
@@ -148,6 +149,7 @@ Item {
         if(focus) {
             //Make sure it's visible to the user
             surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+            surveyChunkTrimmer.chunk = surveyChunk;
         }
     }
 

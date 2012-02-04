@@ -11,6 +11,7 @@ class cwTrip;
 class cwSurveyChunkView;
 class cwSurveyChunk;
 class cwSurveyChunkViewComponents;
+class cwSurveyChunkTrimmer;
 
 class cwSurveyChunkGroupView : public QDeclarativeItem
 {
@@ -85,6 +86,9 @@ private:
 
     //A visible rectangle that the group view always want to be shown
     QRectF EnsureVisibleArea;
+
+    //Enables the corret station shot interaction
+    cwSurveyChunkTrimmer* ChunkTrimmer;
 
     void UpdatePosition(int index);
     void UpdateActiveChunkViews();

@@ -15,7 +15,7 @@ class cwStation;
 class cwShot;
 class cwSurveyChunkViewComponents;
 class cwValidator;
-#include "cwStationReference.h"
+class cwSurveyChunkTrimmer;
 
 
 class cwSurveyChunkView : public QDeclarativeItem
@@ -23,6 +23,7 @@ class cwSurveyChunkView : public QDeclarativeItem
     Q_OBJECT
 
     Q_PROPERTY(cwSurveyChunk* model READ model WRITE setModel NOTIFY modelChanged)
+    Q_PROPERTY(cwSurveyChunkTrimmer* chunkTrimmer READ chunkTrimmer WRITE setChunkTrimmer NOTIFY chunkTrimmerChanged)
     Q_ENUMS(DataBoxType)
 
 public:
@@ -30,8 +31,11 @@ public:
     explicit cwSurveyChunkView(QDeclarativeItem *parent = 0);
     ~cwSurveyChunkView();
 
-    cwSurveyChunk* model();
+    cwSurveyChunk* model() const;
     void setModel(cwSurveyChunk* chunk);
+
+    cwSurveyChunkTrimmer* chunkTrimmer() const;
+    void setChunkTrimmer(cwSurveyChunkTrimmer* chunkTrimmer);
 
     void setFrontSights(bool hasFrontSights);
     void setBackSights(bool hasBackSights);
@@ -60,6 +64,8 @@ signals:
 
     void needChunkAbove(); //Always hook up with a direct connection
     void needChunkBelow(); //Always hook up with a direct connection
+
+    void chunkTrimmerChanged();
 
 public slots:
 
@@ -156,6 +162,8 @@ private:
     friend class ShotRow;
 
     cwSurveyChunk* SurveyChunk;
+    cwSurveyChunkTrimmer* ChunkTrimmer;
+
     QList<StationRow> StationRows;
     QList<ShotRow> ShotRows;
 
@@ -232,6 +240,9 @@ Q_DECLARE_METATYPE(cwSurveyChunkView*)
 
 //QML_DECLARE_TYPEINFO(cwSurveyChunkView, QML_HAS_ATTACHED_PROPERTIES)
 
+inline cwSurveyChunkTrimmer* cwSurveyChunkView::chunkTrimmer() const {
+    return ChunkTrimmer;
+}
 
 
 #endif // CWSURVEYCHUCKVIEW_H

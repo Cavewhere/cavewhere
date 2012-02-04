@@ -58,6 +58,7 @@
 #include "cwScrapManager.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyChunkTrimmer.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -114,4 +115,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
     qmlRegisterType<cwTeam>("Cavewhere", 1, 0, "Team");
     qmlRegisterType<cwTripCalibration>("Cavewhere", 1, 0, "Calibration");
+    qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");
 }

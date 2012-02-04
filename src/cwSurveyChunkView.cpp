@@ -8,6 +8,7 @@
 #include "cwDistanceValidator.h"
 #include "cwDebug.h"
 #include "cwValidator.h"
+#include "cwSurveyChunkTrimmer.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -479,7 +480,7 @@ void cwSurveyChunkView::updateData(cwSurveyChunk::DataRole role, int index) {
 /**
   \brief Get's the model from the view
   */
-cwSurveyChunk* cwSurveyChunkView::model() {
+cwSurveyChunk* cwSurveyChunkView::model() const {
     return SurveyChunk;
 }
 
@@ -511,6 +512,17 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         emit modelChanged();
     }
 }
+
+/**
+  Sets the chunkTrimmer
+  */
+void cwSurveyChunkView::setChunkTrimmer(cwSurveyChunkTrimmer *chunkTrimmer) {
+    if(ChunkTrimmer != chunkTrimmer) {
+        ChunkTrimmer = chunkTrimmer;
+        emit chunkTrimmerChanged();
+    }
+}
+
 
 /**
   \brief If this is set to true, this will all the user to edit the front sights
@@ -892,6 +904,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setProperty("surveyChunkView", QVariant::fromValue(view));
+        item->setProperty("surveyChunkTrimmer", QVariant::fromValue(view->chunkTrimmer()));
         item->setParentItem(view);
         item->setParent(view);
     }
@@ -968,6 +981,7 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setProperty("surveyChunkView", QVariant::fromValue(view));
+        item->setProperty("surveyChunkTrimmer", QVariant::fromValue(view->chunkTrimmer()));
         item->setParentItem(view);
         item->setParent(view);
     }

@@ -141,7 +141,8 @@ SOURCES += src/main.cpp \
     src/cwGLScraps.cpp \
     src/cwGlobalDirectory.cpp \
     src/cwImageTexture.cpp \
-    src/cwGlobalQMLData.cpp
+    src/cwGlobalQMLData.cpp \
+    src/cwSurveyChunkTrimmer.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -266,7 +267,8 @@ HEADERS  += \
     src/cwGlobalDirectory.h \
     src/cwImageTexture.h \
     src/cwGlobalQMLData.h \
-    src/cwReadingStates.h
+    src/cwReadingStates.h \
+    src/cwSurveyChunkTrimmer.h
 
 
 FORMS    += src/cwMainWindow.ui \

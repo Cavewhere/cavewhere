@@ -19,7 +19,6 @@ class cwSurveyChunk : public QObject {
     Q_ENUMS(DataRole)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
-    Q_PROPERTY(bool editting READ isEditting WRITE setEditting NOTIFY edittingChanged)
 
 public:
     enum Direction {
@@ -64,9 +63,6 @@ public:
     Q_INVOKABLE QString guessLastStationName() const;
     QString guessNextStation(QString stationName) const;
 
-    bool isEditting() const;
-    void setEditting(bool isEditting);
-
 signals:
     void parentTripChanged();
 
@@ -77,8 +73,6 @@ signals:
     void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
-
-    void edittingChanged();
 
 public slots:
     int stationCount() const;
@@ -158,13 +152,6 @@ inline QList<cwStation> cwSurveyChunk::stations() const {
   */
 inline QList<cwShot> cwSurveyChunk::shots() const {
     return Shots;
-}
-
-/**
-Gets editting
-*/
-inline bool cwSurveyChunk::isEditting() const {
-    return Editting;
 }
 
 

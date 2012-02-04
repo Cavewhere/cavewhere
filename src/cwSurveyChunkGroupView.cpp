@@ -6,6 +6,7 @@
 #include "cwSurveyChunkViewComponents.h"
 #include "cwTripCalibration.h"
 #include "cwDebug.h"
+#include "cwSurveyChunkTrimmer.h"
 
 //Qt includes
 #include <QDeclarativeEngine>
@@ -19,7 +20,8 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
     Trip(NULL),
     ChunkQMLComponents(NULL),
     NeedChunkAboveMapper(new QSignalMapper(this)),
-    NeedChunkBelowMapper(new QSignalMapper(this))
+    NeedChunkBelowMapper(new QSignalMapper(this)),
+    ChunkTrimmer(new cwSurveyChunkTrimmer(this))
 {
     connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkAbove(int)));
     connect(NeedChunkBelowMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
@@ -235,6 +237,9 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
         //Set the chunkview rendering frontSights or backsights
         chunkView->setFrontSights(Trip->calibrations()->hasFrontSights());
         chunkView->setBackSights(Trip->calibrations()->hasBackSights());
+
+        //Set the trimmer
+        chunkView->setChunkTrimmer(ChunkTrimmer);
 
         //Set the model for the view
         chunkView->setModel(chunk);
