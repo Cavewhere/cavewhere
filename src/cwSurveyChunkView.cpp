@@ -549,7 +549,9 @@ void cwSurveyChunkView::setBackSights(bool hasBackSights) {
 }
 
 QRectF cwSurveyChunkView::boundingRect() const {
-    return childrenBoundingRect();
+    QRectF childrenBounds = childrenBoundingRect();
+    childrenBounds.setHeight(heightHint(StationRows.size()));
+    return childrenBounds;
 }
 
 /**
@@ -1420,7 +1422,7 @@ void cwSurveyChunkView::updateDimensions() {
     if(!interfaceValid()) { return; }
 
     QRectF rect = boundingRect();
-    //qDebug() << "BoundingRect:" << rect;
+//    qDebug() << "BoundingRect:" << rect.height() << height();
 
     setWidth(rect.width());
     setHeight(rect.height());

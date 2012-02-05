@@ -357,7 +357,7 @@ void cwSurveyChunkGroupView::UpdateChunkHeight() {
     cwSurveyChunkView* chunkView = qobject_cast<cwSurveyChunkView*>(sender());
     if(chunkView != NULL) {
         int index = ChunkViews.indexOf(chunkView);
-        UpdateContentArea(index, index);
+        UpdateContentArea(index, ChunkViews.size() - 1);
         UpdateActiveChunkViews();
     }
 }
