@@ -176,7 +176,7 @@ void cwLinePlotManager::runSurvex() {
             LinePlotTask->start();
         } else {
             //Restart the survex
-            qDebug() << "Restart plot task";
+//            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
