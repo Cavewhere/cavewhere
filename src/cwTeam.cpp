@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QByteArray>
+#include <QDebug>
 
 cwTeam::cwTeam(QObject *parent) :
     QAbstractListModel(parent)
@@ -67,6 +68,17 @@ bool cwTeam::setData(QModelIndex index, int role, const QVariant &data) {
         emit dataChanged(index, index);
         return true;
     }
+    case JobsRole: {
+        if(data.canConvert<QStringList>()) {
+            cwTeamMember& teamMember = Team[index.row()];
+            QStringList jobList = data.toStringList();
+            teamMember.setJobs(jobList);
+            emit dataChanged(index, index);
+            return true;
+        }
+        return false;
+    }
+
     default:
         return false;
     }

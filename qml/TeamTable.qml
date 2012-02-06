@@ -30,6 +30,7 @@ Item {
 
             onClicked: {
                 model.addTeamMember();
+                teamList.currentIndex = teamList.count - 1
             }
         }
 
@@ -53,6 +54,16 @@ Item {
             font.bold: true
         }
 
+        Rectangle {
+            id: verticalLine2
+            anchors.left: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: teamList.top
+            width: 1
+            border.color: "lightgray"
+            border.width: 1
+        }
+
         ListView {
             id: teamList
 
@@ -68,9 +79,22 @@ Item {
                 id: rowDelegate
 
                 width: teamList.width
-                height: childrenRect.height
+                height: Math.max(25, Math.max(personNameRow.height, jobsListView.height)) + 6
 
                 color: index % 2 === 0 ? "#DDF2FF" : "white"
+
+                property bool selected: teamList.currentIndex === index
+
+                MouseArea {
+                    id: rowMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        teamList.currentIndex = index
+                        personNameRow.forceActiveFocus()
+                    }
+                    onDoubleClicked: nameText.openEditor()
+                }
 
                 Rectangle {
                     height: 1
@@ -81,37 +105,44 @@ Item {
                 }
 
                 Rectangle {
+                    id: selectedBackground
                     border.width: 1
-                    x: rowDelegate.x + 1
-                    y: personNameRow.y + 1
-                    width: Math.floor(teamTable.width / 2.0) - 2
-                    height: personNameRow.height - 2
+                    anchors.fill: parent
+                    anchors.margins: 1
                     color: "#00000000"
+                    z:1
+                    visible: rowDelegate.selected
                 }
 
-                Row {
+                Item {
                     id: personNameRow
 
                     anchors.left: parent.left
-                    anchors.leftMargin: 2
-
-                    height: nameText.height + 6
+                    anchors.leftMargin: 4
+                    anchors.right: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
 
                     RemoveButton {
                         id: deletePersonButton
+                        anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 15
 
                         onClicked: {
                             teamTable.model.removeTeamMember(index)
                         }
+
+
+                        visible: rowDelegate.selected
                     }
 
                     DoubleClickTextInput {
                         id: nameText
                         text: name
 
+                        anchors.left: deletePersonButton.right
+                        anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
+
 
                         onFinishedEditting: {
                             teamTable.model.setData(index, Team.NameRole, newText)
@@ -119,38 +150,122 @@ Item {
                     }
                 }
 
-                ListView {
+                Rectangle {
+                    id: verticalLine
+                    anchors.left: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 1
+                    border.color: "lightgray"
+                    border.width: 1
+                }
+
+                Flow {
                     id: jobsListView
-                    model: jobs
 
-                    property int delegateHeight: 20
+                    property int rowIndex: index
 
-                    x: Math.floor(teamTable.width / 2.0) + 5
+                    anchors.left: parent.horizontalCenter
+                    anchors.leftMargin: 3
+                    anchors.right: parent.right
+                    anchors.verticalCenter:  parent.verticalCenter
 
-                    height: delegateHeight * count
-                    width: teamTable.width / 2.0
+                    spacing: 5
 
-                    interactive: false
+                    Repeater {
+                        model: jobs
+                        delegate: Rectangle {
+                            id: job
+                            property alias selected: job.focus
 
-                    delegate: Text {
-                        height: jobsListView.delegateHeight
-                        text: modelData
+                            radius: 5
+                            color: selected ? "#F39935" : "#E4CC99"
+                            border.width: 1
+                            border.color: selected ? "#FFEDC7" : "#FFF3D6"
+
+                            width: Math.max(jobText.width, 20) + 10
+                            height: jobText.height + 6
+                            Behavior on y { NumberAnimation {} }
+
+                            DoubleClickTextInput {
+                                id: jobText
+                                anchors.centerIn: parent
+                                text: modelData
+
+                                onFinishedEditting: {
+                                    var alljobs = jobs
+                                    alljobs[index] = newText
+                                    teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    teamList.currentIndex = jobsListView.rowIndex
+                                    job.forceActiveFocus()
+                                }
+
+                                onDoubleClicked: {
+                                    jobText.openEditor()
+                                }
+                            }
+
+                            Keys.onDeletePressed: {
+                                var alljobs = jobs
+                                alljobs.splice(index, 1)
+                                teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
+                            }
+
+                        }
+                    }
+
+                    Rectangle {
+                        radius: 5
+                        color: "#B2D3AF"
+
+                        border.width: 1
+                        border.color: "#E6FFE4"
+
+                        width: addJobRow.width + 6
+                        height: addJobRow.height + 6
+
+                        visible: rowDelegate.selected
+
+                        Row {
+                            id: addJobRow
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            Image {
+                                source: "qrc:icons/plus.png"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                id: addText
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Job"
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+
+                            onClicked: {
+                                var alljobs = jobs
+                                alljobs.push("Job " + (jobs.length + 1));
+                                teamTable.model.setData(index, Team.JobsRole, alljobs)
+                            }
+                        }
                     }
                 }
             }
         }
-
-
     }
 
-    Rectangle {
-        id: verticalLine
-        anchors.left: personTable.horizontalCenter
-        anchors.top: personTable.top
-        anchors.bottom: personTable.bottom
-        width: 1
-        border.color: "lightgray"
-        border.width: 1
+    onModelChanged: {
+        teamList.currentIndex = -1
     }
 
 
@@ -169,11 +284,6 @@ Item {
                 target: addPerson
                 anchors.leftMargin: 0
                 text: "Add a team member"
-            }
-
-            PropertyChanges {
-                target: verticalLine
-                visible: false
             }
 
             PropertyChanges {
