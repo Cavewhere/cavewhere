@@ -6,4 +6,5 @@ IconButton {
     hoverIconSource: "qrc:icons/minusCircleDark.png"
     sourceSize: Qt.size(15, 15);
     height: 15
+    width: 15
 }
