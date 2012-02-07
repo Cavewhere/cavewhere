@@ -270,53 +270,53 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter) {
   */
 void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
 
-    QList <QWeakPointer<cwStation> > stations = cave->stations();
+//    QList <QWeakPointer<cwStation> > stations = cave->stations();
 
-    //Transforms all the station's points
-    QList<QVector3D> transformedStationPoints = QtConcurrent::blockingMapped(stations,
-                                                                             TransformPoint(Camera->viewProjectionMatrix(),
-                                                                                            Camera->viewport()));
+//    //Transforms all the station's points
+//    QList<QVector3D> transformedStationPoints = QtConcurrent::blockingMapped(stations,
+//                                                                             TransformPoint(Camera->viewProjectionMatrix(),
+//                                                                                            Camera->viewport()));
 
 
-    Q_ASSERT(transformedStationPoints.size() == cave->stations().count());
+//    Q_ASSERT(transformedStationPoints.size() == cave->stations().count());
 
-    QFont defaultFont;
-    QFontMetrics fontMetrics(defaultFont);
+//    QFont defaultFont;
+//    QFontMetrics fontMetrics(defaultFont);
 
-    //Go through all the station points and render the text
-    for(int i = 0; i < stations.size(); i++) {
-        QVector3D projectedStationPosition = transformedStationPoints[i];
+//    //Go through all the station points and render the text
+//    for(int i = 0; i < stations.size(); i++) {
+//        QVector3D projectedStationPosition = transformedStationPoints[i];
 
-        //Clip the stations to the rendering area
-        if(projectedStationPosition.z() > 1.0 ||
-                projectedStationPosition.z() < 0.0 ||
-                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
-            continue;
-        }
+//        //Clip the stations to the rendering area
+//        if(projectedStationPosition.z() > 1.0 ||
+//                projectedStationPosition.z() < 0.0 ||
+//                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
+//            continue;
+//        }
 
-        if(stations[i].isNull()) {
-            continue;
-        }
+//        if(stations[i].isNull()) {
+//            continue;
+//        }
 
-        QString stationName = stations[i].data()->name();
+//        QString stationName = stations[i].data()->name();
 
-        //See if stationName overlaps with other stations
-        QPoint topLeftPoint = projectedStationPosition.toPoint();
-        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
-        QRect stationRect(topLeftPoint, stationNameTextSize);
-        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
-        bool couldAddText = LabelKdTree.addRect(stationRect);
+//        //See if stationName overlaps with other stations
+//        QPoint topLeftPoint = projectedStationPosition.toPoint();
+//        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
+//        QRect stationRect(topLeftPoint, stationNameTextSize);
+//        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
+//        bool couldAddText = LabelKdTree.addRect(stationRect);
 
-        if(couldAddText) {
-            painter->save();
-            painter->setPen(Qt::white);
-            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
+//        if(couldAddText) {
+//            painter->save();
+//            painter->setPen(Qt::white);
+//            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
 
-            painter->setPen(Qt::black);
-            painter->drawText(topLeftPoint, stationName);
-            painter->restore();
-        }
-    }
+//            painter->setPen(Qt::black);
+//            painter->drawText(topLeftPoint, stationName);
+//            painter->restore();
+//        }
+//    }
 }
 
 /**

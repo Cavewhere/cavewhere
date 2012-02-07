@@ -10,7 +10,6 @@
 #include "cwImage.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"
-#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwScrap.h"
 #include "cwNoteStation.h"
@@ -103,16 +102,6 @@ namespace boost {
         QString name = cave.name();
         archive << BOOST_SERIALIZATION_NVP(name);
 
-        //Save all the stations
-        QList< QWeakPointer<cwStation> > weakStations = cave.stations();
-        QList< cwStation* > stations;
-        foreach(QWeakPointer<cwStation> weakStation, weakStations) {
-            if(!weakStation.isNull()) {
-                stations.append(weakStation.data());
-            }
-        }
-        archive << BOOST_SERIALIZATION_NVP(stations);
-
         //Save all the trips
         QList<cwTrip*> trips = cave.trips();
         archive << BOOST_SERIALIZATION_NVP(trips);
@@ -126,13 +115,6 @@ namespace boost {
         QString name;
         archive >> BOOST_SERIALIZATION_NVP(name);
         cave.setName(name);
-
-        //Load the stations
-        QList<cwStation*> stations;
-        archive >> BOOST_SERIALIZATION_NVP(stations);
-        foreach(cwStation* station, stations) {
-            cave.addStation(QSharedPointer<cwStation>(station));
-        }
 
         //Load all the trips
         QList<cwTrip*> trips;
@@ -469,28 +451,6 @@ namespace boost {
 
             chunk.appendShot(fromStation, toStation, shot);
         }
-    }
-
-    ////////////////////////// cwStationReferance ////////////////////////////////////////
-    template<class Archive>
-    void save(Archive &archive, const cwStationReference &station, const unsigned int) {
-        QString stationName = station.name();
-        cwCave* cave = station.cave();
-
-        archive << BOOST_SERIALIZATION_NVP(stationName);
-        archive << BOOST_SERIALIZATION_NVP(cave);
-    }
-
-    template<class Archive>
-    void load(Archive &archive, cwStationReference &station, const unsigned int) {
-        QString stationName;
-        cwCave* cave = NULL;
-
-        archive >> BOOST_SERIALIZATION_NVP(stationName);
-        archive >> BOOST_SERIALIZATION_NVP(cave);
-
-        station.setCave(cave);
-        station.setName(stationName);
     }
 
     ////////////////////////// cwShot ////////////////////////////////////////

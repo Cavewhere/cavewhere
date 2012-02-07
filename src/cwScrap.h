@@ -12,6 +12,7 @@
 #include <cwNoteStation.h>
 #include <cwTriangulatedData.h>
 class cwNote;
+class cwCave;
 
 /**
   cwScrap holds a polygon of points that represents a scrap

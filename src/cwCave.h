@@ -38,16 +38,14 @@ public:
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
 
-    bool hasStation(QString name);
-    QWeakPointer<cwStation> station(QString name);
-    void addStation(QSharedPointer<cwStation> station);
-    void removeStation(QString name);
-    void setStationData(QSharedPointer<cwStation> station, QVariant data, cwStation::DataRoles role);
-    QVariant stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const;
+//    bool hasStation(QString name);
+//    QWeakPointer<cwStation> station(QString name);
+//    void addStation(QSharedPointer<cwStation> station);
+//    void removeStation(QString name);
+//    void setStationData(QSharedPointer<cwStation> station, QVariant data, cwStation::DataRoles role);
+//    QVariant stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const;
 
-    QList< QWeakPointer<cwStation> > stations() const;
-
-
+    QList< cwStation > stations() const;
 
 signals:
     void beginInsertTrips(int begin, int end);
@@ -66,7 +64,7 @@ protected:
     QList<cwTrip*> Trips;
     QString Name;
 
-    QMap<QString, QWeakPointer<cwStation> > StationLookup;
+//    QMap<QString, QWeakPointer<cwStation> > StationLookup;
 
     virtual void setUndoStackForChildren();
 private:
@@ -167,42 +165,32 @@ inline cwTrip* cwCave::trip(int index) const {
     return Trips[index];
 }
 
-/**
-  \brief Test if this caves has a station with the name, name.
+///**
+//  \brief Test if this caves has a station with the name, name.
 
-  Returns true if it has a station with that name
-  */
-inline bool cwCave::hasStation(QString name) {
-    QWeakPointer<cwStation> pointer = station(name);
-    return !pointer.isNull();
-}
+//  Returns true if it has a station with that name
+//  */
+//inline bool cwCave::hasStation(QString name) {
+//    QWeakPointer<cwStation> pointer = station(name);
+//    return !pointer.isNull();
+//}
 
-/**
-  \brief Get's the station from it's name
-  */
-inline QWeakPointer<cwStation> cwCave::station(QString name) {
-    return StationLookup.value(name.toLower(), QWeakPointer<cwStation>());
-}
+///**
+//  \brief Get's the station from it's name
+//  */
+//inline QWeakPointer<cwStation> cwCave::station(QString name) {
+//    return StationLookup.value(name.toLower(), QWeakPointer<cwStation>());
+//}
 
-/**
-  \brief Adds the station to the cave
-  */
-inline void cwCave::addStation(QSharedPointer<cwStation> station) {
-    if(!station->name().isEmpty()) {
-        StationLookup[station->name().toLower()] = station.toWeakRef();
-    }
-}
+///**
+//  \brief Adds the station to the cave
+//  */
+//inline void cwCave::addStation(QSharedPointer<cwStation> station) {
+//    if(!station->name().isEmpty()) {
+//        StationLookup[station->name().toLower()] = station.toWeakRef();
+//    }
+//}
 
-/**
-  \brief Gets all the stations in the cave
-
-  To figure out how stations are structured see cwTrip and cwSurveyChunk
-
-  Shots and stations are stored in the cwSurveyChunk
-  */
-inline QList< QWeakPointer<cwStation> > cwCave::stations() const {
-    return StationLookup.values();
-}
 
 /**
   \brief Gets the index of the trip inside of the cave

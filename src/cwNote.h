@@ -11,6 +11,7 @@
 #include "cwNoteTranformation.h"
 class cwTrip;
 class cwScrap;
+class cwCave;
 
 class cwNote : public QObject
 {

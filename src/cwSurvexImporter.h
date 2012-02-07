@@ -11,7 +11,7 @@
 #include <QFile>
 
 //Our includes
-#include <cwStationReference.h>
+#include "cwStation.h"
 class cwSurvexBlockData;
 class cwSurvexGlobalData;
 class cwSurveyChunk;

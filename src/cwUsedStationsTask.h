@@ -3,7 +3,7 @@
 
 //Our includes
 #include <cwTask.h>
-class cwStation;
+#include "cwStation.h"
 
 //Qt includes
 #include <QWeakPointer>
@@ -16,7 +16,7 @@ class cwUsedStationsTask : public cwTask
 public:
     explicit cwUsedStationsTask(QObject *parent = 0);
 
-    Q_INVOKABLE void setStationNames(QList< QString > fullStationNames);
+    Q_INVOKABLE void setStationNames(QList< cwStation > stations);
 
 protected:
     virtual void runTask();
@@ -58,24 +58,24 @@ private:
 
         QString groupString() const;
         QString name() const { return Name; }
-        QList<QString> stations() const { return Stations; }
+        QList<QString> stations() const { return StationsNames; }
 
     private:
         QString Name;
-        QList<QString> Stations;
+        QList<QString> StationsNames;
 
         static bool lessThanForNumericStation(QString left, QString right);
     };
 
 
-    QList< QString > StationNames;
+    QList< cwStation > Stations;
 
     QList<SplitStationName> createSplitStationNames() const;
     QList<SurveyGroup> createSurveyGroups(QList<SplitStationName> stations) const;
     QList<SurveyGroup> groupGroupsByContinousStationNames(QList<SurveyGroup> ungrouped) const;
     QList<QString> groupStrings(QList<SurveyGroup> groups) const;
 
-    static cwUsedStationsTask::SplitStationName splitName(QString stationName);
+    static cwUsedStationsTask::SplitStationName splitName(cwStation stationName);
 
 
 };
@@ -83,8 +83,8 @@ private:
 /**
   Sets all the station names for the task
   */
-inline void cwUsedStationsTask::setStationNames(QList< QString > stationNames) {
-    StationNames = stationNames;
+inline void cwUsedStationsTask::setStationNames(QList< cwStation > stationNames) {
+    Stations = stationNames;
 }
 
 #endif // CWUSEDSTATIONSTASK_H

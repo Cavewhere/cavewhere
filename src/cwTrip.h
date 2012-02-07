@@ -62,6 +62,7 @@ public:
     void setParentCave(cwCave* parentCave);
     cwCave* parentCave();
 
+    QList< cwStation > stations() const;
     QList< cwStation > uniqueStations() const;
 
     //Network operations
@@ -151,6 +152,8 @@ inline QDate cwTrip::date() const {
 inline cwCave* cwTrip::parentCave() {
     return ParentCave;
 }
+
+
 
 ///**
 //  \brief Gets the distance unit for the trip

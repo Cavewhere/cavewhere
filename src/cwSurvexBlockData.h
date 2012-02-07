@@ -2,11 +2,11 @@
 #define CWSURVEXBLOCKDATA_H
 
 //Our includes
-#include <cwStationReference.h>
 class cwSurveyChunk;
 class cwShot;
 class cwTeam;
 class cwTripCalibration;
+#include "cwStation.h"
 
 //Qt includes
 #include <QList>

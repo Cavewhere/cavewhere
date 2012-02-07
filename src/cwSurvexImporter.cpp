@@ -1,6 +1,5 @@
 //Our includes
 #include "cwSurvexImporter.h"
-#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexBlockData.h"

@@ -9,6 +9,7 @@
 #include "cwCavingRegion.h"
 #include "cwImage.h"
 #include "cwGlobalDirectory.h"
+#include "cwStation.h"
 
 int main(int argc, char *argv[])
 {
@@ -18,6 +19,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
     qRegisterMetaType<QList <QString> >("QList<QString>");
     qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
+    qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
 

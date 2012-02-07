@@ -60,16 +60,16 @@ void cwUsedStationsTask::runTask() {
 /**
   This is a threaded helper function to createSplitStationNames
   */
-cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(QString stationName) {
+cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation station) {
     QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\d*\\w*)");
-    if(splitStationsReg.exactMatch(stationName)) {
+    if(splitStationsReg.exactMatch(station.name())) {
         QString surveyName = splitStationsReg.cap(1).toUpper();
         QString stationName = splitStationsReg.cap(2);
 
         cwUsedStationsTask::SplitStationName splitStation(surveyName, stationName);
         return splitStation;
     } else {
-        qDebug() << "Can't match: " << stationName;
+        qDebug() << "Can't match: " << station.name();
     }
     return cwUsedStationsTask::SplitStationName();
 }
@@ -78,7 +78,7 @@ cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(QString stati
   \brief Splits the StationNames into the survey and StationNamuber
   */
 QList<cwUsedStationsTask::SplitStationName> cwUsedStationsTask::createSplitStationNames() const {
-    return QtConcurrent::blockingMapped(StationNames, splitName);
+    return QtConcurrent::blockingMapped(Stations, splitName);
 }
 
 /**
@@ -118,7 +118,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::groupGroupsByContinou
 }
 
 void cwUsedStationsTask::SurveyGroup::addStation(QString stationName) {
-    Stations.append(stationName);
+    StationsNames.append(stationName);
 }
 
 
@@ -129,15 +129,15 @@ void cwUsedStationsTask::SurveyGroup::addStation(QString stationName) {
   */
 QString cwUsedStationsTask::SurveyGroup::groupString() const {
 
-    Q_ASSERT(!Stations.isEmpty());
+    Q_ASSERT(!StationsNames.isEmpty());
     QString groupString;
     if(!Name.isEmpty()) {
         groupString += QString("<b>%1</b> Survey, ").arg(Name);
     }
 
-    if(Stations.size() == 1) {
+    if(StationsNames.size() == 1) {
         //Only one station
-        QString station = Stations.first();
+        QString station = StationsNames.first();
         if(station.isEmpty() && Name.isEmpty()) { return QString(); }
         if(station.isEmpty()) {
             groupString = QString("Station <b>%1</b>").arg(Name); //The group string is really the station
@@ -147,7 +147,7 @@ QString cwUsedStationsTask::SurveyGroup::groupString() const {
 
     } else {
         //More than one station
-        groupString += QString("Stations <b>%1</b> to <b>%2</b>").arg(Stations.first(), Stations.last());
+        groupString += QString("Stations <b>%1</b> to <b>%2</b>").arg(StationsNames.first(), StationsNames.last());
     }
 
     return groupString;
@@ -165,7 +165,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
 
     //Seperate the numeric from the nonNumeric
     bool okay;
-    foreach(QString station, Stations) {
+    foreach(QString station, StationsNames) {
         station.toInt(&okay);
         if(okay) {
             numericStations.append(station);

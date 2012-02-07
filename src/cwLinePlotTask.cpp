@@ -204,12 +204,12 @@ void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
        return;
    }
 
-   QWeakPointer<cwStation> station = cave->station(stationName);
-   QSharedPointer<cwStation> sharedStation = station.toStrongRef();
-   if(sharedStation.isNull()) {
-       qDebug() << "Couldn't find station:" << stationName << "in cave" << cave->name();
-       return;
-   }
+//   QWeakPointer<cwStation> station = cave->station(stationName);
+//   QSharedPointer<cwStation> sharedStation = station.toStrongRef();
+//   if(sharedStation.isNull()) {
+//       qDebug() << "Couldn't find station:" << stationName << "in cave" << cave->name();
+//       return;
+//   }
 
    //This need's to be updated with something else, populate a model?
 //   sharedStation->setPosition(position);

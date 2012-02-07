@@ -61,7 +61,6 @@ SOURCES += src/main.cpp \
     src/cwCavernTask.cpp \
     src/cwPlotSauceTask.cpp \
     src/cwPlotSauceXMLTask.cpp \
-    src/cwStationReference.cpp \
     src/cwUsedStationsTask.cpp \
     src/cwUsedStationTaskManager.cpp \
     src/cwCompassExporterRegionTask.cpp \
@@ -181,7 +180,6 @@ HEADERS  += \
     src/cwCavernTask.h \
     src/cwPlotSauceTask.h \
     src/cwPlotSauceXMLTask.h \
-    src/cwStationReference.h \
     src/cwUsedStationsTask.h \
     src/cwUsedStationTaskManager.h \
     src/cwCompassExporterRegionTask.h \
@@ -362,7 +360,8 @@ OTHER_FILES += \
     qml/InformationButton.qml \
     qml/ErrorHelpArea.qml \
     qml/ErrorHelpBox.qml \
-    qml/DataMainPage.qml
+    qml/DataMainPage.qml #\
+#    qml/CaveDataToolbar.qml
 
 RESOURCES += \
     icons.qrc

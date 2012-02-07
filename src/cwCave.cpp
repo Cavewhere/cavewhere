@@ -128,36 +128,36 @@ void cwCave::removeTrip(int i) {
     pushUndo(new RemoveTripCommand(this, i, i));
 }
 
-/**
-  \brief Removes a station for the lookup
+///**
+//  \brief Removes a station for the lookup
 
-  If the weak pointer is still valid, then this function does nothing
-  */
-void cwCave::removeStation(QString name) {
-    QWeakPointer<cwStation> pointer = StationLookup[name];
-    if(pointer.isNull()) {
-        StationLookup.remove(name);
-    }
-}
+//  If the weak pointer is still valid, then this function does nothing
+//  */
+//void cwCave::removeStation(QString name) {
+//    QWeakPointer<cwStation> pointer = StationLookup[name];
+//    if(pointer.isNull()) {
+//        StationLookup.remove(name);
+//    }
+//}
 
-/**
-  \brief This sets the station's data based on it's role
+///**
+//  \brief This sets the station's data based on it's role
 
-  This creates a undo / redo command and pushes it onto the undo stack
-  */
-void cwCave::setStationData(QSharedPointer<cwStation> station,
-                            QVariant data,
-                            cwStation::DataRoles role) {
+//  This creates a undo / redo command and pushes it onto the undo stack
+//  */
+//void cwCave::setStationData(QSharedPointer<cwStation> station,
+//                            QVariant data,
+//                            cwStation::DataRoles role) {
 
-    station->setData(data, role);
-}
+//    station->setData(data, role);
+//}
 
-/**
-  \brief This gets the stations data base on the role
-  */
-QVariant cwCave::stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const {
-    return station->data(role);
-}
+///**
+//  \brief This gets the stations data base on the role
+//  */
+//QVariant cwCave::stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const {
+//    return station->data(role);
+//}
 
 /**
   \brief Sets the undo stack for the cave and all of it's children
@@ -343,5 +343,20 @@ void cwCave::StationDataCommand::undo() {
     if(Cave.isNull()) { return; }
     Station->setData(OldData, Role);
     emit Cave.data()->stationDataChanged(Station, Role);
+}
+
+/**
+  \brief Gets all the stations in the cave
+
+  To figure out how stations are structured see cwTrip and cwSurveyChunk
+
+  Shots and stations are stored in the cwSurveyChunk
+  */
+QList<cwStation> cwCave::stations() const {
+    QList<cwStation> allStations;
+    foreach(cwTrip* trip, trips()) {
+        allStations.append(trip->stations());
+    }
+    return allStations;
 }
 

@@ -4,7 +4,6 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
-#include "cwStationReference.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 

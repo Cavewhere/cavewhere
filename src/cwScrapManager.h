@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QModelIndex>
 #include <QSet>
+#include <QWeakPointer>
 
 //Our includes
 class cwCavingRegion;

@@ -2,7 +2,6 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
-#include "cwStationReference.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
@@ -348,4 +347,15 @@ void cwTrip::DateCommand::undo() {
     if(Trip.isNull()) { return; }
     Trip.data()->Date = OldDate;
     emit Trip.data()->dateChanged(Trip.data()->Date);
+}
+
+/**
+  \brief Get's all the stations for the trip
+  */
+QList<cwStation> cwTrip::stations() const {
+    QList<cwStation> stations;
+    foreach(cwSurveyChunk* chunk, chunks()) {
+        stations.append(chunk->stations());
+    }
+    return stations;
 }

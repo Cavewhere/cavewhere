@@ -7,7 +7,7 @@
 #include <QPointF>
 
 //Our includes
-#include "cwStationReference.h"
+#include <cwStation.h>
 
 class cwNoteStation
 {

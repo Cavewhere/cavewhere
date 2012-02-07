@@ -45,18 +45,18 @@ void cwLinePlotGeometryTask::runTask() {
   This adds the station positions to PointData
   */
 void cwLinePlotGeometryTask::addStationPositions(cwCave* cave) {
-    QList< QWeakPointer<cwStation> > stations = cave->stations();
-//    qDebug() << "Stations:" << stations.size();
-    foreach( QWeakPointer<cwStation> station, stations) {
+//    QList< QWeakPointer<cwStation> > stations = cave->stations();
+////    qDebug() << "Stations:" << stations.size();
+//    foreach( QWeakPointer<cwStation> station, stations) {
 
-        QSharedPointer<cwStation> fullStation = station.toStrongRef();
+//        QSharedPointer<cwStation> fullStation = station.toStrongRef();
 
-        //Add the station to the index map
-        StationIndexLookup.insert(fullStation.data(), PointData.size());
+//        //Add the station to the index map
+//        StationIndexLookup.insert(fullStation.data(), PointData.size());
 
-        //Lookup the stations position
-//        PointData.append(fullStation->position());
-    }
+//        //Lookup the stations position
+////        PointData.append(fullStation->position());
+//    }
 }
 
 /**

@@ -4,7 +4,6 @@
 #include "cwSurvexBlockData.h"
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
-#include "cwStationReference.h"
 #include "cwGlobalIcons.h"
 
 //Qt includes

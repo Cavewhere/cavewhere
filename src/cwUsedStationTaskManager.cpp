@@ -57,12 +57,12 @@ void cwUsedStationTaskManager::calculateUsedStations() {
     if(Cave.isNull()) { return; }
 
     if(Task->isReady()) {
-        QList<QString> stationNames = allCaveStationNames();
+        QList<cwStation> stations = Cave.data()->stations();
 
         QMetaObject::invokeMethod(Task, //Object
                                   "setStationNames", //Function
                                   Qt::AutoConnection, //Connection to the function
-                                  Q_ARG(QList<QString>, stationNames)); //Arguments to the function
+                                  Q_ARG(QList<cwStation>, stations)); //Arguments to the function
 
         Task->start();
     } else {
@@ -78,25 +78,25 @@ void cwUsedStationTaskManager::setUsedStations(QList<QString> stations) {
     emit usedStationsChanged();
 }
 
-/**
-  Gets all the station names for the current cave.
+///**
+//  Gets all the station names for the current cave.
 
-  This assumes the cave isn't null
- */
-QList<QString> cwUsedStationTaskManager::allCaveStationNames() const {
-    cwCave* currentCave = Cave.data();
-    QList< QWeakPointer <cwStation> > stations = currentCave->stations();
+//  This assumes the cave isn't null
+// */
+//QList<QString> cwUsedStationTaskManager::allCaveStationNames() const {
+//    cwCave* currentCave = Cave.data();
+//    QList< cwStation > stations = currentCave->stations();
 
-    QList< QString > stationNames;
-    foreach( QWeakPointer <cwStation> currentStation, stations) {
-        if(currentStation.isNull()) { continue; }
+//    QList< QString > stationNames;
+//    foreach( QWeakPointer <cwStation> currentStation, stations) {
+//        if(currentStation.isNull()) { continue; }
 
-        cwStation* station = currentStation.data();
-        stationNames.append(station->name());
-    }
+//        cwStation* station = currentStation.data();
+//        stationNames.append(station->name());
+//    }
 
-    return stationNames;
-}
+//    return stationNames;
+//}
 
 /**
   \brief Helper function to setListenToCaveChanges
