@@ -300,6 +300,11 @@ Item {
                 target: jobHeader
                 visible: false
             }
+
+            PropertyChanges {
+                target: verticalLine2
+                visible: false
+            }
         }
     ]
 }
