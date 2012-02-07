@@ -9,13 +9,21 @@ Item {
 
     height: childrenRect.height
 
+    function updateState() {
+        if(teamList.count > 0) {
+            teamTable.state = ""
+        } else {
+            teamTable.state = "NoTeam"
+        }
+//        console.debug("Update state: " + teamTable.state )
+    }
 
     SectionLabel {
         id: title
         text: "Team"
     }
 
-    Rectangle {
+    Item {
         id: personTable
 
         anchors.top: title.bottom
@@ -32,6 +40,7 @@ Item {
                 model.addTeamMember();
                 teamList.currentIndex = teamList.count - 1
             }
+            visible: true
         }
 
         Text {
@@ -42,6 +51,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: "Name"
             font.bold: true
+            visible: true
         }
 
         Text {
@@ -52,6 +62,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: "Job"
             font.bold: true
+            visible: true
         }
 
         Rectangle {
@@ -62,6 +73,7 @@ Item {
             width: 1
             border.color: "lightgray"
             border.width: 1
+            visible: true
         }
 
         ListView {
@@ -74,6 +86,16 @@ Item {
 
             model: teamTable.model
             interactive: false
+
+            visible: true
+
+//            onVisibleChanged: {
+//                console.log("Visible changed:" + visible + " state: " + teamTable.state)
+//            }
+
+            onCountChanged: {
+                updateState();
+            }
 
             delegate: Rectangle {
                 id: rowDelegate
@@ -185,7 +207,6 @@ Item {
 
                             width: Math.max(jobText.width, 20) + 10
                             height: jobText.height + 6
-                            Behavior on y { NumberAnimation {} }
 
                             DoubleClickTextInput {
                                 id: jobText
@@ -265,15 +286,16 @@ Item {
     }
 
     onModelChanged: {
+//        console.debug("Model changed:" + model + " " + model.count)
         teamList.currentIndex = -1
+        updateState()
     }
 
 
     states: [
         State {
-            name: "HasTeam"
-            when: teamList.count === 0
-
+            name: "NoTeam"
+//            when: teamList.count === 0
             AnchorChanges {
                 target: addPerson
                 anchors.left: undefined
