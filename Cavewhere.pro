@@ -361,7 +361,8 @@ OTHER_FILES += \
     qml/DeclainationEditor.qml \
     qml/InformationButton.qml \
     qml/ErrorHelpArea.qml \
-    qml/ErrorHelpBox.qml
+    qml/ErrorHelpBox.qml \
+    qml/DataMainPage.qml
 
 RESOURCES += \
     icons.qrc
