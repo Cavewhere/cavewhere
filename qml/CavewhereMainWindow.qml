@@ -31,7 +31,6 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: mainSideBar.right
         anchors.right: parent.right
-        anchors.leftMargin: 1
 
         property int currentPosition: height * mainSideBar.pageShownReal
 
