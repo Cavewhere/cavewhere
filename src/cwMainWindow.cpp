@@ -13,7 +13,7 @@
 #include "cwProjectImageProvider.h"
 #include "cwScrapManager.h"
 #include "cwGlobalDirectory.h"
-#include "cwGlobalQMLData.h"
+#include "cwRootData.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -69,7 +69,7 @@ static QmlJsDebuggingEnabler enableDebuggingHelper;
 cwMainWindow::cwMainWindow(QWidget *parent) :
     QMainWindow(parent),
     SurvexExporter(NULL),
-    Data(new cwGlobalQMLData(this))
+    Data(new cwRootData(this))
 {
     setupUi(this);
 

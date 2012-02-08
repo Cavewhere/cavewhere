@@ -40,6 +40,7 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
     addCaveConnections(0, rowCount() - 1);
 }
 
+
 QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & parent) const {
     if(column != 0) { return QModelIndex(); }
     if(Region == NULL) { return QModelIndex(); }
