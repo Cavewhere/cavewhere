@@ -47,8 +47,6 @@
      <property name="title">
       <string>Export</string>
      </property>
-     <addaction name="actionSurvexExport"/>
-     <addaction name="actionCompassExport"/>
     </widget>
     <addaction name="actionLoad"/>
     <addaction name="actionSave"/>
@@ -85,19 +83,6 @@
   <action name="actionSurvexImport">
    <property name="text">
     <string>Import Survex</string>
-   </property>
-  </action>
-  <action name="actionSurvexExport">
-   <property name="text">
-    <string>Survex (.svx)</string>
-   </property>
-  </action>
-  <action name="actionCompassExport">
-   <property name="text">
-    <string>Compass (.dat)</string>
-   </property>
-   <property name="toolTip">
-    <string>Compass (.dat)</string>
    </property>
   </action>
   <action name="ActionUndo">

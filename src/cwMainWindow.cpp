@@ -93,8 +93,8 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
     connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
-    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
-    connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
+//    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
+//    connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
 
@@ -106,7 +106,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 
     reloadQML();
 
-    Data->project()->load("bcc.cw");
+//    Data->project()->load("bcc.cw");
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window
@@ -123,125 +123,6 @@ void cwMainWindow::changeEvent(QEvent *e)
     default:
         break;
     }
-}
-
-void OpenExportSurvexTripFileDialog();
-
-/**
-  \brief Opens the survex exporter
-  */
-void cwMainWindow::openExportSurvexTripFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexTrip(QString)));
-}
-
-/**
-  \brief Exports the currently selected trip to filename
-  */
-void cwMainWindow::exportSurvexTrip(QString /*filename*/) {
-    //    if(filename.isEmpty()) { return; }
-
-    //    cwTrip* trip = currentSelectedTrip();
-    //    if(trip != NULL) {
-    //        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
-    //        exportTask->setOutputFile(filename);
-    //        exportTask->setData(*trip);
-    //        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    //        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    //        exportTask->setThread(ExportThread);
-    //        exportTask->start();
-    //    }
-}
-
-/**
-  \brief Called when the export task has completed
-  */
-void cwMainWindow::exporterFinished() {
-    if(sender()) {
-        sender()->deleteLater();
-    }
-}
-
-/**
-  \brief Asks the user to choose a file to export the currently selected file
-  */
-void cwMainWindow::openExportSurvexCaveFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexCave(QString)));
-}
-
-/**
-  \brief Exports the currently selected cave to a file
-  */
-void cwMainWindow::exportSurvexCave(QString /*filename*/) {
-    //    if(filename.isEmpty()) { return; }
-    //    cwCave* cave = currentSelectedCave();
-    //    if(cave != NULL) {
-    //        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
-    //        exportTask->setOutputFile(filename);
-    //        exportTask->setData(*cave);
-    //        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    //        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    //        exportTask->setThread(ExportThread);
-    //        exportTask->start();
-    //    }
-}
-
-/**cwSurveyEditorMainWindow
-  \brief Open a file dialog for the user to save
-  all the data to survex file
-  */
-void cwMainWindow::openExportSurvexRegionFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexRegion(QString)));
-}
-
-/**
-  \brief Exports the survex region to filename
-  */
-void cwMainWindow::exportSurvexRegion(QString filename) {
-    cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
-    exportTask->setOutputFile(filename);
-    exportTask->setData(*(Data->region()));
-    connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    exportTask->setThread(ExportThread);
-    exportTask->start();
-}
-
-/**
-  Opens the compass file export dialog
-  */
-void cwMainWindow::openExportCompassCaveFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export selected cave to Compass", "", "Compass *.dat");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportCaveToCompass(QString)));
-}
-
-/**
-  Exports the currently select cave to Compass
-  */
-void cwMainWindow::exportCaveToCompass(QString filename) {
-        if(filename.isEmpty()) { return; }
-        if(!Data->region()->hasCaves()) { return; }
-
-        cwCave* cave = Data->region()->cave(0);
-        if(cave != NULL) {
-            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
-            exportTask->setOutputFile(filename);
-            exportTask->setData(*cave);
-            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-            exportTask->setThread(ExportThread);
-            exportTask->start();
-        }
 }
 
 /**

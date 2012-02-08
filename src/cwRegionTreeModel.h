@@ -35,6 +35,7 @@ public:
     explicit cwRegionTreeModel(QObject *parent = 0);
 
     void setCavingRegion(cwCavingRegion* region);
+    cwCavingRegion* cavingRegion() const;
 
     Q_INVOKABLE QModelIndex index ( int row, int column, const QModelIndex & parent ) const;
    // Q_INVOKABLE QModelIndex index ( int row, const QModelIndex& parent) const;
@@ -97,5 +98,14 @@ inline void cwRegionTreeModel::beginInsertCaves(int beginIndex, int endIndex) {
 inline void cwRegionTreeModel::endRemoveCaves(int /*beginIndex*/, int /*endIndex*/) {
     endRemoveRows();
 }
+
+/**
+  \brief Get's the caving region that this model represents
+  */
+inline cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
+    return Region;
+}
+
+
 
 #endif // CWREGIONTREEMODEL_H

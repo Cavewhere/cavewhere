@@ -13,8 +13,9 @@ class cwScrapManager;
 class cwProject;
 class cwTripCalibration;
 class cwTrip;
+class cwSurveyExportManager;
 
-class cwGlobalQMLData : public QObject
+class cwRootData : public QObject
 {
     Q_OBJECT
 
@@ -28,7 +29,7 @@ class cwGlobalQMLData : public QObject
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
 
 public:
-    explicit cwGlobalQMLData(QObject *parent = 0);
+    explicit cwRootData(QObject *parent = 0);
     cwCavingRegion* region() const;
     cwRegionTreeModel* regionModel() const;
     QGLWidget* mainGLWidget() const;
@@ -36,6 +37,7 @@ public:
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;
     cwProject* project() const;
+    cwSurveyExportManager* surveyExportManager() const;
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* defaultTrip() const;
@@ -60,62 +62,71 @@ private:
     cwLinePlotManager* LinePlotManager; //!<
     cwScrapManager* ScrapManager; //!<
     cwProject* Project; //!<
+    cwSurveyExportManager* SurveyExportManager;
 
     //Default class, aren't used exept to prevent qml from complaining
-    cwTrip* DefaultTrip; //!<
+    cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
 };
 
 /**
 Gets defaultTrip
 */
-inline cwTrip* cwGlobalQMLData::defaultTrip() const {
+inline cwTrip* cwRootData::defaultTrip() const {
     return DefaultTrip;
 }
 /**
 Gets defaultTripCalibration
 */
-inline cwTripCalibration* cwGlobalQMLData::defaultTripCalibration() const {
+inline cwTripCalibration* cwRootData::defaultTripCalibration() const {
     return DefaultTripCalibration;
 }
 
 /**
 Gets region
 */
-inline cwCavingRegion* cwGlobalQMLData::region() const {
+inline cwCavingRegion* cwRootData::region() const {
     return Region;
 }
 
 /**
 Gets regionModel
 */
-inline cwRegionTreeModel* cwGlobalQMLData::regionModel() const {
+inline cwRegionTreeModel* cwRootData::regionModel() const {
     return RegionTreeModel;
 }
 /**
 Gets mainGLWidget
 */
-inline QGLWidget* cwGlobalQMLData::mainGLWidget() const {
+inline QGLWidget* cwRootData::mainGLWidget() const {
     return GLWidget;
 }
 
 /**
   Gets linePlotManager
   */
-inline cwLinePlotManager* cwGlobalQMLData::linePlotManager() const {
+inline cwLinePlotManager* cwRootData::linePlotManager() const {
     return LinePlotManager;
 }
 /**
   Gets scrapManager
   */
-inline cwScrapManager* cwGlobalQMLData::scrapManager() const {
+inline cwScrapManager* cwRootData::scrapManager() const {
     return ScrapManager;
 }
 
 /**
   Gets project
   */
-inline cwProject* cwGlobalQMLData::project() const {
+inline cwProject* cwRootData::project() const {
     return Project;
+}
+
+/**
+  Get's the survey export manager, this holds the menu actions for exporting survey data
+  */
+inline cwSurveyExportManager *cwRootData::surveyExportManager() const
+{
+    return SurveyExportManager;
 }
 #endif // CWGLOBALQMLDATA_H

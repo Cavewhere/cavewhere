@@ -35,7 +35,7 @@ Rectangle {
         regionModel.rowsAboutToBeRemoved.connect(modelRemovingIndexes);
     }
 
-     Image {
+    Image {
         id: splitter
         fillMode: Image.TileVertically
         source: "qrc:icons/verticalLine.png"
@@ -45,11 +45,18 @@ Rectangle {
         anchors.leftMargin: -3
     }
 
+    CaveDataToolbar {
+        id: iconBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 35
+    }
+
     Column {
         id: staticElements
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: parent.top
+        anchors.top: iconBar.bottom
         anchors.topMargin: 3
         anchors.bottomMargin: 3
         anchors.leftMargin: 0

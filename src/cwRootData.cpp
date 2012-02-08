@@ -1,5 +1,5 @@
 //Our includes
-#include "cwGlobalQMLData.h"
+#include "cwRootData.h"
 #include "cwRegionTreeModel.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
@@ -7,11 +7,12 @@
 #include "cwProject.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyExportManager.h"
 
 //Qt includes
 #include <QGLWidget>
 
-cwGlobalQMLData::cwGlobalQMLData(QObject *parent) :
+cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
@@ -31,12 +32,16 @@ cwGlobalQMLData::cwGlobalQMLData(QObject *parent) :
     ScrapManager = new cwScrapManager(this);
     ScrapManager->setProject(Project);
     ScrapManager->setRegion(Region);
+
+    //Setup the survex export manager
+    SurveyExportManager = new cwSurveyExportManager(this);
+
 }
 
 /**
 Sets mainGLWidget
 */
-void cwGlobalQMLData::setGLWidget(QGLWidget* mainGLWidget) {
+void cwRootData::setGLWidget(QGLWidget* mainGLWidget) {
     if(GLWidget != mainGLWidget) {
         GLWidget = mainGLWidget;
         emit mainGLWidgetChanged();

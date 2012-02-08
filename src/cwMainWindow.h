@@ -7,7 +7,7 @@
 class cwSurvexImporter;
 class cwSurvexExporter;
 class cwImportSurvexDialog;
-class cwGlobalQMLData;
+class cwRootData;
 
 //Qt includes
 #include <QString>
@@ -25,18 +25,6 @@ public:
     void changeEvent(QEvent *e);
 
 protected slots:
-    void openExportSurvexTripFileDialog();
-    void exportSurvexTrip(QString filename);
-    void exporterFinished();
-
-    void openExportSurvexCaveFileDialog();
-    void exportSurvexCave(QString filename);
-
-    void openExportSurvexRegionFileDialog();
-    void exportSurvexRegion(QString filename);
-
-    void openExportCompassCaveFileDialog();
-    void exportCaveToCompass(QString filename);
 
     void importSurvex();
     void reloadQML();
@@ -56,7 +44,7 @@ private:
     cwSurvexExporter* SurvexExporter;
 
     //The global objects that all qml objects have access to
-    cwGlobalQMLData* Data;
+    cwRootData* Data;
 
     QThread* ExportThread;
 

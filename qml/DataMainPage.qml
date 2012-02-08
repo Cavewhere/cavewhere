@@ -35,7 +35,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.topMargin: 40
+        anchors.topMargin: 5
     }
 
     Image {
