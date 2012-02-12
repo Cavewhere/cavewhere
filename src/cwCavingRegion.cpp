@@ -51,7 +51,10 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         //On the correct thread
         cwCave* newCave = new cwCave(*cave);
         newCave->moveToThread(thread());
-        newCave->setParent(this);
+
+        //We need to comment this out because it's bad programming,
+        //Can't notify other threads with sendEvent, ASSERTs on windows
+        //newCave->setParent(this);
 
         Caves.append(newCave);
     }

@@ -3,7 +3,6 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
-#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwLinePlotTask.h"

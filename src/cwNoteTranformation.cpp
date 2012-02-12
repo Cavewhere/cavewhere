@@ -8,7 +8,7 @@
 #include <QLineF>
 
 //Std includes
-#include <math.h>
+#include "cwMath.h"
 
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     QObject(parent),

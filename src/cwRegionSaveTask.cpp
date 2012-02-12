@@ -1,6 +1,7 @@
 //Our includes
 #include "cwRegionSaveTask.h"
 #include "cwRegionIOTask.h"
+#include "cwCavingRegion.h"
 
 //Serielization includes
 #include "cwSerialization.h"
@@ -22,7 +23,7 @@ void cwRegionSaveTask::runTask() {
 
     //Open a datebase connection
     bool connected = connectToDatabase("saveRegionTask");
-    if(connected) {
+    if(connected) {      
 
         //Serielize the Region to XML data
         std::stringstream stream;

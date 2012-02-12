@@ -51,18 +51,32 @@ QString cwCavernTask::output3dFileName() const {
 
      QString inputFile = survexFileName();
      QString outputFile = inputFile + Survex3dExtension;
-     QString cavernAppName = "cavern";
 
-     QDir cavernDir(QApplication::applicationDirPath());
-     QString cavernPathName = cavernDir.absoluteFilePath(cavernAppName);
+     QStringList cavernAppNames;
+     cavernAppNames.append("cavern");
+     cavernAppNames.append("cavern.exe");
 
-     QFileInfo cavernFileInfo(cavernPathName);
-     if(!cavernFileInfo.exists() || !cavernFileInfo.isExecutable()) {
+     //The absolute pathe for the cavern executable
+     QString cavernPathName;
+
+     //Try to get the correct cavern executable
+     foreach(QString cavernAppName, cavernAppNames) {
+         QDir cavernDir(QApplication::applicationDirPath());
+         QString currentCavernPathName = cavernDir.absoluteFilePath(cavernAppName);
+
+         QFileInfo cavernFileInfo(currentCavernPathName);
+         if(cavernFileInfo.exists() && cavernFileInfo.isExecutable()) {
+              cavernPathName = currentCavernPathName;
+              break;
+         }
+     }
+
+     //Found cavern executable?
+     if(cavernPathName.isEmpty()) {
          qDebug() << "Can't find cavern executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
          done();
          return;
      }
-
 
      QStringList arguments;
      arguments.append(QString("--output=%1").arg(outputFile));

@@ -43,10 +43,13 @@ void cwRegularTile::generateIndexes() {
     Indexes.reserve(tempIndexes.size());
     Indexes.resize(tempIndexes.size());
 
-    Forsyth::OptimizeFaces(tempIndexes.data(), tempIndexes.size(),
-                           largestInt,
-                           Indexes.data(),
-                           24);
+    //Can't get optimize faces working on windows
+    Indexes = tempIndexes;
+
+//    Forsyth::OptimizeFaces(tempIndexes.data(), tempIndexes.size(),
+//                           largestInt,
+//                           Indexes.data(),
+//                           24);
 
 }
 

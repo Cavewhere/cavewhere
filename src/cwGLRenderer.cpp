@@ -12,7 +12,7 @@
 #include <QDebug>
 
 //Std includes
-#include <math.h>
+#include "cwMath.h"
 
 
 cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :

@@ -10,7 +10,7 @@
 #include <squish.h>
 
 //Std includes
-#include <math.h>
+#include "cwMath.h"
 
 //Qt includes
 #include <QString>
@@ -27,7 +27,7 @@
 #include <QtConcurrentMap>
 
 //Sqlite lite includes
-#include <sqlite3.h>
+#include "sqlite3.h"
 
 //Zlib includes
 #include <zlib.h>

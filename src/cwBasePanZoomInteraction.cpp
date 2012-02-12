@@ -33,7 +33,7 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
   */
  void cwBasePanZoomInteraction::panFirstPoint(QPointF firstMousePoint) {
      LastPanPoint = Camera->mapToGLViewport(firstMousePoint.toPoint());
-     Camera->unProject(LastPanPoint, 0.1);
+     Camera->unProject(LastPanPoint, 0.1f);
  }
 
  /**
@@ -44,8 +44,8 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
  void cwBasePanZoomInteraction::panMove(QPointF mousePosition) {
      QPoint currentPanPoint = Camera->mapToGLViewport(mousePosition.toPoint());
 
-     QVector3D unProjectedCurrent = Camera->unProject(currentPanPoint, 0.1);
-     QVector3D unProjectedLast = Camera->unProject(LastPanPoint, 0.1);
+     QVector3D unProjectedCurrent = Camera->unProject(currentPanPoint, 0.1f);
+     QVector3D unProjectedLast = Camera->unProject(LastPanPoint, 0.1f);
 
      QVector3D delta = unProjectedCurrent - unProjectedLast;
 
@@ -61,14 +61,14 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
    */
  void cwBasePanZoomInteraction::zoom(int delta, QPointF position) {
      //Calc the scaleFactor
-     float scaleFactor = 1.1;
+     float scaleFactor = 1.1f;
      if(delta < 0) {
          //Zoom out
-         scaleFactor = 1.0 / scaleFactor;
+         scaleFactor = 1.0f / scaleFactor;
      }
 
      QPoint screenCoords = Camera->mapToGLViewport(position.toPoint());
-     QVector3D beforeZoom = Camera->unProject(screenCoords, 0.1);
+     QVector3D beforeZoom = Camera->unProject(screenCoords, 0.1f);
 
      //Get the new zoomed matrix
      QMatrix4x4 zoom;
@@ -76,7 +76,7 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
      QMatrix4x4 newViewMatrix = Camera->viewMatrix() * zoom;
 
      //The position of the mouse after the zoom
-     QVector3D afterZoom = Camera->unProject(screenCoords, 0.1, newViewMatrix, QMatrix4x4());
+     QVector3D afterZoom = Camera->unProject(screenCoords, 0.1f, newViewMatrix, QMatrix4x4());
 
      //Adjust the scale matrix, so the image is in the same location
      QVector3D changeInPosition = afterZoom - beforeZoom;

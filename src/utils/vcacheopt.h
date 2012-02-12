@@ -25,7 +25,7 @@
 #define _VCACHEOPT_H_
 
 #include <vector>
-#include <math.h>
+#include "cwMath.h"
 #include <assert.h>
 
 class VertexCacheData

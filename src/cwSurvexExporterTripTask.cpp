@@ -1,7 +1,6 @@
 //Our includes
 #include "cwSurvexExporterTripTask.h"
 #include "cwTrip.h"
-#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
@@ -205,6 +204,7 @@ QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassState
     case cwCompassStates::Valid:
         return QString("%1").arg(compass);
     }
+    return QString();
 }
 
 /**
@@ -222,6 +222,7 @@ QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::Sta
     case cwClinoStates::Up:
         return QString("UP");
     }
+    return QString();
 }
 
 /**

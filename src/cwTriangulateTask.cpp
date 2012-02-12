@@ -272,11 +272,13 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     optimizedIndices.reserve(fullTriangleIndices.size());
     optimizedIndices.resize(fullTriangleIndices.size());
 
-    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
-                           fullTriangleIndices.size(),
-                           points.size(),
-                           optimizedIndices.data(),
-                           24); //Optimize for 24 triangle count
+    optimizedIndices = fullTriangleIndices;
+
+//    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
+//                           fullTriangleIndices.size(),
+//                           points.size(),
+//                           optimizedIndices.data(),
+//                           24); //Optimize for 24 triangle count
 
     //Set the output's data
     cwTriangulatedData data;
@@ -381,7 +383,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
                                                      QVector<uint> &indices,
                                                      const QVector<QPointF>& unAddedTriangles)
 {
-    static const float PointTolerance = 0.000001;
+    static const float PointTolerance = 0.000001f;
 
     foreach(QPointF unAddedPoint, unAddedTriangles) {
 

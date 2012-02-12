@@ -12,6 +12,7 @@ class cwRootData;
 //Qt includes
 #include <QString>
 #include <QUndoStack>
+#include <QMainWindow>
 class QTreeView;
 class QGLWidget;
 

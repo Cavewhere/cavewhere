@@ -18,6 +18,7 @@
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwReadingStates.h"
+#include "cwQtSerialization.h"
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -73,7 +74,7 @@ namespace boost {
   Save and load a region
   */
     template<class Archive>
-    void save(Archive & archive, const cwCavingRegion & region, const unsigned int /*version*/) {
+    void save(Archive& archive, const cwCavingRegion & region, const unsigned int /*version*/) {
         //Do the saving
         QList<cwCave*> caves = region.caves();
         archive << BOOST_SERIALIZATION_NVP(caves);

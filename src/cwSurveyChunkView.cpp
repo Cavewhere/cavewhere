@@ -1,7 +1,6 @@
 //Our includes
 #include "cwSurveyChunkView.h"
 #include "cwSurveyChunk.h"
-#include "cwStationReference.h"
 #include "cwShot.h"
 #include "cwSurveyChunkViewComponents.h"
 #include "cwStationValidator.h"

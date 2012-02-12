@@ -62,13 +62,26 @@ void cwPlotSauceTask::runTask() {
 
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
-    QString plotSauceAppName = "plotsauce";
 
-    QDir plotSauceDir(QApplication::applicationDirPath());
-    QString plotSaucePath = plotSauceDir.absoluteFilePath(plotSauceAppName);
+    QStringList plotSauceAppNames;
+    plotSauceAppNames.append("plotsauce");
+    plotSauceAppNames.append("plotsauce.exe");
 
-    QFileInfo plotSauceFileInfo(plotSaucePath);
-    if(!plotSauceFileInfo.exists() || !plotSauceFileInfo.isExecutable()) {
+    QString plotSaucePath;
+
+    foreach(QString plotSauceAppName, plotSauceAppNames) {
+        QDir plotSauceDir(QApplication::applicationDirPath());
+        QString currentPlotSaucePath = plotSauceDir.absoluteFilePath(plotSauceAppName);
+
+        QFileInfo plotSauceFileInfo(currentPlotSaucePath);
+        if(plotSauceFileInfo.exists() && plotSauceFileInfo.isExecutable()) {
+            plotSaucePath = currentPlotSaucePath;
+            break;
+        }
+    }
+
+    //Found plot sauce executable?
+    if(plotSaucePath.isEmpty()) {
         qDebug() << "Can't find plotsauce executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
         done();
         return;

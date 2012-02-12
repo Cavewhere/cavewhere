@@ -1,12 +1,12 @@
+//Std includes
+#include <limits>
+
 //Our includes
 #include "cwGLLinePlot.h"
 #include "cwShaderDebugger.h"
 #include "cwGLShader.h"
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
-
-//Std includes
-#include <limits>
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
     cwGLObject(parent),

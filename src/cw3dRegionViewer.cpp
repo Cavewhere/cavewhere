@@ -335,6 +335,7 @@ QVector3D cw3dRegionViewer::TransformPoint::operator()(QWeakPointer<cwStation> s
 //    QVector3D normalizeSceenCoordinate =  ModelViewProjection * strongStation->position();
 //    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
 //    return viewportCoord;
+    return QVector3D();
 }
 
 /**

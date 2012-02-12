@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+class QAction;
 class QMenu;
 class QItemSelectionModel;
 
@@ -68,8 +69,8 @@ private:
 /**
     Gets the tree model that this survey export manager uses to update it's actions
   */
-cwRegionTreeModel *cwSurveyExportManager::cavingRegionTreeModel() const {
-
+inline cwRegionTreeModel *cwSurveyExportManager::cavingRegionTreeModel() const {
+    return NULL;
 }
 
 

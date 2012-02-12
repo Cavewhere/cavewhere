@@ -8,7 +8,7 @@
 #include "cwTripCalibration.h"
 
 //Std includes
-#include <math.h>
+#include "cwMath.h"
 
 const char* cwCompassExportCaveTask::CompassNewLine = "\r\n";
 

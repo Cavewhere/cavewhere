@@ -2,7 +2,6 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
-#include "cwStationReference.h"
 #include "cwDistanceValidator.h"
 #include "cwCompassValidator.h"
 #include "cwClinoValidator.h"

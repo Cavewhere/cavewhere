@@ -89,7 +89,8 @@ namespace boost {
   */
     template<class Archive>
     void save(Archive &archive, const QString &str, const unsigned int) {
-        std::wstring string = str.toStdWString();
+//        std::wstring string = str.toStdWString();
+        std::string string = str.toStdString();
         archive << BOOST_SERIALIZATION_NVP( string);
     }
 
@@ -98,9 +99,10 @@ namespace boost {
   */
     template<class Archive>
     void load(Archive &archive, QString &str, const unsigned int) {
-        std::wstring string;
+        //std::wstring string;
+        std::string string;
         archive >> BOOST_SERIALIZATION_NVP(string);
-        str = QString::fromStdWString(string);
+        str = QString::fromStdString(string);
     }
 
     /////////////////////////////// QList //////////////////////////////////////

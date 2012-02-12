@@ -66,9 +66,7 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
         return;
     }
 
-    Region->setParent(this);
     *Region = region;
-
 
     //Incode the the cave's index into the cave's name
     for(int i = 0; i < Region->caveCount(); i++) {
@@ -146,7 +144,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-  //  qDebug() << "Reading xml" << "Status" << status();
+  //  qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }

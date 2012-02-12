@@ -5,7 +5,7 @@
 #include "cwDebug.h"
 
 //Std includes
-#include <math.h>
+#include "cwMath.h"
 
 //Qt includes
 #include <QDebug>

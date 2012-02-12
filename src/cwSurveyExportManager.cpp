@@ -5,6 +5,8 @@
 //Qt includes
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QAction>
+#include <QMenu>
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent),
