@@ -4,6 +4,8 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
+#include "cwTeamMember.h"
+#include "cwTeam.h"
 
 const int cwSurvexExporterTripTask::TextPadding = -11; //Left align with 10 spaces
 
@@ -46,6 +48,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
     stream << "*begin ; " << trip->name() << endl;
 
+    writeTeamData(stream, trip->team());
     writeCalibrations(stream, trip->calibrations()); stream << endl;
     writeShotData(stream, trip); stream << endl;
     writeLRUDData(stream, trip);
@@ -165,6 +168,26 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
 
                 stream << dataLine << endl;
             }
+        }
+
+        stream << endl;
+    }
+}
+
+/**
+  Writes the team data to survex file
+  */
+void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
+{
+    stream << endl;
+
+    QString dataLineTemplate("*team \"%1\"");
+    foreach(cwTeamMember teamMember, team->teamMembers()) {
+        QString dataLine = dataLineTemplate.arg(teamMember.name());
+        stream << dataLine;
+
+        foreach(QString job, teamMember.jobs()) {
+            stream << " \"" << job << "\"";
         }
 
         stream << endl;

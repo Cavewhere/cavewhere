@@ -8,6 +8,7 @@
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
+class cwTeam;
 
 //Qt includes
 class QTextStream;
@@ -42,6 +43,7 @@ private:
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);
     void writeShotData(QTextStream& stream, cwTrip* trip);
     void writeLRUDData(QTextStream& stream, cwTrip* trip);
+    void writeTeamData(QTextStream& stream, cwTeam *trip);
 
     QString toSupportedLength(double length, cwDistanceStates::State) const;
     QString compassToString(double compass, cwCompassStates::State) const;
