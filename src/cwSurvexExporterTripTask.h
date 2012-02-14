@@ -37,7 +37,7 @@ private:
     cwTrip* Trip;
     static const int TextPadding;
 
-    void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
+    void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
     void writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations);
     void writeCalibration(QTextStream& stream, QString type, float value, float scale = 1.0);
     void writeLengthUnits(QTextStream& stream, cwUnits::LengthUnit unit);

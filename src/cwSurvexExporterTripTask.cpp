@@ -121,17 +121,46 @@ void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
   This will write the data as normal data
   */
 void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) {
-    stream << "*data normal from to tape compass backcompass clino backclino" << endl;
+    bool hasFrontSights = trip->calibrations()->hasFrontSights();
+    bool hasBackSights = trip->calibrations()->hasBackSights();
 
-    QString dataLineComment = QString(";%1%2 %3 %4 %5 %6 %7")
-            .arg("From", TextPadding)
-            .arg("To", TextPadding)
-            .arg("Distance", TextPadding)
-            .arg("Compass", TextPadding)
-            .arg("BackCompass", TextPadding)
-            .arg("Clino", TextPadding)
-            .arg("BackClino", TextPadding);
+    //Make sure we have data to export
+    if(!hasFrontSights && !hasBackSights) {
+        stream << "; NO DATA (doesn't have front or backsight data)" << endl;
+        return;
+    }
 
+    QString dataLineComment;
+
+    if(hasFrontSights && hasBackSights) {
+        stream << "*data normal from to tape compass backcompass clino backclino" << endl;
+        dataLineComment = QString(";%1%2 %3 %4 %5 %6 %7")
+                .arg("From", TextPadding)
+                .arg("To", TextPadding)
+                .arg("Distance", TextPadding)
+                .arg("Compass", TextPadding)
+                .arg("BackCompass", TextPadding)
+                .arg("Clino", TextPadding)
+                .arg("BackClino", TextPadding);
+    } else if(hasFrontSights) {
+        stream << "*data normal from to tape compass clino" << endl;
+        dataLineComment = QString(";%1%2 %3 %4 %5")
+                .arg("From", TextPadding)
+                .arg("To", TextPadding)
+                .arg("Distance", TextPadding)
+                .arg("Compass", TextPadding)
+                .arg("Clino", TextPadding);
+    } else if(hasBackSights) {
+        stream << "*data normal from to tape backcompass backclino" << endl;
+        dataLineComment = QString(";%1%2 %3 %4 %5")
+                .arg("From", TextPadding)
+                .arg("To", TextPadding)
+                .arg("Distance", TextPadding)
+                .arg("BackCompass", TextPadding)
+                .arg("BackClino", TextPadding);
+    }
+
+    //Write out the comment line (this is the column headers)
     stream << dataLineComment << endl;
 
     QList<cwSurveyChunk*> chunks = trip->chunks();
@@ -142,7 +171,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
         cwSurveyChunk* chunk = chunks[i];
 
         //Write the chunk data
-        writeChunk(stream, chunk);
+        writeChunk(stream, hasFrontSights, hasBackSights, chunk);
     }
 }
 
@@ -251,7 +280,22 @@ QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::Sta
 /**
   \brief Writes a chunk to a stream
   */
-void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
+void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
+                                          bool hasFrontSights, //True if the dataset has backsights
+                                          bool hasBackSights, //True if the dataset has frontsights
+                                          cwSurveyChunk* chunk) {
+
+    if(!hasBackSights && !hasFrontSights) {
+        return;
+    }
+
+    QString dataLineTemplate;
+    if(hasBackSights && hasFrontSights) {
+        dataLineTemplate = QString("%1 %2 %3 %4 %5 %6 %7");
+    } else {
+        dataLineTemplate = QString("%1 %2 %3 %4 %5");
+    }
+
     for(int i = 0; i < chunk->stationCount() - 1; i++) {
 
         //Make sure we can still be run
@@ -294,14 +338,32 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         if(backClino.isEmpty()) { backClino = "-"; }
 
 
-        QString line = QString("%1 %2 %3 %4 %5 %6 %7")
-                .arg(fromStation.name(), TextPadding)
-                .arg(toStation.name(), TextPadding)
-                .arg(distance, TextPadding)
-                .arg(compass, TextPadding)
-                .arg(backCompass, TextPadding)
-                .arg(clino, TextPadding)
-                .arg(backClino, TextPadding);
+        //Figure out the line of data
+        QString line;
+        if(hasFrontSights && hasBackSights) {
+             line = dataLineTemplate
+                    .arg(fromStation.name(), TextPadding)
+                    .arg(toStation.name(), TextPadding)
+                    .arg(distance, TextPadding)
+                    .arg(compass, TextPadding)
+                    .arg(backCompass, TextPadding)
+                    .arg(clino, TextPadding)
+                    .arg(backClino, TextPadding);
+        } else if(hasFrontSights) {
+            line = dataLineTemplate
+                   .arg(fromStation.name(), TextPadding)
+                   .arg(toStation.name(), TextPadding)
+                   .arg(distance, TextPadding)
+                   .arg(compass, TextPadding)
+                   .arg(clino, TextPadding);
+        } else if(hasBackSights) {
+            line = dataLineTemplate
+                   .arg(fromStation.name(), TextPadding)
+                   .arg(toStation.name(), TextPadding)
+                   .arg(distance, TextPadding)
+                   .arg(backCompass, TextPadding)
+                   .arg(backClino, TextPadding);
+        }
 
         stream << line << endl;
 
