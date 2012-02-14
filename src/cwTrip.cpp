@@ -275,14 +275,17 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
   \brief Gets all the unique stations for a trip
 
   A station may come up more than once on a trip, but only returns
-  unique stations for this trip.
+  unique stations for this trip.  Empty station name's aren't return in
+  this list.
   */
 QList< cwStation > cwTrip::uniqueStations() const {
     QMap<QString, cwStation> lookup;
     foreach(cwSurveyChunk* chunk, Chunks) {
         for(int i = 0; i < chunk->stationCount(); i++) {
             cwStation station = chunk->station(i);
-            lookup[station.name()] = station;
+            if(!station.name().isEmpty()) {
+                lookup[station.name()] = station;
+            }
         }
     }
     return lookup.values();

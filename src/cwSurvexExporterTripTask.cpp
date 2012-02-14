@@ -148,26 +148,26 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
   a comment
   */
 void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) {
-    QString dataLineTemplate(";%1%2 %3 %4 %5");
-    QString dataLineComment = dataLineTemplate
-            .arg("Station", TextPadding)
-            .arg("Left", TextPadding)
-            .arg("Right", TextPadding)
-            .arg("Up", TextPadding)
-            .arg("Down", TextPadding);
 
-    stream << dataLineComment << endl;
+    QString dataLineTemplate("%1%2 %3 %4 %5");
 
-    QList<cwStation> stations = trip->uniqueStations();
-    foreach(cwStation station, stations) {
-        QString dataLine = dataLineTemplate
-                .arg(station.name(), TextPadding)
-                .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
-                .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
-                .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
-                .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
+    foreach(cwSurveyChunk* chunk, trip->chunks()) {
+        stream << "*data passage station left right up down ignoreall" << endl;
 
-        stream << dataLine << endl;
+        foreach(cwStation station, chunk->stations()) {
+            if(station.isValid()) {
+                QString dataLine = dataLineTemplate
+                        .arg(station.name(), TextPadding)
+                        .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
+                        .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
+                        .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
+                        .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
+
+                stream << dataLine << endl;
+            }
+        }
+
+        stream << endl;
     }
 }
 
