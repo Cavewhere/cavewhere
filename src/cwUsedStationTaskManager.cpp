@@ -21,7 +21,7 @@ cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
 cwUsedStationTaskManager::~cwUsedStationTaskManager() {
     Task->stop();
 
-    QMetaObject::invokeMethod(Thread, "quit"); //Quit the event loop
+    Thread->quit(); //Quit the event loop
     Thread->wait(); //wait to finish
 
     delete Task;

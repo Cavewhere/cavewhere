@@ -12,7 +12,7 @@ Rectangle {
     property alias name: nameText.text
     property alias addButtonText: addButton.text
     property alias addButtonVisible:  addButton.visible
-    property bool selected: rootElement.view.currentIndex == viewIndex
+    property bool selected: rootElement.view.currentIndex === viewIndex
     property alias iconSource:  icon.source
 
     signal addButtonClicked()
@@ -69,6 +69,7 @@ Rectangle {
         anchors.fill: parent;
 
         onClicked: {
+            regionSelectionModel.setCurrentIndex(rootElement.index, 0x0010); //select current
             regionVisualDataModel.rootIndex = rootElement.index
             view.currentIndex = viewIndex
             rootElement.clicked();

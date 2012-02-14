@@ -52,6 +52,12 @@ public:
     Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
 
+    Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
+    Q_INVOKABLE bool isCave(const QModelIndex& index) const;
+    Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
+
+    Q_INVOKABLE int row(const QModelIndex& index) const;
+
 signals:
 
 public slots:
@@ -106,6 +112,33 @@ inline cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
     return Region;
 }
 
+/**
+  \brief Checks if index is a trip, returns true if it is, false if it isn't
+  */
+inline bool cwRegionTreeModel::isTrip(const QModelIndex &index) const {
+    return trip(index) != NULL;
+}
+
+/**
+  \brief Checks if index is a cave, returns true if it is, false if it isn't
+  */
+inline bool cwRegionTreeModel::isCave(const QModelIndex &index) const {
+    return cave(index) != NULL;
+}
+
+/**
+  \brief Checks if index is a region, return true if it is, false if it isn't
+  */
+inline bool cwRegionTreeModel::isRegion(const QModelIndex &index) const {
+    return index == QModelIndex();
+}
+
+/**
+  Gets the row of the index, this is for qml
+  */
+inline int cwRegionTreeModel::row(const QModelIndex &index) const {
+    return index.row();
+}
 
 
 #endif // CWREGIONTREEMODEL_H

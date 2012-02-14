@@ -1,23 +1,35 @@
 //Our includes
 #include "cwSurveyExportManager.h"
+#include "cwSurvexExporterTripTask.h"
+#include "cwSurvexExporterCaveTask.h"
+#include "cwSurvexExporterRegionTask.h"
 #include "cwRegionTreeModel.h"
+#include "cwDebug.h"
+#include "cwCave.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QAction>
 #include <QMenu>
+#include <QItemSelectionModel>
+#include <QDebug>
+#include <QThread>
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent),
-    SurvexMenu(new QMenu()),
-    CompassMenu(new QMenu()),
-    ExportSurvexTripAction(new QAction(this)),
-    ExportSurvexCaveAction(new QAction(this)),
+    Model(NULL),
+    SelectionModel(NULL),
+    SurvexMenu(new QMenu("Survex (.svx)")),
+    CompassMenu(new QMenu("Compass")),
+    ExportSurvexTripAction(new QAction("Current trip", this)),
+    ExportSurvexCaveAction(new QAction("Current cave", this)),
     ExportSurvexRegionAction(new QAction("Region (all caves)", this)),
-    ExportCompassTripAction(new QAction(this)),
-    ExportCompassCaveAction(new QAction(this)),
-    ExportCompassRegionAction(new QAction("Makefile (all caves)", this))
+    ExportCompassTripAction(new QAction("Current trip", this)),
+    ExportCompassCaveAction(new QAction("Current cave", this)),
+    ExportCompassRegionAction(new QAction("Makefile (all caves)", this)),
+    ExportThread(new QThread(this))
 {
     SurvexMenu->addAction(ExportSurvexTripAction);
     SurvexMenu->addAction(ExportSurvexCaveAction);
@@ -38,6 +50,14 @@ cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
 }
 
 /**
+    Destructor
+  */
+cwSurveyExportManager::~cwSurveyExportManager() {
+    ExportThread->exit();
+    ExportThread->wait();
+}
+
+/**
   Gets all the menu's that this survey export manager has
 
   Currently it return the survex and compass menu
@@ -54,7 +74,10 @@ QList<QMenu*> cwSurveyExportManager::menus() const {
   on the current selection.
   */
 void cwSurveyExportManager::setCavingRegionTreeModel(cwRegionTreeModel *model) {
-
+    if(Model != model) {
+        Model = model;
+        connect(Model, SIGNAL(dataChanged(QModelIndex,QModelIndex)), SLOT(updateActions()));
+    }
 }
 
 /**
@@ -119,67 +142,68 @@ void cwSurveyExportManager::openExportCompassRegionFileDialog()
   \brief Exports the survex region to filename
   */
 void cwSurveyExportManager::exportSurvexRegion(QString filename) {
-//    cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
-//    exportTask->setOutputFile(filename);
-//    exportTask->setData(*(Data->region()));
-//    connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//    connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//    exportTask->setThread(ExportThread);
-//    exportTask->start();
+    if(filename.isEmpty()) { return; }
+
+    cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
+    exportTask->setOutputFile(filename);
+    exportTask->setData(*(Model->cavingRegion()));
+    connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+    connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+    exportTask->setThread(ExportThread);
+    exportTask->start();
 }
 
 /**
   \brief Exports the currently selected cave to a file
   */
 void cwSurveyExportManager::exportSurvexCave(QString filename) {
-//    if(filename.isEmpty()) { return; }
-//    cwCave* cave = currentSelectedCave();
-//    if(cave != NULL) {
-//        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
-//        exportTask->setOutputFile(filename);
-//        exportTask->setData(*cave);
-//        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//        exportTask->setThread(ExportThread);
-//        exportTask->start();
-//    }
+    if(filename.isEmpty()) { return; }
+    cwCave* cave = Model->cave(SelectionModel->currentIndex());
+    if(cave != NULL) {
+        cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*cave);
+        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
 }
 
 /**
   \brief Exports the currently selected trip to filename
   */
 void cwSurveyExportManager::exportSurvexTrip(QString filename) {
-//    if(filename.isEmpty()) { return; }
-
-//    cwTrip* trip = NULL //currentSelectedTrip();
-//    if(trip != NULL) {
-//        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
-//        exportTask->setOutputFile(filename);
-//        exportTask->setData(*trip);
-//        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//        exportTask->setThread(ExportThread);
-//        exportTask->start();
-//    }
+    if(filename.isEmpty()) { return; }
+    cwTrip* trip = Model->trip(SelectionModel->currentIndex());
+    if(trip != NULL) {
+        cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*trip);
+        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
 }
 
 /**
   Exports the currently select cave to Compass
   */
 void cwSurveyExportManager::exportCaveToCompass(QString filename) {
-//        if(filename.isEmpty()) { return; }
-//        if(!Data->region()->hasCaves()) { return; }
+    //        if(filename.isEmpty()) { return; }
+    //        if(!Data->region()->hasCaves()) { return; }
 
-//        cwCave* cave = Data->region()->cave(0);
-//        if(cave != NULL) {
-//            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
-//            exportTask->setOutputFile(filename);
-//            exportTask->setData(*cave);
-//            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-//            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-//            exportTask->setThread(ExportThread);
-//            exportTask->start();
-//        }
+    //        cwCave* cave = Data->region()->cave(0);
+    //        if(cave != NULL) {
+    //            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
+    //            exportTask->setOutputFile(filename);
+    //            exportTask->setData(*cave);
+    //            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+    //            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+    //            exportTask->setThread(ExportThread);
+    //            exportTask->start();
+    //        }
 }
 
 /**
@@ -188,5 +212,104 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
 void cwSurveyExportManager::exporterFinished() {
     if(sender()) {
         sender()->deleteLater();
+    }
+}
+
+/**
+  Updates the current menu action with the current value of the
+  selection model
+  */
+void cwSurveyExportManager::updateActions() {
+    QModelIndex currentIndex = SelectionModel->currentIndex();
+    if(Model->isTrip(currentIndex)) {
+        //Selected a trip
+        updateCaveActions(currentIndex.parent());
+        updateTripActions(currentIndex);
+    } else if(Model->isCave(currentIndex)) {
+        //Selected a cave
+        updateCaveActions(currentIndex);
+        updateTripActions(QModelIndex());
+    } else {
+        //Selected the region
+        updateCaveActions(QModelIndex());
+        updateTripActions(QModelIndex());
+    }
+}
+
+/**
+  This is a private function that updates the cave actions.
+
+  If index is invalid this will disable the cave actions
+  */
+void cwSurveyExportManager::updateCaveActions(const QModelIndex &index) {
+    QString currentCaveString;
+    bool caveEnable;
+
+    if(index.isValid()) {
+        cwCave* cave = Model->cave(index);
+        currentCaveString = QString("Current cave - %1").arg(cave->name());
+        caveEnable = true;
+    } else {
+        currentCaveString = QString("Current cave");
+        caveEnable = false;
+    }
+
+    ExportSurvexCaveAction->setText(currentCaveString);
+    ExportCompassCaveAction->setText(currentCaveString);
+    ExportSurvexCaveAction->setEnabled(caveEnable);
+    ExportCompassCaveAction->setEnabled(caveEnable);
+}
+
+/**
+  This is a private function that updates the cave actions.
+
+  If index is invalid this will disable the trip actions
+  */
+void cwSurveyExportManager::updateTripActions(const QModelIndex &index)
+{
+    QString currentTripString;
+    bool tripEnable;
+
+    if(index.isValid()) {
+        cwTrip* trip = Model->trip(index);
+        currentTripString = QString("Current trip - %1").arg(trip->name());
+        tripEnable = true;
+    } else {
+        currentTripString = QString("Current trip");
+        tripEnable = false;
+    }
+
+    ExportSurvexTripAction->setText(currentTripString);
+    ExportCompassTripAction->setText(currentTripString);
+    ExportSurvexTripAction->setEnabled(tripEnable);
+    ExportCompassTripAction->setEnabled(tripEnable);
+}
+
+/**
+  Sets the region's selection model
+
+  This allows the survey export manager to keep the export menu options update with the correct
+  information
+  */
+void cwSurveyExportManager::setRegionSelectionModel(QItemSelectionModel *selectionModel) {
+
+    //Make sure the selection model is setup correctly
+    if(selectionModel->model() != Model) {
+        qDebug() << "Can't set selection model because model isn't correct" << LOCATION;
+        return;
+    }
+
+    if(selectionModel != SelectionModel) {
+        if(SelectionModel != NULL) {
+            disconnect(SelectionModel, NULL, this, NULL);
+        }
+
+        SelectionModel = selectionModel;
+
+        if(SelectionModel != NULL) {
+            connect(SelectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)), SLOT(updateActions()));
+
+            updateActions();
+        }
     }
 }

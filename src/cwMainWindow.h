@@ -30,9 +30,6 @@ protected slots:
     void importSurvex();
     void reloadQML();
 
-    //For changing
-    void setSurveyData(QItemSelection selected, QItemSelection deselected);
-
     //For undo / redo
     void updateUndoText(QString undoText);
     void updateRedoText(QString redoText);
@@ -47,8 +44,6 @@ private:
     //The global objects that all qml objects have access to
     cwRootData* Data;
 
-    QThread* ExportThread;
-
     //For undo and redo
     QAction* UndoAction;
     QAction* RedoAction;
@@ -60,8 +55,8 @@ private:
     void initGLEW();
 
     void initialWindowShape();
-//    cwCave* currentSelectedCave() const;
-//    cwTrip* currentSelectedTrip() const;
+
+    void setupExportMenus();
 };
 
 #endif // SURVEYEDITORMAINWINDOW_H

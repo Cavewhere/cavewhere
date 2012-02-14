@@ -24,7 +24,7 @@ Rectangle {
             var removedObject = regionModel.data(removedIndex, RegionTreeModel.ObjectRole);
             var caveElementObject = regionModel.data(caveElement.index, RegionTreeModel.ObjectRole);
 
-            if(removedObject == caveElementObject) {
+            if(removedObject === caveElementObject) {
                 regionVisualDataModel.rootIndex = cavesElement.index
                 view.currentIndex = cavesElement.viewIndex
             }
@@ -72,7 +72,7 @@ Rectangle {
             name: {
                 switch(region.caveCount) {
                 case 0:
-                    return "All Caves"
+                    return ""
                 case 1:
                     return "Only 1 Cave";
                 default:

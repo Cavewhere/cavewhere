@@ -143,7 +143,8 @@ SOURCES += src/main.cpp \
     src/cwSurveyChunkTrimmer.cpp \
     src/cwSurveyExportManager.cpp \
     src/cwRootData.cpp \
-    src/utils/sqlite3.c
+    src/utils/sqlite3.c \
+    src/cwItemSelectionModel.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -270,7 +271,8 @@ HEADERS  += \
     src/cwSurveyChunkTrimmer.h \
     src/cwSurveyExportManager.h \
     src/cwRootData.h \
-    src/cwMath.h
+    src/cwMath.h \
+    src/cwItemSelectionModel.h
 
 
 FORMS    += src/cwMainWindow.ui \

@@ -28,6 +28,7 @@ Q_OBJECT
 
 public:
     cwProject(QObject* parent = NULL);
+    ~cwProject();
 
     //! The project owns the region
     cwCavingRegion* cavingRegion() const;

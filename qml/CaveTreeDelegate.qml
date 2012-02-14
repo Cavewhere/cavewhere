@@ -129,6 +129,8 @@ FocusScope {
             }
 
             onClicked: {
+                var modelIndex = regionModel.index(index, 0, regionVisualDataModel.rootIndex);
+                regionSelectionModel.setCurrentIndex(modelIndex, 0x0010); //select current
                 view.currentIndex = index;
                 view.focus = true;
             }

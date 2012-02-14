@@ -14,6 +14,7 @@ class cwProject;
 class cwTripCalibration;
 class cwTrip;
 class cwSurveyExportManager;
+class cwItemSelectionModel;
 
 class cwRootData : public QObject
 {
@@ -21,6 +22,7 @@ class cwRootData : public QObject
 
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel NOTIFY regionModelChanged)
+    Q_PROPERTY(cwItemSelectionModel* regionSelectionModel READ regionSelectionModel)
     Q_PROPERTY(QGLWidget* mainGLWidget READ mainGLWidget WRITE setGLWidget NOTIFY mainGLWidgetChanged)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
@@ -32,6 +34,7 @@ public:
     explicit cwRootData(QObject *parent = 0);
     cwCavingRegion* region() const;
     cwRegionTreeModel* regionModel() const;
+    cwItemSelectionModel* regionSelectionModel() const;
     QGLWidget* mainGLWidget() const;
     void setGLWidget(QGLWidget* mainGLWidget);
     cwLinePlotManager* linePlotManager() const;
@@ -57,12 +60,13 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
-    cwRegionTreeModel* RegionTreeModel; //!<
-    QGLWidget* GLWidget; //!<
-    cwLinePlotManager* LinePlotManager; //!<
-    cwScrapManager* ScrapManager; //!<
-    cwProject* Project; //!<
-    cwSurveyExportManager* SurveyExportManager;
+    cwRegionTreeModel* RegionTreeModel; //!< For so listviews can access Region
+    cwItemSelectionModel* RegionTreeSelectionModel; //!< Allows survey export manager to know what item's are selected
+    QGLWidget* GLWidget; //!< For 3d rendering
+    cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
+    cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
+    cwProject* Project; //!< For saving and loading, image saving and loading
+    cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -95,6 +99,17 @@ Gets regionModel
 inline cwRegionTreeModel* cwRootData::regionModel() const {
     return RegionTreeModel;
 }
+
+/**
+  Get the region tree selection model
+
+  This allow the cpp to know when the user selects different items (region, cave, trip)
+  in the data section
+  */
+inline cwItemSelectionModel *cwRootData::regionSelectionModel() const {
+    return RegionTreeSelectionModel;
+}
+
 /**
 Gets mainGLWidget
 */

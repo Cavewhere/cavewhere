@@ -29,7 +29,8 @@ class cwScrapManager : public QObject
     Q_OBJECT
 public:
     explicit cwScrapManager(QObject *parent = 0);
-    
+    ~cwScrapManager();
+
     void setRegion(cwCavingRegion* region);
     void setProject(cwProject* project);
 

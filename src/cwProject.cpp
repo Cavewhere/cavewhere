@@ -47,6 +47,12 @@ cwProject::cwProject(QObject* parent) :
     //AddImageTask->setThread(AddImageThread);
 }
 
+cwProject::~cwProject()
+{
+    LoadSaveThread->quit();
+    LoadSaveThread->wait();
+}
+
 /**
   Creates a new tempDirectoryPath for the temp project
   */

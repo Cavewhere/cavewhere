@@ -7,13 +7,12 @@
 #include "cwProject.h"
 #include "cwRegionTreeModel.h"
 #include "cwLinePlotManager.h"
-#include "cwSurvexExporterRegionTask.h"
-#include "cwCompassExporterCaveTask.h"
 #include "cwImportSurvexDialog.h"
 #include "cwProjectImageProvider.h"
 #include "cwScrapManager.h"
 #include "cwGlobalDirectory.h"
 #include "cwRootData.h"
+#include "cwSurveyExportManager.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -80,6 +79,9 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
 #endif
 
+    //Setup the export menus
+    setupExportMenus();
+
     //Setup undo redo
     UndoStack = new QUndoStack(this);
 
@@ -93,16 +95,11 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
     connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
-//    connect(actionSurvexExport, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
-//    connect(actionCompassExport, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
-
 
     Data->region()->setUndoStack(UndoStack);
 
     connect(actionCompute_Scraps, SIGNAL(triggered()), Data->scrapManager(), SLOT(updateAllScraps()));
-
-    ExportThread = new QThread(this);
 
     reloadQML();
 
@@ -169,68 +166,6 @@ void cwMainWindow::reloadQML() {
     //Allow for the DoubleClickTextInput to work correctly
     context->setContextProperty("rootObject", DeclarativeView->rootObject());
 }
-
-/**
-  \brief Set's the survey data for the current editor
-  */
-void cwMainWindow::setSurveyData(QItemSelection /*selected*/, QItemSelection /*deselected*/) {
-
-    //    QList<QModelIndex> selectedIndexes = selected.indexes();
-    //    if(!selectedIndexes.isEmpty()) {
-    //        QModelIndex firstSelected = selectedIndexes.first();
-    //        QVariant objectVariant = firstSelected.data(cwRegionTreeModel::ObjectRole);
-    //        cwTrip* trip = qobject_cast<cwTrip*>(objectVariant.value<QObject*>());
-    //        cwCave* cave = qobject_cast<cwCave*>(objectVariant.value<QObject*>());
-    //        QDeclarativeContext* context = DeclarativeView->rootContext();
-
-    //        if(trip != NULL) {
-    //            qDebug() << "Setting the trip";
-    //            context->setContextProperty("surveyData", trip);
-    //            //context->setContextProperty("currentPage", "SurveyEditor");
-    //        } else if(cave != NULL) {
-    //            qDebug() << "Setting the cave data";
-    //            context->setContextProperty("caveData", cave);
-    //            //context->setContextProperty("currentPage", "CavePage");
-    //        }
-    //    }
-}
-
-/**
-  \brief Returns the currently selected cave
-
-  If not cave is select, then this returns NULL
-  */
-//cwCave* cwSurveyEditorMainWindow::currentSelectedCave() const {
-//    QList<QModelIndex> selectedIndexes = RegionTreeView->selectionModel()->selectedIndexes();
-
-//    if(selectedIndexes.isEmpty()) {
-//        qWarning() << "No elements selected";
-//        return NULL;
-//    }
-
-//    QModelIndex tripIndex = selectedIndexes.first();
-//    cwCave* cave = RegionTreeModel->cave(tripIndex);
-//    return cave;
-//}
-
-/**
-  \brief Returns the currently selected trip
-
-  If no trip is selected, then this return NULL
-  */
-//cwTrip* cwSurveyEditorMainWindow::currentSelectedTrip() const {
-//    QList<QModelIndex> selectedIndexes = RegionTreeView->selectionModel()->selectedIndexes();
-
-//    if(selectedIndexes.isEmpty()) {
-//        qWarning() << "No elements selected";
-//        return NULL;
-//    }
-
-//    QModelIndex tripIndex = selectedIndexes.first();
-//    cwTrip* trip = RegionTreeModel->trip(tripIndex);
-
-//    return trip;
-//}
 
 void cwMainWindow::updateUndoText(QString undoText) {
     ActionUndo->setText(QString("Undo %1").arg(undoText));
@@ -321,4 +256,13 @@ void cwMainWindow::initialWindowShape() {
     int height = qRound(screenGeometry.height() * size);
 
     setGeometry(x, y, width, height);
+}
+
+/**
+  Sets up the export menus in the main window
+  */
+void cwMainWindow::setupExportMenus() {
+    foreach(QMenu* menu, Data->surveyExportManager()->menus()) {
+        menuExport->addMenu(menu);
+    }
 }

@@ -29,6 +29,12 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 }
 
+cwScrapManager::~cwScrapManager()
+{
+    TriangulateThread->quit();
+    TriangulateThread->wait();
+}
+
 /**
   \brief Set the region for the scrap manager
   */

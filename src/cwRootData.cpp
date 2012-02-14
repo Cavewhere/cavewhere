@@ -8,9 +8,11 @@
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyExportManager.h"
+#include "cwItemSelectionModel.h"
 
 //Qt includes
 #include <QGLWidget>
+#include <QItemSelectionModel>
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
@@ -21,8 +23,12 @@ cwRootData::cwRootData(QObject *parent) :
     Project = new cwProject(this);
     Region = Project->cavingRegion();
 
+    //Setup the region tree model, this model allows the user to see Region in tree form
     RegionTreeModel = new cwRegionTreeModel(this);
     RegionTreeModel->setCavingRegion(Region);
+
+    //Notifies the survey exporter when selection has changed
+    RegionTreeSelectionModel = new cwItemSelectionModel(RegionTreeModel, this);
 
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(this);
@@ -35,6 +41,9 @@ cwRootData::cwRootData(QObject *parent) :
 
     //Setup the survex export manager
     SurveyExportManager = new cwSurveyExportManager(this);
+    SurveyExportManager->setCavingRegionTreeModel(RegionTreeModel);
+    SurveyExportManager->setRegionSelectionModel(RegionTreeSelectionModel);
+
 
 }
 

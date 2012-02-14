@@ -3,9 +3,11 @@
 
 //Qt includes
 #include <QObject>
+#include <QModelIndex>
 class QAction;
 class QMenu;
 class QItemSelectionModel;
+class QThread;
 
 //Our includes
 class cwRegionTreeModel;
@@ -20,8 +22,12 @@ class cwSurveyExportManager : public QObject
     Q_OBJECT
 public:
     explicit cwSurveyExportManager(QObject *parent = 0);
-    
+    ~cwSurveyExportManager();
+
     QList<QMenu*> menus() const;
+
+    QItemSelectionModel* regionSelectionModel() const;
+    void setRegionSelectionModel(QItemSelectionModel* selectionModel);
 
     cwRegionTreeModel* cavingRegionTreeModel() const;
     void setCavingRegionTreeModel(cwRegionTreeModel* model);
@@ -46,11 +52,12 @@ private slots:
     void exportCaveToCompass(QString filename);
     void exporterFinished();
 
+    void updateActions();
+
 private:
     //This model allows use to export different data
     cwRegionTreeModel* Model;
     QItemSelectionModel* SelectionModel; //Query which item is selected
-
 
     //The menus that hold the actions
     QMenu* SurvexMenu;
@@ -63,6 +70,12 @@ private:
     QAction* ExportCompassTripAction;
     QAction* ExportCompassCaveAction;
     QAction* ExportCompassRegionAction;
+
+    //The thread that the exporting runs on
+    QThread* ExportThread;
+
+    void updateCaveActions(const QModelIndex& index);
+    void updateTripActions(const QModelIndex& index);
 
 };
 
