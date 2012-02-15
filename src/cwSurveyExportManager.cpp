@@ -7,6 +7,7 @@
 #include "cwDebug.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -84,20 +85,18 @@ void cwSurveyExportManager::setCavingRegionTreeModel(cwRegionTreeModel *model) {
   \brief Opens the survex exporter
   */
 void cwSurveyExportManager::openExportSurvexTripFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexTrip(QString)));
+    QString filename = QFileDialog::getSaveFileName(NULL, "Export trip to Survex", "", "Survex *.svx");
+    filename = cwGlobals::addExtension(filename, "svx");
+    exportSurvexTrip(filename);
 }
 
 /**
   \brief Asks the user to choose a file to export the currently selected file
   */
 void cwSurveyExportManager::openExportSurvexCaveFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexCave(QString)));
+    QString filename = QFileDialog::getSaveFileName(NULL, "Export cave to Survex", "", "Survex *.svx");
+    filename = cwGlobals::addExtension(filename, "svx");
+    exportSurvexCave(filename);
 }
 
 /**
@@ -106,10 +105,9 @@ void cwSurveyExportManager::openExportSurvexCaveFileDialog() {
   all the data to survex file
   */
 void cwSurveyExportManager::openExportSurvexRegionFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export to Survex", "", "Survex *.svx");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportSurvexRegion(QString)));
+    QString filename = QFileDialog::getSaveFileName(NULL, "Export region to Survex", "", "Survex *.svx");
+    filename = cwGlobals::addExtension(filename, "svx");
+    exportSurvexRegion(filename);
 }
 
 void cwSurveyExportManager::openExportCompassTripFileDialog()
@@ -124,10 +122,9 @@ void cwSurveyExportManager::openExportCompassTripFileDialog()
   Opens the compass file export dialog
   */
 void cwSurveyExportManager::openExportCompassCaveFileDialog() {
-    QFileDialog* dialog = new QFileDialog(NULL, "Export selected cave to Compass", "", "Compass *.dat");
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(exportCaveToCompass(QString)));
+    QString filename = QFileDialog::getSaveFileName(NULL, "Export cave to Compass", "", "Compass *.dat");
+    filename = cwGlobals::addExtension(filename, "dat");
+    exportCaveToCompass(filename);
 }
 
 void cwSurveyExportManager::openExportCompassRegionFileDialog()
@@ -158,7 +155,15 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(filename.isEmpty()) { return; }
-    cwCave* cave = Model->cave(SelectionModel->currentIndex());
+
+    cwCave* cave = NULL;
+    QModelIndex currentSelected = SelectionModel->currentIndex();
+    if(Model->isTrip(currentSelected)) {
+        cave = Model->trip(currentSelected)->parentCave();
+    } else if(Model->isCave(currentSelected)) {
+        cwCave* cave = Model->cave(SelectionModel->currentIndex());
+    }
+
     if(cave != NULL) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
         exportTask->setOutputFile(filename);
