@@ -516,11 +516,12 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
         if(shot.backCompassState() == cwCompassStates::Valid) {
             return shot.backCompass();
         }
+        break;
     case ShotClinoRole: {
         switch(shot.clinoState()) {
         case cwClinoStates::Valid:
             return shot.clino();
-            case cwClinoStates::Empty:
+        case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:
             return "Down";
