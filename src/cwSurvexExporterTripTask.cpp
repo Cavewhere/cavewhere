@@ -48,6 +48,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
     stream << "*begin ; " << trip->name() << endl;
 
+    writeDate(stream, trip->date());
     writeTeamData(stream, trip->team());
     writeCalibrations(stream, trip->calibrations()); stream << endl;
     writeShotData(stream, trip); stream << endl;
@@ -220,6 +221,16 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
         }
 
         stream << endl;
+    }
+}
+
+/**
+  Writes the data to th stream
+  */
+void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
+{
+    if(date.isValid()) {
+        stream << "*date " << date.toString("yyyy.MM.dd") << endl;
     }
 }
 

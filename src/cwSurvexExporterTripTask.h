@@ -44,6 +44,7 @@ private:
     void writeShotData(QTextStream& stream, cwTrip* trip);
     void writeLRUDData(QTextStream& stream, cwTrip* trip);
     void writeTeamData(QTextStream& stream, cwTeam *trip);
+    void writeDate(QTextStream& stream, QDate date);
 
     QString toSupportedLength(double length, cwDistanceStates::State) const;
     QString compassToString(double compass, cwCompassStates::State) const;
