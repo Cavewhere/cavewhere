@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTask.h"
+#include "cwStationPositionLookup.h"
 class cwGunZipReader;
 
 //Qt includes
@@ -19,16 +20,18 @@ public:
 
     void setPlotSauceXMLFile(QString inputFile);
 
-signals:
-    void stationPosition(QString stationName, QVector3D position);
-
+    cwStationPositionLookup stationPositions() const;
 public slots:
 
 protected:
     void runTask();
 
 private:
+    //Input file
     QString XMLFileName;
+
+    //Output
+    cwStationPositionLookup StationPositions;
 
     //For extracting the gunzip data
     cwGunZipReader* GunZipReader;
@@ -40,9 +43,15 @@ private:
     void ParseStationXML(QDomNode station);
 
     QString extractString(QDomElement element);
-
-
-
 };
+
+/**
+  Get's the station position that were parsed from the xml
+
+  This should only be called when the task has finished
+  */
+inline cwStationPositionLookup cwPlotSauceXMLTask::stationPositions() const {
+    return StationPositions;
+}
 
 #endif // CWPLOTSAUCEXMLTASK_H

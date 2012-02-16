@@ -15,6 +15,7 @@
 #include "cwStation.h"
 #include "cw3dRegionViewer.h"
 #include "cwGLScraps.h"
+#include "cwStationPositionLookup.h"
 
 //Qt includes
 #include <QPainter>
@@ -270,53 +271,60 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter) {
   */
 void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
 
-//    QList <QWeakPointer<cwStation> > stations = cave->stations();
-
-//    //Transforms all the station's points
-//    QList<QVector3D> transformedStationPoints = QtConcurrent::blockingMapped(stations,
-//                                                                             TransformPoint(Camera->viewProjectionMatrix(),
-//                                                                                            Camera->viewport()));
+    cwStationPositionLookup stations = cave->stationPositionModel();
 
 
-//    Q_ASSERT(transformedStationPoints.size() == cave->stations().count());
+    QVector< QPair<QString, QVector3D> > uniqueStations;
+    uniqueStations.reserve(stations.positions().count());
 
-//    QFont defaultFont;
-//    QFontMetrics fontMetrics(defaultFont);
+    //Populate the vector of unique stations, this is so we can thread the transformation
+    QMapIterator<QString, QVector3D> mapIter(stations.positions());
+    while(mapIter.hasNext()) {
+        mapIter.next();
+        uniqueStations.append(QPair<QString, QVector3D>(mapIter.key(), mapIter.value()));
+    }
 
-//    //Go through all the station points and render the text
-//    for(int i = 0; i < stations.size(); i++) {
-//        QVector3D projectedStationPosition = transformedStationPoints[i];
+    //Transforms all the station's points
+    QtConcurrent::blockingMap(uniqueStations,
+                              TransformPoint(Camera->viewProjectionMatrix(),
+                                             Camera->viewport()));
 
-//        //Clip the stations to the rendering area
-//        if(projectedStationPosition.z() > 1.0 ||
-//                projectedStationPosition.z() < 0.0 ||
-//                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
-//            continue;
-//        }
 
-//        if(stations[i].isNull()) {
-//            continue;
-//        }
+    QFont defaultFont;
+    QFontMetrics fontMetrics(defaultFont);
 
-//        QString stationName = stations[i].data()->name();
+    //Go through all the station points and render the text
+    QVectorIterator< QPair<QString, QVector3D> >iter(uniqueStations);
+    while(iter.hasNext()) {
+         QPair<QString, QVector3D> stationPair = iter.next();
+         QVector3D projectedStationPosition = stationPair.second;
 
-//        //See if stationName overlaps with other stations
-//        QPoint topLeftPoint = projectedStationPosition.toPoint();
-//        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
-//        QRect stationRect(topLeftPoint, stationNameTextSize);
-//        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
-//        bool couldAddText = LabelKdTree.addRect(stationRect);
+        //Clip the stations to the rendering area
+        if(projectedStationPosition.z() > 1.0 ||
+                projectedStationPosition.z() < 0.0 ||
+                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
+            continue;
+        }
 
-//        if(couldAddText) {
-//            painter->save();
-//            painter->setPen(Qt::white);
-//            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
+        QString stationName = stationPair.first;
 
-//            painter->setPen(Qt::black);
-//            painter->drawText(topLeftPoint, stationName);
-//            painter->restore();
-//        }
-//    }
+        //See if stationName overlaps with other stations
+        QPoint topLeftPoint = projectedStationPosition.toPoint();
+        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
+        QRect stationRect(topLeftPoint, stationNameTextSize);
+        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
+        bool couldAddText = LabelKdTree.addRect(stationRect);
+
+        if(couldAddText) {
+            painter->save();
+            painter->setPen(Qt::white);
+            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
+
+            painter->setPen(Qt::black);
+            painter->drawText(topLeftPoint, stationName);
+            painter->restore();
+        }
+    }
 }
 
 /**
@@ -325,17 +333,10 @@ void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
   This is the kernel for multi threaded algroithm to transform the points into
   screen coordinates.  This is a helper function to renderStationLabels
   */
-QVector3D cw3dRegionViewer::TransformPoint::operator()(QWeakPointer<cwStation> station) {
-//    QSharedPointer<cwStation> strongStation = station.toStrongRef();
-
-//    if(strongStation.isNull()) {
-//        return QVector3D();
-//    }
-
-//    QVector3D normalizeSceenCoordinate =  ModelViewProjection * strongStation->position();
-//    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
-//    return viewportCoord;
-    return QVector3D();
+void cw3dRegionViewer::TransformPoint::operator()(QPair<QString, QVector3D>& station) {
+    QVector3D normalizeSceenCoordinate =  ModelViewProjection * station.second;
+    QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
+    station.second = viewportCoord;
 }
 
 /**

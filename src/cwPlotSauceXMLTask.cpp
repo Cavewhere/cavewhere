@@ -25,6 +25,8 @@ void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
                               Q_ARG(QString, inputFile));
 }
 
+
+
 /**
   \brief Run's the parser on the input file
 
@@ -166,9 +168,7 @@ void cwPlotSauceXMLTask::ParseStationXML(QDomNode station) {
     }
 
     QVector3D position(x, y, z);
-
-    //Emit a new station position
-    emit stationPosition(stationName, position);
+    StationPositions.setPosition(stationName, position);
 }
 
 /**

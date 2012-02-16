@@ -46,10 +46,12 @@ private:
     QVector<unsigned int> IndexData;
 
     //Lookup to look up the station and get it's index
-    QMap< cwStation*, unsigned int > StationIndexLookup;
+    QMap< QString, unsigned int > StationIndexLookup;
 
-    void addStationPositions(cwCave* cave);
-    void addShotLines(cwCave* cave);
+    void addStationPositions(int caveIndex);
+    void addShotLines(int caveIndex);
+
+    QString fullStationName(int caveIndex, QString caveName, QString stationName) const;
 };
 
 /**
@@ -75,6 +77,15 @@ inline QVector<QVector3D> cwLinePlotGeometryTask::pointData() const {
   */
 inline QVector<unsigned int> cwLinePlotGeometryTask::indexData() const {
     return IndexData;
+}
+
+/**
+  Creates a full station name based on the caveIndex, the cave name and the station name.
+
+  This should produces a unique name for the station for the whole region
+  */
+inline QString cwLinePlotGeometryTask::fullStationName(int caveIndex, QString caveName, QString stationName) const {
+    return QString::number(caveIndex) + "-" + caveName + stationName;
 }
 
 #endif // CWLINEPLOTGEOMETRYTASK_H

@@ -47,7 +47,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
     connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(generateCenterlineGeometry()));
     connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
-    connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(setStationPosition(QString,QVector3D)));
+    //connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(updateStationPositionForCaves(QString,QVector3D)));
 
     CenterlineGeometryTask = new cwLinePlotGeometryTask();
     CenterlineGeometryTask->setParentTask(this);
@@ -85,11 +85,16 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
   4. Update the survey data
   */
 void cwLinePlotTask::runTask() {
-  //  qDebug() << "\n-------------------------------------";
+    //  qDebug() << "\n-------------------------------------";
     if(!isRunning()) {
         done();
         return;
     }
+
+    int numCaves = Region->caveCount();
+    CaveStationLookups.clear();
+    CaveStationLookups.reserve(numCaves);
+    CaveStationLookups.resize(numCaves);
 
     Time.start();
     exportData();
@@ -104,7 +109,7 @@ void cwLinePlotTask::exportData() {
         return;
     }
 
-  //  qDebug() << "Status" << status();
+    //  qDebug() << "Status" << status();
     SurvexExporter->setData(*Region);
     SurvexExporter->start();
 }
@@ -133,7 +138,7 @@ void cwLinePlotTask::convertToXML() {
         return;
     }
 
-  //  qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
+    //  qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
@@ -144,7 +149,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-  //  qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
+    //  qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
@@ -160,7 +165,11 @@ void cwLinePlotTask::generateCenterlineGeometry() {
         return;
     }
 
-  //  qDebug() << "Generating centerline geometry" << status();
+    //Go through all the stations in the plot sauce parse and assign them
+    //to caves
+    updateStationPositionForCaves(PlotSauceParseTask->stationPositions());
+
+    //  qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
 }
@@ -169,48 +178,56 @@ void cwLinePlotTask::generateCenterlineGeometry() {
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::linePlotTaskComplete() {
-  //  qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
+    //  qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
 
-void cwLinePlotTask::setStationPosition(QString name, QVector3D position) {
+void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup& stationPostions) {
 
-   QString caveIndexString = name.section('-', 0, 0); //Extract the index
-   QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest
-   QString stationName = caveNameAndStation.section(".", 1, 1); //Extract the station
-   QString caveName = name.section(".", 0, 0);
 
-   bool okay;
-   int caveIndex = caveIndexString.toInt(&okay);
 
-   if(!okay) {
-       qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
-       return;
-   }
+    QMapIterator<QString, QVector3D> iter(stationPostions.positions());
+    while( iter.hasNext() ) {
+        iter.next();
 
-   //Make sure the index is good
-   if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
-       qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
-       return;
-   }
+        QString name = iter.key();
+        QVector3D position = iter.value();
 
-   cwCave* cave = Region->cave(caveIndex);
+        QString caveIndexString = name.section('-', 0, 0); //Extract the index
+        QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest
+        QString stationName = caveNameAndStation.section(".", 1, 1); //Extract the station
+        QString caveName = name.section(".", 0, 0);
 
-   //Make sure the caveName is valid
-   if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
-       qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
-       return;
-   }
+        bool okay;
+        int caveIndex = caveIndexString.toInt(&okay);
 
-//   QWeakPointer<cwStation> station = cave->station(stationName);
-//   QSharedPointer<cwStation> sharedStation = station.toStrongRef();
-//   if(sharedStation.isNull()) {
-//       qDebug() << "Couldn't find station:" << stationName << "in cave" << cave->name();
-//       return;
-//   }
+        if(!okay) {
+            qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+            return;
+        }
 
-   //This need's to be updated with something else, populate a model?
-//   sharedStation->setPosition(position);
+        //Make sure the index is good
+        if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
+            qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+            return;
+        }
 
-  // qDebug() << "Station:" << name << "Position:" << position;
+        cwCave* cave = Region->cave(caveIndex);
+
+        //Make sure the caveName is valid
+        if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
+            qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
+            return;
+        }
+
+        CaveStationLookups[caveIndex].setPosition(stationName, position);
+    }
+
+    Q_ASSERT(CaveStationLookups.size() == Region->caveCount());
+
+    for(int i = 0; i < Region->caveCount(); i++) {
+        cwCave* cave = Region->cave(i);
+        cave->setStationPositionModel(CaveStationLookups[i]);
+    }
+
 }

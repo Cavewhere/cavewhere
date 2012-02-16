@@ -5,6 +5,7 @@
 #include "cwTask.h"
 #include "cwCavingRegion.h"
 #include "cwLinePlotGeometryTask.h"
+#include "cwStationPositionLookup.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
 class cwPlotSauceTask;
@@ -22,6 +23,7 @@ class cwLinePlotTask : public cwTask
 public:
     explicit cwLinePlotTask(QObject *parent = 0);
 
+    QVector<cwStationPositionLookup> stationLookup() const;
     QVector<QVector3D> stationPositions() const;
     QVector<unsigned int> linePlotIndexData() const;
 
@@ -41,8 +43,8 @@ private slots:
     void generateCenterlineGeometry();
     void linePlotTaskComplete();
 
-    //For testing
-    void setStationPosition(QString name, QVector3D position);
+    //For setting up all the station positions
+    void updateStationPositionForCaves(const cwStationPositionLookup& stationPostions);
 
 private:
     //The region data
@@ -56,6 +58,9 @@ private:
     cwPlotSauceTask* PlotSauceTask;
     cwPlotSauceXMLTask* PlotSauceParseTask;
     cwLinePlotGeometryTask* CenterlineGeometryTask;
+
+    //What's returned
+    QVector<cwStationPositionLookup> CaveStationLookups;
 
     //For performance testing
     QTime Time;
@@ -77,6 +82,16 @@ inline QVector<QVector3D> cwLinePlotTask::stationPositions() const {
   */
 inline QVector<unsigned int> cwLinePlotTask::linePlotIndexData() const {
     return CenterlineGeometryTask->indexData();
+}
+
+/**
+  Get's the station position lookups for all the caves in the region
+
+  The lookups are in the same order as the cave's in the region
+  */
+inline QVector<cwStationPositionLookup> cwLinePlotTask::stationLookup() const
+{
+    return CaveStationLookups;
 }
 
 #endif // CWLINEPLOTTASK_H

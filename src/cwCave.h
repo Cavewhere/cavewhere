@@ -3,8 +3,9 @@
 
 //Our include
 class cwTrip;
-#include <cwStation.h>
-#include <cwUndoer.h>
+#include "cwStation.h"
+#include "cwUndoer.h"
+#include "cwStationPositionLookup.h"
 
 //Qt includes
 #include <QObject>
@@ -38,6 +39,9 @@ public:
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
 
+    cwStationPositionLookup stationPositionModel() const;
+    void setStationPositionModel(const cwStationPositionLookup& model);
+
 //    bool hasStation(QString name);
 //    QWeakPointer<cwStation> station(QString name);
 //    void addStation(QSharedPointer<cwStation> station);
@@ -56,13 +60,17 @@ signals:
 
     void nameChanged(QString name);
 
-    void stationAddedToCave(QString name);
-    void stationRemovedFromCave(QString name);
-    void stationDataChanged(QSharedPointer<cwStation>, cwStation::DataRoles role);
+    void stationPositionModelChanged();
+
+//    void stationAddedToCave(QString name);
+//    void stationRemovedFromCave(QString name);
+//    void stationDataChanged(QSharedPointer<cwStation>, cwStation::DataRoles role);
 
 protected:
     QList<cwTrip*> Trips;
     QString Name;
+
+    cwStationPositionLookup StationPositionModel;
 
 //    QMap<QString, QWeakPointer<cwStation> > StationLookup;
 
@@ -115,22 +123,22 @@ private:
         virtual void undo();
     };
 
-    class StationDataCommand : public QUndoCommand {
-    public:
-        StationDataCommand(cwCave* cave,
-                           QSharedPointer<cwStation> station,
-                           QVariant data,
-                           cwStation::DataRoles role);
-        virtual void redo();
-        virtual void undo();
+//    class StationDataCommand : public QUndoCommand {
+//    public:
+//        StationDataCommand(cwCave* cave,
+//                           QSharedPointer<cwStation> station,
+//                           QVariant data,
+//                           cwStation::DataRoles role);
+//        virtual void redo();
+//        virtual void undo();
 
-    private:
-        QWeakPointer<cwCave> Cave;
-        QSharedPointer<cwStation> Station;
-        QVariant NewData;
-        QVariant OldData;
-        cwStation::DataRoles Role;
-    };
+//    private:
+//        QWeakPointer<cwCave> Cave;
+//        QSharedPointer<cwStation> Station;
+//        QVariant NewData;
+//        QVariant OldData;
+//        cwStation::DataRoles Role;
+//    };
 
 };
 
@@ -198,5 +206,15 @@ inline cwTrip* cwCave::trip(int index) const {
 inline int cwCave::indexOf(cwTrip* trip) const {
     return Trips.indexOf(trip);
 }
+
+/**
+  \brief Gets the station position model for the cave
+  */
+inline cwStationPositionLookup cwCave::stationPositionModel() const
+{
+    return StationPositionModel;
+}
+
+
 
 #endif // CWCAVE_H

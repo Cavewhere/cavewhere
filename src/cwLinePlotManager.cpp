@@ -8,6 +8,7 @@
 #include "cwLinePlotTask.h"
 #include "cwGLLinePlot.h"
 #include "cwTripCalibration.h"
+#include "cwDebug.h"
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
@@ -182,12 +183,29 @@ void cwLinePlotManager::runSurvex() {
 }
 
 /**
-  \brief Updates the line plot
+  \brief Updates the line plot, and all the station positions for the
+  line region
   */
 void cwLinePlotManager::updateLinePlot() {
     if(GLLinePlot == NULL) { return; }
     if(!LinePlotTask->isReady()) { return; }
 
+    //Make sure the data is valid
+    QVector<cwStationPositionLookup> stationPositionsPerCave = LinePlotTask->stationLookup();
+    if(stationPositionsPerCave.size() != Region->caveCount()) {
+        //Hmmm, mismatch, rerun survex
+        qDebug() << "Station Lookup mismatch:" << stationPositionsPerCave.size() << "vs" << Region->caveCount() << LOCATION;
+        runSurvex();
+        return;
+    }
+
+    //Update all the positions for all the caves
+    for(int i = 0; i < Region->caveCount(); i++) {
+        cwCave* cave = Region->cave(i);
+        cave->setStationPositionModel(stationPositionsPerCave[i]);
+    }
+
+    //Update the 3D plot
     GLLinePlot->setPoints(LinePlotTask->stationPositions());
     GLLinePlot->setIndexes(LinePlotTask->linePlotIndexData());
 }

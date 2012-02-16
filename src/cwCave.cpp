@@ -293,57 +293,57 @@ void cwCave::RemoveTripCommand::undo() {
     insertTrips();
 }
 
-cwCave::StationDataCommand::StationDataCommand(cwCave* cave,
-        QSharedPointer<cwStation> station,
-        QVariant data,
-        cwStation::DataRoles role) {
-    Cave = cave;
-    Station = station;
-    OldData = station->data(role);
-    NewData = data;
-    Role = role;
+//cwCave::StationDataCommand::StationDataCommand(cwCave* cave,
+//        QSharedPointer<cwStation> station,
+//        QVariant data,
+//        cwStation::DataRoles role) {
+//    Cave = cave;
+//    Station = station;
+//    OldData = station->data(role);
+//    NewData = data;
+//    Role = role;
 
-    QString commandText;
-    switch(role) {
-    case cwStation::NameRole:
-        commandText = QString("Stations Name - %1").arg(data.toString());
-        break;
-    case cwStation::LeftRole:
-        commandText = QString("Station %1's left to %1").arg(station->name()).arg(data.toString());
-        break;
-    case cwStation::RightRole:
-        commandText = QString("Station %1's right to %1").arg(station->name()).arg(data.toString());
-        break;
-    case cwStation::UpRole:
-        commandText = QString("Station %1's up to %1").arg(station->name()).arg(data.toString());
-        break;
-    case cwStation::DownRole:
-        commandText = QString("Station %1's down to %1").arg(station->name()).arg(data.toString());
-        break;
-//    case cwStation::PositionRole: {
-//        QVector3D position = data.value<QVector3D>();
-//        commandText = QString("Station %1's position to %1, %2, %3")
-//                .arg(station->name())
-//                .arg(position.x())
-//                .arg(position.y())
-//                .arg(position.z());
+//    QString commandText;
+//    switch(role) {
+//    case cwStation::NameRole:
+//        commandText = QString("Stations Name - %1").arg(data.toString());
 //        break;
+//    case cwStation::LeftRole:
+//        commandText = QString("Station %1's left to %1").arg(station->name()).arg(data.toString());
+//        break;
+//    case cwStation::RightRole:
+//        commandText = QString("Station %1's right to %1").arg(station->name()).arg(data.toString());
+//        break;
+//    case cwStation::UpRole:
+//        commandText = QString("Station %1's up to %1").arg(station->name()).arg(data.toString());
+//        break;
+//    case cwStation::DownRole:
+//        commandText = QString("Station %1's down to %1").arg(station->name()).arg(data.toString());
+//        break;
+////    case cwStation::PositionRole: {
+////        QVector3D position = data.value<QVector3D>();
+////        commandText = QString("Station %1's position to %1, %2, %3")
+////                .arg(station->name())
+////                .arg(position.x())
+////                .arg(position.y())
+////                .arg(position.z());
+////        break;
+////    }
 //    }
-    }
-    setText(commandText);
-}
+//    setText(commandText);
+//}
 
-void cwCave::StationDataCommand::redo() {
-    if(Cave.isNull()) { return; }
-    Station->setData(NewData, Role);
-    emit Cave.data()->stationDataChanged(Station, Role);
-}
+//void cwCave::StationDataCommand::redo() {
+//    if(Cave.isNull()) { return; }
+//    Station->setData(NewData, Role);
+//    emit Cave.data()->stationDataChanged(Station, Role);
+//}
 
-void cwCave::StationDataCommand::undo() {
-    if(Cave.isNull()) { return; }
-    Station->setData(OldData, Role);
-    emit Cave.data()->stationDataChanged(Station, Role);
-}
+//void cwCave::StationDataCommand::undo() {
+//    if(Cave.isNull()) { return; }
+//    Station->setData(OldData, Role);
+//    emit Cave.data()->stationDataChanged(Station, Role);
+//}
 
 /**
   \brief Gets all the stations in the cave
@@ -360,3 +360,13 @@ QList<cwStation> cwCave::stations() const {
     return allStations;
 }
 
+/**
+  \brief Sets the station position model for the cave
+
+  This holds all the position for al the stations in the cave (this is populated
+  after the loop closure has completed)
+  */
+void cwCave::setStationPositionModel(const cwStationPositionLookup &model) {
+    StationPositionModel = model;
+    emit stationPositionModelChanged();
+}

@@ -72,7 +72,7 @@ private:
         /**
           \brief Transforms the point
           */
-        QVector3D operator()(QWeakPointer<cwStation> station);
+        void operator()(QPair<QString, QVector3D>& stationName);
 
     private:
         QMatrix4x4 ModelViewProjection;
