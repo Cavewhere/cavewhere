@@ -78,14 +78,19 @@ GroupBox {
 
         HelpArea {
             id: tapeCalibarationHelpArea
-            text: "Tape calibration help"
+            text: "<p>Distance calibration allow you to correct a tape that's too long
+or too short.  The calibration is added to uncorrected value (the value you read off the tape) to find the true value.</p>
+<b>UncorrectedValue + Calibration = TrueValue</b>
+<p> For example, the reading in the cave was 10m. You have a tape that's a 1m short. The true measured length
+is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calibration = -1m, so 10m + (-1m) = 9m </p>"
+
             anchors.left: parent.left
             anchors.right: parent.right
         }
 
         HelpArea {
             id: tapeUnitsHelpArea
-            text: "Tape units help"
+            text: "Tape's measurement units: meters (m) or feet (ft)"
             anchors.left: parent.left
             anchors.right: parent.right
         }

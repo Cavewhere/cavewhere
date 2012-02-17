@@ -4,11 +4,12 @@ Rectangle {
     id: helpArea
 
     property alias text: helpText.text
+    property alias pointSize: helpText.font.pointSize
     property alias imageSource: icon.source
     property bool animationToVisible: true
     property bool animationToInvisible: true
 
-    color: "gray"
+    color: "lightgray"
     height: 0
     radius: 5
     clip: true
@@ -30,7 +31,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 5
         anchors.verticalCenter: parent.verticalCenter
-        source: "qrc:icons/Information20x20.png"
+//        source: "qrc:icons/Information20x20.png"
         width: sourceSize.width
         height: sourceSize.height
 
@@ -47,6 +48,7 @@ Rectangle {
 
         textFormat: Text.RichText
         wrapMode: Text.WordWrap
+        font.pointSize: 9
 
         text: "No documentation"
     }
