@@ -169,6 +169,9 @@ void cwLinePlotTask::generateCenterlineGeometry() {
     //to caves
     updateStationPositionForCaves(PlotSauceParseTask->stationPositions());
 
+    //Clear all the stations from the parser
+    PlotSauceParseTask->clearStationPositions();
+
     //  qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
@@ -183,9 +186,6 @@ void cwLinePlotTask::linePlotTaskComplete() {
 }
 
 void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup& stationPostions) {
-
-
-
     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
     while( iter.hasNext() ) {
         iter.next();

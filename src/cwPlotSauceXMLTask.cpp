@@ -36,6 +36,8 @@ void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
   plot sauce file are usually compressed.
   */
 void cwPlotSauceXMLTask::runTask() {
+    StationPositions.clearStations();
+
     GunZipReader->setFilename(XMLFileName);
     GunZipReader->start();
 

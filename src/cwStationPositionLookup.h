@@ -14,7 +14,7 @@ class cwStationPositionLookup {
 public:
     cwStationPositionLookup();
 
-    void clearStation();
+    void clearStations();
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
     QVector3D position(const QString& stationName);
     bool hasPosition(QString stationName) const;
@@ -28,7 +28,7 @@ private:
 /**
   Clears all the station of there data
   */
-inline void cwStationPositionLookup::clearStation() {
+inline void cwStationPositionLookup::clearStations() {
     StationPositions.clear();
 }
 

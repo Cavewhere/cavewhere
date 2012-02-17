@@ -21,6 +21,8 @@ public:
     void setPlotSauceXMLFile(QString inputFile);
 
     cwStationPositionLookup stationPositions() const;
+    void clearStationPositions();
+
 public slots:
 
 protected:
@@ -52,6 +54,13 @@ private:
   */
 inline cwStationPositionLookup cwPlotSauceXMLTask::stationPositions() const {
     return StationPositions;
+}
+
+/**
+  \brief Clears all the stations from memory
+  */
+inline void cwPlotSauceXMLTask::clearStationPositions() {
+    StationPositions.clearStations();
 }
 
 #endif // CWPLOTSAUCEXMLTASK_H

@@ -85,7 +85,7 @@ inline QVector<unsigned int> cwLinePlotGeometryTask::indexData() const {
   This should produces a unique name for the station for the whole region
   */
 inline QString cwLinePlotGeometryTask::fullStationName(int caveIndex, QString caveName, QString stationName) const {
-    return QString::number(caveIndex) + "-" + caveName + stationName;
+    return QString::number(caveIndex) + "-" + caveName + "." + stationName.toLower();
 }
 
 #endif // CWLINEPLOTGEOMETRYTASK_H
