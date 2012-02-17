@@ -17,14 +17,6 @@
 #include <QDebug>
 #include <QSqlError>
 
-//Std includes
-#include <sstream>
-
-//Statics
-const QString cwProject::CavesDir = "Caves";
-const QString cwProject::TripsDir = "Trips";
-const QString cwProject::NotesDir = "Notes";
-
 /**
   By default, a project is open to a temporary directory
   */
@@ -34,17 +26,12 @@ cwProject::cwProject(QObject* parent) :
     //Creates a temp directory for the project
     createTempProjectFile();
 
-//    qDebug() << "DatabaseFile:" << ProjectFile;
-
     //Create the caving the caving region that this project mantaines
     Region = new cwCavingRegion(this);
-    connectRegion();
 
     //Create a new thread
     LoadSaveThread = new QThread(this);
     LoadSaveThread->start();
-
-    //AddImageTask->setThread(AddImageThread);
 }
 
 cwProject::~cwProject()
@@ -75,7 +62,6 @@ void cwProject::createTempProjectFile() {
         qDebug() << "Couldn't open temp project file: " << ProjectFile;
         return;
     }
-//    qDebug() << "Database is valid: " << ProjectDatabase.isValid();
 
     //Create default schema
     createDefaultSchema();
@@ -138,40 +124,6 @@ void cwProject::createDefaultSchema() {
         qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText();
     }
 }
-
-
-//void cwProject::setCavingRegion(cwCavingRegion* region) {
-//    if(region == Region) { return; }
-
-//    //Disconnect all signals and slots
-//    if(region != NULL) {
-//        disconnect(region, NULL, this, NULL);
-//    }
-
-//    region = Region;
-
-//    //Connect the caves to this project
-//    connectRegion();
-//}
-
-/**
-  \brief Sets the project directory
-
-  If the project is current saved to a tempory directory, this will simply move that directory
-  to the directory path and rename it.
-
-  Else, this is treated as a save as, all project files are copied and the project is resaved
-
-  The project will also look for new files.
-  */
-//void cwProject::setProjectDirectory(QString directoryPath) {
-
-//    //Clear the undo / redo stack
-
-//    //Clear the Region tree
-
-
-//}
 
 /**
   Save the project, writes all files to the project
@@ -240,8 +192,6 @@ void cwProject::load(QString filename) {
 
     //Load the region task
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
-//    connect(loadTask, SIGNAL(finished()), loadTask, SLOT(deleteLater()));
-//    connect(loadTask, SIGNAL(stopped()), loadTask, SLOT(deleteLater()));
     connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(updateRegionData(cwCavingRegion*)));
     loadTask->setThread(LoadSaveThread);
 
@@ -314,50 +264,6 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
     progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     progressDialog->setTask(addImageTask);
     progressDialog->show();
-}
-
-///**
-//  Creates a new tempDirectoryPath for the temp project
-//  */
-//void cwProject::createTempProjectFile() {
-
-//    QDateTime seedTime = QDateTime::currentDateTime();
-
-//    //Create the with a hex number
-//    QString projectDir = QString("%1/CavewhereTmpProject-%2")
-//            .arg(QDir::tempPath())
-//            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
-//    TempProject = true;
-
-//    //Create the directory structure
-//    ProjectDir = QDir(projectDir);
-//    ProjectDir.mkdir("./"); //Create the directory path
-//    ProjectDir.mkdir(CavesDir);
-
-//    qDebug() << "Making project file:" << ProjectDir.absolutePath();
-//}
-
-/**
-  \brief Connects the cave to this project
-  */
-void cwProject::connectRegion() {
-    //Connects all the signals from the region so the directory
-//    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(addCaveDirectories(int,int)));
-
-    for(int i = 0; i < Region->caveCount(); i++) {
-        cwCave* cave = Region->cave(i);
-        connectCave(cave);
-    }
-}
-
-/**
-  \brief Connects the cave to this project
-
-  This causes the project to update dynamically.
-  */
-void cwProject::connectCave(cwCave* cave) {
-    //Connect if a trip is added
-    connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(addTripDirectories(int,int)));
 }
 
 /**

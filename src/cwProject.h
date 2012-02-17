@@ -44,7 +44,6 @@ public:
 
     bool isTemporaryProject() const;
 
-    //    static QString uniqueFile(QDir baseDirectory, QString subFile);
 signals:
     void filenameChanged(QString newFilename);
 
@@ -52,27 +51,10 @@ public slots:
      void load(QString filename);
 
 private:
-
-    //Static strings
-    static const QString CavesDir;
-    static const QString TripsDir;
-    static const QString NotesDir;
-
     //If this is a temp project directory on not
     bool TempProject;
     QString ProjectFile;
     QSqlDatabase ProjectDatabase;
-
-    //The project directory
-//    QDir ProjectDir;
-
-//    //Links a path to cwCave* and cwTrip*
-//    QMap<cwCave*, QDir> CaveLookup; //The pointer val
-//    QMap<cwTrip*, QDir> TripLookup;
-
-//    //Looks up a id to a path image pathname
-//    int MaxImage;
-//    QHash<int, QString> ImageDatabase;
 
     //The region that this project looks after
     cwCavingRegion* Region;
@@ -83,22 +65,9 @@ private:
     void createTempProjectFile();
     void createDefaultSchema();
 
-    void connectRegion();
-    void connectCave(cwCave* cave);
-
-//    void addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip);
-
-//    void createNewCaveDirectory(cwCave* cave);
-//    void createNewTripDirectory(cwCave* parentCave, cwTrip* trip);
-
-//    static QString removeEvilCharacters(QString filename);
-
     void setFilename(QString newFilename);
 
 private slots:
-//    void addCaveDirectories(int beginCave, int endCave);
-//    void addTripDirectories(int beginTrip, int endTrip);
-
     void updateRegionData(cwCavingRegion* region);
 
 };
