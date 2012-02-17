@@ -214,6 +214,9 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
         regionPtr->Caves.insert(index, Caves[i]);
         Caves[i]->setParent(regionPtr);
     }
+
+    OwnsCaves = false;
+
     emit regionPtr->insertedCaves(BeginIndex, EndIndex);
     emit regionPtr->caveCountChanged();
 }
@@ -261,12 +264,6 @@ cwCavingRegion::InsertCaveCommand::InsertCaveCommand(cwCavingRegion* parentRegio
 {
     Caves.append(cave);
     setText(QString("Add %1").arg(cave->name()));
-}
-
-cwCavingRegion::InsertCaveCommand::~InsertCaveCommand() {
-    foreach(cwCave* currentCave, Caves) {
-        currentCave->deleteLater();
-    }
 }
 
 void cwCavingRegion::InsertCaveCommand::redo() {

@@ -194,11 +194,11 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
     CavePtr = cave;
     BeginIndex = beginIndex;
     EndIndex = endIndex;
-    OwnsCaves = false;
+    OwnsTrips = false;
 }
 
 cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
-    if(OwnsCaves) {
+    if(OwnsTrips) {
         foreach(cwTrip* trip, Trips) {
             trip->deleteLater();
         }
@@ -214,6 +214,9 @@ void cwCave::InsertRemoveTrip::insertTrips() {
         cave->Trips.insert(index, Trips[i]);
         Trips[i]->setParentCave(cave);
     }
+
+    OwnsTrips = false;
+
     emit cave->insertedTrips(BeginIndex, EndIndex);
 }
 
@@ -229,7 +232,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
         Trips[i]->setParentCave(NULL);
     }
 
-    OwnsCaves = true;
+    OwnsTrips = true;
 
     emit cave->removedTrips(BeginIndex, EndIndex);
 }

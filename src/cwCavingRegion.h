@@ -70,7 +70,7 @@ private:
         void insertCaves();
         void removeCaves();
 
-        QList<cwCave*> Caves;
+        QList< cwCave* > Caves;
     private:
         QWeakPointer<cwCavingRegion> Region;
         int BeginIndex;
@@ -83,7 +83,6 @@ private:
     public:
         InsertCaveCommand(cwCavingRegion* parentRegion, cwCave* cave, int index);
         InsertCaveCommand(cwCavingRegion* parentRegion, QList<cwCave*> cave, int index);
-        virtual ~InsertCaveCommand();
         virtual void redo();
         virtual void undo();
     };
