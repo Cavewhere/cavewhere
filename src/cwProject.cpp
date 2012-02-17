@@ -21,13 +21,11 @@
   By default, a project is open to a temporary directory
   */
 cwProject::cwProject(QObject* parent) :
-    QObject(parent)
+    QObject(parent),
+    TempProject(true),
+    Region(new cwCavingRegion(this))
 {
-    //Creates a temp directory for the project
-    createTempProjectFile();
-
-    //Create the caving the caving region that this project mantaines
-    Region = new cwCavingRegion(this);
+    newProject();
 
     //Create a new thread
     LoadSaveThread = new QThread(this);
@@ -44,6 +42,13 @@ cwProject::~cwProject()
   Creates a new tempDirectoryPath for the temp project
   */
 void cwProject::createTempProjectFile() {
+
+    if(isTemporaryProject()) {
+        //Remove the old temp project file
+        if(QFileInfo(filename()).exists()) {
+            QFile::remove(filename());
+        }
+    }
 
     QDateTime seedTime = QDateTime::currentDateTime();
 
@@ -183,6 +188,17 @@ void cwProject::saveAs(QString newFilename){
 
     //Save the current data
     save();
+}
+
+/**
+  \brief Creates a new project
+  */
+void cwProject::newProject() {
+    //Creates a temp directory for the project
+    createTempProjectFile();
+
+    //Create the caving the caving region that this project mantaines
+    Region->clearCaves();
 }
 
 /**

@@ -36,6 +36,8 @@ public:
     void save();
     void saveAs(QString newFilename);
 
+    void newProject();
+
     QString filename() const;
 
     void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);

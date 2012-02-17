@@ -96,6 +96,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
     connect(actionSave_As, SIGNAL(triggered()), SLOT(saveAs()));
     connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
+    connect(actionNew, SIGNAL(triggered()), SLOT(newProject()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
 
@@ -208,6 +209,15 @@ void cwMainWindow::load() {
     loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
     loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
     loadDialog->open(Data->project(), SLOT(load(QString)));
+}
+
+/**
+    This is called when the user wants to make a new file
+  */
+void cwMainWindow::newProject() {
+    //Clear the undo stack
+    Data->project()->newProject();
+    UndoStack->clear();
 }
 
 /**

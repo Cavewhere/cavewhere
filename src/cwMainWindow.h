@@ -38,6 +38,7 @@ protected slots:
     void saveAs();
     void save();
     void load();
+    void newProject();
 
 private:
     cwSurvexExporter* SurvexExporter;
