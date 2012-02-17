@@ -34,14 +34,15 @@ public:
     cwCavingRegion* cavingRegion() const;
 
     void save();
+    void saveAs(QString newFilename);
 
-
-    void setFilename(QString newFilename);
     QString filename() const;
 
     void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
+
+    bool isTemporaryProject() const;
 
     //    static QString uniqueFile(QDir baseDirectory, QString subFile);
 signals:
@@ -92,13 +93,13 @@ private:
 
 //    static QString removeEvilCharacters(QString filename);
 
-
+    void setFilename(QString newFilename);
 
 private slots:
 //    void addCaveDirectories(int beginCave, int endCave);
 //    void addTripDirectories(int beginTrip, int endTrip);
 
-    void UpdateRegionData(cwCavingRegion* region);
+    void updateRegionData(cwCavingRegion* region);
 
 };
 
@@ -116,6 +117,13 @@ inline cwCavingRegion* cwProject::cavingRegion() const {
   */
 inline QString cwProject::filename() const {
     return ProjectFile;
+}
+
+/**
+  Returns true if the user hasn't save the project and false if they have
+  */
+inline bool cwProject::isTemporaryProject() const {
+    return TempProject;
 }
 
 #endif // CWXMLPROJECT_H

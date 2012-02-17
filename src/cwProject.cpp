@@ -192,6 +192,48 @@ void cwProject::save() {
 }
 
 /**
+  Saves the project as a new file
+
+    Saves the project as.  This will copy the current project to a different location, leaving
+    the original. If the project is a temperary project, the temperary project will be removed
+    from disk.
+  */
+void cwProject::saveAs(QString newFilename){
+    //Just save it the user is overwritting it
+    if(newFilename == filename()) {
+        save();
+        return;
+    }
+
+    //Try to remove the existing file
+    if(QFileInfo(newFilename).exists()) {
+        bool couldRemove = QFile::remove(newFilename);
+        if(!couldRemove) {
+            qDebug() << "Couldn't remove " << newFilename;
+            return;
+        }
+    }
+
+    //Copy the old file to the new location
+    bool couldCopy = QFile::copy(filename(), newFilename);
+    if(!couldCopy) {
+        qDebug() << "Couldn't copy " << filename() << "to" << newFilename;
+        return;
+    }
+
+    if(isTemporaryProject()) {
+        QFile::remove(filename());
+    }
+
+    //Update the project filename
+    setFilename(newFilename);
+    TempProject = false;
+
+    //Save the current data
+    save();
+}
+
+/**
   Loads the project, loads all the files to the project
   */
 void cwProject::load(QString filename) {
@@ -200,7 +242,7 @@ void cwProject::load(QString filename) {
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
 //    connect(loadTask, SIGNAL(finished()), loadTask, SLOT(deleteLater()));
 //    connect(loadTask, SIGNAL(stopped()), loadTask, SLOT(deleteLater()));
-    connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(UpdateRegionData(cwCavingRegion*)));
+    connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(updateRegionData(cwCavingRegion*)));
     loadTask->setThread(LoadSaveThread);
 
     //Set the data for the project
@@ -217,7 +259,7 @@ void cwProject::load(QString filename) {
 
   This should only be called by cwRegionLoadTask
   */
-void cwProject::UpdateRegionData(cwCavingRegion* region) {
+void cwProject::updateRegionData(cwCavingRegion* region) {
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
 
     //Copy the data from the loaded region
@@ -225,6 +267,7 @@ void cwProject::UpdateRegionData(cwCavingRegion* region) {
 
     //Update the project filename
     setFilename(loadTask->databaseFilename());
+    TempProject = false;
 }
 
 /**

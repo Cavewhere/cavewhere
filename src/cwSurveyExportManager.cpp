@@ -161,7 +161,7 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(Model->isTrip(currentSelected)) {
         cave = Model->trip(currentSelected)->parentCave();
     } else if(Model->isCave(currentSelected)) {
-        cwCave* cave = Model->cave(SelectionModel->currentIndex());
+        cave = Model->cave(SelectionModel->currentIndex());
     }
 
     if(cave != NULL) {
@@ -196,6 +196,7 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
   Exports the currently select cave to Compass
   */
 void cwSurveyExportManager::exportCaveToCompass(QString filename) {
+    Q_UNUSED(filename);
     //        if(filename.isEmpty()) { return; }
     //        if(!Data->region()->hasCaves()) { return; }
 

@@ -35,6 +35,7 @@ protected slots:
     void updateRedoText(QString redoText);
 
     //For saving/loading the project
+    void saveAs();
     void save();
     void load();
 

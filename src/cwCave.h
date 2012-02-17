@@ -105,7 +105,7 @@ private:
         QWeakPointer<cwCave> CavePtr;
         int BeginIndex;
         int EndIndex;
-        bool OwnsCaves;
+        bool OwnsTrips;
     };
 
     class InsertTripCommand : public InsertRemoveTrip {

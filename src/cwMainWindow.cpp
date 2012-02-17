@@ -13,6 +13,7 @@
 #include "cwGlobalDirectory.h"
 #include "cwRootData.h"
 #include "cwSurveyExportManager.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QDeclarativeContext>
@@ -93,6 +94,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
 
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
+    connect(actionSave_As, SIGNAL(triggered()), SLOT(saveAs()));
     connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
     connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
@@ -176,10 +178,25 @@ void cwMainWindow::updateRedoText(QString redoText) {
 }
 
 /**
+    Saves the project as.  This will copy the current project to a different location, leaving
+    the original. If the project is a temperary project, the temperary project will be removed
+    from disk.
+  */
+void cwMainWindow::saveAs() {
+    QString filename = QFileDialog::getSaveFileName(NULL, "Save Cavewhere Project As", "", "Cavewhere Project (*.cw)");
+    filename = cwGlobals::addExtension(filename, "cw");
+    Data->project()->saveAs(filename);
+}
+
+/**
   \brief Saves the project
   */
 void cwMainWindow::save() {
-    Data->project()->save();
+    if(Data->project()->isTemporaryProject()) {
+        saveAs();
+    } else {
+        Data->project()->save();
+    }
 }
 
 /**
