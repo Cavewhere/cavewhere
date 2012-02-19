@@ -25,7 +25,9 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         return false;
     }
 
-    stream << "*begin " << cave->name() << endl << endl;
+    QString caveName = cave->name().remove(" ");
+
+    stream << "*begin " << caveName << " ;" << cave->name() << endl << endl;
 
     //Haven't done anything
     TotalProgress = 0;

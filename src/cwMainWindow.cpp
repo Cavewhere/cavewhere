@@ -77,9 +77,6 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
 #endif
 
-    //Setup the export menus
-    setupExportMenus();
-
     connect(Data->undoStack(), SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
     connect(Data->undoStack(), SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
     connect(Data->undoStack(), SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
@@ -115,13 +112,6 @@ void cwMainWindow::changeEvent(QEvent *e)
         break;
     }
 }
-
-///**
-//  \brief Opens the suvrex import dialog
-//  */
-//void cwMainWindow::importSurvex() {
-
-//}
 
 void cwMainWindow::reloadQML() {
 
@@ -271,13 +261,4 @@ void cwMainWindow::initialWindowShape() {
     int height = qRound(screenGeometry.height() * size);
 
     setGeometry(x, y, width, height);
-}
-
-/**
-  Sets up the export menus in the main window
-  */
-void cwMainWindow::setupExportMenus() {
-    foreach(QMenu* menu, Data->surveyExportManager()->menus()) {
-        menuExport->addMenu(menu);
-    }
 }

@@ -16,11 +16,47 @@ Item {
         spacing: 3
 
         Button {
+            id: exportButton
             text: "Export"
 
             onClicked: {
-                exportContextMenu.
-                exportContexMenu.showPopup(0, 0)
+                var globalPoint = mapToItem(null, 0, 2 * exportButton.height);
+                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
+            }
+
+            Desktop.ContextMenu {
+                id: exportContextMenu
+
+                Desktop.Menu {
+                    text: "Survex"
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current trip"
+                        currentText: surveyExportManager.currentTripName
+                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
+                    }
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: surveyExportManager.currentCaveName
+                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
+                    }
+
+                    Desktop.MenuItem {
+                        text: "Region (all caves)"
+                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
+                    }
+                }
+
+                Desktop.Menu {
+                    text: "Compass"
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: surveyExportManager.currentCaveName
+                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
+                    }
+                }
             }
         }
 
@@ -32,8 +68,8 @@ Item {
 
 
             onClicked: {
-                var globalPoint = mapToItem(null, 0, 0);
-                importContextMenu.showPopup(globalPoint.x, globalPoint.y + 2 * importButton.height)
+                var globalPoint = mapToItem(null, 0, 2 * importButton.height);
+                importContextMenu.showPopup(globalPoint.x, globalPoint.y)
             }
 
             Desktop.ContextMenu {
@@ -41,11 +77,7 @@ Item {
 
                 Desktop.MenuItem {
                     text: "Survex (.svx)"
-
-                    onTriggered: {
-                        //Open the survex importer
-                        surveyImportManager.importSurvex()
-                    }
+                    onTriggered: surveyImportManager.importSurvex()
                 }
 
             }
@@ -53,7 +85,5 @@ Item {
     }
 
 
-    Desktop.ContextMenu {
-        id: exportContextMenu
-    }
+
 }

@@ -53,7 +53,6 @@ private:
 
     void initialWindowShape();
 
-    void setupExportMenus();
 };
 
 #endif // SURVEYEDITORMAINWINDOW_H

@@ -18,10 +18,6 @@
 #include "cwImportSurvexDialog.h"
 #include "cwTreeView.h"
 #include "cwQMLWidget.h"
-#include "cwSurvexExporterTripTask.h"
-#include "cwSurvexExporterCaveTask.h"
-#include "cwSurvexExporterRegionTask.h"
-#include "cwCompassExporterCaveTask.h"
 #include "cwLinePlotManager.h"
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
@@ -60,6 +56,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyChunkTrimmer.h"
 #include "cwItemSelectionModel.h"
+#include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
 
 cwQMLRegister::cwQMLRegister()
@@ -119,5 +116,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwTripCalibration>("Cavewhere", 1, 0, "Calibration");
     qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");
     qmlRegisterType<cwItemSelectionModel>("Cavewhere", 1, 0, "ItemSelectionModel");
+    qmlRegisterType<cwSurveyExportManager>("Cavewhere", 1, 0, "SurveyExportManager");
     qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
 }

@@ -20,11 +20,13 @@ class cwRegionTreeModel;
 class cwSurveyExportManager : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(QString currentCaveName READ currentCaveName NOTIFY updateMenu)
+    Q_PROPERTY(QString currentTripName READ currentTripName NOTIFY updateMenu)
+
 public:
     explicit cwSurveyExportManager(QObject *parent = 0);
     ~cwSurveyExportManager();
-
-    QList<QMenu*> menus() const;
 
     QItemSelectionModel* regionSelectionModel() const;
     void setRegionSelectionModel(QItemSelectionModel* selectionModel);
@@ -32,8 +34,12 @@ public:
     cwRegionTreeModel* cavingRegionTreeModel() const;
     void setCavingRegionTreeModel(cwRegionTreeModel* model);
 
+    QString currentCaveName() const;
+    QString currentTripName() const;
+
 signals:
-    
+    void updateMenu();
+
 public slots:
     //Survex exports
     void openExportSurvexTripFileDialog();
@@ -58,18 +64,6 @@ private:
     //This model allows use to export different data
     cwRegionTreeModel* Model;
     QItemSelectionModel* SelectionModel; //Query which item is selected
-
-    //The menus that hold the actions
-    QMenu* SurvexMenu;
-    QMenu* CompassMenu;
-
-    //The actions that allow the user to export data
-    QAction* ExportSurvexTripAction;
-    QAction* ExportSurvexCaveAction;
-    QAction* ExportSurvexRegionAction;
-    QAction* ExportCompassTripAction;
-    QAction* ExportCompassCaveAction;
-    QAction* ExportCompassRegionAction;
 
     //The thread that the exporting runs on
     QThread* ExportThread;

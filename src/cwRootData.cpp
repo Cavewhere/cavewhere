@@ -21,7 +21,6 @@ cwRootData::cwRootData(QObject *parent) :
     UndoStack(new QUndoStack(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
-
 {
     //Create the project, this saves and load data
     Project = new cwProject(this);

@@ -22,31 +22,8 @@ cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent),
     Model(NULL),
     SelectionModel(NULL),
-    SurvexMenu(new QMenu("Survex (.svx)")),
-    CompassMenu(new QMenu("Compass")),
-    ExportSurvexTripAction(new QAction("Current trip", this)),
-    ExportSurvexCaveAction(new QAction("Current cave", this)),
-    ExportSurvexRegionAction(new QAction("Region (all caves)", this)),
-    ExportCompassTripAction(new QAction("Current trip", this)),
-    ExportCompassCaveAction(new QAction("Current cave", this)),
-    ExportCompassRegionAction(new QAction("Makefile (all caves)", this)),
     ExportThread(new QThread(this))
 {
-    SurvexMenu->addAction(ExportSurvexTripAction);
-    SurvexMenu->addAction(ExportSurvexCaveAction);
-    SurvexMenu->addAction(ExportSurvexRegionAction);
-
-    CompassMenu->addAction(ExportCompassTripAction);
-    CompassMenu->addAction(ExportCompassCaveAction);
-    CompassMenu->addAction(ExportCompassRegionAction);
-
-    //Connect everything up
-    connect(ExportSurvexTripAction, SIGNAL(triggered()), SLOT(openExportSurvexTripFileDialog()));
-    connect(ExportSurvexCaveAction, SIGNAL(triggered()), SLOT(openExportSurvexCaveFileDialog()));
-    connect(ExportSurvexRegionAction, SIGNAL(triggered()), SLOT(openExportSurvexRegionFileDialog()));
-    connect(ExportCompassTripAction, SIGNAL(triggered()), SLOT(openExportCompassTripFileDialog()));
-    connect(ExportCompassCaveAction, SIGNAL(triggered()), SLOT(openExportCompassCaveFileDialog()));
-    connect(ExportCompassRegionAction, SIGNAL(triggered()), SLOT(openExportCompassRegionFileDialog()));
 
 }
 
@@ -56,18 +33,6 @@ cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
 cwSurveyExportManager::~cwSurveyExportManager() {
     ExportThread->exit();
     ExportThread->wait();
-}
-
-/**
-  Gets all the menu's that this survey export manager has
-
-  Currently it return the survex and compass menu
-  */
-QList<QMenu*> cwSurveyExportManager::menus() const {
-    QList<QMenu*> rootMenus;
-    rootMenus.append(SurvexMenu);
-    rootMenus.append(CompassMenu);
-    return rootMenus;
 }
 
 /**
@@ -226,69 +191,7 @@ void cwSurveyExportManager::exporterFinished() {
   selection model
   */
 void cwSurveyExportManager::updateActions() {
-    QModelIndex currentIndex = SelectionModel->currentIndex();
-    if(Model->isTrip(currentIndex)) {
-        //Selected a trip
-        updateCaveActions(currentIndex.parent());
-        updateTripActions(currentIndex);
-    } else if(Model->isCave(currentIndex)) {
-        //Selected a cave
-        updateCaveActions(currentIndex);
-        updateTripActions(QModelIndex());
-    } else {
-        //Selected the region
-        updateCaveActions(QModelIndex());
-        updateTripActions(QModelIndex());
-    }
-}
-
-/**
-  This is a private function that updates the cave actions.
-
-  If index is invalid this will disable the cave actions
-  */
-void cwSurveyExportManager::updateCaveActions(const QModelIndex &index) {
-    QString currentCaveString;
-    bool caveEnable;
-
-    if(index.isValid()) {
-        cwCave* cave = Model->cave(index);
-        currentCaveString = QString("Current cave - %1").arg(cave->name());
-        caveEnable = true;
-    } else {
-        currentCaveString = QString("Current cave");
-        caveEnable = false;
-    }
-
-    ExportSurvexCaveAction->setText(currentCaveString);
-    ExportCompassCaveAction->setText(currentCaveString);
-    ExportSurvexCaveAction->setEnabled(caveEnable);
-    ExportCompassCaveAction->setEnabled(caveEnable);
-}
-
-/**
-  This is a private function that updates the cave actions.
-
-  If index is invalid this will disable the trip actions
-  */
-void cwSurveyExportManager::updateTripActions(const QModelIndex &index)
-{
-    QString currentTripString;
-    bool tripEnable;
-
-    if(index.isValid()) {
-        cwTrip* trip = Model->trip(index);
-        currentTripString = QString("Current trip - %1").arg(trip->name());
-        tripEnable = true;
-    } else {
-        currentTripString = QString("Current trip");
-        tripEnable = false;
-    }
-
-    ExportSurvexTripAction->setText(currentTripString);
-    ExportCompassTripAction->setText(currentTripString);
-    ExportSurvexTripAction->setEnabled(tripEnable);
-    ExportCompassTripAction->setEnabled(tripEnable);
+    emit updateMenu();
 }
 
 /**
@@ -318,4 +221,30 @@ void cwSurveyExportManager::setRegionSelectionModel(QItemSelectionModel *selecti
             updateActions();
         }
     }
+}
+
+/**
+Gets currentCaveName
+*/
+QString cwSurveyExportManager::currentCaveName() const {
+    QModelIndex currentIndex = SelectionModel->currentIndex();
+    if(Model->isTrip(currentIndex)) {
+        currentIndex = currentIndex.parent();
+    }
+
+    if(Model->isCave(currentIndex)) {
+        return Model->data(currentIndex, cwRegionTreeModel::NameRole).toString();
+    }
+    return QString();
+}
+
+/**
+Gets currentTripName
+*/
+QString cwSurveyExportManager::currentTripName() const {
+    QModelIndex currentIndex = SelectionModel->currentIndex();
+    if(Model->isTrip(currentIndex)) {
+        return Model->data(currentIndex, cwRegionTreeModel::NameRole).toString();
+    }
+    return QString();
 }

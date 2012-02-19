@@ -370,7 +370,8 @@ OTHER_FILES += \
     qml/InformationButton.qml \
     qml/ErrorHelpArea.qml \
     qml/ErrorHelpBox.qml \
-    qml/DataMainPage.qml #\
+    qml/DataMainPage.qml \ #\
+    qml/ExportSurveyMenuItem.qml
 #    qml/CaveDataToolbar.qml
 
 RESOURCES += \
