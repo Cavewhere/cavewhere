@@ -60,6 +60,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyChunkTrimmer.h"
 #include "cwItemSelectionModel.h"
+#include "cwSurveyImportManager.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -118,4 +119,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwTripCalibration>("Cavewhere", 1, 0, "Calibration");
     qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");
     qmlRegisterType<cwItemSelectionModel>("Cavewhere", 1, 0, "ItemSelectionModel");
+    qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
 }

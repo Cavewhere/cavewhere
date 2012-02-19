@@ -5,9 +5,6 @@
 #include "cwMainWindow.h"
 #include "cwQMLRegister.h"
 #include "cwProject.h"
-#include "cwRegionTreeModel.h"
-#include "cwLinePlotManager.h"
-#include "cwImportSurvexDialog.h"
 #include "cwProjectImageProvider.h"
 #include "cwScrapManager.h"
 #include "cwGlobalDirectory.h"
@@ -83,24 +80,18 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
     //Setup the export menus
     setupExportMenus();
 
-    //Setup undo redo
-    UndoStack = new QUndoStack(this);
-
-    connect(UndoStack, SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
-    connect(UndoStack, SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
-    connect(UndoStack, SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
-    connect(UndoStack, SIGNAL(redoTextChanged(QString)), SLOT(updateRedoText(QString)));
-    connect(ActionUndo, SIGNAL(triggered()), UndoStack, SLOT(undo()));
-    connect(ActionRedo, SIGNAL(triggered()), UndoStack, SLOT(redo()));
+    connect(Data->undoStack(), SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
+    connect(Data->undoStack(), SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
+    connect(Data->undoStack(), SIGNAL(undoTextChanged(QString)), SLOT(updateUndoText(QString)));
+    connect(Data->undoStack(), SIGNAL(redoTextChanged(QString)), SLOT(updateRedoText(QString)));
+    connect(ActionUndo, SIGNAL(triggered()), Data->undoStack(), SLOT(undo()));
+    connect(ActionRedo, SIGNAL(triggered()), Data->undoStack(), SLOT(redo()));
 
     connect(actionSave, SIGNAL(triggered()), SLOT(save()));
     connect(actionSave_As, SIGNAL(triggered()), SLOT(saveAs()));
     connect(actionLoad, SIGNAL(triggered()), SLOT(load()));
     connect(actionNew, SIGNAL(triggered()), SLOT(newProject()));
-    connect(actionSurvexImport, SIGNAL(triggered()), SLOT(importSurvex()));
     connect(actionReloadQML, SIGNAL(triggered()), SLOT(reloadQML()));
-
-    Data->region()->setUndoStack(UndoStack);
 
     connect(actionCompute_Scraps, SIGNAL(triggered()), Data->scrapManager(), SLOT(updateAllScraps()));
 
@@ -125,15 +116,12 @@ void cwMainWindow::changeEvent(QEvent *e)
     }
 }
 
-/**
-  \brief Opens the suvrex import dialog
-  */
-void cwMainWindow::importSurvex() {
-    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(Data->region(), this);
-    survexImportDialog->setUndoStack(UndoStack);
-    survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    survexImportDialog->open();
-}
+///**
+//  \brief Opens the suvrex import dialog
+//  */
+//void cwMainWindow::importSurvex() {
+
+//}
 
 void cwMainWindow::reloadQML() {
 
@@ -217,7 +205,7 @@ void cwMainWindow::load() {
 void cwMainWindow::newProject() {
     //Clear the undo stack
     Data->project()->newProject();
-    UndoStack->clear();
+    Data->undoStack()->clear();
 }
 
 /**

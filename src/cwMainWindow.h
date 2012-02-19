@@ -6,7 +6,6 @@
 #include "ui_cwMainWindow.h"
 class cwSurvexImporter;
 class cwSurvexExporter;
-class cwImportSurvexDialog;
 class cwRootData;
 
 //Qt includes
@@ -27,7 +26,6 @@ public:
 
 protected slots:
 
-    void importSurvex();
     void reloadQML();
 
     //For undo / redo
@@ -49,9 +47,6 @@ private:
     //For undo and redo
     QAction* UndoAction;
     QAction* RedoAction;
-
-    //Undo / redo
-    QUndoStack* UndoStack;
 
     QGLWidget* createGLWidget();
     void initGLEW();

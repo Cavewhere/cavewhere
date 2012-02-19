@@ -81,9 +81,10 @@ void cwImportSurvexDialog::open() {
     QSettings settings;
     QString lastFile = settings.value(ImportSurvexKey).toString();
 
-    QFileDialog* dialog = new QFileDialog(NULL, "Import Survex", lastFile, "Survex *.svx");
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->open(this, SLOT(setSurvexFile(QString)));
+    QString filename = QFileDialog::getOpenFileName(NULL, "Import Survex", lastFile, "Survex *.svx");
+    if(QFileInfo(filename).exists()) {
+        setSurvexFile(filename);
+    }
 }
 
 /**

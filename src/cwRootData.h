@@ -4,6 +4,7 @@
 //Qt includes
 #include <QObject>
 class QGLWidget;
+class QUndoStack;
 
 //Our includes
 class cwRegionTreeModel;
@@ -14,6 +15,7 @@ class cwProject;
 class cwTripCalibration;
 class cwTrip;
 class cwSurveyExportManager;
+class cwSurveyImportManager;
 class cwItemSelectionModel;
 
 class cwRootData : public QObject
@@ -29,6 +31,9 @@ class cwRootData : public QObject
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
     Q_PROPERTY(cwTripCalibration* defaultTripCalibration READ defaultTripCalibration NOTIFY defaultTripCalibrationChanged)
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
+    Q_PROPERTY(cwSurveyExportManager* surveyExportManager READ surveyExportManager NOTIFY surveyExportManagerChanged)
+    Q_PROPERTY(cwSurveyImportManager* surveyImportManager READ surveyImportManager NOTIFY surveyImportManagerChanged)
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack NOTIFY undoStackChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -41,6 +46,8 @@ public:
     cwScrapManager* scrapManager() const;
     cwProject* project() const;
     cwSurveyExportManager* surveyExportManager() const;
+    cwSurveyImportManager* surveyImportManager() const;
+    QUndoStack* undoStack() const;
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* defaultTrip() const;
@@ -53,8 +60,13 @@ signals:
     void linePlotManagerChanged();
     void scrapManagerChanged();
     void projectChanged();
+    void surveyExportManagerChanged();
+    void surveyImportManagerChanged();
+    void undoStackChanged();
+
     void defaultTripChanged();
     void defaultTripCalibrationChanged();
+
 
 public slots:
 
@@ -67,11 +79,20 @@ private:
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
+    cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
+    QUndoStack* UndoStack; //!< For Undo / redo support
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
 };
+
+/**
+Gets undoStack
+*/
+inline QUndoStack* cwRootData::undoStack() const {
+    return UndoStack;
+}
 
 /**
 Gets defaultTrip
@@ -144,4 +165,12 @@ inline cwSurveyExportManager *cwRootData::surveyExportManager() const
 {
     return SurveyExportManager;
 }
+
+/**
+  Gets surveyImportManager
+  */
+inline cwSurveyImportManager* cwRootData::surveyImportManager() const {
+    return SurveyImportManager;
+}
+
 #endif // CWGLOBALQMLDATA_H

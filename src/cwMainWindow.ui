@@ -55,7 +55,6 @@
     <addaction name="actionSave_As"/>
     <addaction name="separator"/>
     <addaction name="menuExport"/>
-    <addaction name="actionSurvexImport"/>
     <addaction name="separator"/>
     <addaction name="actionReloadQML"/>
     <addaction name="separator"/>
