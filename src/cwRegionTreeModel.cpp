@@ -167,7 +167,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         case DateRole:
             return QDate(); //Caves dont have a date
         case IconSourceRole:
-            return QUrl::fromLocalFile("icons/cave.png");
+            return QUrl::fromLocalFile(":icons/cave.png");
         default:
             return QVariant();
         }
@@ -194,7 +194,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         case DateRole:
             return QVariant(currentTrip->date());
         case IconSourceRole:
-            return QUrl::fromLocalFile("icons/trip.png");
+            return QUrl::fromLocalFile(":icons/trip.png");
         default:
             return QVariant();
         }
