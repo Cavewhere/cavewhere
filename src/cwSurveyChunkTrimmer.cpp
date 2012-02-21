@@ -27,6 +27,30 @@ void cwSurveyChunkTrimmer::setChunk(cwSurveyChunk *chunk) {
 }
 
 /**
+  This removes the last empty stations and shots from the chunk.
+
+  This will remove all empty station and shots from the end of the survey,
+  even from the first two
+
+  chunk - The that's will be trimmed
+  */
+void cwSurveyChunkTrimmer::trim(cwSurveyChunk *chunk)
+{
+    //Remove the 2 station if they are invalid
+    if(chunk->stationCount() <= 2) {
+        if(isStationShotEmpty(chunk, 1)) {
+            chunk->removeStation(1, cwSurveyChunk::Above);
+        }
+
+        if(isStationShotEmpty(chunk, 0)) {
+            chunk->removeStation(0, cwSurveyChunk::Above);
+        }
+    }
+
+    trim(chunk, FullTrim);
+}
+
+/**
   This removes the last empty stations and shots from the chunk
 
   chunk - The that's will be trimmed
@@ -34,26 +58,38 @@ void cwSurveyChunkTrimmer::setChunk(cwSurveyChunk *chunk) {
   empty shot and station
   */
 void cwSurveyChunkTrimmer::trim(TrimType fullTrim) {
-    if(Chunk->stationCount() <= 2) {
+    trim(Chunk, fullTrim);
+}
+
+/**
+  This removes the last empty stations and shots from the chunk
+
+  chunk - The that's will be trimmed
+  fullTrim - If true, this will fully trim, else it'll leave just the last
+  empty shot and station
+  */
+void cwSurveyChunkTrimmer::trim(cwSurveyChunk *chunk, cwSurveyChunkTrimmer::TrimType trimType)
+{
+    if(chunk->stationCount() <= 2) {
         return;
     }
 
-    switch(fullTrim) {
+    switch(trimType) {
     case FullTrim: {
-        for(int i = Chunk->stationCount() - 1; i > 1; i--) {
-            if(isStationShotEmpty(Chunk, i)) {
-                Chunk->removeStation(i, cwSurveyChunk::Above);
+        for(int i = chunk->stationCount() - 1; i > 1; i--) {
+            if(isStationShotEmpty(chunk, i)) {
+                chunk->removeStation(i, cwSurveyChunk::Above);
             }
         }
         break;
     }
     case PreserveLastEmptyOne: {
-        for(int i = Chunk->stationCount() - 1; i > 1; i--) {
+        for(int i = chunk->stationCount() - 1; i > 1; i--) {
             //Look a head one
-            if(isStationShotEmpty(Chunk, i - 1)) {
+            if(isStationShotEmpty(chunk, i - 1)) {
                 //Remove the current
-                if(isStationShotEmpty(Chunk, i)) {
-                    Chunk->removeStation(i, cwSurveyChunk::Above);
+                if(isStationShotEmpty(chunk, i)) {
+                    chunk->removeStation(i, cwSurveyChunk::Above);
                 }
             }
         }
@@ -85,7 +121,7 @@ void cwSurveyChunkTrimmer::addLastEmptyStation() {
     chunk - The chunk that's checked
     stationIndex - The station that's chuck.
   */
-bool cwSurveyChunkTrimmer::isStationShotEmpty(cwSurveyChunk *chunk, int stationIndex) const {
+bool cwSurveyChunkTrimmer::isStationShotEmpty(cwSurveyChunk *chunk, int stationIndex) {
     if(stationIndex == 0) { return false; }
 
     cwStation station = chunk->station(stationIndex);

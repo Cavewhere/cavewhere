@@ -6,6 +6,7 @@
 #include "cwShot.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyChunkTrimmer.h"
 
 //Std includes
 #include "cwMath.h"
@@ -41,6 +42,25 @@ bool cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     writeHeader(stream, trip);
 
+    //Make sure the trip has data
+    if(trip->numberOfChunks() <= 1) {
+        if(trip->numberOfChunks() == 1) {
+            cwSurveyChunk* chunk = trip->chunk(0);
+
+            //Trim the invalid stations off
+            cwSurveyChunkTrimmer::trim(chunk);
+
+            if(!chunk->isValid()) {
+                //Invalid chunk
+                writeInvalidTripData(stream, trip);
+            }
+        } else {
+            //No chunks
+            writeInvalidTripData(stream, trip);
+        }
+    }
+
+    //Write all chunks
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         writeChunk(stream, chunk);
     }
@@ -60,7 +80,7 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     stream << CompassNewLine;
 
     stream << "SURVEY NAME: ";
-    writeData(stream, "Survey Name", -12, trip->name());
+    writeData(stream, "Survey Name", -12, trip->name().remove(" "));
     stream << CompassNewLine;
 
     stream << "SURVEY DATE: ";
@@ -74,33 +94,48 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     writeData(stream, "Survey Team", -100, surveyTeam(trip));
     stream << CompassNewLine;
 
-    cwTripCalibration* calibrations = trip->calibrations();
-    float declination = calibrations->declination();
-    float compassCorrections = calibrations->frontCompassCalibration();
-    float clinoCorrections = calibrations->frontClinoCalibration();
+    writeDeclination(stream, trip->calibrations());
+    writeDataFormat(stream, trip->calibrations());
+    writeCorrections(stream, trip->calibrations());
 
-    float tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
-                     calibrations->distanceUnit(),
-                     cwUnits::Feet);
 
-    stream << "DECLINATION: " << QString("%1 ").arg(declination, 0, 'f', 2);
-    stream << "FORMAT: DMMDLRUDLAD";
+    stream << CompassNewLine;
+    stream << "FROM TO   LEN  BEAR   INC LEFT RIGHT UP DOWN AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
+    stream << CompassNewLine;
+}
 
+void cwCompassExportCaveTask::writeDataFormat(QTextStream &stream, cwTripCalibration *calibrations) {
+
+    stream << "FORMAT: D";
+
+    //Write if the distance units
+    switch(calibrations->distanceUnit()) {
+    case cwUnits::Feet:
+        stream << "DD";
+        break;
+    case cwUnits::Meters:
+        stream << "MM";
+        break;
+    default:
+        stream << "MM";
+    }
+
+    //Write all the other options
+    stream << "DLRUDLAD";
+
+    //Write the if the trip has backsights
     if(calibrations->hasBackSights()) {
         stream << "B ";
     } else {
         stream << "N ";
     }
+}
 
-    stream << "CORRECTIONS: " << QString("%1 %2 %3")
-              .arg(compassCorrections, 0, 'f', 2)
-              .arg(clinoCorrections, 0, 'f', 2)
-              .arg(tapeCorrections, 0, 'f', 2);
-    stream << CompassNewLine;
-
-    stream << CompassNewLine;
-    stream << "FROM TO   LEN  BEAR   INC LEFT RIGHT UP DOWN AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
-    stream << CompassNewLine;
+/**
+  \brief Writes the declination to the header for a trip
+  */
+void cwCompassExportCaveTask::writeDeclination(QTextStream &stream, cwTripCalibration *calibrations) {
+    stream << "DECLINATION: " << QString("%1 ").arg(calibrations->declination(), 0, 'f', 2);
 }
 
 /**
@@ -124,8 +159,8 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
 
     if(data.size() > fieldLength) {
         Errors.append(QString("Warning: Truncating %1 field from \"%2\" to \"%3\"").arg(fieldName,
-                                                                                  data,
-                                                                                  paddedString));
+                                                                                        data,
+                                                                                        paddedString));
     }
 
     stream << paddedString;
@@ -138,49 +173,23 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
   */
 void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
     cwTrip* trip = chunk->parentTrip();
-    cwUnits::LengthUnit distanceUnit = trip->calibrations()->distanceUnit();
 
+    //Trim the invalid stations off
+    cwSurveyChunkTrimmer::trim(chunk);
+
+    //Go through all the shots
     for(int i = 0; i < chunk->shotCount(); i++) {
         cwShot shot = chunk->shot(i);
         cwStation from = chunk->station(i);
         cwStation to = chunk->station(i + 1);
 
-        float shotLength = cwUnits::convert(shot.distance(),
-                                            distanceUnit,
-                                            cwUnits::Feet);
-
-        writeData(stream, "From", 12, from.name());
-        stream << " ";
-        writeData(stream, "To", 12, to.name());
-        stream << " ";
-        stream << formatFloat(shotLength) << " ";
-        stream << formatFloat(convertField(trip, shot, Compass)) << " ";
-        stream << formatFloat(convertField(trip, shot, Clino)) << " ";
-        stream << formatFloat(convertField(from, Left, trip->calibrations()->distanceUnit())) << " ";
-        stream << formatFloat(convertField(from, Up, distanceUnit)) << " ";
-        stream << formatFloat(convertField(from, Right, distanceUnit)) << " ";
-        stream << formatFloat(convertField(from, Down, distanceUnit)) << " ";
-
-        stream << formatFloat(convertField(trip, shot, BackCompass)) << " ";
-        stream << formatFloat(convertField(trip, shot, BackClino)) << " ";
-        stream << CompassNewLine;
+        writeShot(stream, trip->calibrations(), from, to, shot, false);
     }
 
+    //Write the last stations LRUD
     cwStation lastStation = chunk->station(chunk->stationCount() - 1);
-    writeData(stream, "From", 12, lastStation.name());
-    stream << " ";
-    writeData(stream, "To", 12, lastStation.name() + "lrud");
-    stream << " ";
-    stream << formatFloat(0.0) << " ";
-    stream << formatFloat(0.0) << " ";
-    stream << formatFloat(0.0) << " ";
-    stream << formatFloat(convertField(lastStation, Left, distanceUnit)) << " ";
-    stream << formatFloat(convertField(lastStation, Up, distanceUnit)) << " ";
-    stream << formatFloat(convertField(lastStation, Right, distanceUnit)) << " ";
-    stream << formatFloat(convertField(lastStation, Down, distanceUnit)) << " ";
-    stream << formatFloat(180.0) << " ";
-    stream << formatFloat(0.0) << " ";
-    stream << CompassNewLine;
+    cwShot emptyShot;
+    writeShot(stream, trip->calibrations(), lastStation, lastStation, emptyShot, true);
 }
 
 /**
@@ -188,33 +197,35 @@ void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chu
 
   This will convert the value into decimal feet
   */
-float cwCompassExportCaveTask::convertField(cwStation station,
-                                       StationLRUDField field,
-                                       cwUnits::LengthUnit unit) {
+double cwCompassExportCaveTask::convertField(cwStation station,
+                                             StationLRUDField field,
+                                             cwUnits::LengthUnit unit) {
 
-    QString value;
+    double value = 0.0;
     switch(field) {
     case Left:
-        value = station.left();
+        if(station.leftInputState() == cwDistanceStates::Valid) {
+            value = station.left();
+        }
         break;
     case Right:
-        value = station.right();
+        if(station.rightInputState() == cwDistanceStates::Valid) {
+            value = station.right();
+        }
         break;
     case Up:
-        value = station.up();
+        if(station.upInputState() == cwDistanceStates::Valid) {
+            value = station.up();
+        }
         break;
     case Down:
-        value = station.down();
+        if(station.downInputState() == cwDistanceStates::Valid) {
+            value = station.down();
+        }
         break;
     }
 
-    bool okay;
-    double numValue = value.toDouble(&okay);
-    if(!okay) {
-        return 0.0;
-    }
-
-    return cwUnits::convert(numValue, unit, cwUnits::Feet);
+    return cwUnits::convert(value, unit, cwUnits::Feet);
 }
 
 /**
@@ -222,10 +233,10 @@ float cwCompassExportCaveTask::convertField(cwStation station,
 
   This will convert the shot's compass and clino data such that it works correctly in compass
   */
-float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot shot, ShotField field) {
+double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cwShot shot, ShotField field) {
 
-    QString frontSite;
-    QString backSite;
+    double frontSite;
+    double backSite;
 
     switch(field) {
     case Compass:
@@ -239,45 +250,35 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot shot, ShotField
         backSite = shot.backClino();
     }
 
-    float value = 0.0f;
+    double value = 0.0f;
 
     if(field == Clino || field == BackClino) {
-        frontSite = convertFromDownUp(frontSite);
-        backSite = convertFromDownUp(backSite);
+        convertFromDownUp(shot.clinoState(), &frontSite);
+        convertFromDownUp(shot.backClinoState(), &backSite);
     }
 
-    bool okay;
     switch(field) {
     case Compass:
-        value = frontSite.toFloat(&okay);
-        if(!okay) {
-            value = backSite.toFloat();
-            value = fmod((value + 180.0), 360.0);
-        }
+        value = fmod(frontSite, 360.0);
         break;
     case BackCompass:
-        value = backSite.toFloat(&okay);
-        if(!okay) {
-            value = frontSite.toFloat();
-        }
-        if(!okay || trip->calibrations()->hasCorrectedCompassBacksight()) {
+        value = backSite;
+        if(calibrations->hasCorrectedCompassBacksight()) {
             value = fmod((value + 180.0), 360.0);
+        } else {
+            value = fmod(value, 360.0);
         }
         break;
     case Clino:
-        value = frontSite.toFloat(&okay);
-        if(!okay) {
-            value = -backSite.toFloat();
-        }
+        value = qBound(-90.0, frontSite, 90.0);
         break;
     case BackClino:
-        value = backSite.toFloat(&okay);
-        if(!okay) {
-            value = frontSite.toFloat();
+        if(calibrations->hasCorrectedClinoBacksight()) {
+            value = -backSite;
+        } else {
+            value = backSite;
         }
-        if(!okay || trip->calibrations()->hasCorrectedClinoBacksight()) {
-            value = -value;
-        }
+        value = qBound(-90.0, value, 90.0);
         break;
     }
 
@@ -287,52 +288,22 @@ float cwCompassExportCaveTask::convertField(cwTrip* trip, cwShot shot, ShotField
 /**
   Heleper to extract shot data
   */
-QString cwCompassExportCaveTask::convertFromDownUp(QString clinoReading) {
-    if(clinoReading.compare("down", Qt::CaseInsensitive) == 0) {
-        clinoReading = "-90.0";
-    } else if(clinoReading.compare("up", Qt::CaseInsensitive) == 0) {
-        clinoReading = "90.0";
+bool cwCompassExportCaveTask::convertFromDownUp(cwClinoStates::State clinoReading, double* value) {
+    switch(clinoReading) {
+    case cwClinoStates::Up:
+        *value = 90.0;
+        return false;
+    case cwClinoStates::Down:
+        *value = -90.0;
+        return true;
+    default:
+        return false;
     }
-    return clinoReading;
 }
 
-QString cwCompassExportCaveTask::formatFloat(float value) {
+QString cwCompassExportCaveTask::formatDouble(double value) {
     return QString("%1").arg(value, 7, 'f', 2);
 }
-
-///**
-//  Heleper to extract shot data
-//  */
-//float cwCompassExportCaveTask::fixCompass(cwTrip* trip, QString compass1, QString compass2) {
-//    float value;
-//    if(compass1.isEmpty()) {
-//        if(!compass2.isEmpty()) {
-//            value = fmod(compass2.toDouble() + 180.0, 360.0);
-//        } else {
-//            return 0.0;
-//        }
-//    } else {
-//        value = compass1.toDouble();
-//    }
-//    return value;
-//}
-
-///**
-//  Heleper to extract shot data
-//  */
-//float cwCompassExportCaveTask::fixClino(cwTrip* trip, QString forward, QString backward) {
-//    float value;
-//    if(forward.isEmpty()) {
-//        if(!backward.isEmpty()) {
-//            value = backward.toDouble() * -1;
-//        } else {
-//            return 0.0;
-//        }
-//    } else {
-//        value = forward.toDouble();
-//    }
-//    return value;
-//}
 
 /**
   Creates the team line for a trip
@@ -350,4 +321,98 @@ QString cwCompassExportCaveTask::surveyTeam(cwTrip* trip) {
     }
 
     return teamMemberNames.join(", ");
+}
+
+/**
+  This writes an invalid trip data, so compass can open the trip
+
+  If we don't do this, compass will fail to open the trip
+  */
+void cwCompassExportCaveTask::writeInvalidTripData(QTextStream &stream, cwTrip* trip)
+{
+    cwStation fromStation;
+    fromStation.setName("New1");
+    cwStation toStation;
+    toStation.setName("New2");
+    cwShot emptyShot;
+
+    writeShot(stream, trip->calibrations(), fromStation, toStation, emptyShot, false);
+}
+
+/**
+  This writes a shot to the strem
+
+  calibrations - The calibrations for the trip
+  fromStation - the from station of the shot
+  toStation - the to station of the shot
+  shot - The shot's data
+  LRUDShotOnly - This shot is really just printing out the last station's LRUD data
+  this hould has zero length, direction and clino readings.
+  */
+void cwCompassExportCaveTask::writeShot(QTextStream &stream,
+                                        cwTripCalibration* calibrations,
+                                        const cwStation &fromStation,
+                                        const cwStation &toStation,
+                                        cwShot shot,
+                                        bool LRUDShotOnly)
+{
+    writeData(stream, "From", 12, fromStation.name());
+    stream << " ";
+    if(LRUDShotOnly) {
+        writeData(stream, "To", 12, fromStation.name() + "lrud");
+        stream << " ";
+        stream << formatDouble(0.0) << " ";
+        stream << formatDouble(0.0) << " ";
+        stream << formatDouble(0.0) << " ";
+    } else {
+        double shotLength = cwUnits::convert(shot.distance(),
+                                             calibrations->distanceUnit(),
+                                             cwUnits::Feet);
+
+        if(!calibrations->hasFrontSights()) {
+            shot.setCompass(fmod(convertField(calibrations, shot, BackCompass) + 180.0, 360.0));
+            shot.setClino(-convertField(calibrations, shot, BackClino));
+        }
+
+        writeData(stream, "To", 12, toStation.name());
+        stream << " ";
+        stream << formatDouble(shotLength) << " ";
+        stream << formatDouble(convertField(calibrations, shot, Compass)) << " ";
+        stream << formatDouble(convertField(calibrations, shot, Clino)) << " ";
+    }
+
+    stream << formatDouble(convertField(fromStation, Left, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Up, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Right, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Down, calibrations->distanceUnit())) << " ";
+
+    //Write out backsight
+    if(calibrations->hasBackSights()) {
+        if(LRUDShotOnly) {
+            stream << formatDouble(180.0) << " ";
+            stream << formatDouble(0.0) << " ";
+        } else {
+            stream << formatDouble(convertField(calibrations, shot, BackCompass)) << " ";
+            stream << formatDouble(convertField(calibrations, shot, BackClino)) << " ";
+        }
+    }
+
+    stream << CompassNewLine;
+}
+
+/**
+  \brief Writes the correction information to the compass file
+  */
+void cwCompassExportCaveTask::writeCorrections(QTextStream &stream, cwTripCalibration *calibrations)
+{
+    double compassCorrections = calibrations->frontCompassCalibration();
+    double clinoCorrections = calibrations->frontClinoCalibration();
+    double tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
+                                              calibrations->distanceUnit(),
+                                              cwUnits::Feet);
+    stream << "CORRECTIONS: " << QString("%1 %2 %3")
+              .arg(compassCorrections, 0, 'f', 2)
+              .arg(clinoCorrections, 0, 'f', 2)
+              .arg(tapeCorrections, 0, 'f', 2);
+    stream << CompassNewLine;
 }

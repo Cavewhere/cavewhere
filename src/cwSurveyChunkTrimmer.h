@@ -29,6 +29,7 @@ public:
     cwSurveyChunk* chunk() const;
     void setChunk(cwSurveyChunk* chunk);
 
+    static void trim(cwSurveyChunk* chunk);
 
 signals:
     void chunkChanged();
@@ -44,8 +45,9 @@ private:
     cwSurveyChunk* Chunk;
 
     void trim(TrimType trimType);
+    static void trim(cwSurveyChunk *chunk, TrimType trimType);
 
-    bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex) const;
+    static bool isStationShotEmpty(cwSurveyChunk* chunk, int stationIndex);
 
 private slots:
     void addLastEmptyStation();

@@ -11,6 +11,8 @@ class QThread;
 
 //Our includes
 class cwRegionTreeModel;
+class cwCave;
+class cwTrip;
 
 /**
     This class will open dialogs to export data.
@@ -71,6 +73,9 @@ private:
     void updateCaveActions(const QModelIndex& index);
     void updateTripActions(const QModelIndex& index);
 
+    cwCave* currentCave() const;
+    cwTrip* currentTrip() const;
+
 };
 
 /**
@@ -79,6 +84,8 @@ private:
 inline cwRegionTreeModel *cwSurveyExportManager::cavingRegionTreeModel() const {
     return NULL;
 }
+
+
 
 
 

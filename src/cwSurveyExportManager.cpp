@@ -3,6 +3,7 @@
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegionTask.h"
+#include "cwCompassExporterCaveTask.h"
 #include "cwRegionTreeModel.h"
 #include "cwDebug.h"
 #include "cwCave.h"
@@ -121,13 +122,7 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
 void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(filename.isEmpty()) { return; }
 
-    cwCave* cave = NULL;
-    QModelIndex currentSelected = SelectionModel->currentIndex();
-    if(Model->isTrip(currentSelected)) {
-        cave = Model->trip(currentSelected)->parentCave();
-    } else if(Model->isCave(currentSelected)) {
-        cave = Model->cave(SelectionModel->currentIndex());
-    }
+    cwCave* cave = currentCave();
 
     if(cave != NULL) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
@@ -145,7 +140,7 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexTrip(QString filename) {
     if(filename.isEmpty()) { return; }
-    cwTrip* trip = Model->trip(SelectionModel->currentIndex());
+    cwTrip* trip = currentTrip();
     if(trip != NULL) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
@@ -162,19 +157,18 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
   */
 void cwSurveyExportManager::exportCaveToCompass(QString filename) {
     Q_UNUSED(filename);
-    //        if(filename.isEmpty()) { return; }
-    //        if(!Data->region()->hasCaves()) { return; }
+    if(filename.isEmpty()) { return; }
 
-    //        cwCave* cave = Data->region()->cave(0);
-    //        if(cave != NULL) {
-    //            cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
-    //            exportTask->setOutputFile(filename);
-    //            exportTask->setData(*cave);
-    //            connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-    //            connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    //            exportTask->setThread(ExportThread);
-    //            exportTask->start();
-    //        }
+    cwCave* cave = currentCave();
+    if(cave != NULL) {
+        cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
+        exportTask->setOutputFile(filename);
+        exportTask->setData(*cave);
+        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
+        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setThread(ExportThread);
+        exportTask->start();
+    }
 }
 
 /**
@@ -247,4 +241,26 @@ QString cwSurveyExportManager::currentTripName() const {
         return Model->data(currentIndex, cwRegionTreeModel::NameRole).toString();
     }
     return QString();
+}
+
+/**
+  Gets the current selected cave
+  */
+cwCave *cwSurveyExportManager::currentCave() const
+{
+    cwCave* cave = NULL;
+    QModelIndex currentSelected = SelectionModel->currentIndex();
+    if(Model->isTrip(currentSelected)) {
+        cave = Model->trip(currentSelected)->parentCave();
+    } else if(Model->isCave(currentSelected)) {
+        cave = Model->cave(SelectionModel->currentIndex());
+    }
+    return cave;
+}
+
+/**
+  Gets the current selected trip
+  */
+cwTrip* cwSurveyExportManager::currentTrip() const {
+    return Model->trip(SelectionModel->currentIndex());
 }

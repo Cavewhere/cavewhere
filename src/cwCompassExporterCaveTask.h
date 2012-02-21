@@ -5,8 +5,10 @@
 #include "cwCaveExporterTask.h"
 #include "cwUnits.h"
 #include "cwStation.h"
+#include "cwReadingStates.h"
 class cwCave;
 class cwTrip;
+class cwTripCalibration;
 class cwSurveyChunk;
 class cwShot;
 
@@ -42,17 +44,21 @@ private:
 
     void writeTrip(QTextStream& stream, cwTrip* trip);
     void writeHeader(QTextStream& stream, cwTrip* trip);
+    void writeDataFormat(QTextStream& stream, cwTripCalibration* calibrations);
+    void writeDeclination(QTextStream& stream, cwTripCalibration* calibrations);
+    void writeCorrections(QTextStream& stream, cwTripCalibration* calibrations);
     void writeData(QTextStream& stream, QString fieldName, int fieldLength, QString data);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
 
-    float convertField(cwStation station, StationLRUDField field, cwUnits::LengthUnit unit);
-    float convertField(cwTrip* trip, cwShot shot, ShotField field);
-    QString formatFloat(float value);
+    double convertField(cwStation station, StationLRUDField field, cwUnits::LengthUnit unit);
+    double convertField(cwTripCalibration *trip, cwShot shot, ShotField field);
+    QString formatDouble(double value);
 
-    QString convertFromDownUp(QString clinoReading);
-//    float fixCompass(cwTrip* trip, QString compass1, QString compass2);
-//    float fixClino(cwTrip* trip, QString clino1, QString clino2);
+    bool convertFromDownUp(cwClinoStates::State clinoReading, double* value);
     QString surveyTeam(cwTrip* trip);
+
+    void writeInvalidTripData(QTextStream& stream, cwTrip *trip);
+    void writeShot(QTextStream &stream, cwTripCalibration *calibrations, const cwStation &fromStation, const cwStation &toStation, cwShot shot, bool LRUDShotOnly);
 
 };
 

@@ -413,6 +413,10 @@ win32 {
     INCLUDEPATH += "$${ZLIBSOURCE}"
     LIBS += -L"$${ZLIBDLL}/static32" -lzlibstat
 
+    debug {
+        CONFIG += console
+    }
+
 #    INCLUDEPATH += C:/Users/saraf/cavewhere/glew-1.7.0/include
 #    LIBS += -LC:/Us_ers/saraf/cavewhere/glew-1.7.0/lib -lglew32
 
