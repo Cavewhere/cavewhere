@@ -150,6 +150,8 @@ void cwTask::restart() {
         privateStop();
 
         CurrentStatus = Restart;
+    } else {
+        start();
     }
 }
 

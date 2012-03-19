@@ -58,6 +58,7 @@
 #include "cwItemSelectionModel.h"
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
+#include "cwTripLengthTask.h"
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -118,4 +119,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwItemSelectionModel>("Cavewhere", 1, 0, "ItemSelectionModel");
     qmlRegisterType<cwSurveyExportManager>("Cavewhere", 1, 0, "SurveyExportManager");
     qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
+    qmlRegisterType<cwTripLengthTask>("Cavewhere", 1, 0, "TripLengthTask");
 }

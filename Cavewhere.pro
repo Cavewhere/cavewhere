@@ -146,7 +146,8 @@ SOURCES += src/main.cpp \
     src/utils/sqlite3.c \
     src/cwItemSelectionModel.cpp \
     src/cwStationPositionLookup.cpp \
-    src/cwSurveyImportManager.cpp
+    src/cwSurveyImportManager.cpp \
+    src/cwTripLengthTask.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -276,7 +277,8 @@ HEADERS  += \
     src/cwMath.h \
     src/cwItemSelectionModel.h \
     src/cwStationPositionLookup.h \
-    src/cwSurveyImportManager.h
+    src/cwSurveyImportManager.h \
+    src/cwTripLengthTask.h
 
 
 FORMS    += src/cwMainWindow.ui \

@@ -1,5 +1,6 @@
 import Qt 4.7
 import Cavewhere 1.0
+import "Utils.js" as Utils
 
 Rectangle {
     id: area
@@ -8,6 +9,12 @@ Rectangle {
 
     property alias currentTrip: view.trip
     property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
+
+    TripLengthTask {
+        id: tripLengthTask
+        trip: currentTrip
+    }
+
 
     Flickable {
         id: flickArea
@@ -69,6 +76,23 @@ Rectangle {
                 viewportHeight: flickArea.height;
 
                 onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
+            }
+
+            Text {
+                text: {
+                    if(currentTrip === null) { return "" }
+                    var unit = ""
+                    switch(currentTrip.calibration.distanceUnit) {
+                    case Units.Meters:
+                        unit = "m"
+                        break;
+                    case Units.Feet:
+                        unit = "ft"
+                        break;
+                    }
+
+                    return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                }
             }
 
             Image {
