@@ -6,6 +6,9 @@
 class cwTrip;
 class cwSurveyChunk;
 
+//Qt includes
+#include <QPair>
+
 /**
   This class isn't thread safe!
 
@@ -47,7 +50,7 @@ private:
    void disconnectChunks();
    void disconnectChunk(cwSurveyChunk* chunk);
 
-   double distanceOfChunk(const cwSurveyChunk *chunk) const;
+   QPair<double, int> distanceOfChunk(const cwSurveyChunk *chunk) const;
 };
 
 /**

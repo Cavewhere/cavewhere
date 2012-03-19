@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
+#include "cwTripCalibration.h"
 
 cwTripLengthTask::cwTripLengthTask(QObject *parent) :
     cwTask(parent),
@@ -20,6 +21,7 @@ void cwTripLengthTask::setTrip(cwTrip *trip) {
 
         if(Trip != NULL) {
             disconnect(Trip, NULL, this, NULL);
+            disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
             disconnectChunks();
         }
 
@@ -28,6 +30,7 @@ void cwTripLengthTask::setTrip(cwTrip *trip) {
         if(Trip != NULL) {
             connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(chunkAdded(int,int)));
             connect(Trip, SIGNAL(chunksRemoved(int,int)), SLOT(chunkRemoved(int,int)));
+            connect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), SLOT(restart()));
             connectChunks();
 
             restart();
@@ -63,13 +66,20 @@ void cwTripLengthTask::disconnectChunk(cwSurveyChunk *chunk)
     disconnect(chunk, NULL, this, NULL);
 }
 
-double cwTripLengthTask::distanceOfChunk(const cwSurveyChunk *chunk) const
+/**
+  Returns the distance of the chunk and the number of shots in the chunk
+  */
+QPair<double, int> cwTripLengthTask::distanceOfChunk(const cwSurveyChunk *chunk) const
 {
     double distance = 0.0;
+    int numberOfShots = 0;
     foreach(cwShot shot, chunk->shots()) {
-        distance += shot.distance();
+        if(shot.distanceState() == cwDistanceStates::Valid) {
+            distance += shot.distance();
+            numberOfShots++;
+        }
     }
-    return distance;
+    return QPair<double, int>(distance, numberOfShots);
 }
 
 /**
@@ -94,10 +104,18 @@ void cwTripLengthTask::chunkAdded(int begin, int end)
 void cwTripLengthTask::runTask()
 {
     double distance = 0.0;
+    int numberOfShots = 0;
+
     foreach(cwSurveyChunk* chunk, Trip->chunks()) {
-        distance += distanceOfChunk(chunk);
+        QPair<double, int> distanceAndNumberShots = distanceOfChunk(chunk);
+        distance += distanceAndNumberShots.first;
+        numberOfShots += distanceAndNumberShots.second;
     }
-    Length = distance;
+
+    //Calibrate for broken tapes
+    double totalTapeError = Trip->calibrations()->tapeCalibration() * (double)numberOfShots;
+
+    Length = distance + totalTapeError;
     lengthChanged();
 
     done();
