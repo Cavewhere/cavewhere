@@ -48,7 +48,8 @@ cwShot::PrivateData::PrivateData() :
 }
 
 void cwShot::setDistance(QString distance) {
-    setValueWithString(cwDistanceValidator(), Data->Distance, (int&)Data->DistanceState, distance);
+    cwDistanceValidator validator;
+    setValueWithString(validator, Data->Distance, (int&)Data->DistanceState, distance);
 }
 
 void cwShot::setDistance(double distance) {
@@ -75,7 +76,8 @@ void cwShot::setDistanceState(cwDistanceStates::State state)
 }
 
 void cwShot::setCompass(QString compass) {
-    setValueWithString(cwCompassValidator(), Data->Compass, (int&)Data->CompassState, compass);
+    cwCompassValidator validator;
+    setValueWithString(validator, Data->Compass, (int&)Data->CompassState, compass);
 }
 
 /// Sets the front sight compass for the shot
@@ -94,7 +96,8 @@ void cwShot::setCompassState(cwCompassStates::State state)
 
 /// Sets the back sight compass for the shot
 void cwShot::setBackCompass(QString backCompass) {
-    setValueWithString(cwCompassValidator(), Data->BackCompass, (int&)Data->BackCompassState, backCompass);
+    cwCompassValidator validator;
+    setValueWithString(validator, Data->BackCompass, (int&)Data->BackCompassState, backCompass);
 }
 
 void cwShot::setBackCompass(double backCompass)
@@ -169,7 +172,8 @@ cwShot::ValidState cwShot::setValueWithString(const cwValidator &validator, doub
   */
 void cwShot::setClinoValueWithString(double &memberData, int &memberState, QString newValue)
 {
-    ValidState state = setValueWithString(cwClinoValidator(), memberData, memberState, newValue);
+    cwClinoValidator validator;
+    ValidState state = setValueWithString(validator, memberData, memberState, newValue);
      if(state == ValidString) {
          if(newValue.compare("down", Qt::CaseInsensitive) == 0) {
             memberState = cwClinoStates::Down;
