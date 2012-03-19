@@ -15,7 +15,6 @@ Rectangle {
         trip: currentTrip
     }
 
-
     Flickable {
         id: flickArea
 
@@ -79,6 +78,7 @@ Rectangle {
             }
 
             Text {
+                visible: !addSurveyData.visible
                 text: {
                     if(currentTrip === null) { return "" }
                     var unit = ""
@@ -118,6 +118,7 @@ Rectangle {
             }
 
             AddButton {
+                id: addSurveyData
                 text: "Add Survey Data"
                 anchors.horizontalCenter: view.horizontalCenter
                 visible: currentTrip !== null && currentTrip.numberOfChunks === 0
