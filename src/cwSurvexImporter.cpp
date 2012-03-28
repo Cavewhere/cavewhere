@@ -691,17 +691,29 @@ void cwSurvexImporter::parseDate(QString dateString) {
   \brief Extracts the team member from the survey line
   */
 void cwSurvexImporter::parseTeamMember(QString line) {
-    QRegExp reg("\"(.+)\"\\s*((?:\\S+\\s*)*)");
 
-    if(reg.exactMatch(line)) {
-        QString name = reg.cap(1);
-        QString jobsString = reg.cap(2);
-        QStringList jobs = jobsString.split(' ', QString::SkipEmptyParts);
+    QStringList jobAndNameList;
 
+    QRegExp splitReg("\"(\\w+\\s*)+\"|\\w+");
+    int pos = 0;
+    while ((pos = splitReg.indexIn(line, pos)) != -1) {
+        QString nameOrJob = line.mid(pos, splitReg.matchedLength());
+        nameOrJob = nameOrJob.remove('"');
+        nameOrJob = nameOrJob.trimmed();
+        jobAndNameList.append(nameOrJob);
+        pos += splitReg.matchedLength();
+    }
+
+    if(!jobAndNameList.isEmpty()) {
         cwTeam* currentTeam = CurrentBlock->team();
+        QString name = jobAndNameList.first();
+
+        jobAndNameList.removeFirst();
+        QStringList jobs = jobAndNameList;
+
         currentTeam->addTeamMember(cwTeamMember(name, jobs));
     } else {
-        addError("couldn't read team member");
+       addError("couldn't read team member");
     }
 }
 

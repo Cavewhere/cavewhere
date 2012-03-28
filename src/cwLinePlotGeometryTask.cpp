@@ -26,8 +26,6 @@ void cwLinePlotGeometryTask::runTask() {
     StationIndexLookup.clear();
 
     for(int caveIndex = 0; caveIndex < Region->caveCount(); caveIndex++) {
-
-
         addStationPositions(caveIndex);
         addShotLines(caveIndex);
     }

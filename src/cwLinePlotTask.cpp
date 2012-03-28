@@ -124,7 +124,7 @@ void cwLinePlotTask::runCavern() {
         return;
     }
 
-    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
+    //qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
     CavernTask->start();
 }
 
@@ -138,7 +138,7 @@ void cwLinePlotTask::convertToXML() {
         return;
     }
 
-      qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
+    //  qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
@@ -149,7 +149,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-      qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
+    //  qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
@@ -172,7 +172,7 @@ void cwLinePlotTask::generateCenterlineGeometry() {
     //Clear all the stations from the parser
     PlotSauceParseTask->clearStationPositions();
 
-      qDebug() << "Generating centerline geometry" << status();
+    //  qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
 }
@@ -181,7 +181,7 @@ void cwLinePlotTask::generateCenterlineGeometry() {
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::linePlotTaskComplete() {
-      qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
+    // qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
 
