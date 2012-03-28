@@ -15,6 +15,9 @@
 #include <QFileInfo>
 #include <QDir>
 
+//Std include
+#include "math.h"
+
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     cwTask(parent),
     RootBlock(new cwSurvexBlockData(this)),
@@ -734,7 +737,7 @@ void cwSurvexImporter::parseCalibrate(QString line) {
 
         //Parse the calibration value
         bool okay;
-        float calibrationValue = calibrationString.toFloat(&okay);
+        double calibrationValue = calibrationString.toDouble(&okay);
         if(!okay) {
             addError("Calibration value isn't a number");
             return;
@@ -764,9 +767,9 @@ void cwSurvexImporter::parseCalibrate(QString line) {
         } else if (type == "backcompass") {
             //Check to see if this is a correct compasss calibration
             const float correctCalibrationThreshold = 45.0;
-            if(calibrationValue + 180.0 < correctCalibrationThreshold) {
+            if(fmod(calibrationValue + 180.0, 360.0) < correctCalibrationThreshold) {
                 //This is probably a correct back compass
-                calibrationValue = calibrationValue + 180.0;
+                calibrationValue = fmod(calibrationValue + 180.0, 360.0);
                 calibration->setCorrectedCompassBacksight(true);
             }
             calibration->setBackCompassCalibration(calibrationValue);
