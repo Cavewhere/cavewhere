@@ -160,15 +160,11 @@ Item {
 
             PropertyChanges {
                 target: globalShadowTextInput.textInput
+
                 Keys.onPressed: {
                     if(event.key === Qt.Key_Tab ||
                             event.key === 1 + Qt.Key_Tab ||
                             event.key === Qt.Key_Space)
-                        //||
-                        //                            event.key === Qt.Key_Left ||
-                        //                            event.key === Qt.Key_Right ||
-                        //                            event.key === Qt.Key_Up ||
-                        //                            event.key === Qt.Key_Down)
                     {
                         var commited = editor.commitChanges()
                         if(!commited) { return; }
@@ -178,9 +174,16 @@ Item {
                         surveyChunk.parentTrip.addNewChunk();
                     }
 
+                    //Tab to the next entry on enter
+                    if(event.key === Qt.Key_Enter ||
+                            event.key === Qt.Key_Return) {
+                        surveyChunkView.tab(rowIndex, dataRole)
+                    }
+
                     //Use teh default keyhanding that the GlobalShadowTextInput has
                     defaultKeyHandling(event);
 
+                    //Handle the tabbing
                     dataBox.handleTab(event);
 
                     if(event.accepted) {
