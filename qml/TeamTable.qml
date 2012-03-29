@@ -60,7 +60,7 @@ Item {
             anchors.right: parent.right
 
             horizontalAlignment: Text.AlignHCenter
-            text: "Bitch"
+            text: "Role"
             font.bold: true
             visible: true
         }
@@ -277,7 +277,7 @@ Item {
                             Text {
                                 id: addText
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "Job"
+                                text: "Role"
                             }
                         }
 
@@ -286,7 +286,7 @@ Item {
 
                             onClicked: {
                                 var alljobs = jobs
-                                alljobs.push("Job " + (jobs.length + 1));
+                                alljobs.push("Role " + (jobs.length + 1));
                                 teamTable.model.setData(index, Team.JobsRole, alljobs)
                             }
                         }
