@@ -237,6 +237,13 @@ void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
     QDeclarativeItem* dataBox = databox(rowIndex, role);
     if(dataBox != NULL) {
         QRectF localRect = dataBox->mapRectToParent(dataBox->childrenBoundingRect());
+
+        if(rowIndex == ShotRows.size() - 2 ||
+                ShotRows.size() == 1) {
+            float extra = 100.0f;
+            localRect.setHeight(localRect.height() + extra);
+        }
+
         QRectF parentRect = mapRectToParent(localRect);
         emit ensureVisibleChanged(parentRect);
     }
