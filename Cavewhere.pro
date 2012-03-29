@@ -391,6 +391,7 @@ unix {
 
 macx {
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.6
+    ICON = icon.icns
 }
 
 win32 {
