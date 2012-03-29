@@ -373,7 +373,8 @@ OTHER_FILES += \
     qml/ErrorHelpArea.qml \
     qml/ErrorHelpBox.qml \
     qml/DataMainPage.qml \ #\
-    qml/ExportSurveyMenuItem.qml
+    qml/ExportSurveyMenuItem.qml \
+    qml/ShadowRectangle.qml
 #    qml/CaveDataToolbar.qml
 
 RESOURCES += \

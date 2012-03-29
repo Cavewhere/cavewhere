@@ -23,6 +23,77 @@ FocusScope {
             selected: caveDelegate.selected
         }
 
+        ShadowRectangle {
+            id: removeChallenge
+            visible: false
+            z: 1
+
+            x: 20
+            y: 5
+
+            width: askRow.width + 6
+            height: askRow.height + 6
+
+            Style {
+                id: style
+            }
+
+            color: style.errorBackground
+
+            Row {
+                id: askRow
+                x: 3
+                y: 3
+                spacing: 3
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Remove <b>" + name + "</b>?"
+                }
+
+                Button {
+                    text: "Remove"
+                    onClicked: {
+                        var itemIndex = regionVisualDataModel.modelIndex(index);
+                        regionModel.removeIndex(itemIndex);
+                        removeChallenge.state = ""
+                    }
+                }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: {
+                        removeChallenge.state = ""
+                    }
+                }
+            }
+
+            states: [
+                State {
+                    name: "visible"
+                    PropertyChanges {
+                        target: removeChallenge
+                        visible: true
+                    }
+                }
+            ]
+
+            transitions: [
+                Transition {
+                    from: ""
+                    to: "visible"
+
+                        PropertyAnimation {
+                            target: removeChallenge
+                            property: "opacity"
+                            from: 0.0
+                            to: 1.0
+                        }
+
+                }
+            ]
+        }
+
         MouseArea {
 
             id: caveMouseArea
@@ -50,10 +121,12 @@ FocusScope {
                         visible: caveDelegate.selected
 
                         onClicked: {
-                            var itemIndex = regionVisualDataModel.modelIndex(index);
-                            regionModel.removeIndex(itemIndex);
+                            removeChallenge.state = "visible"
                         }
                     }
+
+
+
                 }
 
                 Image {
