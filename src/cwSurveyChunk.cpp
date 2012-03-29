@@ -62,7 +62,7 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         ParentTrip = trip;
         setParent(trip);
-//        updateStationsWithNewCave();
+        //        updateStationsWithNewCave();
         emit parentTripChanged();
     }
 }
@@ -413,8 +413,23 @@ QString cwSurveyChunk::guessLastStationName() const {
     }
 
     if(stations().last().name().isEmpty()) {
-        int secondToLastStation = stations().size() - 2;
-        QString stationName = stations().at(secondToLastStation).name();
+        QString stationName;
+
+        if(stations().size() == 2) {
+            //Try to get the station name from the previous chunk
+            QList<cwSurveyChunk*> chunks = parentTrip()->chunks();
+            int index = chunks.indexOf(const_cast<cwSurveyChunk*>(this)) - 1;
+            cwSurveyChunk* previousChunk = parentTrip()->chunk(index);
+            if(previousChunk != NULL) {
+                stationName = previousChunk->stations().last().name();
+            }
+        }
+
+        if(stationName.isEmpty()) {
+            int secondToLastStation = stations().size() - 2;
+            stationName = stations().at(secondToLastStation).name();
+        }
+
         QString nextStation = guessNextStation(stationName);
         return nextStation;
     }
@@ -534,7 +549,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
         switch(shot.backClinoState()) {
         case cwClinoStates::Valid:
             return shot.backClino();
-            case cwClinoStates::Empty:
+        case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:
             return "Down";
