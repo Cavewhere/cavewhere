@@ -15,7 +15,7 @@ Item {
         } else {
             teamTable.state = "NoTeam"
         }
-//        console.debug("Update state: " + teamTable.state )
+        //        console.debug("Update state: " + teamTable.state )
     }
 
     SectionLabel {
@@ -60,7 +60,7 @@ Item {
             anchors.right: parent.right
 
             horizontalAlignment: Text.AlignHCenter
-            text: "Job"
+            text: "Bitch"
             font.bold: true
             visible: true
         }
@@ -89,9 +89,9 @@ Item {
 
             visible: true
 
-//            onVisibleChanged: {
-//                console.log("Visible changed:" + visible + " state: " + teamTable.state)
-//            }
+            //            onVisibleChanged: {
+            //                console.log("Visible changed:" + visible + " state: " + teamTable.state)
+            //            }
 
             onCountChanged: {
                 updateState();
@@ -165,8 +165,8 @@ Item {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
 
-
                         onFinishedEditting: {
+                            //Set the team name data
                             teamTable.model.setData(index, Team.NameRole, newText)
                         }
                     }
@@ -194,6 +194,7 @@ Item {
 
                     spacing: 5
 
+
                     Repeater {
                         model: jobs
                         delegate: Rectangle {
@@ -208,6 +209,12 @@ Item {
                             width: Math.max(jobText.width, 20) + 10
                             height: jobText.height + 6
 
+                            function removeJob() {
+                                var alljobs = jobs
+                                alljobs.splice(index, 1)
+                                teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
+                            }
+
                             DoubleClickTextInput {
                                 id: jobText
                                 anchors.centerIn: parent
@@ -215,7 +222,14 @@ Item {
 
                                 onFinishedEditting: {
                                     var alljobs = jobs
-                                    alljobs[index] = newText
+
+                                    if(newText === "") {
+                                        //Remove the job if there's no data
+                                        alljobs.splice(index, 1)
+                                    } else {
+                                        //Set the new text for the job
+                                        alljobs[index] = newText
+                                    }
                                     teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
                                 }
                             }
@@ -233,11 +247,8 @@ Item {
                             }
 
                             Keys.onDeletePressed: {
-                                var alljobs = jobs
-                                alljobs.splice(index, 1)
-                                teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
+                                removeJob()
                             }
-
                         }
                     }
 
@@ -286,7 +297,7 @@ Item {
     }
 
     onModelChanged: {
-//        console.debug("Model changed:" + model + " " + model.count)
+        //        console.debug("Model changed:" + model + " " + model.count)
         teamList.currentIndex = -1
         updateState()
     }
@@ -295,7 +306,7 @@ Item {
     states: [
         State {
             name: "NoTeam"
-//            when: teamList.count === 0
+            //            when: teamList.count === 0
             AnchorChanges {
                 target: addPerson
                 anchors.left: undefined
