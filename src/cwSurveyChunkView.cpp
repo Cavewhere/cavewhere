@@ -22,6 +22,7 @@
 cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
     QDeclarativeItem(parent),
     SurveyChunk(NULL),
+    ChunkTrimmer(NULL),
     QMLComponents(NULL),
     FocusedItem(NULL),
     HasFrontSights(true),

@@ -10,6 +10,11 @@ cwCollisionRectKdTree::cwCollisionRectKdTree()
     clear();
 }
 
+cwCollisionRectKdTree::~cwCollisionRectKdTree()
+{
+    delete Root;
+}
+
 /**
   \brief This clears all the data from the kDTree
   */

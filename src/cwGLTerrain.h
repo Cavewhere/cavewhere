@@ -16,6 +16,7 @@ class cwGLTerrain : public cwGLObject
     Q_OBJECT
 public:
     explicit cwGLTerrain(QObject *parent = 0);
+    ~cwGLTerrain();
 
     virtual void initialize();
     virtual void draw();

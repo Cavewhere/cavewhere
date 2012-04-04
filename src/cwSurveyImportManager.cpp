@@ -3,7 +3,8 @@
 #include "cwImportSurvexDialog.h"
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    CavingRegion(NULL)
 {
 }
 

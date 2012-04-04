@@ -13,6 +13,7 @@ class cwCollisionRectKdTree
 {
 public:
     cwCollisionRectKdTree();
+    ~cwCollisionRectKdTree();
 
     void clear();
    bool addRect(const QRect& rectangle);

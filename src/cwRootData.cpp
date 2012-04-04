@@ -18,6 +18,7 @@
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
+    GLWidget(NULL),
     UndoStack(new QUndoStack(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))

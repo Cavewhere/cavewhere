@@ -196,6 +196,7 @@ cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
 cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
     if(OwnsCaves) {
         foreach(cwCave* cave, Caves) {
+            // FIXME: double delete for the cave (cause crash)
             cave->deleteLater();
         }
     }

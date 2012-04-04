@@ -16,6 +16,7 @@
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
+    Project(NULL),
     Region(NULL)
 {
 }

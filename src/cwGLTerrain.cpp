@@ -20,6 +20,12 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
     NumberOfLevels = 0;
 }
 
+cwGLTerrain::~cwGLTerrain()
+{
+    delete EdgeTile;
+    delete RegularTile;
+}
+
 /**
   \brief Called when the opengl context is good
   */
