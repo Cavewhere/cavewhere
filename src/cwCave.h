@@ -142,6 +142,8 @@ private:
 
 };
 
+Q_DECLARE_METATYPE(cwCave*)
+
 /**
   \brief Get's the name of the cave
   */

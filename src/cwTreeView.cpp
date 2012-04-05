@@ -44,5 +44,6 @@ void cwTreeView::setModel(cwRegionTreeModel* newModel) {
   \brief Gets the model of the view
   */
 cwRegionTreeModel* cwTreeView::model() const {
-   return static_cast<cwRegionTreeModel*>(TreeView->model());
+    Q_ASSERT(qobject_cast<cwRegionTreeModel*>(TreeView->model()) != NULL);
+    return static_cast<cwRegionTreeModel*>(TreeView->model());
 }

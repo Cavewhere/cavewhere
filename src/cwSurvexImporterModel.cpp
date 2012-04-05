@@ -60,6 +60,8 @@ QVariant cwSurvexImporterModel::NameColumnData(const QModelIndex & index, int ro
 QVariant cwSurvexImporterModel::NameColumnDisplayData(const QModelIndex& index) const {
     //This index is a shot
     if(isShot(index)) {
+
+//        Q_ASSERT(dynamic_cast<cwSurvexBlockData*>(index.internalPointer()) != NULL);
         cwSurvexBlockData* parentBlock = static_cast<cwSurvexBlockData*>(index.internalPointer());
         int shotIndex = index.row() - parentBlock->childBlockCount();
 
@@ -309,6 +311,7 @@ QModelIndex cwSurvexImporterModel::toIndex(cwSurvexBlockData* block) {
   \brief Called when a block's data has changed
   */
 void cwSurvexImporterModel::blockDataChanged() {
+    Q_ASSERT(qobject_cast<cwSurvexBlockData*>(sender()) != NULL);
     cwSurvexBlockData* block = static_cast<cwSurvexBlockData*>(sender());
     QModelIndex blockIndex = toIndex(block);
     if(!blockIndex.isValid()) { return; }

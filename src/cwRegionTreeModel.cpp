@@ -161,7 +161,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-            return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentCave));
+            return QVariant::fromValue(currentCave);
         case TypeRole:
             return CaveType;
         case DateRole:
@@ -188,7 +188,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
             return QVariant(icon);
         }
         case ObjectRole:
-            return QVariant::fromValue<QObject*>(static_cast<QObject*>(currentTrip));
+            return QVariant::fromValue(currentTrip);
         case TypeRole:
             return TripType;
         case DateRole:
@@ -277,8 +277,11 @@ Qt::ItemFlags cwRegionTreeModel::flags ( const QModelIndex & /*index*/) {
   */
 cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
     QVariant tripVariant = data(index, ObjectRole);
-    cwTrip* trip = qobject_cast<cwTrip*>(tripVariant.value<QObject*>());
-    return trip;
+    if(tripVariant.canConvert<cwTrip*>()) {
+        cwTrip* trip = tripVariant.value<cwTrip*>();
+        return trip;
+    }
+    return NULL;
 }
 
 /**
@@ -286,8 +289,11 @@ cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
   */
 cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
     QVariant caveVariant = data(index, ObjectRole);
-    cwCave* cave = qobject_cast<cwCave*>(caveVariant.value<QObject*>());
-    return cave;
+    if(caveVariant.canConvert<cwCave*>()) {
+        cwCave* cave = caveVariant.value<cwCave*>();
+        return cave;
+    }
+    return NULL;
 }
 
 /**

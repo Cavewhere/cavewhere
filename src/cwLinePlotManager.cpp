@@ -134,6 +134,7 @@ void cwLinePlotManager::connectAddedCaves(int beginIndex, int endIndex) {
   \brief Called when the cave adds more trips
   */
 void cwLinePlotManager::connectAddedTrips(int beginIndex, int endIndex) {
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != NULL);
     cwCave* cave = static_cast<cwCave*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = cave->trip(i);
@@ -145,6 +146,7 @@ void cwLinePlotManager::connectAddedTrips(int beginIndex, int endIndex) {
   \brief Called when the trip adds more chunks
   */
 void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
+    Q_ASSERT(qobject_cast<cwTrip*>(sender()) != NULL);
     cwTrip* trip = static_cast<cwTrip*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
         cwSurveyChunk* chunk = trip->chunk(i);
@@ -168,15 +170,15 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
-//        qDebug() << "----Run survex----" << LinePlotTask->status();
+        //        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
-//            qDebug() << "Running the task";
+            //            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-//            qDebug() << "Restart plot task";
+            //            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
