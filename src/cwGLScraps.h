@@ -9,8 +9,9 @@ class cwCavingRegion;
 class cwProject;
 
 //Qt includes
-#include <QGLShaderProgram>
-#include <QGLBuffer>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QSharedPointer>
 
 class cwGLScraps : public cwGLObject
 {
@@ -44,9 +45,9 @@ private:
         GLScrap();
         GLScrap(const cwTriangulatedData& data, cwProject* project);
 
-        QGLBuffer PointBuffer;
-        QGLBuffer IndexBuffer;
-        QGLBuffer TexCoords;
+        QOpenGLBuffer PointBuffer;
+        QOpenGLBuffer IndexBuffer;
+        QOpenGLBuffer TexCoords;
 
         int NumberOfIndices;
 
@@ -57,7 +58,7 @@ private:
     cwProject* Project; //!< The project file for loading textures
     cwCavingRegion* Region;
 
-    QGLShaderProgram* Program;
+    QOpenGLShaderProgram* Program;
     int UniformModelViewProjectionMatrix;
     int vVertex;
     int vScrapTexCoords;

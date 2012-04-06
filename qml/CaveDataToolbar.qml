@@ -1,6 +1,6 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 1.1
-import QtDesktop 0.1 as Desktop
+//import QtDesktop 0.1 as Desktop
 import Cavewhere 1.0
 
 Item {
@@ -19,45 +19,46 @@ Item {
             id: exportButton
             text: "Export"
 
-            onClicked: {
-                var globalPoint = mapToItem(null, 0, 2 * exportButton.height);
-                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
-            }
+            // TODO: Add export button back in
+//            onClicked: {
+//                var globalPoint = mapToItem(null, 0, 2 * exportButton.height);
+//                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
+//            }
 
-            Desktop.ContextMenu {
-                id: exportContextMenu
+//            Desktop.ContextMenu {
+//                id: exportContextMenu
 
-                Desktop.Menu {
-                    text: "Survex"
+//                Desktop.Menu {
+//                    text: "Survex"
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current trip"
-                        currentText: surveyExportManager.currentTripName
-                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
-                    }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current trip"
+//                        currentText: surveyExportManager.currentTripName
+//                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
+//                    }
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current cave"
-                        currentText: surveyExportManager.currentCaveName
-                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
-                    }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current cave"
+//                        currentText: surveyExportManager.currentCaveName
+//                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
+//                    }
 
-                    Desktop.MenuItem {
-                        text: "Region (all caves)"
-                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
-                    }
-                }
+//                    Desktop.MenuItem {
+//                        text: "Region (all caves)"
+//                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
+//                    }
+//                }
 
-                Desktop.Menu {
-                    text: "Compass"
+//                Desktop.Menu {
+//                    text: "Compass"
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current cave"
-                        currentText: surveyExportManager.currentCaveName
-                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
-                    }
-                }
-            }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current cave"
+//                        currentText: surveyExportManager.currentCaveName
+//                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
+//                    }
+//                }
+//            }
         }
 
 
@@ -66,21 +67,21 @@ Item {
 
             text: "Import"
 
+            // TODO: Add export button back in
+//            onClicked: {
+//                var globalPoint = mapToItem(null, 0, 2 * importButton.height);
+//                importContextMenu.showPopup(globalPoint.x, globalPoint.y)
+//            }
 
-            onClicked: {
-                var globalPoint = mapToItem(null, 0, 2 * importButton.height);
-                importContextMenu.showPopup(globalPoint.x, globalPoint.y)
-            }
+//            Desktop.ContextMenu {
+//                id: importContextMenu
 
-            Desktop.ContextMenu {
-                id: importContextMenu
+//                Desktop.MenuItem {
+//                    text: "Survex (.svx)"
+//                    onTriggered: surveyImportManager.importSurvex()
+//                }
 
-                Desktop.MenuItem {
-                    text: "Survex (.svx)"
-                    onTriggered: surveyImportManager.importSurvex()
-                }
-
-            }
+//            }
         }
     }
 

@@ -7,8 +7,8 @@
 //Qt includes
 #include <QVector>
 #include <QVector2D>
-#include <QGLBuffer>
-#include <QGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QOpenGLShaderProgram>
 
 //3rd party utils
 #include "Forsyth.h"
@@ -27,17 +27,17 @@ public:
     QVector<unsigned int> indexes();
     QVector<QVector2D> vertices();
 
-    void setShaderProgram(QGLShaderProgram* shaderProgram);
-    QGLShaderProgram* shaderProgram() const;
+    void setShaderProgram(QOpenGLShaderProgram* shaderProgram);
+    QOpenGLShaderProgram* shaderProgram() const;
 
 protected:
-    QGLShaderProgram* Program;
+    QOpenGLShaderProgram* Program;
 
     QVector<unsigned int> Indexes;
     QVector<QVector2D> Vertices;
 
-    QGLBuffer TriangleVertexBuffer;
-    QGLBuffer TriangleIndexBuffer;
+    QOpenGLBuffer TriangleVertexBuffer;
+    QOpenGLBuffer TriangleIndexBuffer;
     int vVertex;
 
     virtual void generate() = 0;
@@ -74,11 +74,11 @@ inline unsigned int cwTile::indexOf(int column, int row) const {
     return numVerticesOnADimension() * row + column;
 }
 
-inline void cwTile::setShaderProgram(QGLShaderProgram* shaderProgram) {
+inline void cwTile::setShaderProgram(QOpenGLShaderProgram* shaderProgram) {
     Program = shaderProgram;
 }
 
-inline QGLShaderProgram* cwTile::shaderProgram() const {
+inline QOpenGLShaderProgram* cwTile::shaderProgram() const {
     return Program;
 }
 

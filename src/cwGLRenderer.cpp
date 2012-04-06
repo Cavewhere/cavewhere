@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
+#include <QGLWidget>
 
 //Std includes
 #include "cwMath.h"
@@ -143,7 +144,7 @@ void cwGLRenderer::renderTextureFramebuffer() {
   */
 void cwGLRenderer::privateInitializeGL() {
     //Genereate the multi sample buffer for anti aliasing
-    MultiSampleFramebuffer = new QGLFramebufferObject(QSize(1, 1));
+    MultiSampleFramebuffer = new QOpenGLFramebufferObject(QSize(1, 1));
     HasBlit = false; //MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
 
     if(HasBlit) {
@@ -181,7 +182,7 @@ void cwGLRenderer::privateResizeGL() {
 
     //Recreate the multisample framebuffer
     delete MultiSampleFramebuffer;
-    QGLFramebufferObjectFormat multiSampleFormat;
+    QOpenGLFramebufferObjectFormat multiSampleFormat;
     if(HasBlit) {
         multiSampleFormat.setSamples(8);
 
@@ -215,9 +216,9 @@ void cwGLRenderer::privateResizeGL() {
         multiSampleFormat.setSamples(0);
     }
 
-    multiSampleFormat.setAttachment(QGLFramebufferObject::Depth);
+    multiSampleFormat.setAttachment(QOpenGLFramebufferObject::Depth);
     multiSampleFormat.setInternalTextureFormat(GL_RGBA);
-    MultiSampleFramebuffer = new QGLFramebufferObject(framebufferSize, multiSampleFormat);
+    MultiSampleFramebuffer = new QOpenGLFramebufferObject(framebufferSize, multiSampleFormat);
 
     if(!HasBlit) {
         //No multi sampling support

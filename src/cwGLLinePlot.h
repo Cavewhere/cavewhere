@@ -7,8 +7,8 @@
 //Qt includes
 #include <QVector3D>
 #include <QVector>
-#include <QGLBuffer>
-#include <QGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QOpenGLShaderProgram>
 
 class cwGLLinePlot : public cwGLObject
 {
@@ -34,8 +34,8 @@ private:
     float MaxZValue;
     float MinZValue;
 
-    QGLBuffer LinePlotVertexBuffer;
-    QGLBuffer LinePlotIndexBuffer;
+    QOpenGLBuffer LinePlotVertexBuffer;
+    QOpenGLBuffer LinePlotIndexBuffer;
     int IndexBufferSize;
 
     int vVertex; //attribute location
@@ -43,7 +43,7 @@ private:
     int UniformMaxZValue; //in shader uniform location
     int UniformMinZValue; //in shader uniform location
 
-    QGLShaderProgram* ShaderProgram;
+    QOpenGLShaderProgram* ShaderProgram;
 };
 
 #endif // CWGLLINEPLOT_H

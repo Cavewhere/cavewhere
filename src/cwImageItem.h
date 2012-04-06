@@ -69,8 +69,8 @@ private:
     int vVertex; //!< The attribute location of the vVertex
     int ModelViewProjectionMatrix; //!< The attribute location for modelViewProjection matrix
     cwImageTexture* NoteTexture;
-    QGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
-    QGLBuffer NoteVertexBuffer; //!< The vertex buffer
+    QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
+    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();
     void initializeVertexBuffers();

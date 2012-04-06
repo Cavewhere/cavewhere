@@ -1,5 +1,5 @@
 import QtQuick 1.1
-import QtDesktop 0.1 as Desktop
+//import QtDesktop 0.1 as Desktop
 import Cavewhere 1.0
 
 Item {
@@ -74,14 +74,25 @@ Item {
         anchors.fill: autoTransformCheckBox
     }
 
-    Desktop.CheckBox {
-        id: autoTransformCheckBox
-        text: "Auto Calculate"
+    // TODO: Fix autoTransform checkbox
+    Rectangle {
+        width: 20
+        height: 15
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
 
         y: scrapInfoText.height / 2.0
+        color: "red"
     }
+
+//    Desktop.CheckBox {
+//        id: autoTransformCheckBox
+//        text: "Auto Calculate"
+//        anchors.left: checkBoxGroup.left
+//        anchors.leftMargin: 6
+
+//        y: scrapInfoText.height / 2.0
+//    }
 
     Column {
         id: column1

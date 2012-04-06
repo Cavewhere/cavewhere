@@ -10,8 +10,8 @@ cwTile::cwTile() :
   \brief Called when the opengl context is good
   */
 void cwTile::initialize() {
-    TriangleIndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
-    TriangleVertexBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
+    TriangleIndexBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+    TriangleVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
 
     TriangleIndexBuffer.create();
     TriangleVertexBuffer.create();
@@ -55,12 +55,12 @@ void cwTile::setTileSize(int size) {
     generate();
 
     TriangleIndexBuffer.bind();
-    TriangleIndexBuffer.setUsagePattern(QGLBuffer::StaticDraw);
+    TriangleIndexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     TriangleIndexBuffer.allocate(Indexes.data(), Indexes.size() * sizeof(GLuint));
     TriangleIndexBuffer.release();
 
     TriangleVertexBuffer.bind();
-    TriangleVertexBuffer.setUsagePattern(QGLBuffer::StaticDraw);
+    TriangleVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     TriangleVertexBuffer.allocate(Vertices.data(), Vertices.size() * sizeof(QVector2D));
     TriangleVertexBuffer.release();
 }

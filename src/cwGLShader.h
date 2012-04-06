@@ -1,16 +1,15 @@
 #ifndef CWGLSHADER_H
 #define CWGLSHADER_H
 
-#include <QGLShader>
+#include <QOpenGLShader>
 #include <QFileSystemWatcher>
 #include <QString>
 
-class cwGLShader : public QGLShader
+class cwGLShader : public QOpenGLShader
 {
     Q_OBJECT
 public:
-    explicit cwGLShader(QGLShader::ShaderType type, QObject * parent = 0);
-    cwGLShader ( QGLShader::ShaderType type, const QGLContext * context, QObject * parent = 0);
+    explicit cwGLShader(QOpenGLShader::ShaderType type, QObject * parent = 0);
 
     void setSourceFile(QString filename);
     QString sourceFile() const;

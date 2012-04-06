@@ -3,6 +3,9 @@
 #include "cwDebug.h"
 #include "cwGLShader.h"
 
+//Qt includes
+#include <QOpenGLContext>
+
 cwShaderDebugger::cwShaderDebugger(QObject *parent) :
     QObject(parent),
     Context(NULL)
@@ -14,14 +17,14 @@ cwShaderDebugger::cwShaderDebugger(QObject *parent) :
 /**
   \brief Adds the programe for debugging
 
-  The shaders in the program need to be cwGLShader instead of QGLShader for the
+  The shaders in the program need to be cwGLShader instead of QOpenGLShader for the
   debugging to work correctly
   */
-void cwShaderDebugger::addShaderProgram(QGLShaderProgram* program) {
-    QList<QGLShader*> shaders = program->shaders();
+void cwShaderDebugger::addShaderProgram(QOpenGLShaderProgram* program) {
+    QList<QOpenGLShader*> shaders = program->shaders();
 
     //Update the lookup
-    foreach(QGLShader* shader, shaders) {
+    foreach(QOpenGLShader* shader, shaders) {
         cwGLShader* ourShader = qobject_cast<cwGLShader*>(shader);
         if(ourShader == NULL) {
             qDebug() << "Can't debug shader " << shader << "because it's not a cwGLShader" << LOCATION;
@@ -46,9 +49,9 @@ void cwShaderDebugger::addShaderProgram(QGLShaderProgram* program) {
 void cwShaderDebugger::recompileShader(QString path) {
 
     if(Context != NULL) {
-        Context->makeCurrent();
+        Context->makeCurrent(Context->surface());
     } else {
-        if(QGLContext::currentContext() == NULL) {
+        if(QOpenGLContext::currentContext() == NULL) {
             qDebug() << "Can't recompileShader: " << path << "because no OpenGL context is current";
         }
     }
@@ -56,7 +59,7 @@ void cwShaderDebugger::recompileShader(QString path) {
    // qDebug() << "Sauce:" << ShaderSourceWatcher->files();
 
     cwGLShader* shader = FileNameToShader.value(path, NULL);
-    QGLShaderProgram* program = NULL;
+    QOpenGLShaderProgram* program = NULL;
     if(shader != NULL) {
         program = ShaderToShaderProgram.value(shader, NULL);
     }

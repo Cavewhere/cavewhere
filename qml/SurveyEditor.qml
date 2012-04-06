@@ -1,6 +1,6 @@
 import QtQuick 1.0
 import Cavewhere 1.0
-import QtDesktop 0.1
+//import QtDesktop 0.1
 import "Utils.js" as Utils
 
 Rectangle {
@@ -16,18 +16,19 @@ Rectangle {
         trip: currentTrip
     }
 
-    ScrollBar {
-        id: surveyEditorScollbar
-        anchors.top: flickArea.top
-        anchors.bottom: flickArea.bottom
-        anchors.left: flickArea.right
-        orientation: Qt.Vertical
-        minimumValue: 0
-        maximumValue: flickArea.contentHeight - height < 0 ? 0 : flickArea.contentHeight - height
-        visible: maximumValue > 0
-        singleStep: 1
-        onValueChanged: flickArea.contentY = value
-    }
+    // TODO: Add scrollbars back in
+//    ScrollBar {
+//        id: surveyEditorScollbar
+//        anchors.top: flickArea.top
+//        anchors.bottom: flickArea.bottom
+//        anchors.left: flickArea.right
+//        orientation: Qt.Vertical
+//        minimumValue: 0
+//        maximumValue: flickArea.contentHeight - height < 0 ? 0 : flickArea.contentHeight - height
+//        visible: maximumValue > 0
+//        singleStep: 1
+//        onValueChanged: flickArea.contentY = value
+//    }
 
 
     Flickable {
@@ -54,9 +55,10 @@ Rectangle {
             }
         }
 
-        onContentYChanged: {
-            surveyEditorScollbar.value = contentY
-        }
+    // TODO: Add scrollbars back in
+//        onContentYChanged: {
+//            surveyEditorScollbar.value = contentY
+//        }
 
         Column {
             id: column

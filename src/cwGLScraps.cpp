@@ -82,16 +82,16 @@ void cwGLScraps::draw() {
   \brief This initilizes the shaders for the scraps
   */
 void cwGLScraps::initializeShaders() {
-    cwGLShader* scrapVertexShader = new cwGLShader(QGLShader::Vertex);
+    cwGLShader* scrapVertexShader = new cwGLShader(QOpenGLShader::Vertex);
     scrapVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.vert");
 
-    cwGLShader* scrapFragmentShader = new cwGLShader(QGLShader::Fragment);
+    cwGLShader* scrapFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
 
-    cwGLShader* scrapGeometryShader = new cwGLShader(QGLShader::Geometry);
+    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
     scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
 
-    Program = new QGLShaderProgram(this);
+    Program = new QOpenGLShaderProgram(this);
     Program->addShader(scrapVertexShader);
     Program->addShader(scrapFragmentShader);
     Program->addShader(scrapGeometryShader);
@@ -124,14 +124,14 @@ cwGLScraps::GLScrap::GLScrap() :
 cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project) :
     Texture(new cwImageTexture())
 {
-    PointBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
+    PointBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     PointBuffer.create();
     PointBuffer.bind();
     int pointBufferSize = data.points().size() * sizeof(QVector3D);
     PointBuffer.allocate(data.points().constData(), pointBufferSize);
     PointBuffer.release();
 
-    IndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
+    IndexBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
     IndexBuffer.create();
     IndexBuffer.bind();
     int indexBufferSize = data.indices().size() * sizeof(uint);
@@ -139,7 +139,7 @@ cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project)
     IndexBuffer.release();
     NumberOfIndices = data.indices().size();
 
-    TexCoords = QGLBuffer(QGLBuffer::VertexBuffer);
+    TexCoords = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     TexCoords.create();
     TexCoords.bind();
     int texCoordSize = data.texCoords().size() * sizeof(QVector2D);

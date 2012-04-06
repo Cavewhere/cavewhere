@@ -108,13 +108,13 @@ void cwImageItem::initializeGL() {
   Initilizes the shaders for this object
   */
 void cwImageItem::initializeShaders() {
-    cwGLShader* imageVertexShader = new cwGLShader(QGLShader::Vertex);
+    cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
     imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
 
-    cwGLShader* imageFragmentShader = new cwGLShader(QGLShader::Fragment);
+    cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
 
-    ImageProgram = new QGLShaderProgram(this);
+    ImageProgram = new QOpenGLShaderProgram(this);
     ImageProgram->addShader(imageVertexShader);
     ImageProgram->addShader(imageFragmentShader);
 
@@ -138,7 +138,7 @@ void cwImageItem::initializeShaders() {
   */
 void cwImageItem::initializeVertexBuffers() {
     //Create the vertex buffer
-    NoteVertexBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
+    NoteVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     NoteVertexBuffer.create();    //Create the vertexes buffer to render a quad
 
     QVector<QVector2D> vertices;
@@ -150,7 +150,7 @@ void cwImageItem::initializeVertexBuffers() {
 
     //Allocate the buffer array for this object
     NoteVertexBuffer.bind();
-    NoteVertexBuffer.setUsagePattern(QGLBuffer::StaticDraw);
+    NoteVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     NoteVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
     NoteVertexBuffer.release();
 }

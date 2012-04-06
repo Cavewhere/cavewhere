@@ -8,7 +8,7 @@ class cwRegularTile;
 class cwShaderDebugger;
 
 //Qt includes
-#include <QGLShaderProgram>
+#include <QOpenGLShaderProgram>
 #include <QTimer>
 
 class cwGLTerrain : public cwGLObject
@@ -55,7 +55,7 @@ private:
     cwEdgeTile* EdgeTile;
     cwRegularTile* RegularTile;
 
-    QGLShaderProgram* TileProgram;
+    QOpenGLShaderProgram* TileProgram;
     int UniformModelViewProjectionMatrix;
     int UniformModelMatrix;
 

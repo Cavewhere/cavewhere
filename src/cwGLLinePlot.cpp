@@ -26,13 +26,13 @@ void cwGLLinePlot::initialize() {
   This initializes all the shaders for the line plot
   */
 void cwGLLinePlot::initializeShaders() {
-    cwGLShader* linePlotVertexShader = new cwGLShader(QGLShader::Vertex);
+    cwGLShader* linePlotVertexShader = new cwGLShader(QOpenGLShader::Vertex);
     linePlotVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.vert");
 
-    cwGLShader* linePlotFragmentShader = new cwGLShader(QGLShader::Fragment);
+    cwGLShader* linePlotFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     linePlotFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.frag");
 
-    ShaderProgram = new QGLShaderProgram(this);
+    ShaderProgram = new QOpenGLShaderProgram(this);
     ShaderProgram->addShader(linePlotVertexShader);
     ShaderProgram->addShader(linePlotFragmentShader);
 
@@ -55,18 +55,18 @@ void cwGLLinePlot::initializeShaders() {
   */
 void cwGLLinePlot::initializeBuffers() {
     //Setup the buffers
-    LinePlotVertexBuffer = QGLBuffer(QGLBuffer::VertexBuffer);
-    LinePlotIndexBuffer = QGLBuffer(QGLBuffer::IndexBuffer);
+    LinePlotVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    LinePlotIndexBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
 
     LinePlotVertexBuffer.create();
     LinePlotIndexBuffer.create();
 
     LinePlotVertexBuffer.bind();
-    LinePlotVertexBuffer.setUsagePattern(QGLBuffer::DynamicDraw);
+    LinePlotVertexBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
     LinePlotVertexBuffer.release();
 
     LinePlotIndexBuffer.bind();
-    LinePlotIndexBuffer.setUsagePattern(QGLBuffer::DynamicDraw);
+    LinePlotIndexBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
     LinePlotIndexBuffer.release();
 }
 

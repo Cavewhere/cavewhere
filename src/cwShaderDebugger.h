@@ -3,7 +3,7 @@
 
 //Qt includes
 #include <QObject>
-#include <QGLShaderProgram>
+#include <QOpenGLShaderProgram>
 #include <QFileSystemWatcher>
 
 //Our includes
@@ -15,10 +15,10 @@ class cwShaderDebugger : public QObject
 public:
     explicit cwShaderDebugger(QObject *parent = 0);
 
-    void addShaderProgram(QGLShaderProgram* program);
+    void addShaderProgram(QOpenGLShaderProgram* program);
 
-    void setGLContext(QGLContext* widget);
-    QGLContext* GLContext() const;
+    void setGLContext(QOpenGLContext* widget);
+    QOpenGLContext* GLContext() const;
 
 signals:
     void shaderReloaded(cwGLShader* shader); //Called when ever the file has been reloaded
@@ -29,23 +29,23 @@ private slots:
     void recompileShader(QString path);
 
 private:
-    QGLContext* Context;
+    QOpenGLContext* Context;
 
     //Reverse lookups
     QMap<QString, cwGLShader*> FileNameToShader;
-    QMap<cwGLShader*, QGLShaderProgram*> ShaderToShaderProgram;
+    QMap<cwGLShader*, QOpenGLShaderProgram*> ShaderToShaderProgram;
 
-    QList<QGLShaderProgram*> Programs;
+    QList<QOpenGLShaderProgram*> Programs;
 
     QFileSystemWatcher* ShaderSourceWatcher;
 
 };
 
-inline void cwShaderDebugger::setGLContext(QGLContext* context) {
+inline void cwShaderDebugger::setGLContext(QOpenGLContext* context) {
     Context = context;
 }
 
-inline QGLContext* cwShaderDebugger::GLContext() const {
+inline QOpenGLContext* cwShaderDebugger::GLContext() const {
     return Context;
 }
 

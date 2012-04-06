@@ -1,5 +1,5 @@
 import QtQuick 1.1
-import QtDesktop 0.1
+//import QtDesktop 0.1
 
 Item {
     id: unitInput
@@ -33,12 +33,13 @@ Item {
         }
     }
 
-    ContextMenu {
-        id: numeratorMenu
-        model: listModel
-        selectedIndex: unitInput.unit
-        onSelectedIndexChanged: newUnit(selectedIndex)
-    }
+    // TODO: Put unit selection back in
+//    ContextMenu {
+//        id: numeratorMenu
+//        model: listModel
+//        selectedIndex: unitInput.unit
+//        onSelectedIndexChanged: newUnit(selectedIndex)
+//    }
 
     ListModel {
         id: listModel

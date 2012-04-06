@@ -1,12 +1,14 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 1.1
-import QtDesktop 0.1 as Desktop
+//import QtDesktop 0.1 as Desktop
 
 Item {
 
     property color backgroundColor: "white"
-    property alias checked: checkbox.checked
-    property alias text: checkbox.text
+//    property alias checked: checkbox.checked
+//    property alias text: checkbox.text
+    property bool checked: false
+    property string text: "Fix me"
     property bool contentsVisible: true
     property int contentHeight
     default property alias contentData: contentArea.data
@@ -50,10 +52,11 @@ Item {
         visible: contentsVisible
     }
 
-    Desktop.CheckBox {
-        id: checkbox
-        anchors.left: checkBoxGroup.left
-        anchors.leftMargin: 6
-    }
+    // TODO: Fix CheckableGroupBox, add checkboxes back in
+//    Desktop.CheckBox {
+//        id: checkbox
+//        anchors.left: checkBoxGroup.left
+//        anchors.leftMargin: 6
+//    }
 
 }

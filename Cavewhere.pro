@@ -4,8 +4,17 @@
 #
 #-------------------------------------------------
 
+greaterThan(QT_MAJOR_VERSION, 4) {
+   #For porting qt4 to qt5
+   QT += widgets
+   QT += quick1
+   QT += opengl
 
-QT       += core gui declarative xml opengl sql
+   #Extra modules
+   QT += sql concurrent xml
+} else {
+   QT += core gui declarative xml opengl sql
+}
 
 TARGET = Cavewhere
 TEMPLATE = app

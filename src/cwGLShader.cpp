@@ -4,16 +4,11 @@
 //Qt includes
 #include <QFileInfo>
 
-cwGLShader::cwGLShader(QGLShader::ShaderType type, QObject *parent) :
-    QGLShader(type, parent)
+cwGLShader::cwGLShader(QOpenGLShader::ShaderType type, QObject *parent) :
+    QOpenGLShader(type, parent)
 {
 }
 
-cwGLShader::cwGLShader(QGLShader::ShaderType type, const QGLContext * context, QObject * parent):
-    QGLShader(type, context, parent)
-{
-
-}
 
 /**
   \brief Sets the shader's source file

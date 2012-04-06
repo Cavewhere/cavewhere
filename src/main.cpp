@@ -1,6 +1,7 @@
 //Qt includes
-#include <QtGui/QApplication>
+#include <QtWidgets/QApplication>
 #include <QDeclarativeComponent>
+#include <QThread>
 
 //Our includes
 #include "cwMainWindow.h"

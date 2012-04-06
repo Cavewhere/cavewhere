@@ -6,13 +6,13 @@
 
 //Qt includes
 #include <QDeclarativeItem>
-#include <QGLBuffer>
+#include <QOpenGLBuffer>
 #include <QQuaternion>
 #include <QStateMachine>
 #include <QMouseEvent>
 #include <QWheelEvent>
-#include <QGLShaderProgram>
-#include <QGLFramebufferObject>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLFramebufferObject>
 class QGLWidget;
 
 //Our includes
@@ -60,7 +60,7 @@ protected:
     QGLWidget* GLWidget; //This is so we make current when setting up the object
 
     //Framebuffer for renderering
-    QGLFramebufferObject* MultiSampleFramebuffer;
+    QOpenGLFramebufferObject* MultiSampleFramebuffer;
 
     //The framebuffer that the render buffer will be blit to
     GLuint TextureFramebuffer;

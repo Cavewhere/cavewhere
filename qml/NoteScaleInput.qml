@@ -1,5 +1,4 @@
 import QtQuick 1.1
-import QtDesktop 0.1 as Destkop
 import Cavewhere 1.0
 import "Utils.js" as Utils
 

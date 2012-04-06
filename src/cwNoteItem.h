@@ -58,13 +58,13 @@ protected:
 private:
 
     //The shader program for the note
-    QGLShaderProgram* ImageProgram;
+    QOpenGLShaderProgram* ImageProgram;
 
     //The vertex buffer
-    QGLBuffer NoteVertexBuffer;
+    QOpenGLBuffer NoteVertexBuffer;
 
     //The vertex buffer for the stations
-  //  QGLBuffer StationVertexBuffer;
+  //  QOpenGLBuffer StationVertexBuffer;
 
     //The attribute location of the vVertex
     int vVertex;

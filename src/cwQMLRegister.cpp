@@ -59,6 +59,7 @@
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
 #include "cwTripLengthTask.h"
+#include <QGLWidget>
 
 cwQMLRegister::cwQMLRegister()
 {
