@@ -11,9 +11,10 @@ Item {
     width: textArea.width
     height: textArea.height
 
-    onUnitChanged: {
-        numeratorMenu.selectedIndex = unitInput.unit
-    }
+    // TODO: QtDesktop include
+//    onUnitChanged: {
+//        numeratorMenu.selectedIndex = unitInput.unit
+//    }
 
     Pallete {
         id: pallete
@@ -22,7 +23,8 @@ Item {
     Text {
         id: textArea
         color: pallete.inputTextColor
-        text: " " + numeratorMenu.selectedText
+        // TODO: QtDesktop include
+//        text: " " + numeratorMenu.selectedText
 
         MouseArea {
             anchors.fill: parent
@@ -45,12 +47,13 @@ Item {
         id: listModel
     }
 
-    onUnitModelChanged: {
-        listModel.clear()
-        for(var unit in unitModel) {
-            listModel.append({"text": unitModel[unit]})
-        }
-        numeratorMenu.rebuildMenu()
-        numeratorMenu.selectedIndex = unitInput.unit
-    }
+            // TODO: QtDesktop include
+//    onUnitModelChanged: {
+//        listModel.clear()
+//        for(var unit in unitModel) {
+//            listModel.append({"text": unitModel[unit]})
+//        }
+//        numeratorMenu.rebuildMenu()
+//        numeratorMenu.selectedIndex = unitInput.unit
+//    }
 }

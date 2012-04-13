@@ -1,10 +1,12 @@
 //Qt includes
-#include <QtWidgets/QApplication>
-#include <QDeclarativeComponent>
+#include <QGuiApplication>
+//#include <QDeclarativeComponent>
 #include <QThread>
+#include <QtQuick/QQuickView>
+#include <QModelIndex>
 
 //Our includes
-#include "cwMainWindow.h"
+//#include "cwMainWindow.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
 #include "cwCavingRegion.h"
@@ -14,7 +16,7 @@
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
+    QGuiApplication a(argc, argv);
 
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
@@ -24,15 +26,20 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
 
-    QApplication::setOrganizationName("Vadose Solutions");
-    QApplication::setOrganizationDomain("cavewhere.com");
-    QApplication::setApplicationName("Cavewhere");
-    QApplication::setApplicationVersion("0.1");
+    QGuiApplication::setOrganizationName("Vadose Solutions");
+    QGuiApplication::setOrganizationDomain("cavewhere.com");
+    QGuiApplication::setApplicationName("Cavewhere");
+    QGuiApplication::setApplicationVersion("0.1");
 
     cwGlobalDirectory::setupBaseDirectory();
 
-    cwMainWindow w;
-    w.show();
+    QQuickView view;
+    view.setResizeMode(QQuickView::SizeRootObjectToView);
+    view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
+    view.show();
+
+//    cwMainWindow w;
+//    w.show();
 
     return a.exec();
 }

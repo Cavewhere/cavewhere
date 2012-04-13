@@ -3,7 +3,7 @@
 
 //Qt includes
 #include <QObject>
-#include <QDeclarativeImageProvider>
+#include <QtQml/QQmlImageProvider>
 #include <QMutex>
 #include <QDebug>
 
@@ -11,7 +11,7 @@
 #include <cwImage.h>
 #include <cwImageData.h>
 
-class cwProjectImageProvider : public QObject, public QDeclarativeImageProvider
+class cwProjectImageProvider : public QObject, public QQmlImageProvider
 {
     Q_OBJECT
 

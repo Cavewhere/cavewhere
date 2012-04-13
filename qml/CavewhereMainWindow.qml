@@ -1,9 +1,11 @@
-import Qt 4.7
-import Cavewhere 1.0
+import QtQuick 2.0
+//import Cavewhere 1.0
 
 Rectangle {
     id: rootQMLItem
-    anchors.fill: parent;
+    width: 1500
+    height: 1000
+//    anchors.fill: parent;
 
     MainSideBar {
         id: mainSideBar;
@@ -34,24 +36,25 @@ Rectangle {
 
         property int currentPosition: height * mainSideBar.pageShownReal
 
-//       Replace with the view
-        GLTerrainRenderer {
-//            visible: mainSideBar.pageShown == "view"
-            glWidget: mainGLWidget
-            cavingRegion: region
-            width:  parent.width
-            height: parent.height
-            x: 0; y: -container.currentPosition
+////       Replace with the view
+//        GLTerrainRenderer {
+////            visible: mainSideBar.pageShown == "view"
+//            glWidget: mainGLWidget
+//            cavingRegion: region
+//            width:  parent.width
+//            height: parent.height
+//            x: 0; y: -container.currentPosition
 
-            Component.onCompleted: {
-                //Setup the linePlotManager with the glLinePlot
-                linePlotManager.setGLLinePlot(linePlot);
-                scrapManager.setGLScraps(scraps);
-            }
-        }
+//            Component.onCompleted: {
+//                //Setup the linePlotManager with the glLinePlot
+//                linePlotManager.setGLLinePlot(linePlot);
+//                scrapManager.setGLScraps(scraps);
+//            }
+//        }
 
-        DataMainPage {
-            //visible: mainSideBar.pageShown == "data"
+//        DataMainPage {
+        Rectangle {
+        //visible: mainSideBar.pageShown == "data"
             width:  parent.width
             height: parent.height
             x: 0;
@@ -68,12 +71,12 @@ Rectangle {
         }
     }
 
-    //There's only one shadow input text editor for the cavewhere program
-    //This make the input creation much faster for any thing that needs an editor
-    //Only one editor can be open at a time
-    GlobalShadowTextInput {
-        id: globalShadowTextInput
-    }
+//    //There's only one shadow input text editor for the cavewhere program
+//    //This make the input creation much faster for any thing that needs an editor
+//    //Only one editor can be open at a time
+//    GlobalShadowTextInput {
+//        id: globalShadowTextInput
+//    }
 
 
 }

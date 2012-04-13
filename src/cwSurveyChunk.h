@@ -11,7 +11,7 @@ class cwCave;
 //Qt
 #include <QObject>
 #include <QList>
-#include <QDeclarativeListProperty>
+//#include <QDeclarativeListProperty>
 #include <QVariant>
 
 class cwSurveyChunk : public QObject {

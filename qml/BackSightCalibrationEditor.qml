@@ -15,8 +15,9 @@ CheckableGroupBox {
 
     onCalibrationChanged: {
         checked = calibration.backSights
-        compassCorrected.checked = calibration.correctedCompassBacksight
-        clinoCorrected.checked = calibration.correctedClinoBacksight
+        // TODO: QtDesktop include
+        //        compassCorrected.checked = calibration.correctedCompassBacksight
+//        clinoCorrected.checked = calibration.correctedClinoBacksight
     }
 
     onCheckedChanged: {

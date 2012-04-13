@@ -48,7 +48,8 @@ Item {
 
         color: style.floatingWidgetColor
         radius: style.floatingWidgetRadius
-        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
+        // TODO: QtDesktop include
+//        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
         width: checkBoxGroup.width + checkBoxGroup.x * 2.0
         //        y: groupAreaRect.height / 2.0
     }
@@ -59,7 +60,8 @@ Item {
         radius: style.floatingWidgetRadius
         color: "#00000000"
 
-        anchors.top: autoTransformCheckBox.verticalCenter
+                // TODO: QtDesktop include
+//        anchors.top: autoTransformCheckBox.verticalCenter
         anchors.left: column1.left
         anchors.right: column1.right
         anchors.bottom: column1.bottom
@@ -71,7 +73,8 @@ Item {
 
     Rectangle {
         color: backgroundRect.color
-        anchors.fill: autoTransformCheckBox
+        // TODO: QtDesktop include
+        //        anchors.fill: autoTransformCheckBox
     }
 
     // TODO: Fix autoTransform checkbox
@@ -108,7 +111,8 @@ Item {
             noteTransform: editor.noteTransform
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
             northUpHelp: northUpHelpArea
-            enable: !autoTransformCheckBox.checked
+                    // TODO: QtDesktop include
+//            enable: !autoTransformCheckBox.checked
         }
 
         HelpArea {
@@ -123,7 +127,8 @@ Item {
             noteTransform: editor.noteTransform
             scaleHelp: scaleHelpAreaId
             onScaleInteractionActivated: interactionManager.active(scaleInteraction)
-            autoScaling: autoTransformCheckBox.checked
+                // TODO: QtDesktop include
+            //    autoScaling: autoTransformCheckBox.checked
         }
 
         HelpArea {

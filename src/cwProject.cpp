@@ -276,10 +276,10 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
     //Run the addImageTask, in an asyncus way
     addImageTask->start();
 
-    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
-    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    progressDialog->setTask(addImageTask);
-    progressDialog->show();
+//    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
+//    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+//    progressDialog->setTask(addImageTask);
+//    progressDialog->show();
 }
 
 /**

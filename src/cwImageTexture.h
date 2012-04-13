@@ -2,7 +2,7 @@
 #define CWIMAGETEXTURE_H
 
 //Glew includes
-#include <GL/glew.h>
+//#include <GL/glew.h>
 
 //Qt include
 #include <QObject>
@@ -10,6 +10,7 @@
 #include <QPair>
 #include <QByteArray>
 #include <QSize>
+#include <QGLFunctions>
 
 //Our includes
 #include "cwImage.h"

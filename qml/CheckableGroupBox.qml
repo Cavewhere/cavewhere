@@ -5,6 +5,7 @@ import QtQuick 1.1
 Item {
 
     property color backgroundColor: "white"
+            // TODO: QtDesktop include
 //    property alias checked: checkbox.checked
 //    property alias text: checkbox.text
     property bool checked: false
@@ -13,7 +14,8 @@ Item {
     property int contentHeight
     default property alias contentData: contentArea.data
 
-    height: contentsVisible ? checkbox.height + contentHeight + 3 : checkbox.height
+            // TODO: QtDesktop include
+//    height: contentsVisible ? checkbox.height + contentHeight + 3 : checkbox.height
 
     Style {
         id: style
@@ -27,7 +29,8 @@ Item {
         color: "#00000000"
         visible: contentsVisible
 
-        anchors.top: checkbox.verticalCenter
+                // TODO: QtDesktop include
+//        anchors.top: checkbox.verticalCenter
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -39,7 +42,8 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
 
-            anchors.topMargin: checkbox.height / 2
+                    // TODO: QtDesktop include
+//            anchors.topMargin: checkbox.height / 2
             anchors.leftMargin: 3
             anchors.rightMargin: 3
             anchors.bottomMargin: 3
@@ -48,7 +52,8 @@ Item {
 
     Rectangle {
         color: backgroundColor
-        anchors.fill: checkbox
+                // TODO: QtDesktop include
+//        anchors.fill: checkbox
         visible: contentsVisible
     }
 

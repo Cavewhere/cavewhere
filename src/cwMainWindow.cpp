@@ -98,7 +98,7 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
   //  Project->load("/Users/philipschuchardt/test.cw");
 
     //Positions and resize the main window
-    initialWindowShape();
+    //initialWindowShape();
 }
 
 void cwMainWindow::changeEvent(QEvent *e)
