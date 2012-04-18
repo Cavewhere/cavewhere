@@ -17,7 +17,7 @@ CheckableGroupBox {
 
     anchors.margins: 3
     contentHeight: frontSightContent.height
-    text: "<b>Back Sights</b>"
+    text: qsTr("<b>Back Sights</b>")
     checked: calibration.backSights
 
     onCalibrationChanged: {
@@ -40,7 +40,7 @@ CheckableGroupBox {
 
             LabelWithHelp {
                 id: compassCalibrationLabel
-                text: "Compass calibration"
+                text: qsTr("Compass calibration")
                 helpArea: compassCalibarationHelpArea
             }
 
@@ -58,14 +58,14 @@ CheckableGroupBox {
             id: compassCalibarationHelpArea
             anchors.left: parent.left
             anchors.right: parent.right
-            text: "<p>Back sight compass calibration allows you to correct an instrument that's off.
+            text: qsTr("<p>Back sight compass calibration allows you to correct an instrument that's off.
 The calibration is added to uncorrected value
 (the value you read off the instrument) to find the true value.</p>
 <b>UncorrectedValue + Calibration = TrueValue</b>
 <p> For example, the reading in the cave was 180°. Your instrument is off by -2°. The bearing is really
 182° instead of 180 (because your insturment is subtracting 2° at every shot).  So you need to enter 2
 for the calibration to correct it. UncorrectedValue = 180°,
-Calibration = 2°, so 180° + (2°) = 182° </p>"
+Calibration = 2°, so 180° + (2°) = 182° </p>")
         }
 
         Row {
@@ -73,7 +73,7 @@ Calibration = 2°, so 180° + (2°) = 182° </p>"
 
             LabelWithHelp {
                 id: clinoCalibrationLabel
-                text: "Clino calibration"
+                text: qsTr("Clino calibration")
                 helpArea: clinoCalibarationHelpArea
             }
 
@@ -91,14 +91,14 @@ Calibration = 2°, so 180° + (2°) = 182° </p>"
             id: clinoCalibarationHelpArea
             anchors.left: parent.left
             anchors.right: parent.right
-            text: "<p>Back sight clino calibration allows you to correct an instrument that's off.
+            text: qsTr("<p>Back sight clino calibration allows you to correct an instrument that's off.
 The calibration is added to uncorrected value
 (the value you read off the instrument) to find the true value.</p>
 <b>UncorrectedValue + Calibration = TrueValue</b>
 <p> For example, the reading in the cave was +4°. Your instrument is off by +1°. The bearing is really
 +3° instead of +4° (because your insturment is adding extra 1° at every shot).  So you need to enter -1
 for the calibration to correct it. UncorrectedValue = +4°,
-Calibration = -1°, so +4° + (-1°) = +3° </p>"
+Calibration = -1°, so +4° + (-1°) = +3° </p>")
         }
 
         BreakLine {}
@@ -113,7 +113,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
 
             Controls.CheckBox {
                 id: compassCorrected
-                text: "Corrected <i>Compass</i>"
+                text: qsTr("Corrected <i>Compass</i>")
 
                 checked: calibration.correctedCompassBacksight
 
@@ -128,9 +128,9 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
             id: correctedCompassHelpArea
             anchors.left: parent.left
             anchors.right: parent.right
-            text: "Corrected compass allow you to entry back sights as if they were read as
+            text: qsTr("Corrected compass allow you to entry back sights as if they were read as
             a front sight.  This will <b>subtract 180°</b> to all back sight compass readings to get
-            the true value."
+            the true value.")
         }
 
         Row {
@@ -143,7 +143,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
 
             Controls.CheckBox {
                 id: clinoCorrected
-                text: "Corrected <i>Clino</i>"
+                text: qsTr("Corrected <i>Clino</i>")
 
                 checked: calibration.correctedClinoBacksight
 
@@ -157,9 +157,9 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
             id: correctedClinoHelpArea
             anchors.left: parent.left
             anchors.right: parent.right
-            text: "Corrected clino allow you to entry back sights as if they were read as
+            text: qsTr("Corrected clino allow you to entry back sights as if they were read as
             a front sight.  This will <b>subtract 90°</b> to all back sight clino readings to get
-            the true value."
+            the true value.")
         }
     }
 }

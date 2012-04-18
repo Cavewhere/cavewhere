@@ -58,7 +58,7 @@ Rectangle {
 
     Text {
         id: usedStationsLabel
-        text: "Used Stations"
+        text: qsTr("Used Stations")
         font.bold: true
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top

@@ -34,14 +34,14 @@ Item {
         LabelWithHelp {
             id: labelId
             helpArea: northUpHelp
-            text: "North"
+            text: qsTr("North")
             anchors.verticalCenter: parent.verticalCenter
         }
 
         ClickTextInput {
             id: clickInput
             readOnly: !enable
-            text: ""
+            text: qsTr("")
             onFinishedEditting: ( { } )
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -49,7 +49,7 @@ Item {
         Text {
             id: unit
             textFormat: Text.RichText
-            text: "&deg"
+            text: qsTr("&deg")
             anchors.verticalCenter: parent.verticalCenter
         }
     }

@@ -15,7 +15,7 @@ GroupBox {
     property Calibration calibration
 
     contentHeight: column.height
-    text: "Declination"
+    text: qsTr("Declination")
 
     Column {
         id: column
@@ -27,7 +27,7 @@ GroupBox {
 
             LabelWithHelp {
                 id: declination
-                text: "Declination"
+                text: qsTr("Declination")
                 helpArea: declinationHelp
             }
 
@@ -43,9 +43,9 @@ GroupBox {
 
         HelpArea {
             id: declinationHelp
-            text: "<p>Magnetic declination is the <b>angle between magnetic north and true north</b></p>
+            text: qsTr("<p>Magnetic declination is the <b>angle between magnetic north and true north</b></p>
             Cavewhere calculates the true bearing (<b>TB</b>) by adding declination (<b>D</b>) to magnetic bearing (<b>MB</b>).
-            <center><b>MB + D = TB</b></center>"
+            <center><b>MB + D = TB</b></center>")
             anchors.left: parent.left
             anchors.right: parent.right
         }

@@ -21,8 +21,8 @@ DataTabWidget {
 //    }
 
 //    Text {
-//        property string label: "Calibrations"
+//        property string label: qsTr("Calibrations")
 //        property string icon: "qrc:icons/calibration.png"
-//        text: "This is the Team page"
+//        text: qsTr("This is the Team page")
 //    }
 }

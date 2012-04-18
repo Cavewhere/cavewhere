@@ -83,16 +83,16 @@ Rectangle {
             name: {
                 switch(region.caveCount) {
                 case 0:
-                    return ""
+                    return qsTr("")
                 case 1:
-                    return "Only 1 Cave";
+                    return qsTr("Only 1 Cave");
                 default:
-                    return "All " + region.caveCount + " Caves";
+                    return qsTr("All " + region.caveCount + " Caves");
                 }
             }
 
             iconSource: "qrc:icons/caves-64x64.png"
-            addButtonText: "Add Cave"
+            addButtonText: qsTr("Add Cave")
 
             addButtonVisible: !caveElement.visible
 
@@ -113,7 +113,7 @@ Rectangle {
             model: regionModel
             view: view;
             viewIndex: -2; //The root element
-            addButtonText: "Add Trip"
+            addButtonText: qsTr("Add Trip")
             iconSource: "qrc:icons/cave-64x64.png"
             visible: false;
 

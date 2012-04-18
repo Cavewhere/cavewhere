@@ -27,7 +27,7 @@ Item {
 
     SectionLabel {
         id: title
-        text: "Team"
+        text: qsTr("Team")
     }
 
     Item {
@@ -56,7 +56,7 @@ Item {
             anchors.right: parent.horizontalCenter
 
             horizontalAlignment: Text.AlignHCenter
-            text: "Name"
+            text: qsTr("Name")
             font.bold: true
             visible: teamList.visible
         }
@@ -67,7 +67,7 @@ Item {
             anchors.right: parent.right
 
             horizontalAlignment: Text.AlignHCenter
-            text: "Role"
+            text: qsTr("Role")
             font.bold: true
             visible: teamList.visible
         }
@@ -284,7 +284,7 @@ Item {
                             Text {
                                 id: addText
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "Role"
+                                text: qsTr("Role")
                             }
                         }
 
@@ -323,7 +323,7 @@ Item {
             PropertyChanges {
                 target: addPerson
                 anchors.leftMargin: 0
-                text: "Add a team member"
+                text: qsTr("Add a team member")
             }
 
             PropertyChanges {

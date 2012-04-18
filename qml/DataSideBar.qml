@@ -32,7 +32,7 @@ Rectangle {
 
         CaveDataSidebarPage {
             id: caveDataSidebar
-            property string label: "Caves"
+            property string label: qsTr("Caves")
             property string icon: "qrc:icons/caves-64x64.png"
         }
 

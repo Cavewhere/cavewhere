@@ -47,7 +47,7 @@ Item {
         anchors.rightMargin: 5
 
         font.bold:  true
-        text: "Scrap Info"
+        text: qsTr("Scrap Info")
     }
 
     ShadowRectangle {
@@ -83,7 +83,7 @@ Item {
 
     Controls.CheckBox {
         id: autoTransformCheckBox
-        text: "Auto Calculate"
+        text: qsTr("Auto Calculate")
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6
 
@@ -110,8 +110,8 @@ Item {
         HelpArea {
             id: northUpHelpArea
             width: scaleInputId.width
-            text: "You can set the direction of <b>north</b> relative to page for a scrap.
-            Cavewhere only uses <b>north</b> to help you automatically label stations."
+            text: qsTr("You can set the direction of <b>north</b> relative to page for a scrap.
+            Cavewhere only uses <b>north</b> to help you automatically label stations.")
         }
 
         PaperScaleInput {
@@ -125,7 +125,7 @@ Item {
         HelpArea {
             id: scaleHelpAreaId
             width: scaleInputId.width
-            text: "You can set the <b>scale</b> of the scrap."
+            text: qsTr("You can set the <b>scale</b> of the scrap.")
         }
     }
 

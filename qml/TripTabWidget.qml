@@ -21,15 +21,15 @@ DataTabWidget {
 
     //Comment this out, because it's slow
     SurveyEditor {
-        property string label: "Data"
+        property string label: qsTr("Data")
         property string icon: "qrc:icons/data.png"
 
         currentTrip: tripTabWidget.currentTrip === null ? defaultTrip : tripTabWidget.currentTrip
-        //    text: "This is the Data page"
+        //    text: qsTr("This is the Data page")
     }
 
     NotesGallery {
-        property string label: "Notes"
+        property string label: qsTr("Notes")
         property string icon: "qrc:icons/notes.png"
 
         notesModel: tripTabWidget.currentTrip !== null ? tripTabWidget.currentTrip.notes : null

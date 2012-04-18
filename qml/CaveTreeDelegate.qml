@@ -123,7 +123,7 @@ FocusScope {
 
             Button {
                 id: tripsButton
-                text: "Trips"
+                text: qsTr("Trips")
                 iconSource: "qrc:icons/moreArrow.png"
                 iconOnTheLeft: false
                 opacity: 0.0

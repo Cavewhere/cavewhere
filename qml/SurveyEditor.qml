@@ -131,7 +131,7 @@ Item {
                 BreakLine { }
 
                 SectionLabel {
-                    text: "Data"
+                text: qsTr("Data")
                 }
 
                 SurveyChunkGroupView {
@@ -154,17 +154,17 @@ Item {
                     visible: !addSurveyData.visible
                     text: {
                         if(currentTrip === null) { return "" }
-                        var unit = ""
+	                var unit = qsTr("")
                         switch(currentTrip.calibration.distanceUnit) {
                         case Units.Meters:
-                            unit = "m"
+                        unit = qsTr("m")
                             break;
                         case Units.Feet:
-                            unit = "ft"
+                        unit = qsTr("ft")
                             break;
                         }
 
-                        return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                    return qsTr("Total Length: ") + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                     }
                 }
 
@@ -178,7 +178,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Press <b>Space</b> to add another data block";
+                    text: qsTr("Press <b>Space</b> to add another data block");
                     }
 
                     MouseArea {
@@ -192,7 +192,7 @@ Item {
 
                 AddButton {
                     id: addSurveyData
-                    text: "Add Survey Data"
+                text: qsTr("Add Survey Data")
                     anchors.horizontalCenter: view.horizontalCenter
                     visible: currentTrip !== null && currentTrip.numberOfChunks === 0
 

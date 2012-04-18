@@ -325,7 +325,7 @@ Rectangle {
                 id: rotateIconButtonId
                 iconSource: "qrc:icons/rotate.png"
                 sourceSize: mainToolBar.iconSize
-                text: "Rotate"
+                text: qsTr("Rotate")
 
                 onClicked: {
                     //Update the note's rotation
@@ -339,7 +339,7 @@ Rectangle {
                 id: carpetButtonId
                 iconSource: "qrc:icons/carpet.png"
                 sourceSize: mainToolBar.iconSize
-                text: "Carpet"
+                text: qsTr("Carpet")
 
                 onClicked:  {
                     noteGallery.state = "SELECT"
@@ -376,7 +376,7 @@ Rectangle {
             IconButton {
                 iconSource: "qrc:icons/back.png"
                 sourceSize: mainToolBar.iconSize
-                text: "Back"
+                text: qsTr("Back")
 
                 onClicked: {
                     noteGallery.state = "CARPET"
@@ -389,7 +389,7 @@ Rectangle {
                 id: selectObjectId
                 iconSource: "qrc:icons/select.png"
                 sourceSize: mainToolBar.iconSize
-                text: "Select"
+                text: qsTr("Select")
 
                 onClicked: {
                     noteGallery.state = "SELECT"
@@ -398,7 +398,7 @@ Rectangle {
 
             ButtonGroup {
                 id: addButtonGroup
-                text: "Add"
+                text: qsTr("Add")
 
                 IconButton {
                     id: addScrapId
@@ -413,7 +413,7 @@ Rectangle {
                     id: addStationId
                     iconSource: "qrc:icons/addStation.png"
                     sourceSize: mainToolBar.iconSize
-                    text: "Station"
+                    text: qsTr("Station")
 
                     onClicked: noteGallery.state = "ADD-STATION"
                 }
@@ -422,7 +422,7 @@ Rectangle {
                     id: addLeadId
                     iconSource: "qrc:icons/addLead.png"
                     sourceSize: mainToolBar.iconSize
-                    text: "Lead"
+                    text: qsTr("Lead")
 
                     onClicked: noteGallery.state = "ADD-LEAD"
                 }

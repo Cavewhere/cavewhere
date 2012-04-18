@@ -9,5 +9,5 @@
 import QtQuick 2.0
 
 ReadingBox {
-    readingText: "fs"
+    readingText: qsTr("fs")
 }

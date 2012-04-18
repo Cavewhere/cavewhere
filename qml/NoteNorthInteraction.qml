@@ -119,7 +119,7 @@ Interaction {
 
     HelpBox {
         id: helpBoxId
-        text: "<b>Click</b> the north arrow's first point"
+        text: qsTr("<b>Click</b> the north arrow's first point")
     }
 
     states: [
@@ -151,7 +151,7 @@ Interaction {
 
             PropertyChanges {
                 target: helpBoxId
-                text: "<b>Click</b> the north arrow's second point"
+                text: qsTr("<b>Click</b> the north arrow's second point")
             }
 
             PropertyChanges {

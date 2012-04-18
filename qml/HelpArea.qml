@@ -55,7 +55,7 @@ Rectangle {
         wrapMode: Text.WordWrap
         font.pointSize: 10
 
-        text: "No documentation"
+        text: qsTr("No documentation")
     }
 
     QtObject {

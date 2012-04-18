@@ -30,7 +30,7 @@ Rectangle {
         spacing: 5
 
         SectionLabel {
-            text: "Calibration"
+            text: qsTr("Calibration")
         }
 
         Item {
@@ -84,7 +84,7 @@ Rectangle {
 
             visible: !backSightCalibrationEditor.checked && !frontSightCalibrationEditor.checked
             animationToInvisible: false
-            text: "Hmm, you need to <b>check</b> either <i>front</i> or <i>back sights</i> box, or both, depending on your data."
+            text: qsTr("Hmm, you need to <b>check</b> either <i>front</i> or <i>back sights</i> box, or both, depending on your data.")
         }
     }
 }

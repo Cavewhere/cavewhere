@@ -13,7 +13,7 @@ DataTabWidget {
     property Cave currentCave: null
 
     CaveOverviewPage {
-        property string label: "Overview"
+        property string label: qsTr("Overview")
         property string icon:  "qrc:icons/dataOverview.png"
         currentCave: caveTabWidget.currentCave
     }

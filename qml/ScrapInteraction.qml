@@ -87,7 +87,7 @@ BaseScrapInteraction {
 
     HelpBox {
         id: scrapHelpBox
-        text: "Trace a cave section by <b>clicking</b> points around it."
+        text: qsTr("Trace a cave section by <b>clicking</b> points around it.")
     }
 
     Rectangle {

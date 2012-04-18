@@ -16,7 +16,7 @@ GroupBox {
 
     anchors.margins: 3
     contentHeight: tapeContent.height
-    text: "Distance"
+    text: qsTr("Distance")
 
     Column {
         id: tapeContent
@@ -35,7 +35,7 @@ GroupBox {
 
                 LabelWithHelp {
                     id: tapeCalibrationLabel
-                    text: "Calibration"
+                    text: qsTr("Calibration")
                     helpArea: tapeCalibarationHelpArea
                 }
 
@@ -52,7 +52,7 @@ GroupBox {
             Row {
                 LabelWithHelp {
                     id: tapeUnits
-                    text: "Units"
+                    text: qsTr("Units")
                     helpArea: tapeUnitsHelpArea
                 }
 
@@ -85,11 +85,11 @@ GroupBox {
 
         HelpArea {
             id: tapeCalibarationHelpArea
-            text: "<p>Distance calibration allow you to correct a tape that's too long
+            text: qsTr("<p>Distance calibration allow you to correct a tape that's too long
 or too short.  The calibration is added to uncorrected value (the value you read off the tape) to find the true value.</p>
 <b>UncorrectedValue + Calibration = TrueValue</b>
 <p> For example, the reading in the cave was 10m. You have a tape that's a 1m short. The true measured length
-is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calibration = -1m, so 10m + (-1m) = 9m </p>"
+is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calibration = -1m, so 10m + (-1m) = 9m </p>")
 
             anchors.left: parent.left
             anchors.right: parent.right
@@ -97,7 +97,7 @@ is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calib
 
         HelpArea {
             id: tapeUnitsHelpArea
-            text: "Tape's measurement units: meters (m) or feet (ft)"
+            text: qsTr("Tape's measurement units: meters (m) or feet (ft)")
             anchors.left: parent.left
             anchors.right: parent.right
         }
