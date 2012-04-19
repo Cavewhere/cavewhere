@@ -1,6 +1,6 @@
 //Our includes
 #include "cwSurveyImportManager.h"
-#include "cwImportSurvexDialog.h"
+//#include "cwImportSurvexDialog.h"
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),

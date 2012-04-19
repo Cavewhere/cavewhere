@@ -15,7 +15,7 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
-#include "cwImportSurvexDialog.h"
+//#include "cwImportSurvexDialog.h"
 #include "cwLinePlotManager.h"
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"

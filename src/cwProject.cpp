@@ -4,7 +4,7 @@
 #include "cwTrip.h"
 #include "cwAddImageTask.h"
 #include "cwCavingRegion.h"
-#include "cwTaskProgressDialog.h"
+//#include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
 #include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
