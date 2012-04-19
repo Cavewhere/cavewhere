@@ -12,13 +12,11 @@
 #include "cwItemSelectionModel.h"
 
 //Qt includes
-#include <QGLWidget>
 #include <QItemSelectionModel>
 #include <QUndoStack>
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
-    GLWidget(NULL),
     UndoStack(new QUndoStack(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
@@ -56,12 +54,3 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setUndoStack(UndoStack);
 }
 
-/**
-Sets mainGLWidget
-*/
-void cwRootData::setGLWidget(QGLWidget* mainGLWidget) {
-    if(GLWidget != mainGLWidget) {
-        GLWidget = mainGLWidget;
-        emit mainGLWidgetChanged();
-    }
-}

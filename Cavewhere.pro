@@ -84,7 +84,7 @@ SOURCES += src/main.cpp \
     src/cwGlobalUndoStack.cpp \
     src/cwUndoer.cpp \
 #    src/cwSurveyChunkView.cpp \
-#    src/cwGLRenderer.cpp \
+    src/cwGLRenderer.cpp \
     src/cwCamera.cpp \
     src/cwPlane.cpp \
     src/cwLine3D.cpp \
@@ -101,7 +101,7 @@ SOURCES += src/main.cpp \
     src/cwLinePlotGeometryTask.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
-#    src/cw3dRegionViewer.cpp \
+    src/cw3dRegionViewer.cpp \
     src/cwImageDatabase.cpp \
     src/cwImage.cpp \
     src/cwImageData.cpp \
@@ -208,7 +208,7 @@ HEADERS  += \
     src/cwGlobalUndoStack.h \
     src/cwUndoer.h \
 #    src/cwSurveyChunkView.h \
-#    src/cwGLRenderer.h \
+    src/cwGLRenderer.h \
     src/cwCamera.h \
     src/cwPlane.h \
     src/cwLine3D.h \
@@ -227,7 +227,7 @@ HEADERS  += \
     src/cwLinePlotGeometryTask.h \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
-#    src/cw3dRegionViewer.h \
+    src/cw3dRegionViewer.h \
     src/cwImageDatabase.h \
     src/cwImage.h \
     src/cwImageData.h \

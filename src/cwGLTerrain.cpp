@@ -43,10 +43,10 @@ void cwGLTerrain::initialize() {
     TileProgram = new QOpenGLShaderProgram(this);
     TileProgram->addShader(tileVertexShader);
     TileProgram->addShader(tileFragmentShader);
-    TileProgram->addShader(tileGeometryShader);
+//    TileProgram->addShader(tileGeometryShader);
 
-    TileProgram->setGeometryInputType(GL_TRIANGLES);
-    TileProgram->setGeometryOutputType(GL_TRIANGLE_STRIP);
+//    TileProgram->setGeometryInputType(GL_TRIANGLES);
+//    TileProgram->setGeometryOutputType(GL_TRIANGLE_STRIP);
 
     bool linkingErrors = TileProgram->link();
     if(!linkingErrors) {

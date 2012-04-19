@@ -1,4 +1,4 @@
-import QtQuick 1.1
+import QtQuick 2.0
 import Cavewhere 1.0
 
 RegionViewer {
@@ -25,7 +25,7 @@ RegionViewer {
             PropertyChanges {
                 target: interaction;
 
-                onMousePositionChanged: {
+                onPositionChanged: {
                     renderer.pan(Qt.point(mouse.x, mouse.y))
                 }
 
@@ -40,7 +40,7 @@ RegionViewer {
             PropertyChanges {
                 target: interaction;
 
-                onMousePositionChanged: {
+                onPositionChanged: {
                     renderer.rotate(Qt.point(mouse.x, mouse.y));
                 }
 

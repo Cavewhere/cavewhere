@@ -36,21 +36,21 @@ Rectangle {
 
         property int currentPosition: height * mainSideBar.pageShownReal
 
-////       Replace with the view
-//        GLTerrainRenderer {
-////            visible: mainSideBar.pageShown == "view"
+//       Replace with the view
+        GLTerrainRenderer {
+//            visible: mainSideBar.pageShown == "view"
 //            glWidget: mainGLWidget
-//            cavingRegion: region
-//            width:  parent.width
-//            height: parent.height
-//            x: 0; y: -container.currentPosition
+            cavingRegion: region
+            width:  parent.width
+            height: parent.height
+            x: 0; y: -container.currentPosition
 
-//            Component.onCompleted: {
-//                //Setup the linePlotManager with the glLinePlot
-//                linePlotManager.setGLLinePlot(linePlot);
-//                scrapManager.setGLScraps(scraps);
-//            }
-//        }
+            Component.onCompleted: {
+                //Setup the linePlotManager with the glLinePlot
+                linePlotManager.setGLLinePlot(linePlot);
+                scrapManager.setGLScraps(scraps);
+            }
+        }
 
 //        DataMainPage {
         Rectangle {

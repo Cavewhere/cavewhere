@@ -16,16 +16,16 @@
 #include "cwMath.h"
 
 
-cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwGLRenderer::cwGLRenderer(QQuickItem *parent) :
+    QQuickPaintedItem(parent),
     MultiSampleFramebuffer(NULL),
     TextureFramebuffer(0),
     ColorTexture(0),
     DepthTexture(0),
     HasBlit(false)
 {
-    GLWidget = NULL;
-    setFlag(QGraphicsItem::ItemHasNoContents, false);
+//    GLWidget = NULL;
+    setFlag(QQuickItem::ItemHasContents, true);
 
     Camera = new cwCamera(this);
     ShaderDebugger = new cwShaderDebugger(this);
@@ -35,196 +35,197 @@ cwGLRenderer::cwGLRenderer(QDeclarativeItem *parent) :
     connect(Camera, SIGNAL(viewChanged()), SLOT(updateRenderer()));
     connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
+    setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
 
 }
 
 cwGLRenderer::~cwGLRenderer() {
-    //Delete all the gl stuff
-    if(MultiSampleFramebuffer != NULL) {
-        if(TextureFramebuffer != 0 &&
-                MultiSampleFramebuffer->handle() != TextureFramebuffer) {
-            glDeleteFramebuffersEXT(1, &TextureFramebuffer);
-        }
+//    //Delete all the gl stuff
+//    if(MultiSampleFramebuffer != NULL) {
+//        if(TextureFramebuffer != 0 &&
+//                MultiSampleFramebuffer->handle() != TextureFramebuffer) {
+//            glDeleteFramebuffersEXT(1, &TextureFramebuffer);
+//        }
 
-        if(ColorTexture != 0 &&
-                ColorTexture != MultiSampleFramebuffer->texture()) {
-            glDeleteTextures(1, &ColorTexture);
-        }
+//        if(ColorTexture != 0 &&
+//                ColorTexture != MultiSampleFramebuffer->texture()) {
+//            glDeleteTextures(1, &ColorTexture);
+//        }
 
-        if(DepthTexture != 0) {
-            glDeleteTextures(1, &DepthTexture);
-        }
+//        if(DepthTexture != 0) {
+//            glDeleteTextures(1, &DepthTexture);
+//        }
 
-        delete MultiSampleFramebuffer;
-    }
+//        delete MultiSampleFramebuffer;
+//    }
 }
 
 
-void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
-    painter->beginNativePainting();
+//void cwGLRenderer::paint(QPainter* painter, const QStyleOptionGraphicsItem *, QWidget *) {
+//    painter->beginNativePainting();
 
-    //Draw the subclasses paintFramebuffer to the render framebuffer
-    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
+//    //Draw the subclasses paintFramebuffer to the render framebuffer
+//    glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
 
-    MultiSampleFramebuffer->bind();
-    glViewport(0, 0, width(), height());
-    glDisable(GL_SCISSOR_TEST);
+//    MultiSampleFramebuffer->bind();
+//    glViewport(0, 0, width(), height());
+//    glDisable(GL_SCISSOR_TEST);
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    paintFramebuffer();
+//    paintFramebuffer();
 
-    glPopAttrib();
-    MultiSampleFramebuffer->release();
+//    glPopAttrib();
+//    MultiSampleFramebuffer->release();
 
-    //Copy the render buffer
-    copyRenderFramebufferToTextures();
+//    //Copy the render buffer
+//    copyRenderFramebufferToTextures();
 
-    //Render the texture framebuffer
-    if(painter->hasClipping()) {
-        glPushAttrib(GL_SCISSOR_BIT );
-        glEnable(GL_SCISSOR_TEST);
-        renderTextureFramebuffer();
-        glPopAttrib();
-    } else {
-        renderTextureFramebuffer();
-    }
+//    //Render the texture framebuffer
+//    if(painter->hasClipping()) {
+//        glPushAttrib(GL_SCISSOR_BIT );
+//        glEnable(GL_SCISSOR_TEST);
+//        renderTextureFramebuffer();
+//        glPopAttrib();
+//    } else {
+//        renderTextureFramebuffer();
+//    }
 
-    painter->endNativePainting();
-}
+//    painter->endNativePainting();
+//}
 
-/**
-  This copies the render buffer to the texture framebuffer object
-  */
-void cwGLRenderer::copyRenderFramebufferToTextures() {
-    if(HasBlit) {
-        //Copy the MultiSampleFramebuffer data to the textureFramebuffer
-        glBindFramebufferEXT(GL_READ_FRAMEBUFFER, MultiSampleFramebuffer->handle());
-        glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, TextureFramebuffer);
-        glBlitFramebufferEXT(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
-                          0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
-                          GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-                          GL_NEAREST);
+///**
+//  This copies the render buffer to the texture framebuffer object
+//  */
+//void cwGLRenderer::copyRenderFramebufferToTextures() {
+//    if(HasBlit) {
+//        //Copy the MultiSampleFramebuffer data to the textureFramebuffer
+//        glBindFramebufferEXT(GL_READ_FRAMEBUFFER, MultiSampleFramebuffer->handle());
+//        glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, TextureFramebuffer);
+//        glBlitFramebufferEXT(0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
+//                          0, 0, MultiSampleFramebuffer->width(), MultiSampleFramebuffer->height(),
+//                          GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+//                          GL_NEAREST);
 
-        glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
-        glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
-    }
-}
+//        glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
+//        glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
+//    }
+//}
 
-/**
-  \brief This renderes the texture framebuffer to the screen
-  */
-void cwGLRenderer::renderTextureFramebuffer() {
-    //Draw the texture that the TextureFramebuffer just rendered to
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, ColorTexture);
+///**
+//  \brief This renderes the texture framebuffer to the screen
+//  */
+//void cwGLRenderer::renderTextureFramebuffer() {
+//    //Draw the texture that the TextureFramebuffer just rendered to
+//    glEnable(GL_TEXTURE_2D);
+//    glBindTexture(GL_TEXTURE_2D, ColorTexture);
 
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.0, 1.0);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    glVertex2f(0, 0);
+//    glBegin(GL_QUADS);
+//    glTexCoord2f(0.0, 1.0);
+//    glColor3f(1.0f, 1.0f, 1.0f);
+//    glVertex2f(0, 0);
 
-    glTexCoord2f(0.0, 0.0);
-    glVertex2f(0, height());
+//    glTexCoord2f(0.0, 0.0);
+//    glVertex2f(0, height());
 
-    glTexCoord2f(1.0, 0.0);
-    glVertex2f(width(), height());
+//    glTexCoord2f(1.0, 0.0);
+//    glVertex2f(width(), height());
 
-    glTexCoord2f(1.0, 1.0);
-    glVertex2f(width(), 0);
+//    glTexCoord2f(1.0, 1.0);
+//    glVertex2f(width(), 0);
 
-    glEnd();
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
+//    glEnd();
+//    glBindTexture(GL_TEXTURE_2D, 0);
+//}
 
 
 
-/**
-  \brief This initializes this item's opengl stuff
-  */
-void cwGLRenderer::privateInitializeGL() {
-    //Genereate the multi sample buffer for anti aliasing
-    MultiSampleFramebuffer = new QOpenGLFramebufferObject(QSize(1, 1));
-    HasBlit = false; //MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
+///**
+//  \brief This initializes this item's opengl stuff
+//  */
+//void cwGLRenderer::privateInitializeGL() {
+//    //Genereate the multi sample buffer for anti aliasing
+//    MultiSampleFramebuffer = new QOpenGLFramebufferObject(QSize(1, 1));
+//    HasBlit = false; //MultiSampleFramebuffer->hasOpenGLFramebufferBlit();
 
-    if(HasBlit) {
-        //Generate the texture framebuffer for rendering
-        glGenFramebuffersEXT(1, &TextureFramebuffer);
+//    if(HasBlit) {
+//        //Generate the texture framebuffer for rendering
+//        glGenFramebuffersEXT(1, &TextureFramebuffer);
 
-        //Generate the color texture
-        glGenTextures(1, &ColorTexture);
-        glBindTexture(GL_TEXTURE_2D, ColorTexture);
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
-        glBindTexture(GL_TEXTURE_2D, 0);
+//        //Generate the color texture
+//        glGenTextures(1, &ColorTexture);
+//        glBindTexture(GL_TEXTURE_2D, ColorTexture);
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+//        glBindTexture(GL_TEXTURE_2D, 0);
 
-        //Generate the depth texture
-        glGenTextures(1, &DepthTexture);
-        glBindTexture(GL_TEXTURE_2D, DepthTexture);
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
-        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
+//        //Generate the depth texture
+//        glGenTextures(1, &DepthTexture);
+//        glBindTexture(GL_TEXTURE_2D, DepthTexture);
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
+//        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
+//        glBindTexture(GL_TEXTURE_2D, 0);
+//    }
 
-    initializeGL();
-}
+//    initializeGL();
+//}
 
 void cwGLRenderer::privateResizeGL() {
-    if(GLWidget == NULL) { return; }
+//    if(GLWidget == NULL) { return; }
     if(width() == 0.0 || height() == 0.0) { return; }
     QSize framebufferSize(width(), height());
 
-    if(!framebufferSize.isValid()) { return; }
+//    if(!framebufferSize.isValid()) { return; }
 
-    //Recreate the multisample framebuffer
-    delete MultiSampleFramebuffer;
-    QOpenGLFramebufferObjectFormat multiSampleFormat;
-    if(HasBlit) {
-        multiSampleFormat.setSamples(8);
+//    //Recreate the multisample framebuffer
+//    delete MultiSampleFramebuffer;
+//    QOpenGLFramebufferObjectFormat multiSampleFormat;
+//    if(HasBlit) {
+//        multiSampleFormat.setSamples(8);
 
-        //Don't alloc
-        glBindTexture(GL_TEXTURE_2D, ColorTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                     framebufferSize.width(), framebufferSize.height(), 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+//        //Don't alloc
+//        glBindTexture(GL_TEXTURE_2D, ColorTexture);
+//        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+//                     framebufferSize.width(), framebufferSize.height(), 0,
+//                     GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
-        glBindTexture(GL_TEXTURE_2D, DepthTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
-                     framebufferSize.width(), framebufferSize.height(), 0,
-                     GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+//        glBindTexture(GL_TEXTURE_2D, DepthTexture);
+//        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+//                     framebufferSize.width(), framebufferSize.height(), 0,
+//                     GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 
-        glBindFramebufferEXT(GL_FRAMEBUFFER, TextureFramebuffer);
-        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ColorTexture, 0);
+//        glBindFramebufferEXT(GL_FRAMEBUFFER, TextureFramebuffer);
+//        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ColorTexture, 0);
 
-        glBindFramebufferEXT(GL_FRAMEBUFFER, TextureFramebuffer);
-        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, DepthTexture, 0);
+//        glBindFramebufferEXT(GL_FRAMEBUFFER, TextureFramebuffer);
+//        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, DepthTexture, 0);
 
-        glBindTexture(GL_TEXTURE_2D, 0);
+//        glBindTexture(GL_TEXTURE_2D, 0);
 
-        GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER);
-        if(status != GL_FRAMEBUFFER_COMPLETE) {
-            qDebug() << "Can't complete framebuffer:" << TextureFramebuffer;
-        }
+//        GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER);
+//        if(status != GL_FRAMEBUFFER_COMPLETE) {
+//            qDebug() << "Can't complete framebuffer:" << TextureFramebuffer;
+//        }
 
-        glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
-    } else {
-        //No multi sampling, doesn't support blit
-        multiSampleFormat.setSamples(0);
-    }
+//        glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
+//    } else {
+//        //No multi sampling, doesn't support blit
+//        multiSampleFormat.setSamples(0);
+//    }
 
-    multiSampleFormat.setAttachment(QOpenGLFramebufferObject::Depth);
-    multiSampleFormat.setInternalTextureFormat(GL_RGBA);
-    MultiSampleFramebuffer = new QOpenGLFramebufferObject(framebufferSize, multiSampleFormat);
+//    multiSampleFormat.setAttachment(QOpenGLFramebufferObject::Depth);
+//    multiSampleFormat.setInternalTextureFormat(GL_RGBA);
+//    MultiSampleFramebuffer = new QOpenGLFramebufferObject(framebufferSize, multiSampleFormat);
 
-    if(!HasBlit) {
-        //No multi sampling support
-        TextureFramebuffer = MultiSampleFramebuffer->handle();
-        ColorTexture = MultiSampleFramebuffer->texture();
-    }
+//    if(!HasBlit) {
+//        //No multi sampling support
+//        TextureFramebuffer = MultiSampleFramebuffer->handle();
+//        ColorTexture = MultiSampleFramebuffer->texture();
+//    }
 
     //Update the viewport
     QRect viewportRect(QPoint(0, 0), framebufferSize);
@@ -236,25 +237,25 @@ void cwGLRenderer::privateResizeGL() {
     update();
 }
 
-/**
-  \brief Sets the QGLWidget for this renderer
+///**
+//  \brief Sets the QGLWidget for this renderer
 
-  This assumes that the widget's context is created and is valid.
-  */
-void cwGLRenderer::setGLWidget(QGLWidget* widget) {
-    if(widget == GLWidget) {
-        return;
-    }
+//  This assumes that the widget's context is created and is valid.
+//  */
+//void cwGLRenderer::setGLWidget(QGLWidget* widget) {
+//    if(widget == GLWidget) {
+//        return;
+//    }
 
-    //Initialize the object here!
-    GLWidget = widget;
-    GLWidget->makeCurrent();
-    privateInitializeGL();
+//    //Initialize the object here!
+//    GLWidget = widget;
+//    GLWidget->makeCurrent();
+//    privateInitializeGL();
 
-    emit glWidgetChanged();
+//    emit glWidgetChanged();
 
-    privateResizeGL();
-}
+//    privateResizeGL();
+//}
 
 /**
   Unprojects the screen point at point and returns a QVector3d in world coordinates
@@ -276,46 +277,48 @@ QVector3D cwGLRenderer::unProject(QPoint point) {
   The return value will be from 0.0 to 1.0
   */
 float cwGLRenderer::sampleDepthBuffer(QPoint point) {
-    GLWidget->makeCurrent();
+//    GLWidget->makeCurrent();
 
-    const int samplerSize = 3;
-    const int samplerCenter = samplerSize / 2;
-    const QRect samplerArea(QPoint(point.x() - samplerCenter, point.y() - samplerCenter),
-                        QSize(samplerSize, samplerSize));
+//    const int samplerSize = 3;
+//    const int samplerCenter = samplerSize / 2;
+//    const QRect samplerArea(QPoint(point.x() - samplerCenter, point.y() - samplerCenter),
+//                        QSize(samplerSize, samplerSize));
 
-    //Allocate memory
-    QVector<float> buffer;
-    int bufferSize = samplerArea.width() * samplerArea.height();
-    buffer.reserve(bufferSize);
-    buffer.resize(bufferSize);
+//    //Allocate memory
+//    QVector<float> buffer;
+//    int bufferSize = samplerArea.width() * samplerArea.height();
+//    buffer.reserve(bufferSize);
+//    buffer.resize(bufferSize);
 
-    //Get data from opengl framebuffer
-    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, TextureFramebuffer);
-    glReadPixels(samplerArea.x(), samplerArea.y(), //where
-                 samplerArea.width(), samplerArea.height(), //size
-                 GL_DEPTH_COMPONENT, //what buffer
-                 GL_FLOAT, //Returned data type
-                 buffer.data()); //The buffer for the data
-    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
+//    //Get data from opengl framebuffer
+//    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, TextureFramebuffer);
+//    glReadPixels(samplerArea.x(), samplerArea.y(), //where
+//                 samplerArea.width(), samplerArea.height(), //size
+//                 GL_DEPTH_COMPONENT, //what buffer
+//                 GL_FLOAT, //Returned data type
+//                 buffer.data()); //The buffer for the data
+//    glBindFramebufferEXT(GL_READ_FRAMEBUFFER, 0);
 
-    float sum = 0.0;
-    int count = 0;
-    for(int i = 0; i < buffer.size(); i++) {
-        //Make sure we're in range
-        if(buffer[i] <= .9999999f && buffer[i] > 0.0f) {
-            sum += buffer[i];
-            count++;
-        }
-    }
+//    float sum = 0.0;
+//    int count = 0;
+//    for(int i = 0; i < buffer.size(); i++) {
+//        //Make sure we're in range
+//        if(buffer[i] <= .9999999f && buffer[i] > 0.0f) {
+//            sum += buffer[i];
+//            count++;
+//        }
+//    }
 
-    if(count > 0) {
-        //We have at least one valid sample
-        return sum / (float)count;
-    } else {
-        //Use the middle value in the buffer
-        int centerIndex = samplerSize * samplerCenter + samplerCenter;
-        return buffer[centerIndex];
-    }
+//    if(count > 0) {
+//        //We have at least one valid sample
+//        return sum / (float)count;
+//    } else {
+//        //Use the middle value in the buffer
+//        int centerIndex = samplerSize * samplerCenter + samplerCenter;
+//        return buffer[centerIndex];
+//    }
+
+    return 0.90;
 }
 
 

@@ -21,7 +21,7 @@
 #include "cwGlobalUndoStack.h"
 //#include "cwGLRenderer.h"
 #include "cwGLLinePlot.h"
-//#include "cw3dRegionViewer.h"
+#include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwImageDatabase.h"
 #include "cwFileDialogHelper.h"
@@ -57,7 +57,7 @@
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
 #include "cwTripLengthTask.h"
-#include <QGLWidget>
+//#include <QGLWidget>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -66,7 +66,7 @@ cwQMLRegister::cwQMLRegister()
 void cwQMLRegister::registerQML()
 {
 ////    const char* uri = "Cavewhere";
-//    qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
+    qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
 //    qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
 //    qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
 ////    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
@@ -79,12 +79,10 @@ void cwQMLRegister::registerQML()
 //    qmlRegisterType<cwDistanceValidator>("Cavewhere", 1, 0, "DistanceValidator");
 //    qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
 //    qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
-//    qmlRegisterType<cwQMLWidget>("Cavewhere", 1, 0, "ProxyWidget");
 //    qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
-//    qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
-//    qmlRegisterType<QGLWidget>("Cavewhere", 1, 0, "QGLWidget");
-//    qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
-//    qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
+    qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
+    qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
+    qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
 //    qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
 //    qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
 //    qmlRegisterType<cwNote>("Cavewhere", 1, 0, "Note");
@@ -109,8 +107,8 @@ void cwQMLRegister::registerQML()
 //    qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
 //    qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");
 //    qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
-//    qmlRegisterType<cwGLScraps>("Cavewhere", 1, 0, "GLScraps");
-//    qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
+    qmlRegisterType<cwGLScraps>("Cavewhere", 1, 0, "GLScraps");
+    qmlRegisterType<cwScrapManager>("Cavewhere", 1, 0, "ScrapManager");
 //    qmlRegisterType<cwTeam>("Cavewhere", 1, 0, "Team");
 //    qmlRegisterType<cwTripCalibration>("Cavewhere", 1, 0, "Calibration");
 //    qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");

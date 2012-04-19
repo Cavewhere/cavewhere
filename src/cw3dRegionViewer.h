@@ -19,10 +19,10 @@ class cw3dRegionViewer : public cwGLRenderer
     Q_PROPERTY(cwGLScraps* scraps READ scraps)
 
 public:
-    cw3dRegionViewer(QDeclarativeItem *parent = 0);
+    cw3dRegionViewer(QQuickItem* parent = 0);
 
-    virtual void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *);
-
+    virtual void paint(QPainter* painter);
+    Q_INVOKABLE virtual void initializeGL();
 public slots:
     cwGLLinePlot* linePlot();
     cwGLScraps* scraps() const;
@@ -35,7 +35,6 @@ public slots:
 
     void startRotating(QPoint currentMousePos);
     void rotate(QPoint currentMousePos);
-
 signals:
     void cavingRegionChanged();
 
@@ -46,10 +45,9 @@ private slots:
     virtual void resizeGL();
 
 protected:
-    virtual void initializeGL();
 
-    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
-    void zoom(QGraphicsSceneWheelEvent* event);
+//    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
+//    void zoom(QGraphicsSceneWheelEvent* event);
 
     virtual void paintFramebuffer();
 
@@ -79,6 +77,8 @@ private:
         QRect Viewport;
     };
 
+    bool Initilized; //True if it's initilized and false if it's not
+
     //For interaction
     QVector3D LastMouseGlobalPosition; //For panning
     QPointF LastMousePosition; //For rotation
@@ -99,6 +99,8 @@ private:
     void renderStationLabels(QPainter* painter, cwCave* cave);
 
 };
+
+Q_DECLARE_METATYPE(cw3dRegionViewer*)
 
 /**
   \brief Returns the object that renderes the line plot

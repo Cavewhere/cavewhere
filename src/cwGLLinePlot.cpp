@@ -93,6 +93,8 @@ void cwGLLinePlot::draw() {
   \brief Set the line points for the line plot object
   */
 void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
+    if(ShaderProgram == NULL) { return; }
+
     //Find the max value and the min value
     MaxZValue = -std::numeric_limits<float>::max();
     MinZValue = std::numeric_limits<float>::max();

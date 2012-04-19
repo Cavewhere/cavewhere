@@ -3,6 +3,7 @@
 //#include <QDeclarativeComponent>
 #include <QThread>
 #include <QtQuick/QQuickView>
+#include <QQmlContext>
 #include <QModelIndex>
 
 //Our includes
@@ -13,6 +14,9 @@
 #include "cwImage.h"
 #include "cwGlobalDirectory.h"
 #include "cwStation.h"
+#include "cwQMLRegister.h"
+#include "cwRootData.h"
+
 
 int main(int argc, char *argv[])
 {
@@ -33,7 +37,15 @@ int main(int argc, char *argv[])
 
     cwGlobalDirectory::setupBaseDirectory();
 
+    //Register all of the cavewhere types
+    cwQMLRegister::registerQML();
+
     QQuickView view;
+
+    cwRootData* rootData = new cwRootData(&view);
+    view.rootContext()->setContextObject(rootData);
+    view.rootContext()->setContextProperty("rootObject", (QObject*)view.rootObject());
+
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
     view.show();

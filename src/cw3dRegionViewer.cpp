@@ -31,8 +31,9 @@
 #include <QtConcurrentMap>
 #include <QFontMetrics>
 
-cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
-    cwGLRenderer(parent)
+cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
+    cwGLRenderer(parent),
+    Initilized(false)
 {
     Region = NULL;
 
@@ -49,14 +50,25 @@ cw3dRegionViewer::cw3dRegionViewer(QDeclarativeItem *parent) :
     Scraps = new cwGLScraps(this);
     Scraps->setCamera(Camera);
     Scraps->setShaderDebugger(ShaderDebugger);
+
+
+
 }
 
 /**
   \brief This paints the cwGLRender and the linePlot labels
   */
-void cw3dRegionViewer::paint(QPainter * painter, const QStyleOptionGraphicsItem * item, QWidget * widget) {
+void cw3dRegionViewer::paint(QPainter * painter) {
     //Run paint Framebuffer
-    cwGLRenderer::paint(painter, item, widget);
+    //cwGLRenderer::paint(painter, item, widget);
+    painter->beginNativePainting();
+
+    if(!Initilized) {
+        initializeGL();
+    }
+
+    paintFramebuffer();
+    painter->endNativePainting();
 
     //Render the text labels
     painter->save();
@@ -74,8 +86,8 @@ void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     Terrain->draw();
-    Scraps->draw();
-    LinePlot->draw();
+//    Scraps->draw();
+//    LinePlot->draw();
 
    glDisable(GL_DEPTH_TEST);
 }
@@ -84,12 +96,14 @@ void cw3dRegionViewer::paintFramebuffer() {
   \brief Initilizes the viwer
   */
 void cw3dRegionViewer::initializeGL() {
+    Initilized = true;
+
     //Initilizes the cameras
     resetView();
 
     Terrain->initialize();
-    Scraps->initialize();
-    LinePlot->initialize();
+//    Scraps->initialize();
+//    LinePlot->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }
@@ -189,42 +203,42 @@ void cw3dRegionViewer::rotate(QPoint position) {
     update();
 }
 
-void cw3dRegionViewer::wheelEvent(QGraphicsSceneWheelEvent *event) {
-    zoom(event);
-    event->accept();
-}
+//void cw3dRegionViewer::wheelEvent(QGraphicsSceneWheelEvent *event) {
+//    zoom(event);
+//    event->accept();
+//}
 
-/**
-  Zooms the view
-  */
-void cw3dRegionViewer::zoom(QGraphicsSceneWheelEvent* event) {
+///**
+//  Zooms the view
+//  */
+//void cw3dRegionViewer::zoom(QGraphicsSceneWheelEvent* event) {
 
-    //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(event->pos().toPoint());
+//    //Make the event position into gl viewport
+//    QPoint mappedPos = Camera->mapToGLViewport(event->pos().toPoint());
 
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
+//    //Get the ray from the front of the screen to the back of the screen
+//    QVector3D front = Camera->unProject(mappedPos, 0.0);
 
-    //Find the intsection on the plane
-    QVector3D intersection = unProject(mappedPos);
+//    //Find the intsection on the plane
+//    QVector3D intersection = unProject(mappedPos);
 
-    //Smallray
-    QVector3D ray = intersection - front;
-    float rayLength = ray.length();
-    ray.normalize();
+//    //Smallray
+//    QVector3D ray = intersection - front;
+//    float rayLength = ray.length();
+//    ray.normalize();
 
-    float t = .0005 * -event->delta();
-    t = qMax(-1.0f, qMin(1.0f, t));
-    t = rayLength * t;
+//    float t = .0005 * -event->delta();
+//    t = qMax(-1.0f, qMin(1.0f, t));
+//    t = rayLength * t;
 
-    QVector3D newPositionDelta = ray * t;
+//    QVector3D newPositionDelta = ray * t;
 
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(newPositionDelta);
-    Camera->setViewMatrix(viewMatrix);
+//    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+//    viewMatrix.translate(newPositionDelta);
+//    Camera->setViewMatrix(viewMatrix);
 
-    update();
-}
+//    update();
+//}
 
 /**
   \brief Resets the view

@@ -2,10 +2,9 @@
 #define CWGLRENDERER_H
 
 //GLEW includes
-#include <GL/glew.h>
+//#include <GL/glew.h>
 
 //Qt includes
-#include <QDeclarativeItem>
 #include <QOpenGLBuffer>
 #include <QQuaternion>
 #include <QStateMachine>
@@ -13,6 +12,7 @@
 #include <QWheelEvent>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFramebufferObject>
+#include <QQuickPaintedItem>
 class QGLWidget;
 
 //Our includes
@@ -28,19 +28,19 @@ class cwCave;
 #include <cwCollisionRectKdTree.h>
 
 
-class cwGLRenderer : public QDeclarativeItem
+class cwGLRenderer : public QQuickPaintedItem
 {
     Q_OBJECT
-    Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
+//    Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
     Q_PROPERTY(cwCamera* camera READ camera NOTIFY cameraChanged)
 
 public:
-    explicit cwGLRenderer(QDeclarativeItem *parent = 0);
+    explicit cwGLRenderer(QQuickItem *parent = 0);
     ~cwGLRenderer();
 
     QVector3D unProject(QPoint point);
 
-    virtual void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *);
+//    virtual void paint(QPainter* painter);
 
     cwCamera* camera() const;
 
@@ -49,15 +49,15 @@ signals:
     void cameraChanged();
 
 
-public slots:
-    void setGLWidget(QGLWidget* widget);
-    QGLWidget* glWidget();
+//public slots:
+//    void setGLWidget(QGLWidget* widget);
+//    QGLWidget* glWidget();
 
 
 protected:
     virtual void initializeGL() {}
 
-    QGLWidget* GLWidget; //This is so we make current when setting up the object
+//    QGLWidget* GLWidget; //This is so we make current when setting up the object
 
     //Framebuffer for renderering
     QOpenGLFramebufferObject* MultiSampleFramebuffer;
@@ -90,17 +90,17 @@ protected slots:
     void updateRenderer();
 
 private:
-    void copyRenderFramebufferToTextures();
-    void renderTextureFramebuffer();
+//    void copyRenderFramebufferToTextures();
+//    void renderTextureFramebuffer();
 
-    void privateInitializeGL();
+//    void privateInitializeGL();
 
 private slots:
     void privateResizeGL();
 
 };
 
-inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
+//inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
 inline cwCamera* cwGLRenderer::camera() const { return Camera; }
 inline void cwGLRenderer::updateRenderer() { update(); }
 
