@@ -28,8 +28,9 @@ varying vec4 projectedPosition;
 float contour(float spacing, float widthPx) {
 
     float gsize = 1.0 / spacing;
+    const float offset = 0.5;
 
-    vec3 f  = abs(fract (vPosition.xyz * gsize) - 0.5);
+    vec3 f  = abs(fract (vPosition.xyz * gsize - offset) - offset);
     vec3 df = fwidth(vPosition.xyz * gsize);
 //    vec3 g = smoothstep(-widthPx*df,widthPx*df , f);
 
@@ -78,9 +79,10 @@ void main() {
 
 
     //float depth = ((projectedPosition.z / projectedPosition.w) + 1.0) * 0.5 / 7.5;
+    const vec4 planeColor = vec4(0.5, 0.5, 0.5, 1.0);
     float c = contour(10.0, 1.0) * contour(100.0, 1.5);
 
-    gl_FragColor = vec4(c, c, c, 1.0);
+    gl_FragColor = vec4(c, c, c, 1.0)* planeColor;
  //  gl_FragColor = vec4(depth, depth, depth, 1.0);
 
 }
