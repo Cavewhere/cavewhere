@@ -7,39 +7,41 @@
 //Qt includes
 #include <QGraphicsPolygonItem>
 #include <QPen>
-#include <QDeclarativeEngine>
+#include <QQmlEngine>
 
-cwScrapItem::cwScrapItem(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwScrapItem::cwScrapItem(QQuickItem *parent) :
+    QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    BorderItemHandler(new QDeclarativeItem(this)),
-    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
+    BorderItemHandler(new QQuickItem(this)),
+    //FIXME: Port BorderItem to qt5
+//    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
     StationView(new cwScrapStationView(this))
 {
     //Set the declarative context for the station view
-    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-    QDeclarativeEngine::setContextForObject(StationView, context);
+    QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+    QQmlEngine::setContextForObject(StationView, context);
 
-    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
+//    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
 }
 
-cwScrapItem::cwScrapItem(QDeclarativeContext *context, QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwScrapItem::cwScrapItem(QDeclarativeContext *context, QQuickItem *parent) :
+    QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    BorderItemHandler(new QDeclarativeItem(this)),
-    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
+    BorderItemHandler(new QQuickItem(this)),
+        //FIXME: Port BorderItem to qt5
+//    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
     StationView(new cwScrapStationView(this))
 {
     StationView->setScrapItem(this);
 
     //Set the declarative context for the station view
-    QDeclarativeEngine::setContextForObject(this, context);
-    QDeclarativeEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(this, context);
+    QQmlEngine::setContextForObject(StationView, context);
 
-    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
+//    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
 }
 

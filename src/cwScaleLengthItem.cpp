@@ -5,10 +5,10 @@
 //Qt includes
 #include <QDebug>
 
-cwScaleLengthItem::cwScaleLengthItem(QDeclarativeItem *parent) :
+cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent)
 {
-    LengthHandler = new QDeclarativeItem(this);
+    LengthHandler = new QQuickItem(this);
     LengthLine = new QGraphicsPathItem(LengthHandler);
     LengthLine->setPen(LinePen);
 }

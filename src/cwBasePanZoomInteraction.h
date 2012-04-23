@@ -1,9 +1,6 @@
 #ifndef CWPANZOOMINTERACTION_H
 #define CWPANZOOMINTERACTION_H
 
-//Qt includes
-#include <QDeclarativeItem>
-
 //Our includes
 #include "cwInteraction.h"
 #include "cwCamera.h"
@@ -15,7 +12,7 @@ class cwBasePanZoomInteraction : public cwInteraction
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 
 public:
-    explicit cwBasePanZoomInteraction(QDeclarativeItem *parent = 0);
+    explicit cwBasePanZoomInteraction(QQuickItem *parent = 0);
 
     void setCamera(cwCamera* camera);
     cwCamera* camera() const;

@@ -2,7 +2,7 @@
 #define CWSCRAPSTATIONVIEW_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 
 //Our includes
 class cwTransformUpdater;
@@ -14,7 +14,7 @@ class cwScrapItem;
 /**
   This class manages a list of station items that visualize all the stations in a scrap.
   */
-class cwScrapStationView : public QDeclarativeItem
+class cwScrapStationView : public QQuickItem
 {
     Q_OBJECT
 
@@ -24,7 +24,7 @@ class cwScrapStationView : public QDeclarativeItem
     Q_PROPERTY(cwScrapItem* scrapItem READ scrapItem WRITE setScrapItem NOTIFY scrapItemChanged)
 
 public:
-    explicit cwScrapStationView(QDeclarativeItem *parent = 0);
+    explicit cwScrapStationView(QQuickItem *parent = 0);
     ~cwScrapStationView();
 
     cwTransformUpdater* transformUpdater() const;
@@ -36,7 +36,7 @@ public:
     void clearSelection();
     int selectedStationIndex() const;
     void setSelectedStationIndex(int selectedStationIndex);
-    QDeclarativeItem* selectedStationItem() const;
+    QQuickItem* selectedStationItem() const;
     cwNoteStation selectedNoteStation() const;
 
     cwScrapItem* scrapItem() const;
@@ -58,11 +58,11 @@ private:
     cwScrap* Scrap; //!< The scrap this is class keeps track of
 
     //All the NoteStationItems
-    QDeclarativeComponent* StationItemComponent;
-    QList<QDeclarativeItem*> StationItems;
+    QQmlComponent* StationItemComponent;
+    QList<QQuickItem*> StationItems;
 
     //Shows the shot lines
-    QDeclarativeItem* ShotLinesHandler;
+    QQuickItem* ShotLinesHandler;
     QGraphicsPathItem* ShotLines;
 
     cwScrapItem* ScrapItem; //!< For selection and holding the scrap

@@ -2,7 +2,7 @@
 #define CWSURVEYCHUNKGROUPVIEW_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 #include <QSignalMapper>
 class QModelIndex;
 
@@ -13,7 +13,7 @@ class cwSurveyChunk;
 class cwSurveyChunkViewComponents;
 class cwSurveyChunkTrimmer;
 
-class cwSurveyChunkGroupView : public QDeclarativeItem
+class cwSurveyChunkGroupView : public QQuickItem
 {
     Q_OBJECT
 
@@ -27,13 +27,13 @@ class cwSurveyChunkGroupView : public QDeclarativeItem
     Q_PROPERTY(QRectF ensureVisibleRect READ ensureVisibleRect NOTIFY ensureVisibleRectChanged)
 
 public:
-    explicit cwSurveyChunkGroupView(QDeclarativeItem *parent = 0);
+    explicit cwSurveyChunkGroupView(QQuickItem *parent = 0);
 
     void setTrip(cwTrip* trip);
     cwTrip* trip() const;
 
     float contentHeight() const;
-    float contentWidth() const;
+    float contentWidth();
 
     float viewportX() const;
     float viewportY() const;

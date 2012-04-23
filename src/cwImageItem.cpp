@@ -12,7 +12,7 @@
 #include <QtConcurrentMap>
 
 
-cwImageItem::cwImageItem(QDeclarativeItem *parent) :
+cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLRenderer(parent),
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),

@@ -1,6 +1,6 @@
 //Qt includes
 #include <QGuiApplication>
-//#include <QDeclarativeComponent>
+//#include <QQmlComponent>
 #include <QThread>
 #include <QtQuick/QQuickView>
 #include <QQmlContext>

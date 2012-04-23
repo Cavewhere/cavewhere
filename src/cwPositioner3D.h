@@ -1,16 +1,16 @@
 #ifndef CWPOSITIONER3D_H
 #define CWPOSITIONER3D_H
 
-#include <QDeclarativeItem>
+#include <QQuickItem>
 
-class cwPositioner3D : public QDeclarativeItem
+class cwPositioner3D : public QQuickItem
 {
     Q_OBJECT
 
     Q_PROPERTY(QVector3D position3D READ position3D WRITE setPosition3D NOTIFY position3DChanged)
 
 public:
-    explicit cwPositioner3D(QDeclarativeItem *parent = 0);
+    explicit cwPositioner3D(QQuickItem *parent = 0);
 
     QVector3D position3D() const;
     void setPosition3D(QVector3D position3D);

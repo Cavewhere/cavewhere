@@ -2,7 +2,7 @@
 #define CWSCRAPVIEW_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 #include <QGraphicsPolygonItem>
 
 //Our includes
@@ -16,7 +16,7 @@ class cwScrapItem;
 /**
   This class visualizes scraps in NoteItem
   */
-class cwScrapView : public QDeclarativeItem
+class cwScrapView : public QQuickItem
 {
     Q_OBJECT
 
@@ -26,7 +26,7 @@ class cwScrapView : public QDeclarativeItem
     Q_PROPERTY(int selectScrapIndex READ selectScrapIndex WRITE setSelectScrapIndex NOTIFY selectScrapIndexChanged)
 
 public:
-    explicit cwScrapView(QDeclarativeItem *parent = 0);
+    explicit cwScrapView(QQuickItem *parent = 0);
 
     cwNote* note() const;
     void setNote(cwNote* note);

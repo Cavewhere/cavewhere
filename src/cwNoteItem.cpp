@@ -15,9 +15,9 @@
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 #include <QFuture>
-#include <QDeclarativeEngine>
-#include <QDeclarativeComponent>
-#include <QDeclarativeItem>
+#include <QQmlEngine>
+#include <QQmlComponent>
+#include <QQuickItem>
 #include <QDeclarativeContext>
 #include <QGraphicsScene>
 #include <QGLWidget>
@@ -27,7 +27,7 @@
 
 
 
-cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
+cwNoteItem::cwNoteItem(QQuickItem *parent) :
     cwGLRenderer(parent),
     LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this)),
     Note(NULL),
@@ -38,22 +38,6 @@ cwNoteItem::cwNoteItem(QDeclarativeItem *parent) :
     connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(ImageFinishedLoading()));
 
     TransformUpdater->setCamera(Camera);
-
-    TestParent = new QGraphicsWidget(this);
-    TestRectangle = new QGraphicsPolygonItem(TestParent);
-
-    QVector<QPointF> points;
-    points.append(QPointF(.1, .1));
-    points.append(QPointF(.1, .5));
-    points.append(QPointF(.5, .1));
-    points.append(QPointF(.7, .8));
-    points.append(QPointF(0.0, .8));
-    points.append(QPointF(.1, .1));
-
-    TestRectangle->setPolygon(points);
-    TestRectangle->setBrush(Qt::red);
-    TestRectangle->setOpacity(.5);
-    TransformUpdater->addTransformItem(TestParent);
 }
 
 void cwNoteItem::setProjectFilename(QString projectFilename) {
@@ -130,9 +114,9 @@ void cwNoteItem::regenerateStationVertices() {
 
 //    //Make sure we have a note component so we can create it
 //    if(NoteStationComponent == NULL) {
-//        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+//        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
 //        if(context == NULL) { return; }
-//        NoteStationComponent = new QDeclarativeComponent(context->engine(), "qml/NoteStation.qml", this);
+//        NoteStationComponent = new QQmlComponent(context->engine(), "qml/NoteStation.qml", this);
 //        if(NoteStationComponent->isError()) {
 //            qDebug() << "Notecomponent errors:" << NoteStationComponent->errorString();
 //        }
@@ -149,7 +133,7 @@ void cwNoteItem::regenerateStationVertices() {
 //                continue;
 //            }
 
-//            QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(NoteStationComponent->create());
+//            QQuickItem* stationItem = qobject_cast<QQuickItem*>(NoteStationComponent->create());
 //            if(stationItem == NULL) {
 //                qDebug() << "Problem creating new station item ... THIS IS A BUG!";
 //                continue;
@@ -163,14 +147,14 @@ void cwNoteItem::regenerateStationVertices() {
 //        int notesToRemove = QMLNoteStations.size() - Note->numberOfStations();
 //        //Add more stations to the NoteStations
 //        for(int i = 0; i < notesToRemove; i++) {
-//            QDeclarativeItem* deleteStation = QMLNoteStations.last();
+//            QQuickItem* deleteStation = QMLNoteStations.last();
 //            QMLNoteStations.removeLast();
 //            deleteStation->deleteLater();
 //        }
 //    }
 
 //    for(int i = 0; i < QMLNoteStations.size(); i++) {
-//        QDeclarativeItem* stationItem = QMLNoteStations[i];
+//        QQuickItem* stationItem = QMLNoteStations[i];
 //        stationItem->setProperty("stationId", i);
 //        stationItem->setProperty("noteViewer", QVariant::fromValue(this));
 //        stationItem->setProperty("note", QVariant::fromValue(Note));
@@ -333,7 +317,7 @@ void cwNoteItem::setNote(cwNote* note) {
 
             regenerateStationVertices();
             //Update all the station with new positions and station names
-            foreach(QDeclarativeItem* qmlStation, QMLNoteStations) {
+            foreach(QQuickItem* qmlStation, QMLNoteStations) {
                 qmlStation->setProperty("note", QVariant::fromValue<QObject*>(Note));
             }
         }
@@ -437,7 +421,7 @@ void cwNoteItem::updateNoteRotation(float degrees) {
 ////    //This is slow, compared to GPU transformation, but not sure how to use QML,  Could use
 ////    //Point sprits, but annoying to control.
 ////    for(int i = 0; i < stations.size() && i < QMLNoteStations.size(); i++) {
-////        QDeclarativeItem* item = QMLNoteStations[i];
+////        QQuickItem* item = QMLNoteStations[i];
 ////        cwNoteStation station = stations[i];
 
 ////        QVector3D transformedPoint = Camera->viewProjectionMatrix() * RotationModelMatrix * QVector3D(station.positionOnNote());
@@ -565,7 +549,7 @@ void cwNoteItem::moveStation(QPoint /*qtViewportCoordinate*/, cwNote* /*note*/, 
   This will deselect the previous station.  Send this null to deselect the current
   station
   */
-void cwNoteItem::setSelectedStation(QDeclarativeItem* station) {
+void cwNoteItem::setSelectedStation(QQuickItem* station) {
     if(SelectedNoteStation != NULL && SelectedNoteStation->property("selected").toBool() != false) {
         SelectedNoteStation->setProperty("selected", false);
     }

@@ -7,7 +7,7 @@
 #include "cwScrapItem.h"
 #include "cwScrapStationView.h"
 
-cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QDeclarativeItem *parent) :
+cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QQuickItem *parent) :
     cwInteraction(parent),
 //    NoteStationView(NULL),
     ScrapView(NULL)

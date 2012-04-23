@@ -8,29 +8,29 @@
 
 //Qt includes
 #include <QDeclarativeContext>
-#include <QDeclarativeEngine>
-#include <QDeclarativeComponent>
+#include <QQmlEngine>
+#include <QQmlComponent>
 #include <QDebug>
 
 cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* context, QObject *parent) :
     QObject(parent)
 {
-    QDeclarativeEngine* engine = context->engine();
+    QQmlEngine* engine = context->engine();
 
-    Delegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
-    StationDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/StationBox.qml", this);
-    TitleDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
-    FrontSiteDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
-    BackSiteDelegate = new QDeclarativeComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
-    //    LeftDelegate = new QDeclarativeComponent(engine, "qml/LeftDataBox.qml", this);
-//    RightDelegate = new QDeclarativeComponent(engine, "qml/RightDataBox.qml", this);
-//    UpDelegate = new QDeclarativeComponent(engine, "qml/UpDataBox.qml", this);
-//    DownDelegate = new QDeclarativeComponent(engine, "qml/DownDataBox.qml", this);
-//    DistanceDelegate = new QDeclarativeComponent(engine, "qml/ShotDistanceDataBox.qml", this);
-//    FrontCompassDelegate = new QDeclarativeComponent(engine, "qml/FrontCompassReadBox.qml", this);
-//    BackCompassDelegate = new QDeclarativeComponent(engine, "qml/BackCompassReadBox.qml", this);
-//    FrontClinoDelegate = new QDeclarativeComponent(engine, "qml/FrontClinoReadBox.qml", this);
-//    BackClinoDelegate = new QDeclarativeComponent(engine, "qml/BackClinoReadBox.qml", this);
+    Delegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
+    StationDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/StationBox.qml", this);
+    TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
+    FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
+    BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
+    //    LeftDelegate = new QQmlComponent(engine, "qml/LeftDataBox.qml", this);
+//    RightDelegate = new QQmlComponent(engine, "qml/RightDataBox.qml", this);
+//    UpDelegate = new QQmlComponent(engine, "qml/UpDataBox.qml", this);
+//    DownDelegate = new QQmlComponent(engine, "qml/DownDataBox.qml", this);
+//    DistanceDelegate = new QQmlComponent(engine, "qml/ShotDistanceDataBox.qml", this);
+//    FrontCompassDelegate = new QQmlComponent(engine, "qml/FrontCompassReadBox.qml", this);
+//    BackCompassDelegate = new QQmlComponent(engine, "qml/BackCompassReadBox.qml", this);
+//    FrontClinoDelegate = new QQmlComponent(engine, "qml/FrontClinoReadBox.qml", this);
+//    BackClinoDelegate = new QQmlComponent(engine, "qml/BackClinoReadBox.qml", this);
 
     //Print error if there are any
     printErrors(Delegate);
@@ -56,7 +56,7 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* co
 /**
   \brief Prints errors for cwSurveyChunkViewComponents
  */
-void cwSurveyChunkViewComponents::printErrors(QDeclarativeComponent* component) {
+void cwSurveyChunkViewComponents::printErrors(QQmlComponent* component) {
     if(!component->errors().isEmpty()) {
         qDebug() << component->errorString();
     }

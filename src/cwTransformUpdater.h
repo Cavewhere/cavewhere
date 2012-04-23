@@ -4,7 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QMatrix4x4>
-#include <QGraphicsObject>
+#include <QQuickItem>
 
 //Our includes
 #include "cwCamera.h"
@@ -36,11 +36,11 @@ public:
     void setModelMatrix(QMatrix4x4 matrix);
     QMatrix4x4 modelMatrix() const;
 
-    void addPointItem(QGraphicsObject* object);
-    void removePointItem(QGraphicsObject* object);
+    void addPointItem(QQuickItem* object);
+    void removePointItem(QQuickItem* object);
 
-    void addTransformItem(QGraphicsObject* item);
-    void removeTransformItem(QGraphicsObject* item);
+    void addTransformItem(QQuickItem* item);
+    void removeTransformItem(QQuickItem *item);
 
     QMatrix4x4 matrix() const;
 
@@ -55,7 +55,7 @@ signals:
 
 public slots:
     void update();
-    void updateTransform(QGraphicsObject* object);
+    void updateTransform(QQuickItem* object);
 
 private slots:
     void pointItemDeleted(QObject* object);
@@ -63,14 +63,14 @@ private slots:
 
     void transformItemDeleted(QObject* object);
 private:
-    QSet<QGraphicsObject*> PointItems;
-    QSet<QGraphicsObject*> TransformItems;
+    QSet<QQuickItem*> PointItems;
+    QSet<QQuickItem*> TransformItems;
     cwCamera* Camera;
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
 
-    void updatePoint(QGraphicsObject* object);
+    void updatePoint(QQuickItem* object);
 
     void updateTransformMatrix();
 };

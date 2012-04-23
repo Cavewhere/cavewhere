@@ -2,7 +2,7 @@
 #define CWBASENOTESTATIONINTERACTION_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 
 //Our includes
 #include "cwBasePanZoomInteraction.h"
@@ -20,7 +20,7 @@ class cwBaseNoteStationInteraction : public cwInteraction
     Q_PROPERTY(cwScrapView* scrapView READ scrapView WRITE setScrapView NOTIFY scrapViewChanged)
 
 public:
-    explicit cwBaseNoteStationInteraction(QDeclarativeItem *parent = 0);
+    explicit cwBaseNoteStationInteraction(QQuickItem *parent = 0);
 
     Q_INVOKABLE void addStation(QPointF notePosition);
 

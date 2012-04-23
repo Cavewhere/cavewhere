@@ -9,14 +9,14 @@
 #include "cwSurveyChunkTrimmer.h"
 
 //Qt includes
-#include <QDeclarativeEngine>
-#include <QDeclarativeComponent>
-#include <QDeclarativeItem>
+#include <QQmlEngine>
+#include <QQmlComponent>
+#include <QQuickItem>
 #include <QDeclarativeContext>
 #include <QKeyEvent>
 
-cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
+    QQuickItem(parent),
     Trip(NULL),
     ChunkQMLComponents(NULL),
     NeedChunkAboveMapper(new QSignalMapper(this)),
@@ -31,7 +31,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QDeclarativeItem *parent) :
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
     if(ChunkQMLComponents == NULL) {
-        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
         context->contextProperty("globalShadowTextInput");
         ChunkQMLComponents = new cwSurveyChunkViewComponents(context, this);
     }
@@ -157,7 +157,7 @@ void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
     if(range.first < 0 || range.first >= ChunkViews.size()) { return; }
     if(range.second < 0 || range.second >= ChunkViews.size()) { return; }
 
-    float oldContentWidth = childrenBoundingRect().width();
+    float oldContentWidth = childrenRect().width();
 
     //qDebug() << "Range: " << range;
     //Remove views going in the negative direction
@@ -230,8 +230,8 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
 
         //Create a chunkView object
         cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
-        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-        QDeclarativeEngine::setContextForObject(chunkView, context);
+        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+        QQmlEngine::setContextForObject(chunkView, context);
         chunkView->setQMLComponents(ChunkQMLComponents);
 
         //Set the chunkview rendering frontSights or backsights
@@ -373,7 +373,7 @@ void cwSurveyChunkGroupView::SetEnsureVisibleRect(QRectF rect) {
     rect.setHeight(rect.height() + extraHeight);
     rect.moveTop(rect.top() - extraHeight / 2.0);
 
-    EnsureVisibleArea = mapRectToParent(rect);
+    EnsureVisibleArea = mapRectToItem(parentItem(), rect);
     emit ensureVisibleRectChanged();
 }
 
@@ -481,17 +481,17 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
 
     int previousIndex = index - 1;
     if(previousIndex < 0) {
-        ChunkViews[index]->setPos(0, 0);
+        ChunkViews[index]->setPos(QPointF(0.0f, 0.0f));
         return;
     }
 
     cwSurveyChunkView* previousView = ChunkViews[previousIndex];
     //const float buffer = 10.0;
-    float x = 0.0;
+    float x = 0.0f;
     float y = mapRectFromItem(previousView, previousView->boundingRect()).bottom(); //height(); // + buffer;
 
     cwSurveyChunkView* view = ChunkViews[index];
-    view->setPos(x, y);
+    view->setPos(QPointF(x, y));
 }
 
 /**
@@ -553,10 +553,10 @@ float cwSurveyChunkGroupView::contentHeight() const {
     return ChunkBoundingRects.last().bottom() - ChunkBoundingRects.first().top() + 1;
 }
 
-float cwSurveyChunkGroupView::contentWidth() const {
+float cwSurveyChunkGroupView::contentWidth() {
     if(ChunkBoundingRects.isEmpty()) { return 500.0; }
 //    qDebug() << "Children width: " << childrenBoundingRect().width();
-    return childrenBoundingRect().width();
+    return childrenRect().width();
 }
 
 

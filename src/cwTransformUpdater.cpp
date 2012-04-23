@@ -46,7 +46,7 @@ void cwTransformUpdater::setModelMatrix(QMatrix4x4 matrix) {
   This will update the object position by using setPosition.  The object needs to have "position3D"
   property for this to work.
   */
-void cwTransformUpdater::addPointItem(QGraphicsObject* object) {
+void cwTransformUpdater::addPointItem(QQuickItem *object) {
     if(object == NULL) { return; }
 
     if(PointItems.contains(object)) {
@@ -63,7 +63,7 @@ void cwTransformUpdater::addPointItem(QGraphicsObject* object) {
 /**
   Removes a object from the transform updater
   */
-void cwTransformUpdater::removePointItem(QGraphicsObject* object) {
+void cwTransformUpdater::removePointItem(QQuickItem *object) {
     if(object == NULL) { return; }
 
     if(!PointItems.contains(object)) {
@@ -81,7 +81,7 @@ void cwTransformUpdater::removePointItem(QGraphicsObject* object) {
   coordinates are defined in a opengl 2D cooridates system.  When transformUpdater calls update, the
   item's transformation will update.  The position will not be effeceted through setPos().
   */
-void cwTransformUpdater::addTransformItem(QGraphicsObject* item) {
+void cwTransformUpdater::addTransformItem(QQuickItem *item) {
     if(item == NULL) { return; }
 
     if(TransformItems.contains(item)) {
@@ -98,7 +98,7 @@ void cwTransformUpdater::addTransformItem(QGraphicsObject* item) {
 /**
   This remove the item from the transformer
   */
-void cwTransformUpdater::removeTransformItem(QGraphicsObject* item) {
+void cwTransformUpdater::removeTransformItem(QQuickItem* item) {
     if(item == NULL) { return; }
 
     if(!TransformItems.contains(item)) {
@@ -119,12 +119,12 @@ void cwTransformUpdater::update() {
     updateTransformMatrix();
 
     //Update all the point objects
-    foreach(QGraphicsObject* object, PointItems) {
+    foreach(QQuickItem* object, PointItems) {
         updatePoint(object);
     }
 
     //Update the transform objects
-    foreach(QGraphicsObject* object, TransformItems) {
+    foreach(QQuickItem* object, TransformItems) {
         updateTransform(object);
     }
 
@@ -136,10 +136,10 @@ void cwTransformUpdater::update() {
   position using setPos.  This doesn't scale the object like updateTransform does.  This is
   useful for billboarded points.
   */
-void cwTransformUpdater::updatePoint(QGraphicsObject* object) {
+void cwTransformUpdater::updatePoint(QQuickItem *object) {
     QVector3D position = object->property("position3D").value<QVector3D>();
     QVector3D position2D = TransformMatrix * position;
-    object->setPos(position2D.x(), position2D.y());
+    object->setPos(QPointF(position2D.x(), position2D.y()));
 }
 
 /**
@@ -149,7 +149,7 @@ void cwTransformUpdater::updatePoint(QGraphicsObject* object) {
 
   This assuems that the object's geometry has already been set in local 2D opengl coordinates.
   */
-void cwTransformUpdater::updateTransform(QGraphicsObject* object) {
+void cwTransformUpdater::updateTransform(QQuickItem *object) {
     Q_ASSERT(object != NULL);
     object->setTransform(TransformMatrix.toTransform());
 }
@@ -177,7 +177,7 @@ void cwTransformUpdater::updateTransformMatrix() {
   This will remove the object from the transformUpdater
   */
 void cwTransformUpdater::pointItemDeleted(QObject* object) {
-   QGraphicsObject* graphicsObject = qobject_cast<QGraphicsObject*>(object);
+   QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
    removePointItem(graphicsObject);
 }
 
@@ -187,7 +187,7 @@ void cwTransformUpdater::pointItemDeleted(QObject* object) {
   This will update the position of a object, when it has changed.
   */
 void cwTransformUpdater::handlePointItemDataChanged() {
-    QGraphicsObject* item = qobject_cast<QGraphicsObject*>(sender());
+    QQuickItem* item = qobject_cast<QQuickItem*>(sender());
     if(PointItems.contains(item)) {
         updatePoint(item);
     }
@@ -199,7 +199,7 @@ void cwTransformUpdater::handlePointItemDataChanged() {
   This will remove the object from the transformUpdater
   */
 void cwTransformUpdater::transformItemDeleted(QObject* object) {
-    QGraphicsObject* graphicsObject = qobject_cast<QGraphicsObject*>(object);
+    QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
     removeTransformItem(graphicsObject);
 }
 

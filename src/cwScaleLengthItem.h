@@ -10,7 +10,7 @@ class cwScaleLengthItem : public cwAbstract2PointItem
     Q_OBJECT
 
 public:
-    explicit cwScaleLengthItem(QDeclarativeItem *parent = 0);
+    explicit cwScaleLengthItem(QQuickItem *parent = 0);
     
 public slots:
 

@@ -1,6 +1,6 @@
 #include "cwNoteInteraction.h"
 
-cwNoteInteraction::cwNoteInteraction(QDeclarativeItem *parent) :
+cwNoteInteraction::cwNoteInteraction(QQuickItem *parent) :
     cwInteraction(parent), Note(NULL)
 {
 }

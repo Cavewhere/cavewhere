@@ -1,9 +1,6 @@
 #ifndef CWBASESCRAPINTERACTION_H
 #define CWBASESCRAPINTERACTION_H
 
-//Qt includes
-#include <QDeclarativeItem>
-
 //Our includes
 #include "cwNoteInteraction.h"
 class cwScrap;
@@ -15,7 +12,7 @@ class cwBaseScrapInteraction : public cwNoteInteraction
 
 
 public:
-    explicit cwBaseScrapInteraction(QDeclarativeItem *parent = 0);
+    explicit cwBaseScrapInteraction(QQuickItem *parent = 0);
 
     Q_INVOKABLE void addPoint(QPointF noteCoordinate);
 

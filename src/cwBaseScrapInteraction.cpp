@@ -4,7 +4,7 @@
 #include "cwScrap.h"
 #include "cwNote.h"
 
-cwBaseScrapInteraction::cwBaseScrapInteraction(QDeclarativeItem *parent) :
+cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
     CurrentScrapIndex(-1)
 {

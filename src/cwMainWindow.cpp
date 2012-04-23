@@ -14,8 +14,8 @@
 
 //Qt includes
 #include <QDeclarativeContext>
-#include <QDeclarativeComponent>
-#include <QDeclarativeEngine>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QGraphicsObject>
 #include <QFileDialog>
 #include <QDebug>
@@ -49,7 +49,7 @@
 
 #if defined(QMLJSDEBUGGER)
 
-// Enable debugging before any QDeclarativeEngine is created
+// Enable debugging before any QQmlEngine is created
 struct QmlJsDebuggingEnabler
 {
     QmlJsDebuggingEnabler()
@@ -58,7 +58,7 @@ struct QmlJsDebuggingEnabler
     }
 };
 
-// Execute code in constructor before first QDeclarativeEngine is instantiated
+// Execute code in constructor before first QQmlEngine is instantiated
 static QmlJsDebuggingEnabler enableDebuggingHelper;
 
 #endif // QMLJSDEBUGGER

@@ -1,7 +1,7 @@
 #include "cwAbstract2PointItem.h"
 
-cwAbstract2PointItem::cwAbstract2PointItem(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent)
+cwAbstract2PointItem::cwAbstract2PointItem(QQuickItem *parent) :
+    QQuickItem(parent)
 {
     TransformUpdater = NULL;
     connect(this, SIGNAL(visibleChanged()), SLOT(updateTransformUpdater()));

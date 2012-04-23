@@ -14,7 +14,7 @@
 //Qt includes
 #include <QObject>
 #include <QVariant>
-class QDeclarativeComponent;
+class QQmlComponent;
 class QDeclarativeContext;
 class QValidator;
 
@@ -25,17 +25,17 @@ class cwSurveyChunkViewComponents : public QObject
 public:
     explicit cwSurveyChunkViewComponents(QDeclarativeContext* context, QObject *parent = 0);
 
-    QDeclarativeComponent* titleDelegate() const;
-    QDeclarativeComponent* stationDelegate() const;
-    QDeclarativeComponent* leftDelegate() const;
-    QDeclarativeComponent* rightDelegate() const;
-    QDeclarativeComponent* upDelegate() const;
-    QDeclarativeComponent* downDelegate() const;
-    QDeclarativeComponent* distanceDelegate() const;
-    QDeclarativeComponent* frontCompassDelegate() const;
-    QDeclarativeComponent* backCompassDelegate() const;
-    QDeclarativeComponent* frontClinoDelegate() const;
-    QDeclarativeComponent* backClinoDelegate() const;
+    QQmlComponent* titleDelegate() const;
+    QQmlComponent* stationDelegate() const;
+    QQmlComponent* leftDelegate() const;
+    QQmlComponent* rightDelegate() const;
+    QQmlComponent* upDelegate() const;
+    QQmlComponent* downDelegate() const;
+    QQmlComponent* distanceDelegate() const;
+    QQmlComponent* frontCompassDelegate() const;
+    QQmlComponent* backCompassDelegate() const;
+    QQmlComponent* frontClinoDelegate() const;
+    QQmlComponent* backClinoDelegate() const;
 
     cwValidator* stationValidator() const;
     cwValidator* lrudValidator() const;
@@ -48,11 +48,11 @@ signals:
 public slots:
 
 private:
-    QDeclarativeComponent* Delegate;
-    QDeclarativeComponent* StationDelegate;
-    QDeclarativeComponent* TitleDelegate;
-    QDeclarativeComponent* FrontSiteDelegate;
-    QDeclarativeComponent* BackSiteDelegate;
+    QQmlComponent* Delegate;
+    QQmlComponent* StationDelegate;
+    QQmlComponent* TitleDelegate;
+    QQmlComponent* FrontSiteDelegate;
+    QQmlComponent* BackSiteDelegate;
 
     cwStationValidator* StationValidator;
     cwDistanceValidator* DistanceValidator;
@@ -60,57 +60,57 @@ private:
     cwClinoValidator* ClinoValidator;
 
 
-    void printErrors(QDeclarativeComponent* component);
+    void printErrors(QQmlComponent* component);
 
 };
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::titleDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::titleDelegate() const {
     return TitleDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::stationDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::stationDelegate() const {
     //return Delegate;
     return StationDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::leftDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::leftDelegate() const {
     return Delegate;
     //    return LeftDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::rightDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::rightDelegate() const {
     return Delegate;
     //    return RightDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::upDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::upDelegate() const {
     return Delegate;
     //    return UpDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::downDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::downDelegate() const {
     return Delegate;
     //    return DownDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::distanceDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::distanceDelegate() const {
     return Delegate;
     //    return DistanceDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontCompassDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::frontCompassDelegate() const {
     return FrontSiteDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::backCompassDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::backCompassDelegate() const {
     return BackSiteDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::frontClinoDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::frontClinoDelegate() const {
     return FrontSiteDelegate;
 }
 
-inline QDeclarativeComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
+inline QQmlComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
     return BackSiteDelegate;
 }
 

@@ -13,7 +13,7 @@ class cwNoteInteraction : public cwInteraction
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
 
 public:
-    explicit cwNoteInteraction(QDeclarativeItem *parent = 0);
+    explicit cwNoteInteraction(QQuickItem *parent = 0);
 
     void setNote(cwNote* note);
     cwNote* note() const;

@@ -23,7 +23,7 @@ class cwImageItem : public cwGLRenderer
     Q_PROPERTY(cwImageProperties* imageProperties READ imageProperties NOTIFY imagePropertiesChanged)
 
 public:
-    cwImageItem(QDeclarativeItem *parent = 0);
+    cwImageItem(QQuickItem *parent = 0);
 
     void setImage(const cwImage& image);
     cwImage image() const;

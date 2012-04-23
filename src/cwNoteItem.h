@@ -11,7 +11,7 @@
 #include "cwTransformUpdater.h"
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 #include <QTransform>
 #include <QFutureWatcher>
 #include <QTimer>
@@ -24,7 +24,7 @@ class cwNoteItem : public cwGLRenderer
     Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())
 
 public:
-    explicit cwNoteItem(QDeclarativeItem *parent = 0);
+    explicit cwNoteItem(QQuickItem *parent = 0);
 
     cwNote* note() const;
     void setNote(cwNote* note);
@@ -38,7 +38,7 @@ public:
     //For adding a station
     Q_INVOKABLE int addStation(QPoint qtViewportCoordinate);
     Q_INVOKABLE void moveStation(QPoint qtViewportCoordinate, cwNote* note, int stationIndex);
-    Q_INVOKABLE void setSelectedStation(QDeclarativeItem* station);
+    Q_INVOKABLE void setSelectedStation(QQuickItem* station);
 
     //For adding a scrap
     Q_INVOKABLE void addScrapPoint(QPoint qtViewportCoordinate);
@@ -87,14 +87,11 @@ private:
 
 
 
-    QDeclarativeComponent* NoteStationComponent;
-    QList<QDeclarativeItem*> QMLNoteStations;
-    QDeclarativeItem* SelectedNoteStation;
+    QQmlComponent* NoteStationComponent;
+    QList<QQuickItem*> QMLNoteStations;
+    QQuickItem* SelectedNoteStation;
 
     cwTransformUpdater* TransformUpdater; //!< Transform objects with gl coordinates into qt item coordinates
-
-    QGraphicsObject* TestParent;
-    QGraphicsPolygonItem* TestRectangle;
 
 //    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 

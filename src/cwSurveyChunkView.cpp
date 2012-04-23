@@ -11,7 +11,7 @@
 
 //Qt includes
 #include <QMetaObject>
-#include <QDeclarativeEngine>
+#include <QQmlEngine>
 #include <QDeclarativeContext>
 #include <QVariant>
 #include <QMenu>
@@ -19,8 +19,8 @@
 #include <QGraphicsScene>
 #include <QCursor>
 
-cwSurveyChunkView::cwSurveyChunkView(QDeclarativeItem* parent) :
-    QDeclarativeItem(parent),
+cwSurveyChunkView::cwSurveyChunkView(QQuickItem* parent) :
+    QQuickItem(parent),
     SurveyChunk(NULL),
     ChunkTrimmer(NULL),
     QMLComponents(NULL),
@@ -94,7 +94,7 @@ void cwSurveyChunkView::setQMLComponents(cwSurveyChunkViewComponents* components
   cell. This function might get evil...
   */
 void cwSurveyChunkView::tab(int rowIndex, int role) {
-    QDeclarativeItem* nextItem = NULL;
+    QQuickItem* nextItem = NULL;
 
     ShotRow shotRow = getNavigationShotRow(rowIndex);
     StationRow stationRow = getNavigationStationRow(rowIndex);
@@ -151,7 +151,7 @@ void cwSurveyChunkView::tab(int rowIndex, int role) {
   This tabs to the next databox
   */
 void cwSurveyChunkView::previousTab(int rowIndex, int role) {
-    QDeclarativeItem* previousItem = NULL;
+    QQuickItem* previousItem = NULL;
 
     ShotRow shotRow = getNavigationShotRow(rowIndex);
     StationRow stationRow = getNavigationStationRow(rowIndex);
@@ -211,7 +211,7 @@ void cwSurveyChunkView::previousTab(int rowIndex, int role) {
 
   */
 void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
-    QDeclarativeItem* navItem = NULL;
+    QQuickItem* navItem = NULL;
 
     switch((Qt::Key)key) {
     case Qt::Key_Left:
@@ -235,9 +235,9 @@ void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
 }
 
 void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
-    QDeclarativeItem* dataBox = databox(rowIndex, role);
+    QQuickItem* dataBox = databox(rowIndex, role);
     if(dataBox != NULL) {
-        QRectF localRect = dataBox->mapRectToParent(dataBox->childrenBoundingRect());
+        QRectF localRect = dataBox->mapRectToItem(parentItem(), dataBox->childrenRect());
 
         if(rowIndex == ShotRows.size() - 2 ||
                 ShotRows.size() == 1) {
@@ -245,7 +245,7 @@ void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
             localRect.setHeight(localRect.height() + extra);
         }
 
-        QRectF parentRect = mapRectToParent(localRect);
+        QRectF parentRect = mapRectToItem(parentItem(), localRect);
         emit ensureVisibleChanged(parentRect);
     }
 }
@@ -253,7 +253,7 @@ void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
 /**
   Moves the focus to the left
   */
-QDeclarativeItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
+QQuickItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
         return NULL;
@@ -294,7 +294,7 @@ QDeclarativeItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
 /**
   Moves the focus to the right
   */
-QDeclarativeItem* cwSurveyChunkView::navArrowRight(int rowIndex, int role)  {
+QQuickItem* cwSurveyChunkView::navArrowRight(int rowIndex, int role)  {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
         if(rowIndex == 0) {
@@ -335,7 +335,7 @@ QDeclarativeItem* cwSurveyChunkView::navArrowRight(int rowIndex, int role)  {
 /**
   Moves the focus up
   */
-QDeclarativeItem* cwSurveyChunkView::navArrowUp(int rowIndex, int role)  {
+QQuickItem* cwSurveyChunkView::navArrowUp(int rowIndex, int role)  {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
         return getNavigationStationRow(rowIndex - 1).stationName();
@@ -380,7 +380,7 @@ QDeclarativeItem* cwSurveyChunkView::navArrowUp(int rowIndex, int role)  {
 /**
   Moves the focus down
   */
-QDeclarativeItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
+QQuickItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
         return getNavigationStationRow(rowIndex + 1).stationName();
@@ -426,7 +426,7 @@ QDeclarativeItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
 /**
   Sets the focus for the item
   */
-void cwSurveyChunkView::setItemFocus(QDeclarativeItem *item) {
+void cwSurveyChunkView::setItemFocus(QQuickItem *item) {
     if(item != NULL) {
         item->setFocus(true);
     }
@@ -435,7 +435,7 @@ void cwSurveyChunkView::setItemFocus(QDeclarativeItem *item) {
 /**
   Gets the data box at rowIndex and role
   */
-QDeclarativeItem *cwSurveyChunkView::databox(int rowIndex, int role)
+QQuickItem *cwSurveyChunkView::databox(int rowIndex, int role)
 {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
@@ -555,8 +555,8 @@ void cwSurveyChunkView::setBackSights(bool hasBackSights) {
     }
 }
 
-QRectF cwSurveyChunkView::boundingRect() const {
-    QRectF childrenBounds = childrenBoundingRect();
+QRectF cwSurveyChunkView::boundingRect() {
+    QRectF childrenBounds = childrenRect();
     childrenBounds.setHeight(heightHint(StationRows.size()));
     return childrenBounds;
 }
@@ -565,7 +565,7 @@ QRectF cwSurveyChunkView::boundingRect() const {
   \brief Re-initializes the view
   */
 void cwSurveyChunkView::clear() {
-    foreach(QGraphicsItem* item, childItems()) {
+    foreach(QQuickItem* item, childItems()) {
         delete item;
     }
 
@@ -673,7 +673,7 @@ void cwSurveyChunkView::addStations(int beginIndex, int endIndex) {
     if(SurveyChunk->stationCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
-    prepareGeometryChange();
+//    prepareGeometryChange();
 
     //Disconnect stations that were watched
     disconnect(this, SLOT(stationValueHasChanged()));
@@ -718,7 +718,7 @@ void cwSurveyChunkView::addShots(int beginIndex, int endIndex) {
     if(SurveyChunk->shotCount() == 0) { return; }
 
     //Alert the scene graph that we're changing
-    prepareGeometryChange();
+//    prepareGeometryChange();
 
     //Make sure thes are good indexes, else clamp
     beginIndex = qMax(0, beginIndex);
@@ -760,7 +760,7 @@ void cwSurveyChunkView::removeStations(int beginIndex, int endIndex) {
     for(int i = endIndex; i >= beginIndex; i--) {
         StationRow row = getStationRow(i);
 
-        foreach(QDeclarativeItem* item, row.items()) {
+        foreach(QQuickItem* item, row.items()) {
             if(item) {
                 item->deleteLater();
             }
@@ -790,7 +790,7 @@ void cwSurveyChunkView::removeShots(int beginIndex, int endIndex) {
     for(int i = endIndex; i >= beginIndex; i--) {
         ShotRow row = getShotRow(i);
 
-        foreach(QDeclarativeItem* item, row.items()) {
+        foreach(QQuickItem* item, row.items()) {
             if(item) {
                 item->deleteLater();
             }
@@ -815,15 +815,15 @@ void cwSurveyChunkView::removeShots(int beginIndex, int endIndex) {
   */
 void cwSurveyChunkView::createTitlebar() {
 
-    QDeclarativeComponent* titleDelegate = QMLComponents->titleDelegate();
-    StationTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    DistanceTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    AzimuthTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    ClinoTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    LeftTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    RightTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    UpTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
-    DownTitle = qobject_cast<QDeclarativeItem*>(titleDelegate->create());
+    QQmlComponent* titleDelegate = QMLComponents->titleDelegate();
+    StationTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    DistanceTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    AzimuthTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    ClinoTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    LeftTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    RightTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    UpTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
+    DownTitle = qobject_cast<QQuickItem*>(titleDelegate->create());
 
     StationTitle->setParentItem(this);
     DistanceTitle->setParentItem(this);
@@ -852,7 +852,7 @@ void cwSurveyChunkView::createTitlebar() {
     UpTitle->setProperty("height", elementHeight());
     DownTitle->setProperty("height", elementHeight());
 
-    StationTitle->setPos(0, 0);
+    StationTitle->setPos(QPointF(0, 0));
     DistanceTitle->setX(mapRectFromItem(StationTitle, StationTitle->boundingRect()).right() - 1);
     DistanceTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).center().y() + 1);
     AzimuthTitle->setX(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).right() - 1);
@@ -883,7 +883,7 @@ cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
-    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(view);
+    QDeclarativeContext* context = QQmlEngine::contextForObject(view);
     Items[StationName] = setupItem(components->stationDelegate(),
                                    context,
                                    cwSurveyChunk::StationNameRole,
@@ -909,7 +909,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
                             cwSurveyChunk::StationDownRole,
                             components->lrudValidator());
 
-    foreach(QDeclarativeItem* item, items()) {
+    foreach(QQuickItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setProperty("surveyChunkView", QVariant::fromValue(view));
@@ -932,7 +932,7 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
 /**
   \brief Sets up a row declarative item
   */
-QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* component,
+QQuickItem* cwSurveyChunkView::Row::setupItem(QQmlComponent* component,
                                                     QDeclarativeContext* context,
                                                     cwSurveyChunk::DataRole role,
                                                     cwValidator *validator) {
@@ -941,7 +941,7 @@ QDeclarativeItem* cwSurveyChunkView::Row::setupItem(QDeclarativeComponent* compo
         return NULL;
     }
 
-    QDeclarativeItem* item = qobject_cast<QDeclarativeItem*>(component->create(context));
+    QQuickItem* item = qobject_cast<QQuickItem*>(component->create(context));
     item->setProperty("dataRole", role);
     item->setProperty("dataValidator", QVariant::fromValue(validator));
     return item;
@@ -960,7 +960,7 @@ cwSurveyChunkView::ShotRow::ShotRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
-    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(view);
+    QDeclarativeContext* context = QQmlEngine::contextForObject(view);
     Items[Distance] = setupItem(components->distanceDelegate(),
                                 context,
                                 cwSurveyChunk::ShotDistanceRole,
@@ -986,7 +986,7 @@ cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row
                                  cwSurveyChunk::ShotBackClinoRole,
                                  components->clinoValidator());
 
-    foreach(QDeclarativeItem* item, items()) {
+    foreach(QQuickItem* item, items()) {
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setProperty("surveyChunkView", QVariant::fromValue(view));
@@ -1013,7 +1013,7 @@ void cwSurveyChunkView::positionStationRow(StationRow row, int index) {
 /**
   \brief Helper to the PositionStationRow
   */
-void cwSurveyChunkView::positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset, QSizeF size) {
+void cwSurveyChunkView::positionElement(QQuickItem* item, const QQuickItem* titleItem, int index, int yOffset, QSizeF size) {
     QRectF titleRect = mapRectFromItem(titleItem, titleItem->boundingRect());
     size = !size.isValid() ? titleRect.size() + QSizeF(-2, 0) : size;
     float y = titleRect.bottom() + titleRect.height() * index;
@@ -1086,12 +1086,12 @@ void cwSurveyChunkView::setChildActiveFocus(bool focus) {
         FocusedItem = NULL;
     } else if (sender() != FocusedItem) {
         //Gained focus
-        FocusedItem = qobject_cast<QDeclarativeItem*>(sender());
+        FocusedItem = qobject_cast<QQuickItem*>(sender());
     }
 
     if(FocusedItem != NULL) {
-        QRectF localRect = FocusedItem->mapRectToParent(FocusedItem->childrenBoundingRect());
-        QRectF parentRect = mapRectToParent(localRect);
+        QRectF localRect = FocusedItem->mapRectToItem(FocusedItem->parentItem(), FocusedItem->childrenRect());
+        QRectF parentRect = mapRectToItem(parentItem(), localRect);
         emit ensureVisibleChanged(parentRect);
     }
 }
@@ -1264,13 +1264,13 @@ void cwSurveyChunkView::updateIndexes(int index) {
     if(!interfaceValid()) { return; }
 
     for(int i = index; i < StationRows.size(); i++) {
-        foreach(QDeclarativeItem* item, StationRows[i].items()) {
+        foreach(QQuickItem* item, StationRows[i].items()) {
             item->setProperty("rowIndex", i);
         }
     }
 
     for(int i = index; i < ShotRows.size(); i++) {
-        foreach(QDeclarativeItem* item, ShotRows[i].items()) {
+        foreach(QQuickItem* item, ShotRows[i].items()) {
             item->setProperty("rowIndex", i);
         }
     }
@@ -1289,7 +1289,7 @@ bool cwSurveyChunkView::interfaceValid() {
 /**
   This finds the next tab item from the station at rowIndex
   */
-QDeclarativeItem *cwSurveyChunkView::tabFromStation(int rowIndex) {
+QQuickItem *cwSurveyChunkView::tabFromStation(int rowIndex) {
     //If not the first station
     if(rowIndex != 0) {
         //Check to make sure the previous row's distance has data in itShotRow
@@ -1330,7 +1330,7 @@ QDeclarativeItem *cwSurveyChunkView::tabFromStation(int rowIndex) {
 /**
   This holds the logic for the tab navigation from the clino databox
   */
-QDeclarativeItem *cwSurveyChunkView::tabFromClino(int rowIndex) {
+QQuickItem *cwSurveyChunkView::tabFromClino(int rowIndex) {
     if(HasBackSights) {
         //Go to the backsight entry box
         return getNavigationShotRow(rowIndex).backClino();
@@ -1342,11 +1342,11 @@ QDeclarativeItem *cwSurveyChunkView::tabFromClino(int rowIndex) {
 /**
   This holds the logic for the tab navigation from the clino databox
   */
-QDeclarativeItem *cwSurveyChunkView::tabFromBackClino(int rowIndex) {
+QQuickItem *cwSurveyChunkView::tabFromBackClino(int rowIndex) {
     return tabFromClinoToLRUD(rowIndex);
 }
 
-QDeclarativeItem *cwSurveyChunkView::tabFromClinoToLRUD(int rowIndex) {
+QQuickItem *cwSurveyChunkView::tabFromClinoToLRUD(int rowIndex) {
     //Go to the LRUD area
     //    QString leftFromStation = SurveyChunk->data(cwSurveyChunk::StationLeftRole, rowIndex).toString();
     //    if(leftFromStation.isEmpty()) {
@@ -1358,13 +1358,13 @@ QDeclarativeItem *cwSurveyChunkView::tabFromClinoToLRUD(int rowIndex) {
     return getNavigationStationRow(rowIndex + 1).left();
 }
 
-QDeclarativeItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
+QQuickItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
     int nextRowIndex = rowIndex + 1;
     cwSurveyChunk* currentSurveyChunk = SurveyChunk;
 
     //If the next tab should go to the next chunk
     if(nextRowIndex >= SurveyChunk->stationCount()) {
-        QDeclarativeItem* nextStation = getNavigationStationRow(nextRowIndex).stationName();
+        QQuickItem* nextStation = getNavigationStationRow(nextRowIndex).stationName();
 
         if(nextStation == NULL) {
             //Check to make sure the current row has a station name
@@ -1392,7 +1392,7 @@ QDeclarativeItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
 /**
   When the user presses shift tab from a station
   */
-QDeclarativeItem *cwSurveyChunkView::previousTabFromStation(int rowIndex) {
+QQuickItem *cwSurveyChunkView::previousTabFromStation(int rowIndex) {
     StationRow stationRow = getNavigationStationRow(rowIndex - 1);
     if(rowIndex == 1) {
         return stationRow.stationName();
@@ -1403,7 +1403,7 @@ QDeclarativeItem *cwSurveyChunkView::previousTabFromStation(int rowIndex) {
 /**
   When the user presses shift tab from a left databox
   */
-QDeclarativeItem *cwSurveyChunkView::previousTabFromLeft(int rowIndex) {
+QQuickItem *cwSurveyChunkView::previousTabFromLeft(int rowIndex) {
     if(rowIndex == 1) {
         return getNavigationStationRow(rowIndex - 1).down();
     }
@@ -1454,7 +1454,7 @@ void cwSurveyChunkView::updateDimensions() {
 void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) {
     if(index < 0 || index >= ShotRows.size()) { return; }
 
-    QDeclarativeItem* shotItem;
+    QQuickItem* shotItem;
     switch(role) {
     case cwSurveyChunk::ShotDistanceRole:
         shotItem = ShotRows[index].distance();
@@ -1500,7 +1500,7 @@ void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int inde
         return;
     }
 
-    QDeclarativeItem* stationItem;
+    QQuickItem* stationItem;
     switch(role) {
     case cwSurveyChunk::StationNameRole:
         stationItem = StationRows[index].stationName();

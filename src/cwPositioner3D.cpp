@@ -1,7 +1,7 @@
 #include "cwPositioner3D.h"
 
-cwPositioner3D::cwPositioner3D(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent)
+cwPositioner3D::cwPositioner3D(QQuickItem *parent) :
+    QQuickItem(parent)
 {
 }
 

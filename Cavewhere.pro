@@ -38,7 +38,7 @@ SOURCES += src/main.cpp \
     src/cwStation.cpp \
     src/cwShot.cpp \
     src/cwSurvexImporter.cpp \
-#    src/cwSurveyChunkGroupView.cpp \
+    src/cwSurveyChunkGroupView.cpp \
     src/cwClinoValidator.cpp \
     src/cwStationValidator.cpp \
     src/cwValidator.cpp \
@@ -47,7 +47,7 @@ SOURCES += src/main.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
     src/cwNote.cpp \
-#    src/cwNoteItem.cpp \
+    src/cwNoteItem.cpp \
     src/cwTrip.cpp \
     src/cwCave.cpp \
     src/cwCavingRegion.cpp \
@@ -57,7 +57,7 @@ SOURCES += src/main.cpp \
     src/cwSurvexImporterModel.cpp \
 #    src/cwImportSurvexDialog.cpp \
     src/cwGlobalIcons.cpp \
-#    src/cwSurveyChunkViewComponents.cpp \
+    src/cwSurveyChunkViewComponents.cpp \
     src/cwTask.cpp \
     src/cwSurvexExporterTripTask.cpp \
     src/cwTripStatistics.cpp \
@@ -83,7 +83,7 @@ SOURCES += src/main.cpp \
     src/cwStringListErrorModel.cpp \
     src/cwGlobalUndoStack.cpp \
     src/cwUndoer.cpp \
-#    src/cwSurveyChunkView.cpp \
+    src/cwSurveyChunkView.cpp \
     src/cwGLRenderer.cpp \
     src/cwCamera.cpp \
     src/cwPlane.cpp \
@@ -118,24 +118,24 @@ SOURCES += src/main.cpp \
     src/cwNoteTranformation.cpp \
     src/cwScrap.cpp \
     src/cwTransformUpdater.cpp \
-#    src/cwBaseNoteStationInteraction.cpp \
-#    src/cwBaseScrapInteraction.cpp \
-#    src/cwImageItem.cpp \
-#    src/cwScrapItem.cpp \
-#    src/cwBasePanZoomInteraction.cpp \
+    src/cwBaseNoteStationInteraction.cpp \
+    src/cwBaseScrapInteraction.cpp \
+    src/cwImageItem.cpp \
+    src/cwScrapItem.cpp \
+    src/cwBasePanZoomInteraction.cpp \
 #    src/cwWheelArea.cpp \
-#    src/cwNoteInteraction.cpp \
-#    src/cwScrapView.cpp \
-#    src/cwScrapStationView.cpp \
+    src/cwNoteInteraction.cpp \
+    src/cwScrapView.cpp \
+    src/cwScrapStationView.cpp \
     src/cwLength.cpp \
     src/cwGlobals.cpp \
-#    src/cwInteraction.cpp \
+    src/cwInteraction.cpp \
     src/cwQMLRegister.cpp \
-#    src/cwNorthArrowItem.cpp \
-#    src/cwPositioner3D.cpp \
-#    src/cwMainWindow.cpp \
-#    src/cwScaleLengthItem.cpp \
-#    src/cwAbstract2PointItem.cpp \
+    src/cwNorthArrowItem.cpp \
+    src/cwPositioner3D.cpp \
+    src/cwMainWindow.cpp \
+    src/cwScaleLengthItem.cpp \
+    src/cwAbstract2PointItem.cpp \
     src/cwImageProperties.cpp \
     src/cwTriangulateTask.cpp \
     src/cwScrapManager.cpp \
@@ -162,7 +162,7 @@ HEADERS  += \
     src/cwStation.h \
     src/cwShot.h \
     src/cwSurvexImporter.h \
-#    src/cwSurveyChunkGroupView.h \
+    src/cwSurveyChunkGroupView.h \
     src/cwClinoValidator.h \
     src/cwStationValidator.h \
     src/cwValidator.h \
@@ -171,7 +171,7 @@ HEADERS  += \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \
     src/cwNote.h \
-#    src/cwNoteItem.h \
+    src/cwNoteItem.h \
     src/cwTrip.h \
     src/cwCave.h \
     src/cwCavingRegion.h \
@@ -181,7 +181,7 @@ HEADERS  += \
     src/cwSurvexImporterModel.h \
 #    src/cwImportSurvexDialog.h \
     src/cwGlobalIcons.h \
-#    src/cwSurveyChunkViewComponents.h \
+    src/cwSurveyChunkViewComponents.h \
     src/cwTask.h \
     src/cwSurvexExporterTripTask.h \
     src/cwTripStatistics.h \
@@ -207,7 +207,7 @@ HEADERS  += \
     src/cwStringListErrorModel.h \
     src/cwGlobalUndoStack.h \
     src/cwUndoer.h \
-#    src/cwSurveyChunkView.h \
+    src/cwSurveyChunkView.h \
     src/cwGLRenderer.h \
     src/cwCamera.h \
     src/cwPlane.h \
@@ -246,25 +246,25 @@ HEADERS  += \
     src/cwNoteTranformation.h \
     src/cwScrap.h \
     src/cwTransformUpdater.h \
-#    src/cwBaseNoteStationInteraction.h \
-#    src/cwBaseScrapInteraction.h \
-#    src/cwImageItem.h \
-#    src/cwScrapItem.h \
-#    src/cwBasePanZoomInteraction.h \
+    src/cwBaseNoteStationInteraction.h \
+    src/cwBaseScrapInteraction.h \
+    src/cwImageItem.h \
+    src/cwScrapItem.h \
+    src/cwBasePanZoomInteraction.h \
 #    src/cwWheelArea.h \
-#    src/cwNoteInteraction.h \
-#    src/cwScrapView.h \
-#    src/cwScrapStationView.h \
+    src/cwNoteInteraction.h \
+    src/cwScrapView.h \
+    src/cwScrapStationView.h \
     src/cwLength.h \
     src/cwGlobals.h \
-#    src/cwInteraction.h \
+    src/cwInteraction.h \
     src/cwQMLRegister.h \
     src/cwQMLRegister.h \
-#    src/cwNorthArrowItem.h \
-#    src/cwPositioner3D.h \
-#    src/cwMainWindow.h \
-#    src/cwScaleLengthItem.h \
-#    src/cwAbstract2PointItem.h \
+    src/cwNorthArrowItem.h \
+    src/cwPositioner3D.h \
+    src/cwMainWindow.h \
+    src/cwScaleLengthItem.h \
+    src/cwAbstract2PointItem.h \
     src/cwImageProperties.h \
     src/cwTriangulateTask.h \
     src/cwScrapManager.h \

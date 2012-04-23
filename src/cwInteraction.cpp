@@ -1,7 +1,7 @@
 #include "cwInteraction.h"
 
-cwInteraction::cwInteraction(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent)
+cwInteraction::cwInteraction(QQuickItem *parent) :
+    QQuickItem(parent)
 {
 
 }

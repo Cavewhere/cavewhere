@@ -11,7 +11,7 @@ class cwNorthArrowItem : public cwAbstract2PointItem
     Q_OBJECT
 
 public:
-    explicit cwNorthArrowItem(QDeclarativeItem *parent = 0);
+    explicit cwNorthArrowItem(QQuickItem *parent = 0);
 
 public slots:
 

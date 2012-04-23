@@ -3,7 +3,7 @@
 
 //Qt includes
 #include <QObject>
-#include <QDeclarativeItem>
+#include <QQuickItem>
 #include <QList>
 #include <QVector>
 #include <QDebug>
@@ -18,7 +18,7 @@ class cwValidator;
 class cwSurveyChunkTrimmer;
 
 
-class cwSurveyChunkView : public QDeclarativeItem
+class cwSurveyChunkView : public QQuickItem
 {
     Q_OBJECT
 
@@ -28,7 +28,7 @@ class cwSurveyChunkView : public QDeclarativeItem
 
 public:
 
-    explicit cwSurveyChunkView(QDeclarativeItem *parent = 0);
+    explicit cwSurveyChunkView(QQuickItem *parent = 0);
     ~cwSurveyChunkView();
 
     cwSurveyChunk* model() const;
@@ -40,7 +40,7 @@ public:
     void setFrontSights(bool hasFrontSights);
     void setBackSights(bool hasBackSights);
 
-    QRectF boundingRect() const;
+    QRectF boundingRect();
 
     static float elementHeight();
     static float heightHint(int numberElements);
@@ -100,13 +100,13 @@ private:
         Row(int rowIndex, int numberOfItems);
 
         int rowIndex() const { return RowIndex; }
-        QVector<QDeclarativeItem*> items() { return Items; }
+        QVector<QQuickItem*> items() { return Items; }
 
     protected:
-        QVector<QDeclarativeItem*> Items;
+        QVector<QQuickItem*> Items;
         int RowIndex;
 
-        static QDeclarativeItem* setupItem(QDeclarativeComponent* component,
+        static QQuickItem* setupItem(QQmlComponent* component,
                                            QDeclarativeContext* context,
                                            cwSurveyChunk::DataRole,
                                            cwValidator* validator);
@@ -118,11 +118,11 @@ private:
         StationRow();
         StationRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* stationName() const { return Items[StationName]; }
-        QDeclarativeItem* left() const { return Items[Left]; }
-        QDeclarativeItem* right() const { return Items[Right]; }
-        QDeclarativeItem* up() const { return Items[Up]; }
-        QDeclarativeItem* down() const { return Items[Down]; }
+        QQuickItem* stationName() const { return Items[StationName]; }
+        QQuickItem* left() const { return Items[Left]; }
+        QQuickItem* right() const { return Items[Right]; }
+        QQuickItem* up() const { return Items[Up]; }
+        QQuickItem* down() const { return Items[Down]; }
 
     private:
 
@@ -141,11 +141,11 @@ private:
         ShotRow();
         ShotRow(cwSurveyChunkView* Chunk, int RowIndex);
 
-        QDeclarativeItem* distance() const { return Items[Distance]; }
-        QDeclarativeItem* frontCompass() const { return Items[FrontCompass]; }
-        QDeclarativeItem* backCompass() const { return Items[BackCompass]; }
-        QDeclarativeItem* frontClino() const { return Items[FrontClino]; }
-        QDeclarativeItem* backClino() const { return Items[BackClino]; }
+        QQuickItem* distance() const { return Items[Distance]; }
+        QQuickItem* frontCompass() const { return Items[FrontCompass]; }
+        QQuickItem* backCompass() const { return Items[BackCompass]; }
+        QQuickItem* frontClino() const { return Items[FrontClino]; }
+        QQuickItem* backClino() const { return Items[BackClino]; }
 
     private:
         enum {
@@ -170,19 +170,19 @@ private:
     //Where all the survey chunk view's delegates are stored
     cwSurveyChunkViewComponents* QMLComponents;
 
-    QDeclarativeItem* StationTitle;
-    QDeclarativeItem* DistanceTitle;
-    QDeclarativeItem* AzimuthTitle;
-    QDeclarativeItem* ClinoTitle;
-    QDeclarativeItem* LeftTitle;
-    QDeclarativeItem* RightTitle;
-    QDeclarativeItem* UpTitle;
-    QDeclarativeItem* DownTitle;
+    QQuickItem* StationTitle;
+    QQuickItem* DistanceTitle;
+    QQuickItem* AzimuthTitle;
+    QQuickItem* ClinoTitle;
+    QQuickItem* LeftTitle;
+    QQuickItem* RightTitle;
+    QQuickItem* UpTitle;
+    QQuickItem* DownTitle;
 
-    QMenu* RightClickMenu;
+//    QMenu* RightClickMenu;
 
     //For keeping the current object visible
-    QDeclarativeItem* FocusedItem;
+    QQuickItem* FocusedItem;
 
     //For showing front sites only or backsights only
     bool HasFrontSights;
@@ -195,7 +195,7 @@ private:
     void createTitlebar();
 
     void positionStationRow(StationRow row, int index);
-    void positionElement(QDeclarativeItem* item, const QDeclarativeItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
+    void positionElement(QQuickItem* item, const QQuickItem* titleItem, int index, int yOffset = 0, QSizeF size = QSizeF());
 
     void positionShotRow(ShotRow row, int index);
 
@@ -216,23 +216,23 @@ private:
 
     bool interfaceValid();
 
-    QDeclarativeItem* tabFromStation(int rowIndex);
-    QDeclarativeItem* tabFromClino(int rowIndex);
-    QDeclarativeItem* tabFromBackClino(int rowIndex);
-    QDeclarativeItem* tabFromClinoToLRUD(int rowIndex);
-    QDeclarativeItem* tabFromDown(int rowIndex);
-    QDeclarativeItem* previousTabFromStation(int rowIndex);
-    QDeclarativeItem* previousTabFromLeft(int rowIndex);
+    QQuickItem* tabFromStation(int rowIndex);
+    QQuickItem* tabFromClino(int rowIndex);
+    QQuickItem* tabFromBackClino(int rowIndex);
+    QQuickItem* tabFromClinoToLRUD(int rowIndex);
+    QQuickItem* tabFromDown(int rowIndex);
+    QQuickItem* previousTabFromStation(int rowIndex);
+    QQuickItem* previousTabFromLeft(int rowIndex);
 
-    QDeclarativeItem* navArrowLeft(int rowIndex, int role);
-    QDeclarativeItem* navArrowRight(int rowIndex, int role);
-    QDeclarativeItem* navArrowUp(int rowIndex, int role);
-    QDeclarativeItem* navArrowDown(int rowIndex, int role);
-    QDeclarativeItem* navArrowUpDown(int rowIndex, int role, Qt::Key key);
+    QQuickItem* navArrowLeft(int rowIndex, int role);
+    QQuickItem* navArrowRight(int rowIndex, int role);
+    QQuickItem* navArrowUp(int rowIndex, int role);
+    QQuickItem* navArrowDown(int rowIndex, int role);
+    QQuickItem* navArrowUpDown(int rowIndex, int role, Qt::Key key);
 
-    void setItemFocus(QDeclarativeItem* item);
+    void setItemFocus(QQuickItem* item);
 
-    QDeclarativeItem* databox(int rowIndex, int role);
+    QQuickItem* databox(int rowIndex, int role);
 
 };
 

@@ -6,10 +6,10 @@
 #include "cwScrapItem.h"
 
 //Qt includes
-#include <QDeclarativeEngine>
+#include <QQmlEngine>
 
-cwScrapView::cwScrapView(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwScrapView::cwScrapView(QQuickItem *parent) :
+    QQuickItem(parent),
     Note(NULL),
     TransformUpdater(NULL)
 {
@@ -58,7 +58,7 @@ void cwScrapView::addScrapItem() {
     }
 
     //Create a new scrap item
-    cwScrapItem* scrapItem = new cwScrapItem(QDeclarativeEngine::contextForObject(this), this);
+    cwScrapItem* scrapItem = new cwScrapItem(QQmlEngine::contextForObject(this), this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
     connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
@@ -181,7 +181,7 @@ void cwScrapView::updateAllScraps() {
     }
 
     if(ScrapItems.size() < numberOfScraps) {
-        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
 
         //Add new scrap items
         for(int i = ScrapItems.size(); i < numberOfScraps; i++) {

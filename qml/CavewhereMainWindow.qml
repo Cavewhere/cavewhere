@@ -52,8 +52,7 @@ Rectangle {
             }
         }
 
-//        DataMainPage {
-        Rectangle {
+        DataMainPage {
         //visible: mainSideBar.pageShown == "data"
             width:  parent.width
             height: parent.height

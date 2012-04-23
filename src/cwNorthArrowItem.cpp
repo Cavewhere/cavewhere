@@ -7,14 +7,14 @@
 //Qt includes
 #include <QPen>
 
-cwNorthArrowItem::cwNorthArrowItem(QDeclarativeItem *parent) :
+cwNorthArrowItem::cwNorthArrowItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent)
 {
     NorthTextHandler = new cwPositioner3D(this);
     NorthTextHandler->setPosition3D(QVector3D(.1, .1, 0));
     NorthText = new QGraphicsTextItem(NorthTextHandler);
 
-    NorthArrowLineHandler = new QDeclarativeItem(this);
+    NorthArrowLineHandler = new QQuickItem(this);
     NorthArrowLine = new QGraphicsPathItem(NorthArrowLineHandler);
 
     QFont font;

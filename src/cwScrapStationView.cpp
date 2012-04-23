@@ -9,19 +9,19 @@
 #include "cwGlobalDirectory.h"
 
 //Qt includes
-#include <QDeclarativeComponent>
-#include <QDeclarativeItem>
-#include <QDeclarativeEngine>
+#include <QQmlComponent>
+#include <QQuickItem>
+#include <QQmlEngine>
 #include <QDeclarativeContext>
 #include <QPen>
 
-cwScrapStationView::cwScrapStationView(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent),
+cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
+    QQuickItem(parent),
 //    NoteStationView(NULL),
     TransformUpdater(NULL),
     Scrap(NULL),
     StationItemComponent(NULL),
-    ShotLinesHandler(new QDeclarativeItem(this)),
+    ShotLinesHandler(new QQuickItem(this)),
     ShotLines(new QGraphicsPathItem(ShotLinesHandler)),
     ScrapItem(NULL),
     SelectedStationIndex(-1)
@@ -46,7 +46,7 @@ void cwScrapStationView::setTransformUpdater(cwTransformUpdater* updater) {
     if(TransformUpdater != updater) {
         if(TransformUpdater != NULL) {
             //Remove all previous stations
-            foreach(QDeclarativeItem* stationItem, StationItems) {
+            foreach(QQuickItem* stationItem, StationItems) {
                 TransformUpdater->removePointItem(stationItem);
             }
         }
@@ -55,7 +55,7 @@ void cwScrapStationView::setTransformUpdater(cwTransformUpdater* updater) {
 
         if(TransformUpdater != NULL) {
             //Add station to the new transformUpdater
-            foreach(QDeclarativeItem* stationItem, StationItems) {
+            foreach(QQuickItem* stationItem, StationItems) {
                 TransformUpdater->addPointItem(stationItem);
             }
 
@@ -100,9 +100,9 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
 void cwScrapStationView::createStationComponent() {
     //Make sure we have a note component so we can create it
     if(StationItemComponent == NULL) {
-        QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
+        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
         if(context == NULL) { return; }
-        StationItemComponent = new QDeclarativeComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
+        StationItemComponent = new QQmlComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
         if(StationItemComponent->isError()) {
             qDebug() << "Notecomponent errors:" << StationItemComponent->errorString();
         }
@@ -117,8 +117,8 @@ void cwScrapStationView::addNewStationItem() {
         qDebug() << "StationItemComponent isn't ready, ... THIS IS A BUG" << LOCATION;
     }
 
-    QDeclarativeContext* context = QDeclarativeEngine::contextForObject(this);
-    QDeclarativeItem* stationItem = qobject_cast<QDeclarativeItem*>(StationItemComponent->create(context));
+    QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+    QQuickItem* stationItem = qobject_cast<QQuickItem*>(StationItemComponent->create(context));
     if(stationItem == NULL) {
         qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
         return;
@@ -136,7 +136,7 @@ void cwScrapStationView::addNewStationItem() {
   Updates the station item's data
   */
 void cwScrapStationView::updateStationItemData(int index){
-    QDeclarativeItem* stationItem = StationItems[index];
+    QQuickItem* stationItem = StationItems[index];
     stationItem->setProperty("stationId", index);
     stationItem->setProperty("stationView", QVariant::fromValue(this));
     stationItem->setProperty("scrap", QVariant::fromValue(scrap()));
@@ -289,7 +289,7 @@ void cwScrapStationView::updateAllStations() {
         int notesToRemove = StationItems.size() - Scrap->numberOfStations();
         //Add more stations to the NoteStations
         for(int i = 0; i < notesToRemove; i++) {
-            QDeclarativeItem* deleteStation = StationItems.last();
+            QQuickItem* deleteStation = StationItems.last();
             StationItems.removeLast();
             deleteStation->deleteLater();
         }
@@ -323,14 +323,14 @@ void cwScrapStationView::setSelectedStationIndex(int selectedStationIndex) {
         }
 
         //Deselect the old index
-        QDeclarativeItem* oldStationItem = selectedStationItem();
+        QQuickItem* oldStationItem = selectedStationItem();
         if(oldStationItem != NULL) {
             oldStationItem->setProperty("selected", false);
         }
 
         //Select the new station item
         if(selectedStationIndex >= 0) {
-            QDeclarativeItem* newStationItem = StationItems[selectedStationIndex];
+            QQuickItem* newStationItem = StationItems[selectedStationIndex];
             if(!newStationItem->property("selected").toBool()) {
                 newStationItem->setProperty("selected", true);
             }
@@ -347,7 +347,7 @@ void cwScrapStationView::setSelectedStationIndex(int selectedStationIndex) {
 
   If there's no select station item, this will return null
   */
-QDeclarativeItem* cwScrapStationView::selectedStationItem() const {
+QQuickItem* cwScrapStationView::selectedStationItem() const {
     if(SelectedStationIndex >= 0 && SelectedStationIndex < StationItems.size()) {
         return StationItems[SelectedStationIndex];
     }

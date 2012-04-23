@@ -2,7 +2,7 @@
 #define CWSCRAPITEM_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 
 //Our includes
 class cwScrap;
@@ -12,7 +12,7 @@ class cwScrapStationView;
 /**
   \brief This draws a scrap
   */
-class cwScrapItem : public QDeclarativeItem
+class cwScrapItem : public QQuickItem
 {
     Q_OBJECT
 
@@ -22,8 +22,8 @@ class cwScrapItem : public QDeclarativeItem
     Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
 
 public:
-    explicit cwScrapItem(QDeclarativeItem *parent = 0);
-    explicit cwScrapItem(QDeclarativeContext* context, QDeclarativeItem *parent = 0);
+    explicit cwScrapItem(QQuickItem *parent = 0);
+    explicit cwScrapItem(QDeclarativeContext* context, QQuickItem *parent = 0);
     ~cwScrapItem();
 
     void setScrap(cwScrap* scrap);
@@ -53,8 +53,9 @@ private:
     cwTransformUpdater* TransformUpdater; //!<
 
     //Visual elements
-    QDeclarativeItem* BorderItemHandler;
-    QGraphicsPolygonItem* BorderItem; //!< The border around the scrap
+    QQuickItem* BorderItemHandler;
+    //FIXME: Implement painting method for border item
+//    QGraphicsPolygonItem* BorderItem; //!< The border around the scrap
     cwScrapStationView* StationView; //!< All the stations in the scrap
 
     bool Selected; //!< True if the scrap is select and false if it isn't

@@ -2,13 +2,13 @@
 #define CWABSTRACT2POINTITEM_H
 
 //Qt includes
-#include <QDeclarativeItem>
+#include <QQuickItem>
 #include <QPen>
 
 //Our includes
 class cwTransformUpdater;
 
-class cwAbstract2PointItem : public QDeclarativeItem
+class cwAbstract2PointItem : public QQuickItem
 {
     Q_OBJECT
 
@@ -17,7 +17,7 @@ class cwAbstract2PointItem : public QDeclarativeItem
     Q_PROPERTY(QPointF p2 READ p2 WRITE setP2 NOTIFY p2Changed)
 
 public:
-    cwAbstract2PointItem(QDeclarativeItem *parent);
+    cwAbstract2PointItem(QQuickItem *parent);
 
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* transformUpdater);
