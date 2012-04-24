@@ -6,6 +6,7 @@
 #include "cwSurvexGlobalData.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwSurvexLRUDChunk.h"
 
 //Qt includes
 #include <QFile>
@@ -252,6 +253,10 @@ void cwSurvexImporter::parseLine(QString line) {
             QString arg = exp.cap(2).trimmed();
 
             if(compare(command, "end")) {
+
+                //Update the LRUD before getting out of this block
+                updateLRUDForCurrentBlock();
+
                 cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
                 if(parentBlock != NULL) {
                     CurrentBlock = parentBlock;
@@ -360,6 +365,7 @@ void cwSurvexImporter::parseDataFormat(QString line) {
         setCurrentDataEntryType(Normal);
     } else if(compare(dataFormatType, "passage")) {
         setCurrentDataEntryType(Passage);
+        CurrentBlock->addLRUDChunk();
     } else {
         addError("Normal and passage data are supported, using default format");
         setCurrentDataEntryType(Normal);
@@ -476,8 +482,8 @@ void cwSurvexImporter::parseNormalData(QString line) {
     }
 
     //Create the from and to stations
-    cwStation fromStation = createOrLookupStation(fromStationName);
-    cwStation toStation = createOrLookupStation(toStationName);
+    cwStation fromStation(fromStationName);
+    cwStation toStation(toStationName);
 
     cwShot shot;
     shot.setDistance(extractData(data, Distance));
@@ -503,28 +509,6 @@ QString cwSurvexImporter::extractData(const QStringList data, DataFormatType typ
         }
     }
     return QString();
-}
-
-/**
-  \brief Creates or lookup station based on the station name
-  \param stationName - The name of the station
-  \returns A new station of a station that's already exists
-  */
-cwStation cwSurvexImporter::createOrLookupStation(QString stationName) {
-    if(stationName.isEmpty()) { return cwStation(); }
-
-    //Create the survex prefix
-    QString fullName = fullStationName(stationName);
-
-    //See if the station already exist
-    if(StationLookup.contains(fullName)) {
-        return StationLookup[fullName];
-    }
-
-    //Create the stations
-    cwStation station(stationName);
-    StationLookup[fullName] = station;
-    return station;
 }
 
 /**
@@ -587,11 +571,14 @@ void cwSurvexImporter::parsePassageData(QString line) {
     }
 
     //Create or find a station from the name
-    cwStation station = createOrLookupStation(stationName);
+    cwStation station(stationName);
     station.setLeft(extractData(data, Left));
     station.setRight(extractData(data, Right));
     station.setUp(extractData(data, Up));
     station.setDown(extractData(data, Down));
+
+    //Add the station to the current LRUD chunk
+    CurrentBlock->LRUDChunks.last().Stations.append(station);
 }
 
 /**
@@ -896,4 +883,58 @@ void cwSurvexImporter::runStats(QString filename) {
     }
 
     IncludeStack.removeLast();
+}
+
+/**
+ * @brief cwSurvexImporter::updateLRUDForCurrentBlock
+ *
+ * This will try to update the LRUD for the stations in the chunks
+ *
+ */
+void cwSurvexImporter::updateLRUDForCurrentBlock() {
+
+    foreach(cwSurvexLRUDChunk lrudChunk, CurrentBlock->LRUDChunks) {
+        QList<cwStation> stations = lrudChunk.Stations;
+        for(int i = 0; i < stations.size(); i++) {
+            int before = i - 1;
+            int after = i + 1;
+
+            cwStation beforeStation = before >= 0 ? stations.at(before) : cwStation();
+            cwStation station = stations.at(i);
+            cwStation afterStation = after < stations.size() ? stations.at(after) : cwStation();
+
+            updateStationLRUD(beforeStation, station, afterStation);
+        }
+    }
+}
+
+/**
+ * @brief cwSurvexImporter::updateStationLRUD
+ * @param before - The station before station that occures in *data passage
+ * @param station - The station with LRUDs
+ * @param after - The station after station that occures in *data passage
+ *
+ * This will attempt to update chunk station with station's LRUD data.  This function
+ * uses shot inforamation to varify we're updating the correct station in the chunk
+ */
+void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cwStation after)
+{
+    foreach(cwSurveyChunk* chunk, CurrentBlock->Chunks) {
+        QList<int> stationIndices = chunk->indicesOfStation(station.name());
+        if(!stationIndices.isEmpty()) {
+            foreach(int index, stationIndices) {
+                //NOTE: This won't work this case sensitive survex files
+                QString beforeStationName = chunk->station(index - 1).name();
+                bool beforeGood = !before.isValid() || beforeStationName.compare(before.name(), Qt::CaseInsensitive) == 0;
+
+                QString afterStationName = chunk->station(index + 1).name();
+                bool afterGood = !after.isValid() || afterStationName.compare(after.name(), Qt::CaseInsensitive) == 0;
+
+                if(beforeGood && afterGood) {
+                    chunk->setStation(station, index);
+                    return;
+                }
+            }
+        }
+    }
 }

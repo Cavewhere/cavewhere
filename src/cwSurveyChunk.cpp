@@ -459,6 +459,23 @@ QString cwSurveyChunk::guessNextStation(QString stationName) const {
 }
 
 /**
+ * @brief cwSurveyChunk::setStation
+ * @param station - The station that'll be changed
+ * @param index - The index of the station that'll be changed
+ *
+ * If the index is out of range, this function will do nothing
+ */
+void cwSurveyChunk::setStation(cwStation station, int index){
+    if(index < 0 || index >= Stations.size()) { return; }
+    Stations[index] = station;
+    dataChanged(StationNameRole, index);
+    dataChanged(StationLeftRole, index);
+    dataChanged(StationRightRole, index);
+    dataChanged(StationUpRole, index);
+    dataChanged(StationDownRole, index);
+}
+
+/**
   \brief Get's the chunk data based on a role
   */
 QVariant cwSurveyChunk::data(DataRole role, int index) const {

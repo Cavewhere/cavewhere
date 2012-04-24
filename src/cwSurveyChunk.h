@@ -63,6 +63,8 @@ public:
     Q_INVOKABLE QString guessLastStationName() const;
     QString guessNextStation(QString stationName) const;
 
+    void setStation(cwStation station, int index);
+
 signals:
     void parentTripChanged();
 

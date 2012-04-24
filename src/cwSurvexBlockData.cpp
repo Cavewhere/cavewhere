@@ -110,6 +110,15 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  }
 
  /**
+  * @brief cwSurvexBlockData::addLRUDChunk
+  * This creates a new LRUD chunk
+  */
+ void cwSurvexBlockData::addLRUDChunk()
+ {
+     LRUDChunks.append(cwSurvexLRUDChunk());
+ }
+
+ /**
    \brief Clears the data from this object
 
    This will delete the block, if they're still owned by this object

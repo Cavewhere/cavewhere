@@ -7,6 +7,7 @@ class cwShot;
 class cwTeam;
 class cwTripCalibration;
 #include "cwStation.h"
+#include "cwSurvexLRUDChunk.h"
 
 //Qt includes
 #include <QList>
@@ -69,6 +70,7 @@ signals:
 
 private:
     QList<cwSurveyChunk*> Chunks;
+    QList<cwSurvexLRUDChunk> LRUDChunks;
     QList<cwSurvexBlockData*> ChildBlocks;
     cwSurvexBlockData* ParentBlock;
 
@@ -82,6 +84,7 @@ private:
 
     void addChildBlock(cwSurvexBlockData* blockData);
     void addChunk(cwSurveyChunk* chunk);
+    void addLRUDChunk();
 
     void setParentBlock(cwSurvexBlockData* parentBlock);
 

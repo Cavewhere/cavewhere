@@ -115,7 +115,6 @@ private:
 
     //Data map <Type, index>
     QMap<DataFormatType, int> DataFormat;
-    QMap<QString, cwStation> StationLookup;
 
     //For progress
     int TotalNumberOfLines;
@@ -141,7 +140,6 @@ private:
 
     void parseNormalData(QString line);
     QString extractData(const QStringList data, DataFormatType type);
-    cwStation createOrLookupStation(QString stationName);
     void addShotToCurrentChunk(cwStation fromStation,
                                cwStation toStation,
                                cwShot shot);
@@ -172,6 +170,9 @@ private:
     void parseUnits(QString line);
 
     void runStats(QString filename);
+
+    void updateLRUDForCurrentBlock();
+    void updateStationLRUD(cwStation before, cwStation station, cwStation after);
 };
 
 /**

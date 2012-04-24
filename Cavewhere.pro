@@ -147,7 +147,8 @@ SOURCES += src/main.cpp \
     src/cwItemSelectionModel.cpp \
     src/cwStationPositionLookup.cpp \
     src/cwSurveyImportManager.cpp \
-    src/cwTripLengthTask.cpp
+    src/cwTripLengthTask.cpp \
+    src/cwSurvexLRUDChunk.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -278,7 +279,8 @@ HEADERS  += \
     src/cwItemSelectionModel.h \
     src/cwStationPositionLookup.h \
     src/cwSurveyImportManager.h \
-    src/cwTripLengthTask.h
+    src/cwTripLengthTask.h \
+    src/cwSurvexLRUDChunk.h
 
 
 FORMS    += src/cwMainWindow.ui \
