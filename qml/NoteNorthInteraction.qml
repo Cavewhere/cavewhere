@@ -36,7 +36,7 @@ Interaction {
             }
         }
 
-        onMousePositionChanged: {
+        onPositionChanged: {
             if(pressedButtons == Qt.RightButton) {
                 basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
             }
@@ -71,7 +71,7 @@ Interaction {
 
                 hoverEnabled: true
 
-                onMousePositionChanged: {
+                onPositionChanged: {
                     if(pressedButtons == Qt.RightButton) {
                         basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                     } else {

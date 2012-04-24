@@ -11,7 +11,7 @@ ImageItem {
 //        id: defaultNoteTransform
 //    }
 
-    glWidget: mainGLWidget
+//    glWidget: mainGLWidget
     projectFilename: project.filename
 
     clip: true
@@ -116,11 +116,12 @@ ImageItem {
 //        anchors.fill: parent
 //    }
 
-    WheelArea {
-        id: wheelArea
-        anchors.fill: parent
-        onVerticalScroll: panZoomInteraction.zoom(delta, position)
-    }
+    //FIXME: Replace with MouseArea
+//    WheelArea {
+//        id: wheelArea
+//        anchors.fill: parent
+//        onVerticalScroll: panZoomInteraction.zoom(delta, position)
+//    }
 
     states: [
         State {

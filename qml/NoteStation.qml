@@ -93,7 +93,7 @@ Positioner3D {
                 ignoreLength = false;
             }
 
-            onMousePositionChanged: {
+            onPositionChanged: {
                 //Make sure the mouse has move at least three pixel from where it's started
                 var length = Math.sqrt(Math.pow(lastPoint.x - mouse.x, 2) + Math.pow(lastPoint.y - mouse.y, 2));
                 if(length > 3 || ignoreLength) {

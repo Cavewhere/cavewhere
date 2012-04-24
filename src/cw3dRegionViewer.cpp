@@ -30,6 +30,7 @@
 #include <QGraphicsSceneWheelEvent>
 #include <QtConcurrentMap>
 #include <QFontMetrics>
+#include <QQuickCanvas>
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwGLRenderer(parent),
@@ -51,8 +52,6 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Scraps->setCamera(Camera);
     Scraps->setShaderDebugger(ShaderDebugger);
 
-
-
 }
 
 /**
@@ -61,22 +60,26 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 void cw3dRegionViewer::paint(QPainter * painter) {
     //Run paint Framebuffer
     //cwGLRenderer::paint(painter, item, widget);
-    painter->beginNativePainting();
 
-    if(!Initilized) {
-        initializeGL();
-    }
+    painter->setBrush(Qt::red);
+    painter->drawRect(QRectF(0, 0, width()-1, height()-1));
 
-    paintFramebuffer();
-    painter->endNativePainting();
+//    painter->beginNativePainting();
 
-    //Render the text labels
-    painter->save();
-    painter->setPen(QPen());
-    painter->setBrush(QBrush());
-    painter->setFont(QFont());
-    renderStationLabels(painter);
-    painter->restore();
+//    if(!Initilized) {
+//        initializeGL();
+//    }
+
+//    paintFramebuffer();
+//    painter->endNativePainting();
+
+//    //Render the text labels
+//    painter->save();
+//    painter->setPen(QPen());
+//    painter->setBrush(QBrush());
+//    painter->setFont(QFont());
+//    renderStationLabels(painter);
+//    painter->restore();
 }
 
 /**
@@ -87,7 +90,7 @@ void cw3dRegionViewer::paintFramebuffer() {
     glEnable(GL_DEPTH_TEST);
     Terrain->draw();
 //    Scraps->draw();
-//    LinePlot->draw();
+    LinePlot->draw();
 
    glDisable(GL_DEPTH_TEST);
 }
@@ -103,7 +106,7 @@ void cw3dRegionViewer::initializeGL() {
 
     Terrain->initialize();
 //    Scraps->initialize();
-//    LinePlot->initialize();
+    LinePlot->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }

@@ -23,7 +23,7 @@ BaseNoteStationInteraction {
             }
         }
 
-        onMousePositionChanged: {
+        onPositionChanged: {
             if(pressedButtons == Qt.RightButton) {
                 basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
             }

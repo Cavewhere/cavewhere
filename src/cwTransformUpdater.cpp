@@ -151,7 +151,8 @@ void cwTransformUpdater::updatePoint(QQuickItem *object) {
   */
 void cwTransformUpdater::updateTransform(QQuickItem *object) {
     Q_ASSERT(object != NULL);
-    object->setTransform(TransformMatrix.toTransform());
+    //FIXME: Use QQuickItem::transform() instead
+//    object->setTransform(TransformMatrix.toTransform());
 }
 
 /**

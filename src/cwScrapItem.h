@@ -23,7 +23,7 @@ class cwScrapItem : public QQuickItem
 
 public:
     explicit cwScrapItem(QQuickItem *parent = 0);
-    explicit cwScrapItem(QDeclarativeContext* context, QQuickItem *parent = 0);
+    explicit cwScrapItem(QQmlContext* context, QQuickItem *parent = 0);
     ~cwScrapItem();
 
     void setScrap(cwScrap* scrap);

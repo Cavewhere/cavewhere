@@ -181,7 +181,7 @@ void cwScrapView::updateAllScraps() {
     }
 
     if(ScrapItems.size() < numberOfScraps) {
-        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+        QQmlContext* context = QQmlEngine::contextForObject(this);
 
         //Add new scrap items
         for(int i = ScrapItems.size(); i < numberOfScraps; i++) {

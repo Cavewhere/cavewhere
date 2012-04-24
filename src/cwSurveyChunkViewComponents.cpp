@@ -7,12 +7,12 @@
 #include "cwGlobalDirectory.h"
 
 //Qt includes
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlComponent>
 #include <QDebug>
 
-cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QDeclarativeContext* context, QObject *parent) :
+cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, QObject *parent) :
     QObject(parent)
 {
     QQmlEngine* engine = context->engine();

@@ -12,7 +12,7 @@
 #include <QQmlComponent>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QPen>
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
@@ -22,13 +22,15 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     Scrap(NULL),
     StationItemComponent(NULL),
     ShotLinesHandler(new QQuickItem(this)),
-    ShotLines(new QGraphicsPathItem(ShotLinesHandler)),
+    //FIXME: Fix Shot lines
+//    ShotLines(new QGraphicsPathItem(ShotLinesHandler)),
     ScrapItem(NULL),
     SelectedStationIndex(-1)
 {
     QPen shotPen;
     shotPen.setColor(Qt::red);
-    ShotLines->setPen(shotPen);
+    //FIXME: Fix Shot lines
+    //    ShotLines->setPen(shotPen);
 }
 
 cwScrapStationView::~cwScrapStationView() {
@@ -100,7 +102,7 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
 void cwScrapStationView::createStationComponent() {
     //Make sure we have a note component so we can create it
     if(StationItemComponent == NULL) {
-        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+        QQmlContext* context = QQmlEngine::contextForObject(this);
         if(context == NULL) { return; }
         StationItemComponent = new QQmlComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
         if(StationItemComponent->isError()) {
@@ -117,7 +119,7 @@ void cwScrapStationView::addNewStationItem() {
         qDebug() << "StationItemComponent isn't ready, ... THIS IS A BUG" << LOCATION;
     }
 
-    QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+    QQmlContext* context = QQmlEngine::contextForObject(this);
     QQuickItem* stationItem = qobject_cast<QQuickItem*>(StationItemComponent->create(context));
     if(stationItem == NULL) {
         qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
@@ -205,7 +207,8 @@ void cwScrapStationView::updateShotLines() {
             shotLines.lineTo(normalizeNotePos.toPointF());
         }
 
-        ShotLines->setPath(shotLines);
+            //FIXME: Fix Shot lines
+//        ShotLines->setPath(shotLines);
     }
 }
 

@@ -53,7 +53,7 @@ signals:
 protected:
     virtual void initializeGL();
     virtual void resizeGL();
-    virtual void paintFramebuffer();
+    virtual void paint(QPainter* painter);
 
 private:
 

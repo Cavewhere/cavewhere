@@ -15,7 +15,7 @@
 #include <QObject>
 #include <QVariant>
 class QQmlComponent;
-class QDeclarativeContext;
+class QQmlContext;
 class QValidator;
 
 
@@ -23,7 +23,7 @@ class cwSurveyChunkViewComponents : public QObject
 {
     Q_OBJECT
 public:
-    explicit cwSurveyChunkViewComponents(QDeclarativeContext* context, QObject *parent = 0);
+    explicit cwSurveyChunkViewComponents(QQmlContext* context, QObject *parent = 0);
 
     QQmlComponent* titleDelegate() const;
     QQmlComponent* stationDelegate() const;

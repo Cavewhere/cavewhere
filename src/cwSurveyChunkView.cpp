@@ -12,7 +12,7 @@
 //Qt includes
 #include <QMetaObject>
 #include <QQmlEngine>
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QVariant>
 #include <QMenu>
 #include <QGraphicsSceneMouseEvent>
@@ -883,7 +883,7 @@ cwSurveyChunkView::StationRow::StationRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
-    QDeclarativeContext* context = QQmlEngine::contextForObject(view);
+    QQmlContext* context = QQmlEngine::contextForObject(view);
     Items[StationName] = setupItem(components->stationDelegate(),
                                    context,
                                    cwSurveyChunk::StationNameRole,
@@ -933,7 +933,7 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
   \brief Sets up a row declarative item
   */
 QQuickItem* cwSurveyChunkView::Row::setupItem(QQmlComponent* component,
-                                                    QDeclarativeContext* context,
+                                                    QQmlContext* context,
                                                     cwSurveyChunk::DataRole role,
                                                     cwValidator *validator) {
     if(component->isError()) {
@@ -960,7 +960,7 @@ cwSurveyChunkView::ShotRow::ShotRow() : Row(-1, NumberItems)
   */
 cwSurveyChunkView::ShotRow::ShotRow(cwSurveyChunkView *view, int rowIndex) : Row(rowIndex, NumberItems) {
     cwSurveyChunkViewComponents* components = view->QMLComponents;
-    QDeclarativeContext* context = QQmlEngine::contextForObject(view);
+    QQmlContext* context = QQmlEngine::contextForObject(view);
     Items[Distance] = setupItem(components->distanceDelegate(),
                                 context,
                                 cwSurveyChunk::ShotDistanceRole,

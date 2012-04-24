@@ -29,7 +29,7 @@ Item {
                 PropertyChanges {
                     target: splitterMouseArea
 
-                    onMousePositionChanged: {
+                    onPositionChanged: {
                         //Change the databar width
                         var mappedX = mapToItem(null, mouse.x, 0).x;
 

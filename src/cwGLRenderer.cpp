@@ -36,7 +36,6 @@ cwGLRenderer::cwGLRenderer(QQuickItem *parent) :
     connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
     setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
-
 }
 
 cwGLRenderer::~cwGLRenderer() {
@@ -175,6 +174,8 @@ cwGLRenderer::~cwGLRenderer() {
 //}
 
 void cwGLRenderer::privateResizeGL() {
+    qDebug() << "Private resize:" << width() << height() << contentsSize();
+
 //    if(GLWidget == NULL) { return; }
     if(width() == 0.0 || height() == 0.0) { return; }
     QSize framebufferSize(width(), height());
@@ -226,7 +227,6 @@ void cwGLRenderer::privateResizeGL() {
 //        TextureFramebuffer = MultiSampleFramebuffer->handle();
 //        ColorTexture = MultiSampleFramebuffer->texture();
 //    }
-
     //Update the viewport
     QRect viewportRect(QPoint(0, 0), framebufferSize);
     Camera->setViewport(viewportRect);
@@ -320,5 +320,11 @@ float cwGLRenderer::sampleDepthBuffer(QPoint point) {
 
     return 0.90;
 }
+
+//void cwGLRenderer::geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry)
+//{
+////    setImplicitSize(newGeometry.width(), newGeometry.height());
+//    privateResizeGL();
+//}
 
 

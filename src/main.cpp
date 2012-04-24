@@ -48,10 +48,8 @@ int main(int argc, char *argv[])
 
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
+    view.setWindowFlags(Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);
     view.show();
-
-//    cwMainWindow w;
-//    w.show();
 
     return a.exec();
 }

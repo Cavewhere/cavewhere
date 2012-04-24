@@ -85,6 +85,8 @@ protected:
       */
     virtual void paintFramebuffer() { qDebug() << "Bad paint"; }
 
+//    virtual void geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry);
+
 protected slots:
     virtual void resizeGL() {}
     void updateRenderer();

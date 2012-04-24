@@ -16,11 +16,13 @@ public:
 public slots:
 
 private:
-    QGraphicsObject* NorthArrowLineHandler;
-    QGraphicsPathItem* NorthArrowLine;
+    //FIXME: Fix north arrow line
+    QQuickItem* NorthArrowLineHandler;
+//    QGraphicsPathItem* NorthArrowLine;
 
+    //FIXME: Fix north text
     cwPositioner3D* NorthTextHandler;
-    QGraphicsTextItem* NorthText;
+//    QGraphicsTextItem* NorthText;
 
     void disconnectTransformer();
     void connectTransformer();

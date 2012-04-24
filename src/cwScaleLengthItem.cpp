@@ -9,8 +9,9 @@ cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent)
 {
     LengthHandler = new QQuickItem(this);
-    LengthLine = new QGraphicsPathItem(LengthHandler);
-    LengthLine->setPen(LinePen);
+        //FIXME: Fix lengthline
+//    LengthLine = new QGraphicsPathItem(LengthHandler);
+//    LengthLine->setPen(LinePen);
 }
 
 /**
@@ -65,5 +66,6 @@ void cwScaleLengthItem::updateScaleLengthPath() {
     painterPath.moveTo(TransformUpdater->mapFromViewportToModel(line2.p1()).toPointF());
     painterPath.lineTo(TransformUpdater->mapFromViewportToModel(line2.p2()).toPointF());
 
-    LengthLine->setPath(painterPath);
+        //FIXME: Fix lengthline
+//    LengthLine->setPath(painterPath);
 }

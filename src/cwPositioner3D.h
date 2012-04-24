@@ -2,6 +2,7 @@
 #define CWPOSITIONER3D_H
 
 #include <QQuickItem>
+#include <QVector3D>
 
 class cwPositioner3D : public QQuickItem
 {

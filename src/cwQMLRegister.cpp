@@ -4,8 +4,8 @@
 #include "cwShot.h"
 #include "cwSurvexImporter.h"
 #include "cwTrip.h"
-//#include "cwSurveyChunkView.h"
-//#include "cwSurveyChunkGroupView.h"
+#include "cwSurveyChunkView.h"
+#include "cwSurveyChunkGroupView.h"
 #include "cwClinoValidator.h"
 #include "cwStationValidator.h"
 #include "cwCompassValidator.h"
@@ -69,8 +69,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
     qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
-//    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
-//    qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
+    qmlRegisterType<cwSurveyChunkView>("Cavewhere", 1, 0, "SurveyChunkView");
+    qmlRegisterType<cwSurveyChunkGroupView>("Cavewhere", 1, 0, "SurveyChunkGroupView");
     qmlRegisterType<cwTrip>("Cavewhere", 1, 0, "Trip");
     qmlRegisterType<cwValidator>("Cavewhere", 1, 0, "Validator");
     qmlRegisterType<cwClinoValidator>("Cavewhere", 1, 0, "ClinoValidator");
@@ -89,7 +89,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwBasePanZoomInteraction>("Cavewhere", 1, 0, "BasePanZoomInteraction");
     qmlRegisterType<cwBaseScrapInteraction>("Cavewhere", 1, 0, "BaseScrapInteraction");
     qmlRegisterType<cwCamera>("Cavewhere", 1, 0, "Camera");
-//    qmlRegisterType<cwImageItem>("Cavewhere", 1, 0, "ImageItem");
+    qmlRegisterType<cwImageItem>("Cavewhere", 1, 0, "ImageItem");
 //    qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
     qmlRegisterType<cwScrapView>("Cavewhere", 1, 0, "ScrapView");
     qmlRegisterType<cwTransformUpdater>("Cavewhere", 1, 0, "TransformUpdater");

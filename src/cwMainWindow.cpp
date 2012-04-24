@@ -13,7 +13,7 @@
 #include "cwGlobals.h"
 
 //Qt includes
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QGraphicsObject>
@@ -36,32 +36,32 @@
 #include "cwSerialization.h"
 #include "cwQtSerialization.h"
 
-#if defined(QMLJSDEBUGGER)
-#include <qt_private/qdeclarativedebughelper_p.h>
-#endif
+//#if defined(QMLJSDEBUGGER)
+//#include <qt_private/qdeclarativedebughelper_p.h>
+//#endif
 
-#if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
-#include <jsdebuggeragent.h>
-#endif
-#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
-#include <qdeclarativeviewobserver.h>
-#endif
+//#if defined(QMLJSDEBUGGER) && !defined(NO_JSDEBUGGER)
+//#include <jsdebuggeragent.h>
+//#endif
+//#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
+//#include <qdeclarativeviewobserver.h>
+//#endif
 
-#if defined(QMLJSDEBUGGER)
+//#if defined(QMLJSDEBUGGER)
 
-// Enable debugging before any QQmlEngine is created
-struct QmlJsDebuggingEnabler
-{
-    QmlJsDebuggingEnabler()
-    {
-        QDeclarativeDebugHelper::enableDebugging();
-    }
-};
+//// Enable debugging before any QQmlEngine is created
+//struct QmlJsDebuggingEnabler
+//{
+//    QmlJsDebuggingEnabler()
+//    {
+//        QDeclarativeDebugHelper::enableDebugging();
+//    }
+//};
 
-// Execute code in constructor before first QQmlEngine is instantiated
-static QmlJsDebuggingEnabler enableDebuggingHelper;
+//// Execute code in constructor before first QQmlEngine is instantiated
+//static QmlJsDebuggingEnabler enableDebuggingHelper;
 
-#endif // QMLJSDEBUGGER
+//#endif // QMLJSDEBUGGER
 
 cwMainWindow::cwMainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -70,12 +70,12 @@ cwMainWindow::cwMainWindow(QWidget *parent) :
 {
     setupUi(this);
 
-#if defined(QMLJcwSurveyEditorMainWindowSDEBUGGER) && !defined(NO_JSDEBUGGER)
-    new QmlJSDebugger::JSDebuggerAgent(DeclarativeView->engine());
-#endif
-#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
-    new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
-#endif
+//#if defined(QMLJcwSurveyEditorMainWindowSDEBUGGER) && !defined(NO_JSDEBUGGER)
+//    new QmlJSDebugger::JSDebuggerAgent(DeclarativeView->engine());
+//#endif
+//#if defined(QMLJSDEBUGGER) && !defined(NO_QMLOBSERVER)
+//    new QmlJSDebugger::QDeclarativeViewObserver(DeclarativeView, this);
+//#endif
 
     connect(Data->undoStack(), SIGNAL(canUndoChanged(bool)), ActionUndo, SLOT(setEnabled(bool)));
     connect(Data->undoStack(), SIGNAL(canRedoChanged(bool)), ActionRedo, SLOT(setEnabled(bool)));
@@ -126,7 +126,7 @@ void cwMainWindow::reloadQML() {
     DeclarativeView->setRenderHint(QPainter::SmoothPixmapTransform, true);
     DeclarativeView->setRenderHint(QPainter::Antialiasing, true);
 
-    QDeclarativeContext* context = DeclarativeView->rootContext();
+    QQmlContext* context = DeclarativeView->rootContext();
     context->setParent(this);
 
     //Register all the qml types

@@ -63,7 +63,9 @@ private:
 
     //Shows the shot lines
     QQuickItem* ShotLinesHandler;
-    QGraphicsPathItem* ShotLines;
+
+    //FIXME: Need a way to render shot lines
+//    QGraphicsPathItem* ShotLines;
 
     cwScrapItem* ScrapItem; //!< For selection and holding the scrap
 

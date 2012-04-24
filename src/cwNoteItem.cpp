@@ -18,7 +18,7 @@
 #include <QQmlEngine>
 #include <QQmlComponent>
 #include <QQuickItem>
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QGraphicsScene>
 #include <QGLWidget>
 
@@ -114,7 +114,7 @@ void cwNoteItem::regenerateStationVertices() {
 
 //    //Make sure we have a note component so we can create it
 //    if(NoteStationComponent == NULL) {
-//        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+//        QQmlContext* context = QQmlEngine::contextForObject(this);
 //        if(context == NULL) { return; }
 //        NoteStationComponent = new QQmlComponent(context->engine(), "qml/NoteStation.qml", this);
 //        if(NoteStationComponent->isError()) {
@@ -338,7 +338,7 @@ void cwNoteItem::setImage(cwImage image) {
   The image has complete loading it self
   */
 void cwNoteItem::ImageFinishedLoading() {
-    GLWidget->makeCurrent();
+//    GLWidget->makeCurrent();
 
     QList<QPair<QByteArray, QSize> >mipmaps = LoadNoteWatcher->future().results();
 

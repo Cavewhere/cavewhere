@@ -12,20 +12,24 @@ cwNorthArrowItem::cwNorthArrowItem(QQuickItem *parent) :
 {
     NorthTextHandler = new cwPositioner3D(this);
     NorthTextHandler->setPosition3D(QVector3D(.1, .1, 0));
-    NorthText = new QGraphicsTextItem(NorthTextHandler);
+    // FIXME: Fix north arrow text
+    //    NorthText = new QGraphicsTextItem(NorthTextHandler);
 
     NorthArrowLineHandler = new QQuickItem(this);
-    NorthArrowLine = new QGraphicsPathItem(NorthArrowLineHandler);
+    // FIXME: Fix north arrow line
+    // NorthArrowLine = new QGraphicsPathItem(NorthArrowLineHandler);
 
     QFont font;
     font.setBold(true);
     font.setPointSize(14);
 
-    NorthText->setPlainText("N");
-    NorthText->setFont(font);
-    NorthText->setPos(-NorthText->boundingRect().width() / 2.0, 0);
+        // FIXME: Fix north arrow text
+//    NorthText->setPlainText("N");
+//    NorthText->setFont(font);
+//    NorthText->setPos(-NorthText->boundingRect().width() / 2.0, 0);
 
-    NorthArrowLine->setPen(LinePen);
+    // FIXME: Fix north arrow line
+//    NorthArrowLine->setPen(LinePen);
 }
 
 void cwNorthArrowItem::p1Updated() {
@@ -57,7 +61,8 @@ void cwNorthArrowItem::updateNorthArrowPath() {
     QVector3D p3 = TransformUpdater->mapFromViewportToModel(arrowLine.p2());
 
     painterPath.lineTo(p3.toPointF());
-    NorthArrowLine->setPath(painterPath);
+        // FIXME: Fix north arrow line
+//    NorthArrowLine->setPath(painterPath);
 }
 
 /**

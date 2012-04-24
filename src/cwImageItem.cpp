@@ -208,8 +208,10 @@ void cwImageItem::resizeGL() {
 /**
   \brief Draws the note item
   */
-void cwImageItem::paintFramebuffer() {
+void cwImageItem::paint(QPainter* painter) {
     if(!Image.isValid()) { return; }
+
+    painter->beginNativePainting();
 
     NoteVertexBuffer.bind();
 
@@ -226,6 +228,8 @@ void cwImageItem::paintFramebuffer() {
     NoteVertexBuffer.release();
     ImageProgram->release();
     NoteTexture->release();
+
+    painter->endNativePainting();
 }
 
 

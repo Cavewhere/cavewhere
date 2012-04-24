@@ -11,7 +11,7 @@ Interaction {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        onMousePositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+        onPositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
         onClicked: {
             var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
             scrapView.selectScrapAt(notePoint)

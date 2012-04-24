@@ -15,8 +15,9 @@ public:
 public slots:
 
 private:
-    QGraphicsObject* LengthHandler;
-    QGraphicsPathItem* LengthLine;
+    QQuickItem* LengthHandler;
+    //FIXME: Fix lengthline
+//    QGraphicsPathItem* LengthLine;
 
     void connectTransformer();
     void disconnectTransformer();

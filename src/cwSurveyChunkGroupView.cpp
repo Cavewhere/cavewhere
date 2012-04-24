@@ -12,7 +12,7 @@
 #include <QQmlEngine>
 #include <QQmlComponent>
 #include <QQuickItem>
-#include <QDeclarativeContext>
+#include <QQmlContext>
 #include <QKeyEvent>
 
 cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
@@ -31,7 +31,7 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
     if(ChunkQMLComponents == NULL) {
-        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+        QQmlContext* context = QQmlEngine::contextForObject(this);
         context->contextProperty("globalShadowTextInput");
         ChunkQMLComponents = new cwSurveyChunkViewComponents(context, this);
     }
@@ -230,7 +230,7 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
 
         //Create a chunkView object
         cwSurveyChunkView* chunkView = new cwSurveyChunkView(this);
-        QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+        QQmlContext* context = QQmlEngine::contextForObject(this);
         QQmlEngine::setContextForObject(chunkView, context);
         chunkView->setQMLComponents(ChunkQMLComponents);
 

@@ -133,7 +133,7 @@ SOURCES += src/main.cpp \
     src/cwQMLRegister.cpp \
     src/cwNorthArrowItem.cpp \
     src/cwPositioner3D.cpp \
-    src/cwMainWindow.cpp \
+#    src/cwMainWindow.cpp \
     src/cwScaleLengthItem.cpp \
     src/cwAbstract2PointItem.cpp \
     src/cwImageProperties.cpp \
@@ -262,7 +262,7 @@ HEADERS  += \
     src/cwQMLRegister.h \
     src/cwNorthArrowItem.h \
     src/cwPositioner3D.h \
-    src/cwMainWindow.h \
+#    src/cwMainWindow.h \
     src/cwScaleLengthItem.h \
     src/cwAbstract2PointItem.h \
     src/cwImageProperties.h \
@@ -381,7 +381,8 @@ OTHER_FILES += \
     qml/ErrorHelpBox.qml \
     qml/DataMainPage.qml \ #\
     qml/ExportSurveyMenuItem.qml \
-    qml/ShadowRectangle.qml
+    qml/ShadowRectangle.qml \
+    qml/TitleLabel.qml
 #    qml/CaveDataToolbar.qml
 
 RESOURCES += \

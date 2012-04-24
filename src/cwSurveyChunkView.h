@@ -107,7 +107,7 @@ private:
         int RowIndex;
 
         static QQuickItem* setupItem(QQmlComponent* component,
-                                           QDeclarativeContext* context,
+                                           QQmlContext* context,
                                            cwSurveyChunk::DataRole,
                                            cwValidator* validator);
     };

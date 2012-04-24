@@ -19,14 +19,14 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     StationView(new cwScrapStationView(this))
 {
     //Set the declarative context for the station view
-    QDeclarativeContext* context = QQmlEngine::contextForObject(this);
+    QQmlContext* context = QQmlEngine::contextForObject(this);
     QQmlEngine::setContextForObject(StationView, context);
 
 //    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
 }
 
-cwScrapItem::cwScrapItem(QDeclarativeContext *context, QQuickItem *parent) :
+cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
@@ -79,7 +79,8 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
     This will update the polygon item's geometry
   */
 void cwScrapItem::updateScrapGeometry() {
-    BorderItem->setPolygon(QPolygonF(Scrap->points()));
+    //FIXME: Add set polygon for border item
+//    BorderItem->setPolygon(QPolygonF(Scrap->points()));
 }
 
 /**
@@ -97,7 +98,8 @@ void cwScrapItem::setSelected(bool selected) {
         } else {
             pen.setWidth(1.0);
         }
-        BorderItem->setPen(pen);
+        //FIXME: Fix border item's pen
+//        BorderItem->setPen(pen);
 
         if(!selected) {
             StationView->clearSelection();
