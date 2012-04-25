@@ -1,5 +1,5 @@
 import QtQuick 2.0
-//import QtDesktop 0.1 as Desktop
+import QtDesktop 0.2 as Desktop
 import Cavewhere 1.0
 
 Item {
@@ -48,8 +48,7 @@ Item {
 
         color: style.floatingWidgetColor
         radius: style.floatingWidgetRadius
-        // TODO: QtDesktop include
-//        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
+        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
         width: checkBoxGroup.width + checkBoxGroup.x * 2.0
         //        y: groupAreaRect.height / 2.0
     }
@@ -60,8 +59,7 @@ Item {
         radius: style.floatingWidgetRadius
         color: "#00000000"
 
-                // TODO: QtDesktop include
-//        anchors.top: autoTransformCheckBox.verticalCenter
+        anchors.top: autoTransformCheckBox.verticalCenter
         anchors.left: column1.left
         anchors.right: column1.right
         anchors.bottom: column1.bottom
@@ -73,11 +71,9 @@ Item {
 
     Rectangle {
         color: backgroundRect.color
-        // TODO: QtDesktop include
-        //        anchors.fill: autoTransformCheckBox
+        anchors.fill: autoTransformCheckBox
     }
 
-    // TODO: Fix autoTransform checkbox
     Rectangle {
         width: 20
         height: 15
@@ -88,14 +84,14 @@ Item {
         color: "red"
     }
 
-//    Desktop.CheckBox {
-//        id: autoTransformCheckBox
-//        text: "Auto Calculate"
-//        anchors.left: checkBoxGroup.left
-//        anchors.leftMargin: 6
+    Desktop.CheckBox {
+        id: autoTransformCheckBox
+        text: "Auto Calculate"
+        anchors.left: checkBoxGroup.left
+        anchors.leftMargin: 6
 
-//        y: scrapInfoText.height / 2.0
-//    }
+        y: scrapInfoText.height / 2.0
+    }
 
     Column {
         id: column1
@@ -111,8 +107,7 @@ Item {
             noteTransform: editor.noteTransform
             onNorthUpInteractionActivated: interactionManager.active(northInteraction)
             northUpHelp: northUpHelpArea
-                    // TODO: QtDesktop include
-//            enable: !autoTransformCheckBox.checked
+            enable: !autoTransformCheckBox.checked
         }
 
         HelpArea {
@@ -127,8 +122,7 @@ Item {
             noteTransform: editor.noteTransform
             scaleHelp: scaleHelpAreaId
             onScaleInteractionActivated: interactionManager.active(scaleInteraction)
-                // TODO: QtDesktop include
-            //    autoScaling: autoTransformCheckBox.checked
+            autoScaling: autoTransformCheckBox.checked
         }
 
         HelpArea {

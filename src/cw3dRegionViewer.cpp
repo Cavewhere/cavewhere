@@ -61,19 +61,17 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //Run paint Framebuffer
     //cwGLRenderer::paint(painter, item, widget);
 
-    painter->setBrush(Qt::red);
-    painter->drawRect(QRectF(0, 0, width()-1, height()-1));
+    painter->beginNativePainting();
 
-//    painter->beginNativePainting();
+    if(!Initilized) {
+        initializeGL();
+    }
 
-//    if(!Initilized) {
-//        initializeGL();
-//    }
-
-//    paintFramebuffer();
-//    painter->endNativePainting();
+    paintFramebuffer();
+    painter->endNativePainting();
 
 //    //Render the text labels
+    // FIXME: station labels need to be implemented in QML
 //    painter->save();
 //    painter->setPen(QPen());
 //    painter->setBrush(QBrush());

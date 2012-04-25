@@ -174,8 +174,6 @@ cwGLRenderer::~cwGLRenderer() {
 //}
 
 void cwGLRenderer::privateResizeGL() {
-    qDebug() << "Private resize:" << width() << height() << contentsSize();
-
 //    if(GLWidget == NULL) { return; }
     if(width() == 0.0 || height() == 0.0) { return; }
     QSize framebufferSize(width(), height());

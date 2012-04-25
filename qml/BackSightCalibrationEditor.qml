@@ -1,6 +1,6 @@
 // import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
-//import QtDesktop 0.1 as Desktop
+import QtDesktop 0.2 as Desktop
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
@@ -15,9 +15,8 @@ CheckableGroupBox {
 
     onCalibrationChanged: {
         checked = calibration.backSights
-        // TODO: QtDesktop include
-        //        compassCorrected.checked = calibration.correctedCompassBacksight
-//        clinoCorrected.checked = calibration.correctedClinoBacksight
+        compassCorrected.checked = calibration.correctedCompassBacksight
+        clinoCorrected.checked = calibration.correctedClinoBacksight
     }
 
     onCheckedChanged: {
@@ -105,17 +104,16 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-            // TODO: Add compassCorrected back in
-//            Desktop.CheckBox {
-//                id: compassCorrected
-//                text: "Corrected <i>Compass</i>"
+            Desktop.CheckBox {
+                id: compassCorrected
+                text: "Corrected <i>Compass</i>"
 
-//                checked: calibration.correctedCompassBacksight
+                checked: calibration.correctedCompassBacksight
 
-//                onCheckedChanged: {
-//                    calibration.correctedCompassBacksight = checked
-//                }
-//            }
+                onCheckedChanged: {
+                    calibration.correctedCompassBacksight = checked
+                }
+            }
         }
 
 
@@ -136,17 +134,16 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-        // TODO: Add compassCorrected back in
-//            Desktop.CheckBox {
-//                id: clinoCorrected
-//                text: "Corrected <i>Clino</i>"
+            Desktop.CheckBox {
+                id: clinoCorrected
+                text: "Corrected <i>Clino</i>"
 
-//                checked: calibration.correctedClinoBacksight
+                checked: calibration.correctedClinoBacksight
 
-//                onCheckedChanged: {
-//                    calibration.correctedClinoBacksight = checked
-//                }
-//            }
+                onCheckedChanged: {
+                    calibration.correctedClinoBacksight = checked
+                }
+            }
         }
 
         HelpArea {

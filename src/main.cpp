@@ -1,5 +1,6 @@
 //Qt includes
 #include <QGuiApplication>
+#include <QApplication>
 //#include <QQmlComponent>
 #include <QThread>
 #include <QtQuick/QQuickView>
@@ -20,7 +21,7 @@
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication a(argc, argv);
+    QApplication a(argc, argv);
 
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
@@ -30,10 +31,10 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
 
-    QGuiApplication::setOrganizationName("Vadose Solutions");
-    QGuiApplication::setOrganizationDomain("cavewhere.com");
-    QGuiApplication::setApplicationName("Cavewhere");
-    QGuiApplication::setApplicationVersion("0.1");
+    QApplication::setOrganizationName("Vadose Solutions");
+    QApplication::setOrganizationDomain("cavewhere.com");
+    QApplication::setApplicationName("Cavewhere");
+    QApplication::setApplicationVersion("0.1");
 
     cwGlobalDirectory::setupBaseDirectory();
 
