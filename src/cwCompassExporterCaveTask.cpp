@@ -262,23 +262,34 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
         value = fmod(frontSite, 360.0);
         break;
     case BackCompass:
-        value = backSite;
-        if(calibrations->hasCorrectedCompassBacksight()) {
-            value = fmod((value + 180.0), 360.0);
+        if(shot.backCompassState() == cwCompassStates::Valid) {
+            //Backsite is valid
+            value = backSite;
+            if(calibrations->hasCorrectedCompassBacksight()) {
+                value = fmod((value + 180.0), 360.0);
+            } else {
+                value = fmod(value, 360.0);
+            }
         } else {
-            value = fmod(value, 360.0);
+            //Use flipped front site
+             value = fmod((frontSite + 180.0), 360.0);
         }
         break;
     case Clino:
         value = qBound(-90.0, frontSite, 90.0);
         break;
     case BackClino:
-        if(calibrations->hasCorrectedClinoBacksight()) {
-            value = -backSite;
+        if(shot.backClinoState() == cwClinoStates::Valid) {
+            if(calibrations->hasCorrectedClinoBacksight()) {
+                value = -backSite;
+            } else {
+                value = backSite;
+            }
+            value = qBound(-90.0, value, 90.0);
         } else {
-            value = backSite;
+            //Use flipped front site
+            value = qBound(-90.0, -frontSite, 90.0);
         }
-        value = qBound(-90.0, value, 90.0);
         break;
     }
 
@@ -356,10 +367,10 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
                                         cwShot shot,
                                         bool LRUDShotOnly)
 {
-    writeData(stream, "From", 12, fromStation.name());
+    writeData(stream, "From", 12, fromStation.name().toLower());
     stream << " ";
     if(LRUDShotOnly) {
-        writeData(stream, "To", 12, fromStation.name() + "lrud");
+        writeData(stream, "To", 12, fromStation.name().toLower() + "lrud");
         stream << " ";
         stream << formatDouble(0.0) << " ";
         stream << formatDouble(0.0) << " ";
@@ -374,7 +385,7 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
             shot.setClino(-convertField(calibrations, shot, BackClino));
         }
 
-        writeData(stream, "To", 12, toStation.name());
+        writeData(stream, "To", 12, toStation.name().toLower());
         stream << " ";
         stream << formatDouble(shotLength) << " ";
         stream << formatDouble(convertField(calibrations, shot, Compass)) << " ";
