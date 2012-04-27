@@ -187,7 +187,7 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
     }
 
     //Make sure we don't reopen the same file twice
-    if(qFind(IncludeFiles, filename) != IncludeFiles.end()) {
+    if(qFind(IncludeFiles, filename) != IncludeFiles.end() && !IncludeFiles.empty()) {
         //File has already been included... Do nothing
         return false;
     }

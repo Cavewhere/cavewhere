@@ -393,8 +393,8 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
     }
 
     stream << formatDouble(convertField(fromStation, Left, calibrations->distanceUnit())) << " ";
-    stream << formatDouble(convertField(fromStation, Up, calibrations->distanceUnit())) << " ";
     stream << formatDouble(convertField(fromStation, Right, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Up, calibrations->distanceUnit())) << " ";
     stream << formatDouble(convertField(fromStation, Down, calibrations->distanceUnit())) << " ";
 
     //Write out backsight
