@@ -100,7 +100,7 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
 
 
     stream << CompassNewLine;
-    stream << "FROM TO   LEN  BEAR   INC LEFT RIGHT UP DOWN AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
+    stream << "FROM TO   LEN  BEAR   INC LEFT UP DOWN RIGHT AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
     stream << CompassNewLine;
 }
 
@@ -393,9 +393,9 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
     }
 
     stream << formatDouble(convertField(fromStation, Left, calibrations->distanceUnit())) << " ";
-    stream << formatDouble(convertField(fromStation, Right, calibrations->distanceUnit())) << " ";
     stream << formatDouble(convertField(fromStation, Up, calibrations->distanceUnit())) << " ";
     stream << formatDouble(convertField(fromStation, Down, calibrations->distanceUnit())) << " ";
+    stream << formatDouble(convertField(fromStation, Right, calibrations->distanceUnit())) << " ";
 
     //Write out backsight
     if(calibrations->hasBackSights()) {
