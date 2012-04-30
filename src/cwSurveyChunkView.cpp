@@ -19,6 +19,9 @@
 #include <QGraphicsScene>
 #include <QCursor>
 
+//Std includes
+#include <math.h>
+
 cwSurveyChunkView::cwSurveyChunkView(QQuickItem* parent) :
     QQuickItem(parent),
     SurveyChunk(NULL),
@@ -856,9 +859,9 @@ void cwSurveyChunkView::createTitlebar() {
     DistanceTitle->setX(mapRectFromItem(StationTitle, StationTitle->boundingRect()).right() - 1);
     DistanceTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).center().y() + 1);
     AzimuthTitle->setX(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).right() - 1);
-    AzimuthTitle->setY(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).top() + 1);
+    AzimuthTitle->setY(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).top());
     ClinoTitle->setX(mapRectFromItem(AzimuthTitle, AzimuthTitle->boundingRect()).right() - 1);
-    ClinoTitle->setY(mapRectFromItem(AzimuthTitle, AzimuthTitle->boundingRect()).top() + 1);
+    ClinoTitle->setY(mapRectFromItem(AzimuthTitle, AzimuthTitle->boundingRect()).top());
     LeftTitle->setX(mapRectFromItem(ClinoTitle, ClinoTitle->boundingRect()).right() - 1);
     LeftTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).top() + 1);
     RightTitle->setX(mapRectFromItem(LeftTitle, LeftTitle->boundingRect()).right() - 1);
@@ -1015,9 +1018,9 @@ void cwSurveyChunkView::positionStationRow(StationRow row, int index) {
   */
 void cwSurveyChunkView::positionElement(QQuickItem* item, const QQuickItem* titleItem, int index, int yOffset, QSizeF size) {
     QRectF titleRect = mapRectFromItem(titleItem, titleItem->boundingRect());
-    size = !size.isValid() ? titleRect.size() + QSizeF(-2, 0) : size;
+    size = !size.isValid() ? titleRect.size() + QSizeF(-1, 0) : size;
     float y = titleRect.bottom() + titleRect.height() * index;
-    QPointF position(titleRect.left() + 1, yOffset + y -1);
+    QPointF position(titleRect.left(), yOffset + y - 1);
     //item->setPos(position - QPointF(0.0, size.height()));
     if(item->pos() == QPointF(0.0, 0.0)) {
         //Not position yet
@@ -1046,15 +1049,15 @@ void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
     row.backClino()->setProperty("visible", HasBackSights);
 
     //Has only one
-    float azimuthHeight = AzimuthTitle->height() + 2.0;
-    float clinoHeight = ClinoTitle->height() + 2.0;
+    float azimuthHeight = AzimuthTitle->height() + 1;
+    float clinoHeight = ClinoTitle->height() + 1;
     float backAzimuthY = 0.0;
     float backClinoY = 0.0;
 
     //Has both back and front sight
     if(HasFrontSights && HasBackSights) {
-        azimuthHeight = AzimuthTitle->height() / 2.0 + 1.0;
-        clinoHeight = ClinoTitle->height() / 2.0 + 1.0;
+        azimuthHeight = floor(AzimuthTitle->height() / 2.0 + 1);
+        clinoHeight = floor(ClinoTitle->height() / 2.0 + 1);
         backAzimuthY = azimuthHeight;
         backClinoY = clinoHeight;
     }
@@ -1062,8 +1065,8 @@ void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
     positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), azimuthHeight));
     positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), clinoHeight));
 
-    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width(), azimuthHeight));
-    positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight));
+    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width(), azimuthHeight - 1));
+    positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight - 1));
 }
 
 /**
