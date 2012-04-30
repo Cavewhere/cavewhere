@@ -15,7 +15,7 @@ Item {
         } else {
             teamTable.state = "NoTeam"
         }
-        //        console.debug("Update state: " + teamTable.state )
+    //        console.debug("Update state: " + teamTable.state )
     }
 
     SectionLabel {
@@ -321,7 +321,7 @@ Item {
 
             PropertyChanges {
                 target: teamList
-                visible: false
+                height: 0
             }
 
             PropertyChanges {
