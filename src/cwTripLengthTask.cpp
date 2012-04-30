@@ -17,17 +17,18 @@ cwTripLengthTask::cwTripLengthTask(QObject *parent) :
   */
 void cwTripLengthTask::setTrip(cwTrip *trip) {
 
+    qDebug() << "Set trip: " << trip;
+
     if(Trip != trip) {
 
         if(Trip != NULL) {
-            disconnect(Trip, NULL, this, NULL);
-            disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
-            disconnectChunks();
+            disconnectTrip();
         }
 
         Trip = trip;
 
         if(Trip != NULL) {
+            connect(Trip, SIGNAL(destroyed()), SLOT(disconnectTrip()));
             connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(chunkAdded(int,int)));
             connect(Trip, SIGNAL(chunksRemoved(int,int)), SLOT(chunkRemoved(int,int)));
             connect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), SLOT(restart()));
@@ -99,6 +100,15 @@ void cwTripLengthTask::chunkAdded(int begin, int end)
         cwSurveyChunk* chunk = Trip->chunk(i);
         connectChunk(chunk);
     }
+}
+
+/**
+  Disconnects the trip from the task
+  */
+void cwTripLengthTask::disconnectTrip() {
+    disconnect(Trip, NULL, this, NULL);
+    disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
+    disconnectChunks();
 }
 
 void cwTripLengthTask::runTask()

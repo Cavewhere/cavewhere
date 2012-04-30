@@ -35,6 +35,7 @@ public:
     explicit cwTrip(QObject *parent = 0);
     cwTrip(const cwTrip& object);
     cwTrip& operator=(const cwTrip& object);
+    ~cwTrip();
 
     QString name() const;
     void setName(QString name);

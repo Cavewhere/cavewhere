@@ -107,23 +107,25 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
 //    qDebug() << "MaxZValue: " << MaxZValue;
 //    qDebug() << "MinZValue: " << MinZValue;
 
-    LinePlotVertexBuffer.bind();
-    LinePlotVertexBuffer.allocate(pointData.data(), pointData.size() * sizeof(QVector3D));
-    LinePlotVertexBuffer.release();
+    //FIXME: Needs to be updated in rendering thread (not thread safe code)
+//    LinePlotVertexBuffer.bind();
+//    LinePlotVertexBuffer.allocate(pointData.data(), pointData.size() * sizeof(QVector3D));
+//    LinePlotVertexBuffer.release();
 
-    ShaderProgram->bind();
-    ShaderProgram->setUniformValue(UniformMaxZValue, MaxZValue);
-    ShaderProgram->setUniformValue(UniformMinZValue, MinZValue);
-    ShaderProgram->release();
+//    ShaderProgram->bind();
+//    ShaderProgram->setUniformValue(UniformMaxZValue, MaxZValue);
+//    ShaderProgram->setUniformValue(UniformMinZValue, MinZValue);
+//    ShaderProgram->release();
 }
 
 /**
   \brief Set the line indexes for the line plot object
   */
 void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
-    LinePlotIndexBuffer.bind();
-    LinePlotIndexBuffer.allocate(indexData.data(), indexData.size() * sizeof(unsigned int));
-    LinePlotIndexBuffer.release();
+    //FIXME: Needs to be updated in rendering thread (not thread safe code)
+    //    LinePlotIndexBuffer.bind();
+//    LinePlotIndexBuffer.allocate(indexData.data(), indexData.size() * sizeof(unsigned int));
+//    LinePlotIndexBuffer.release();
 
-    IndexBufferSize = indexData.size();
+//    IndexBufferSize = indexData.size();
 }

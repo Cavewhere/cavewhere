@@ -80,6 +80,11 @@ cwTrip& cwTrip::operator=(const cwTrip& object) {
     return *this;
 }
 
+cwTrip::~cwTrip()
+{
+    qDebug() << "Deleting " << this << name();
+}
+
 /**
   \brief Set's the name of the survey trip
   */

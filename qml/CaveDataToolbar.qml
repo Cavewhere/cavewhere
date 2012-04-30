@@ -24,40 +24,41 @@ Item {
                 exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
             }
 
-            Desktop.ContextMenu {
-                id: exportContextMenu
+            // FIXME: Fix export menu
+//            Desktop.ContextMenu {
+//                id: exportContextMenu
 
-                Desktop.Menu {
-                    text: "Survex"
+//                Desktop.Menu {
+//                    text: "Survex"
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current trip"
-                        currentText: surveyExportManager.currentTripName
-                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
-                    }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current trip"
+//                        currentText: surveyExportManager.currentTripName
+//                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
+//                    }
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current cave"
-                        currentText: surveyExportManager.currentCaveName
-                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
-                    }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current cave"
+//                        currentText: surveyExportManager.currentCaveName
+//                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
+//                    }
 
-                    Desktop.MenuItem {
-                        text: "Region (all caves)"
-                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
-                    }
-                }
+//                    Desktop.MenuItem {
+//                        text: "Region (all caves)"
+//                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
+//                    }
+//                }
 
-                Desktop.Menu {
-                    text: "Compass"
+//                Desktop.Menu {
+//                    text: "Compass"
 
-                    ExportSurveyMenuItem {
-                        prefixText: "Current cave"
-                        currentText: surveyExportManager.currentCaveName
-                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
-                    }
-                }
-            }
+//                    ExportSurveyMenuItem {
+//                        prefixText: "Current cave"
+//                        currentText: surveyExportManager.currentCaveName
+//                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
+//                    }
+//                }
+//            }
         }
 
 
@@ -71,15 +72,16 @@ Item {
                 importContextMenu.showPopup(globalPoint.x, globalPoint.y)
             }
 
-            Desktop.ContextMenu {
-                id: importContextMenu
+            // FIXME: Fix import menu
+//            Desktop.ContextMenu {
+//                id: importContextMenu
 
-                Desktop.MenuItem {
-                    text: "Survex (.svx)"
-                    onTriggered: surveyImportManager.importSurvex()
-                }
+//                Desktop.MenuItem {
+//                    text: "Survex (.svx)"
+//                    onTriggered: surveyImportManager.importSurvex()
+//                }
 
-            }
+//            }
         }
     }
 

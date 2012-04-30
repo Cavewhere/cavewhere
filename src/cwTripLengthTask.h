@@ -40,6 +40,8 @@ private slots:
    void chunkRemoved(int begin, int end);
    void chunkAdded(int begin, int end);
 
+   void disconnectTrip();
+
 private:
    cwTrip* Trip;
    double Length; //!< The length of the trip
