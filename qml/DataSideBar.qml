@@ -35,9 +35,4 @@ Rectangle {
             text: "This is the Surface page"
         }
     }
-
-
-
-
-
 }

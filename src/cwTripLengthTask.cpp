@@ -16,9 +16,6 @@ cwTripLengthTask::cwTripLengthTask(QObject *parent) :
   Sets the trip for the lenght task
   */
 void cwTripLengthTask::setTrip(cwTrip *trip) {
-
-    qDebug() << "Set trip: " << trip;
-
     if(Trip != trip) {
 
         if(Trip != NULL) {
@@ -109,6 +106,7 @@ void cwTripLengthTask::disconnectTrip() {
     disconnect(Trip, NULL, this, NULL);
     disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
     disconnectChunks();
+    Trip = NULL;
 }
 
 void cwTripLengthTask::runTask()

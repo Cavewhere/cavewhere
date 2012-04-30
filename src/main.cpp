@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     QQuickView view;
 
     cwRootData* rootData = new cwRootData(&view);
-    rootData->project()->load("/Users/vpicaver/Documents/Caving Data/quanko.cw");
+    rootData->project()->load("/home/blitz/Dropbox/quanko.cw");
     view.rootContext()->setContextObject(rootData);
     view.rootContext()->setContextProperty("rootObject", (QObject*)view.rootObject());
 

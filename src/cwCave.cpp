@@ -25,6 +25,9 @@ cwCave& cwCave::operator=(const cwCave& object) {
     return Copy(object);
 }
 
+cwCave::~cwCave() {
+}
+
 /**
   \brief Copies data from one object to another one
   */

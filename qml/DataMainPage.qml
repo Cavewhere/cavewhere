@@ -12,7 +12,7 @@ Rectangle {
     function currentIndexIsType(type) {
         var index = dataSideBar.caveSidebar.currentIndex
         var indexsType = regionModel.data(index, RegionTreeModel.TypeRole);
-        return (indexsType == type);
+        return (indexsType === type);
     }
 
     /**

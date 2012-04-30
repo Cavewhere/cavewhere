@@ -191,6 +191,7 @@ void cwLinePlotManager::runSurvex() {
 void cwLinePlotManager::updateLinePlot() {
     if(GLLinePlot == NULL) { return; }
     if(!LinePlotTask->isReady()) { return; }
+    if(Region == NULL) { return; }
 
     //Make sure the data is valid
     QVector<cwStationPositionLookup> stationPositionsPerCave = LinePlotTask->stationLookup();

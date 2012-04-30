@@ -82,7 +82,6 @@ cwTrip& cwTrip::operator=(const cwTrip& object) {
 
 cwTrip::~cwTrip()
 {
-    qDebug() << "Deleting " << this << name();
 }
 
 /**

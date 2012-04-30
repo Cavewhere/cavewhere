@@ -52,9 +52,10 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         cwCave* newCave = new cwCave(*cave);
         newCave->moveToThread(thread());
 
+        // FIXME : Test on windows
         //We need to comment this out because it's bad programming,
         //Can't notify other threads with sendEvent, ASSERTs on windows
-        //newCave->setParent(this);
+        newCave->setParent(this);  //Uncomment because this cause problems with QML
 
         Caves.append(newCave);
     }

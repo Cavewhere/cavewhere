@@ -1,11 +1,14 @@
 import QtQuick 2.0
+import Cavewhere 1.0
 
 DataTabWidget {
-    property variant currentCave: null
+    id: caveTabWidget
+    property Cave currentCave: null
 
     CaveOverviewPage {
         property string label: "Overview"
         property string icon:  "qrc:icons/dataOverview.png"
+        currentCave: caveTabWidget.currentCave
     }
 
     Text {

@@ -4,6 +4,8 @@ import Cavewhere 1.0
 Rectangle {
     id: cavePageArea
 
+    property Cave currentCave: null
+
     anchors.fill: parent;
 
 

@@ -25,6 +25,7 @@ public:
     explicit cwCave(QObject* parent = NULL);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
+    ~cwCave();
 
     QString name() const;
     void setName(QString name);
