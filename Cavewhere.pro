@@ -155,7 +155,8 @@ SOURCES += src/main.cpp \
     src/cwStationPositionLookup.cpp \
     src/cwSurveyImportManager.cpp \
     src/cwTripLengthTask.cpp \
-    src/cwSurvexLRUDChunk.cpp
+    src/cwSurvexLRUDChunk.cpp \
+    src/cwMenuWindow.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -285,7 +286,8 @@ HEADERS  += \
     src/cwStationPositionLookup.h \
     src/cwSurveyImportManager.h \
     src/cwTripLengthTask.h \
-    src/cwSurvexLRUDChunk.h
+    src/cwSurvexLRUDChunk.h \
+    src/cwMenuWindow.h
 
 
 #FORMS    += src/cwMainWindow.ui \
@@ -383,7 +385,10 @@ OTHER_FILES += \
     qml/ExportSurveyMenuItem.qml \
     qml/ShadowRectangle.qml \
     qml/TitleLabel.qml \
-    qml/CaveDataToolbar.qml
+    qml/CaveDataToolbar.qml \
+    qml/Menu.qml \
+    qml/ContextMenu.qml \
+    qml/MenuItem.qml
 
 RESOURCES += \
     icons.qrc

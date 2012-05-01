@@ -1,6 +1,6 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
-import QtDesktop 0.2 as Desktop
+//import QtDesktop 0.2 as Desktop
 import Cavewhere 1.0
 
 Item {
@@ -20,8 +20,32 @@ Item {
             text: "Export"
 
             onClicked: {
-                var globalPoint = mapToItem(null, 0, 2 * exportButton.height);
-                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
+
+//                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
+//                menuWindow.raise();
+                var globalPoint = mapToItem(null, 0, exportButton.height);
+                menuWindow.x = globalPoint.x
+                menuWindow.y = globalPoint.y
+                menuWindow.showNormal()
+            }
+
+
+            Menu {
+                id: menuWindow
+
+                MenuItem {
+                    text: "Current Trip"
+                }
+
+                MenuItem {
+                    id: currentCave
+                    text: "Current Cave"
+                }
+
+                onVisibleChanged: {
+                    update();
+                }
+
             }
 
             // FIXME: Fix export menu
