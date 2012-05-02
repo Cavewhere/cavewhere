@@ -44,11 +44,15 @@ int main(int argc, char *argv[])
 
     QQuickView view;
 
+    QSurfaceFormat format = view.format();
+    format.setSamples(8);
+
     cwRootData* rootData = new cwRootData(&view);
     rootData->project()->load("/home/blitz/Dropbox/quanko.cw");
     view.rootContext()->setContextObject(rootData);
     view.rootContext()->setContextProperty("mainWindow", &view);
 
+    view.setFormat(format);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
     view.setWindowFlags(Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);

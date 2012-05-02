@@ -388,7 +388,8 @@ OTHER_FILES += \
     qml/CaveDataToolbar.qml \
     qml/Menu.qml \
     qml/ContextMenu.qml \
-    qml/MenuItem.qml
+    qml/MenuItem.qml \
+    qml/GlobalMenuMouseHandler.qml
 
 RESOURCES += \
     icons.qrc

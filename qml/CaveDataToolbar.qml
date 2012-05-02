@@ -21,28 +21,86 @@ Item {
 
             onClicked: {
                 var globalPoint = mapToItem(null, 0, exportButton.height);
-                menuWindow.x = globalPoint.x + mainWindow.x
-                menuWindow.y = globalPoint.y + mainWindow.y
-                menuWindow.show()
-                menuWindow.raise()
+                exportMenuWindow.visible = true
+                exportMenuWindow.x = globalPoint.x
+                exportMenuWindow.y = globalPoint.y
             }
 
 
-            Menu {
-                id: menuWindow
+            ContextMenu {
+                id: exportMenuWindow
 
-                MenuItem {
-                    text: "Current Trip"
+                Menu {
+                    text: "Survex"
+
+                    MenuItem {
+                        text: "Current Trip"
+                    }
+
+                    MenuItem {
+                        text: "Current Cave"
+                    }
+
                 }
 
-                MenuItem {
-                    id: currentCave
-                    text: "Current Cave"
+                Menu {
+                    text: "Compass"
+
+                    MenuItem {
+                        text: "Current Trip Compass"
+                    }
+
+                    MenuItem {
+                        text: "Current Cave Compass"
+                    }
                 }
 
-                onVisibleChanged: {
-                    update();
+                Menu {
+                    text: "Test"
+
+                    MenuItem {
+                        text: "Sauce !Current Trip Compass"
+                    }
+
+                    MenuItem {
+                        text: "Moo Current Cave Compass"
+                    }
+
+                    Menu {
+                        text: "Touch me"
+
+                        MenuItem {
+                            text: "Wahoo!"
+                        }
+
+                        MenuItem {
+                            text: "Sauce"
+                        }
+
+                        Menu {
+                            text: "Menu"
+
+                            Menu {
+                                text: "Menu2"
+
+                                MenuItem {
+
+                                    width: menuImage.width
+                                    height: menuImage.height
+
+                                    Image {
+                                        id: menuImage
+                                        source: "/Users/vpicaver/Documents/Caving\ Data/China/2012/Drafting/Quankou/scanGref/wetdreams2_gref.jpg"
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+
+//                onXChanged: {
+//                    console.log("X change: " + x)
+//                }
 
             }
 

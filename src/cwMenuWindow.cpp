@@ -6,6 +6,7 @@
 
 cwMenuWindow::cwMenuWindow(QWindow *parent) : QQuickCanvas(parent)
 {
+    setWindowFlags(Qt::Popup);
 }
 
 /**
@@ -15,9 +16,10 @@ cwMenuWindow::cwMenuWindow(QWindow *parent) : QQuickCanvas(parent)
 bool cwMenuWindow::event(QEvent *event) {
     bool handled = QQuickCanvas::event(event);
 
+    qDebug() << "Event:" << event;
     if(event->type() == QEvent::FocusOut) {
         handled = true;
-//        hide();
+        hide();
     }
 
     return handled;
