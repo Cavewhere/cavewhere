@@ -20,13 +20,11 @@ Item {
             text: "Export"
 
             onClicked: {
-
-//                exportContextMenu.showPopup(globalPoint.x, globalPoint.y);
-//                menuWindow.raise();
                 var globalPoint = mapToItem(null, 0, exportButton.height);
-                menuWindow.x = globalPoint.x
-                menuWindow.y = globalPoint.y
-                menuWindow.showNormal()
+                menuWindow.x = globalPoint.x + mainWindow.x
+                menuWindow.y = globalPoint.y + mainWindow.y
+                menuWindow.show()
+                menuWindow.raise()
             }
 
 

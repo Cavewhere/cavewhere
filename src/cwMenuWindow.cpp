@@ -15,9 +15,9 @@ cwMenuWindow::cwMenuWindow(QWindow *parent) : QQuickCanvas(parent)
 bool cwMenuWindow::event(QEvent *event) {
     bool handled = QQuickCanvas::event(event);
 
-    if(event->type() == QEvent::Leave) {
+    if(event->type() == QEvent::FocusOut) {
         handled = true;
-        hide();
+//        hide();
     }
 
     return handled;

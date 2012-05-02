@@ -12,5 +12,10 @@ Rectangle {
     Text {
         id: textId
     }
+
+    MouseArea {
+
+
+    }
 }
 

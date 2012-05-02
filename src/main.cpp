@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
     cwRootData* rootData = new cwRootData(&view);
     rootData->project()->load("/home/blitz/Dropbox/quanko.cw");
     view.rootContext()->setContextObject(rootData);
-    view.rootContext()->setContextProperty("rootObject", (QObject*)view.rootObject());
+    view.rootContext()->setContextProperty("mainWindow", &view);
 
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));

@@ -13,13 +13,4 @@ MenuWindow {
         id: childItems
 
     }
-
-    MouseArea {
-        anchors.fill: parent
-
-        onPressed: {
-            menuWindow.hide()
-        }
-    }
-
 }
