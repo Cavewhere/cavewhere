@@ -6,6 +6,7 @@ MenuItem {
     id: menuId
 
     default property alias children: subMenu.children
+    menu: true
 
     ContextMenu {
         id: subMenu
@@ -28,4 +29,6 @@ MenuItem {
             }
         }
     }
+
+
 }

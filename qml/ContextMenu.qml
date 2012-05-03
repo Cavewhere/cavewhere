@@ -7,7 +7,7 @@ Rectangle {
 
     default property alias children: childItems.children
     property var currentItem: null
-    property int marginWidth: 15
+    property int marginWidth: 28
     property int marginHeight: 3
 
     border.width: 1
@@ -35,6 +35,13 @@ Rectangle {
         if(globalMenuMouseHandler.currentRootContextMenu === null) {
             globalMenuMouseHandler.currentRootContextMenu = menuWindow
         }
+    }
+
+    function popupOnTopOf(item, xOffset, yOffset) {
+        var globalPoint = item.mapToItem(null, xOffset, yOffset);
+        menuWindow.x = globalPoint.x
+        menuWindow.y = globalPoint.y
+        visible = true
     }
 
     onVisibleChanged: {

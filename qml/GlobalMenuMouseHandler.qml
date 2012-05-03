@@ -11,11 +11,17 @@ MouseArea {
 
     visible: true;
 
-    onPressed: {
+    function closeOpenMenu() {
         if(currentRootContextMenu !== null) {
             currentRootContextMenu.visible = false
             currentRootContextMenu = null
         }
+    }
+
+    onPressed: {
+        closeOpenMenu()
         mouse.accepted = false
     }
+
+
 }

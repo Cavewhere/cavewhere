@@ -6,6 +6,7 @@
 #include <QtQuick/QQuickView>
 #include <QQmlContext>
 #include <QModelIndex>
+#include <QtWidgets/QWidget>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -57,6 +58,8 @@ int main(int argc, char *argv[])
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
     view.setWindowFlags(Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);
     view.show();
+
+    a.setQuitOnLastWindowClosed(false);
 
     return a.exec();
 }

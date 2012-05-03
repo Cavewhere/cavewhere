@@ -17,7 +17,7 @@ class QAction;
 class cwImportSurvexDialog :
         public QDialog,
         public cwUndoer,
-        private Ui::cwImportSurvexDialog``
+        private Ui::cwImportSurvexDialog
 {
     Q_OBJECT
 

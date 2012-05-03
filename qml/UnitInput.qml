@@ -1,9 +1,8 @@
 import QtQuick 2.0
-//import QtDesktop 0.1
 
 Item {
     id: unitInput
-    property variant unitModel
+    property var unitModel
     property int unit
 
     signal newUnit(int unit)
@@ -11,10 +10,9 @@ Item {
     width: textArea.width
     height: textArea.height
 
-    // TODO: QtDesktop include
-//    onUnitChanged: {
-//        numeratorMenu.selectedIndex = unitInput.unit
-//    }
+    onUnitChanged: {
+        numeratorMenu.selectedIndex = unitInput.unit
+    }
 
     Pallete {
         id: pallete
@@ -23,37 +21,28 @@ Item {
     Text {
         id: textArea
         color: pallete.inputTextColor
-        // TODO: QtDesktop include
-//        text: " " + numeratorMenu.selectedText
+        text: unitModel !== null ? " " + unitModel[numeratorMenu.selectedIndex] : "";
 
         MouseArea {
             anchors.fill: parent
 
             onClicked: {
-                numeratorMenu.visible = true
+                numeratorMenu.popupOnTopOf(textArea, 0, textArea.height)
+            }
+        }
+
+        ContextMenu {
+            id: numeratorMenu
+            property int selectedIndex: unitInput.unit
+
+            Repeater {
+                model: unitModel
+
+                delegate: MenuItem {
+                    text: modelData
+                    onTriggered: unitInput.newUnit(index)
+                }
             }
         }
     }
-
-    // TODO: Put unit selection back in
-//    ContextMenu {
-//        id: numeratorMenu
-//        model: listModel
-//        selectedIndex: unitInput.unit
-//        onSelectedIndexChanged: newUnit(selectedIndex)
-//    }
-
-    ListModel {
-        id: listModel
-    }
-
-            // TODO: QtDesktop include
-//    onUnitModelChanged: {
-//        listModel.clear()
-//        for(var unit in unitModel) {
-//            listModel.append({"text": unitModel[unit]})
-//        }
-//        numeratorMenu.rebuildMenu()
-//        numeratorMenu.selectedIndex = unitInput.unit
-//    }
 }

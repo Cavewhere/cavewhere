@@ -55,7 +55,7 @@ SOURCES += src/main.cpp \
     src/cwSurvexGlobalData.cpp \
     src/cwSurvexBlockData.cpp \
     src/cwSurvexImporterModel.cpp \
-#    src/cwImportSurvexDialog.cpp \
+    src/cwImportSurvexDialog.cpp \
     src/cwGlobalIcons.cpp \
     src/cwSurveyChunkViewComponents.cpp \
     src/cwTask.cpp \
@@ -79,7 +79,7 @@ SOURCES += src/main.cpp \
     src/cwTeamMember.cpp \
     src/cwTeam.cpp \
     src/cwTripCalibration.cpp \
-#    src/cwTaskProgressDialog.cpp \
+    src/cwTaskProgressDialog.cpp \
     src/cwStringListErrorModel.cpp \
     src/cwGlobalUndoStack.cpp \
     src/cwUndoer.cpp \
@@ -180,7 +180,7 @@ HEADERS  += \
     src/cwSurvexGlobalData.h \
     src/cwSurvexBlockData.h \
     src/cwSurvexImporterModel.h \
-#    src/cwImportSurvexDialog.h \
+    src/cwImportSurvexDialog.h \
     src/cwGlobalIcons.h \
     src/cwSurveyChunkViewComponents.h \
     src/cwTask.h \
@@ -204,7 +204,7 @@ HEADERS  += \
     src/cwTeamMember.h \
     src/cwTeam.h \
     src/cwTripCalibration.h \
- #   src/cwTaskProgressDialog.h \
+    src/cwTaskProgressDialog.h \
     src/cwStringListErrorModel.h \
     src/cwGlobalUndoStack.h \
     src/cwUndoer.h \
@@ -290,9 +290,9 @@ HEADERS  += \
     src/cwMenuWindow.h
 
 
-#FORMS    += src/cwMainWindow.ui \
-#    src/cwImportSurvexDialog.ui \
-#    src/cwTaskProgressDialog.ui
+FORMS    += \ #src/cwMainWindow.ui \
+    src/cwImportSurvexDialog.ui \
+    src/cwTaskProgressDialog.ui
 
 OTHER_FILES += \
     qml/DataSideBar.qml \

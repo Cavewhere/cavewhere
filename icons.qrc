@@ -57,5 +57,6 @@
         <file>icons/Information.png</file>
         <file>icons/InformationDark.png</file>
         <file>icons/Information20x20.png</file>
+        <file>icons/moreArrowWhite.png</file>
     </qresource>
 </RCC>

@@ -20,127 +20,44 @@ Item {
             text: "Export"
 
             onClicked: {
-                var globalPoint = mapToItem(null, 0, exportButton.height);
-                exportMenuWindow.visible = true
-                exportMenuWindow.x = globalPoint.x
-                exportMenuWindow.y = globalPoint.y
+                exportContextMenu.popupOnTopOf(exportButton, 0, exportButton.height)
             }
 
-
             ContextMenu {
-                id: exportMenuWindow
+                id: exportContextMenu
 
                 Menu {
                     text: "Survex"
 
-                    MenuItem {
-                        text: "Current Trip"
+                    ExportSurveyMenuItem {
+                        prefixText: "Current trip"
+                        currentText: surveyExportManager.currentTripName
+                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
+                    }
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: surveyExportManager.currentCaveName
+                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
                     }
 
                     MenuItem {
-                        text: "Current Cave"
+                        text: "Region (all caves)"
+                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
                     }
-
                 }
 
                 Menu {
                     text: "Compass"
 
-                    MenuItem {
-                        text: "Current Trip Compass"
-                    }
-
-                    MenuItem {
-                        text: "Current Cave Compass"
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: surveyExportManager.currentCaveName
+                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
                     }
                 }
-
-                Menu {
-                    text: "Test"
-
-                    MenuItem {
-                        text: "Sauce !Current Trip Compass"
-                    }
-
-                    MenuItem {
-                        text: "Moo Current Cave Compass"
-                    }
-
-                    Menu {
-                        text: "Touch me"
-
-                        MenuItem {
-                            text: "Wahoo!"
-                        }
-
-                        MenuItem {
-                            text: "Sauce"
-                        }
-
-                        Menu {
-                            text: "Menu"
-
-                            Menu {
-                                text: "Menu2"
-
-                                MenuItem {
-
-                                    width: menuImage.width
-                                    height: menuImage.height
-
-                                    Image {
-                                        id: menuImage
-                                        source: "/Users/vpicaver/Documents/Caving\ Data/China/2012/Drafting/Quankou/scanGref/wetdreams2_gref.jpg"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-//                onXChanged: {
-//                    console.log("X change: " + x)
-//                }
-
             }
-
-            // FIXME: Fix export menu
-//            Desktop.ContextMenu {
-//                id: exportContextMenu
-
-//                Desktop.Menu {
-//                    text: "Survex"
-
-//                    ExportSurveyMenuItem {
-//                        prefixText: "Current trip"
-//                        currentText: surveyExportManager.currentTripName
-//                        onTriggered: surveyExportManager.openExportSurvexTripFileDialog()
-//                    }
-
-//                    ExportSurveyMenuItem {
-//                        prefixText: "Current cave"
-//                        currentText: surveyExportManager.currentCaveName
-//                        onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
-//                    }
-
-//                    Desktop.MenuItem {
-//                        text: "Region (all caves)"
-//                        onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
-//                    }
-//                }
-
-//                Desktop.Menu {
-//                    text: "Compass"
-
-//                    ExportSurveyMenuItem {
-//                        prefixText: "Current cave"
-//                        currentText: surveyExportManager.currentCaveName
-//                        onTriggered: surveyExportManager.openExportCompassCaveFileDialog()
-//                    }
-//                }
-//            }
         }
-
 
         Button {
             id: importButton
@@ -148,23 +65,17 @@ Item {
             text: "Import"
 
             onClicked: {
-                var globalPoint = mapToItem(null, 0, 2 * importButton.height);
-                importContextMenu.showPopup(globalPoint.x, globalPoint.y)
+                importContextMenu.popupOnTopOf(importButton, 0, importButton.height)
             }
 
-            // FIXME: Fix import menu
-//            Desktop.ContextMenu {
-//                id: importContextMenu
+            ContextMenu {
+                id: importContextMenu
 
-//                Desktop.MenuItem {
-//                    text: "Survex (.svx)"
-//                    onTriggered: surveyImportManager.importSurvex()
-//                }
-
-//            }
+                MenuItem {
+                    text: "Survex (.svx)"
+                    onTriggered: surveyImportManager.importSurvex()
+                }
+            }
         }
     }
-
-
-
 }
