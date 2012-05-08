@@ -399,7 +399,7 @@ DEPENDPATH += INCLUDEPATH
 
 unix {
     INCLUDEPATH += /usr/local/include /opt/local/include
-    LIBS += -lz -lGLEW -L/usr/lib -L/usr/local/lib -L/opt/local/lib -lsquish -lboost_serialization -lboost_wserialization
+    LIBS += -lz -lGLEW -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 }
 

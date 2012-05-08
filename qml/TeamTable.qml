@@ -51,7 +51,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: "Name"
             font.bold: true
-            visible: true
+            visible: teamList.visible
         }
 
         Text {
@@ -62,7 +62,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: "Role"
             font.bold: true
-            visible: true
+            visible: teamList.visible
         }
 
         Rectangle {
@@ -73,7 +73,7 @@ Item {
             width: 1
             border.color: "lightgray"
             border.width: 1
-            visible: true
+            visible: teamList.visible
         }
 
         ListView {
