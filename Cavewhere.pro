@@ -11,7 +11,7 @@ greaterThan(QT_MAJOR_VERSION, 4) {
    QT += opengl
 
    #Extra modules
-   QT += sql concurrent xml qml quick
+   QT += sql concurrent xml qml quick 3d
 } else {
    QT += core gui declarative xml opengl sql
 }
@@ -156,7 +156,8 @@ SOURCES += src/main.cpp \
     src/cwSurveyImportManager.cpp \
     src/cwTripLengthTask.cpp \
     src/cwSurvexLRUDChunk.cpp \
-    src/cwMenuWindow.cpp
+    src/cwMenuWindow.cpp \
+    src/cwGLGridPlane.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -287,7 +288,8 @@ HEADERS  += \
     src/cwSurveyImportManager.h \
     src/cwTripLengthTask.h \
     src/cwSurvexLRUDChunk.h \
-    src/cwMenuWindow.h
+    src/cwMenuWindow.h \
+    src/cwGLGridPlane.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -319,6 +321,8 @@ OTHER_FILES += \
     shaders/tileVertex.vert \
     shaders/tileVertex.frag \
     shaders/tileVertex.geom \
+    shaders/grid.vert \
+    shaders/grid.frag \
     qml/FileDialog.qml \
     qml/ButtonGroup.qml \
     qml/Splitter.qml \

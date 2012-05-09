@@ -39,7 +39,7 @@ Rectangle {
         id: buttonBar
         anchors.fill: parent
 
-        property int currentIndex: 1
+        property int currentIndex: 0
 
         SideBarButton {
             id: viewButton

@@ -16,6 +16,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwGLScraps.h"
 #include "cwStationPositionLookup.h"
+#include "cwGLGridPlane.h"
 
 //Qt includes
 #include <QPainter>
@@ -52,6 +53,9 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Scraps->setCamera(Camera);
     Scraps->setShaderDebugger(ShaderDebugger);
 
+    Plane = new cwGLGridPlane(this);
+    Plane->setCamera(Camera);
+    Plane->setShaderDebugger(ShaderDebugger);
 }
 
 /**
@@ -86,9 +90,10 @@ void cw3dRegionViewer::paint(QPainter * painter) {
 void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    Terrain->draw();
+//    Terrain->draw();
 //    Scraps->draw();
     LinePlot->draw();
+    Plane->draw();
 
    glDisable(GL_DEPTH_TEST);
 }
@@ -105,6 +110,7 @@ void cw3dRegionViewer::initializeGL() {
     Terrain->initialize();
 //    Scraps->initialize();
     LinePlot->initialize();
+    Plane->initialize();
 
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }

@@ -37,8 +37,8 @@ void cwGLTerrain::initialize() {
     cwGLShader* tileFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     tileFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.frag");
 
-    cwGLShader* tileGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
-    tileGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
+//    cwGLShader* tileGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
+//    tileGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
 
     TileProgram = new QOpenGLShaderProgram(this);
     TileProgram->addShader(tileVertexShader);

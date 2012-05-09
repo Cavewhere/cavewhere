@@ -10,6 +10,7 @@
 class cwGLTerrain;
 class cwGLLinePlot;
 class cwGLScraps;
+class cwGLGridPlane;
 
 class cw3dRegionViewer : public cwGLRenderer
 {
@@ -90,6 +91,7 @@ private:
     cwGLTerrain* Terrain;
     cwGLLinePlot* LinePlot;
     cwGLScraps* Scraps;
+    cwGLGridPlane* Plane;
 
     //For rendering label
     cwCavingRegion* Region;
