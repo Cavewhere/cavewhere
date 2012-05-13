@@ -22,6 +22,8 @@ public:
     void setPoints(QVector<QVector3D> pointData);
     void setIndexes(QVector<unsigned int> indexData);
 
+    void updateData();
+
 signals:
 
 public slots:
@@ -42,6 +44,9 @@ private:
     int UniformModelViewProjectionMatrix; //in shader uniform location
     int UniformMaxZValue; //in shader uniform location
     int UniformMinZValue; //in shader uniform location
+
+    QVector<QVector3D> Points;
+    QVector<unsigned int> Indexes;
 
     QOpenGLShaderProgram* ShaderProgram;
 };

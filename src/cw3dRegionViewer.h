@@ -51,7 +51,7 @@ protected:
 
     QVector3D unProject(QPoint point);
 
-
+    virtual QSGNode * 	updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
 
     virtual void paintFramebuffer();
 

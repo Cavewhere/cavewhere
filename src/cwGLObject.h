@@ -15,6 +15,7 @@ public:
 
     virtual void initialize() = 0;
     virtual void draw() = 0;
+    virtual void updateData() {}
 
     void setCamera(cwCamera* camera);
     cwCamera* camera() const;
@@ -22,9 +23,15 @@ public:
     void setShaderDebugger(cwShaderDebugger* debugger);
     cwShaderDebugger* shaderDebugger() const;
 
+    bool isDirty() const;
+
+protected:
+    void setDirty(bool isDirty);
+
 private:
     cwCamera* Camera;
     cwShaderDebugger* ShaderDebugger;
+    bool Dirty;
 };
 
 inline void cwGLObject::setCamera(cwCamera* camera) {
@@ -42,5 +49,16 @@ inline void cwGLObject::setShaderDebugger(cwShaderDebugger* debugger) {
 inline cwShaderDebugger* cwGLObject::shaderDebugger() const {
     return ShaderDebugger;
 }
+
+inline bool cwGLObject::isDirty() const
+{
+    return Dirty;
+}
+
+inline void cwGLObject::setDirty(bool isDirty)
+{
+    Dirty = isDirty;
+}
+
 
 #endif // CWGLOBJECT_H

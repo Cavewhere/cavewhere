@@ -93,8 +93,6 @@ void cwGLLinePlot::draw() {
   \brief Set the line points for the line plot object
   */
 void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
-    if(ShaderProgram == NULL) { return; }
-
     //Find the max value and the min value
     MaxZValue = -std::numeric_limits<float>::max();
     MinZValue = std::numeric_limits<float>::max();
@@ -104,28 +102,46 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
         MinZValue = qMin((qreal)MinZValue, pointData[i].z());
     }
 
-//    qDebug() << "MaxZValue: " << MaxZValue;
-//    qDebug() << "MinZValue: " << MinZValue;
+    Points = pointData;
+    setDirty(true);
 
-    //FIXME: Needs to be updated in rendering thread (not thread safe code)
-//    LinePlotVertexBuffer.bind();
-//    LinePlotVertexBuffer.allocate(pointData.data(), pointData.size() * sizeof(QVector3D));
-//    LinePlotVertexBuffer.release();
-
-//    ShaderProgram->bind();
-//    ShaderProgram->setUniformValue(UniformMaxZValue, MaxZValue);
-//    ShaderProgram->setUniformValue(UniformMinZValue, MinZValue);
-//    ShaderProgram->release();
+    qDebug() << "Points:" << Points.size();
 }
 
 /**
   \brief Set the line indexes for the line plot object
   */
 void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
-    //FIXME: Needs to be updated in rendering thread (not thread safe code)
-    //    LinePlotIndexBuffer.bind();
-//    LinePlotIndexBuffer.allocate(indexData.data(), indexData.size() * sizeof(unsigned int));
-//    LinePlotIndexBuffer.release();
+    Indexes = indexData;
+    setDirty(true);
 
-//    IndexBufferSize = indexData.size();
+    qDebug() << "Indexes:" << Indexes.size();
+}
+
+/**
+ * @brief cwGLLinePlot::updateData
+ *
+ * This is called by the cwGLRenderer to update all the dataobject's that are dirty.
+ *
+ * This is called in updateScene and is thread safe
+ */
+void cwGLLinePlot::updateData() {
+    if(ShaderProgram == NULL) { return; }
+
+    LinePlotVertexBuffer.bind();
+    LinePlotVertexBuffer.allocate(Points.data(), Points.size() * sizeof(QVector3D));
+    LinePlotVertexBuffer.release();
+
+    ShaderProgram->bind();
+    ShaderProgram->setUniformValue(UniformMaxZValue, MaxZValue);
+    ShaderProgram->setUniformValue(UniformMinZValue, MinZValue);
+    ShaderProgram->release();
+
+    LinePlotIndexBuffer.bind();
+    LinePlotIndexBuffer.allocate(Indexes.data(), Indexes.size() * sizeof(unsigned int));
+    LinePlotIndexBuffer.release();
+
+    IndexBufferSize = Indexes.size();
+
+    setDirty(false);
 }

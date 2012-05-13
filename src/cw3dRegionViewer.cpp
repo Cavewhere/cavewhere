@@ -150,6 +150,23 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
     return ray.point(t);
 }
 
+/**
+ * @brief cw3dRegionViewer::updatePaintNode
+ *
+ * This is called by the rendering thread and but the main thread is blocked
+ *
+ * @param oldNode
+ * @param data
+ * @return
+ */
+QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
+    if(LinePlot->isDirty()) {
+        LinePlot->updateData();
+    }
+
+    return cwGLRenderer::updatePaintNode(oldNode, data);
+}
+
 
 /**
   Initializes the last click for the panning state

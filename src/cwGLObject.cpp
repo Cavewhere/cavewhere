@@ -5,4 +5,8 @@ cwGLObject::cwGLObject(QObject* parent) :
 {
     ShaderDebugger = NULL;
     Camera = NULL;
+    Dirty = false;
 }
+
+
+
