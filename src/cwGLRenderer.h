@@ -38,7 +38,7 @@ public:
     explicit cwGLRenderer(QQuickItem *parent = 0);
     ~cwGLRenderer();
 
-    QVector3D unProject(QPoint point);
+//    QVector3D unProject(QPoint point);
 
 //    virtual void paint(QPainter* painter);
 

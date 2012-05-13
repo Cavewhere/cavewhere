@@ -14,7 +14,7 @@
 
 cwGLGridPlane::cwGLGridPlane(QObject* parent) :
     cwGLObject(parent),
-    Plane(QPlane3D(QVector3D(0.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0))),
+    Plane(QPlane3D(QVector3D(0.0, 0.0, -100.0), QVector3D(0.0, 0.0, 1.0))),
     Extent(1000.0),
     Program(NULL)
 {
@@ -131,7 +131,7 @@ void cwGLGridPlane::updateModelMatrix() {
     QMatrix4x4 modelMatrix;
 
     //Position
-    modelMatrix.translate(Plane.origin() + QVector3D(0.0, 0.0, -80));
+    modelMatrix.translate(Plane.origin());
 
     //Scale
     modelMatrix.scale(Extent);

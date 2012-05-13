@@ -255,16 +255,16 @@ void cwGLRenderer::privateResizeGL() {
 //    privateResizeGL();
 //}
 
-/**
-  Unprojects the screen point at point and returns a QVector3d in world coordinates
-  */
-QVector3D cwGLRenderer::unProject(QPoint point) {
-    //Sample the depth buffer
-    float depth = sampleDepthBuffer(point);
+///**
+//  Unprojects the screen point at point and returns a QVector3d in world coordinates
+//  */
+//QVector3D cwGLRenderer::unProject(QPoint point) {
+//    //Sample the depth buffer
+//    float depth = sampleDepthBuffer(point);
 
-    //Unproject the point
-    return Camera->unProject(point, depth);
-}
+//    //Unproject the point
+//    return Camera->unProject(point, depth);
+//}
 
 /**
   Samples the depth buffer using a 3 by 3 filter

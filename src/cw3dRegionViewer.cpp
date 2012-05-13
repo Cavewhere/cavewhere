@@ -32,6 +32,7 @@
 #include <QtConcurrentMap>
 #include <QFontMetrics>
 #include <QQuickCanvas>
+#include <QRay3D>
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwGLRenderer(parent),
@@ -125,6 +126,31 @@ void cw3dRegionViewer::resizeGL() {
     projectionMatrix.perspective(55, width() / (float)height(), 1, 10000);
     Camera->setProjectionMatrix(projectionMatrix);
 }
+
+/**
+ * @brief cw3dRegionViewer::unProject
+ * @param point
+ * @return  QVector3d in world coordinates
+ *
+ * Unprojects the screen point at point and returns a QVector3d in world coordinates
+ */
+QVector3D cw3dRegionViewer::unProject(QPoint point) {
+    //Create a ray from the back projection front and back plane
+    QVector3D frontPoint = Camera->unProject(point, 0.0);
+    QVector3D backPoint = Camera->unProject(point, 1.0);
+    QVector3D direction = QVector3D(backPoint - frontPoint).normalized();
+    QRay3D ray(frontPoint, direction);
+
+    //See where it intercest geometry
+    double t = Plane->plane().intersection(ray);
+    if(qIsNaN(t)) {
+        return QVector3D();
+    }
+
+    return ray.point(t);
+}
+
+
 /**
   Initializes the last click for the panning state
   */

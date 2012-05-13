@@ -47,6 +47,8 @@ private slots:
 
 protected:
 
+    QVector3D unProject(QPoint point);
+
 //    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
 //    void zoom(QGraphicsSceneWheelEvent* event);
 
