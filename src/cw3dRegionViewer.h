@@ -36,6 +36,8 @@ public slots:
 
     void startRotating(QPoint currentMousePos);
     void rotate(QPoint currentMousePos);
+
+    void zoom(QPoint position, int delta);
 signals:
     void cavingRegionChanged();
 
@@ -49,8 +51,7 @@ protected:
 
     QVector3D unProject(QPoint point);
 
-//    virtual void wheelEvent(QGraphicsSceneWheelEvent *event);
-//    void zoom(QGraphicsSceneWheelEvent* event);
+
 
     virtual void paintFramebuffer();
 

@@ -241,37 +241,37 @@ void cw3dRegionViewer::rotate(QPoint position) {
 //    event->accept();
 //}
 
-///**
-//  Zooms the view
-//  */
-//void cw3dRegionViewer::zoom(QGraphicsSceneWheelEvent* event) {
+/**
+  Zooms the view
+  */
+void cw3dRegionViewer::zoom(QPoint position, int delta) {
 
-//    //Make the event position into gl viewport
-//    QPoint mappedPos = Camera->mapToGLViewport(event->pos().toPoint());
+    //Make the event position into gl viewport
+    QPoint mappedPos = Camera->mapToGLViewport(position);
 
-//    //Get the ray from the front of the screen to the back of the screen
-//    QVector3D front = Camera->unProject(mappedPos, 0.0);
+    //Get the ray from the front of the screen to the back of the screen
+    QVector3D front = Camera->unProject(mappedPos, 0.0);
 
-//    //Find the intsection on the plane
-//    QVector3D intersection = unProject(mappedPos);
+    //Find the intsection on the plane
+    QVector3D intersection = unProject(mappedPos);
 
-//    //Smallray
-//    QVector3D ray = intersection - front;
-//    float rayLength = ray.length();
-//    ray.normalize();
+    //Smallray
+    QVector3D ray = intersection - front;
+    float rayLength = ray.length();
+    ray.normalize();
 
-//    float t = .0005 * -event->delta();
-//    t = qMax(-1.0f, qMin(1.0f, t));
-//    t = rayLength * t;
+    float t = .0005 * delta;
+    t = qMax(-1.0f, qMin(1.0f, t));
+    t = rayLength * t;
 
-//    QVector3D newPositionDelta = ray * t;
+    QVector3D newPositionDelta = ray * t;
 
-//    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-//    viewMatrix.translate(newPositionDelta);
-//    Camera->setViewMatrix(viewMatrix);
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(newPositionDelta);
+    Camera->setViewMatrix(viewMatrix);
 
-//    update();
-//}
+    update();
+}
 
 /**
   \brief Resets the view

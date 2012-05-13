@@ -15,7 +15,10 @@ RegionViewer {
                 renderer.state = "rotateState"
                 startRotating(Qt.point(mouse.x, mouse.y));
             }
+        }
 
+        onWheel: {
+            zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
         }
     }
 
