@@ -15,7 +15,6 @@ Item {
     property bool readOnly: false
     property string errorText
 
-    signal clicked();
     signal startedEditting()
     signal finishedEditting(string newText)
 
@@ -132,9 +131,8 @@ Item {
 
                 PropertyChanges {
                     target: doubleClickArea
+                    propagateComposedEvents: !acceptMousePress
                     onDoubleClicked: openEditor()
-                    onPressed: mouse.accepted = acceptMousePress
-                    onClicked: clickTextInput.clicked()
                 }
             },
 
@@ -149,6 +147,4 @@ Item {
             }
         ]
     }
-
-
 }

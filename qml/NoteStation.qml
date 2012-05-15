@@ -131,6 +131,13 @@ Positioner3D {
             noteStation.forceActiveFocus();
         }
 
-        onClicked: selectStation()
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            onClicked: selectStation()
+        }
+
     }
+
+
 }
