@@ -7,6 +7,7 @@
 #include <QQmlContext>
 #include <QModelIndex>
 #include <QtWidgets/QWidget>
+#include <QDir>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -46,10 +47,10 @@ int main(int argc, char *argv[])
     QQuickView view;
 
     QSurfaceFormat format = view.format();
-    format.setSamples(8);
+    format.setSamples(2);
 
     cwRootData* rootData = new cwRootData(&view);
-    rootData->project()->load("/home/blitz/Dropbox/quanko.cw");
+    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
     view.rootContext()->setContextObject(rootData);
     view.rootContext()->setContextProperty("mainWindow", &view);
 
