@@ -25,8 +25,6 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
 {
     connect(NeedChunkAboveMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkAbove(int)));
     connect(NeedChunkBelowMapper, SIGNAL(mapped(int)), SLOT(forceAllocateChunkBelow(int)));
-
-
 }
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {

@@ -104,8 +104,6 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
 
     Points = pointData;
     setDirty(true);
-
-    qDebug() << "Points:" << Points.size();
 }
 
 /**
@@ -114,8 +112,6 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
 void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
     Indexes = indexData;
     setDirty(true);
-
-    qDebug() << "Indexes:" << Indexes.size();
 }
 
 /**

@@ -57,6 +57,9 @@
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
 #include "cwTripLengthTask.h"
+#include "cwLabel3dView.h"
+#include "cwLinePlotLabelView.h"
+
 //#include <QGLWidget>
 
 #include <cwMenuWindow.h>
@@ -118,6 +121,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyExportManager>("Cavewhere", 1, 0, "SurveyExportManager");
     qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
     qmlRegisterType<cwTripLengthTask>("Cavewhere", 1, 0, "TripLengthTask");
+    qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
+    qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
 }

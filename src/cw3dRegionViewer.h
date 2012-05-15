@@ -57,29 +57,29 @@ protected:
 
 private:
 
-    /**
-      \brief This is used to render text labels correctly
+//    /**
+//      \brief This is used to render text labels correctly
 
-      This will transform the points in a multi thread manor.
-      */
-    class TransformPoint {
-    public:
-        typedef QVector3D result_type;
+//      This will transform the points in a multi thread manor.
+//      */
+//    class TransformPoint {
+//    public:
+//        typedef QVector3D result_type;
 
-        TransformPoint(QMatrix4x4 modelViewProjection, QRect viewport) {
-            ModelViewProjection = modelViewProjection;
-            Viewport = viewport;
-        }
+//        TransformPoint(QMatrix4x4 modelViewProjection, QRect viewport) {
+//            ModelViewProjection = modelViewProjection;
+//            Viewport = viewport;
+//        }
 
-        /**
-          \brief Transforms the point
-          */
-        void operator()(QPair<QString, QVector3D>& stationName);
+//        /**
+//          \brief Transforms the point
+//          */
+//        void operator()(QPair<QString, QVector3D>& stationName);
 
-    private:
-        QMatrix4x4 ModelViewProjection;
-        QRect Viewport;
-    };
+//    private:
+//        QMatrix4x4 ModelViewProjection;
+//        QRect Viewport;
+//    };
 
     bool Initilized; //True if it's initilized and false if it's not
 
@@ -98,7 +98,7 @@ private:
 
     //For rendering label
     cwCavingRegion* Region;
-    cwCollisionRectKdTree LabelKdTree;
+//    cwCollisionRectKdTree LabelKdTree;
 
     void renderStationLabels(QPainter* painter);
     void renderStationLabels(QPainter* painter, cwCave* cave);

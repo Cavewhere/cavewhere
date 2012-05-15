@@ -22,6 +22,13 @@ RegionViewer {
         }
     }
 
+    LinePlotLabelView {
+        id: labelView
+        anchors.fill: parent
+        camera: renderer.camera
+        region: renderer.cavingRegion
+    }
+
     states: [
         State {
             name: "panState"

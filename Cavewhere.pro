@@ -157,7 +157,11 @@ SOURCES += src/main.cpp \
     src/cwTripLengthTask.cpp \
     src/cwSurvexLRUDChunk.cpp \
     src/cwMenuWindow.cpp \
-    src/cwGLGridPlane.cpp
+    src/cwGLGridPlane.cpp \
+    src/cwLabel3dView.cpp \
+    src/cwLabel3dItem.cpp \
+    src/cwLinePlotLabelView.cpp \
+    src/cwLabel3dGroup.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -289,7 +293,11 @@ HEADERS  += \
     src/cwTripLengthTask.h \
     src/cwSurvexLRUDChunk.h \
     src/cwMenuWindow.h \
-    src/cwGLGridPlane.h
+    src/cwGLGridPlane.h \
+    src/cwLabel3dView.h \
+    src/cwLabel3dItem.h \
+    src/cwLinePlotLabelView.h \
+    src/cwLabel3dGroup.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -393,7 +401,8 @@ OTHER_FILES += \
     qml/Menu.qml \
     qml/ContextMenu.qml \
     qml/MenuItem.qml \
-    qml/GlobalMenuMouseHandler.qml
+    qml/GlobalMenuMouseHandler.qml \
+    qml/Label3d.qml
 
 RESOURCES += \
     icons.qrc
