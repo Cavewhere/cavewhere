@@ -1,5 +1,6 @@
 //Our includes
 #include "cwProjectImageProvider.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -84,7 +85,7 @@ QByteArray cwProjectImageProvider::requestImageData(int id, QSize* size, QByteAr
     }
 
     if(!QFileInfo(ProjectPath).isFile()) {
-        qDebug() << "cwProjectImageProvider:: ProjectPath isn't set or isn't a file:" << ProjectPath;
+        qDebug() << "cwProjectImageProvider:: ProjectPath isn't set or isn't a file:" << ProjectPath << LOCATION;
         return QByteArray();
     }
 

@@ -55,6 +55,8 @@ protected:
     virtual void resizeGL();
     virtual void paint(QPainter* painter);
 
+    virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
+
 private:
 
     //The project filename for this class

@@ -4,7 +4,7 @@
 #include "cwTrip.h"
 #include "cwAddImageTask.h"
 #include "cwCavingRegion.h"
-//#include "cwTaskProgressDialog.h"
+#include "cwTaskProgressDialog.h"
 #include "cwImageData.h"
 #include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
@@ -212,7 +212,6 @@ void cwProject::load(QString filename) {
     loadTask->setThread(LoadSaveThread);
 
     //Set the data for the project
-    qDebug() << "Loading project to:" << filename;
     loadTask->setDatabaseFilename(filename);
 
     //Start the save thread
@@ -276,10 +275,10 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
     //Run the addImageTask, in an asyncus way
     addImageTask->start();
 
-//    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
-//    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-//    progressDialog->setTask(addImageTask);
-//    progressDialog->show();
+    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
+    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    progressDialog->setTask(addImageTask);
+    progressDialog->show();
 }
 
 /**

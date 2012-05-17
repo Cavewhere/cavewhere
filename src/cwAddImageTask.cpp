@@ -177,7 +177,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     bool successful = originalFile.open(QFile::ReadOnly);
 
     if(!successful) {
-        qDebug() << "Couldn't load image: " << imagePath;
+        qDebug() << "Couldn't load image: " << imagePath << LOCATION;
         return QImage();
     }
 
@@ -188,7 +188,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     QByteArray format = QImageReader::imageFormat(imagePath);
 
     if(format.isEmpty()) {
-        qDebug() << "This file is not an image:" << imagePath;
+        qDebug() << "This file is not an image:" << imagePath << LOCATION;
         return QImage();
     }
 
@@ -249,10 +249,18 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
     emit statusMessage(QString("Generating icon for %1").arg(QFileInfo(imageFilename).fileName()));
 
     QSize scaledSize = QSize(512, 512);
+
+    if(originalImage.size().height() <= scaledSize.height() &&
+            originalImage.size().width() <= scaledSize.width()) {
+        //Make the original the icon
+        imageIds->setIcon(imageIds->original());
+        return;
+    }
+
     QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     //Convert the image into a jpg
-    QByteArray format = "jpg";
+    QByteArray format = "png";
     QByteArray jpgData;
     QBuffer buffer(&jpgData);
     QImageWriter writer(&buffer, format);

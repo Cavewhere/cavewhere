@@ -232,6 +232,21 @@ void cwImageItem::paint(QPainter* painter) {
     painter->endNativePainting();
 }
 
+/**
+ * @brief cwImageItem::updatePaintNode
+ * @param oldNode
+ * @param data
+ * @return
+ *
+ * Called when the renderer can update opengl objects safely.  This is called by the rendering
+ * thread.
+ */
+QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data)
+{
+    NoteTexture->updateData();
+    return cwGLRenderer::updatePaintNode(oldNode, data);
+}
+
 
 /**
   This converts a mouse click into note coordinates
@@ -249,8 +264,8 @@ QPointF cwImageItem::mapQtViewportToNote(QPoint qtViewportCoordinate) {
 
   The project filename allow this imageItem to extra data from disk.
   */
-void cwImageItem::setProjectFilename(QString projectFilename) {
-    NoteTexture->setProject(projectFilename);
+void cwImageItem::setProjectFilename(QString filename) {
+    NoteTexture->setProject(filename);
 }
 
 /**

@@ -36,18 +36,23 @@ public:
     QString project() const;
     void setProject(QString project);
 
+    void sceneUpdate();
+
+    bool isDirty() const;
+
 signals:
     void projectChanged();
     void imageChanged();
     void textureUploaded();
 
 public slots:
-    void uploadImageToGraphicsCard();
+    void updateData();
 
 private:
     QString ProjectFilename; //!<
     cwImage Image; //!< The image that this texture represent
 
+    bool TextureDirty; //!< true when the image needs to be updated
     GLuint TextureId; //!< Texture object
 
     //For loading the image from disk
@@ -70,7 +75,23 @@ private:
 
         QString Filename;
     };
+
+    void startLoadingImage();
+    void reinitilizeLoadNoteWatcher();
+
+private slots:
+    void markAsDirty();
 };
+
+/**
+ * @brief cwImageTexture::isDirty
+ * @return true if the texture out of date
+ */
+inline bool cwImageTexture::isDirty() const
+{
+    return TextureDirty;
+}
+
 
 /**
 Gets project

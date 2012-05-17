@@ -28,15 +28,9 @@ Rectangle {
             width: maxImageWidth
             height: maxImageWidth
 
-            onChildrenRectChanged: {
-                console.log("Children rect change:" + childrenRect)
-            }
-
             Image {
                 id: imageItem
                 asynchronous: true
-                //                anchors.fill: parent
-                //                anchors.margins: container.border
 
                 anchors.centerIn: parent
 
@@ -121,7 +115,6 @@ Rectangle {
             anchors.margins: 4
 
             delegate: listDelegate
-            //model: surveyNoteModel
 
             clip: true
 
@@ -177,7 +170,7 @@ Rectangle {
 
         Row {
             id: mainToolBar
-            property variant iconSize: Qt.size(42, 42)
+            property var iconSize: Qt.size(42, 42)
 
             spacing: 3
 

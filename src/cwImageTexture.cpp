@@ -11,10 +11,11 @@
   */
 cwImageTexture::cwImageTexture(QObject *parent) :
     QObject(parent),
+    TextureDirty(false),
     TextureId(0),
-    LoadNoteWatcher(new QFutureWatcher<QPair<QByteArray, QSize> >(this))
+    LoadNoteWatcher(NULL)
 {
-    connect(LoadNoteWatcher, SIGNAL(finished()), SLOT(uploadImageToGraphicsCard()));
+    reinitilizeLoadNoteWatcher();
 }
 
 cwImageTexture::~cwImageTexture()
@@ -44,6 +45,7 @@ Sets project
 void cwImageTexture::setProject(QString project) {
     if(ProjectFilename != project) {
         ProjectFilename = project;
+        startLoadingImage();
         emit projectChanged();
     }
 }
@@ -55,15 +57,7 @@ void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
 
-        //If texture hasn't been initiziled
-        if(TextureId == 0) {
-            initialize();
-        }
-
-        //Load the notes in an asyn way
-        LoadNoteWatcher->cancel(); //Cancel previous run, if still running
-        QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
-        LoadNoteWatcher->setFuture(future);
+        startLoadingImage();
 
         emit imageChanged();
     }
@@ -72,7 +66,9 @@ void cwImageTexture::setImage(cwImage image) {
 /**
   This upload the results from texture image to the graphics card
   */
-void cwImageTexture::uploadImageToGraphicsCard() {
+void cwImageTexture::updateData() {
+    if(!isDirty()) { return; }
+
     QList<QPair<QByteArray, QSize> >mipmaps = LoadNoteWatcher->future().results();
 
     if(mipmaps.empty()) { return; }
@@ -102,7 +98,46 @@ void cwImageTexture::uploadImageToGraphicsCard() {
 
     release();
 
-    emit textureUploaded();
+    TextureDirty = false;
+}
+
+/**
+ * @brief cwImageTexture::startLoadingImage
+ *
+ * Loads the image into the graphics card
+ */
+void cwImageTexture::startLoadingImage()
+{
+    if(Image.isValid() && !project().isEmpty()) {
+        //If texture hasn't been initiziled
+        if(TextureId == 0) {
+            initialize();
+        }
+
+        //Load the notes in an asyn way
+        LoadNoteWatcher->cancel(); //Cancel previous run, if still running
+        QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
+        LoadNoteWatcher->setFuture(future);
+    }
+}
+
+/**
+ * @brief cwImageTexture::reinitilizeLoadNoteWatcher
+ */
+void cwImageTexture::reinitilizeLoadNoteWatcher()
+{
+    if(LoadNoteWatcher != NULL) {
+        //Clean up the memory
+        LoadNoteWatcher->deleteLater();
+    }
+
+    LoadNoteWatcher = new QFutureWatcher<QPair<QByteArray, QSize> >(this);
+    connect(LoadNoteWatcher, &QFutureWatcher<QPair<QByteArray, QSize> >::finished, this, &cwImageTexture::markAsDirty);
+}
+
+void cwImageTexture::markAsDirty()
+{
+    TextureDirty = true;
 }
 
 /**
@@ -120,4 +155,6 @@ QPair<QByteArray, QSize> cwImageTexture::LoadImage::operator ()(int imageId) {
 
     return QPair<QByteArray, QSize>(imageData, size);
 }
+
+
 

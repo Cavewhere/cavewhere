@@ -1,13 +1,14 @@
 //Qt includes
 #include <QGuiApplication>
 #include <QApplication>
-//#include <QQmlComponent>
 #include <QThread>
 #include <QtQuick/QQuickView>
 #include <QQmlContext>
 #include <QModelIndex>
 #include <QtWidgets/QWidget>
 #include <QDir>
+#include <QQmlEngine>
+#include <QImageReader>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -20,11 +21,16 @@
 #include "cwQMLRegister.h"
 #include "cwRootData.h"
 #include "cwProject.h"
-
+#include "cwProjectImageProvider.h"
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
+    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
+        qDebug() << "Image formats:" << imageFormats;
+    }
+
 
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
@@ -51,8 +57,15 @@ int main(int argc, char *argv[])
 
     cwRootData* rootData = new cwRootData(&view);
     rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
-    view.rootContext()->setContextObject(rootData);
-    view.rootContext()->setContextProperty("mainWindow", &view);
+    QQmlContext* context = view.rootContext();
+    context->setContextObject(rootData);
+    context->setContextProperty("mainWindow", &view);
+
+    //This allow to extra image data from the project's image database
+    cwProjectImageProvider* imageProvider = new cwProjectImageProvider();
+    imageProvider->setProjectPath(rootData->project()->filename());
+    QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
+    context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
 
     view.setFormat(format);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
