@@ -149,13 +149,13 @@ Rectangle {
         }
     }
 
-    NoteExplorer {
-        noteModel: currentTrip !== null ? currentTrip.notes : null
-//        anchors.left: surveyEditorScollbar.right
-        anchors.right: parent.right
-        anchors.top: area.top
-        anchors.bottom: area.bottom
-        clip: true
-    }
+//    NoteExplorer {
+//        noteModel: currentTrip !== null ? currentTrip.notes : null
+////        anchors.left: surveyEditorScollbar.right
+//        anchors.right: parent.right
+//        anchors.top: area.top
+//        anchors.bottom: area.bottom
+//        clip: true
+//    }
 }
 

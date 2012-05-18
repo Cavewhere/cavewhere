@@ -23,6 +23,8 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
     connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
     ImageProperties->setImage(Image);
+
+    setOpaquePainting(false);
 }
 
 /**
@@ -33,6 +35,7 @@ void cwImageItem::setImage(const cwImage& image) {
         Image = image;
         ImageProperties->setImage(Image);
         NoteTexture->setImage(Image);
+        resizeGL();
     }
 }
 
@@ -159,6 +162,8 @@ void cwImageItem::initializeVertexBuffers() {
   \brief The initilizes the texture map
   */
 void cwImageItem::initializeTexture() {
+    qDebug() << "Initialized";
+
     //Generate the color texture
     NoteTexture->initialize();
 }
@@ -168,7 +173,6 @@ void cwImageItem::initializeTexture() {
   \brief Called when the note item is resized
   */
 void cwImageItem::resizeGL() {
-
     QSize imageSize = Image.origianlSize();
     if(!imageSize.isValid()) { return; }
 
@@ -203,6 +207,7 @@ void cwImageItem::resizeGL() {
     Camera->setViewMatrix(viewMatrix);
 
     Camera->setViewport(QRect(QPoint(0.0, 0.0), windowSize));
+    update();
 }
 
 /**

@@ -3,7 +3,8 @@
 #include "cwLabel3dView.h"
 
 cwLabel3dGroup::cwLabel3dGroup(cwLabel3dView *parent) :
-    QObject(parent)
+    QObject(parent),
+    ParentView(NULL)
 {
     setParentView(parent);
 }

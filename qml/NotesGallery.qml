@@ -69,10 +69,7 @@ Rectangle {
                 Component.onCompleted: {
                     updateHeight();
                 }
-
-
             }
-
 
             /**
                   Probably could be allocated and deleted on the fly
@@ -143,7 +140,9 @@ Rectangle {
 
             onCurrentIndexChanged: {
                 if(currentItem != null) {
-                    currentNote = currentItem.noteObject
+                    console.log("CurrentItem:" + currentItem + " " + currentItem.noteObject);
+
+                    noteGallery.currentNote = currentItem.noteObject
                     noteArea.image = currentItem.noteObject.image;
                 }
             }

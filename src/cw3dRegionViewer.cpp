@@ -35,8 +35,7 @@
 #include <QRay3D>
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
-    cwGLRenderer(parent),
-    Initilized(false)
+    cwGLRenderer(parent)
 {
     Region = NULL;
 
@@ -44,7 +43,7 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Terrain->setCamera(Camera);
     Terrain->setShaderDebugger(ShaderDebugger);
     Terrain->setNumberOfLevels(10);
-//    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
+    //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
     LinePlot = new cwGLLinePlot(this);
     LinePlot->setCamera(Camera);
@@ -68,48 +67,27 @@ void cw3dRegionViewer::paint(QPainter * painter) {
 
     painter->beginNativePainting();
 
-    if(!Initilized) {
-        initializeGL();
-    }
-
-    paintFramebuffer();
-    painter->endNativePainting();
-
-//    //Render the text labels
-    // FIXME: station labels need to be implemented in QML
-//    painter->save();
-//    painter->setPen(QPen());
-//    painter->setBrush(QBrush());
-//    painter->setFont(QFont());
-//    renderStationLabels(painter);
-//    painter->restore();
-}
-
-/**
-  \brief This paints the terrain and the line plot
-  */
-void cw3dRegionViewer::paintFramebuffer() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-//    Terrain->draw();
-//    Scraps->draw();
+    //    Terrain->draw();
+    //    Scraps->draw();
     LinePlot->draw();
     Plane->draw();
 
-   glDisable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST);
+
+    painter->endNativePainting();
 }
 
 /**
   \brief Initilizes the viwer
   */
 void cw3dRegionViewer::initializeGL() {
-    Initilized = true;
-
     //Initilizes the cameras
     resetView();
 
     Terrain->initialize();
-//    Scraps->initialize();
+    //    Scraps->initialize();
     LinePlot->initialize();
     Plane->initialize();
 

@@ -47,7 +47,6 @@ SOURCES += src/main.cpp \
     src/cwImageModel.cpp \
     src/cwSurveyNoteModel.cpp \
     src/cwNote.cpp \
-    src/cwNoteItem.cpp \
     src/cwTrip.cpp \
     src/cwCave.cpp \
     src/cwCavingRegion.cpp \
@@ -177,7 +176,6 @@ HEADERS  += \
     src/cwImageModel.h \
     src/cwSurveyNoteModel.h \
     src/cwNote.h \
-    src/cwNoteItem.h \
     src/cwTrip.h \
     src/cwCave.h \
     src/cwCavingRegion.h \

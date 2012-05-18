@@ -31,7 +31,6 @@ class cwCave;
 class cwGLRenderer : public QQuickPaintedItem
 {
     Q_OBJECT
-//    Q_PROPERTY(QGLWidget* glWidget READ glWidget WRITE setGLWidget NOTIFY glWidgetChanged)
     Q_PROPERTY(cwCamera* camera READ camera NOTIFY cameraChanged)
 
 public:
@@ -39,8 +38,6 @@ public:
     ~cwGLRenderer();
 
 //    QVector3D unProject(QPoint point);
-
-//    virtual void paint(QPainter* painter);
 
     cwCamera* camera() const;
 
@@ -59,33 +56,18 @@ protected:
 
 //    QGLWidget* GLWidget; //This is so we make current when setting up the object
 
-    //Framebuffer for renderering
-    QOpenGLFramebufferObject* MultiSampleFramebuffer;
-
-    //The framebuffer that the render buffer will be blit to
-    GLuint TextureFramebuffer;
-    GLuint ColorTexture;
-    GLuint DepthTexture;
-    bool HasBlit;
-
     //Shaders for testing
     cwShaderDebugger* ShaderDebugger;
 
     //The main camera for the viewer
     cwCamera* Camera;
 
+    bool Initialized;
+
     //For querying the depth buffer in the renderer
     float sampleDepthBuffer(QPoint point);
 
-    /**
-      \brief This is called by the paint in this functon
-
-      The subclass should reimplement this function with opengl rendering commands.  All these
-      rendering commands will be rendered to the framebuffer
-      */
-    virtual void paintFramebuffer() { qDebug() << "Bad paint"; }
-
-
+    virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
 
 //    virtual void geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry);
 
@@ -93,18 +75,11 @@ protected slots:
     virtual void resizeGL() {}
     void updateRenderer();
 
-private:
-//    void copyRenderFramebufferToTextures();
-//    void renderTextureFramebuffer();
-
-//    void privateInitializeGL();
-
 private slots:
     void privateResizeGL();
 
 };
 
-//inline QGLWidget* cwGLRenderer::glWidget() { return GLWidget; }
 inline cwCamera* cwGLRenderer::camera() const { return Camera; }
 inline void cwGLRenderer::updateRenderer() { update(); }
 

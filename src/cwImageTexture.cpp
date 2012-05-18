@@ -56,9 +56,7 @@ Sets image
 void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
-
         startLoadingImage();
-
         emit imageChanged();
     }
 }
@@ -98,6 +96,8 @@ void cwImageTexture::updateData() {
 
     release();
 
+    reinitilizeLoadNoteWatcher();
+
     TextureDirty = false;
 }
 
@@ -109,11 +109,6 @@ void cwImageTexture::updateData() {
 void cwImageTexture::startLoadingImage()
 {
     if(Image.isValid() && !project().isEmpty()) {
-        //If texture hasn't been initiziled
-        if(TextureId == 0) {
-            initialize();
-        }
-
         //Load the notes in an asyn way
         LoadNoteWatcher->cancel(); //Cancel previous run, if still running
         QFuture<QPair<QByteArray, QSize> > future = QtConcurrent::mapped(Image.mipmaps(), LoadImage(ProjectFilename));
@@ -133,10 +128,12 @@ void cwImageTexture::reinitilizeLoadNoteWatcher()
 
     LoadNoteWatcher = new QFutureWatcher<QPair<QByteArray, QSize> >(this);
     connect(LoadNoteWatcher, &QFutureWatcher<QPair<QByteArray, QSize> >::finished, this, &cwImageTexture::markAsDirty);
+    connect(LoadNoteWatcher, &QFutureWatcher<QPair<QByteArray, QSize> >::finished, this, &cwImageTexture::textureUploaded);
 }
 
 void cwImageTexture::markAsDirty()
 {
+    qDebug() << "Mark as dirty" << this;
     TextureDirty = true;
 }
 

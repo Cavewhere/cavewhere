@@ -11,7 +11,6 @@ ImageItem {
 //        id: defaultNoteTransform
 //    }
 
-//    glWidget: mainGLWidget
     projectFilename: project.filename
 
     clip: true
@@ -114,13 +113,6 @@ ImageItem {
 //        transformUpdater: transformUpdaterId
 //        scrapView: scrapViewId
 //        anchors.fill: parent
-//    }
-
-    //FIXME: Replace with MouseArea
-//    WheelArea {
-//        id: wheelArea
-//        anchors.fill: parent
-//        onVerticalScroll: panZoomInteraction.zoom(delta, position)
 //    }
 
     states: [
