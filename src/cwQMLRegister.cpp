@@ -33,6 +33,7 @@
 #include "cwImageItem.h"
 //#include "cwWheelArea.h"
 #include "cwScrapView.h"
+#include "cwScrapItem.h"
 #include "cwTransformUpdater.h"
 #include "cwBaseNoteStationInteraction.h"
 #include "cwScrap.h"
@@ -123,6 +124,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwTripLengthTask>("Cavewhere", 1, 0, "TripLengthTask");
     qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
+    qmlRegisterType<cwScrapItem>("Cavewhere", 1, 0, "ScrapItem");
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
 }

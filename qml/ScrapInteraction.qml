@@ -7,6 +7,10 @@ BaseScrapInteraction {
     property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
 
+    onVisibleChanged: {
+        console.log("Scrap visible:" + visible)
+    }
+
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton

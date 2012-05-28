@@ -106,6 +106,7 @@ ImageItem {
         transformUpdater: transformUpdaterId
     }
 
+
 //    //For rendering note onto the note
 //    NoteStationView {
 //        id: noteStationViewId

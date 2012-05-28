@@ -2,7 +2,9 @@
 #define CWSCRAPITEM_H
 
 //Qt includes
-#include <QQuickItem>
+#include <QQuickPaintedItem>
+#include <QQuickTransform>
+#include <QQmlListProperty>
 
 //Our includes
 class cwScrap;
@@ -62,6 +64,9 @@ private:
 
 private slots:
     void updateScrapGeometry();
+
+protected:
+    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
 
 };
 

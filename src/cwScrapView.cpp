@@ -13,6 +13,7 @@ cwScrapView::cwScrapView(QQuickItem *parent) :
     Note(NULL),
     TransformUpdater(NULL)
 {
+
 }
 
 /**
@@ -41,7 +42,7 @@ void cwScrapView::setNote(cwNote* note) {
 /**
   \brief Updates all the scrap items that are in the view
   */
-void cwScrapView::addScrapItem() {
+void cwScrapView:: addScrapItem() {
     if(Note == NULL) {
         return;
     }
@@ -58,16 +59,16 @@ void cwScrapView::addScrapItem() {
     }
 
     //Create a new scrap item
-    cwScrapItem* scrapItem = new cwScrapItem(QQmlEngine::contextForObject(this), this);
+    cwScrapItem* scrapItem = new cwScrapItem(this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
     connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
+
 
     ScrapItems.append(scrapItem);
 
     //Select the scrapItem
     setSelectScrapIndex(ScrapItems.size() - 1);
-
 }
 
 ///**
@@ -233,7 +234,7 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
 */
 cwScrapItem* cwScrapView::selectedScrapItem() const {
     if(selectScrapIndex() >= 0 && selectScrapIndex() < ScrapItems.size()) {
-//        Q_ASSERT(ScrapItems[selectScrapIndex()]->isSelected());
+        //        Q_ASSERT(ScrapItems[selectScrapIndex()]->isSelected());
         return ScrapItems[selectScrapIndex()];
     }
     return NULL;
