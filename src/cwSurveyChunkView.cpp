@@ -240,7 +240,7 @@ void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
 void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
     QQuickItem* dataBox = databox(rowIndex, role);
     if(dataBox != NULL) {
-        QRectF localRect = dataBox->mapRectToItem(parentItem(), dataBox->childrenRect());
+        QRectF localRect = dataBox->mapRectToItem(this, dataBox->childrenRect());
 
         if(rowIndex == ShotRows.size() - 2 ||
                 ShotRows.size() == 1) {
