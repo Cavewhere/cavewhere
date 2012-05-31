@@ -10,6 +10,8 @@
 #include <QApplication>
 #include <QQmlContext>
 #include <QThread>
+#include <QTranslator>
+#include <QLibraryInfo>
 #include <QQuickView>
 #include <QModelIndex>
 #include <QWidget>
@@ -60,12 +62,21 @@ int main(int argc, char *argv[])
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
+    
+    //Qt transations
+    QTranslator qtTranslator;
+    qtTranslator.load("qt_" + QLocale::system().name(),
+                      QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+    a.installTranslator(&qtTranslator);
+
+    //Cavewhere Transations
+    QTranslator cavewhereTranslator;
+    cavewhereTranslator.load("translations/mandarin.qm");
+    a.installTranslator(&cavewhereTranslator);
 
 //    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
 //        qDebug() << "Image formats:" << imageFormats;
 //    }
-
-
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");
