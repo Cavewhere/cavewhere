@@ -3,6 +3,7 @@
 #include "cwScrap.h"
 #include "cwTransformUpdater.h"
 #include "cwScrapStationView.h"
+#include "cwSGPolygonNode.h"
 
 //Qt includes
 #include <QGraphicsPolygonItem>
@@ -14,7 +15,8 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    BorderItemHandler(NULL),
+    TransformNode(NULL),
+    PolygonNode(NULL),
     //FIXME: Port BorderItem to qt5
 //    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
     StationView(NULL) //new cwScrapStationView(this))
@@ -36,7 +38,6 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    BorderItemHandler(NULL), //new QQuickItem(this)),
         //FIXME: Port BorderItem to qt5
 //    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
     StationView(NULL) //new cwScrapStationView(this))
@@ -87,10 +88,6 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
     This will update the polygon item's geometry
   */
 void cwScrapItem::updateScrapGeometry() {
-    //FIXME: Add set polygon for border item
-    //    BorderItem->setPolygon(QPolygonF(Scrap->points()));
-    QPolygonF(Scrap->points());
-    qDebug() << "Update scrap geometry " << Scrap->points().size() << isVisible();
     update();
 }
 
@@ -100,15 +97,25 @@ void cwScrapItem::updateScrapGeometry() {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-    qDebug() << "OldNode:" << oldNode;
-
-    QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
-    if (!n) {
-        n = new QSGSimpleRectNode();
-        n->setColor(Qt::red);
+    qDebug() << oldNode << TransformNode;
+    if(!oldNode && TransformNode) {
+        //Initilize
+        qDebug() << "Initilized!";
+        PolygonNode = new cwSGPolygonNode();
+        TransformNode->appendChildNode(PolygonNode);
     }
-    n->setRect(boundingRect());
-    return n;
+
+    if(PolygonNode) {
+        PolygonNode->setPolygon(QPolygonF(Scrap->points()));
+    }
+    //    QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
+//    if (!n) {
+//        n = new QSGSimpleRectNode();
+
+//        n->setColor(Qt::red);
+//    }
+//    n->setRect(boundingRect());
+    return TransformNode;
 
 }
 
@@ -156,6 +163,11 @@ void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
 //        }
 
 //        emit transformUpdaterChanged();
-//    }
+    //    }
+}
+
+void cwScrapItem::setTransformNode(QSGTransformNode *node) {
+    qDebug() << "Set TransformNode:" << node;
+    TransformNode = node;
 }
 

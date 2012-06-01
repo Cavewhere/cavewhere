@@ -160,7 +160,8 @@ SOURCES += src/main.cpp \
     src/cwLabel3dView.cpp \
     src/cwLabel3dItem.cpp \
     src/cwLinePlotLabelView.cpp \
-    src/cwLabel3dGroup.cpp
+    src/cwLabel3dGroup.cpp \
+    src/cwSGPolygonNode.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -295,7 +296,8 @@ HEADERS  += \
     src/cwLabel3dView.h \
     src/cwLabel3dItem.h \
     src/cwLinePlotLabelView.h \
-    src/cwLabel3dGroup.h
+    src/cwLabel3dGroup.h \
+    src/cwSGPolygonNode.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \

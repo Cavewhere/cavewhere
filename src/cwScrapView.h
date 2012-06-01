@@ -53,6 +53,9 @@ signals:
 
 public slots:
 
+protected:
+    QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+
 private slots:
     void addScrapItem();
     void updateAllScraps();
@@ -65,6 +68,9 @@ private:
     int SelectScrapIndex; //!< The current select scrap, -1 if no scrapitem is selected
 
     cwTransformUpdater* TransformUpdater;
+
+    //For transforming all subobjects
+    QSGTransformNode* TransformNode;
 };
 
 /**

@@ -10,6 +10,7 @@
 class cwScrap;
 class cwTransformUpdater;
 class cwScrapStationView;
+class cwSGPolygonNode;
 
 /**
   \brief This draws a scrap
@@ -37,6 +38,8 @@ public:
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* transformUpdater);
 
+    void setTransformNode(QSGTransformNode* node);
+
     cwScrapStationView* stationView() const;
 
 signals:
@@ -54,8 +57,11 @@ private:
     //For keeping the 2D object aligned
     cwTransformUpdater* TransformUpdater; //!<
 
+    QSGTransformNode* TransformNode; //!< Keep the outline up to date
+    cwSGPolygonNode* PolygonNode; //!< Draws the polygon
+
     //Visual elements
-    QQuickItem* BorderItemHandler;
+//    QQuickItem* BorderItemHandler;
     //FIXME: Implement painting method for border item
 //    QGraphicsPolygonItem* BorderItem; //!< The border around the scrap
     cwScrapStationView* StationView; //!< All the stations in the scrap

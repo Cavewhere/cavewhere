@@ -11,9 +11,10 @@
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
     Note(NULL),
-    TransformUpdater(NULL)
+    TransformUpdater(NULL),
+    TransformNode(new QSGTransformNode())
 {
-
+    setFlag(QQuickItem::ItemHasContents, true);
 }
 
 /**
@@ -62,6 +63,7 @@ void cwScrapView:: addScrapItem() {
     cwScrapItem* scrapItem = new cwScrapItem(this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
+    scrapItem->setTransformNode(TransformNode);
     connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
 
 
@@ -155,6 +157,9 @@ void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
 
         updateAllScraps();
 
+        //Update the matrix node when the transformUpdater's matrix has changed
+        connect(TransformUpdater, SIGNAL(matrixChanged()), SLOT(update()));
+
         emit transformUpdaterChanged();
     }
 }
@@ -186,7 +191,9 @@ void cwScrapView::updateAllScraps() {
 
         //Add new scrap items
         for(int i = ScrapItems.size(); i < numberOfScraps; i++) {
-            ScrapItems.append(new cwScrapItem(context, this));
+            cwScrapItem* item = new cwScrapItem(context, this);
+            item->setTransformNode(TransformNode);
+            ScrapItems.append(item);
         }
     }
 
@@ -259,4 +266,19 @@ void cwScrapView::updateSelection() {
     if(scrapItem != NULL) {
         setSelectedScrapItem(scrapItem);
     }
+}
+
+/**
+ * @brief cwScrapView::updatePaintNode
+ * @param oldNode
+ * @return
+ *
+ * Updates the TransformNode
+ */
+QSGNode* cwScrapView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
+{
+    Q_UNUSED(oldNode);
+    qDebug() << "Matrix: " << TransformUpdater->matrix();
+    TransformNode->setMatrix(TransformUpdater->matrix());
+    return NULL;
 }

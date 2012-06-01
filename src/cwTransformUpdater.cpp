@@ -123,10 +123,10 @@ void cwTransformUpdater::update() {
         updatePoint(object);
     }
 
-    //Update the transform objects
-    foreach(QQuickItem* object, TransformItems) {
-        updateTransform(object);
-    }
+//    //Update the transform objects
+//    foreach(QQuickItem* object, TransformItems) {
+//        updateTransform(object);
+//    }
 
     emit updated();
 }
