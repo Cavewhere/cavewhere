@@ -7,6 +7,7 @@
 
 //Qt includes
 #include <QQmlEngine>
+#include <QSGTransformNode>
 
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
@@ -278,7 +279,13 @@ void cwScrapView::updateSelection() {
 QSGNode* cwScrapView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
 {
     Q_UNUSED(oldNode);
-    qDebug() << "Matrix: " << TransformUpdater->matrix();
-    TransformNode->setMatrix(TransformUpdater->matrix());
+
+    //Magicial transformation fix, not sure why we have to subtract -200 pixels
+    QMatrix4x4 translationBugMatrix;
+    translationBugMatrix.translate(-200, -200, 0.0);
+
+    QMatrix4x4 matrix = translationBugMatrix * TransformUpdater->matrix();
+
+    TransformNode->setMatrix(matrix);
     return NULL;
 }
