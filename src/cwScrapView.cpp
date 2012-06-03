@@ -61,7 +61,8 @@ void cwScrapView:: addScrapItem() {
     }
 
     //Create a new scrap item
-    cwScrapItem* scrapItem = new cwScrapItem(this);
+    QQmlContext* context = QQmlEngine::contextForObject(this);
+    cwScrapItem* scrapItem = new cwScrapItem(context, this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
     scrapItem->setTransformNode(TransformNode);
@@ -280,11 +281,7 @@ QSGNode* cwScrapView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
 {
     Q_UNUSED(oldNode);
 
-    //Magicial transformation fix, not sure why we have to subtract -200 pixels
-    QMatrix4x4 translationBugMatrix;
-    translationBugMatrix.translate(-200, -200, 0.0);
-
-    QMatrix4x4 matrix = translationBugMatrix * TransformUpdater->matrix();
+    QMatrix4x4 matrix = TransformUpdater->matrix();
 
     TransformNode->setMatrix(matrix);
     return NULL;

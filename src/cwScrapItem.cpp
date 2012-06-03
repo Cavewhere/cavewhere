@@ -17,18 +17,15 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     TransformUpdater(NULL),
     TransformNode(NULL),
     PolygonNode(NULL),
-    //FIXME: Port BorderItem to qt5
-//    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
-    StationView(NULL) //new cwScrapStationView(this))
+    StationView(new cwScrapStationView(this))
 {
-    //Set the declarative context for the station view
-//    QQmlContext* context = QQmlEngine::contextForObject(this);
-//    QQmlEngine::setContextForObject(StationView, context);
+    StationView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
-    setWidth(100);
-    setHeight(100);
-    setPos(QPointF(200, 200));
+
+    //Set the declarative context for the station view
+    QQmlContext* context = QQmlEngine::contextForObject(this);
+    QQmlEngine::setContextForObject(StationView, context);
 
 //    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
@@ -38,15 +35,15 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-        //FIXME: Port BorderItem to qt5
-//    BorderItem(new QGraphicsPolygonItem(BorderItemHandler)),
-    StationView(NULL) //new cwScrapStationView(this))
+    StationView(new cwScrapStationView(this))
 {
-//    StationView->setScrapItem(this);
+    StationView->setScrapItem(this);
+
+    setFlag(QQuickItem::ItemHasContents, true);
 
     //Set the declarative context for the station view
-//    QQmlEngine::setContextForObject(this, context);
-//    QQmlEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(this, context);
+    QQmlEngine::setContextForObject(StationView, context);
 
 //    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
@@ -54,9 +51,6 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
 
 cwScrapItem::~cwScrapItem()
 {
-//    if(TransformUpdater != NULL) {
-//        TransformUpdater->removeTransformItem(BorderItemHandler);
-//    }
 }
 
 /**
@@ -69,10 +63,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
         }
 
         Scrap = scrap;
-
-        qDebug() << "Scrap:" << Scrap;
-
-//        StationView->setScrap(Scrap);
+        StationView->setScrap(Scrap);
 
         if(Scrap != NULL) {
             connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapGeometry()));
@@ -150,24 +141,16 @@ void cwScrapItem::setSelected(bool selected) {
 Sets transformUpdater
 */
 void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
-//    if(TransformUpdater != transformUpdater) {
-//        if(TransformUpdater != NULL) {
-//        //    TransformUpdater->removeTransformItem(BorderItemHandler);
-//        }
+    if(TransformUpdater != transformUpdater) {
 
-//        TransformUpdater = transformUpdater;
-////        StationView->setTransformUpdater(TransformUpdater);
+        TransformUpdater = transformUpdater;
+        StationView->setTransformUpdater(TransformUpdater);
 
-//        if(TransformUpdater != NULL) {
-//          //r  TransformUpdater->addTransformItem(BorderItemHandler);
-//        }
-
-//        emit transformUpdaterChanged();
-    //    }
+        emit transformUpdaterChanged();
+        }
 }
 
 void cwScrapItem::setTransformNode(QSGTransformNode *node) {
-    qDebug() << "Set TransformNode:" << node;
     TransformNode = node;
 }
 

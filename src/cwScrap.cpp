@@ -96,6 +96,8 @@ void cwScrap::addStation(cwNoteStation station) {
 //        station.setCave(parentNote()->parentTrip()->parentCave());
 //    }
 
+    qDebug() << "Add station:" << station.name();
+
     Stations.append(station);
     updateNoteTransformation();
 
@@ -131,7 +133,7 @@ QVariant cwScrap::stationData(StationDataRole role, int noteStationIndex) const 
 
     switch(role) {
     case StationName:
-        return noteStation.station().name();
+        return noteStation.name();
     case StationPosition:
         return noteStation.positionOnNote();
     }
@@ -152,7 +154,7 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
 
     switch(role) {
     case StationName:
-        if(noteStation.station().name() != value.toString()) {
+        if(noteStation.name() != value.toString()) {
             noteStation.setName(value.toString());
             updateNoteTransformation();
             emit stationNameChanged(noteStationIndex);
@@ -212,47 +214,50 @@ void cwScrap::updateNoteTransformation() {
   This is a helper to updateNoteTransformation
   */
 QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
-    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
-    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+//FIXME: Fix with new station architecture
 
-    //Find the valid stations
-    QSet<cwNoteStation> validStationsSet;
-    foreach(cwNoteStation noteStation, Stations) {
-        if(noteStation.station().isValid()) { // && noteStation.station().cave() != NULL) {
-            validStationsSet.insert(noteStation);
-        }
-    }
+    //    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
+//    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
-    //Get the parent trip of for these notes
-    cwTrip* trip = parentNote()->parentTrip();
+//    //Find the valid stations
+//    QSet<cwNoteStation> validStationsSet;
+//    foreach(cwNoteStation noteStation, Stations) {
+//        if(noteStation.station().isValid()) { // && noteStation.station().cave() != NULL) {
+//            validStationsSet.insert(noteStation);
+//        }
+//    }
 
-    //Go through all the valid stations get the
-    QList<cwNoteStation> validStationList = validStationsSet.toList();
+//    //Get the parent trip of for these notes
+//    cwTrip* trip = parentNote()->parentTrip();
 
-    //Generate all the neighbor list for each station
-    QList< QSet< cwStation > > stationNeighbors;
-    foreach(cwNoteStation station, validStationList) {
-        QSet<cwStation> neighbors = trip->neighboringStations(station.station().name());
-        stationNeighbors.append(neighbors);
-    }
+//    //Go through all the valid stations get the
+//    QList<cwNoteStation> validStationList = validStationsSet.toList();
+
+//    //Generate all the neighbor list for each station
+//    QList< QSet< cwStation > > stationNeighbors;
+//    foreach(cwNoteStation station, validStationList) {
+//        QSet<cwStation> neighbors = trip->neighboringStations(station.station().name());
+//        stationNeighbors.append(neighbors);
+//    }
+
+//    QList< QPair<cwNoteStation, cwNoteStation> > shotList;
+//    for(int i = 0; i < validStationList.size(); i++) {
+//        for(int j = i; j < validStationList.size(); j++) {
+//            cwNoteStation station1 = validStationList[i];
+//            cwNoteStation station2 = validStationList[j];
+
+//            //Get neigbor lookup
+//            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
+//            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
+
+//            //See if they make up a shot
+//            if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
+//                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
+//            }
+//        }
+//    }
 
     QList< QPair<cwNoteStation, cwNoteStation> > shotList;
-    for(int i = 0; i < validStationList.size(); i++) {
-        for(int j = i; j < validStationList.size(); j++) {
-            cwNoteStation station1 = validStationList[i];
-            cwNoteStation station2 = validStationList[j];
-
-            //Get neigbor lookup
-            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
-            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
-
-            //See if they make up a shot
-            if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
-                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
-            }
-        }
-    }
-
     return shotList;
 }
 

@@ -565,10 +565,10 @@ namespace boost {
     void save(Archive &archive, const cwNoteStation &noteStation, const unsigned int version) {
         Q_UNUSED(version);
 
-        cwStation station = noteStation.station();
+        QString stationName = noteStation.name();
         QPointF positionOnNote = noteStation.positionOnNote();
 
-        archive << BOOST_SERIALIZATION_NVP(station);
+        archive << BOOST_SERIALIZATION_NVP(stationName);
         archive << BOOST_SERIALIZATION_NVP(positionOnNote);
     }
 
@@ -576,13 +576,13 @@ namespace boost {
     void load(Archive &archive, cwNoteStation &noteStation, const unsigned int version) {
         Q_UNUSED(version)
 
-        cwStation station;
+        QString stationName;
         QPointF positionOnNote;
 
-        archive >> BOOST_SERIALIZATION_NVP(station);
+        archive >> BOOST_SERIALIZATION_NVP(stationName);
         archive >> BOOST_SERIALIZATION_NVP(positionOnNote);
 
-        noteStation.setStation(station);
+        noteStation.setName(stationName);
         noteStation.setPositionOnNote(positionOnNote);
     }
 
