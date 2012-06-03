@@ -17,7 +17,6 @@
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
-    UndoStack(new QUndoStack(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
@@ -25,7 +24,7 @@ cwRootData::cwRootData(QObject *parent) :
     Project = new cwProject(this);
     Region = Project->cavingRegion();
 
-    Region->setUndoStack(UndoStack);
+    Region->setUndoStack(undoStack());
 
     //Setup the region tree model, this model allows the user to see Region in tree form
     RegionTreeModel = new cwRegionTreeModel(this);
@@ -51,6 +50,12 @@ cwRootData::cwRootData(QObject *parent) :
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(this);
     SurveyImportManager->setCavingRegion(Region);
-    SurveyImportManager->setUndoStack(UndoStack);
+    SurveyImportManager->setUndoStack(undoStack());
 }
 
+/**
+Gets undoStack
+*/
+QUndoStack* cwRootData::undoStack() const {
+    return Project->undoStack();
+}

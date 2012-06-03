@@ -77,19 +77,13 @@ private:
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
-    QUndoStack* UndoStack; //!< For Undo / redo support
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
 };
 
-/**
-Gets undoStack
-*/
-inline QUndoStack* cwRootData::undoStack() const {
-    return UndoStack;
-}
+
 
 /**
 Gets defaultTrip

@@ -66,7 +66,7 @@ void cwLinePlotLabelView::addCaves(int begin, int end) {
  */
 void cwLinePlotLabelView::removeCaves(int begin, int end)
 {
-    for(int i = end; i >= begin; i++) {
+    for(int i = end; i >= begin; i--) {
         cwCave* cave = Region->cave(i);
         disconnectCave(cave);
 

@@ -7,13 +7,17 @@ Rectangle {
     height: 1000
 //    anchors.fill: parent;
 
+    FileButtonAndMenu {
+        id: fileMenuButton
+    }
+
     MainSideBar {
         id: mainSideBar;
         anchors.bottom: parent.bottom
         anchors.bottomMargin: -1
         anchors.left: parent.left
         anchors.leftMargin: 0
-        anchors.top: parent.top
+        anchors.top: fileMenuButton.bottom
         anchors.topMargin: -1
 
 

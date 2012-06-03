@@ -16,6 +16,7 @@
 #include <QSqlQuery>
 #include <QDebug>
 #include <QSqlError>
+#include <QUndoStack>
 
 /**
   By default, a project is open to a temporary directory
@@ -23,7 +24,8 @@
 cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
-    Region(new cwCavingRegion(this))
+    Region(new cwCavingRegion(this)),
+    UndoStack(new QUndoStack(this))
 {
     newProject();
 
@@ -199,6 +201,9 @@ void cwProject::newProject() {
 
     //Create the caving the caving region that this project mantaines
     Region->clearCaves();
+
+    //Clear undo stack
+    UndoStack->clear();
 }
 
 /**
@@ -469,3 +474,16 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
 
 //    return checkName;
 //}
+
+/**
+ * @brief cwProject::setUndoStack
+ * @param undoStack - The undo stack for the project
+ *
+ * The undo stack will be cleared when the use creates a new project
+ */
+void cwProject::setUndoStack(QUndoStack *undoStack) {
+    if(UndoStack != undoStack) {
+        UndoStack = undoStack;
+        emit undoStackChanged();
+    }
+}

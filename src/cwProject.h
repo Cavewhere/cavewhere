@@ -16,6 +16,7 @@ class cwTrip;
 #include <QThread>
 #include <QMap>
 #include <QHash>
+class QUndoStack;
 
 /**
   This class saves and load a cavewhere project using xml and sqlite
@@ -25,6 +26,7 @@ class cwTrip;
 class cwProject :  public QObject{
 Q_OBJECT
     Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
 
 public:
     cwProject(QObject* parent = NULL);
@@ -33,10 +35,13 @@ public:
     //! The project owns the region
     cwCavingRegion* cavingRegion() const;
 
+    QUndoStack* undoStack() const;
+    void setUndoStack(QUndoStack* undoStack);
+
     void save();
     void saveAs(QString newFilename);
 
-    void newProject();
+    Q_INVOKABLE void newProject();
 
     QString filename() const;
 
@@ -48,11 +53,13 @@ public:
 
 signals:
     void filenameChanged(QString newFilename);
+    void undoStackChanged();
 
 public slots:
      void load(QString filename);
 
 private:
+
     //If this is a temp project directory on not
     bool TempProject;
     QString ProjectFile;
@@ -63,6 +70,9 @@ private:
 
     //For loading images from the disk into this project
     QThread* LoadSaveThread;
+
+    //The undo stack
+    QUndoStack* UndoStack;
 
     void createTempProjectFile();
     void createDefaultSchema();
@@ -80,6 +90,13 @@ private slots:
 inline cwCavingRegion* cwProject::cavingRegion() const {
     return Region;
 }
+
+inline QUndoStack *cwProject::undoStack() const
+{
+    return UndoStack;
+}
+
+
 
 /**
   \brief Returns the open project path

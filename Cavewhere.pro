@@ -402,7 +402,8 @@ OTHER_FILES += \
     qml/ContextMenu.qml \
     qml/MenuItem.qml \
     qml/GlobalMenuMouseHandler.qml \
-    qml/Label3d.qml
+    qml/Label3d.qml \
+    qml/FileButtonAndMenu.qml
 
 RESOURCES += \
     icons.qrc
