@@ -174,7 +174,7 @@ void cwMainWindow::save() {
     if(Data->project()->isTemporaryProject()) {
         saveAs();
     } else {
-        Data->project()->save();
+        Data->project()->privateSave();
     }
 }
 

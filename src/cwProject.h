@@ -38,8 +38,10 @@ public:
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
-    void save();
-    void saveAs(QString newFilename);
+    Q_INVOKABLE void load();
+    Q_INVOKABLE void save();
+    Q_INVOKABLE void saveAs();
+    Q_INVOKABLE void saveAs(QString newFilename);
 
     Q_INVOKABLE void newProject();
 
@@ -79,6 +81,7 @@ private:
 
     void setFilename(QString newFilename);
 
+     void privateSave();
 private slots:
     void updateRegionData(cwCavingRegion* region);
 

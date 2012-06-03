@@ -39,22 +39,27 @@ Rectangle {
 
         MenuItem {
             text: "Save"
+            onTriggered: project.save();
         }
 
         MenuItem {
             text: "Save As"
+            onTriggered: project.saveAs();
         }
 
         MenuItem {
             text: "Load"
+            onTriggered: project.load();
         }
 
         MenuItem {
             text: "Compute Scraps"
+            onTriggered: scrapManager.updateAllScraps()
         }
 
         MenuItem {
             text: "Quit"
+            onTriggered: Qt.quit()
         }
     }
 }

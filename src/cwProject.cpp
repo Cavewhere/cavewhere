@@ -8,6 +8,7 @@
 #include "cwImageData.h"
 #include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QDir>
@@ -17,6 +18,7 @@
 #include <QDebug>
 #include <QSqlError>
 #include <QUndoStack>
+#include <QFileDialog>
 
 /**
   By default, a project is open to a temporary directory
@@ -133,9 +135,21 @@ void cwProject::createDefaultSchema() {
 }
 
 /**
-  Save the project, writes all files to the project
+  \brief Saves the project
   */
 void cwProject::save() {
+    if(isTemporaryProject()) {
+        saveAs();
+    } else {
+        privateSave();
+    }
+}
+
+
+/**
+  Save the project, writes all files to the project
+  */
+void cwProject::privateSave() {
     cwRegionSaveTask* saveTask = new cwRegionSaveTask();
     connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
     connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
@@ -151,6 +165,20 @@ void cwProject::save() {
 }
 
 /**
+ * @brief cwProject::saveAs
+ *
+    Saves the project as.  This will copy the current project to a different location, leaving
+    the original. If the project is a temperary project, the temperary project will be removed
+    from disk.
+ */
+void cwProject::saveAs()
+{
+    QString filename = QFileDialog::getSaveFileName(NULL, "Save Cavewhere Project As", "", "Cavewhere Project (*.cw)");
+    filename = cwGlobals::addExtension(filename, "cw");
+    saveAs(filename);
+}
+
+/**
   Saves the project as a new file
 
     Saves the project as.  This will copy the current project to a different location, leaving
@@ -160,7 +188,7 @@ void cwProject::save() {
 void cwProject::saveAs(QString newFilename){
     //Just save it the user is overwritting it
     if(newFilename == filename()) {
-        save();
+        privateSave();
         return;
     }
 
@@ -189,7 +217,7 @@ void cwProject::saveAs(QString newFilename){
     TempProject = false;
 
     //Save the current data
-    save();
+    privateSave();
 }
 
 /**
@@ -486,4 +514,18 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
         UndoStack = undoStack;
         emit undoStackChanged();
     }
+}
+
+/**
+ * @brief cwProject::load
+ *
+ * This creates a file widget that asks the user to load a file from disk
+ */
+void cwProject::load()
+{
+    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+    loadDialog->setFileMode(QFileDialog::ExistingFile);
+    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
+    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    loadDialog->open(this, SLOT(load(QString)));
 }
