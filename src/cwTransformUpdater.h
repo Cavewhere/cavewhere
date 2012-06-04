@@ -19,16 +19,15 @@
 
   All items that are added to the transform need to have "position" property that's QVector3D.
   */
-class cwTransformUpdater : public QObject
+class cwTransformUpdater : public QQuickItem
 {
     Q_OBJECT
 
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY matrixChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 
-
 public:
-    explicit cwTransformUpdater(QObject *parent = 0);
+    explicit cwTransformUpdater(QQuickItem *parent = 0);
 
      void setCamera(cwCamera* camera);
     cwCamera* camera() const;
@@ -39,8 +38,7 @@ public:
     void addPointItem(QQuickItem* object);
     void removePointItem(QQuickItem* object);
 
-    void addTransformItem(QQuickItem* item);
-    void removeTransformItem(QQuickItem *item);
+    QSGTransformNode* transformNode() const;
 
     QMatrix4x4 matrix() const;
 
@@ -55,24 +53,26 @@ signals:
 
 public slots:
     void update();
-    void updateTransform(QQuickItem* object);
 
 private slots:
     void pointItemDeleted(QObject* object);
     void handlePointItemDataChanged();
 
-    void transformItemDeleted(QObject* object);
 private:
     QSet<QQuickItem*> PointItems;
-    QSet<QQuickItem*> TransformItems;
     cwCamera* Camera;
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
+    QSGTransformNode* TransformNode;
 
     void updatePoint(QQuickItem* object);
 
     void updateTransformMatrix();
+
+protected:
+    QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+
 };
 
 /**
@@ -107,6 +107,15 @@ inline cwCamera* cwTransformUpdater::camera() const {
   */
 inline QMatrix4x4 cwTransformUpdater::modelMatrix() const {
     return ModelMatrix;
+}
+
+/**
+ * @brief cwTransformUpdater::transformNode
+ * @return Returns the transform node. This should used carful, because modifing
+ * QSGTransformeNode outside of the rendering thread, isn't safe.
+ */
+inline QSGTransformNode *cwTransformUpdater::transformNode() const {
+    return TransformNode;
 }
 
 #endif // CWTRANSFORMUPDATER_H

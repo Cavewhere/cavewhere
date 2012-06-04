@@ -9,7 +9,7 @@
 
 cwSGPolygonNode::cwSGPolygonNode() {
     QSGFlatColorMaterial *material = new QSGFlatColorMaterial;
-    material->setColor(QColor(255, 0, 0, 100));
+    material->setColor(QColor::fromRgbF(1.0, 0.0, 0.0, 0.2));
     setMaterial(material);
     setFlags(QSGNode::OwnsMaterial);
     setFlags(QSGNode::OwnsGeometry);

@@ -7,6 +7,8 @@
 #include "cwNote.h"
 #include "cwTrip.h"
 #include "cwGlobalDirectory.h"
+#include "cwCave.h"
+#include "cwSGLinesNode.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -14,29 +16,22 @@
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QPen>
+#include <QSGTransformNode>
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     QQuickItem(parent),
-//    NoteStationView(NULL),
     TransformUpdater(NULL),
+    TransformNodeDirty(false),
     Scrap(NULL),
     StationItemComponent(NULL),
-    ShotLinesHandler(new QQuickItem(this)),
-    //FIXME: Fix Shot lines
-//    ShotLines(new QGraphicsPathItem(ShotLinesHandler)),
+    ShotLineScale(1.0),
     ScrapItem(NULL),
     SelectedStationIndex(-1)
 {
-    QPen shotPen;
-    shotPen.setColor(Qt::red);
-    //FIXME: Fix Shot lines
-    //    ShotLines->setPen(shotPen);
+    setFlag(QQuickItem::ItemHasContents, true);
 }
 
 cwScrapStationView::~cwScrapStationView() {
-    if(TransformUpdater != NULL) {
-        TransformUpdater->removeTransformItem(ShotLinesHandler);
-    }
 }
 
 /**
@@ -54,14 +49,13 @@ void cwScrapStationView::setTransformUpdater(cwTransformUpdater* updater) {
         }
 
         TransformUpdater = updater;
+        TransformNodeDirty = true;
 
         if(TransformUpdater != NULL) {
             //Add station to the new transformUpdater
             foreach(QQuickItem* stationItem, StationItems) {
                 TransformUpdater->addPointItem(stationItem);
             }
-
-            TransformUpdater->addTransformItem(ShotLinesHandler);
         }
 
         emit transformUpdaterChanged();
@@ -93,6 +87,18 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
         }
 
         emit scrapChanged();
+    }
+}
+
+/**
+ * @brief cwScrapStationView::setShotLineScale
+ * @param scale
+ */
+void cwScrapStationView::setShotLineScale(float scale) {
+    if(ShotLineScale != scale) {
+        scale = ShotLineScale;
+        emit shotLineScaleChanged();
+        update();
     }
 }
 
@@ -159,12 +165,13 @@ void cwScrapStationView::updateShotLines() {
     if(transformUpdater() == NULL) { return; }
 
     cwNoteStation noteStation = scrap()->station(selectedStationIndex());
+    //Get the current trip
+    cwNote* note = scrap()->parentNote();
+    cwTrip* trip = note->parentTrip();
+    cwCave* cave = trip->parentCave();
+    cwStationPositionLookup stationPositionLookup = cave->stationPositionModel();
 
-    if(noteStation.isValid()) {
-        //Get the current trip
-        cwNote* note = scrap()->parentNote();
-        cwTrip* trip = note->parentTrip();
-
+    if(noteStation.isValid() && stationPositionLookup.hasPosition(noteStation.name())) {
         QString stationName = noteStation.name();
         QSet<cwStation> neighboringStations = trip->neighboringStations(stationName);
 
@@ -172,7 +179,7 @@ void cwScrapStationView::updateShotLines() {
         QPainterPath shotLines; //In normalized note coordinates
 
         //The position of the selected station
-        QVector3D selectedStationPos; // = noteStation.station().position();
+        QVector3D selectedStationPos = stationPositionLookup.position(noteStation.name());
 
         //Create the matrix to covert global position into note position
         QMatrix4x4 noteTransformMatrix = scrap()->noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
@@ -196,20 +203,47 @@ void cwScrapStationView::updateShotLines() {
                 noteTransformMatrix *
                 offsetMatrix;
 
+        //Clear all the lines
+        ShotLines.clear();
+
         //Go through all the neighboring stations and add the position to the line
         foreach(cwStation station, neighboringStations) {
 
-            QVector3D currentPos; // = station.position();
-
+            QVector3D currentPos = stationPositionLookup.position(station.name());
             QVector3D normalizeNotePos = toNormalizedNote.map(currentPos);
 
-            shotLines.moveTo(noteStation.positionOnNote());
-            shotLines.lineTo(normalizeNotePos.toPointF());
+            ShotLines.append(QLineF(noteStation.positionOnNote(), normalizeNotePos.toPointF()));
         }
 
-            //FIXME: Fix Shot lines
-//        ShotLines->setPath(shotLines);
+        //Update the node geometry
+        update();
     }
+}
+
+/**
+ * @brief cwScrapItem::updatePaintNode
+ * @param oldNode
+ * @return See qt documentation
+ */
+QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
+{
+    if(TransformUpdater) {
+        if(!oldNode) {
+            ShotLinesNode = new cwSGLinesNode();
+        }
+
+        if(TransformNodeDirty) {
+            TransformUpdater->transformNode()->appendChildNode(ShotLinesNode);
+            TransformNodeDirty = false;
+        }
+
+        if(ShotLinesNode) {
+            ShotLinesNode->setLines(ShotLines);
+        }
+
+        return TransformUpdater->transformNode();
+    }
+    return NULL;
 }
 
 /**

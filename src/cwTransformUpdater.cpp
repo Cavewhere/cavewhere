@@ -4,11 +4,14 @@
 
 //Qt includes
 #include <QDebug>
+#include <QSGTransformNode>
 
-cwTransformUpdater::cwTransformUpdater(QObject *parent) :
-    QObject(parent),
-    Camera(NULL)
+cwTransformUpdater::cwTransformUpdater(QQuickItem *parent) :
+    QQuickItem(parent),
+    Camera(NULL),
+    TransformNode(new QSGTransformNode())
 {
+    setFlag(QQuickItem::ItemHasContents, true);
 
 }
 
@@ -72,41 +75,6 @@ void cwTransformUpdater::removePointItem(QQuickItem *object) {
     PointItems.remove(object);
 }
 
-/**
-  Adds a item to the transform updater
-
-  This is different then addPointItem.  Point item will change the object position without effecting
-  it's scale.  This will create a 2D transform that will both position and scale the object.  This
-  is useful for position lines and polygons in a two view.  This only work for 2d object, that there
-  coordinates are defined in a opengl 2D cooridates system.  When transformUpdater calls update, the
-  item's transformation will update.  The position will not be effeceted through setPos().
-  */
-void cwTransformUpdater::addTransformItem(QQuickItem *item) {
-    if(item == NULL) { return; }
-
-    if(TransformItems.contains(item)) {
-        qDebug() << "Adding object twice in cwTransformUpdater " << LOCATION;
-        return;
-    }
-
-    TransformItems.insert(item);
-    connect(item, SIGNAL(destroyed(QObject*)), SLOT(transformItemDeleted(QObject*)));
-
-    updateTransform(item);
-}
-
-/**
-  This remove the item from the transformer
-  */
-void cwTransformUpdater::removeTransformItem(QQuickItem* item) {
-    if(item == NULL) { return; }
-
-    if(!TransformItems.contains(item)) {
-        qDebug() << item << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
-    }
-    disconnect(item, NULL, this, NULL);
-    TransformItems.remove(item);
-}
 
 
 /**
@@ -123,11 +91,6 @@ void cwTransformUpdater::update() {
         updatePoint(object);
     }
 
-//    //Update the transform objects
-//    foreach(QQuickItem* object, TransformItems) {
-//        updateTransform(object);
-//    }
-
     emit updated();
 }
 
@@ -140,19 +103,6 @@ void cwTransformUpdater::updatePoint(QQuickItem *object) {
     QVector3D position = object->property("position3D").value<QVector3D>();
     QVector3D position2D = TransformMatrix * position;
     object->setPos(QPointF(position2D.x(), position2D.y()));
-}
-
-/**
-  Update a transform object. This updates the object's position and scale based on setTransform.
-
-  This is useful for updating lines or polygons, or anything that needs to keep it's shape.
-
-  This assuems that the object's geometry has already been set in local 2D opengl coordinates.
-  */
-void cwTransformUpdater::updateTransform(QQuickItem *object) {
-    Q_ASSERT(object != NULL);
-    //FIXME: Use QQuickItem::transform() instead
-//    object->setTransform(TransformMatrix.toTransform());
 }
 
 /**
@@ -170,6 +120,22 @@ void cwTransformUpdater::updateTransformMatrix() {
 
     TransformMatrix = qtViewportMatrix * Camera->viewProjectionMatrix() * ModelMatrix;
     emit matrixChanged();
+    QQuickItem::update();
+}
+
+/**
+ * @brief cwTransformUpdater::updatePaintNode
+ * @param oldNode,  Updates the transformation node
+ * @return
+ */
+QSGNode* cwTransformUpdater::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
+{
+    if(!oldNode) {
+        TransformNode->setFlag(QSGNode::OwnedByParent, false);
+    }
+
+    TransformNode->setMatrix(matrix());
+    return TransformNode;
 }
 
 /**
@@ -192,16 +158,6 @@ void cwTransformUpdater::handlePointItemDataChanged() {
     if(PointItems.contains(item)) {
         updatePoint(item);
     }
-}
-
-/**
-  \brief Called when the object (a transform object) has been deleted
-
-  This will remove the object from the transformUpdater
-  */
-void cwTransformUpdater::transformItemDeleted(QObject* object) {
-    QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
-    removeTransformItem(graphicsObject);
 }
 
 /**

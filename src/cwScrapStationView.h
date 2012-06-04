@@ -9,6 +9,7 @@ class cwTransformUpdater;
 class cwScrap;
 class cwImageItem;
 class cwScrapItem;
+class cwSGLinesNode;
 #include "cwNoteStation.h"
 
 /**
@@ -22,6 +23,7 @@ class cwScrapStationView : public QQuickItem
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(int selectedStationIndex READ selectedStationIndex WRITE setSelectedStationIndex NOTIFY selectedStationIndexChanged)
     Q_PROPERTY(cwScrapItem* scrapItem READ scrapItem WRITE setScrapItem NOTIFY scrapItemChanged)
+    Q_PROPERTY(float shotLineScale READ shotLineScale WRITE setShotLineScale NOTIFY shotLineScaleChanged)
 
 public:
     explicit cwScrapStationView(QQuickItem *parent = 0);
@@ -32,6 +34,9 @@ public:
 
     cwScrap* scrap() const;
     void setScrap(cwScrap* scrap);
+
+    float shotLineScale() const;
+    void setShotLineScale(float scale);
 
     void clearSelection();
     int selectedStationIndex() const;
@@ -47,6 +52,7 @@ signals:
     void scrapChanged();
     void selectedStationIndexChanged();
     void scrapItemChanged();
+    void shotLineScaleChanged();
 
 public slots:
 
@@ -54,6 +60,7 @@ private:
 
     //Will keep the note stations at the correct location
     cwTransformUpdater* TransformUpdater;
+    bool TransformNodeDirty;
 
     cwScrap* Scrap; //!< The scrap this is class keeps track of
 
@@ -61,11 +68,11 @@ private:
     QQmlComponent* StationItemComponent;
     QList<QQuickItem*> StationItems;
 
-    //Shows the shot lines
-    QQuickItem* ShotLinesHandler;
+    //Geometry for the shot lines
+    cwSGLinesNode* ShotLinesNode;
+    QVector<QLineF> ShotLines;
 
-    //FIXME: Need a way to render shot lines
-//    QGraphicsPathItem* ShotLines;
+    float ShotLineScale;
 
     cwScrapItem* ScrapItem; //!< For selection and holding the scrap
 
@@ -75,8 +82,6 @@ private:
     void addNewStationItem();
     void updateStationItemData(int index);
 
-
-
 private slots:
     void stationAdded();
     void stationRemoved(int stationIndex);
@@ -84,6 +89,10 @@ private slots:
     void updateAllStations();
     void updateAllStationData();
     void updateShotLines();
+
+protected:
+    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+
 };
 
 Q_DECLARE_METATYPE(cwScrapStationView*)
@@ -122,5 +131,14 @@ inline cwScrapItem* cwScrapStationView::scrapItem() const {
 inline void cwScrapStationView::clearSelection() {
     setSelectedStationIndex(-1);
 }
+
+/**
+ * @brief cwScrapStationView::shotLineScale
+ * @return Return's the shot line scale, 0.0 to 1.0, useful for animating the shot lines
+ */
+inline float cwScrapStationView::shotLineScale() const {
+    return ShotLineScale;
+}
+
 
 #endif // CWSCRAPSTATIONVIEW_H

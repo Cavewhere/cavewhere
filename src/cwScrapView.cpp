@@ -12,10 +12,8 @@
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
     Note(NULL),
-    TransformUpdater(NULL),
-    TransformNode(new QSGTransformNode())
+    TransformUpdater(NULL)
 {
-    setFlag(QQuickItem::ItemHasContents, true);
 }
 
 /**
@@ -65,7 +63,6 @@ void cwScrapView:: addScrapItem() {
     cwScrapItem* scrapItem = new cwScrapItem(context, this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
-    scrapItem->setTransformNode(TransformNode);
     connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
 
 
@@ -194,7 +191,7 @@ void cwScrapView::updateAllScraps() {
         //Add new scrap items
         for(int i = ScrapItems.size(); i < numberOfScraps; i++) {
             cwScrapItem* item = new cwScrapItem(context, this);
-            item->setTransformNode(TransformNode);
+            item->setTransformUpdater(TransformUpdater);
             ScrapItems.append(item);
         }
     }
@@ -268,21 +265,4 @@ void cwScrapView::updateSelection() {
     if(scrapItem != NULL) {
         setSelectedScrapItem(scrapItem);
     }
-}
-
-/**
- * @brief cwScrapView::updatePaintNode
- * @param oldNode
- * @return
- *
- * Updates the TransformNode
- */
-QSGNode* cwScrapView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
-{
-    Q_UNUSED(oldNode);
-
-    QMatrix4x4 matrix = TransformUpdater->matrix();
-
-    TransformNode->setMatrix(matrix);
-    return NULL;
 }

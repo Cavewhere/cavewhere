@@ -71,7 +71,7 @@ void cwNorthArrowItem::updateNorthArrowPath() {
 void cwNorthArrowItem::disconnectTransformer()
 {
     TransformUpdater->removePointItem(NorthTextHandler);
-    TransformUpdater->removeTransformItem(NorthArrowLineHandler);
+    //TransformUpdater->removeTransformItem(NorthArrowLineHandler);
     disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateNorthArrowPath()));
 }
 
@@ -80,6 +80,6 @@ void cwNorthArrowItem::disconnectTransformer()
   */
 void cwNorthArrowItem::connectTransformer() {
     TransformUpdater->addPointItem(NorthTextHandler);
-    TransformUpdater->addTransformItem(NorthArrowLineHandler);
+    //TransformUpdater->addTransformItem(NorthArrowLineHandler);
     connect(TransformUpdater, SIGNAL(updated()), SLOT(updateNorthArrowPath()));
 }

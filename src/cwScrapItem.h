@@ -39,6 +39,7 @@ public:
     void setTransformUpdater(cwTransformUpdater* transformUpdater);
 
     void setTransformNode(QSGTransformNode* node);
+    QSGTransformNode* transformNode() const;
 
     cwScrapStationView* stationView() const;
 
@@ -57,13 +58,10 @@ private:
     //For keeping the 2D object aligned
     cwTransformUpdater* TransformUpdater; //!<
 
-    QSGTransformNode* TransformNode; //!< Keep the outline up to date
-    cwSGPolygonNode* PolygonNode; //!< Draws the polygon
 
     //Visual elements
-//    QQuickItem* BorderItemHandler;
-    //FIXME: Implement painting method for border item
-//    QGraphicsPolygonItem* BorderItem; //!< The border around the scrap
+    bool TransformNodeDirty;
+    cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
 
     bool Selected; //!< True if the scrap is select and false if it isn't

@@ -20,7 +20,7 @@ cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     We need to connect it.
   */
 void cwScaleLengthItem::connectTransformer() {
-    TransformUpdater->addTransformItem(LengthHandler);
+//    TransformUpdater->addTransformItem(LengthHandler);
     connect(TransformUpdater, SIGNAL(updated()), SLOT(updateScaleLengthPath()));
 }
 
@@ -30,7 +30,7 @@ void cwScaleLengthItem::connectTransformer() {
     We need to disconnect it
   */
 void cwScaleLengthItem::disconnectTransformer() {
-    TransformUpdater->removeTransformItem(LengthHandler);
+//    TransformUpdater->removeTransformItem(LengthHandler);
     disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateScaleLengthPath()));
 }
 

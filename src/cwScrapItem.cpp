@@ -15,7 +15,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    TransformNode(NULL),
+    TransformNodeDirty(false),
     PolygonNode(NULL),
     StationView(new cwScrapStationView(this))
 {
@@ -88,25 +88,23 @@ void cwScrapItem::updateScrapGeometry() {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-    qDebug() << oldNode << TransformNode;
-    if(!oldNode && TransformNode) {
-        //Initilize
-        qDebug() << "Initilized!";
-        PolygonNode = new cwSGPolygonNode();
-        TransformNode->appendChildNode(PolygonNode);
-    }
+    if(TransformUpdater) {
+        if(!oldNode) {
+            PolygonNode = new cwSGPolygonNode();
+        }
 
-    if(PolygonNode) {
-        PolygonNode->setPolygon(QPolygonF(Scrap->points()));
-    }
-    //    QSGSimpleRectNode *n = static_cast<QSGSimpleRectNode *>(oldNode);
-//    if (!n) {
-//        n = new QSGSimpleRectNode();
+        if(TransformNodeDirty) {
+            TransformUpdater->transformNode()->appendChildNode(PolygonNode);
+            TransformNodeDirty = false;
+        }
 
-//        n->setColor(Qt::red);
-//    }
-//    n->setRect(boundingRect());
-    return TransformNode;
+        if(PolygonNode) {
+            PolygonNode->setPolygon(QPolygonF(Scrap->points()));
+        }
+
+        return TransformUpdater->transformNode();
+    }
+    return NULL;
 
 }
 
@@ -144,13 +142,13 @@ void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
     if(TransformUpdater != transformUpdater) {
 
         TransformUpdater = transformUpdater;
+        TransformNodeDirty = true;
         StationView->setTransformUpdater(TransformUpdater);
 
         emit transformUpdaterChanged();
-        }
+        update();
+    }
 }
 
-void cwScrapItem::setTransformNode(QSGTransformNode *node) {
-    TransformNode = node;
-}
+
 

@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     QQuickView view;
 
     QSurfaceFormat format = view.format();
-    format.setSamples(2);
+    format.setSamples(4);
 
     cwRootData* rootData = new cwRootData(&view);
     rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
