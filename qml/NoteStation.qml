@@ -17,7 +17,6 @@ Positioner3D {
         if(scrap !== null) {
             stationName.text = scrap.stationData(Scrap.StationName, stationId)
             var position = scrap.stationData(Scrap.StationPosition, stationId);
-            console.log("stationId:" + stationId + " station name:" + stationName.text + " SCrap:" + scrap + " Position:" + position.x + " " + position.y);
             position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }

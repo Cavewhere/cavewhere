@@ -6,6 +6,7 @@
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwGlobals.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QDebug>
@@ -74,13 +75,6 @@ void cwScrap::setPoints(QVector<QPointF> points) {
 void cwScrap::setStations(QList<cwNoteStation> stations)  {
     Stations = stations;
 
-//    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
-//        for(int i = 0; i < Stations.size(); i++) {
-//            cwNoteStation& station = Stations[i];
-//            station.setCave(parentNote()->parentTrip()->parentCave());
-//        }
-//    }
-
     updateNoteTransformation();
 
     emit stationsReset();
@@ -90,14 +84,6 @@ void cwScrap::setStations(QList<cwNoteStation> stations)  {
   \brief Adds a station to the note
   */
 void cwScrap::addStation(cwNoteStation station) {
-
-//    //Reference the cave to the station
-//    if(parentNote() != NULL && parentNote()->parentTrip() != NULL) {
-//        station.setCave(parentNote()->parentTrip()->parentCave());
-//    }
-
-    qDebug() << "Add station:" << station.name();
-
     Stations.append(station);
     updateNoteTransformation();
 
@@ -382,8 +368,11 @@ void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
 QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
     if(parentNote() == NULL) { return QString(); }
     if(parentNote()->parentTrip() == NULL) { return QString(); }
+    if(parentNote()->parentTrip()->parentCave() == NULL) { return QString(); }
 
     cwTrip* parentTrip = parentNote()->parentTrip();
+    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
+    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
 
     QSet<cwStation> neigborStations = parentTrip->neighboringStations(previousStation.name());
 
@@ -400,19 +389,21 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     double bestNormalizeError = 1.0;
 
     foreach(cwStation station, neigborStations) {
-        QVector3D stationPosition; // = station.position();
+        if(stationLookup.hasPosition(station.name())) {
+            QVector3D stationPosition = stationLookup.position(station.name());
 
-        //Figure out the predicited position of the station on the notes
-        QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
+            //Figure out the predicited position of the station on the notes
+            QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
 
-        //Figure out the error between stationNotePosition and predictedPosition
-        QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
-        QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
-        double normalizedError = errorVector.length() / noteVector.length();
+            //Figure out the error between stationNotePosition and predictedPosition
+            QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
+            QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
+            double normalizedError = errorVector.length() / noteVector.length();
 
-        if(normalizedError < bestNormalizeError) {
-            //Station is probably the one
-            bestStationName = station.name();
+            if(normalizedError < bestNormalizeError) {
+                //Station is probably the one
+                bestStationName = station.name();
+            }
         }
     }
 

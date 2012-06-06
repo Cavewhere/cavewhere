@@ -133,7 +133,6 @@ void cwImageTexture::reinitilizeLoadNoteWatcher()
 
 void cwImageTexture::markAsDirty()
 {
-    qDebug() << "Mark as dirty" << this;
     TextureDirty = true;
 }
 

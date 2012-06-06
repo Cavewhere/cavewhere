@@ -27,10 +27,9 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
-    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
-        qDebug() << "Image formats:" << imageFormats;
-    }
-
+//    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
+//        qDebug() << "Image formats:" << imageFormats;
+//    }
 
     qRegisterMetaType<QThread*>("QThread*");
     qRegisterMetaType<cwCavingRegion>("cwCavingRegion");

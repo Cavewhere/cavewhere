@@ -40,7 +40,7 @@ public:
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
 
-    cwStationPositionLookup stationPositionModel() const;
+    cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionModel(const cwStationPositionLookup& model);
 
 //    bool hasStation(QString name);
@@ -213,7 +213,7 @@ inline int cwCave::indexOf(cwTrip* trip) const {
 /**
   \brief Gets the station position model for the cave
   */
-inline cwStationPositionLookup cwCave::stationPositionModel() const
+inline cwStationPositionLookup cwCave::stationPositionLookup() const
 {
     return StationPositionModel;
 }

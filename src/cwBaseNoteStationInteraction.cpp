@@ -64,7 +64,6 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
         stationName = "Station Name";
     }
 
-    qDebug() << "Set station name:" << stationName;
     newNoteStation.setName(stationName);
     scrap->addStation(newNoteStation);
 

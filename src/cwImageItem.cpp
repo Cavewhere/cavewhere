@@ -162,8 +162,6 @@ void cwImageItem::initializeVertexBuffers() {
   \brief The initilizes the texture map
   */
 void cwImageItem::initializeTexture() {
-    qDebug() << "Initialized";
-
     //Generate the color texture
     NoteTexture->initialize();
 }

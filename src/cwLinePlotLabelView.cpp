@@ -119,7 +119,7 @@ void cwLinePlotLabelView::disconnectCave(cwCave *cave)
  */
 QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwCave *cave) const
 {
-    cwStationPositionLookup stations = cave->stationPositionModel();
+    cwStationPositionLookup stations = cave->stationPositionLookup();
 
     QList< cwLabel3dItem > uniqueStations;
     uniqueStations.reserve(stations.positions().count());

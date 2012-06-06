@@ -46,7 +46,7 @@ void cwLinePlotGeometryTask::runTask() {
 void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
     cwCave* cave = Region->cave(caveIndex);
 
-    QMapIterator<QString, QVector3D> iter(cave->stationPositionModel().positions());
+    QMapIterator<QString, QVector3D> iter(cave->stationPositionLookup().positions());
 
     while(iter.hasNext()) {
         iter.next();

@@ -169,7 +169,7 @@ void cwScrapStationView::updateShotLines() {
     cwNote* note = scrap()->parentNote();
     cwTrip* trip = note->parentTrip();
     cwCave* cave = trip->parentCave();
-    cwStationPositionLookup stationPositionLookup = cave->stationPositionModel();
+    cwStationPositionLookup stationPositionLookup = cave->stationPositionLookup();
 
     if(noteStation.isValid() && stationPositionLookup.hasPosition(noteStation.name())) {
         QString stationName = noteStation.name();

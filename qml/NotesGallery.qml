@@ -140,8 +140,6 @@ Rectangle {
 
             onCurrentIndexChanged: {
                 if(currentItem != null) {
-                    console.log("CurrentItem:" + currentItem + " " + currentItem.noteObject);
-
                     noteGallery.currentNote = currentItem.noteObject
                     noteArea.image = currentItem.noteObject.image;
                 }
