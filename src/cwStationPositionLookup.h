@@ -16,7 +16,7 @@ public:
 
     void clearStations();
     void setPosition(const QString& stationName, const QVector3D& stationPosition);
-    QVector3D position(const QString& stationName);
+    QVector3D position(const QString& stationName) const;
     bool hasPosition(QString stationName) const;
 
     QMap<QString, QVector3D> positions() const;
@@ -44,7 +44,7 @@ inline void cwStationPositionLookup::setPosition(const QString& stationName, con
   Get's the station position with stationName.  If stationName doesn't exist, this
   will return QVector3D()
   */
-inline QVector3D cwStationPositionLookup::position(const QString& stationName) {
+inline QVector3D cwStationPositionLookup::position(const QString& stationName) const {
     return StationPositions.value(stationName, QVector3D());
 }
 

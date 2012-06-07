@@ -51,6 +51,8 @@ void cwCropImageTask::runTask() {
     QImage image = QImage::fromData(imageData.data(), imageData.format());
     QImage croppedImage = image.copy(cropArea);
 
+    qDebug() << "image:" << image << imageData.format();
+
     QList<QImage> images;
     images.append(croppedImage);
 

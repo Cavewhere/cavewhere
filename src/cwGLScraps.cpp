@@ -29,17 +29,7 @@ cwGLScraps::cwGLScraps(QObject *parent) :
 void cwGLScraps::updateGeometry() {
     if(Region == NULL) { return; }
 
-    Scraps.clear();
-
-    foreach(cwCave* cave, Region->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                foreach(cwScrap* scrap, note->scraps()) {
-                    Scraps.append(GLScrap(scrap->triangulationData(), project()));
-                }
-            }
-        }
-    }
+    setDirty(true);
 }
 
 void cwGLScraps::initialize() {
@@ -47,6 +37,8 @@ void cwGLScraps::initialize() {
 }
 
 void cwGLScraps::draw() {
+    if(Scraps.isEmpty()) { return; }
+
     Program->bind();
 
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
@@ -56,6 +48,10 @@ void cwGLScraps::draw() {
     glEnable(GL_TEXTURE_2D);
 
     foreach(GLScrap scrap, Scraps) {
+        if(scrap.Texture->isDirty()) {
+            scrap.Texture->updateData();
+        }
+
         scrap.IndexBuffer.bind();
 
         scrap.PointBuffer.bind();
@@ -79,6 +75,31 @@ void cwGLScraps::draw() {
 }
 
 /**
+ * @brief cwGLScraps::updateData
+ *
+ * Updates the
+ */
+void cwGLScraps::updateData()
+{
+    Scraps.clear();
+
+    foreach(cwCave* cave, Region->caves()) {
+        foreach(cwTrip* trip, cave->trips()) {
+            foreach(cwNote* note, trip->notes()->notes()) {
+                foreach(cwScrap* scrap, note->scraps()) {
+                    Scraps.append(GLScrap(scrap->triangulationData(), project()));
+                    qDebug() << "Creating scrap!";
+                }
+            }
+        }
+    }
+
+    setDirty(false);
+
+    qDebug() << "Scrap geometry updated!";
+}
+
+/**
   \brief This initilizes the shaders for the scraps
   */
 void cwGLScraps::initializeShaders() {
@@ -88,16 +109,16 @@ void cwGLScraps::initializeShaders() {
     cwGLShader* scrapFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
 
-    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
-    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
+//    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
+//    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
 
     Program = new QOpenGLShaderProgram(this);
     Program->addShader(scrapVertexShader);
     Program->addShader(scrapFragmentShader);
-    Program->addShader(scrapGeometryShader);
+//    Program->addShader(scrapGeometryShader);
 
-    Program->setGeometryInputType(GL_TRIANGLES);
-    Program->setGeometryOutputType(GL_TRIANGLE_STRIP);
+//    Program->setGeometryInputType(GL_TRIANGLES);
+//    Program->setGeometryOutputType(GL_TRIANGLE_STRIP);
 
     bool linkingErrors = Program->link();
     if(!linkingErrors) {
@@ -108,7 +129,7 @@ void cwGLScraps::initializeShaders() {
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     vVertex = Program->attributeLocation("vVertex");
     vScrapTexCoords = Program->attributeLocation("vScrapTexCoords");
-    Program->setUniformValue("colorBG", Qt::green);
+//    Program->setUniformValue("colorBG", Qt::green);
     Program->setUniformValue("Texture", 0);
 
 //    UniformModelMatrix = Program->uniformLocation("ModelMatrix");
@@ -147,6 +168,7 @@ cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project)
     TexCoords.release();
 
     //Upload the texture to the graphics card
+    Texture->initialize();
     Texture->setProject(project->filename());
     Texture->setImage(data.croppedImage());
 }

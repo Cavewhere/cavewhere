@@ -143,7 +143,7 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperX = scrapImageSize.width() / (double)scrapImage.originalDotsPerMeter(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / (double)scrapImage.originalDotsPerMeter(); //in meters
 
-    double pointsPerMeter = 2; //Grid resolution
+    double pointsPerMeter = 0.2; //Grid resolution
     double scale = noteTransform.scale(); //scale for the notes
 
     double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave

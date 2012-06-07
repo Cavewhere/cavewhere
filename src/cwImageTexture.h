@@ -36,8 +36,6 @@ public:
     QString project() const;
     void setProject(QString project);
 
-    void sceneUpdate();
-
     bool isDirty() const;
 
 signals:

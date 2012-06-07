@@ -17,6 +17,7 @@ class cwNote;
 class cwTriangulateTask;
 class cwProject;
 class cwGLScraps;
+class cwStationPositionLookup;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 
@@ -66,7 +67,7 @@ private:
 
     void updateScrapGeometry(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
-    QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations) const;
+    QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations, const cwStationPositionLookup& positionLookup) const;
 
 private slots:
     void cavesInserted(int begin, int end);

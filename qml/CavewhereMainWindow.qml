@@ -3,8 +3,8 @@ import QtQuick 2.0
 
 Rectangle {
     id: rootQMLItem
-    width: 1500
-    height: 1000
+    width: 800
+    height: 600
 //    anchors.fill: parent;
 
     FileButtonAndMenu {

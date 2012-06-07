@@ -160,9 +160,10 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
   */
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
+    cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
     data.setNoteImage(scrap->parentNote()->image());
     data.setOutline(scrap->points());
-    data.setStations(mapNoteStationsToTriangulateStation(scrap->stations()));
+    data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
     data.setNoteTransform(*(scrap->noteTransformation()));
     return data;
 }
@@ -170,14 +171,17 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
 /**
   Extracts the note station's position and note position
   */
-QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations) const {
+QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
+                                                                                const cwStationPositionLookup& positionLookup) const {
     QList<cwTriangulateStation> stations;
     foreach(cwNoteStation noteStation, noteStations) {
-        cwTriangulateStation station;
-        station.setName(noteStation.name());
-        station.setNotePosition(noteStation.positionOnNote());
-        //station.setPosition(noteStation.station().position());
-        stations.append(cwTriangulateStation(station));
+        if(positionLookup.hasPosition(noteStation.name())) {
+            cwTriangulateStation station;
+            station.setName(noteStation.name());
+            station.setNotePosition(noteStation.positionOnNote());
+            station.setPosition(positionLookup.position(noteStation.name()));
+            stations.append(cwTriangulateStation(station));
+        }
     }
     return stations;
 }

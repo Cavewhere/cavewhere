@@ -33,8 +33,6 @@ void cwGLGridPlane::initialize()
 void cwGLGridPlane::draw() {
     Program->bind();
 
-
-
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * ModelMatrix);
     Program->setUniformValue(UniformModelMatrix, ModelMatrix);
 
@@ -46,6 +44,8 @@ void cwGLGridPlane::draw() {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     TriangleVertexBuffer.release();
+
+    Program->release();
 }
 
 

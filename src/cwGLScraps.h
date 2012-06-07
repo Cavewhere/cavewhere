@@ -32,6 +32,8 @@ public:
 
     void initialize();
     void draw();
+    void updateData();
+
     
 signals:
     void projectChanged();

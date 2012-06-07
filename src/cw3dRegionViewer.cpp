@@ -70,7 +70,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     //    Terrain->draw();
-    //    Scraps->draw();
+    Scraps->draw();
     LinePlot->draw();
     Plane->draw();
 
@@ -87,7 +87,7 @@ void cw3dRegionViewer::initializeGL() {
     resetView();
 
     Terrain->initialize();
-    //    Scraps->initialize();
+    Scraps->initialize();
     LinePlot->initialize();
     Plane->initialize();
 
@@ -140,6 +140,10 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
 QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
     if(LinePlot->isDirty()) {
         LinePlot->updateData();
+    }
+
+    if(Scraps->isDirty()) {
+        Scraps->updateData();
     }
 
     return cwGLRenderer::updatePaintNode(oldNode, data);
