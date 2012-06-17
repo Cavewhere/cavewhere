@@ -11,6 +11,7 @@ class cwScrap;
 class cwTransformUpdater;
 class cwScrapStationView;
 class cwSGPolygonNode;
+class cwSGLinesNode;
 
 /**
   \brief This draws a scrap
@@ -62,6 +63,7 @@ private:
     //Visual elements
     bool TransformNodeDirty;
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
+    cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
 
     bool Selected; //!< True if the scrap is select and false if it isn't

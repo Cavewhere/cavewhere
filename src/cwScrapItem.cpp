@@ -4,6 +4,7 @@
 #include "cwTransformUpdater.h"
 #include "cwScrapStationView.h"
 #include "cwSGPolygonNode.h"
+#include "cwSGLinesNode.h"
 
 //Qt includes
 #include <QGraphicsPolygonItem>
@@ -17,6 +18,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     TransformUpdater(NULL),
     TransformNodeDirty(false),
     PolygonNode(NULL),
+    OutlineNode(NULL),
     StationView(new cwScrapStationView(this))
 {
     StationView->setScrapItem(this);
@@ -91,16 +93,21 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     if(TransformUpdater) {
         if(!oldNode) {
             PolygonNode = new cwSGPolygonNode();
+            OutlineNode = new cwSGLinesNode();
+            OutlineNode->setLineWidth(2.0);
         }
 
         if(TransformNodeDirty) {
             TransformUpdater->transformNode()->appendChildNode(PolygonNode);
+            TransformUpdater->transformNode()->appendChildNode(OutlineNode);
             TransformNodeDirty = false;
         }
 
         if(PolygonNode) {
             PolygonNode->setPolygon(QPolygonF(Scrap->points()));
+            OutlineNode->setLineStrip(Scrap->points());
         }
+
 
         return TransformUpdater->transformNode();
     }
