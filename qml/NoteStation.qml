@@ -103,6 +103,10 @@ Positioner3D {
                     scrap.setStationData(Scrap.StationPosition, stationId, Qt.point(noteCoord.x, noteCoord.y));
                 }
             }
+
+            onDoubleClicked: {
+                stationName.openEditor();
+            }
         }
 
 //        Rectangle {
