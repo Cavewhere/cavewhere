@@ -16,6 +16,7 @@ Interaction {
             var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
             scrapView.selectScrapAt(notePoint)
         }
+        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 
 }

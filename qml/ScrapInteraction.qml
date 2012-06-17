@@ -32,6 +32,8 @@ BaseScrapInteraction {
         onEntered: {
             interaction.forceActiveFocus()
         }
+
+        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 
     HelpBox {

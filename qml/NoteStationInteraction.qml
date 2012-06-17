@@ -28,6 +28,8 @@ BaseNoteStationInteraction {
                 basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
             }
         }
+
+        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 
     HelpBox {
