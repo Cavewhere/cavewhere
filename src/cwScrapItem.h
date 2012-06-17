@@ -59,12 +59,15 @@ private:
     //For keeping the 2D object aligned
     cwTransformUpdater* TransformUpdater; //!<
 
-
     //Visual elements
     bool TransformNodeDirty;
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
+
+    //For showing all the control points around the scrap
+    QQmlComponent* OutlineControlPoints;
+    QList<QQuickItem*> OutlineStation;
 
     bool Selected; //!< True if the scrap is select and false if it isn't
 

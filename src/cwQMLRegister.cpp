@@ -60,6 +60,7 @@
 #include "cwTripLengthTask.h"
 #include "cwLabel3dView.h"
 #include "cwLinePlotLabelView.h"
+#include "cwAbstractPointManager.h"
 
 //#include <QGLWidget>
 
@@ -125,6 +126,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
     qmlRegisterType<cwScrapItem>("Cavewhere", 1, 0, "ScrapItem");
+    qmlRegisterType<cwAbstractPointManager>();
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
 }

@@ -162,7 +162,8 @@ SOURCES += src/main.cpp \
     src/cwLinePlotLabelView.cpp \
     src/cwLabel3dGroup.cpp \
     src/cwSGPolygonNode.cpp \
-    src/cwSGLinesNode.cpp
+    src/cwSGLinesNode.cpp \
+    src/cwAbstractPointManager.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -299,7 +300,8 @@ HEADERS  += \
     src/cwLinePlotLabelView.h \
     src/cwLabel3dGroup.h \
     src/cwSGPolygonNode.h \
-    src/cwSGLinesNode.h
+    src/cwSGLinesNode.h \
+    src/cwAbstractPointManager.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -405,7 +407,8 @@ OTHER_FILES += \
     qml/MenuItem.qml \
     qml/GlobalMenuMouseHandler.qml \
     qml/Label3d.qml \
-    qml/FileButtonAndMenu.qml
+    qml/FileButtonAndMenu.qml \
+    qml/ScrapOutlinePoint.qml
 
 RESOURCES += \
     icons.qrc

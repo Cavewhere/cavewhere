@@ -20,13 +20,13 @@
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     QQuickItem(parent),
-    TransformUpdater(NULL),
-    TransformNodeDirty(false),
+//    TransformUpdater(NULL),
+//    TransformNodeDirty(false),
     Scrap(NULL),
-    StationItemComponent(NULL),
+//    StationItemComponent(NULL),
     ShotLineScale(1.0),
-    ScrapItem(NULL),
-    SelectedStationIndex(-1)
+    ScrapItem(NULL)
+//    SelectedStationIndex(-1)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 }
@@ -34,33 +34,33 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
 cwScrapStationView::~cwScrapStationView() {
 }
 
-/**
-  \brief Sets the transform updater
+///**
+//  \brief Sets the transform updater
 
-  This will transform all the station in this station view
-  */
-void cwScrapStationView::setTransformUpdater(cwTransformUpdater* updater) {
-    if(TransformUpdater != updater) {
-        if(TransformUpdater != NULL) {
-            //Remove all previous stations
-            foreach(QQuickItem* stationItem, StationItems) {
-                TransformUpdater->removePointItem(stationItem);
-            }
-        }
+//  This will transform all the station in this station view
+//  */
+//void cwScrapStationView::setTransformUpdater(cwTransformUpdater* updater) {
+//    if(TransformUpdater != updater) {
+//        if(TransformUpdater != NULL) {
+//            //Remove all previous stations
+//            foreach(QQuickItem* stationItem, StationItems) {
+//                TransformUpdater->removePointItem(stationItem);
+//            }
+//        }
 
-        TransformUpdater = updater;
-        TransformNodeDirty = true;
+//        TransformUpdater = updater;
+//        TransformNodeDirty = true;
 
-        if(TransformUpdater != NULL) {
-            //Add station to the new transformUpdater
-            foreach(QQuickItem* stationItem, StationItems) {
-                TransformUpdater->addPointItem(stationItem);
-            }
-        }
+//        if(TransformUpdater != NULL) {
+//            //Add station to the new transformUpdater
+//            foreach(QQuickItem* stationItem, StationItems) {
+//                TransformUpdater->addPointItem(stationItem);
+//            }
+//        }
 
-        emit transformUpdaterChanged();
-    }
-}
+//        emit transformUpdaterChanged();
+//    }
+//}
 
 /**
 Sets scrap that this class renders all the stations of
@@ -102,50 +102,50 @@ void cwScrapStationView::setShotLineScale(float scale) {
     }
 }
 
-/**
-  This creates the station component used generate the station symobols
-  */
-void cwScrapStationView::createStationComponent() {
-    //Make sure we have a note component so we can create it
-    if(StationItemComponent == NULL) {
-        QQmlContext* context = QQmlEngine::contextForObject(this);
-        if(context == NULL) { return; }
-        StationItemComponent = new QQmlComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
-        if(StationItemComponent->isError()) {
-            qDebug() << "Notecomponent errors:" << StationItemComponent->errorString();
-        }
-    }
-}
+///**
+//  This creates the station component used generate the station symobols
+//  */
+//void cwScrapStationView::createStationComponent() {
+//    //Make sure we have a note component so we can create it
+//    if(StationItemComponent == NULL) {
+//        QQmlContext* context = QQmlEngine::contextForObject(this);
+//        if(context == NULL) { return; }
+//        StationItemComponent = new QQmlComponent(context->engine(), cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml", this);
+//        if(StationItemComponent->isError()) {
+//            qDebug() << "Notecomponent errors:" << StationItemComponent->errorString();
+//        }
+//    }
+//}
 
-/**
-  This is a private method, that adds a new station the end of the station list
-  */
-void cwScrapStationView::addNewStationItem() {
-    if(StationItemComponent == NULL) {
-        qDebug() << "StationItemComponent isn't ready, ... THIS IS A BUG" << LOCATION;
-    }
+///**
+//  This is a private method, that adds a new station the end of the station list
+//  */
+//void cwScrapStationView::addNewStationItem() {
+//    if(StationItemComponent == NULL) {
+//        qDebug() << "StationItemComponent isn't ready, ... THIS IS A BUG" << LOCATION;
+//    }
 
-    QQmlContext* context = QQmlEngine::contextForObject(this);
-    QQuickItem* stationItem = qobject_cast<QQuickItem*>(StationItemComponent->create(context));
-    if(stationItem == NULL) {
-        qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
-        return;
-    }
+//    QQmlContext* context = QQmlEngine::contextForObject(this);
+//    QQuickItem* stationItem = qobject_cast<QQuickItem*>(StationItemComponent->create(context));
+//    if(stationItem == NULL) {
+//        qDebug() << "Problem creating new station item ... THIS IS A BUG!" << LOCATION;
+//        return;
+//    }
 
-    StationItems.append(stationItem);
+//    StationItems.append(stationItem);
 
-    //Add the point to the transform updater
-    if(TransformUpdater != NULL) {
-        TransformUpdater->addPointItem(stationItem);
-    }
-}
+//    //Add the point to the transform updater
+//    if(TransformUpdater != NULL) {
+//        TransformUpdater->addPointItem(stationItem);
+//    }
+//}
 
 /**
   Updates the station item's data
   */
-void cwScrapStationView::updateStationItemData(int index){
-    QQuickItem* stationItem = StationItems[index];
-    stationItem->setProperty("stationId", index);
+void cwScrapStationView::updatePoint(QQuickItem* item, int pointIndex){
+    QQuickItem* stationItem = item;
+    stationItem->setProperty("stationId", pointIndex);
     stationItem->setProperty("stationView", QVariant::fromValue(this));
     stationItem->setProperty("scrap", QVariant::fromValue(scrap()));
     stationItem->setProperty("scrapItem", QVariant::fromValue(scrapItem()));
@@ -246,56 +246,56 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
     return NULL;
 }
 
-/**
-  Called when a station has been added to the scrap
-  */
-void cwScrapStationView::stationAdded() {
-    createStationComponent();
+///**
+//  Called when a station has been added to the scrap
+//  */
+//void cwScrapStationView::stationAdded() {
+//    createStationComponent();
 
-    if(StationItemComponent == NULL) {
-        qDebug() << "StationItemComponent bad" << LOCATION;
-        return;
-    }
+//    if(StationItemComponent == NULL) {
+//        qDebug() << "StationItemComponent bad" << LOCATION;
+//        return;
+//    }
 
-    //Create a new station item
-    addNewStationItem();
+//    //Create a new station item
+//    addNewStationItem();
 
-    //Update the station
-    int lastIndex = StationItems.size() - 1;
-    updateStationItemData(lastIndex);
-}
+//    //Update the station
+//    int lastIndex = StationItems.size() - 1;
+//    updateStationItemData(lastIndex);
+//}
 
-/**
-  This is called when the scrap removes a station
-  */
-void cwScrapStationView::stationRemoved(int stationIndex) {
-    //Unselect the item that's going to be deleted
-    if(stationIndex >= 0 || stationIndex < StationItems.size()) {
-        if(selectedStationIndex() == stationIndex) {
-            clearSelection();
-        }
+///**
+//  This is called when the scrap removes a station
+//  */
+//void cwScrapStationView::stationRemoved(int stationIndex) {
+//    //Unselect the item that's going to be deleted
+//    if(stationIndex >= 0 || stationIndex < StationItems.size()) {
+//        if(selectedStationIndex() == stationIndex) {
+//            clearSelection();
+//        }
 
-        StationItems[stationIndex]->deleteLater();
-        StationItems.removeAt(stationIndex);
+//        StationItems[stationIndex]->deleteLater();
+//        StationItems.removeAt(stationIndex);
 
-        updateAllStationData();
-    }
-}
+//        updateAllStationData();
+//    }
+//}
 
-/**
-  \brief Updates the station's position
-  */
-void cwScrapStationView::udpateStationPosition(int stationIndex) {
-    if(Scrap == NULL) { return; }
-    if(stationIndex >= 0 || stationIndex < StationItems.size()) {
-        QPointF point = Scrap->stationData(cwScrap::StationPosition, stationIndex).value<QPointF>();
-        StationItems[stationIndex]->setProperty("position3D", QVector3D(point));
+///**
+//  \brief Updates the station's position
+//  */
+//void cwScrapStationView::udpateStationPosition(int stationIndex) {
+//    if(Scrap == NULL) { return; }
+//    if(stationIndex >= 0 || stationIndex < StationItems.size()) {
+//        QPointF point = Scrap->stationData(cwScrap::StationPosition, stationIndex).value<QPointF>();
+//        StationItems[stationIndex]->setProperty("position3D", QVector3D(point));
 
-        if(stationIndex == selectedStationIndex()) {
-            updateShotLines();
-        }
-    }
-}
+//        if(stationIndex == selectedStationIndex()) {
+//            updateShotLines();
+//        }
+//    }
+//}
 
 /**
     \brief This is called when all the stations need to be reset
