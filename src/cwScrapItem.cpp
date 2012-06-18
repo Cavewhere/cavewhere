@@ -3,6 +3,7 @@
 #include "cwScrap.h"
 #include "cwTransformUpdater.h"
 #include "cwScrapStationView.h"
+#include "cwScrapControlPointView.h"
 #include "cwSGPolygonNode.h"
 #include "cwSGLinesNode.h"
 
@@ -19,7 +20,8 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     TransformNodeDirty(false),
     PolygonNode(NULL),
     OutlineNode(NULL),
-    StationView(new cwScrapStationView(this))
+    StationView(new cwScrapStationView(this)),
+    ControlPointView(new cwScrapControlPointView(this))
 {
     StationView->setScrapItem(this);
 
@@ -28,6 +30,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     //Set the declarative context for the station view
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQmlEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(ControlPointView, context);
 
 //    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
@@ -37,7 +40,8 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
-    StationView(new cwScrapStationView(this))
+    StationView(new cwScrapStationView(this)),
+    ControlPointView(new cwScrapControlPointView(this))
 {
     StationView->setScrapItem(this);
 
@@ -46,6 +50,7 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     //Set the declarative context for the station view
     QQmlEngine::setContextForObject(this, context);
     QQmlEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(ControlPointView, context);
 
 //    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
     setSelected(false);
@@ -66,6 +71,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
 
         Scrap = scrap;
         StationView->setScrap(Scrap);
+        ControlPointView->setScrap(Scrap);
 
         if(Scrap != NULL) {
             connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapGeometry()));
@@ -151,6 +157,7 @@ void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
         TransformUpdater = transformUpdater;
         TransformNodeDirty = true;
         StationView->setTransformUpdater(TransformUpdater);
+        ControlPointView->setTransformUpdater(TransformUpdater);
 
         emit transformUpdaterChanged();
         update();

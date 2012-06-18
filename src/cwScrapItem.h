@@ -10,6 +10,7 @@
 class cwScrap;
 class cwTransformUpdater;
 class cwScrapStationView;
+class cwScrapControlPointView;
 class cwSGPolygonNode;
 class cwSGLinesNode;
 
@@ -64,6 +65,7 @@ private:
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
+    cwScrapControlPointView* ControlPointView; //!< All the control points around the scrap
 
     //For showing all the control points around the scrap
     QQmlComponent* OutlineControlPoints;

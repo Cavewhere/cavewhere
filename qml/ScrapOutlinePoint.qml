@@ -1,12 +1,15 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
+import Cavewhere 1.0
 
-Item {
+Positioner3D {
     Rectangle {
-        x: -width / 2.0
-        y: -height / 2.0
-        width: 5
-        height: 5
+        width: 9
+        height: 9
+
+        anchors.centerIn: parent
+
+        border.width: 1
 
         color: "green"
         radius: width

@@ -163,7 +163,8 @@ SOURCES += src/main.cpp \
     src/cwLabel3dGroup.cpp \
     src/cwSGPolygonNode.cpp \
     src/cwSGLinesNode.cpp \
-    src/cwAbstractPointManager.cpp
+    src/cwAbstractPointManager.cpp \
+    src/cwScrapControlPointView.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -301,7 +302,8 @@ HEADERS  += \
     src/cwLabel3dGroup.h \
     src/cwSGPolygonNode.h \
     src/cwSGLinesNode.h \
-    src/cwAbstractPointManager.h
+    src/cwAbstractPointManager.h \
+    src/cwScrapControlPointView.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
