@@ -21,55 +21,51 @@ class cwAbstractPointManager : public QQuickItem
     Q_OBJECT
 
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
-    Q_PROPERTY(int selectedIndex READ selectedIndex WRITE setSelectedIndex NOTIFY selectedIndexChanged)
+    Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
 
 public:
-    explicit cwAbstractPointManager(QObject *parent = 0);
+    explicit cwAbstractPointManager(QQuickItem *parent = 0);
     
     cwTransformUpdater* transformUpdater() const;
     void setTransformUpdater(cwTransformUpdater* updater);
 
     void clearSelection();
-    int selectedIndex() const;
-    void setSelectedIndex(int selectedStationIndex);
+    int selectedItemIndex() const;
+    void setSelectedItemIndex(int selectedItemIndex);
     QQuickItem* selectedItem() const;
 
 signals:
     void transformUpdaterChanged();
-    void selectedIndexChanged();
+    void selectedItemIndexChanged();
 
 public slots:
     
 protected:
     virtual QUrl qmlSource() const = 0;
-    virtual void updatePoint(QQuickItem* item, int pointIndex) = 0;
-
-    void updateAllStations();
-
-    void addPoint();
-    void removePoint(int pointIndex);
+    virtual void updateItemData(QQuickItem* item, int pointIndex) = 0;
+    virtual void updateItemPosition(QQuickItem* item, int pointIndex) = 0;
+    void resizeNumberOfItems(int numberOfStations);
+    void updateAllItemData();
 
 protected slots:
     void pointAdded();
-    void pointRemoved(int stationIndex);
-    void udpateStationPosition(int stationIndex);
-    void updateAllStations();
-    void updateAllStationData();
+    void pointRemoved(int index);
+    void updateItemPosition(int index);
+
 
 private:
     //Will keep the note stations at the correct location
     cwTransformUpdater* TransformUpdater;
-    bool TransformNodeDirty;
 
     //All the NoteStationItems
-    QQmlComponent* PointComponent;
-    QList<QQuickItem*> PointItems;
+    QQmlComponent* ItemComponent;
+    QList<QQuickItem*> Items;
 
-    int SelectedIndex; //!< The currently selected index
+    int SelectedItemIndex; //!< The currently selected index
 
     void createComponent();
-    QQuickItem *addItem();
-
+    QQuickItem* addItem();
+    void removeItem(int index);
 };
 
 /**
@@ -83,8 +79,8 @@ inline cwTransformUpdater* cwAbstractPointManager::transformUpdater() const {
 /**
 Gets selectedStationIndex
 */
-inline int cwAbstractPointManager::selectedStationIndex() const {
-    return SelectedStationIndex;
+inline int cwAbstractPointManager::selectedItemIndex() const {
+    return SelectedItemIndex;
 }
 
 
@@ -92,7 +88,7 @@ inline int cwAbstractPointManager::selectedStationIndex() const {
   \brief Clears the selection
   */
 inline void cwAbstractPointManager::clearSelection() {
-    setSelectedStationIndex(-1);
+    setSelectedItemIndex(-1);
 }
 
 

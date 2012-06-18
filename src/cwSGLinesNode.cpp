@@ -16,6 +16,7 @@ cwSGLinesNode::cwSGLinesNode()
     setMaterial(material);
     setFlags(QSGNode::OwnsMaterial);
     setFlags(QSGNode::OwnsGeometry);
+    setGeometry(new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0));
 }
 
 /**
@@ -26,17 +27,18 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
 {
     int numberOfPoints = lines.size() * 2;
 
-    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), numberOfPoints);
-    geometry->setDrawingMode(GL_LINES);
-    geometry->setLineWidth(LineWidth);
+//    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), numberOfPoints);
+    geometry()->setDrawingMode(GL_LINES);
+    geometry()->setLineWidth(LineWidth);
+    geometry()->allocate(numberOfPoints);
 
     for(int i = 0; i < lines.size(); i++) {
         const QLineF& line = lines.at(i);
-        geometry->vertexDataAsPoint2D()[i * 2].set(line.p1().x(), line.p1().y());
-        geometry->vertexDataAsPoint2D()[i * 2 + 1].set(line.p2().x(), line.p2().y());
+        geometry()->vertexDataAsPoint2D()[i * 2].set(line.p1().x(), line.p1().y());
+        geometry()->vertexDataAsPoint2D()[i * 2 + 1].set(line.p2().x(), line.p2().y());
     }
 
-    setGeometry(geometry);
+//    setGeometry(geometry);
     markDirty(DirtyGeometry);
 }
 
@@ -48,16 +50,17 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
  */
 void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
 {
-    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), points.size());
-    geometry->setDrawingMode(GL_LINE_STRIP);
-    geometry->setLineWidth(lineWidth());
+//    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), points.size());
+    geometry()->setDrawingMode(GL_LINE_STRIP);
+    geometry()->setLineWidth(lineWidth());
+    geometry()->allocate(points.size());
 
     for(int i = 0; i < points.size(); i++) {
         const QPointF& point = points.at(i);
-        geometry->vertexDataAsPoint2D()[i].set(point.x(), point.y());
+        geometry()->vertexDataAsPoint2D()[i].set(point.x(), point.y());
     }
 
-    setGeometry(geometry);
+//    setGeometry(geometry);
     markDirty(DirtyGeometry);
 }
 

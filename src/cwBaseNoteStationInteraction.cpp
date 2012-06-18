@@ -68,7 +68,7 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
     scrap->addStation(newNoteStation);
 
     //Get the last station in the list and select it
-    scrapItem->stationView()->setSelectedStationIndex(scrap->numberOfStations() - 1);
+    scrapItem->stationView()->setSelectedItemIndex(scrap->numberOfStations() - 1);
 }
 
 ///**

@@ -37,7 +37,7 @@ Positioner3D {
 
     onSelectedChanged: {
         if(selected) {
-            stationView.selectedStationIndex = stationId;
+            stationView.selectedItemIndex = stationId;
             scrapItem.selected = true
             forceActiveFocus();
         }
@@ -45,6 +45,12 @@ Positioner3D {
 
     Keys.onDeletePressed: {
         scrap.removeStation(stationId);
+    }
+
+    Keys.onPressed: {
+        if(event.key === 0x01000003) { //Backspace key = Qt::Key_Backspace
+            scrap.removeStation(stationId);
+        }
     }
 
     Rectangle {
