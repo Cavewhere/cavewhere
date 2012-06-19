@@ -114,7 +114,6 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
             OutlineNode->setLineStrip(Scrap->points());
         }
 
-
         return TransformUpdater->transformNode();
     }
     return NULL;

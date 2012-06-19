@@ -14,7 +14,6 @@ public:
     float lineWidth() const;
     void setLineWidth(float lineWidth);
 
-
 private:
     float LineWidth;
 

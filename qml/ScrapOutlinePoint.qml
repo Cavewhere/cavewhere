@@ -3,7 +3,19 @@ import QtQuick 2.0
 import Cavewhere 1.0
 
 Positioner3D {
+
+    /**
+      Returns true if the point is in point's geometry and false if it isn't.
+      Point needs to be in the local coordinate system of the point.  Where 0,0,0 is the
+      center of the point.
+      */
+    function contains(point) {
+        var length = Math.sqrt(point.x * point.x + point.y + point.y);
+        return length <= pointGeometry.radius;
+    }
+
     Rectangle {
+        id: pointGeometry
         width: 9
         height: 9
 
@@ -12,6 +24,10 @@ Positioner3D {
         border.width: 1
 
         color: "green"
-        radius: width
+        radius: width / 2.0
+
     }
+
+
+
 }

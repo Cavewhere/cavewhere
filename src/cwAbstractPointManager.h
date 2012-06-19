@@ -34,6 +34,8 @@ public:
     void setSelectedItemIndex(int selectedItemIndex);
     QQuickItem* selectedItem() const;
 
+    QList<QQuickItem*> items() const;
+
 signals:
     void transformUpdaterChanged();
     void selectedItemIndexChanged();

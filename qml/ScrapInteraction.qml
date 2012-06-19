@@ -5,7 +5,6 @@ BaseScrapInteraction {
     id: interaction
 
     property BasePanZoomInteraction basePanZoomInteraction
-    property ImageItem imageItem
 
     MouseArea {
         anchors.fill: parent
@@ -18,8 +17,7 @@ BaseScrapInteraction {
 
         onReleased: {
             if(mouse.button === Qt.LeftButton) {
-                var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                interaction.addPoint(notePoint)
+                interaction.addPoint(Qt.point(mouse.x, mouse.y))
             }
         }
 

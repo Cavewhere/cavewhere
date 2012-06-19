@@ -254,6 +254,15 @@ QQuickItem* cwAbstractPointManager::selectedItem() const {
 }
 
 /**
+ * @brief cwAbstractPointManager::items
+ * @return - Returns a list of all the items in the point manager
+ */
+QList<QQuickItem *> cwAbstractPointManager::items() const
+{
+    return Items;
+}
+
+/**
      * @brief updatePosition
      * @param index - The index that needs to be updated
      */

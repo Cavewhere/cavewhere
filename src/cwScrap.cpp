@@ -467,7 +467,7 @@ void cwScrap::setParentNote(cwNote* note) {
 
         if(ParentNote != NULL) {
             ParentCave = parentNote()->parentCave();
-            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
+//            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
 
 //        updateStationsWithNewCave();
@@ -648,3 +648,4 @@ void cwScrap::setParentCave(cwCave *cave) {
 //        updateStationsWithNewCave();
     }
 }
+

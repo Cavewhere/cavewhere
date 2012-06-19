@@ -49,6 +49,7 @@ public:
     void insertPoint(int index, QPointF point);
     void removePoint(int index);
     QVector<QPointF> points() const;
+    QPolygonF polygon() const;
     void setPoints(QVector<QPointF> points);
 
     int numberOfPoints() const;
@@ -89,6 +90,7 @@ signals:
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
+
 private:
     //The outline of the scrap, in normalized points
     QPolygonF OutlinePoints;
@@ -138,6 +140,16 @@ inline void cwScrap::addPoint(QPointF point) {
   */
 inline QVector<QPointF> cwScrap::points() const {
     return OutlinePoints;
+}
+
+/**
+ * @brief cwScrap::polygon
+ * @return The polygon that repesents the scrap
+ *
+ * This is the same as the OutlinePoints
+ */
+inline QPolygonF cwScrap::polygon() const {
+    return QPolygonF(OutlinePoints);
 }
 
 /**
@@ -206,7 +218,6 @@ inline void cwScrap::setTriangulationData(cwTriangulatedData data) {
 inline cwTriangulatedData cwScrap::triangulationData() const {
     return TriangulationData;
 }
-
 
 
 #endif // CWSCRAP_H

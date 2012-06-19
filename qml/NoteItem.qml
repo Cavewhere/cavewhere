@@ -28,6 +28,12 @@ ImageItem {
         note: noteArea.note
         basePanZoomInteraction: panZoomInteraction
         imageItem: noteArea
+        controlPointView: {
+            if(scrapViewId.selectedScrapItem !== null) {
+                return scrapViewId.selectedScrapItem.controlPointView
+            }
+            return null;
+        }
     }
 
     NoteStationInteraction {

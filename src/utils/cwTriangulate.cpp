@@ -2,6 +2,9 @@
 //Our includes
 #include "cwTriangulate.h"
 
+//Qt includes
+#include <QPolygonF>
+
 //Std includes
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,16 +83,22 @@ bool cwTriangulate::Snip(const QVector<QPointF> &contour,int u,int v,int w,int n
 
 bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &result)
 {
+    QPolygonF polygon(contour);
+    if(polygon.isClosed()) {
+        //Remove the last item
+        polygon.pop_back();
+    }
+
   /* allocate and initialize list of Vertices in polygon */
 
-  int n = contour.size();
+  int n = polygon.size();
   if ( n < 3 ) return false;
 
   int *V = new int[n];
 
   /* we want a counter-clockwise polygon in V */
 
-  if ( 0.0f < Area(contour) )
+  if ( 0.0f < Area(polygon) )
     for (int v=0; v<n; v++) V[v] = v;
   else
     for(int v=0; v<n; v++) V[v] = (n-1)-v;
@@ -113,7 +122,7 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
     v = u+1; if (nv <= v) v = 0;     /* new v    */
     int w = v+1; if (nv <= w) w = 0;     /* next     */
 
-    if ( Snip(contour,u,v,w,nv,V) )
+    if ( Snip(polygon,u,v,w,nv,V) )
     {
       int a,b,c,s,t;
 
@@ -121,9 +130,9 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
       a = V[u]; b = V[v]; c = V[w];
 
       /* output Triangle */
-      result.push_back( contour[a] );
-      result.push_back( contour[b] );
-      result.push_back( contour[c] );
+      result.push_back( polygon[a] );
+      result.push_back( polygon[b] );
+      result.push_back( polygon[c] );
 
       m++;
 

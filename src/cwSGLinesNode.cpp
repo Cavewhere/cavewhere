@@ -27,7 +27,6 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
 {
     int numberOfPoints = lines.size() * 2;
 
-//    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), numberOfPoints);
     geometry()->setDrawingMode(GL_LINES);
     geometry()->setLineWidth(LineWidth);
     geometry()->allocate(numberOfPoints);
@@ -38,7 +37,6 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
         geometry()->vertexDataAsPoint2D()[i * 2 + 1].set(line.p2().x(), line.p2().y());
     }
 
-//    setGeometry(geometry);
     markDirty(DirtyGeometry);
 }
 
@@ -50,7 +48,6 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
  */
 void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
 {
-//    QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), points.size());
     geometry()->setDrawingMode(GL_LINE_STRIP);
     geometry()->setLineWidth(lineWidth());
     geometry()->allocate(points.size());
@@ -60,7 +57,6 @@ void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
         geometry()->vertexDataAsPoint2D()[i].set(point.x(), point.y());
     }
 
-//    setGeometry(geometry);
     markDirty(DirtyGeometry);
 }
 

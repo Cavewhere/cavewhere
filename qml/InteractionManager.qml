@@ -11,7 +11,7 @@ Item {
 
         //            Make sure the interaction exists
         for(var i = 0; i < interactions.length; i++) {
-            var item = interactions[i]
+            var item = interactions[i];
             //Make all interaction invisible
             item.visible = false;
         }
