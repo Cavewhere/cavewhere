@@ -70,6 +70,22 @@ void cwScrap::setPoints(QVector<QPointF> points) {
 }
 
 /**
+ * @brief cwScrap::setPoint
+ * @param index - The index of the point
+ * @param point - The point's geometry
+ */
+void cwScrap::setPoint(int index, QPointF point)
+{
+    if(index < 0 || index >= OutlinePoints.size()) {
+        qDebug() << "Set point out of bounds:" << index << LOCATION;
+        return;
+    }
+
+    OutlinePoints[index] = point;
+    emit pointChanged(index, index);
+}
+
+/**
   Resets all the stations in the scrap
   */
 void cwScrap::setStations(QList<cwNoteStation> stations)  {
@@ -648,4 +664,3 @@ void cwScrap::setParentCave(cwCave *cave) {
 //        updateStationsWithNewCave();
     }
 }
-

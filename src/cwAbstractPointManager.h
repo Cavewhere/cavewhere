@@ -74,6 +74,8 @@ private:
     void privateUpdateItemData(QQuickItem* item, int index);
 };
 
+Q_DECLARE_METATYPE(cwAbstractPointManager*)
+
 /**
   Gets the transform updater
   */

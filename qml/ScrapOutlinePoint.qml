@@ -4,6 +4,10 @@ import Cavewhere 1.0
 
 Positioner3D {
 
+    property Scrap scrap;
+    property ScrapControlPointView controlPointView;
+    property int scrapPointIndex;
+
     /**
       Returns true if the point is in point's geometry and false if it isn't.
       Point needs to be in the local coordinate system of the point.  Where 0,0,0 is the
@@ -25,6 +29,8 @@ Positioner3D {
 
         color: "green"
         radius: width / 2.0
+
+
 
     }
 

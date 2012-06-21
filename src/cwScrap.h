@@ -51,6 +51,7 @@ public:
     QVector<QPointF> points() const;
     QPolygonF polygon() const;
     void setPoints(QVector<QPointF> points);
+    void setPoint(int index, QPointF point);
 
     int numberOfPoints() const;
 
@@ -79,6 +80,7 @@ signals:
     //For scrap outline
     void insertedPoints(int begin, int end);
     void removedPoints(int begin, int end);
+    void pointChanged(int begin, int end);
     void pointsReset();
 
     //For stations

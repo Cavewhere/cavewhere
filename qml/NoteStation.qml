@@ -4,19 +4,19 @@ import Cavewhere 1.0
 /**
     This class holds the geometry and interaction for a station on a page of notes
   */
-Positioner3D {
+ScrapPointItem {
     id: noteStation
 
-    property ScrapStationView stationView;
-    property ScrapItem scrapItem;
-    property Scrap scrap;
-    property int stationId;
-    property bool selected: false
+//    property ScrapStationView stationView;
+//    property ScrapItem scrapItem;
+//    property Scrap scrap;
+//    property int pointIndex;
+//    property bool selected: false
 
     function updateItem() {
         if(scrap !== null) {
-            stationName.text = scrap.stationData(Scrap.StationName, stationId)
-            var position = scrap.stationData(Scrap.StationPosition, stationId);
+            stationName.text = scrap.stationData(Scrap.StationName, pointIndex)
+            var position = scrap.stationData(Scrap.StationPosition, pointIndex);
             position3D = Qt.vector3d(position.x, position.y, 0.0);
         }
     }
@@ -33,23 +33,23 @@ Positioner3D {
     focus: selected
 
     onScrapChanged: updateItem()
-    onStationIdChanged: updateItem()
+    onPointIndexChanged: updateItem()
 
     onSelectedChanged: {
         if(selected) {
-            stationView.selectedItemIndex = stationId;
+            parentView.selectedItemIndex = pointIndex;
             scrapItem.selected = true
             forceActiveFocus();
         }
     }
 
     Keys.onDeletePressed: {
-        scrap.removeStation(stationId);
+        scrap.removeStation(pointIndex);
     }
 
     Keys.onPressed: {
         if(event.key === 0x01000003) { //Backspace key = Qt::Key_Backspace
-            scrap.removeStation(stationId);
+            scrap.removeStation(pointIndex);
         }
     }
 
@@ -103,10 +103,10 @@ Positioner3D {
                 var length = Math.sqrt(Math.pow(lastPoint.x - mouse.x, 2) + Math.pow(lastPoint.y - mouse.y, 2));
                 if(length > 3 || ignoreLength) {
                     ignoreLength = true
-                    var parentCoord = mapToItem(stationView, mouse.x, mouse.y);
-                    var transformer = stationView.transformUpdater;
+                    var parentCoord = mapToItem(parentView, mouse.x, mouse.y);
+                    var transformer = parentView.transformUpdater;
                     var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
-                    scrap.setStationData(Scrap.StationPosition, stationId, Qt.point(noteCoord.x, noteCoord.y));
+                    scrap.setStationData(Scrap.StationPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
                 }
             }
 
@@ -135,7 +135,7 @@ Positioner3D {
         anchors.left: stationImage.right
 
         onFinishedEditting: {
-            scrap.setStationData(Note.StationName, stationId, newText);
+            scrap.setStationData(Note.StationName, pointIndex, newText);
             text = newText;
             noteStation.forceActiveFocus();
         }

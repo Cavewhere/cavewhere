@@ -80,8 +80,6 @@ void cwScrapStationView::setShotLineScale(float scale) {
   */
 void cwScrapStationView::updateItemData(QQuickItem* item, int pointIndex){
     QQuickItem* stationItem = item;
-    stationItem->setProperty("stationId", pointIndex);
-    stationItem->setProperty("stationView", QVariant::fromValue(this));
     stationItem->setProperty("scrap", QVariant::fromValue(scrap()));
     stationItem->setProperty("scrapItem", QVariant::fromValue(scrapItem()));
 }

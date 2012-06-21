@@ -76,9 +76,6 @@ private:
 
     bool Selected; //!< True if the scrap is select and false if it isn't
 
-private slots:
-    void updateScrapGeometry();
-
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
 

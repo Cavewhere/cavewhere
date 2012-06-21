@@ -282,6 +282,10 @@ void cwAbstractPointManager::updateItemPosition(int index) {
  */
 void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
 {
+    //Update assumed stuff
+    item->setProperty("pointItem", index);
+    item->setProperty("parentView", QVariant::fromValue(this));
+
     updateItemData(item, index);
     updateItemPosition(index);
 }

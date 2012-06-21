@@ -74,20 +74,14 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
         ControlPointView->setScrap(Scrap);
 
         if(Scrap != NULL) {
-            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updateScrapGeometry()));
-            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updateScrapGeometry()));
-            updateScrapGeometry();
+            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(update()));
+            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(update()));
+            connect(Scrap, SIGNAL(pointChanged(int,int)), SLOT(update()));
+            update();
         }
 
         emit scrapChanged();
     }
-}
-
-/**
-    This will update the polygon item's geometry
-  */
-void cwScrapItem::updateScrapGeometry() {
-    update();
 }
 
 /**

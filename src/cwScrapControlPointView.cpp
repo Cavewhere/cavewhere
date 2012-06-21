@@ -32,9 +32,14 @@ void cwScrapControlPointView::setScrap(cwScrap *scrap)
     }
 }
 
-
-void cwScrapControlPointView::updateItemData(QQuickItem *item, int pointIndex)
-{
+/**
+ * @brief cwScrapControlPointView::updateItemData
+ * @param item - The item that's going to be update
+ * @param pointIndex - The index of the item in the item list
+ */
+void cwScrapControlPointView::updateItemData(QQuickItem *item, int pointIndex) {
+    item->setProperty("scrap", QVariant::fromValue(Scrap));
+    item->setProperty("pointIndex", pointIndex);
 }
 
 void cwScrapControlPointView::updateItemPosition(QQuickItem *item, int pointIndex)

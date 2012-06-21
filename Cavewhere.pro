@@ -410,7 +410,9 @@ OTHER_FILES += \
     qml/GlobalMenuMouseHandler.qml \
     qml/Label3d.qml \
     qml/FileButtonAndMenu.qml \
-    qml/ScrapOutlinePoint.qml
+    qml/ScrapOutlinePoint.qml \
+    qml/PointItem.qml \
+    qml/ScrapPointItem.qml
 
 RESOURCES += \
     icons.qrc
