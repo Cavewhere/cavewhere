@@ -3,8 +3,7 @@
 #include "cwScrap.h"
 
 cwScrapControlPointView::cwScrapControlPointView(QQuickItem *parent) :
-    cwAbstractPointManager(parent),
-    Scrap(NULL)
+    cwScrapPointView(parent)
 {
 }
 
@@ -16,6 +15,7 @@ void cwScrapControlPointView::setScrap(cwScrap *scrap)
             disconnect(Scrap, &cwScrap::insertedPoints, this, &cwScrapControlPointView::pointsInserted);
             disconnect(Scrap, &cwScrap::removedPoints, this, &cwScrapControlPointView::pointsRemoved);
             disconnect(Scrap, &cwScrap::pointsReset, this, &cwScrapControlPointView::reset);
+            disconnect(Scrap, &cwScrap::pointChanged, this, &cwScrapControlPointView::updateItemsPositions);
         }
 
         Scrap = scrap;
@@ -24,23 +24,15 @@ void cwScrapControlPointView::setScrap(cwScrap *scrap)
             connect(Scrap, &cwScrap::insertedPoints, this, &cwScrapControlPointView::pointsInserted);
             connect(Scrap, &cwScrap::removedPoints, this, &cwScrapControlPointView::pointsRemoved);
             connect(Scrap, &cwScrap::pointsReset, this, &cwScrapControlPointView::reset);
+            connect(Scrap, &cwScrap::pointChanged, this, &cwScrapControlPointView::updateItemsPositions);
         }
 
         reset();
 
-        scrapChanged();
+        cwScrapPointView::setScrap(scrap);
     }
 }
 
-/**
- * @brief cwScrapControlPointView::updateItemData
- * @param item - The item that's going to be update
- * @param pointIndex - The index of the item in the item list
- */
-void cwScrapControlPointView::updateItemData(QQuickItem *item, int pointIndex) {
-    item->setProperty("scrap", QVariant::fromValue(Scrap));
-    item->setProperty("pointIndex", pointIndex);
-}
 
 void cwScrapControlPointView::updateItemPosition(QQuickItem *item, int pointIndex)
 {

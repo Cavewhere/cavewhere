@@ -3,6 +3,13 @@ import QtQuick 2.0
 import Cavewhere 1.0
 
 PointItem {
+    id: pointItem
+
     property Scrap scrap;
     property ScrapItem scrapItem;
+
+    function select() {
+        pointItem.selected = true
+        scrapItem.selected = true
+    }
 }

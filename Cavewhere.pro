@@ -164,7 +164,8 @@ SOURCES += src/main.cpp \
     src/cwSGPolygonNode.cpp \
     src/cwSGLinesNode.cpp \
     src/cwAbstractPointManager.cpp \
-    src/cwScrapControlPointView.cpp
+    src/cwScrapControlPointView.cpp \
+    src/cwScrapPointView.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -303,7 +304,8 @@ HEADERS  += \
     src/cwSGPolygonNode.h \
     src/cwSGLinesNode.h \
     src/cwAbstractPointManager.h \
-    src/cwScrapControlPointView.h
+    src/cwScrapControlPointView.h \
+    src/cwScrapPointView.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -412,7 +414,8 @@ OTHER_FILES += \
     qml/FileButtonAndMenu.qml \
     qml/ScrapOutlinePoint.qml \
     qml/PointItem.qml \
-    qml/ScrapPointItem.qml
+    qml/ScrapPointItem.qml \
+    qml/ScrapPointMouseArea.qml
 
 RESOURCES += \
     icons.qrc

@@ -2,11 +2,7 @@
 import QtQuick 2.0
 import Cavewhere 1.0
 
-Positioner3D {
-
-    property Scrap scrap;
-    property ScrapControlPointView controlPointView;
-    property int scrapPointIndex;
+ScrapPointItem {
 
     /**
       Returns true if the point is in point's geometry and false if it isn't.
@@ -31,9 +27,13 @@ Positioner3D {
         radius: width / 2.0
 
 
+        ScrapPointMouseArea {
+            anchors.fill: parent
 
+            onPointSelected: select()
+            onPointMoved: scrap.setPoint(pointIndex, Qt.point(noteCoord.x, noteCoord.y))
+
+
+        }
     }
-
-
-
 }

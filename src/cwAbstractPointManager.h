@@ -54,7 +54,7 @@ protected slots:
     void pointRemoved(int index);
     void pointsInserted(int begin, int end);
     void pointsRemoved(int begin, int end);
-    void updateItemPosition(int index);
+    void updateItemsPositions(int begin, int end);
 
 
 private:
@@ -71,6 +71,7 @@ private:
     QQuickItem* createItem();
     void removeItem(int index);
 
+    void privateUpdateItemPosition(int index);
     void privateUpdateItemData(QQuickItem* item, int index);
 };
 

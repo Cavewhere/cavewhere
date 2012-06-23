@@ -24,6 +24,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     ControlPointView(new cwScrapControlPointView(this))
 {
     StationView->setScrapItem(this);
+    ControlPointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
 
@@ -44,6 +45,7 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     ControlPointView(new cwScrapControlPointView(this))
 {
     StationView->setScrapItem(this);
+    ControlPointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
 

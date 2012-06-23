@@ -159,6 +159,19 @@ void cwAbstractPointManager::pointsRemoved(int begin, int end)
     updateAllItemData();
 }
 
+/**
+ * @brief cwAbstractPointManager::updateItemsPositions
+ * @param begin - The first item that needs their position updated
+ * @param end - The last item that needs their position updated
+ */
+void cwAbstractPointManager::updateItemsPositions(int begin, int end)
+{
+    for(int i = begin; i <= end; i++) {
+        privateUpdateItemPosition(i);
+    }
+
+}
+
 
 
 /**
@@ -263,7 +276,7 @@ QList<QQuickItem *> cwAbstractPointManager::items() const
      * @brief updatePosition
      * @param index - The index that needs to be updated
      */
-void cwAbstractPointManager::updateItemPosition(int index) {
+void cwAbstractPointManager::privateUpdateItemPosition(int index) {
     if(index >= 0 && index < Items.size()) {
         updateItemPosition(Items.at(index), index);
     }
@@ -284,5 +297,5 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
     item->setProperty("parentView", QVariant::fromValue(this));
 
     updateItemData(item, index);
-    updateItemPosition(index);
+    privateUpdateItemPosition(index);
 }

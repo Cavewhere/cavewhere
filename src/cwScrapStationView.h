@@ -2,7 +2,7 @@
 #define CWSCRAPSTATIONVIEW_H
 
 //Our includes
-#include "cwAbstractPointManager.h"
+#include "cwScrapPointView.h"
 #include "cwGlobalDirectory.h"
 class cwTransformUpdater;
 class cwScrap;
@@ -14,28 +14,22 @@ class cwSGLinesNode;
 /**
   This class manages a list of station items that visualize all the stations in a scrap.
   */
-class cwScrapStationView : public cwAbstractPointManager
+class cwScrapStationView : public cwScrapPointView
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
-    Q_PROPERTY(cwScrapItem* scrapItem READ scrapItem WRITE setScrapItem NOTIFY scrapItemChanged)
     Q_PROPERTY(float shotLineScale READ shotLineScale WRITE setShotLineScale NOTIFY shotLineScaleChanged)
 
 public:
     explicit cwScrapStationView(QQuickItem *parent = 0);
     ~cwScrapStationView();
 
-    cwScrap* scrap() const;
-    void setScrap(cwScrap* scrap);
-
     float shotLineScale() const;
     void setShotLineScale(float scale);
 
-    cwNoteStation selectedNoteStation() const;
+    void setScrap(cwScrap* scrap);
 
-    cwScrapItem* scrapItem() const;
-    void setScrapItem(cwScrapItem* scrapItem);
+    cwNoteStation selectedNoteStation() const;
 
 signals:
     void scrapChanged();
@@ -45,17 +39,12 @@ signals:
 public slots:
 
 private:
-    cwScrap* Scrap; //!< The scrap this is class keeps track of
-
     //Geometry for the shot lines
     cwSGLinesNode* ShotLinesNode;
     QVector<QLineF> ShotLines;
 
     float ShotLineScale;
 
-    cwScrapItem* ScrapItem; //!< For selection and holding the scrap
-
-    virtual void updateItemData(QQuickItem* item, int index);
     virtual void updateItemPosition(QQuickItem* item, int index);
     virtual QUrl qmlSource() const;
 
@@ -70,19 +59,6 @@ protected:
 
 Q_DECLARE_METATYPE(cwScrapStationView*)
 
-/**
-    Gets scrap that this class renders all the stations of
-*/
-inline cwScrap* cwScrapStationView::scrap() const {
-    return Scrap;
-}
-
-/**
-  Gets scrapItem
-  */
-inline cwScrapItem* cwScrapStationView::scrapItem() const {
-    return ScrapItem;
-}
 
 /**
  * @brief cwScrapStationView::shotLineScale

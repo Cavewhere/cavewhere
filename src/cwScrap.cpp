@@ -81,6 +81,20 @@ void cwScrap::setPoint(int index, QPointF point)
         return;
     }
 
+    if(polygon().isClosed()) {
+        int lastPointIndex = OutlinePoints.size() - 1;
+        int firstPointIndex = 0;
+        if(index == 0) {
+            //Updateh the last point, because it's the same as the first
+            OutlinePoints[lastPointIndex] = point;
+            emit pointChanged(lastPointIndex, lastPointIndex);
+        } else if(index == lastPointIndex) {
+            //Update the first point, because it's the same as the last
+            OutlinePoints[firstPointIndex] = point;
+            emit pointChanged(firstPointIndex, firstPointIndex);
+        }
+    }
+
     OutlinePoints[index] = point;
     emit pointChanged(index, index);
 }
@@ -167,7 +181,7 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
             QPointF clampedPosition = clampToScrap(value.toPointF());
             noteStation.setPositionOnNote(clampedPosition);
             updateNoteTransformation();
-            emit stationPositionChanged(noteStationIndex);
+            emit stationPositionChanged(noteStationIndex, noteStationIndex);
         }
         break;
     }

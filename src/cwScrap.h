@@ -51,7 +51,7 @@ public:
     QVector<QPointF> points() const;
     QPolygonF polygon() const;
     void setPoints(QVector<QPointF> points);
-    void setPoint(int index, QPointF point);
+    Q_INVOKABLE void setPoint(int index, QPointF point);
 
     int numberOfPoints() const;
 
@@ -85,7 +85,7 @@ signals:
 
     //For stations
     void stationAdded();
-    void stationPositionChanged(int noteStationIndex);
+    void stationPositionChanged(int begin, int end);
     void stationNameChanged(int noteStationIndex);
     void stationRemoved(int index);
     void stationsReset();

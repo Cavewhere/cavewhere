@@ -21,10 +21,6 @@ ScrapPointItem {
         }
     }
 
-    function selectStation() {
-        noteStation.selected = true
-        scrapItem.selected = true
-    }
 
     width: 2
     height: 2
@@ -81,38 +77,13 @@ ScrapPointItem {
         width: sourceSize.width
         height: sourceSize.height
 
-
-        MouseArea {
+        ScrapPointMouseArea {
             id: stationMouseArea
             anchors.fill: parent
 
-            property variant lastPoint;
-            property bool ignoreLength;
-
-            onClicked: selectStation()
-
-            onReleased: ({ })
-
-            onPressed: {
-                lastPoint = Qt.point(mouse.x, mouse.y);
-                ignoreLength = false;
-            }
-
-            onPositionChanged: {
-                //Make sure the mouse has move at least three pixel from where it's started
-                var length = Math.sqrt(Math.pow(lastPoint.x - mouse.x, 2) + Math.pow(lastPoint.y - mouse.y, 2));
-                if(length > 3 || ignoreLength) {
-                    ignoreLength = true
-                    var parentCoord = mapToItem(parentView, mouse.x, mouse.y);
-                    var transformer = parentView.transformUpdater;
-                    var noteCoord = transformer.mapFromViewportToModel(Qt.point(parentCoord.x, parentCoord.y));
-                    scrap.setStationData(Scrap.StationPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
-                }
-            }
-
-            onDoubleClicked: {
-                stationName.openEditor();
-            }
+            onPointSelected: select();
+            onPointMoved: scrap.setStationData(Scrap.StationPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
+            onDoubleClicked: stationName.openEditor();
         }
 
 //        Rectangle {

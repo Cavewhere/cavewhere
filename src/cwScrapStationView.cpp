@@ -19,10 +19,8 @@
 #include <QSGTransformNode>
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
-    cwAbstractPointManager(parent),
-    Scrap(NULL),
-    ShotLineScale(1.0),
-    ScrapItem(NULL)
+    cwScrapPointView(parent),
+    ShotLineScale(1.0)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
@@ -50,7 +48,7 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
         if(Scrap != NULL) {
             connect(Scrap, SIGNAL(stationAdded()), SLOT(pointAdded()));
             connect(Scrap, SIGNAL(stationRemoved(int)), SLOT(pointRemoved(int)));
-            connect(Scrap, SIGNAL(stationPositionChanged(int)), SLOT(updateItemPosition(int)));
+            connect(Scrap, SIGNAL(stationPositionChanged(int, int)), SLOT(updateItemsPositions(int, int)));
             connect(Scrap, SIGNAL(stationNameChanged(int)), SLOT(updateShotLines()));
             connect(Scrap->noteTransformation(), SIGNAL(scaleChanged()), SLOT(updateShotLines()));
             connect(Scrap->noteTransformation(), SIGNAL(northUpChanged()), SLOT(updateShotLines()));
@@ -59,7 +57,7 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
             resizeNumberOfItems(0); //No items, remove all old ones
         }
 
-        emit scrapChanged();
+        cwScrapPointView::setScrap(scrap);
     }
 }
 
@@ -75,14 +73,7 @@ void cwScrapStationView::setShotLineScale(float scale) {
     }
 }
 
-/**
-  Updates the station item's data
-  */
-void cwScrapStationView::updateItemData(QQuickItem* item, int pointIndex){
-    QQuickItem* stationItem = item;
-    stationItem->setProperty("scrap", QVariant::fromValue(scrap()));
-    stationItem->setProperty("scrapItem", QVariant::fromValue(scrapItem()));
-}
+
 
 /**
   \brief When a station has been selected, this updates the shot lines
@@ -194,16 +185,3 @@ cwNoteStation cwScrapStationView::selectedNoteStation() const {
     }
     return cwNoteStation();
 }
-
-/**
-Sets scrapItem
-*/
-void cwScrapStationView::setScrapItem(cwScrapItem* scrapItem) {
-    if(ScrapItem != scrapItem) {
-        ScrapItem = scrapItem;
-        updateAllItemData();
-        emit scrapItemChanged();
-    }
-}
-
-
