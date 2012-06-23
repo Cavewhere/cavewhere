@@ -213,9 +213,6 @@ Sets selectedStationIndex
 */
 void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
     if(SelectedItemIndex != selectedIndex) {
-
-       // scrapItem()->selectScrapStationView(this);
-
         if(selectedIndex >= Items.size()) {
             qDebug() << "Selected station index invalid" << selectedIndex << LOCATION;
             return;
@@ -227,6 +224,8 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
             oldItem->setProperty("selected", false);
         }
 
+        SelectedItemIndex = selectedIndex;
+
         //Select the new station item
         if(selectedIndex >= 0) {
             QQuickItem* newItem = Items.at(selectedIndex);
@@ -235,8 +234,6 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
             }
         }
 
-        SelectedItemIndex = selectedIndex;
-//        updateShotLines();
         emit selectedItemIndexChanged();
     }
 }
@@ -283,7 +280,7 @@ void cwAbstractPointManager::updateItemPosition(int index) {
 void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
 {
     //Update assumed stuff
-    item->setProperty("pointItem", index);
+    item->setProperty("pointIndex", index);
     item->setProperty("parentView", QVariant::fromValue(this));
 
     updateItemData(item, index);
