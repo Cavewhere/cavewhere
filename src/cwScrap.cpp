@@ -57,8 +57,39 @@ void cwScrap::removePoint(int index) {
         return;
     }
 
-    OutlinePoints.remove(index);
-    emit removedPoints(index, index);
+    //If the polygon is a close polygon, the first point == to the last point
+    int lastPointIndex = OutlinePoints.size() - 1;
+    int firstPointIndex = 0;
+    if((index == firstPointIndex || index == lastPointIndex) &&
+            (polygon().isClosed() && OutlinePoints.size() > 1)) {
+
+        //Remove the first and last point, they are the same
+        OutlinePoints.remove(lastPointIndex);
+        emit removedPoints(lastPointIndex, lastPointIndex);
+
+        OutlinePoints.remove(firstPointIndex);
+        emit removedPoints(firstPointIndex, firstPointIndex);
+
+        //Add a new point at the end
+        if(OutlinePoints.size() > 2) {
+            //Make the polygon closed again
+            addPoint(OutlinePoints.first());
+        }
+
+
+
+    } else if(index >= 0 && index < OutlinePoints.size()) {
+        OutlinePoints.remove(index);
+        emit removedPoints(index, index);
+    }
+
+    if(OutlinePoints.isEmpty()) {
+        //Deleted the last point
+        if(parentNote()) {
+            int scrapIndex = parentNote()->indexOfScrap(this);
+            parentNote()->removeScraps(scrapIndex, scrapIndex);
+        }
+    }
 }
 
 /**

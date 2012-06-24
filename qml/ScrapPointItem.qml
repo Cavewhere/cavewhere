@@ -12,4 +12,15 @@ PointItem {
         pointItem.selected = true
         scrapItem.selected = true
     }
+
+    focus: selected
+
+    onSelectedChanged: {
+        if(selected) {
+            parentView.selectedItemIndex = pointIndex;
+            scrapItem.selected = true
+            forceActiveFocus();
+        }
+    }
+
 }

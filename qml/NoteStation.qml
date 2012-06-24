@@ -21,23 +21,13 @@ ScrapPointItem {
         }
     }
 
-
     width: 2
     height: 2
     z: 2
 
-    focus: selected
-
     onScrapChanged: updateItem()
     onPointIndexChanged: updateItem()
 
-    onSelectedChanged: {
-        if(selected) {
-            parentView.selectedItemIndex = pointIndex;
-            scrapItem.selected = true
-            forceActiveFocus();
-        }
-    }
 
     Keys.onDeletePressed: {
         scrap.removeStation(pointIndex);

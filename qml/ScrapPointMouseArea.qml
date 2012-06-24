@@ -13,13 +13,17 @@ MouseArea {
     signal pointSelected()
     signal pointMoved(var noteCoord)
 
-    onClicked: pointSelected()
+//    onClicked: pointSelected()
 
     onReleased: ({ })
 
     onPressed: {
         lastPoint = Qt.point(mouse.x, mouse.y);
         ignoreLength = false;
+
+        if(!ignoreLength) {
+            pointSelected()
+        }
     }
 
     onPositionChanged: {

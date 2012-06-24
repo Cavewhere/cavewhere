@@ -57,6 +57,7 @@ private slots:
     void addScrapItem();
     void updateAllScraps();
     void updateSelection();
+    void updateRemovedScraps(int begin, int end);
 
 private:
     cwNote* Note;

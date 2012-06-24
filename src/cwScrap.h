@@ -47,7 +47,7 @@ public:
 
     void addPoint(QPointF point);
     void insertPoint(int index, QPointF point);
-    void removePoint(int index);
+    Q_INVOKABLE void removePoint(int index);
     QVector<QPointF> points() const;
     QPolygonF polygon() const;
     void setPoints(QVector<QPointF> points);

@@ -3,6 +3,7 @@ import QtQuick 2.0
 import Cavewhere 1.0
 
 ScrapPointItem {
+    id: scrapPointItem
 
     /**
       Returns true if the point is in point's geometry and false if it isn't.
@@ -14,6 +15,16 @@ ScrapPointItem {
         return length <= pointGeometry.radius;
     }
 
+    Keys.onDeletePressed: {
+        scrap.removePoint(pointIndex);
+    }
+
+    Keys.onPressed: {
+        if(event.key === 0x01000003) { //Backspace key = Qt::Key_Backspace
+            scrap.removePoint(pointIndex);
+        }
+    }
+
     Rectangle {
         id: pointGeometry
         width: 9
@@ -23,17 +34,18 @@ ScrapPointItem {
 
         border.width: 1
 
-        color: "green"
         radius: width / 2.0
-
+        color: scrapPointItem.selected ? "red" : "green" //Qt.rgba(0.25, 1.0, 0.25, 1.0) : Qt.rgba(0.0, 1.0, 0.0, 1.0)
 
         ScrapPointMouseArea {
             anchors.fill: parent
+            anchors.bottomMargin: -3
+            anchors.rightMargin: -3
 
-            onPointSelected: select()
+            onPointSelected: {
+                select()
+            }
             onPointMoved: scrap.setPoint(pointIndex, Qt.point(noteCoord.x, noteCoord.y))
-
-
         }
     }
 }

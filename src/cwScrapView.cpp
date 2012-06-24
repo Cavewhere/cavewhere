@@ -30,6 +30,7 @@ void cwScrapView::setNote(cwNote* note) {
 
         if(Note != NULL) {
             connect(Note, SIGNAL(scrapAdded()), SLOT(addScrapItem()));
+            connect(Note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
 
             //This is full reset, update all the scraps
             updateAllScraps();
@@ -265,4 +266,16 @@ void cwScrapView::updateSelection() {
     if(scrapItem != NULL) {
         setSelectedScrapItem(scrapItem);
     }
+}
+
+/**
+ * @brief cwScrapView::updateRemovedScraps
+ * @param begin - The index of the first scrap that was removed
+ * @param end - The index of the last scrap that was removed
+ */
+void cwScrapView::updateRemovedScraps(int begin, int end)
+{
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    updateAllScraps();
 }

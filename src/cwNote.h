@@ -49,6 +49,8 @@ public:
     cwScrap* scrap(int scrap) const;
     QList<cwScrap*> scraps() const;
     void setScraps(QList<cwScrap*> scraps);
+    void removeScraps(int begin, int end);
+    int indexOfScrap(cwScrap* scrap) const;
 
 
 signals:
@@ -127,6 +129,16 @@ inline cwCave *cwNote::parentCave() const {
     return ParentCave;
 }
 
+/**
+ * @brief cwNote::indexOfScrap
+ * @param scrap - That this function will find
+ * @return return -1, if the scrap doesn't exist is this note. Returns the index of
+ * the scrap in this note
+ */
+inline int cwNote::indexOfScrap(cwScrap *scrap) const
+{
+   return Scraps.indexOf(scrap);
+}
 
 
 

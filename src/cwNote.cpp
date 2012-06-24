@@ -167,6 +167,27 @@ void cwNote::setScraps(QList<cwScrap *> scraps) {
 }
 
 /**
+ * @brief cwNote::removeScraps
+ * @param begin
+ * @param end
+ *
+ * Removes and deletes all the scraps between begin and end index
+ */
+void cwNote::removeScraps(int begin, int end)
+{
+    emit beginRemovingScraps(begin, end);
+
+    for(int i = end; i >= begin; i--) {
+        Scraps.at(i)->deleteLater();
+        Scraps.removeAt(i);
+    }
+
+    emit removedScraps(begin, end);
+}
+
+
+
+/**
   Gets the scrap form the note at a index
 
   If the scrapIndex is out of bounds, this returns NULL
