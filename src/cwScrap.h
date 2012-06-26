@@ -52,8 +52,9 @@ public:
     QPolygonF polygon() const;
     void setPoints(QVector<QPointF> points);
     Q_INVOKABLE void setPoint(int index, QPointF point);
-
-    int numberOfPoints() const;
+    Q_INVOKABLE int numberOfPoints() const;
+    Q_INVOKABLE bool isClosed() const;
+    Q_INVOKABLE void close();
 
     void addStation(cwNoteStation station);
     Q_INVOKABLE void removeStation(int stationId);
@@ -82,6 +83,7 @@ signals:
     void removedPoints(int begin, int end);
     void pointChanged(int begin, int end);
     void pointsReset();
+    void closeChanged();
 
     //For stations
     void stationAdded();
@@ -160,6 +162,18 @@ inline QPolygonF cwScrap::polygon() const {
 inline int cwScrap::numberOfPoints() const {
     return OutlinePoints.size();
 }
+
+/**
+ * @brief cwScrap::isClosed
+ * @return Returns true if the the scrap geometry is closed, ie. the last point
+ * equal to first point
+ */
+inline bool cwScrap::isClosed() const {
+    if(numberOfPoints() <= 2) { return false; }
+    return polygon().isClosed();
+}
+
+
 
 /**
   \brief Gets the number of stations for a page of notes

@@ -44,7 +44,14 @@ ScrapPointItem {
 
             onPointSelected: {
                 select()
+
+                if(pointIndex === 0)
+                {
+                    //Close the scrap
+                    scrap.close()
+                }
             }
+
             onPointMoved: scrap.setPoint(pointIndex, Qt.point(noteCoord.x, noteCoord.y))
         }
     }

@@ -44,8 +44,17 @@ void cwScrap::insertPoint(int index, QPointF point) {
         qDebug() << "Inserting point out of bounds:" << point << index << LOCATION;
     }
 
+    bool closed = isClosed();
+
     OutlinePoints.insert(index, point);
+
     emit insertedPoints(index, index);
+
+    //Has closed changed for the insert
+    qDebug() << "Closed:" << closed << isClosed();
+    if(closed != isClosed()) {
+        emit closeChanged();
+    }
 }
 
 /**
@@ -56,6 +65,8 @@ void cwScrap::removePoint(int index) {
         qDebug() << "Removing point out of bounds:" << index << LOCATION;
         return;
     }
+
+    bool closed = isClosed();
 
     //If the polygon is a close polygon, the first point == to the last point
     int lastPointIndex = OutlinePoints.size() - 1;
@@ -76,8 +87,6 @@ void cwScrap::removePoint(int index) {
             addPoint(OutlinePoints.first());
         }
 
-
-
     } else if(index >= 0 && index < OutlinePoints.size()) {
         OutlinePoints.remove(index);
         emit removedPoints(index, index);
@@ -89,6 +98,10 @@ void cwScrap::removePoint(int index) {
             int scrapIndex = parentNote()->indexOfScrap(this);
             parentNote()->removeScraps(scrapIndex, scrapIndex);
         }
+    }
+
+    if(closed != isClosed()) {
+        emit closeChanged();
     }
 }
 
@@ -128,6 +141,20 @@ void cwScrap::setPoint(int index, QPointF point)
 
     OutlinePoints[index] = point;
     emit pointChanged(index, index);
+}
+
+/**
+ * @brief cwScrap::close
+ *
+ * Closes the scrap. If the scrap isn't already closed
+ */
+void cwScrap::close()
+{
+    if(numberOfPoints() >= 3 && !isClosed()) {
+        int firstIndex = 0;
+        QPointF firstPoint = OutlinePoints[firstIndex];
+        addPoint(firstPoint);
+    }
 }
 
 /**

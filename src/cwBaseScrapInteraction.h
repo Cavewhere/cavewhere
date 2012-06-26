@@ -5,14 +5,15 @@
 #include "cwNoteInteraction.h"
 class cwScrap;
 class cwImageItem;
-class cwScrapControlPointView;
+class cwScrapOutlinePointView;
 
 class cwBaseScrapInteraction : public cwNoteInteraction
 {
     Q_OBJECT
 
     Q_PROPERTY(cwImageItem* imageItem READ imageItem WRITE setImageItem NOTIFY imageItemChanged)
-    Q_PROPERTY(cwScrapControlPointView* controlPointView READ controlPointView WRITE setControlPointView NOTIFY controlPointViewChanged)
+    Q_PROPERTY(cwScrapOutlinePointView* controlPointView READ controlPointView WRITE setControlPointView NOTIFY controlPointViewChanged)
+
 
 public:
     explicit cwBaseScrapInteraction(QQuickItem *parent = 0);
@@ -22,8 +23,10 @@ public:
     cwImageItem* imageItem() const;
     void setImageItem(cwImageItem* imageItem);
 
-    cwScrapControlPointView* controlPointView() const;
-    void setControlPointView(cwScrapControlPointView* controlPointView);
+    cwScrapOutlinePointView* controlPointView() const;
+    void setControlPointView(cwScrapOutlinePointView* controlPointView);
+
+    void setScrap(cwScrap* scrap);
 
 signals:
     void imageItemChanged();
@@ -33,13 +36,13 @@ public slots:
     void startNewScrap();
 
 private:
-    int CurrentScrapIndex;
-
+    cwScrap* Scrap;
     cwImageItem* ImageItem; //!< For converting viewport coordinates into note coordinates
-    cwScrapControlPointView* ControlPointView; //!< For testing if we clicked on a control point
+    cwScrapOutlinePointView* ControlPointView; //!< For testing if we clicked on a control point
 
     void addScrap();
     void closeCurrentScrap();
+
 private slots:
     void deactivating();
 
@@ -54,7 +57,7 @@ inline cwImageItem* cwBaseScrapInteraction::imageItem() const {
 /**
 Gets controlPointView
 */
-inline cwScrapControlPointView* cwBaseScrapInteraction::controlPointView() const {
+inline cwScrapOutlinePointView* cwBaseScrapInteraction::controlPointView() const {
     return ControlPointView;
 }
 

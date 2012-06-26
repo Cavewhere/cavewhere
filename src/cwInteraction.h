@@ -15,8 +15,9 @@ class cwInteraction : public QQuickItem
 public:
     explicit cwInteraction(QQuickItem *parent = 0);
 
-    Q_INVOKABLE void activate();
-    Q_INVOKABLE void deactivate();
+public slots:
+    void activate();
+    void deactivate();
 
 signals:
     void activated(cwInteraction* interaction);

@@ -164,8 +164,8 @@ SOURCES += src/main.cpp \
     src/cwSGPolygonNode.cpp \
     src/cwSGLinesNode.cpp \
     src/cwAbstractPointManager.cpp \
-    src/cwScrapControlPointView.cpp \
-    src/cwScrapPointView.cpp
+    src/cwScrapPointView.cpp \
+    src/cwScrapOutlinePointView.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -304,8 +304,8 @@ HEADERS  += \
     src/cwSGPolygonNode.h \
     src/cwSGLinesNode.h \
     src/cwAbstractPointManager.h \
-    src/cwScrapControlPointView.h \
-    src/cwScrapPointView.h
+    src/cwScrapPointView.h \
+    src/cwScrapOutlinePointView.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \

@@ -10,7 +10,7 @@
 class cwScrap;
 class cwTransformUpdater;
 class cwScrapStationView;
-class cwScrapControlPointView;
+class cwScrapOutlinePointView;
 class cwSGPolygonNode;
 class cwSGLinesNode;
 
@@ -25,7 +25,7 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
-    Q_PROPERTY(cwScrapControlPointView* controlPointView READ controlPointView NOTIFY controlPointViewChanged)
+    Q_PROPERTY(cwScrapOutlinePointView* controlPointView READ controlPointView NOTIFY controlPointViewChanged)
 
 public:
     explicit cwScrapItem(QQuickItem *parent = 0);
@@ -45,7 +45,7 @@ public:
     QSGTransformNode* transformNode() const;
 
     cwScrapStationView* stationView() const;
-    cwScrapControlPointView* controlPointView() const;
+    cwScrapOutlinePointView* controlPointView() const;
 
 signals:
     void scrapChanged();
@@ -68,7 +68,7 @@ private:
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
-    cwScrapControlPointView* ControlPointView; //!< All the control points around the scrap
+    cwScrapOutlinePointView* ControlPointView; //!< All the control points around the scrap
 
     //For showing all the control points around the scrap
     QQmlComponent* OutlineControlPoints;
@@ -115,7 +115,7 @@ inline cwScrapStationView* cwScrapItem::stationView() const {
 /**
 Gets controlPointView
 */
-inline cwScrapControlPointView* cwScrapItem::controlPointView() const {
+inline cwScrapOutlinePointView* cwScrapItem::controlPointView() const {
     return ControlPointView;
 }
 #endif // CWSCRAPITEM_H

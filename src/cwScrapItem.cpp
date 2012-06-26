@@ -3,7 +3,7 @@
 #include "cwScrap.h"
 #include "cwTransformUpdater.h"
 #include "cwScrapStationView.h"
-#include "cwScrapControlPointView.h"
+#include "cwScrapOutlinePointView.h"
 #include "cwSGPolygonNode.h"
 #include "cwSGLinesNode.h"
 
@@ -21,7 +21,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     PolygonNode(NULL),
     OutlineNode(NULL),
     StationView(new cwScrapStationView(this)),
-    ControlPointView(new cwScrapControlPointView(this))
+    ControlPointView(new cwScrapOutlinePointView(this))
 {
     StationView->setScrapItem(this);
     ControlPointView->setScrapItem(this);
@@ -42,7 +42,7 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     Scrap(NULL),
     TransformUpdater(NULL),
     StationView(new cwScrapStationView(this)),
-    ControlPointView(new cwScrapControlPointView(this))
+    ControlPointView(new cwScrapOutlinePointView(this))
 {
     StationView->setScrapItem(this);
     ControlPointView->setScrapItem(this);

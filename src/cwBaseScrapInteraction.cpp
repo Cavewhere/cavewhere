@@ -4,11 +4,11 @@
 #include "cwScrap.h"
 #include "cwNote.h"
 #include "cwImageItem.h"
-#include "cwScrapControlPointView.h"
+#include "cwScrapOutlinePointView.h"
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
-    CurrentScrapIndex(-1),
+    Scrap(NULL),
     ImageItem(NULL),
     ControlPointView(NULL)
 {
@@ -21,9 +21,8 @@ cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     scrap
   */
 void cwBaseScrapInteraction::addScrap() {
-    cwScrap* scrap = new cwScrap();
-    note()->addScrap(scrap);
-    CurrentScrapIndex = note()->scraps().size() - 1;
+    setScrap(new cwScrap());
+    note()->addScrap(Scrap);
 }
 
 /**
@@ -32,13 +31,8 @@ void cwBaseScrapInteraction::addScrap() {
  * Closes the current scrap geometry
  */
 void cwBaseScrapInteraction::closeCurrentScrap() {
-    cwScrap* currentScrap = note()->scrap(CurrentScrapIndex);
-    if(currentScrap != NULL) {
-        if(!currentScrap->polygon().isClosed() &&
-                currentScrap->polygon().size() > 1) {
-            //Connect the last point to the first point
-            currentScrap->addPoint(currentScrap->polygon().first());
-        }
+    if(Scrap != NULL) {
+        Scrap->close();
     }
 }
 
@@ -66,7 +60,7 @@ void cwBaseScrapInteraction::addPoint(QPoint viewportCoordinate) {
         return;
     }
 
-    if(CurrentScrapIndex == -1) {
+    if(Scrap == NULL) {
         addScrap();
     }
 
@@ -80,37 +74,30 @@ void cwBaseScrapInteraction::addPoint(QPoint viewportCoordinate) {
         return;
     }
 
-    cwScrap* scrap = note()->scrap(CurrentScrapIndex);
-
-    if(scrap == NULL) {
+    if(Scrap == NULL) {
         qDebug() << "This is a bug! scrap is null" << LOCATION;
         return;
     }
 
-    if(scrap->numberOfPoints() > 0) {
-        QPointF firstPoint = scrap->points().first();
-        QLineF(firstPoint, viewportCoordinate);
-    }
+//    if(!controlPointView()->items().isEmpty()) {
+//        //Get the first qml object
+//        QQuickItem* scrapPoint = controlPointView()->items().first();
+//        QPointF point = imageItem()->mapToItem(scrapPoint, viewportCoordinate); //Point in scrap point coordinates
 
-    if(!controlPointView()->items().isEmpty()) {
-        //Get the first qml object
-        QQuickItem* scrapPoint = controlPointView()->items().first();
-        QPointF point = imageItem()->mapToItem(scrapPoint, viewportCoordinate); //Point in scrap point coordinates
+//        //Ask the qml object if the point's contained in it
+//        QVariant pointInScrapPoint;
+//        QMetaObject::invokeMethod(scrapPoint, "contains", Q_RETURN_ARG(QVariant, pointInScrapPoint), Q_ARG(QVariant, point));
 
-        //Ask the qml object if the point's contained in it
-        QVariant pointInScrapPoint;
-        QMetaObject::invokeMethod(scrapPoint, "contains", Q_RETURN_ARG(QVariant, pointInScrapPoint), Q_ARG(QVariant, point));
-
-        if(pointInScrapPoint.toBool()) {
-            //User has clicked on the first point
-            startNewScrap();
-            return;
-        }
-    }
+//        if(pointInScrapPoint.toBool()) {
+//            //User has clicked on the first point
+//            startNewScrap();
+//            return;
+//        }
+//    }
 
     //Add the last point to the scrap
     QPointF noteCoordinate = imageItem()->mapQtViewportToNote(viewportCoordinate);
-    scrap->addPoint(noteCoordinate);
+    Scrap->addPoint(noteCoordinate);
 }
 
 /**
@@ -118,7 +105,7 @@ void cwBaseScrapInteraction::addPoint(QPoint viewportCoordinate) {
   */
  void cwBaseScrapInteraction::startNewScrap() {
      closeCurrentScrap();
-     CurrentScrapIndex = -1;
+     setScrap(NULL);
  }
 
  /**
@@ -134,10 +121,30 @@ void cwBaseScrapInteraction::addPoint(QPoint viewportCoordinate) {
  /**
 Sets controlPointView
 */
- void cwBaseScrapInteraction::setControlPointView(cwScrapControlPointView* controlPointView) {
+ void cwBaseScrapInteraction::setControlPointView(cwScrapOutlinePointView* controlPointView) {
      if(ControlPointView != controlPointView) {
          ControlPointView = controlPointView;
          emit controlPointViewChanged();
      }
  }
+
+ /**
+  * @brief cwBaseScrapInteraction::setScrap
+  * @param scrap - Sets the current scrap
+  */
+ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
+ {
+     if(Scrap == scrap) { return; }
+
+     if(Scrap != NULL) {
+         disconnect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
+     }
+
+     Scrap = scrap;
+
+     if(Scrap != NULL) {
+         connect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
+     }
+ }
+
 

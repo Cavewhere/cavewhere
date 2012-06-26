@@ -6,12 +6,12 @@
 #include "cwGlobalDirectory.h"
 class cwScrap;
 
-class cwScrapControlPointView : public cwScrapPointView
+class cwScrapOutlinePointView : public cwScrapPointView
 {
     Q_OBJECT
 
 public:
-    explicit cwScrapControlPointView(QQuickItem *parent = 0);
+    explicit cwScrapOutlinePointView(QQuickItem *parent = 0);
     
     void setScrap(cwScrap* scrap);
 
@@ -31,7 +31,7 @@ private slots:
  * @brief cwScrapControlPointView::qmlSource
  * @return Returns the point's qml definition
  */
-inline QUrl cwScrapControlPointView::qmlSource() const
+inline QUrl cwScrapOutlinePointView::qmlSource() const
 {
     return cwGlobalDirectory::baseDirectory() + "qml/ScrapOutlinePoint.qml";
 }

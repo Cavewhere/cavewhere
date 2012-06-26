@@ -61,7 +61,7 @@
 #include "cwLabel3dView.h"
 #include "cwLinePlotLabelView.h"
 #include "cwAbstractPointManager.h"
-#include "cwScrapControlPointView.h"
+#include "cwScrapOutlinePointView.h"
 
 //#include <QGLWidget>
 
@@ -128,7 +128,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
     qmlRegisterType<cwScrapItem>("Cavewhere", 1, 0, "ScrapItem");
     qmlRegisterType<cwAbstractPointManager>();
-    qmlRegisterType<cwScrapControlPointView>("Cavewhere", 1, 0, "ScrapControlPointView");
+    qmlRegisterType<cwScrapOutlinePointView>("Cavewhere", 1, 0, "ScrapControlPointView");
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
 }
