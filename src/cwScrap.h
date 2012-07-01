@@ -46,7 +46,7 @@ public:
     cwCave* parentCave() const;
 
     void addPoint(QPointF point);
-    void insertPoint(int index, QPointF point);
+    Q_INVOKABLE void insertPoint(int index, QPointF point);
     Q_INVOKABLE void removePoint(int index);
     QVector<QPointF> points() const;
     QPolygonF polygon() const;

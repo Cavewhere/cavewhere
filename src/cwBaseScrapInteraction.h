@@ -12,8 +12,8 @@ class cwBaseScrapInteraction : public cwNoteInteraction
     Q_OBJECT
 
     Q_PROPERTY(cwImageItem* imageItem READ imageItem WRITE setImageItem NOTIFY imageItemChanged)
-    Q_PROPERTY(cwScrapOutlinePointView* controlPointView READ controlPointView WRITE setControlPointView NOTIFY controlPointViewChanged)
-
+    Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView WRITE setOutlinePointView NOTIFY outlinePointViewChanged)
+    Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
 
 public:
     explicit cwBaseScrapInteraction(QQuickItem *parent = 0);
@@ -23,25 +23,45 @@ public:
     cwImageItem* imageItem() const;
     void setImageItem(cwImageItem* imageItem);
 
-    cwScrapOutlinePointView* controlPointView() const;
-    void setControlPointView(cwScrapOutlinePointView* controlPointView);
+    cwScrapOutlinePointView* outlinePointView() const;
+    void setOutlinePointView(cwScrapOutlinePointView* outlinePointView);
 
+    Q_INVOKABLE void addScrap();
     void setScrap(cwScrap* scrap);
+    cwScrap* scrap() const;
+
+    Q_INVOKABLE QVariantMap snapToScrapLine(QPoint qtViewportPosition) const;
 
 signals:
     void imageItemChanged();
-    void controlPointViewChanged();
+    void outlinePointViewChanged();
+    void scrapChanged();
 
 public slots:
     void startNewScrap();
 
 private:
+    class cwClosestPoint {
+    public:
+        cwClosestPoint() : IsValid(false), InsertIndex(-1) { }
+        cwClosestPoint(QPointF closestPoint, int insertIndex) :
+            IsValid(true),
+            ClosestPoint(closestPoint),
+            InsertIndex(insertIndex) { }
+
+        bool IsValid;
+        QPointF ClosestPoint;
+        int InsertIndex;
+    };
+
     cwScrap* Scrap;
     cwImageItem* ImageItem; //!< For converting viewport coordinates into note coordinates
-    cwScrapOutlinePointView* ControlPointView; //!< For testing if we clicked on a control point
+    cwScrapOutlinePointView* OutlinePointView; //!< For testing if we clicked on a control point
 
-    void addScrap();
+
     void closeCurrentScrap();
+
+    cwClosestPoint calcClosestPoint(QPoint qtViewportPosition) const;
 
 private slots:
     void deactivating();
@@ -57,8 +77,17 @@ inline cwImageItem* cwBaseScrapInteraction::imageItem() const {
 /**
 Gets controlPointView
 */
-inline cwScrapOutlinePointView* cwBaseScrapInteraction::controlPointView() const {
-    return ControlPointView;
+inline cwScrapOutlinePointView* cwBaseScrapInteraction::outlinePointView() const {
+    return OutlinePointView;
+}
+
+/**
+ * @brief cwBaseScrapInteraction::scrap
+ * @return The current scrap of this interaction
+ */
+inline cwScrap *cwBaseScrapInteraction::scrap() const
+{
+    return Scrap;
 }
 
 #endif // CWBASESCRAPINTERACTION_H

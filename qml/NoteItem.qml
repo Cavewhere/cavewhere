@@ -6,11 +6,6 @@ ImageItem {
 
     property Note note;
 
-//    //Private properties
-//    NoteTransform {
-//        id: defaultNoteTransform
-//    }
-
     projectFilename: project.filename
 
     clip: true
@@ -28,9 +23,9 @@ ImageItem {
         note: noteArea.note
         basePanZoomInteraction: panZoomInteraction
         imageItem: noteArea
-        controlPointView: {
+        outlinePointView: {
             if(scrapViewId.selectedScrapItem !== null) {
-                return scrapViewId.selectedScrapItem.controlPointView
+                return scrapViewId.selectedScrapItem.outlinePointView
             }
             return null;
         }
@@ -40,7 +35,6 @@ ImageItem {
         id: addStationInteraction
         anchors.fill: parent
         scrapView: scrapViewId
-//        noteStationView: noteStationViewId
         basePanZoomInteraction: panZoomInteraction
         imageItem: noteArea
     }
@@ -111,16 +105,6 @@ ImageItem {
         note: noteArea.note
         transformUpdater: transformUpdaterId
     }
-
-
-//    //For rendering note onto the note
-//    NoteStationView {
-//        id: noteStationViewId
-//        note: noteArea.note
-//        transformUpdater: transformUpdaterId
-//        scrapView: scrapViewId
-//        anchors.fill: parent
-//    }
 
     states: [
         State {

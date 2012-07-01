@@ -129,6 +129,11 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
             break;
         }
     }
+
+    //Update indices for all items after end
+    for(int i = end + 1; i < Items.size(); i++) {
+        privateUpdateItemData(Items.at(i), i);
+    }
 }
 
 /**

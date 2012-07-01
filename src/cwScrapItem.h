@@ -25,7 +25,7 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
-    Q_PROPERTY(cwScrapOutlinePointView* controlPointView READ controlPointView NOTIFY controlPointViewChanged)
+    Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView NOTIFY outlinePointViewChanged)
 
 public:
     explicit cwScrapItem(QQuickItem *parent = 0);
@@ -45,14 +45,14 @@ public:
     QSGTransformNode* transformNode() const;
 
     cwScrapStationView* stationView() const;
-    cwScrapOutlinePointView* controlPointView() const;
+    cwScrapOutlinePointView* outlinePointView() const;
 
 signals:
     void scrapChanged();
     void selectedChanged();
     void transformUpdaterChanged();
     void stationViewChanged();
-    void controlPointViewChanged();
+    void outlinePointViewChanged();
 
 public slots:
 
@@ -115,7 +115,7 @@ inline cwScrapStationView* cwScrapItem::stationView() const {
 /**
 Gets controlPointView
 */
-inline cwScrapOutlinePointView* cwScrapItem::controlPointView() const {
+inline cwScrapOutlinePointView* cwScrapItem::outlinePointView() const {
     return ControlPointView;
 }
 #endif // CWSCRAPITEM_H

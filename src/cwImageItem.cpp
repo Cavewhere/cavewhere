@@ -263,6 +263,18 @@ QPointF cwImageItem::mapQtViewportToNote(QPoint qtViewportCoordinate) {
 }
 
 /**
+ * @brief cwImageItem::mapNoteToQtViewport
+ * @param mapNote - This converts a map point into a QtViewport coordinate
+ * @return
+ */
+QPointF cwImageItem::mapNoteToQtViewport(QPointF mapNote) const
+{
+    QPointF glViewportPoint = Camera->project(QVector3D(mapNote.x(), mapNote.y(), 0.0), RotationModelMatrix);
+    QPointF qtViewportPoint = Camera->mapToQtViewport(glViewportPoint);
+    return qtViewportPoint;
+}
+
+/**
   Set the project filename
 
   The project filename allow this imageItem to extra data from disk.

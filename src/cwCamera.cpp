@@ -41,9 +41,19 @@ QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 viewMatr
   This maps the point in Qt viewport where the 0, 0 is in the top left to
   opengl viewport where the 0, 0 is in the bottom left
   */
-QPoint cwCamera::mapToGLViewport(QPoint point) const {
-    int flippedY = Viewport.y() + (Viewport.height() - point.y());
-    return QPoint(point.x(), flippedY);
+QPoint cwCamera::mapToGLViewport(QPoint qtViewportPoint) const {
+    int flippedY = Viewport.y() + (Viewport.height() - qtViewportPoint.y());
+    return QPoint(qtViewportPoint.x(), flippedY);
+}
+
+/**
+  This maps the point in GL Viewport where the 0, 0 is in the bottom left to
+  qt viewport where the 0, 0 is in the top left
+  */
+QPointF cwCamera::mapToQtViewport(QPointF glViewportPoint) const
+{
+    double flippedY = Viewport.y() + (Viewport.height() - glViewportPoint.y());
+    return QPointF(glViewportPoint.x(), flippedY);
 }
 
 /**
@@ -104,4 +114,19 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      y = viewport.y() + (viewport.height() - y);
 
      return QVector3D(x, y, z);
+ }
+
+ /**
+  * @brief cwCamera::project
+  * @param point - Projects the point into screen coordinates
+  * @param viewMatrix
+  * @param modelMatrix
+  * @return Returns the point in screen coordiante
+  */
+ QPointF cwCamera::project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const
+ {
+      QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * viewMatrix * modelMatrix;
+      QVector3D projectedPoint = modelViewProjectionMatrix * point;
+      QVector3D viewportQt = mapNormalizeScreenToGLViewport(projectedPoint);
+      return mapToQtViewport(viewportQt.toPointF());
  }

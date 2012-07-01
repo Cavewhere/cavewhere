@@ -32,7 +32,7 @@ public:
     void clearSelection();
     int selectedItemIndex() const;
     void setSelectedItemIndex(int selectedItemIndex);
-    QQuickItem* selectedItem() const;
+    Q_INVOKABLE QQuickItem* selectedItem() const;
 
     QList<QQuickItem*> items() const;
 

@@ -27,9 +27,14 @@ public:
     QVector3D unProject(QPoint point, float viewDepth, QMatrix4x4 modelMatrix) const;
     QVector3D unProject(QPoint point, float viewDepth, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
 
+    QPointF project(QVector3D point) const;
+    QPointF project(QVector3D point, QMatrix4x4 modelMatrix) const;
+    QPointF project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
+
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
     QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
-    QPoint mapToGLViewport(QPoint point) const;
+    QPoint mapToGLViewport(QPoint qtViewportPoint) const;
+    QPointF mapToQtViewport(QPointF glViewportPoint) const;
 
 signals:
     void viewportChanged();
@@ -85,6 +90,18 @@ inline QMatrix4x4 cwCamera::viewMatrix() const {
 inline QVector3D cwCamera::unProject(QPoint point, float viewDepth) const {
     return unProject(point, viewDepth, QMatrix4x4());
 }
+
+inline QPointF cwCamera::project(QVector3D point) const
+{
+    return project(point, viewMatrix(), QMatrix4x4());
+}
+
+inline QPointF cwCamera::project(QVector3D point, QMatrix4x4 modelMatrix) const
+{
+    return project(point, viewMatrix(), modelMatrix);
+}
+
+
 
 /**
   Convenience method
