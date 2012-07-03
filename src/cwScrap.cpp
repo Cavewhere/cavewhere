@@ -51,7 +51,6 @@ void cwScrap::insertPoint(int index, QPointF point) {
     emit insertedPoints(index, index);
 
     //Has closed changed for the insert
-    qDebug() << "Closed:" << closed << isClosed();
     if(closed != isClosed()) {
         emit closeChanged();
     }
