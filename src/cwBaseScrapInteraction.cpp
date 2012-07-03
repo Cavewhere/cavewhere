@@ -104,6 +104,7 @@ void cwBaseScrapInteraction::deactivating() {
     }
 }
 
+
 /**
     Add a point to the end of the current scrap.
 
@@ -186,12 +187,14 @@ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
 
     if(Scrap != NULL) {
         disconnect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
+        disconnect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
     Scrap = scrap;
 
     if(Scrap != NULL) {
         connect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
+        connect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
     emit scrapChanged();

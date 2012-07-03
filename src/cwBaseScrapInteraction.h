@@ -58,13 +58,13 @@ private:
     cwImageItem* ImageItem; //!< For converting viewport coordinates into note coordinates
     cwScrapOutlinePointView* OutlinePointView; //!< For testing if we clicked on a control point
 
-
     void closeCurrentScrap();
 
     cwClosestPoint calcClosestPoint(QPoint qtViewportPosition) const;
 
 private slots:
     void deactivating();
+    void scrapDeleted();
 
 };
 /**
@@ -89,5 +89,15 @@ inline cwScrap *cwBaseScrapInteraction::scrap() const
 {
     return Scrap;
 }
+
+/**
+ * @brief cwBaseScrapInteraction::scrapDeleted
+ *
+ * Called when the current scrap is destroyed
+ */
+inline void cwBaseScrapInteraction::scrapDeleted() {
+    Scrap = NULL;
+}
+
 
 #endif // CWBASESCRAPINTERACTION_H
