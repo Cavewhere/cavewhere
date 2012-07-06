@@ -22,6 +22,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     OutlineNode(NULL),
     StationView(new cwScrapStationView(this)),
     OutlinePointView(new cwScrapOutlinePointView(this)),
+    SelectionManager(NULL),
     Selected(false)
 {
     StationView->setScrapItem(this);
@@ -157,5 +158,19 @@ void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
 
         emit transformUpdaterChanged();
         update();
+    }
+}
+
+/**
+Sets selectionManager
+*/
+void cwScrapItem::setSelectionManager(cwSelectionManager* selectionManager) {
+    if(SelectionManager != selectionManager) {
+        SelectionManager = selectionManager;
+
+        stationView()->setSelectionManager(SelectionManager);
+        outlinePointView()->setSelectionManager(SelectionManager);
+
+        emit selectionManagerChanged();
     }
 }

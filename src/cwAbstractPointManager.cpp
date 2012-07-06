@@ -2,6 +2,7 @@
 #include "cwAbstractPointManager.h"
 #include "cwTransformUpdater.h"
 #include "cwDebug.h"
+#include "cwSelectionManager.h"
 
 //Qt includes
 #include <QQmlEngine>
@@ -11,6 +12,7 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
     TransformUpdater(NULL),
     ItemComponent(NULL),
+    SelectionManager(NULL),
     SelectedItemIndex(-1)
 {
 
@@ -174,10 +176,20 @@ void cwAbstractPointManager::updateItemsPositions(int begin, int end)
     for(int i = begin; i <= end; i++) {
         privateUpdateItemPosition(i);
     }
-
 }
 
-
+/**
+ * @brief cwAbstractPointManager::updateSelection
+ *
+ * Update the selection, when the selection manager has changed the selection
+ */
+void cwAbstractPointManager::updateSelection()
+{
+    //SelectedItem test if the item is
+    if(selectedItem() == NULL) {
+        setSelectedItemIndex(-1);
+    }
+}
 
 /**
  * @brief cwAbstractPointManager::updateAll
@@ -236,19 +248,13 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
             return;
         }
 
-        //Deselect the old index
-        QQuickItem* oldItem = selectedItem();
-        if(oldItem != NULL) {
-            oldItem->setProperty("selected", false);
-        }
-
         SelectedItemIndex = selectedIndex;
 
         //Select the new station item
         if(selectedIndex >= 0) {
             QQuickItem* newItem = Items.at(selectedIndex);
-            if(!newItem->property("selected").toBool()) {
-                newItem->setProperty("selected", true);
+            if(selectionManager() != NULL) {
+                selectionManager()->setSelectedItem(newItem);
             }
         }
 
@@ -263,7 +269,12 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
   */
 QQuickItem* cwAbstractPointManager::selectedItem() const {
     if(SelectedItemIndex >= 0 && SelectedItemIndex < Items.size()) {
-        return Items.at(SelectedItemIndex);
+        QQuickItem* item = Items.at(SelectedItemIndex);
+        if(selectionManager() != NULL) {
+            if(selectionManager()->isSelected(item)) {
+                return item;
+            }
+        }
     }
     return NULL;
 }
@@ -304,3 +315,24 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
     updateItemData(item, index);
     privateUpdateItemPosition(index);
 }
+
+/**
+Sets selectionManager
+*/
+void cwAbstractPointManager::setSelectionManager(cwSelectionManager* selectionManager) {
+    if(SelectionManager != selectionManager) {
+
+        if(SelectionManager != NULL) {
+            disconnect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
+        }
+
+        SelectionManager = selectionManager;
+
+        if(SelectionManager != NULL) {
+            connect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
+        }
+
+        emit selectionManagerChanged();
+    }
+}
+

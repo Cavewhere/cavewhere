@@ -13,6 +13,7 @@ class cwScrapStationView;
 class cwScrapOutlinePointView;
 class cwSGPolygonNode;
 class cwSGLinesNode;
+class cwSelectionManager;
 
 /**
   \brief This draws a scrap
@@ -26,6 +27,7 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
     Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView NOTIFY outlinePointViewChanged)
+    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
 public:
     explicit cwScrapItem(QQuickItem *parent = 0);
@@ -47,12 +49,16 @@ public:
     cwScrapStationView* stationView() const;
     cwScrapOutlinePointView* outlinePointView() const;
 
+    cwSelectionManager* selectionManager() const;
+    void setSelectionManager(cwSelectionManager* selectionManager);
+
 signals:
     void scrapChanged();
     void selectedChanged();
     void transformUpdaterChanged();
     void stationViewChanged();
     void outlinePointViewChanged();
+    void selectionManagerChanged();
 
 public slots:
 
@@ -74,6 +80,7 @@ private:
     QQmlComponent* OutlineControlPoints;
     QList<QQuickItem*> OutlineStation;
 
+    cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
     bool Selected; //!< True if the scrap is select and false if it isn't
 
 protected:
@@ -118,4 +125,13 @@ Gets controlPointView
 inline cwScrapOutlinePointView* cwScrapItem::outlinePointView() const {
     return OutlinePointView;
 }
+
+/**
+Gets selectionManager
+*/
+inline cwSelectionManager* cwScrapItem::selectionManager() const {
+    return SelectionManager;
+}
+
+
 #endif // CWSCRAPITEM_H

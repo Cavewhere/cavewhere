@@ -8,6 +8,7 @@
 
 //Our includes
 class cwTransformUpdater;
+class cwSelectionManager;
 
 /**
  * @brief The cwAbsrtactPointManager class
@@ -22,6 +23,7 @@ class cwAbstractPointManager : public QQuickItem
 
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(int selectedItemIndex READ selectedItemIndex WRITE setSelectedItemIndex NOTIFY selectedItemIndexChanged)
+    Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
 public:
     explicit cwAbstractPointManager(QQuickItem *parent = 0);
@@ -36,9 +38,13 @@ public:
 
     QList<QQuickItem*> items() const;
 
+    cwSelectionManager* selectionManager() const;
+    void setSelectionManager(cwSelectionManager* selectionManager);
+
 signals:
     void transformUpdaterChanged();
     void selectedItemIndexChanged();
+    void selectionManagerChanged();
 
 public slots:
     
@@ -56,14 +62,18 @@ protected slots:
     void pointsRemoved(int begin, int end);
     void updateItemsPositions(int begin, int end);
 
+private slots:
+    void updateSelection();
 
 private:
     //Will keep the note stations at the correct location
     cwTransformUpdater* TransformUpdater;
 
-    //All the NoteStationItems
-    QQmlComponent* ItemComponent;
-    QList<QQuickItem*> Items;
+    //All the point items
+    QQmlComponent* ItemComponent; //Allows you to create point items
+    QList<QQuickItem*> Items; //A list of point items
+
+    cwSelectionManager* SelectionManager; //!< The selection manager to select point items
 
     int SelectedItemIndex; //!< The currently selected index
 
@@ -84,14 +94,12 @@ inline cwTransformUpdater* cwAbstractPointManager::transformUpdater() const {
     return TransformUpdater;
 }
 
-
 /**
 Gets selectedStationIndex
 */
 inline int cwAbstractPointManager::selectedItemIndex() const {
     return SelectedItemIndex;
 }
-
 
 /**
   \brief Clears the selection
@@ -100,5 +108,11 @@ inline void cwAbstractPointManager::clearSelection() {
     setSelectedItemIndex(-1);
 }
 
+/**
+Gets selectionManager
+*/
+inline cwSelectionManager* cwAbstractPointManager::selectionManager() const {
+    return SelectionManager;
+}
 
 #endif // CWABSRTACTPOINTMANAGER_H

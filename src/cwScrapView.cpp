@@ -4,6 +4,7 @@
 #include "cwDebug.h"
 #include "cwScrap.h"
 #include "cwScrapItem.h"
+#include "cwSelectionManager.h"
 
 //Qt includes
 #include <QQmlEngine>
@@ -12,7 +13,8 @@
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
     Note(NULL),
-    TransformUpdater(NULL)
+    TransformUpdater(NULL),
+    SelectionManager(new cwSelectionManager(this))
 {
 }
 
@@ -64,6 +66,7 @@ void cwScrapView:: addScrapItem() {
     cwScrapItem* scrapItem = new cwScrapItem(context, this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
+    scrapItem->setSelectionManager(SelectionManager);
 //    connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
 
 
@@ -176,6 +179,7 @@ void cwScrapView::updateAllScraps() {
         cwScrapItem* scrapItem = ScrapItems[i];
         scrapItem->setScrap(scrap);
         scrapItem->setTransformUpdater(TransformUpdater);
+        scrapItem->setSelectionManager(SelectionManager);
         connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
     }
 }
@@ -204,6 +208,9 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
 
         SelectScrapIndex = selectScrapIndex;
         emit selectScrapIndexChanged();
+
+        //Deselect any items that were selected in the scrap
+        SelectionManager->clear();
     }
 }
 
@@ -234,7 +241,6 @@ void cwScrapView::setSelectedScrapItem(cwScrapItem* scrapItem) {
   */
 void cwScrapView::updateSelection() {
     cwScrapItem* scrapItem = qobject_cast<cwScrapItem*>(sender());
-    qDebug() << "Update selection:" << scrapItem << selectedScrapItem();
     if(scrapItem != NULL) {
         setSelectedScrapItem(scrapItem);
     }

@@ -11,6 +11,7 @@ class cwCamera;
 class cwScrap;
 class cwTransformUpdater;
 class cwScrapItem;
+class cwSelectionManager;
 #include "cwTransformUpdater.h"
 
 /**
@@ -67,6 +68,7 @@ private:
     int SelectScrapIndex; //!< The current select scrap, -1 if no scrapitem is selected
 
     cwTransformUpdater* TransformUpdater;
+    cwSelectionManager* SelectionManager;
 };
 
 /**

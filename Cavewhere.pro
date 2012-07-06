@@ -165,7 +165,8 @@ SOURCES += src/main.cpp \
     src/cwSGLinesNode.cpp \
     src/cwAbstractPointManager.cpp \
     src/cwScrapPointView.cpp \
-    src/cwScrapOutlinePointView.cpp
+    src/cwScrapOutlinePointView.cpp \
+    src/cwSelectionManager.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -305,7 +306,8 @@ HEADERS  += \
     src/cwSGLinesNode.h \
     src/cwAbstractPointManager.h \
     src/cwScrapPointView.h \
-    src/cwScrapOutlinePointView.h
+    src/cwScrapOutlinePointView.h \
+    src/cwSelectionManager.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
