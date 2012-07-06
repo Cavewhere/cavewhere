@@ -9,7 +9,6 @@
 
 cwSGPolygonNode::cwSGPolygonNode() {
     QSGFlatColorMaterial *material = new QSGFlatColorMaterial;
-    material->setColor(QColor::fromRgbF(1.0, 0.0, 0.0, 0.2));
     setMaterial(material);
     setFlags(QSGNode::OwnsMaterial);
     setFlags(QSGNode::OwnsGeometry);
@@ -31,4 +30,13 @@ void cwSGPolygonNode::setPolygon(const QPolygonF &polygon) {
 
     setGeometry(geometry);
     markDirty(DirtyGeometry);
+}
+
+/**
+ * @brief setColor
+ * @param color - Set the color for the polygon
+ */
+void cwSGPolygonNode::setColor(const QColor& color) {
+    static_cast<QSGFlatColorMaterial*>(material())->setColor(color);
+    markDirty(DirtyMaterial);
 }

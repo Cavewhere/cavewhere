@@ -119,7 +119,7 @@ cwScrapItem *cwBaseNoteStationInteraction::selectScrapForAdding(QList<cwScrapIte
     if(scrapItems.size() == 1) {
         //Select the only scrap item
         scrapItem = scrapItems.first();
-        ScrapView->setSelectScrapIndex(0); //Select the first scrap
+        ScrapView->setSelectScrapIndex(ScrapView->indexOf(scrapItem)); //Select the first scrap
     } else {
         //More than one scrap under the station
 
@@ -131,7 +131,7 @@ cwScrapItem *cwBaseNoteStationInteraction::selectScrapForAdding(QList<cwScrapIte
         } else {
             //Just use the first scrap in the list
             scrapItem = scrapItems.first();
-            ScrapView->setSelectScrapIndex(0); //Select the first scrap
+            ScrapView->setSelectScrapIndex(ScrapView->indexOf(scrapItem)); //Select the first scrap
         }
     }
 

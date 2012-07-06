@@ -14,6 +14,7 @@ PointItem {
     }
 
     focus: selected
+    visible: scrapItem === null ? false : scrapItem.selected
 
     onSelectedChanged: {
         if(selected) {
@@ -22,5 +23,4 @@ PointItem {
             forceActiveFocus();
         }
     }
-
 }

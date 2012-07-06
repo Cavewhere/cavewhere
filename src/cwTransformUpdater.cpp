@@ -6,12 +6,10 @@
 #include <QDebug>
 #include <QSGTransformNode>
 
-cwTransformUpdater::cwTransformUpdater(QQuickItem *parent) :
-    QQuickItem(parent),
-    Camera(NULL),
-    TransformNode(new QSGTransformNode())
+cwTransformUpdater::cwTransformUpdater(QObject *parent) :
+    QObject(parent),
+    Camera(NULL)
 {
-    setFlag(QQuickItem::ItemHasContents, true);
 
 }
 
@@ -120,22 +118,6 @@ void cwTransformUpdater::updateTransformMatrix() {
 
     TransformMatrix = qtViewportMatrix * Camera->viewProjectionMatrix() * ModelMatrix;
     emit matrixChanged();
-    QQuickItem::update();
-}
-
-/**
- * @brief cwTransformUpdater::updatePaintNode
- * @param oldNode,  Updates the transformation node
- * @return
- */
-QSGNode* cwTransformUpdater::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
-{
-    if(!oldNode) {
-        TransformNode->setFlag(QSGNode::OwnedByParent, false);
-    }
-
-    TransformNode->setMatrix(matrix());
-    return TransformNode;
 }
 
 /**

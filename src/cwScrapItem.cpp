@@ -21,41 +21,40 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     PolygonNode(NULL),
     OutlineNode(NULL),
     StationView(new cwScrapStationView(this)),
-    ControlPointView(new cwScrapOutlinePointView(this))
+    OutlinePointView(new cwScrapOutlinePointView(this)),
+    Selected(false)
 {
     StationView->setScrapItem(this);
-    ControlPointView->setScrapItem(this);
+    OutlinePointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
 
     //Set the declarative context for the station view
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQmlEngine::setContextForObject(StationView, context);
-    QQmlEngine::setContextForObject(ControlPointView, context);
-
-//    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
-    setSelected(false);
+    QQmlEngine::setContextForObject(OutlinePointView, context);
 }
 
 cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
     Scrap(NULL),
     TransformUpdater(NULL),
+    TransformNodeDirty(false),
+    PolygonNode(NULL),
+    OutlineNode(NULL),
     StationView(new cwScrapStationView(this)),
-    ControlPointView(new cwScrapOutlinePointView(this))
+    OutlinePointView(new cwScrapOutlinePointView(this)),
+    Selected(false)
 {
     StationView->setScrapItem(this);
-    ControlPointView->setScrapItem(this);
+    OutlinePointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
 
     //Set the declarative context for the station view
     QQmlEngine::setContextForObject(this, context);
     QQmlEngine::setContextForObject(StationView, context);
-    QQmlEngine::setContextForObject(ControlPointView, context);
-
-//    BorderItem->setBrush(QColor(0x20, 0x8b, 0xe9, 50));
-    setSelected(false);
+    QQmlEngine::setContextForObject(OutlinePointView, context);
 }
 
 cwScrapItem::~cwScrapItem()
@@ -73,7 +72,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
 
         Scrap = scrap;
         StationView->setScrap(Scrap);
-        ControlPointView->setScrap(Scrap);
+        OutlinePointView->setScrap(Scrap);
 
         if(Scrap != NULL) {
             connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(update()));
@@ -92,28 +91,37 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-    if(TransformUpdater) {
-        if(!oldNode) {
-            PolygonNode = new cwSGPolygonNode();
-            OutlineNode = new cwSGLinesNode();
-            OutlineNode->setLineWidth(2.0);
-        }
+    if(!oldNode) {
+        oldNode = new QSGTransformNode();
+        PolygonNode = new cwSGPolygonNode();
+        OutlineNode = new cwSGLinesNode();
 
-        if(TransformNodeDirty) {
-            TransformUpdater->transformNode()->appendChildNode(PolygonNode);
-            TransformUpdater->transformNode()->appendChildNode(OutlineNode);
-            TransformNodeDirty = false;
-        }
+        oldNode->appendChildNode(PolygonNode);
+        oldNode->appendChildNode(OutlineNode);
 
-        if(PolygonNode) {
-            PolygonNode->setPolygon(QPolygonF(Scrap->points()));
-            OutlineNode->setLineStrip(Scrap->points());
-        }
-
-        return TransformUpdater->transformNode();
+        PolygonNode->setPolygon(QPolygonF(Scrap->points()));
+        OutlineNode->setLineStrip(Scrap->points());
     }
-    return NULL;
 
+    if(transformUpdater()) {
+        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+        transformNode->setMatrix(transformUpdater()->matrix());
+    }
+
+    if(Selected) {
+        //Selecet, red color
+        PolygonNode->setColor(QColor::fromRgbF(1.0, 1.0, 0.0, 0.15));
+        OutlineNode->setLineWidth(2.0);
+    } else {
+        //Not selected, blue color
+        PolygonNode->setColor(QColor::fromRgbF(0.0, 0.0, 1.0, 0.10));
+        OutlineNode->setLineWidth(1.0);
+    }
+
+    PolygonNode->setPolygon(QPolygonF(Scrap->points()));
+    OutlineNode->setLineStrip(Scrap->points());
+
+    return oldNode;
 }
 
 /**
@@ -122,23 +130,8 @@ Sets the scrap item as the selected scrap
 void cwScrapItem::setSelected(bool selected) {
     if(Selected != selected) {
         Selected = selected;
-
-        //Make the pen wider
-        QPen pen;
-        pen.setCosmetic(true);
-        if(Selected) {
-            pen.setWidth(2.0);
-        } else {
-            pen.setWidth(1.0);
-        }
-        //FIXME: Fix border item's pen
-//        BorderItem->setPen(pen);
-
-//        if(!selected) {
-//            StationView->clearSelection();
-//        }
-
         emit selectedChanged();
+        update();
     }
 }
 
@@ -149,15 +142,20 @@ Sets transformUpdater
 void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
     if(TransformUpdater != transformUpdater) {
 
+        if(TransformUpdater != NULL) {
+            disconnect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
+        }
+
         TransformUpdater = transformUpdater;
-        TransformNodeDirty = true;
+
+        if(TransformUpdater != NULL) {
+            connect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
+        }
+
         StationView->setTransformUpdater(TransformUpdater);
-        ControlPointView->setTransformUpdater(TransformUpdater);
+        OutlinePointView->setTransformUpdater(TransformUpdater);
 
         emit transformUpdaterChanged();
         update();
     }
 }
-
-
-

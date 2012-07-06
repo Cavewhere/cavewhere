@@ -20,14 +20,17 @@
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     cwScrapPointView(parent),
-    ShotLineScale(1.0)
+    ShotLineScale(1.0),
+    OldTransformUpdater(NULL)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
-    connect(this, SIGNAL(selectedItemIndexChanged()), this, SLOT(updateShotLines()));
+    connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLines);
+    connect(this, &cwScrapStationView::transformUpdaterChanged, this, &cwScrapStationView::updateTransformUpdate);
 }
 
 cwScrapStationView::~cwScrapStationView() {
+
 }
 
 
@@ -141,22 +144,51 @@ void cwScrapStationView::updateShotLines() {
 }
 
 /**
+ * @brief cwScrapStationView::updateTransformUpdate
+ *
+ * Called when the transform update has changed
+ */
+void cwScrapStationView::updateTransformUpdate() {
+   //Called when the transform updater has changed
+
+    if(OldTransformUpdater != transformUpdater()) {
+
+        if(OldTransformUpdater != NULL) {
+            disconnect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
+        }
+
+        OldTransformUpdater = transformUpdater();
+
+        if(OldTransformUpdater != NULL) {
+            connect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
+        }
+
+        update();
+    }
+}
+
+/**
  * @brief cwScrapItem::updatePaintNode
  * @param oldNode
  * @return See qt documentation
  */
 QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
 {
-    if(transformUpdater()) {
-        if(!oldNode) {
-            ShotLinesNode = new cwSGLinesNode();
-            transformUpdater()->transformNode()->appendChildNode(ShotLinesNode);
-        }
+    if(!oldNode) {
+        oldNode = new QSGTransformNode();
+        ShotLinesNode = new cwSGLinesNode();
 
-        ShotLinesNode->setLines(ShotLines);
-        return transformUpdater()->transformNode();
+        oldNode->appendChildNode(ShotLinesNode);
     }
-    return NULL;
+
+    if(transformUpdater()) {
+        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+        transformNode->setMatrix(transformUpdater()->matrix());
+    }
+
+    ShotLinesNode->setLines(ShotLines);
+
+    return oldNode;
 }
 
 /**

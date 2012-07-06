@@ -10,6 +10,7 @@ public:
     cwSGPolygonNode();
 
     void setPolygon(const QPolygonF& polygon);
+    void setColor(const QColor& color);
 };
 
 #endif // CWSGPOLYGONNODE_H

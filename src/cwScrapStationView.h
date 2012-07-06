@@ -45,12 +45,15 @@ private:
 
     float ShotLineScale;
 
+    cwTransformUpdater* OldTransformUpdater;
+
     virtual void updateItemPosition(QQuickItem* item, int index);
     virtual QUrl qmlSource() const;
 
 
 private slots:
     void updateShotLines();
+    void updateTransformUpdate();
 
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);

@@ -68,7 +68,7 @@ private:
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
-    cwScrapOutlinePointView* ControlPointView; //!< All the control points around the scrap
+    cwScrapOutlinePointView* OutlinePointView; //!< All the control points around the scrap
 
     //For showing all the control points around the scrap
     QQmlComponent* OutlineControlPoints;
@@ -116,6 +116,6 @@ inline cwScrapStationView* cwScrapItem::stationView() const {
 Gets controlPointView
 */
 inline cwScrapOutlinePointView* cwScrapItem::outlinePointView() const {
-    return ControlPointView;
+    return OutlinePointView;
 }
 #endif // CWSCRAPITEM_H

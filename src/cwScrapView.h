@@ -45,6 +45,7 @@ public:
 
     QList<cwScrapItem*> scrapItemsAt(QPointF notePoint);
     cwScrapItem* scrapItemAt(int index);
+    int indexOf(cwScrapItem* item) const;
 
 signals:
     void noteChanged();
@@ -95,4 +96,15 @@ Gets selectScrapIndex
 inline int cwScrapView::selectScrapIndex() const {
     return SelectScrapIndex;
 }
+
+/**
+ * @brief cwScrapView::indexOf
+ * @param item - The item
+ * @return Get's the index of the item in the scrap view
+ */
+inline int cwScrapView::indexOf(cwScrapItem *item) const
+{
+    return ScrapItems.indexOf(item);
+}
+
 #endif // CWSCRAPVIEW_H

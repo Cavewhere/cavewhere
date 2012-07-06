@@ -7,12 +7,6 @@ import Cavewhere 1.0
 ScrapPointItem {
     id: noteStation
 
-//    property ScrapStationView stationView;
-//    property ScrapItem scrapItem;
-//    property Scrap scrap;
-//    property int pointIndex;
-//    property bool selected: false
-
     function updateItem() {
         if(scrap !== null) {
             stationName.text = scrap.stationData(Scrap.StationName, pointIndex)
@@ -23,11 +17,9 @@ ScrapPointItem {
 
     width: 2
     height: 2
-    z: 2
 
     onScrapChanged: updateItem()
     onPointIndexChanged: updateItem()
-
 
     Keys.onDeletePressed: {
         scrap.removeStation(pointIndex);
@@ -75,11 +67,6 @@ ScrapPointItem {
             onPointMoved: scrap.setStationData(Scrap.StationPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
             onDoubleClicked: stationName.openEditor();
         }
-
-//        Rectangle {
-//            anchors.fill: parent
-//            color: "red"
-//        }
     }
 
     DoubleClickTextInput {
@@ -104,10 +91,8 @@ ScrapPointItem {
         MouseArea {
             anchors.fill: parent
             propagateComposedEvents: true
-            onClicked: selectStation()
+            onClicked: select()
         }
 
     }
-
-
 }

@@ -64,7 +64,7 @@ void cwScrapView:: addScrapItem() {
     cwScrapItem* scrapItem = new cwScrapItem(context, this);
     scrapItem->setScrap(Note->scraps().last());
     scrapItem->setTransformUpdater(TransformUpdater);
-    connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
+//    connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
 
 
     ScrapItems.append(scrapItem);
@@ -72,37 +72,6 @@ void cwScrapView:: addScrapItem() {
     //Select the scrapItem
     setSelectScrapIndex(ScrapItems.size() - 1);
 }
-
-///**
-
-//This select the scrapItem, if the scrap item isn't null, and is part of the
-//  scrap view.  Otherwise this function does nothing
-//*/
-//void cwScrapView::setSelectedScrap(cwScrapItem* selectedScrap) {
-//    if(SelectedScrap != selectedScrap) {
-
-//        if(SelectedScrap != NULL) {
-//            //Deselect the scrap
-//            SelectedScrap->setSelected(false);
-//        }
-
-//        SelectedScrap = NULL;
-
-//        if(selectedScrap != NULL) {
-//            if(ScrapItems.contains(selectedScrap)) {
-
-//                SelectedScrap = selectedScrap;
-
-//                if(SelectedScrap != NULL) {
-//                    //Select the new selectedScrap
-//                    SelectedScrap->setSelected(true);
-//                }
-//            }
-//        }
-
-//        emit selectedScrapChanged();
-//    }
-//}
 
 /**
     Gets the scrapItem at notePoint
@@ -134,6 +103,8 @@ cwScrapItem *cwScrapView::scrapItemAt(int index) {
     }
     return NULL;
 }
+
+
 
 /**
   \brief Selects the scrap at the notePoint
@@ -227,7 +198,7 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
         }
 
         if(selectScrapIndex >= 0) {
-            cwScrapItem* newScrapItem = ScrapItems[selectScrapIndex];
+            cwScrapItem* newScrapItem = ScrapItems.at(selectScrapIndex);
             newScrapItem->setSelected(true);
         }
 
@@ -242,7 +213,7 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
 cwScrapItem* cwScrapView::selectedScrapItem() const {
     if(selectScrapIndex() >= 0 && selectScrapIndex() < ScrapItems.size()) {
         //        Q_ASSERT(ScrapItems[selectScrapIndex()]->isSelected());
-        return ScrapItems[selectScrapIndex()];
+        return ScrapItems.at(selectScrapIndex());
     }
     return NULL;
 }
@@ -263,6 +234,7 @@ void cwScrapView::setSelectedScrapItem(cwScrapItem* scrapItem) {
   */
 void cwScrapView::updateSelection() {
     cwScrapItem* scrapItem = qobject_cast<cwScrapItem*>(sender());
+    qDebug() << "Update selection:" << scrapItem << selectedScrapItem();
     if(scrapItem != NULL) {
         setSelectedScrapItem(scrapItem);
     }
