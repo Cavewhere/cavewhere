@@ -166,7 +166,9 @@ SOURCES += src/main.cpp \
     src/cwAbstractPointManager.cpp \
     src/cwScrapPointView.cpp \
     src/cwScrapOutlinePointView.cpp \
-    src/cwSelectionManager.cpp
+    src/cwSelectionManager.cpp \
+    src/cwUnitValue.cpp \
+    src/cwImageResolution.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -307,7 +309,9 @@ HEADERS  += \
     src/cwAbstractPointManager.h \
     src/cwScrapPointView.h \
     src/cwScrapOutlinePointView.h \
-    src/cwSelectionManager.h
+    src/cwSelectionManager.h \
+    src/cwUnitValue.h \
+    src/cwImageResolution.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -369,7 +373,6 @@ OTHER_FILES += \
     qml/GlobalShadowTextInput.qml \
     qml/DataBox.qml \
     qml/Utils.js \
-    qml/LengthInput.qml \
     qml/CavewhereMainWindow.qml \
     shaders/scrap.vert \
     shaders/scrap.frag \
@@ -417,7 +420,10 @@ OTHER_FILES += \
     qml/ScrapOutlinePoint.qml \
     qml/PointItem.qml \
     qml/ScrapPointItem.qml \
-    qml/ScrapPointMouseArea.qml
+    qml/ScrapPointMouseArea.qml \
+    qml/FloatingGroupBox.qml \
+    qml/NoteResolution.qml \
+    qml/UnitValueInput.qml
 
 RESOURCES += \
     icons.qrc

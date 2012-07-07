@@ -13,8 +13,8 @@
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     QObject(parent),
     North(0.0),
-    ScaleNumerator(new cwLength(1, cwUnits::Unitless, this)),
-    ScaleDenominator(new cwLength(1, cwUnits::Unitless, this))
+    ScaleNumerator(new cwLength(1, cwUnits::LengthUnitless, this)),
+    ScaleDenominator(new cwLength(1, cwUnits::LengthUnitless, this))
 {
     connectLengthObjects();
 }
@@ -148,12 +148,12 @@ void cwNoteTranformation::setScale(double newScale)
 
     //Figure out the unit scaling
     double unitScale = 1.0; //scales the length for the units
-    if(scaleNumerator()->unit() != cwUnits::Unitless ||
-            scaleDenominator()->unit() != cwUnits::Unitless ) {
+    if(scaleNumerator()->unit() != cwUnits::LengthUnitless ||
+            scaleDenominator()->unit() != cwUnits::LengthUnitless ) {
 
         unitScale = cwUnits::convert(1.0,
-                                     scaleNumerator()->unit(),
-                                     scaleDenominator()->unit());
+                                     (cwUnits::LengthUnit)scaleNumerator()->unit(),
+                                     (cwUnits::LengthUnit)scaleDenominator()->unit());
     }
 
     double denominator = 1.0 / newScale * unitScale;

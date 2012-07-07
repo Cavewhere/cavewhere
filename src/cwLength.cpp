@@ -5,14 +5,12 @@
 #include <QDebug>
 
 cwLength::cwLength(QObject *parent) :
-    QObject(parent),
-    Data(new PrivateData())
+    cwUnitValue(parent)
 {
 }
 
 cwLength::cwLength(double value, cwUnits::LengthUnit unit, QObject* parent) :
-    QObject(parent),
-    Data(new PrivateData(value, unit))
+    cwUnitValue(value, unit, parent)
 {
 
 }
@@ -21,34 +19,9 @@ cwLength::cwLength(double value, cwUnits::LengthUnit unit, QObject* parent) :
   Copy constructor
   */
 cwLength::cwLength(const cwLength& other) :
-    QObject(NULL),
-    Data(new PrivateData(*(other.Data)))
+    cwUnitValue(other)
 {
 
-}
-
-/**
-  Sets the unit for the length
-  */
-void cwLength::setUnit(cwUnits::LengthUnit unit) {
-    if(Data->LengthUnit != unit) {
-//        //Update the value with a new value
-//        double newValue = convert(value(), Data->LengthUnit, unit);
-//        setValue(newValue);
-
-        Data->LengthUnit = unit;
-        emit unitChanged();
-    }
-}
-
-/**
-  Sets the value of the length
-  */
-void cwLength::setValue(double value) {
-    if(Data->Value != value) {
-        Data->Value = value;
-        emit valueChanged();
-    }
 }
 
 /**
@@ -56,18 +29,6 @@ void cwLength::setValue(double value) {
   cwLength object with that value
   */
 cwLength cwLength::convertTo(cwUnits::LengthUnit to) const {
-    double convertedValue = convert(value(), unit(), to);
+    double convertedValue = cwUnits::convert(value(), (cwUnits::LengthUnit)unit(), (cwUnits::LengthUnit)to);
     return cwLength(convertedValue, to);
-}
-
-/**
-  Assignment operator
-  */
-const cwLength & cwLength::operator =(const cwLength &other)
-{
-    if(this != &other) {
-        setUnit(other.unit());
-        setValue(other.value());
-    }
-    return *this;
 }

@@ -90,20 +90,34 @@ ImageItem {
         modelMatrix: noteArea.modelMatrix
     }
 
-    NoteTransformEditor {
-        id: noteTransformEditorId
+    Column {
         anchors.top: parent.top
         anchors.left: parent.left
-        interactionManager: interactionManagerId
-        northInteraction: noteNorthUpInteraction
-        scaleInteraction: noteScaleInteraction
-        scrap: {
-            if(scrapViewId.selectedScrapItem !== null) {
-                return scrapViewId.selectedScrapItem.scrap;
-            }
-            return null;
-        }
+        spacing: 5
         z: 2
+
+        NoteResolution {
+            id: noteResolutionId
+            resolution: {
+                if(note !== null) {
+                    return note.imageResolution;
+                }
+                return null;
+            }
+        }
+
+        NoteTransformEditor {
+            id: noteTransformEditorId
+            interactionManager: interactionManagerId
+            northInteraction: noteNorthUpInteraction
+            scaleInteraction: noteScaleInteraction
+            scrap: {
+                if(scrapViewId.selectedScrapItem !== null) {
+                    return scrapViewId.selectedScrapItem.scrap;
+                }
+                return null;
+            }
+        }
     }
 
     //For rendering scraps onto the view

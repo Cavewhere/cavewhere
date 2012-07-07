@@ -63,6 +63,8 @@
 #include "cwAbstractPointManager.h"
 #include "cwScrapOutlinePointView.h"
 #include "cwSelectionManager.h"
+#include "cwUnitValue.h"
+#include "cwImageResolution.h"
 
 //#include <QGLWidget>
 
@@ -131,6 +133,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwAbstractPointManager>();
     qmlRegisterType<cwScrapOutlinePointView>("Cavewhere", 1, 0, "ScrapControlPointView");
     qmlRegisterType<cwSelectionManager>("Cavewhere", 1, 0, "SelectionManager");
+    qmlRegisterType<cwUnitValue>();
+    qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
 }

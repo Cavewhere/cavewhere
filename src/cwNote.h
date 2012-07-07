@@ -12,6 +12,7 @@
 class cwTrip;
 class cwScrap;
 class cwCave;
+class cwImageResolution;
 
 class cwNote : public QObject
 {
@@ -21,6 +22,7 @@ class cwNote : public QObject
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
+    Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
 
 public:
     explicit cwNote(QObject *parent = 0);
@@ -52,13 +54,15 @@ public:
     void removeScraps(int begin, int end);
     int indexOfScrap(cwScrap* scrap) const;
 
+    cwImageResolution* imageResolution() const;
+    double dotPerMeter() const;
 
 signals:
-//    void imagePathChanged();
     void originalChanged(int id);
     void iconChanged(int id);
     void imageChanged(cwImage image);
     void rotateChanged(float rotate);
+    void imageResolutionChanged();
 
     //For scraps
     void insertedScraps(int begin, int end);
@@ -86,6 +90,8 @@ private:
     QList<cwNoteStation> Stations;
 
     QList<cwScrap*> Scraps;
+
+    cwImageResolution* ImageResolution; //!< NULL if the note should use image's resolution
 
     void copy(const cwNote& object);
     void setupScrap(cwScrap* scrap);
@@ -139,6 +145,15 @@ inline int cwNote::indexOfScrap(cwScrap *scrap) const
 {
    return Scraps.indexOf(scrap);
 }
+
+/**
+Gets specifiedImageResolution
+*/
+inline cwImageResolution* cwNote::imageResolution() const {
+    return ImageResolution;
+}
+
+
 
 
 

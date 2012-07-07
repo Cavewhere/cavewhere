@@ -6,7 +6,7 @@
 #include <QStringList>
 #include <QDebug>
 
-double cwUnits::UnitsToMeters[cwUnits::Unitless + 1] = {0.0254, //Inches
+double cwUnits::LengthUnitsToMeters[cwUnits::LengthUnitless + 1] = {0.0254, //Inches
                                                         0.3048, //Feet
                                                         0.9144, //Yard
                                                         1.0, //Meter
@@ -16,6 +16,13 @@ double cwUnits::UnitsToMeters[cwUnits::Unitless + 1] = {0.0254, //Inches
                                                         0.0 //Unitless
                                                        };
 
+
+double cwUnits::ResolutionUnitToDotPerMeters[cwUnits::DotsPerMeter + 1] = {
+      39.3700787, //Dots per inch
+      100.0, //Dots per centimeter
+      1.0, //Dots per meter
+};
+
 /**
   Converts value to the 'to' LengthUnit
 
@@ -23,24 +30,23 @@ double cwUnits::UnitsToMeters[cwUnits::Unitless + 1] = {0.0254, //Inches
 
   */
 double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthUnit to) {
-    if(from == Unitless || to == Unitless) {
+    if(from == LengthUnitless || to == LengthUnitless) {
         return value;
     }
 
-    if(to < 0 || to > Unitless ) {
+    if(to < 0 || to > LengthUnitless ) {
         qDebug() << "Can't convert to unit" << LOCATION;
         return value;
     }
 
-    if(from < 0 || from > Unitless) {
+    if(from < 0 || from > LengthUnitless) {
         qDebug() << "Can't convert from unit" << LOCATION;
         return value;
     }
 
-    double fromFactor = UnitsToMeters[from];
-    double toFactor = UnitsToMeters[to];
-
-    return value * fromFactor / toFactor;
+    double fromFactor = LengthUnitsToMeters[from];
+    double toFactor = LengthUnitsToMeters[to];
+    return convert(value, fromFactor, toFactor);
 }
 
 /**
@@ -49,7 +55,7 @@ double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthU
 QStringList cwUnits::lengthUnitNames()
 {
     QStringList units;
-    for(int i = Inches; i <= Unitless; i++) {
+    for(int i = Inches; i <= LengthUnitless; i++) {
         units.append(unitName((LengthUnit)i));
     }
     return units;
@@ -75,7 +81,7 @@ QString cwUnits::unitName(cwUnits::LengthUnit unit)
         return "cm";
     case Kilometers:
         return "km";
-    case Unitless:
+    case LengthUnitless:
         return "unitless";
     default:
         return "error";
@@ -119,6 +125,62 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
     } else if(unitString == "km") {
         return Kilometers;
     }
-    return Unitless;
+    return LengthUnitless;
+}
+
+/**
+ * @brief cwUnits::convert
+ * @param value - The value in sum resolution
+ * @param from - The units of the value
+ * @param to - The units of the value that will be converted to
+ * @return The value with the from units
+ */
+double cwUnits::convert(double value, cwUnits::ImageResolutionUnit from, cwUnits::ImageResolutionUnit to)
+{
+    if(to < 0 || to > DotsPerMeter ) {
+        qDebug() << "Can't convert to unit" << LOCATION;
+        return value;
+    }
+
+    if(from < 0 || from > DotsPerMeter) {
+        qDebug() << "Can't convert from unit" << LOCATION;
+        return value;
+    }
+
+    double fromFactor = ResolutionUnitToDotPerMeters[from];
+    double toFactor = ResolutionUnitToDotPerMeters[to];
+    return convert(value, fromFactor, toFactor);
+}
+
+/**
+ * @brief cwUnits::imageResolutionUnitNames
+ * @return All the names of all the units
+ *.ep.e
+ */
+QStringList cwUnits::imageResolutionUnitNames()
+{
+    QStringList units;
+    for(int i = DotsPerInch; i <= DotsPerMeter; i++) {
+        units.append(unitName((ImageResolutionUnit)i));
+    }
+    return units;
+
+}
+
+/**
+  Get's a unit name for a unit
+  */
+QString cwUnits::unitName(cwUnits::ImageResolutionUnit unit)
+{
+    switch(unit) {
+    case DotsPerInch:
+        return "Dots per inch";
+    case DotsPerCentimeter:
+        return "Dots per centimeter";
+    case DotsPerMeter:
+        return "Dots per meter";
+    default:
+        return "Unknown";
+    }
 }
 

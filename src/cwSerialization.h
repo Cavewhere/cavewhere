@@ -15,6 +15,7 @@
 #include "cwNoteStation.h"
 #include "cwNoteTranformation.h"
 #include "cwLength.h"
+#include "cwImageResolution.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwReadingStates.h"
@@ -30,7 +31,7 @@
 
 BOOST_CLASS_VERSION(cwCavingRegion, 1)
 BOOST_CLASS_VERSION(cwCave, 1)
-BOOST_CLASS_VERSION(cwNote, 1)
+BOOST_CLASS_VERSION(cwNote, 2)
 BOOST_CLASS_VERSION(cwStation, 1)
 BOOST_CLASS_VERSION(cwTrip, 1)
 BOOST_CLASS_VERSION(cwSurveyNoteModel, 1)
@@ -43,6 +44,7 @@ BOOST_CLASS_VERSION(cwScrap, 1)
 BOOST_CLASS_VERSION(cwNoteStation, 1)
 BOOST_CLASS_VERSION(cwNoteTranformation, 1)
 BOOST_CLASS_VERSION(cwLength, 1)
+BOOST_CLASS_VERSION(cwImageResolution, 1)
 BOOST_CLASS_VERSION(cwTeam, 1)
 BOOST_CLASS_VERSION(cwTeamMember, 1)
 
@@ -61,6 +63,7 @@ BOOST_SERIALIZATION_SPLIT_FREE(cwScrap)
 BOOST_SERIALIZATION_SPLIT_FREE(cwNoteStation)
 BOOST_SERIALIZATION_SPLIT_FREE(cwNoteTranformation)
 BOOST_SERIALIZATION_SPLIT_FREE(cwLength)
+BOOST_SERIALIZATION_SPLIT_FREE(cwImageResolution)
 BOOST_SERIALIZATION_SPLIT_FREE(cwTeam)
 BOOST_SERIALIZATION_SPLIT_FREE(cwTeamMember)
 
@@ -282,15 +285,19 @@ namespace boost {
 
     ///////////////////////////// cwNote ///////////////////////////////
     template<class Archive>
-    void save(Archive &archive, const cwNote &note, const unsigned int) {
+    void save(Archive &archive, const cwNote &note, const unsigned int version) {
+        Q_UNUSED(version)
+
         //Save the notes
         cwImage image = note.image();
         float rotation = note.rotate();
         QList<cwScrap*> scraps = note.scraps();
+        cwImageResolution* imageResolution = note.imageResolution();
 
         archive << BOOST_SERIALIZATION_NVP(image);
         archive << BOOST_SERIALIZATION_NVP(rotation);
         archive << BOOST_SERIALIZATION_NVP(scraps);
+        archive << BOOST_SERIALIZATION_NVP(imageResolution);
     }
 
     template<class Archive>
@@ -305,6 +312,14 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(image);
         archive >> BOOST_SERIALIZATION_NVP(rotation);
         archive >> BOOST_SERIALIZATION_NVP(scraps);
+
+        //Added support for resolution
+        if(version >= 2) {
+            cwImageResolution* imageResolution;
+            archive >> BOOST_SERIALIZATION_NVP(imageResolution);
+            *(note.imageResolution()) = *imageResolution; //Copy the image resolution into the note
+            delete imageResolution; //Delete the loaded image resolution
+        }
 
         note.setImage(image);
         note.setRotate(rotation);
@@ -391,7 +406,7 @@ namespace boost {
         float BackCompasssCalibration = 0.0;
         float BackClinoCalibration = 0.0;
         float Declination = 0.0;
-        int DistanceUnit = cwUnits::Unitless;
+        int DistanceUnit = cwUnits::LengthUnitless;
         bool hasFrontSights;
         bool hasBackSights;
 
@@ -619,7 +634,7 @@ namespace boost {
         transform.scaleDenominator()->setUnit(scaleDenominator->unit());
     }
 
-    ////////////////////////// cwNoteTranformation ////////////////////////////////////////
+    ////////////////////////// cwLength ////////////////////////////////////////
     template<class Archive>
     void save(Archive &archive, const cwLength &length, const unsigned int version) {
         Q_UNUSED(version);
@@ -643,6 +658,32 @@ namespace boost {
 
         length.setValue(value);
         length.setUnit((cwUnits::LengthUnit)unit);
+    }
+
+    ////////////////////////// cwImageResolution ////////////////////////////////////////
+    template<class Archive>
+    void save(Archive &archive, const cwImageResolution &resolution, const unsigned int version) {
+        Q_UNUSED(version);
+
+        double value = resolution.value();
+        int unit = resolution.unit();
+
+        archive << BOOST_SERIALIZATION_NVP(value);
+        archive << BOOST_SERIALIZATION_NVP(unit);
+    }
+
+    template<class Archive>
+    void load(Archive &archive, cwImageResolution &resolution, const unsigned int version) {
+        Q_UNUSED(version)
+
+        double value;
+        int unit;
+
+        archive >> BOOST_SERIALIZATION_NVP(value);
+        archive >> BOOST_SERIALIZATION_NVP(unit);
+
+        resolution.setValue(value);
+        resolution.setUnit((cwUnits::LengthUnit)unit);
     }
 
     ////////////////////////// cwTeam ////////////////////////////////////////

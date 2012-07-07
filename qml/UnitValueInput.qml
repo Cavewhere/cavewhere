@@ -4,35 +4,36 @@ import Cavewhere 1.0
 import "Utils.js" as Utils
 
 Row {
-    property Length length
+    property var unitValue: null
     property alias valueVisible: clickInput.visible
     property alias valueReadOnly: clickInput.readOnly
+    property int defaultUnit
 
     ClickTextInput {
         id: clickInput
-        text: length !== null ? Utils.fixed(length.value, 2) : ""
-        onFinishedEditting: if(length !== null) { length.value = newText }
+        text: unitValue !== null ? Utils.fixed(unitValue.value, 2) : ""
+        onFinishedEditting: if(unitValue !== null) { unitValue.value = newText }
     }
 
     UnitInput {
         id: unitInput
         unitModel: {
-            if(length !== null) {
-                return length.unitNames;
+            if(unitValue !== null) {
+                return unitValue.unitNames;
             } else {
                 return null
             }
         }
         unit: {
-            if(length !== null) {
-                return length.unit;
+            if(unitValue !== null) {
+                return unitValue.unit;
             } else {
-                return Units.Unitless
+                return defaultUnit
             }
         }
         onNewUnit: {
-            if(length !== null) {
-                length.unit = unit
+            if(unitValue !== null) {
+                unitValue.unit = unit
             }
         }
     }

@@ -145,7 +145,7 @@ int cwTripCalibration::mapToLengthUnit(int supportedUnitIndex)
     case 1:
         return cwUnits::Feet;
     default:
-        return cwUnits::Unitless;
+        return cwUnits::LengthUnitless;
     }
 }
 

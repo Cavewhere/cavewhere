@@ -86,8 +86,9 @@ Interaction {
                 text: "<b>In cave length</b>"
             }
 
-            LengthInput {
-                length: length
+            UnitValueInput {
+                unitValue: length
+                defaultUnit: Units.LengthUnitless
                 anchors.verticalCenter: parent.verticalCenter
             }
 

@@ -3,6 +3,7 @@
 #include "cwTrip.h"
 #include "cwScrap.h"
 #include "cwDebug.h"
+#include "cwImageResolution.h"
 
 //Std includes
 #include "cwMath.h"
@@ -13,7 +14,8 @@
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
     ParentTrip(NULL),
-    ParentCave(NULL)
+    ParentCave(NULL),
+    ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
 }
@@ -21,7 +23,8 @@ cwNote::cwNote(QObject *parent) :
 cwNote::cwNote(const cwNote& object) :
     QObject(NULL),
     ParentTrip(NULL),
-    ParentCave(NULL)
+    ParentCave(NULL),
+    ImageResolution(new cwImageResolution(this))
 {
     copy(object);
 }
@@ -62,6 +65,9 @@ void cwNote::copy(const cwNote& object) {
         Scraps.append(scrap);
     }
 
+    //Copy the image resolution
+    *ImageResolution = *(object.ImageResolution);
+
     Q_ASSERT(Scraps.size() == object.scraps().size());
 }
 
@@ -77,6 +83,9 @@ void cwNote::setImage(cwImage image) {
         emit originalChanged(ImageIds.original());
         emit iconChanged(ImageIds.icon());
         emit imageChanged(ImageIds);
+
+        imageResolution()->setValue(image.originalDotsPerMeter());
+        imageResolution()->setUnit(cwUnits::DotsPerMeter);
     }
 }
 
@@ -120,7 +129,7 @@ QMatrix4x4 cwNote::scaleMatrix() const {
   reallife coordinates.
   */
 QMatrix4x4 cwNote::metersOnPageMatrix() const {
-    double dotsPerMeter = image().originalDotsPerMeter();
+    double dotsPerMeter = dotPerMeter();
     double metersPerDot = 1.0 / dotsPerMeter;
 
     QMatrix4x4 metersPerDotsMatrix;
@@ -220,4 +229,10 @@ void cwNote::setParentCave(cwCave *cave) {
     }
 }
 
-
+/**
+ * @brief cwNote::dotPerMeter
+ * @return Get's the resolution of the image
+ */
+double cwNote::dotPerMeter() const {
+    imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+}

@@ -117,8 +117,7 @@ void cwScrapStationView::updateShotLines() {
         offsetMatrix.translate(-selectedStationPos);
 
         QMatrix4x4 dotPerMeter;
-        cwImage noteImage = note->image();
-        dotPerMeter.scale(noteImage.originalDotsPerMeter(), noteImage.originalDotsPerMeter(), 1.0);
+        dotPerMeter.scale(note->dotPerMeter(), note->dotPerMeter(), 1.0);
 
         QMatrix4x4 noteStationOffset;
         noteStationOffset.translate(QVector3D(noteStation.positionOnNote()));

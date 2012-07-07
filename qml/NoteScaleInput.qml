@@ -55,12 +55,13 @@ Item {
                         text: "On Paper"
                     }
 
-                    LengthInput {
+                    UnitValueInput {
                         id: onPaperLengthInput
                         anchors.horizontalCenter: parent.horizontalCenter
-                        length: null
+                        unitValue: null
                         valueVisible: false
                         valueReadOnly: autoScaling
+                        defaultUnit: Units.LengthUnitless
                     }
                 }
             }
@@ -88,12 +89,13 @@ Item {
                         text: "In Cave"
                     }
 
-                    LengthInput {
+                    UnitValueInput {
                         id: inCaveLengthInput
                         anchors.horizontalCenter: parent.horizontalCenter
-                        length: null
+                        unitValue: null
                         valueVisible: false
                         valueReadOnly: autoScaling
+                        defaultUnit: Units.LengthUnitless
                     }
                 }
             }
@@ -129,13 +131,13 @@ Item {
 
             PropertyChanges {
                 target: onPaperLengthInput
-                length: noteTransform.scaleNumerator
+                unitValue: noteTransform.scaleNumerator
                 valueVisible: (!autoScaling || noteTransform.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
             }
 
             PropertyChanges {
                 target: inCaveLengthInput
-                length: noteTransform.scaleDenominator
+                unitValue: noteTransform.scaleDenominator
                 valueVisible: (!autoScaling || noteTransform.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
             }
 
