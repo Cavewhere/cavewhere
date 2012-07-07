@@ -97,6 +97,9 @@ void cwScrapStationView::updateShotLines() {
     cwCave* cave = trip->parentCave();
     cwStationPositionLookup stationPositionLookup = cave->stationPositionLookup();
 
+    //Clear all the lines
+    ShotLines.clear();
+
     if(noteStation.isValid() && stationPositionLookup.hasPosition(noteStation.name())) {
         QString stationName = noteStation.name();
         QSet<cwStation> neighboringStations = trip->neighboringStations(stationName);
@@ -126,9 +129,6 @@ void cwScrapStationView::updateShotLines() {
                 noteTransformMatrix *
                 offsetMatrix;
 
-        //Clear all the lines
-        ShotLines.clear();
-
         //Go through all the neighboring stations and add the position to the line
         foreach(cwStation station, neighboringStations) {
 
@@ -137,10 +137,10 @@ void cwScrapStationView::updateShotLines() {
 
             ShotLines.append(QLineF(noteStation.positionOnNote(), normalizeNotePos.toPointF()));
         }
-
-        //Update the node geometry
-        update();
     }
+
+    //Update the node geometry
+    update();
 }
 
 /**
