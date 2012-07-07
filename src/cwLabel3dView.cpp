@@ -30,6 +30,7 @@ cwLabel3dView::~cwLabel3dView()
     QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
     while(iter.hasNext()) {
         cwLabel3dGroup* group = iter.next();
+        group->setParentView(NULL);
         group->deleteLater();
     }
 }
