@@ -287,50 +287,50 @@ void cwScrap::updateNoteTransformation() {
   This is a helper to updateNoteTransformation
   */
 QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
-//FIXME: Fix with new station architecture
 
-    //    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
-//    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+    if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
+    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+    if(parentCave() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
 //    //Find the valid stations
 //    QSet<cwNoteStation> validStationsSet;
+//    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
 //    foreach(cwNoteStation noteStation, Stations) {
-//        if(noteStation.station().isValid()) { // && noteStation.station().cave() != NULL) {
+//        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != NULL) {
 //            validStationsSet.insert(noteStation);
 //        }
 //    }
 
-//    //Get the parent trip of for these notes
-//    cwTrip* trip = parentNote()->parentTrip();
+    //Get the parent trip of for these notes
+    cwTrip* trip = parentNote()->parentTrip();
 
-//    //Go through all the valid stations get the
-//    QList<cwNoteStation> validStationList = validStationsSet.toList();
+    //Go through all the valid stations get the
+    QList<cwNoteStation> validStationList = stations(); //validStationsSet.toList();
 
-//    //Generate all the neighbor list for each station
-//    QList< QSet< cwStation > > stationNeighbors;
-//    foreach(cwNoteStation station, validStationList) {
-//        QSet<cwStation> neighbors = trip->neighboringStations(station.station().name());
-//        stationNeighbors.append(neighbors);
-//    }
-
-//    QList< QPair<cwNoteStation, cwNoteStation> > shotList;
-//    for(int i = 0; i < validStationList.size(); i++) {
-//        for(int j = i; j < validStationList.size(); j++) {
-//            cwNoteStation station1 = validStationList[i];
-//            cwNoteStation station2 = validStationList[j];
-
-//            //Get neigbor lookup
-//            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
-//            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
-
-//            //See if they make up a shot
-//            if(neighborsStation1.contains(station2.station()) && neighborsStation2.contains(station1.station())) {
-//                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
-//            }
-//        }
-//    }
+    //Generate all the neighbor list for each station
+    QList< QSet< cwStation > > stationNeighbors;
+    foreach(cwNoteStation station, validStationList) {
+        QSet<cwStation> neighbors = trip->neighboringStations(station.name());
+        stationNeighbors.append(neighbors);
+    }
 
     QList< QPair<cwNoteStation, cwNoteStation> > shotList;
+    for(int i = 0; i < validStationList.size(); i++) {
+        for(int j = i; j < validStationList.size(); j++) {
+            cwNoteStation station1 = validStationList[i];
+            cwNoteStation station2 = validStationList[j];
+
+            //Get neigbor lookup
+            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
+            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
+
+            //See if they make up a shot
+            if(neighborsStation1.contains(station2.name()) && neighborsStation2.contains(station1.name())) {
+                shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
+            }
+        }
+    }
+
     return shotList;
 }
 
@@ -352,8 +352,20 @@ QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair 
   This will caluclate the transfromation between station1 and station2
   */
 cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
-    QVector3D station1RealPos; // = station1.station().position(); //In meters
-    QVector3D station2RealPos; // = station2.station().position();
+    if(parentCave() == NULL) {
+        qDebug() << "Can't calculate shot transformation because parentCave is null" << LOCATION;
+        return cwNoteTranformation();
+    }
+
+    cwStationPositionLookup positionLookup = parentCave()->stationPositionLookup();
+
+    //Make sure station1 and station2 exist in the lookup
+    if(!positionLookup.hasPosition(station1.name()) || !positionLookup.hasPosition(station2.name())) {
+        return cwNoteTranformation();
+    }
+
+    QVector3D station1RealPos = positionLookup.position(station1.name());
+    QVector3D station2RealPos = positionLookup.position(station2.name());
 
     //Remove the z for plan view
     station1RealPos.setZ(0.0);
@@ -401,8 +413,11 @@ cwNoteTranformation cwScrap::averageTransformations(QList< cwNoteTranformation >
     double scaleAverage = 0.0;
 
     foreach(cwNoteTranformation transformation, shotTransforms) {
-        angleAverage  += transformation.northUp();
-        scaleAverage += transformation.scaleDenominator()->value();
+        //Make sure the note transform scale is valid
+        if(transformation.scale() != 1.0) {
+            angleAverage  += transformation.northUp();
+            scaleAverage += transformation.scaleDenominator()->value();
+        }
     }
 
     angleAverage = angleAverage / (double)shotTransforms.size();
