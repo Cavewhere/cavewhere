@@ -24,12 +24,19 @@ BaseScrapInteraction {
                    interaction.addScrap()
                 }
 
-                var index = lastPoint["InsertIndex"]
+                //Scrap is completed, we just need to create a new scrap
+                var index
+                if(!lastPoint["IsSnapped"] && scrap.isClosed()) {
+                   interaction.addScrap()
+                    index = 0; //Insert the point at the begining of the new scrap
+                } else {
+                    index = lastPoint["InsertIndex"]
+                }
+
                 scrap.insertPoint(index, lastPoint["NoteCoordsPoint"])
                 outlinePointView.selectedItemIndex = index
 
                 lastPointIndex = index
-//                interaction.addPoint(Qt.point(mouse.x, mouse.y))
             }
         }
 

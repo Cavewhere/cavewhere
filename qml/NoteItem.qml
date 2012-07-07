@@ -30,6 +30,12 @@ ImageItem {
             }
             return null;
         }
+        scrap: {
+            if(scrapViewId.selectedScrapItem !== null) {
+                return scrapViewId.selectedScrapItem.scrap
+            }
+            return null
+        }
     }
 
     NoteStationInteraction {

@@ -51,7 +51,7 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
     }
 
     QPointF noteCoordinate = imageItem()->mapQtViewportToNote(qtViewportPosition);
-    double buffer = 5.0;
+    double buffer = 7.5;
 
 //    foreach(cwScrap* scrap, note()->scraps()) {
 
@@ -104,57 +104,11 @@ void cwBaseScrapInteraction::deactivating() {
     }
 }
 
-
-/**
-    Add a point to the end of the current scrap.
-
-    If no scrap is currently selected, this will create a new scrap
-
-    QPointF viewportCoordinate - The point in viewportCoordinate coordinates
-  */
-void cwBaseScrapInteraction::addPoint(QPoint viewportCoordinate) {
-    if(note() == NULL) {
-        qDebug() << "This is a bug! Can't add point because Note is null" << LOCATION;
-        return;
-    }
-
-    if(Scrap == NULL) {
-        addScrap();
-    }
-
-    if(imageItem() == NULL) {
-        qDebug() << "This is a bug! Can't add point because the image item is null" << LOCATION;
-        return;
-    }
-
-    if(outlinePointView() == NULL) {
-        qDebug() << "This is a bug! Can't add point because controlPointView is null" << LOCATION;
-        return;
-    }
-
-    if(Scrap == NULL) {
-        qDebug() << "This is a bug! scrap is null" << LOCATION;
-        return;
-    }
-
-
-
-    cwClosestPoint closestPoint = calcClosestPoint(viewportCoordinate);
-    if(closestPoint.IsValid) {
-        Scrap->insertPoint(closestPoint.InsertIndex, closestPoint.ClosestPoint);
-    } else {
-        //Add the last point to the scrap
-        QPointF noteCoordinate = imageItem()->mapQtViewportToNote(viewportCoordinate);
-        Scrap->addPoint(noteCoordinate);
-    }
-}
-
 /**
   This starts a new scrap instead of
   */
 void cwBaseScrapInteraction::startNewScrap() {
     closeCurrentScrap();
-    setScrap(NULL);
 }
 
 /**
@@ -186,14 +140,12 @@ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
     if(Scrap == scrap) { return; }
 
     if(Scrap != NULL) {
-        disconnect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
         disconnect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
     Scrap = scrap;
 
     if(Scrap != NULL) {
-        connect(Scrap, &cwScrap::closeChanged, this, &cwBaseScrapInteraction::startNewScrap);
         connect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 

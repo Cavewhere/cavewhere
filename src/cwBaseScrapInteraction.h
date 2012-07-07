@@ -18,7 +18,7 @@ class cwBaseScrapInteraction : public cwNoteInteraction
 public:
     explicit cwBaseScrapInteraction(QQuickItem *parent = 0);
 
-    Q_INVOKABLE void addPoint(QPoint imageCoordinate);
+//    Q_INVOKABLE void addPoint(QPoint imageCoordinate);
 
     cwImageItem* imageItem() const;
     void setImageItem(cwImageItem* imageItem);
