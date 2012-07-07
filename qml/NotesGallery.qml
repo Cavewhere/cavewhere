@@ -297,6 +297,7 @@ Rectangle {
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
+        scrapsVisible: false
         note: currentNote
     }
 
@@ -340,6 +341,11 @@ Rectangle {
             PropertyChanges {
                 target: galleryContainer
                 anchors.top:  carpetButtonArea.bottom
+            }
+
+            PropertyChanges {
+                target: noteArea
+                scrapsVisible: true
             }
 
 //            PropertyChanges {

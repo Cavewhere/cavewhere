@@ -5,6 +5,7 @@ ImageItem {
     id: noteArea
 
     property Note note;
+    property alias scrapsVisible: scrapViewId.visible
 
     projectFilename: project.filename
 
