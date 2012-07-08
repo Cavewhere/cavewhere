@@ -5,7 +5,14 @@ import Cavewhere 1.0
 FloatingGroupBox {
     id: floatingGroup
 
-    property ImageResolution resolution
+    property Note note;
+    property ImageResolution resolution: {
+        if(note !== null) {
+            return note.imageResolution;
+        }
+        return null;
+    }
+
 
     titleText: "Image Info"
 
@@ -30,7 +37,43 @@ FloatingGroupBox {
 
         UnitValueInput {
             unitValue: resolution
+            anchors.verticalCenter: parent.verticalCenter
         }
+
+        Button {
+            id: moreButton
+            iconSource: "qrc:/icons/moreArrowDown.png"
+            iconSize: Qt.size(8, 8)
+            height: 12
+            anchors.verticalCenter: parent.verticalCenter
+
+            onClicked: {
+                resolutionPopupMenu.popupOnTopOf(moreButton, 0, moreButton.height)
+            }
+
+            ContextMenu {
+                id: resolutionPopupMenu
+
+                MenuItem {
+                    text: {
+                        var tripName = ""
+                        if(note !== null && note.parentTrip() !== null) {
+                            tripName = note.parentTrip().name
+                        }
+                        return "<b>Properate</b> resolution to ever note in " + tripName
+                    }
+                }
+
+                MenuItem {
+                    text: "<b>Reset</b> to original"
+                    onTriggered: note.resetImageResolution()
+                }
+
+            }
+
+        }
+
+
     }
 
 }

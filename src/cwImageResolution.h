@@ -16,6 +16,9 @@ public:
     QString unitName(int unit);
     
     cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
+
+protected:
+    virtual void convertToUnit(int newUnit);
 };
 
 

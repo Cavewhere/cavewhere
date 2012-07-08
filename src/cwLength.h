@@ -24,6 +24,10 @@ public:
     QString unitName(int unit);
 
     cwLength convertTo(cwUnits::LengthUnit to) const;
+
+protected:
+    virtual void convertToUnit(int newUnit);
+
 };
 
 

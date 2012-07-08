@@ -18,6 +18,7 @@ cwNote::cwNote(QObject *parent) :
     ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
+    ImageResolution->setUpdateValue(true); //Update the value when the units have changed
 }
 
 cwNote::cwNote(const cwNote& object) :
@@ -84,8 +85,7 @@ void cwNote::setImage(cwImage image) {
         emit iconChanged(ImageIds.icon());
         emit imageChanged(ImageIds);
 
-        imageResolution()->setValue(image.originalDotsPerMeter());
-        imageResolution()->setUnit(cwUnits::DotsPerMeter);
+        resetImageResolution();
     }
 }
 
@@ -234,5 +234,18 @@ void cwNote::setParentCave(cwCave *cave) {
  * @return Get's the resolution of the image
  */
 double cwNote::dotPerMeter() const {
-    imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+    return imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+}
+
+/**
+ * @brief cwNote::resetImageResolution
+ *
+ * This resets the image resolution to it's original resolution
+ */
+void cwNote::resetImageResolution() {
+    imageResolution()->setUpdateValue(false);
+    imageResolution()->setUnit(cwUnits::DotsPerMeter);
+    imageResolution()->setValue(image().originalDotsPerMeter());
+    imageResolution()->setUpdateValue(true);
+    imageResolution()->setUnit(cwUnits::DotsPerInch); //Automatically converts imageResolution to inch
 }

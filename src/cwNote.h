@@ -39,7 +39,7 @@ public:
     float rotate() const;
 
     void setParentTrip(cwTrip* trip);
-    cwTrip* parentTrip() const;
+    Q_INVOKABLE cwTrip* parentTrip() const;
 
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
@@ -56,6 +56,8 @@ public:
 
     cwImageResolution* imageResolution() const;
     double dotPerMeter() const;
+
+    Q_INVOKABLE void resetImageResolution();
 
 signals:
     void originalChanged(int id);

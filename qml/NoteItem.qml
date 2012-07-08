@@ -98,12 +98,7 @@ ImageItem {
 
         NoteResolution {
             id: noteResolutionId
-            resolution: {
-                if(note !== null) {
-                    return note.imageResolution;
-                }
-                return null;
-            }
+            note: noteArea.note
         }
 
         NoteTransformEditor {

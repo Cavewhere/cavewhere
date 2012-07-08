@@ -29,6 +29,16 @@ cwLength::cwLength(const cwLength& other) :
   cwLength object with that value
   */
 cwLength cwLength::convertTo(cwUnits::LengthUnit to) const {
-    double convertedValue = cwUnits::convert(value(), (cwUnits::LengthUnit)unit(), (cwUnits::LengthUnit)to);
-    return cwLength(convertedValue, to);
+    cwLength length = *this;
+    length.convertToUnit(to);
+    return length;
+}
+
+/**
+ * @brief cwLength::convertToUnit
+ * @param newUnit - The new unit this object is going to convert to
+ */
+void cwLength::convertToUnit(int newUnit) {
+    double newValue = cwUnits::convert(value(), (cwUnits::LengthUnit)unit(), (cwUnits::LengthUnit)newUnit);
+    setValue(newValue);
 }

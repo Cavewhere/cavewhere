@@ -1,7 +1,7 @@
 #include "cwImageResolution.h"
 
 cwImageResolution::cwImageResolution(QObject *parent) :
-    cwUnitValue(parent)
+    cwUnitValue(0.0, cwUnits::DotsPerMeter, parent)
 {
 }
 
@@ -21,6 +21,16 @@ cwImageResolution::cwImageResolution(const cwImageResolution &other) :
   cwLength object with that value
   */
 cwImageResolution cwImageResolution::convertTo(cwUnits::ImageResolutionUnit to) const {
-    double convertedValue = cwUnits::convert(value(), (cwUnits::ImageResolutionUnit)unit(), (cwUnits::ImageResolutionUnit)to);
-    return cwImageResolution(convertedValue, to);
+    cwImageResolution resolution = *this;
+    resolution.convertToUnit(to);
+    return resolution;
+}
+
+/**
+ * @brief cwLength::convertToUnit
+ * @param newUnit - The new unit this object is going to convert to
+ */
+void cwImageResolution::convertToUnit(int newUnit) {
+    double newValue = cwUnits::convert(value(), (cwUnits::ImageResolutionUnit)unit(), (cwUnits::ImageResolutionUnit)newUnit);
+    setValue(newValue);
 }

@@ -30,8 +30,12 @@ public:
     int unit() const;
     void setUnit(int unit);
 
+    void setUpdateValue(bool updateAutomatically);
+    bool isUpdatingValue() const;
+
     virtual QStringList unitNames() = 0;
     virtual QString unitName(int unit) = 0;
+
 
 signals:
     void valueChanged();
@@ -40,23 +44,29 @@ signals:
     
 public slots:
 
+protected:
+    virtual void convertToUnit(int newUnit) = 0;
+
 private:
     class PrivateData : public QSharedData {
     public:
         PrivateData() :
-            Unit(-1),
-            Value(0.0)
+            Unit(0),
+            Value(0.0),
+            UpdateValueWhenUnitChanged(false)
         {
         }
 
         PrivateData(double value, int unit) :
             Unit(unit),
-            Value(value)
+            Value(value),
+            UpdateValueWhenUnitChanged(false)
             {
         }
 
         int Unit;
         double Value;
+        bool UpdateValueWhenUnitChanged;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -76,6 +86,14 @@ inline double cwUnitValue::value() const {
   */
 inline int cwUnitValue::unit() const {
     return Data->Unit;
+}
+
+/**
+ * Returns true if the value is update automatically, if units change
+ * This is disabled by default
+ */
+inline bool cwUnitValue::isUpdatingValue() const {
+   return Data->UpdateValueWhenUnitChanged;
 }
 
 #endif // CWUNITVALUE_H

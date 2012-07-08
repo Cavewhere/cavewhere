@@ -28,13 +28,19 @@ cwUnitValue::cwUnitValue(const cwUnitValue& other) :
   */
 void cwUnitValue::setUnit(int unit) {
     if(Data->Unit != unit) {
-//        //Update the value with a new value
-//        double newValue = convert(value(), Data->LengthUnit, unit);
-//        setValue(newValue);
+        if(isUpdatingValue()) {
+            //Update the value with a new value
+            convertToUnit(unit);
+        }
 
         Data->Unit = unit;
         emit unitChanged();
     }
+}
+
+void cwUnitValue::setUpdateValue(bool updateAutomatically)
+{
+    Data->UpdateValueWhenUnitChanged = updateAutomatically;
 }
 
 /**
