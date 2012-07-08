@@ -60,8 +60,9 @@ FloatingGroupBox {
                         if(note !== null && note.parentTrip() !== null) {
                             tripName = note.parentTrip().name
                         }
-                        return "<b>Properate</b> resolution to ever note in " + tripName
+                        return "<b>Propagate resolution</b> for each note in " + tripName
                     }
+                    onTriggered: note.propagateResolutionNotesInTrip();
                 }
 
                 MenuItem {

@@ -4,6 +4,7 @@
 #include "cwScrap.h"
 #include "cwDebug.h"
 #include "cwImageResolution.h"
+#include "cwSurveyNoteModel.h"
 
 //Std includes
 #include "cwMath.h"
@@ -248,4 +249,19 @@ void cwNote::resetImageResolution() {
     imageResolution()->setValue(image().originalDotsPerMeter());
     imageResolution()->setUpdateValue(true);
     imageResolution()->setUnit(cwUnits::DotsPerInch); //Automatically converts imageResolution to inch
+}
+
+/**
+ * @brief cwNote::propagateResolutionNotesInTrip
+ *
+ * This uses the parent trip, if valid, and propagates the current resolution to all the other
+ * notes
+ */
+void cwNote::propagateResolutionNotesInTrip()
+{
+    if(parentTrip() == NULL) { return; }
+
+    foreach(cwNote* note, parentTrip()->notes()->notes()) {
+        *(note->imageResolution()) = *(imageResolution());
+    }
 }

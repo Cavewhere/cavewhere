@@ -58,6 +58,7 @@ public:
     double dotPerMeter() const;
 
     Q_INVOKABLE void resetImageResolution();
+    Q_INVOKABLE void propagateResolutionNotesInTrip();
 
 signals:
     void originalChanged(int id);
