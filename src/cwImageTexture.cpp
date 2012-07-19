@@ -20,9 +20,10 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 
 cwImageTexture::~cwImageTexture()
 {
-    if(TextureId != 0) {
-        glDeleteTextures(1, &TextureId);
-    }
+    //FIXME: Texture needs to be delete when object is destroyed
+    //    if(TextureId != 0) {
+//        glDeleteTextures(1, &TextureId);
+//    }
 }
 
 /**
