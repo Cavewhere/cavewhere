@@ -15,10 +15,14 @@ Interaction {
 
     focus: visible
 
-    Keys.onEscapePressed: {
+    function done() {
+        northArrow.visible = false
         interaction.state = ""
         interaction.deactivate();
     }
+
+
+    Keys.onEscapePressed: done()
 
     QtObject {
         id: privateData
@@ -48,13 +52,19 @@ Interaction {
                 northArrow.p1 = privateData.firstLocation
                 northArrow.p2 = northArrow.p1
                 interaction.state = "WaitForSecondClick"
+                northArrow.visible = true
             }
+        }
+
+        onWheel: {
+            basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
     }
 
     NorthArrowItem {
         id: northArrow
         anchors.fill: parent
+        visible: false
     }
 
     HelpBox {
@@ -84,8 +94,7 @@ Interaction {
                         var secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
                         noteTransform.northUp = noteTransform.calculateNorth(privateData.firstLocation, secondLocation);
                         northArrow.p2 = secondLocation
-                        interaction.state = ""
-                        interaction.deactivate();
+                        done()
                     }
                 }
             }

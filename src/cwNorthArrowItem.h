@@ -5,6 +5,7 @@
 #include "cwAbstract2PointItem.h"
 class cwTransformUpdater;
 class cwPositioner3D;
+class cwSGLinesNode;
 
 class cwNorthArrowItem : public cwAbstract2PointItem
 {
@@ -15,23 +16,25 @@ public:
 
 public slots:
 
-private:
-    //FIXME: Fix north arrow line
-    QQuickItem* NorthArrowLineHandler;
-//    QGraphicsPathItem* NorthArrowLine;
-
-    //FIXME: Fix north text
-    cwPositioner3D* NorthTextHandler;
-//    QGraphicsTextItem* NorthText;
-
-    void disconnectTransformer();
-    void connectTransformer();
+protected:
+    QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData *);
 
     void p1Updated();
     void p2Updated();
 
+private:
+    void disconnectTransformer();
+    void connectTransformer();
+
+
 private slots:
     void updateNorthArrowPath();
+
+private:
+    QVector<QPointF> NorthArrowLineStrip;
+    cwSGLinesNode* NorthArrowLinesNode;
+
+    QVector<QPointF> createNorthArrowLineStrip() const;
 
 };
 
