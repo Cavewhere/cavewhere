@@ -1,17 +1,36 @@
 //Our includes
 #include "cwScaleLengthItem.h"
 #include "cwTransformUpdater.h"
+#include "cwSGLinesNode.h"
 
 //Qt includes
 #include <QDebug>
 
 cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
-    cwAbstract2PointItem(parent)
+    cwAbstract2PointItem(parent),
+    LinesNode(NULL)
 {
-    LengthHandler = new QQuickItem(this);
-        //FIXME: Fix lengthline
-//    LengthLine = new QGraphicsPathItem(LengthHandler);
-//    LengthLine->setPen(LinePen);
+    setFlag(QQuickItem::ItemHasContents, true);
+}
+
+QSGNode *cwScaleLengthItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *)
+{
+    if(!oldNode) {
+        oldNode = new QSGTransformNode();
+        LinesNode = new cwSGLinesNode();
+
+        oldNode->appendChildNode(LinesNode);
+    }
+
+    if(transformUpdater()) {
+        QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
+        transformNode->setMatrix(transformUpdater()->matrix());
+    }
+
+
+    LinesNode->setLines(Lines);
+
+    return oldNode;
 }
 
 /**
@@ -20,7 +39,6 @@ cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     We need to connect it.
   */
 void cwScaleLengthItem::connectTransformer() {
-//    TransformUpdater->addTransformItem(LengthHandler);
     connect(TransformUpdater, SIGNAL(updated()), SLOT(updateScaleLengthPath()));
 }
 
@@ -30,7 +48,6 @@ void cwScaleLengthItem::connectTransformer() {
     We need to disconnect it
   */
 void cwScaleLengthItem::disconnectTransformer() {
-//    TransformUpdater->removeTransformItem(LengthHandler);
     disconnect(TransformUpdater, SIGNAL(updated()), this, SLOT(updateScaleLengthPath()));
 }
 
@@ -38,10 +55,19 @@ void cwScaleLengthItem::disconnectTransformer() {
     Updates the scale length path
   */
 void cwScaleLengthItem::updateScaleLengthPath() {
+    Lines = lengthLines();
+    update();
+}
+
+/**
+ * @brief cwScaleLengthItem::lengthLines
+ * @return A vector with the 3 lines that make up the visual representation of the item
+ */
+QVector<QLineF> cwScaleLengthItem::lengthLines() const
+{
     //Create the centerLine
     QPainterPath painterPath;
-    painterPath.moveTo(p1());
-    painterPath.lineTo(p2());
+    QLineF line0(p1(), p2());
 
     QPointF p1ViewportPosition = TransformUpdater->mapModelToViewport(p1());
     QPointF p2ViewportPosition = TransformUpdater->mapModelToViewport(p2());
@@ -55,17 +81,21 @@ void cwScaleLengthItem::updateScaleLengthPath() {
     transform.rotate(rotation);
     QLineF line1 = transform.map(perpendicularLine);
 
-    painterPath.moveTo(TransformUpdater->mapFromViewportToModel(line1.p1()).toPointF());
-    painterPath.lineTo(TransformUpdater->mapFromViewportToModel(line1.p2()).toPointF());
+    line1.setP1(TransformUpdater->mapFromViewportToModel(line1.p1()).toPointF());
+    line1.setP2(TransformUpdater->mapFromViewportToModel(line1.p2()).toPointF());
 
     transform = QTransform();
     transform.translate(p2ViewportPosition.x(), p2ViewportPosition.y());
     transform.rotate(rotation);
     QLineF line2 = transform.map(perpendicularLine);
 
-    painterPath.moveTo(TransformUpdater->mapFromViewportToModel(line2.p1()).toPointF());
-    painterPath.lineTo(TransformUpdater->mapFromViewportToModel(line2.p2()).toPointF());
+    line2.setP1(TransformUpdater->mapFromViewportToModel(line2.p1()).toPointF());
+    line2.setP2(TransformUpdater->mapFromViewportToModel(line2.p2()).toPointF());
 
-        //FIXME: Fix lengthline
-//    LengthLine->setPath(painterPath);
+    QVector<QLineF> lines;
+    lines.reserve(3);
+    lines.append(line0);
+    lines.append(line1);
+    lines.append(line2);
+    return lines;
 }

@@ -9,11 +9,14 @@ Interaction {
     property NoteTransform noteTransform
     property alias transformUpdater: scaleLengthItem.transformUpdater
 
-    focus: visible
-    Keys.onEscapePressed: {
+    function done() {
+        scaleLengthItem.visible = false
         interaction.state = ""
         interaction.deactivate();
     }
+
+    focus: visible
+    Keys.onEscapePressed: done()
 
     QtObject {
         id: privateData
@@ -44,7 +47,12 @@ Interaction {
                 scaleLengthItem.p1 = privateData.firstLocation
                 scaleLengthItem.p2 = scaleLengthItem.p1
                 interaction.state = "WaitForSecondClick"
+                scaleLengthItem.visible = true;
             }
+        }
+
+        onWheel: {
+            basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
     }
 
@@ -106,9 +114,7 @@ Interaction {
                                                              dotPerMeter);
 
                     noteTransform.scale = scale
-
-                    interaction.state = ""
-                    interaction.deactivate();
+                    done()
                 }
             }
         }

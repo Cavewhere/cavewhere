@@ -4,6 +4,7 @@
 
 //Our includes
 #include "cwAbstract2PointItem.h"
+class cwSGLinesNode;
 
 class cwScaleLengthItem : public cwAbstract2PointItem
 {
@@ -14,19 +15,25 @@ public:
     
 public slots:
 
-private:
-    QQuickItem* LengthHandler;
-    //FIXME: Fix lengthline
-//    QGraphicsPathItem* LengthLine;
+protected:
+    QSGNode* updatePaintNode(QSGNode *, UpdatePaintNodeData *);
 
+
+private:
     void connectTransformer();
     void disconnectTransformer();
 
     void p1Updated();
     void p2Updated();
 
+    //This should only be used in the rendering thread
+    cwSGLinesNode* LinesNode;
+    QVector<QLineF> Lines;
+
 private slots:
     void updateScaleLengthPath();
+
+    QVector<QLineF> lengthLines() const;
     
 };
 
