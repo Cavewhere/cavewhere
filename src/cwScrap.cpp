@@ -495,12 +495,12 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
             QVector3D stationPosition = stationLookup.position(station.name());
 
             //Figure out the predicited position of the station on the notes
-            QVector3D predictedPosition = worldToNoteMatrix.map(stationPosition);
+            QPointF predictedPosition = worldToNoteMatrix.map(stationPosition).toPointF();
 
             //Figure out the error between stationNotePosition and predictedPosition
-            QVector3D errorVector = predictedPosition - QVector3D(stationNotePosition);
-            QVector3D noteVector = QVector3D(previousStation.positionOnNote()) - predictedPosition;
-            double normalizedError = errorVector.length() / noteVector.length();
+            QPointF errorVector = predictedPosition - stationNotePosition;
+            QPointF noteVector = previousStation.positionOnNote() - predictedPosition;
+            double normalizedError = QVector2D(errorVector).length() / QVector2D(noteVector).length();
 
             if(normalizedError < bestNormalizeError) {
                 //Station is probably the one
@@ -517,35 +517,29 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
   3D to normalize note coordinates
   */
 QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
-    cwNote* note = parentNote();
-    if(note == NULL) {
-        return QMatrix4x4();
-    }
+    if(parentNote() == NULL) { return QMatrix4x4(); }
+    if(parentNote()->parentTrip() == NULL) { return QMatrix4x4(); }
+    if(parentNote()->parentTrip()->parentCave() == NULL) { return QMatrix4x4(); }
+
+    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
+    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
 
     //The position of the selected station
-    QVector3D stationPos; // = referenceStation.station().position();
+    QVector3D stationPos = stationLookup.position(referenceStation.name());
 
     //Create the matrix to covert global position into note position
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
     noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
 
-    QMatrix4x4 dotsOnPageMatrix = note->metersOnPageMatrix().inverted();
-
-//    QMatrix4x4 notePageAspect = note->scaleMatrix().inverted(); //The note's aspect ratio
+    QMatrix4x4 dotsOnPageMatrix = parentNote()->metersOnPageMatrix().inverted();
 
     QMatrix4x4 offsetMatrix;
     offsetMatrix.translate(-stationPos);
-
-//    QMatrix4x4 dotPerMeter;
-//    cwImage noteImage = note->image();
-//    dotPerMeter.scale(noteImage.originalDotsPerMeter(), noteImage.originalDotsPerMeter(), 1.0);
 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
     QMatrix4x4 toNormalizedNote = noteStationOffset *
-//            dotPerMeter *
-//            notePageAspect *
             dotsOnPageMatrix *
             noteTransformMatrix *
             offsetMatrix;
