@@ -1,4 +1,5 @@
 #include "cwImageResolution.h"
+#include "cwLength.h"
 
 cwImageResolution::cwImageResolution(QObject *parent) :
     cwUnitValue(0.0, cwUnits::DotsPerMeter, parent)
@@ -24,6 +25,21 @@ cwImageResolution cwImageResolution::convertTo(cwUnits::ImageResolutionUnit to) 
     cwImageResolution resolution = *this;
     resolution.convertToUnit(to);
     return resolution;
+}
+
+/**
+ * @brief cwImageResolution::setResolution
+ * @param length - The distance of the number of pixels
+ * @param numberOfPixels
+ *
+ * This doesn't change the image resolution units, this simply just updates image's DPI
+ */
+void cwImageResolution::setResolution(cwLength *length, double numberOfPixels)
+{
+    cwLength lengthMeter = length->convertTo(cwUnits::Meters);
+    double dotsPerMeter = (double)numberOfPixels / lengthMeter.value();
+    double value = cwUnits::convert(dotsPerMeter, cwUnits::DotsPerMeter, (cwUnits::ImageResolutionUnit)unit());
+    setValue(value);
 }
 
 /**

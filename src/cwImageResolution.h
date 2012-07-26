@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwUnitValue.h"
+class cwLength;
 
 class cwImageResolution : public cwUnitValue
 {
@@ -16,6 +17,8 @@ public:
     QString unitName(int unit);
     
     cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
+
+    Q_INVOKABLE void setResolution(cwLength* length, double numberOfPixels);
 
 protected:
     virtual void convertToUnit(int newUnit);

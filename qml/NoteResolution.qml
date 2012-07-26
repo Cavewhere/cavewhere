@@ -13,6 +13,7 @@ FloatingGroupBox {
         return null;
     }
 
+    signal activateDPIInteraction
 
     titleText: "Image Info"
 
@@ -24,12 +25,11 @@ FloatingGroupBox {
         Button {
             id: setResolution
             width: 24
-            //      onClicked: northUpInteractionActivated()
+            onClicked: activateDPIInteraction()
         }
 
         LabelWithHelp {
             id: labelId
-//            helpArea: northUpHelp
             text: "Image Resolution"
             anchors.verticalCenter: parent.verticalCenter
         }

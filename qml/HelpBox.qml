@@ -42,34 +42,33 @@ ShadowRectangle {
                 to: 1.0;
                 duration: 200
             }
-        },
-
-        Transition {
-            from: "VISIBLE"
-            SequentialAnimation {
-                PropertyAction {
-                    target: helpBox
-                    property: "visible"
-                    value: true
-                }
-
-                NumberAnimation {
-                    target: helpBox;
-                    property: "opacity";
-                    from: 1.0
-                    to: 0.0;
-                    duration: 200
-                }
-
-                PropertyAction {
-                    target: helpBox
-                    property: "visible"
-                    value: false
-                }
-            }
-
-
         }
+
+        //FIXME: This transition doesn't work (check in beta if it works)
+//        Transition {
+//            from: "VISIBLE"
+//            SequentialAnimation {
+//                PropertyAction {
+//                    target: helpBox
+//                    property: "visible"
+//                    value: true
+//                }
+
+//                NumberAnimation {
+//                    target: helpBox;
+//                    property: "opacity";
+//                    from: 1.0
+//                    to: 0.0;
+//                    duration: 200
+//                }
+
+//                PropertyAction {
+//                    target: helpBox
+//                    property: "visible"
+//                    value: false
+//                }
+//            }
+//        }
     ]
 
 }

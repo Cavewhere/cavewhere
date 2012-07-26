@@ -70,6 +70,15 @@ ImageItem {
         transformUpdater: transformUpdaterId
     }
 
+    NoteDPIInteraction {
+        id: noteDPIInteraction
+        anchors.fill: parent
+        imageItem: noteArea
+        basePanZoomInteraction: panZoomInteraction
+        transformUpdater: transformUpdaterId
+        imageResolution: note != null ? note.imageResolution : null
+    }
+
     InteractionManager {
         id: interactionManagerId
         interactions: [
@@ -78,7 +87,8 @@ ImageItem {
             addStationInteraction,
             noteSelectionInteraction,
             noteNorthUpInteraction,
-            noteScaleInteraction
+            noteScaleInteraction,
+            noteDPIInteraction
         ]
         defaultInteraction: panZoomInteraction
     }
@@ -99,6 +109,7 @@ ImageItem {
         NoteResolution {
             id: noteResolutionId
             note: noteArea.note
+            onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
         }
 
         NoteTransformEditor {
