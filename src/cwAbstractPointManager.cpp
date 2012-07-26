@@ -125,7 +125,6 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
         if(item != NULL) {
             Items.insert(i, item);
             privateUpdateItemData(item, i);
-            item->setParentItem(this);
         } else {
             qDebug() << "Can't insert. Item is NULL. THIS IS A BUG" << LOCATION;
             break;
@@ -311,6 +310,11 @@ void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
     //Update assumed stuff
     item->setProperty("pointIndex", index);
     item->setProperty("parentView", QVariant::fromValue(this));
+
+    if(item->parentItem() != this) {
+        item->setParentItem(this);
+        item->setParent(this);
+    }
 
     updateItemData(item, index);
     privateUpdateItemPosition(index);
