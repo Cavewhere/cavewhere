@@ -125,7 +125,7 @@ Rectangle {
 
             highlightMoveDuration: 300
             highlightResizeDuration: -1
-            highlightResizeSpeed: -1
+//            highlightResizeSpeed: -1
 
             spacing: 3
 
