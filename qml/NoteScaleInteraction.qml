@@ -5,17 +5,17 @@ DrawLengthInteraction {
     id: noteScaleInteraction
 
     property NoteTransform noteTransform
+    property Note note
 
     doneTextLabel: "<b>In cave length</b>"
 
     onDoneButtonPressed: {
         var imageSize = imageItem.imageProperties.size
-        var dotPerMeter = imageItem.imageProperties.dotsPerMeter
         var scale = noteTransform.calculateScale(firstMouseLocation,
                                                  secondMouseLocation,
                                                  lengthObject,
                                                  imageSize,
-                                                 dotPerMeter);
+                                                 note.imageResolution);
 
         noteTransform.scale = scale
         noteScaleInteraction.done()

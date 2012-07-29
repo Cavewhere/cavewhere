@@ -121,7 +121,7 @@ private:
 
     void triangulateScraps();
     void triangulateScrap(int index);
-    PointGrid createPointGrid(QRectF bounds, cwImage scrapImage, const cwNoteTranformation &noteTransform) const;
+    PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const;
     QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
     QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap);
 

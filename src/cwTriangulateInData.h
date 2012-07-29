@@ -27,11 +27,14 @@ public:
     cwNoteTranformation noteTransform() const;
     void setNoteTransform(cwNoteTranformation noteTransform);
 
+    double noteImageResolution() const;
+    void setNoteImageResolution(double dotsPerMeter);
 
 private:
     class PrivateData : public QSharedData {
     public:
         cwImage NoteImage;
+        double DotPerMeter;
         QPolygonF Outline;
         cwNoteTranformation NoteTransform;
         QList<cwTriangulateStation> Stations;
@@ -96,4 +99,23 @@ inline cwNoteTranformation cwTriangulateInData::noteTransform() const {
 inline void cwTriangulateInData::setNoteTransform(cwNoteTranformation noteTransform) {
     Data->NoteTransform = noteTransform;
 }
+
+/**
+ * @brief cwTriangulateInData::noteImageResolution
+ * @return Return the resolution of the note image, in DotsPerMeter
+ */
+inline double cwTriangulateInData::noteImageResolution() const
+{
+    return Data->DotPerMeter;
+}
+
+/**
+ * @brief cwTriangulateInData::setNoteImageResolution
+ * @param dotsPerMeter - Sets the resolution
+ */
+inline void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
+{
+    Data->DotPerMeter = dotsPerMeter;
+}
+
 #endif // CWTRIANGULATEINDATA_H

@@ -20,8 +20,6 @@ DrawLengthInteraction {
 
         var lengthPixels = Math.sqrt(xImage * xImage + yImage * yImage)
 
-        console.log("Length pixels:" + lengthPixels)
-
         imageResolution.setResolution(lengthObject, lengthPixels)
 
         noteScaleInteraction.done()

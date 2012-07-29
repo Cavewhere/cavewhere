@@ -12,6 +12,7 @@
 #include "cwDebug.h"
 #include "cwGLScraps.h"
 #include "cwRemoveImageTask.h"
+#include "cwImageResolution.h"
 
 //Qt includes
 #include <QThread>
@@ -168,6 +169,10 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
     data.setNoteTransform(*(scrap->noteTransformation()));
+
+    double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
+    data.setNoteImageResolution(dotsPerMeter);
+
     return data;
 }
 

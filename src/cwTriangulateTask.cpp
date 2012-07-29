@@ -96,7 +96,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
     cwImage croppedImage = TriangulatedScraps[index].croppedImage();
 
     //Create the regualar mesh that covers the croppedImage
-    PointGrid pointGrid = createPointGrid(bounds, croppedImage, scrapData.noteTransform());
+    PointGrid pointGrid = createPointGrid(bounds, scrapData);
 
     //Find all the points in the regualar mesh that are in the scrap's polygon
     QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrapData.outline());
@@ -136,12 +136,14 @@ void cwTriangulateTask::triangulateScrap(int index) {
 
     This returns a regualar grid.
 */
-cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, cwImage scrapImage, const cwNoteTranformation &noteTransform) const {
+cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const {
     PointGrid grid;
 
-    QSize scrapImageSize = scrapImage.origianlSize();
-    double sizeOnPaperX = scrapImageSize.width() / (double)scrapImage.originalDotsPerMeter(); //in meters
-    double sizeOnPaperY = scrapImageSize.height() / (double)scrapImage.originalDotsPerMeter(); //in meters
+    cwNoteTranformation noteTransform = scrapData.noteTransform();
+
+    QSize scrapImageSize = scrapData.noteImage().origianlSize();
+    double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
+    double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
     double pointsPerMeter = 0.2; //Grid resolution
     double scale = noteTransform.scale(); //scale for the notes
@@ -476,7 +478,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
                                                   const cwImage& croppedImage) {
 
     QSize imageSize = croppedImage.origianlSize();
-    double metersPerDot = 1.0 / (double)croppedImage.originalDotsPerMeter();
+    double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
 
     //For right now try to map
     QMatrix4x4 toPixels;

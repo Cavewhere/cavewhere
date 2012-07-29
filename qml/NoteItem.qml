@@ -68,6 +68,7 @@ ImageItem {
         imageItem: noteArea
         basePanZoomInteraction: panZoomInteraction
         transformUpdater: transformUpdaterId
+        note: noteArea.note
     }
 
     NoteDPIInteraction {

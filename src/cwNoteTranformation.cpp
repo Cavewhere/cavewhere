@@ -2,6 +2,7 @@
 #include "cwNoteTranformation.h"
 #include "cwLength.h"
 #include "cwGlobals.h"
+#include "cwImageResolution.h"
 
 //Qt includes
 #include <QVector2D>
@@ -93,14 +94,22 @@ double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const
   */
 double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
                                            cwLength* length,
-                                           QSize imageSize, double dotsPerMeter)
+                                           QSize imageSize,
+                                           cwImageResolution* resolution)
 {
+    if(length == NULL) { return 0.0; }
+    if(resolution == NULL) { return 0.0; }
+
     QLineF line(p1, p2);
     double a = line.dx() * imageSize.width(); //a is in dots
     double b = line.dy() * imageSize.height(); //b is in dots
 
     //Use Pythagorean
     double lengthInDots = sqrt(a * a + b * b);
+
+    //Dots per meter
+    cwImageResolution meterResolution = resolution->convertTo(cwUnits::DotsPerMeter);
+    double dotsPerMeter = meterResolution.value();
 
     //Compute the scale
     double lengthInMetersOnPage = lengthInDots / dotsPerMeter;

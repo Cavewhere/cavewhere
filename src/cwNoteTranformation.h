@@ -11,6 +11,7 @@
 
 //Our includes
 class cwLength;
+class cwImageResolution;
 
 /**
   This class is useful for allowing automatic station referencing.  This holds the page of note's
@@ -45,7 +46,8 @@ public:
     Q_INVOKABLE double calculateNorth(QPointF noteP1, QPointF noteP2) const;
     Q_INVOKABLE double calculateScale(QPointF noteP1, QPointF noteP2,
                                       cwLength* length,
-                                      QSize imageSize, double dotsPerMeter);
+                                      QSize imageSize,
+                                      cwImageResolution* resolution);
 
     QMatrix4x4 matrix() const;
 

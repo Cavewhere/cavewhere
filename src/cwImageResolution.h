@@ -16,7 +16,7 @@ public:
     QStringList unitNames();
     QString unitName(int unit);
     
-    cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
+    Q_INVOKABLE cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
 
     Q_INVOKABLE void setResolution(cwLength* length, double numberOfPixels);
 
