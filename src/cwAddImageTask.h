@@ -37,7 +37,6 @@ public:
     //Option 2 for using
     void setNewImages(QList<QImage> images);
 
-
     ///////////// Results ///////////////////
     QList<cwImage> images();
 

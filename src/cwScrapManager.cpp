@@ -11,6 +11,7 @@
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
 #include "cwGLScraps.h"
+#include "cwRemoveImageTask.h"
 
 //Qt includes
 #include <QThread>
@@ -20,6 +21,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     Region(NULL),
     TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
+    RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(NULL),
     GLScraps(NULL)
 {
@@ -137,6 +139,7 @@ void cwScrapManager::connectScrapes(QList<cwScrap*> scraps) {
   3. Morph the geometry to the station positions
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
+    WaitingForUpdate.clear();
     foreach(cwScrap* scrap, scraps) {
         WaitingForUpdate.append(QWeakPointer<cwScrap>(scrap));
     }
@@ -239,26 +242,56 @@ void cwScrapManager::updateScrapPoints() {
 void cwScrapManager::taskFinished() {
     QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
 
+
     //Make sure there's the same amount of data
     if(WaitingForUpdate.size() != scrapDataset.size()) {
         qDebug() << "Scrap size mismatch" << LOCATION;
         return;
     }
 
-    //This can have major problems, if the scrap has already been deleted!!!
-    //Undo and redo wont like this
+    //All the images to remove (replacing the previously calculated or invalid images)
+    QList<cwImage> imagesToRemove;
+
+    //Get all the valid scraps
+    QList<cwScrap*> validScraps;
+    QList<cwTriangulatedData> validScrapTriangleDataset;
     for(int i = 0; i < WaitingForUpdate.size(); i++) {
-        QWeakPointer<cwScrap> weakPtrScrap = WaitingForUpdate[i];
+        QWeakPointer<cwScrap> weakPtrScrap = WaitingForUpdate.at(i);
+        cwTriangulatedData triangleData = scrapDataset.at(i);
+
+        //Make sure the scrap still exists
+        //FIXME: This will not work with UNDO/REDO because the pointer will still be valid,
+        // even through it's remove in the undo stack
         if(!weakPtrScrap.isNull()) {
-            cwScrap* scrap = weakPtrScrap.data();
-            scrap->setTriangulationData(scrapDataset[i]);
-
-            //For debugging should be removed
-            QList<cwImage> images;
-            images.append(scrapDataset[i].croppedImage());
-
-            scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
+            validScraps.append(weakPtrScrap.data());
+            validScrapTriangleDataset.append(triangleData);
+        } else {
+            //Remove the cropped image that's not needed
+            imagesToRemove.append(triangleData.croppedImage());
         }
+    }
+
+    foreach(cwScrap* scrap, validScraps) {
+        cwImage image = scrap->triangulationData().croppedImage();
+        if(image.isValid()) {
+            imagesToRemove.append(image);
+        }
+    }
+
+    RemoveImageTask->setImagesToRemove(imagesToRemove);
+    RemoveImageTask->setDatabaseFilename(Project->filename());
+    RemoveImageTask->start(); //This runs in this thread, should be very quick
+
+    for(int i = 0; i < validScraps.size(); i++) {
+        cwScrap* scrap = validScraps.at(i);
+        cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
+        scrap->setTriangulationData(triangleData);
+
+        //TODO: For debugging should be removed
+        QList<cwImage> images;
+        images.append(scrapDataset[i].croppedImage());
+
+        scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
     }
 
     GLScraps->setCavingRegion(Region);

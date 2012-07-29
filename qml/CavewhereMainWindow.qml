@@ -3,7 +3,7 @@ import QtQuick 2.0
 
 Rectangle {
     id: rootQMLItem
-    width: 1600
+    width: 2000
     height: 1200
 //    anchors.fill: parent;
 

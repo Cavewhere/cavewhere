@@ -50,6 +50,7 @@ public:
     void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
+    static bool removeImage(const QSqlDatabase& database, cwImage image);
 
     bool isTemporaryProject() const;
 

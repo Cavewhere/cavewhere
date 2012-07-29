@@ -18,6 +18,7 @@ class cwTriangulateTask;
 class cwProject;
 class cwGLScraps;
 class cwStationPositionLookup;
+class cwRemoveImageTask;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 
@@ -53,6 +54,7 @@ private:
     //The task that'll be run
     QThread* TriangulateThread;
     cwTriangulateTask* TriangulateTask;
+    cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
 
     //For testing only

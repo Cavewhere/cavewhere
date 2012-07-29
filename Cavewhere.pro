@@ -168,7 +168,8 @@ SOURCES += src/main.cpp \
     src/cwScrapOutlinePointView.cpp \
     src/cwSelectionManager.cpp \
     src/cwUnitValue.cpp \
-    src/cwImageResolution.cpp
+    src/cwImageResolution.cpp \
+    src/cwRemoveImageTask.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -311,7 +312,8 @@ HEADERS  += \
     src/cwScrapOutlinePointView.h \
     src/cwSelectionManager.h \
     src/cwUnitValue.h \
-    src/cwImageResolution.h
+    src/cwImageResolution.h \
+    src/cwRemoveImageTask.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -432,9 +434,23 @@ INCLUDEPATH += src src/utils . .ui
 DEPENDPATH += INCLUDEPATH
 
 unix {
-    INCLUDEPATH += /usr/local/include /opt/local/include
+    INCLUDEPATH += /usr/local/include /opt/local/include \
+    /home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtOpenGL \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtQML \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtQuick \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtCore \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtGui \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtConcurrent \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/Qt3D \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtSql \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtXml \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtXmlPatterns \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/Qt \
+/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include
+
     LIBS += -lz -lGLEW -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
+
 }
 
 macx {

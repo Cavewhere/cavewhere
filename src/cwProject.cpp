@@ -346,6 +346,37 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
 }
 
 /**
+ * @brief cwProject::removeImage
+ * @param database - The database connection
+ * @param image - The Image that going to be removed
+ * @return True if the image could be removed, and false if it couldn't be removed
+ */
+bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
+{
+    //Create the delete SQL statement
+    QString SQL("DELETE FROM Images WHERE");
+    SQL += QString(" id == %1").arg(image.original());
+    SQL += QString(" OR ");
+    SQL += QString(" id == %1").arg(image.icon());
+    foreach(int mipmapId, image.mipmaps()) {
+        SQL += QString(" OR ");
+        SQL += QString(" id == %1").arg(mipmapId);
+    }
+
+    QSqlQuery query(database);
+    bool successful = query.prepare(SQL);
+
+    if(!successful) {
+        qDebug() << "Couldn't delete images: " << query.lastError();
+        return false;
+    }
+
+    query.exec();
+
+    return true;
+}
+
+/**
   Adds new directories back into the cwXMLProject
   */
 //void cwProject::addCaveDirectories(int beginCave, int endCave) {

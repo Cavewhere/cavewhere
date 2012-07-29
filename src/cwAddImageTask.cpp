@@ -260,7 +260,7 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
     QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     //Convert the image into a jpg
-    QByteArray format = "png";
+    QByteArray format = "jpg";
     QByteArray jpgData;
     QBuffer buffer(&jpgData);
     QImageWriter writer(&buffer, format);

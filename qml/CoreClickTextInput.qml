@@ -36,8 +36,9 @@ Item {
                 return false;
             }
         } else {
-            finishedEditting(globalShadowTextInput.textInput.text);
+            var newText = globalShadowTextInput.textInput.text
             closeEditor();
+            finishedEditting(globalShadowTextInput.textInput.text);
             return true;
         }
     }
