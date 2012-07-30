@@ -26,6 +26,10 @@
 #include <QBuffer>
 #include <QtConcurrentMap>
 
+//TODO: REMOVE for testing only
+#include <QFile>
+#include <QTime>
+
 //Sqlite lite includes
 #include "sqlite3.h"
 
@@ -34,7 +38,14 @@
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
+    CompressionContext = new QOpenGLContext(this);
+    Window = new QWindow();
+    Window->setSurfaceType(QSurface::OpenGLSurface);
+    Window->create();
+    Texture = 0;
+//    ComperssionContext->create();
 
+//    qDebug() << "Context created: " << GLWindow->context();
 }
 
 /**
@@ -53,6 +64,18 @@ void cwAddImageTask::runTask() {
     //Set the number of steps for this task
     calculateNumberOfSteps();
 
+    bool couldCreate = CompressionContext->create();
+    qDebug() << "Could create context:" << couldCreate;
+
+    bool couldMakeCurrent = CompressionContext->makeCurrent(Window);
+    qDebug() << "Could make curernt: " << couldMakeCurrent;
+
+    glEnable(GL_TEXTURE_2D);
+
+    if(Texture == 0) {
+        glGenTextures(1, &Texture);
+    }
+
     //Connect to the database
     bool connected = connectToDatabase("AddImagesTask");
 
@@ -67,6 +90,8 @@ void cwAddImageTask::runTask() {
             emit addedImages(images());
         }
     }
+
+    CompressionContext->doneCurrent();
 
     //Finished
     done();
@@ -331,7 +356,14 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
   */
 int cwAddImageTask::saveToDXT1Format(QImage image) {
     //Convert and compress using dxt1
-    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+    //20 times slower on my computer
+    //QByteArray outputData1 = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+
+    QByteArray outputData = openglDxt1Compression(image);
+
+    if(outputData.isEmpty()) {
+        return -1;
+    }
 
     //Compress the dxt1FileData using zlib
     outputData = qCompress(outputData, 9);
@@ -339,6 +371,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image) {
     //Add the image to the database
     cwImageData iconImageData(image.size(), 0, cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
     int imageId = cwProject::addImage(Database, iconImageData);
+
     return imageId;
  }
 
@@ -493,6 +526,67 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
     QtConcurrent::blockingMap(computeBlocks, CompressImageKernal(this, image.size(), flags, metric));
 
     return outputData;
+}
+
+/**
+ * @brief cwAddImageTask::graphicsDriverDx1Compression
+ * @param image - The image to compress
+ * @return Returns the compress image in DXT1 compression
+ *
+ * This assumes that the opengl context is bound
+ */
+QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
+{
+    glBindTexture(GL_TEXTURE_2D, Texture);
+
+//    //Convert the image to opengl RGB
+//    int pixelSize = 3; //RGB in bytes
+//    int numberOfPixels = image.width() * image.height();
+//    int size = numberOfPixels * pixelSize;
+//    QByteArray byteArray(size, 0);
+//    uchar* imagePtr = image.bits();
+//    char* byteArrayPtr = byteArray.data();
+
+//    qDebug() << "ByteArray: " << byteArray.size() << "ImageSize:" << image.byteCount();
+
+//    for(int i = 0; i < numberOfPixels; i++) {
+//        byteArray[0] = imagePtr[1];
+//        byteArray[1] = imagePtr[2];
+//        byteArray[2] = imagePtr[3];
+//        imagePtr += 4;
+//        byteArrayPtr += 3;
+//    }
+
+    QImage convertedImage = image.mirrored(false, true);
+    convertedImage = convertedImage.convertToFormat(QImage::Format_RGB888);
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                 image.width(), image.height(),
+                 0, GL_RGB,
+                 GL_UNSIGNED_BYTE,
+                 convertedImage.bits());
+
+//    qDebug() << "glError:" << glGetError();
+
+    GLint compressed;
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_ARB, &compressed);
+    /* if the compression has been successful */
+    if (compressed == GL_TRUE)
+    {
+//        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT,
+//                                 &internalformat);
+        GLint compressed_size;
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
+                                 &compressed_size);
+        QByteArray compressedByteArray(compressed_size, 0);
+        glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
+
+        return compressedByteArray;
+    }
+
+    qDebug() << "Error: Couldn't compress image" << LOCATION;
+    return QByteArray();
 }
 
 /**

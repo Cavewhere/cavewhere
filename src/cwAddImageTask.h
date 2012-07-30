@@ -12,6 +12,8 @@
 #include <QDir>
 #include <QSqlDatabase>
 #include <QAtomicInt>
+#include <QOpenGLContext> //For getting the opengl context
+#include <QWindow>
 #include <QDebug>
 
 //Squish includes
@@ -71,6 +73,9 @@ private:
     QStringList Errors;
 
     QAtomicInt Progress;
+    QOpenGLContext* CompressionContext;
+    QWindow* Window;
+    GLuint Texture;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);
     void copyOriginalImage(const QImage& image, cwImage* imageIds);
@@ -80,6 +85,7 @@ private:
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
     int saveToDXT1Format(QImage image);
     QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
+    QByteArray openglDxt1Compression(QImage image);
 
     void calculateNumberOfSteps();
     int numberOfMipmapLevels(QSize imageSize) const;
