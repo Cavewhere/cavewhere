@@ -77,6 +77,9 @@ public:
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
 
+public slots:
+    void updateNoteTransformation();
+
 signals:
     //For scrap outline
     void insertedPoints(int begin, int end);
@@ -127,7 +130,7 @@ private:
 
 private slots:
 //    void updateStationsWithNewCave();
-    void updateNoteTransformation();
+
 };
 
 Q_DECLARE_METATYPE(cwScrap*)

@@ -20,7 +20,11 @@ cwNote::cwNote(QObject *parent) :
 {
     DisplayRotation = 0.0;
     ImageResolution->setUpdateValue(true); //Update the value when the units have changed
+
+    connect(ImageResolution, &cwImageResolution::unitChanged, this, &cwNote::updateScrapNoteTransform);
+    connect(ImageResolution, &cwImageResolution::valueChanged, this, &cwNote::updateScrapNoteTransform);
 }
+
 
 cwNote::cwNote(const cwNote& object) :
     QObject(NULL),
@@ -29,6 +33,9 @@ cwNote::cwNote(const cwNote& object) :
     ImageResolution(new cwImageResolution(this))
 {
     copy(object);
+
+    connect(ImageResolution, &cwImageResolution::unitChanged, this, &cwNote::updateScrapNoteTransform);
+    connect(ImageResolution, &cwImageResolution::valueChanged, this, &cwNote::updateScrapNoteTransform);
 }
 
 cwNote& cwNote::operator=(const cwNote& object) {
@@ -216,6 +223,18 @@ void cwNote::setupScrap(cwScrap *scrap) {
     scrap->setParent(this);
     scrap->setParentNote(this);
     scrap->setParentCave(ParentCave);
+}
+
+/**
+ * @brief cwNote::updateScrapNoteTransform
+ *
+ * Goes through all the scraps in the note and updates the scrap transform
+ */
+void cwNote::updateScrapNoteTransform()
+{
+    foreach(cwScrap* scrap, scraps()) {
+        scrap->updateNoteTransformation();
+    }
 }
 
 /**

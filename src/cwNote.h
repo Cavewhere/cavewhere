@@ -98,6 +98,10 @@ private:
 
     void copy(const cwNote& object);
     void setupScrap(cwScrap* scrap);
+
+private slots:
+    void updateScrapNoteTransform();
+
 };
 
 Q_DECLARE_METATYPE(cwNote*)

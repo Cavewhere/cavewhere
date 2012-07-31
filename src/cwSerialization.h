@@ -313,10 +313,6 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(rotation);
         archive >> BOOST_SERIALIZATION_NVP(scraps);
 
-        note.setImage(image);
-        note.setRotate(rotation);
-        note.setScraps(scraps);
-
         //Added support for resolution
         if(version >= 2) {
             cwImageResolution* imageResolution;
@@ -324,6 +320,10 @@ namespace boost {
             *(note.imageResolution()) = *imageResolution; //Copy the image resolution into the note
             delete imageResolution; //Delete the loaded image resolution
         }
+
+        note.setImage(image);
+        note.setRotate(rotation);
+        note.setScraps(scraps);
     }
 
     ///////////////////////////// cwImage ///////////////////////////////
