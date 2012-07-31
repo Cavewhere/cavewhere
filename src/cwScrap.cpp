@@ -390,7 +390,7 @@ cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1,
 
     //calculate the north
     double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized()));
-    angle = angle * cwGlobals::RadiansToDegrees;
+    angle = 360.0 - angle * cwGlobals::RadiansToDegrees;
 
     cwNoteTranformation noteTransform;
     noteTransform.scaleNumerator()->setValue(1);
