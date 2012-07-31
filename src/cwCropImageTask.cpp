@@ -36,6 +36,15 @@ void cwCropImageTask::setRectF(QRectF cropTo) {
 }
 
 /**
+ * @brief cwCropImageTask::setMipmapOnly
+ * @param mipmapOnly - This make the crop image task only create images with mipmaps
+ */
+void cwCropImageTask::setMipmapOnly(bool mipmapOnly)
+{
+    AddImageTask->setMipmapsOnly(mipmapOnly);
+}
+
+/**
   This gets the finished cropped image.  This should be called when the task has completed
   */
 cwImage cwCropImageTask::croppedImage() const {
@@ -52,9 +61,17 @@ void cwCropImageTask::runTask() {
     cwImageData imageData = ImageProvider.data(Original.original());
     QRect cropArea = mapNormalizedToIndex(CropRect, imageData.size());
     QImage image = QImage::fromData(imageData.data(), imageData.format());
-    QImage croppedImage = image.copy(cropArea);
 
-    qDebug() << "image:" << image << imageData.format() << croppedImage.size();
+
+    if(image.size().isEmpty()) {
+        qDebug() << "Can't crop an image with no size";
+        stop();
+        done();
+        return;
+    }
+
+    QImage croppedImage = image.copy(cropArea);
+//    qDebug() << "image:" << Original.original() << image << imageData.format() << croppedImage.size() << imageData.size() << CropRect << cropArea;
 
     QList<QImage> images;
     images.append(croppedImage);
@@ -62,13 +79,6 @@ void cwCropImageTask::runTask() {
     AddImageTask->setDatabaseFilename(databaseFilename());
     AddImageTask->setNewImages(images);
     AddImageTask->start();
-
-//    bool connected = connectToDatabase("CropImageTask");
-//    if(connected) {
-//        tryCroppingImage();
-
-//        Database.close();
-//    }
 
     Q_ASSERT(AddImageTask->isReady());
 
@@ -78,51 +88,6 @@ void cwCropImageTask::runTask() {
     CroppedImage = croppedImages.first();
 
     done();
-}
-
-/**
-  This crops an image in the database
-
-  This will take imageId, extra the image data, crop the image, and then save image agian to
-  a different id.  This id is returned.
-  */
-cwImageData cwCropImageTask::cropImage(int imageId) const {
-    cwImageData imageData = ImageProvider.data(imageId);
-
-    QByteArray croppedData;
-    QRect cropArea = mapNormalizedToIndex(CropRect, imageData.size());
-    QSize croppedSize = cropArea.size();
-    QByteArray croppedFormat = imageData.format();
-    int dotPerMeter = imageData.dotsPerMeter();
-
-    //If custom DXT1 format
-    if(imageData.format() == cwProjectImageProvider::Dxt1_GZ_Extension) {
-        //Crop the DXT1 data
-        croppedData = cropDxt1Image(imageData.data(), imageData.size(), cropArea);
-
-        QFile file(QString("/home/blitz/mipmap/addImage-%1").arg(imageId));
-        file.open(QIODevice::WriteOnly);
-        file.write(croppedData);
-
-        croppedData = qCompress(croppedData);
-    } else {
-        //Some other format that QImage can handle
-        QImage image = QImage::fromData(imageData.data(), imageData.format());
-        QImage croppedImage = image.copy(cropArea);
-
-        QBuffer buffer(&croppedData);
-        QImageWriter writer(&buffer, croppedFormat);
-        writer.write(croppedImage);
-    }
-
-    if(croppedData.isEmpty()) {
-        qDebug() << "Can't crop image id:" << imageId << LOCATION;
-        return cwImageData();
-    }
-
-    //Add the cropped image data to the database
-    cwImageData croppedImageData(croppedSize, dotPerMeter, croppedFormat, croppedData);
-    return croppedImageData;
 }
 
 /**
@@ -140,116 +105,4 @@ QRect cwCropImageTask::mapNormalizedToIndex(QRectF normalized, QSize size) const
     return QRect(QPoint(left, top), QPoint(right, bottom));
 }
 
-/**
-    \brief This crops the dxt1Data to the cropArea
 
-    This returns the cropped dxt data
-  */
-QByteArray cwCropImageTask::cropDxt1Image(const QByteArray &dxt1Data, QSize size, QRect cropArea) const {
-    //Should have 8 byte cells
-    if(dxt1Data.size() % 8 != 0) {
-        qDebug() << "This isn't Dxt1 format, can't crop dxt1 data" << LOCATION;
-        return QByteArray();
-    }
-
-    //Number of blocks in each direction, a block represents 4x4 pixel block
-    int numBlockSizeX = size.width() / 4;
-    int numBlockSizeY = size.height() / 4;
-
-    //Over shoot size?
-    if(size.width() % 4 != 0) {
-        numBlockSizeX += 1;
-    }
-
-    if(size.height() % 4 != 0) {
-        numBlockSizeY += 1;
-    }
-
-    //Make sure the number of blocks add up to the originial, a block is 8 bytes
-    int sizeOfBlock = 8; //8 bytes
-    if(numBlockSizeX * numBlockSizeY * sizeOfBlock != dxt1Data.size()) {
-        qDebug() << "dxt1 data size mismatch" << LOCATION;
-        return QByteArray();
-    }
-
-    //Convert cropArea to dxt1 blocks
-    int x = cropArea.x() / 4;
-    int y = cropArea.y() / 4;
-    int width = cropArea.width() / 4;
-    int height = cropArea.height() / 4;
-    if(cropArea.width() % 4 != 0) { width += 1; }
-    if(cropArea.height() % 4 != 0) { height += 1; }
-
-    QByteArray cropDxt1Image(width * height * sizeOfBlock, 0); //Create a completely black image
-   // QByteArray cropDxt1Image(dxt1Data.size(), 0);
-
-    //Make sure the x,y components aren't negitive
-    x = qMax(0, x);
-    y = qMax(0, y);
-
-    width = qMin(width, numBlockSizeX - x); //Make sure the width is in the bounds of the dxt1 format
-
-
-    //For each scan line in the dxt formate
-    for(int row = 0; row < height && row + y < numBlockSizeY; row++) {
-        int fromIndex = (numBlockSizeX * (row + y) + x) * sizeOfBlock;
-        int toIndex = row * width * sizeOfBlock;
-
-        Q_ASSERT(fromIndex <= dxt1Data.size() - width);
-        Q_ASSERT(toIndex <= cropDxt1Image.size() - width);
-
-        //Copy each scanline
-        memcpy(&(cropDxt1Image.data()[toIndex]), &(dxt1Data.constData()[fromIndex]), width * sizeOfBlock);
-    }
-
-//    memcpy(cropDxt1Image.data(), dxt1Data.constData(), cropDxt1Image.size());
-
-    QSize cropSize(width * 4, height * 4);
-
-    qDebug() << "Original size: " << size << "CropSize" << cropArea.size() << "CroppedDxt1Image:" << cropDxt1Image.size() << cropArea.size() << "Finalsize:" << cropSize;
-
-    return cropDxt1Image;
-}
-
-/**
-  This tries to crop cwImage and save it back to a cwImage.
-  */
-void cwCropImageTask::tryCroppingImage()
-{
-    cwImageData originalData = cropImage(Original.original());
-    cwImageData iconData = cropImage(Original.icon());
-
-    //For all the mipmaps
-    QList<cwImageData> mipMapImageData;
-    foreach(int mipmapId, Original.mipmaps()) {
-        mipMapImageData.append(cropImage(mipmapId));
-    }
-
-    //Commit all the images to the project database
-    bool good = beginTransation();
-    if(!good) { return; }
-
-    //Add all the images to the database
-    int originalId = cwProject::addImage(Database, originalData);
-    int iconId = cwProject::addImage(Database, iconData);
-
-    QList<int> mipmapIds;
-    mipmapIds.reserve(Original.mipmaps().size());
-    foreach(cwImageData mipmap, mipMapImageData) {
-        int mipmapId = cwProject::addImage(Database, mipmap);
-        mipmapIds.append(mipmapId);
-
-        //The last mipmap, there's usually more than one image that's smaller than 1x1
-        if(mipmap.size().width() == 1 && mipmap.size().height() == 1) {
-            break;
-        }
-    }
-
-    endTransation();
-
-    CroppedImage.setMipmaps(mipmapIds);
-    CroppedImage.setOriginal(originalId);
-    CroppedImage.setIcon(iconId);
-    CroppedImage.setOriginalSize(originalData.size());
-    CroppedImage.setOriginalDotsPerMeter(originalData.dotsPerMeter());
-}

@@ -39,6 +39,9 @@ public:
     //Option 2 for using
     void setNewImages(QList<QImage> images);
 
+    //Options for adding
+    void setMipmapsOnly(bool mipmapOnly);
+
     ///////////// Results ///////////////////
     QList<cwImage> images();
 
@@ -71,6 +74,8 @@ private:
 
     QList<cwImage> Images;
     QStringList Errors;
+
+    bool MipmapOnly; //Doesn't save the original or create an icon
 
     QAtomicInt Progress;
     QOpenGLContext* CompressionContext;
@@ -123,6 +128,18 @@ inline void cwAddImageTask::setNewImagesPath(QStringList imagePaths) {
   */
 inline void cwAddImageTask::setNewImages(QList<QImage> images) {
     NewImages = images;
+}
+
+/**
+ * @brief cwAddImageTask::setMipmapsOnly
+ * @param mipmapOnly - Will only generate the mipmaps of the image
+ *
+ * This will not save the original image's data, and it will not resize
+ * the icon data either. Or save the icon.
+ */
+inline void cwAddImageTask::setMipmapsOnly(bool mipmapOnly)
+{
+    MipmapOnly = mipmapOnly;
 }
 
 /**

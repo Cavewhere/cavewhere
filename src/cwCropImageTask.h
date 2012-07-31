@@ -25,7 +25,7 @@ public:
     //Inputs
     void setOriginal(cwImage image);
     void setRectF(QRectF cropTo);
-//    void setDatabaseFilename(QString filename);
+    void setMipmapOnly(bool mipmapOnly);
 
     //Output
     cwImage croppedImage() const;
@@ -37,8 +37,6 @@ private:
     //Inputs
     cwImage Original;
     QRectF CropRect;
-//    QString ProjectPath;
-//    QString DatabasePath;
 
     //Output
     cwImage CroppedImage;
@@ -49,13 +47,7 @@ private:
     //For writting the cropped image
     cwAddImageTask* AddImageTask;
 
-    cwImageData cropImage(int imageId) const;
     QRect mapNormalizedToIndex(QRectF normalized, QSize size) const;
-
-    QByteArray cropDxt1Image(const QByteArray& dxt1Data, QSize size, QRect cropArea) const;
-
-private slots:
-    void tryCroppingImage();
 
 };
 

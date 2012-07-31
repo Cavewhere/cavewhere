@@ -43,6 +43,8 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
     Window->setSurfaceType(QSurface::OpenGLSurface);
     Window->create();
     Texture = 0;
+
+    MipmapOnly = false;
 //    ComperssionContext->create();
 
 //    qDebug() << "Context created: " << GLWindow->context();
@@ -54,6 +56,9 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   This will mipmap the images as well, create a icon image.  The original is also stored
   */
 void cwAddImageTask::runTask() {
+
+    QTime time;
+    time.start();
 
     //Clear all previous data
     Images.clear();
@@ -92,6 +97,8 @@ void cwAddImageTask::runTask() {
     }
 
     CompressionContext->doneCurrent();
+
+    qDebug() << "Finished with image:" << time.elapsed();
 
     //Finished
     done();
@@ -174,7 +181,9 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         const QString name = images[i].Name;
 
         //Create a icon image
-        createIcon(originalImage, name, &imageIds);
+        if(!MipmapOnly) {
+            createIcon(originalImage, name, &imageIds);
+        }
 
         //Create mipmaps
         createMipmaps(originalImage, name, &imageIds);
@@ -221,6 +230,10 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     QImage image;
     image.loadFromData(originalImageByteData, format.constData());
 
+    if(MipmapOnly) {
+        originalImageByteData = QByteArray();
+    }
+
     *imageIdContainer = addImageToDatabase(image, format, originalImageByteData);
 
     return image;
@@ -233,10 +246,12 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
 {
     QByteArray format = "jpg";
     QByteArray imageData;
-    QBuffer buffer(&imageData);
 
-    QImageWriter writer(&buffer, format);
-    writer.write(image);
+    if(!MipmapOnly) {
+        QBuffer buffer(&imageData);
+        QImageWriter writer(&buffer, format);
+        writer.write(image);
+    }
 
     *imageIds = addImageToDatabase(image, format, imageData);
 }
@@ -539,39 +554,19 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
 {
     glBindTexture(GL_TEXTURE_2D, Texture);
 
-//    //Convert the image to opengl RGB
-//    int pixelSize = 3; //RGB in bytes
-//    int numberOfPixels = image.width() * image.height();
-//    int size = numberOfPixels * pixelSize;
-//    QByteArray byteArray(size, 0);
-//    uchar* imagePtr = image.bits();
-//    char* byteArrayPtr = byteArray.data();
-
-//    qDebug() << "ByteArray: " << byteArray.size() << "ImageSize:" << image.byteCount();
-
-//    for(int i = 0; i < numberOfPixels; i++) {
-//        byteArray[0] = imagePtr[1];
-//        byteArray[1] = imagePtr[2];
-//        byteArray[2] = imagePtr[3];
-//        imagePtr += 4;
-//        byteArrayPtr += 3;
-//    }
-
-    QImage convertedImage = image.mirrored(false, true);
-    convertedImage = convertedImage.convertToFormat(QImage::Format_RGB888);
+    QImage convertedImage = QGLWidget::convertToGLFormat(image);
 
     glTexImage2D(GL_TEXTURE_2D,
                  0, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                  image.width(), image.height(),
-                 0, GL_RGB,
+                 0, GL_RGBA,
                  GL_UNSIGNED_BYTE,
                  convertedImage.bits());
 
-//    qDebug() << "glError:" << glGetError();
 
     GLint compressed;
     glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_ARB, &compressed);
-    /* if the compression has been successful */
+    // if the compression has been successful
     if (compressed == GL_TRUE)
     {
 //        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT,
