@@ -103,7 +103,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrapData.outline());
 
     //Creates list of quads that are on the edges or in the scrap
-    QuadDatabase quads = createQuads(pointGrid, gridPointsInScrap);
+    QuadDatabase quads = createQuads(pointGrid, gridPointsInScrap, scrapData.outline());
 
     //Triangulate the quads (this will update the outputs data)
     cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
@@ -146,7 +146,9 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
-    double pointsPerMeter = 0.2; //Grid resolution
+    //TODO: Make distance between points an option that can be adjusted
+    double distanceBetweenPoints = 5.0; //In meters
+    double pointsPerMeter = 1.0 / distanceBetweenPoints; //Grid resolution
     double scale = noteTransform.scale(); //scale for the notes
 
     double sizeInCaveX = sizeOnPaperX / scale; //in meters in cave
@@ -158,9 +160,10 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
     double numberOfPointsX = sizeInCaveX * (double)pointsPerMeter;
     double numberOfPointsY = sizeInCaveY * (double)pointsPerMeter;
 
-    grid.GridSize.setWidth((int)(numberOfPointsX) + 1);
-    grid.GridSize.setHeight((int)(numberOfPointsY) + 1);
+    grid.GridSize.setWidth((int)(numberOfPointsX) + 2);
+    grid.GridSize.setHeight((int)(numberOfPointsY) + 2);
     grid.Points.resize(grid.GridSize.width() * grid.GridSize.height());
+    grid.GridDeltaSize = QSizeF(xDelta, yDelta);
 
     for(int y = 0; y < grid.GridSize.height(); y++) {
         for(int x = 0; x < grid.GridSize.width(); x++) {
@@ -174,6 +177,32 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 }
 
 /**
+ * @brief cwTriangulateTask::PointGrid::index
+ * @param point
+ * @return The top left point of the cell that the point falls in.  If the point
+ * is out side of the grid, this returns -1
+ */
+int cwTriangulateTask::PointGrid::index(QPointF point) const
+{
+    if(Points.isEmpty()) { return -1; }
+
+    QPointF topLeft = Points.first();
+    QPointF bottomRight = Points.last();
+    QRectF bounds(topLeft, bottomRight);
+
+    if(bounds.contains(point)) {
+        point = (point - topLeft);
+        int xIndex = (int)(point.x() / GridDeltaSize.width());
+        int yIndex = (int)(point.y() / GridDeltaSize.height());
+
+        return index(xIndex, yIndex);
+    }
+
+    return -1;
+}
+
+
+/**
   \brief This creates a database of points that are in the polygon.
 
   This useful for quering which points are in the polygon which ones aren't.  This should be
@@ -184,8 +213,11 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid &grid, const QPolygonF &polygon) const {
     QSet<int> inPolygon;
 
+    //Go through all the grid points
     for(int i = 0; i < grid.Points.size(); i++) {
         const QPointF& point = grid.Points[i];
+
+        //See if the grid point containts point
         if(polygon.containsPoint(point, Qt::OddEvenFill)) {
             inPolygon.insert(i);
         }
@@ -202,13 +234,16 @@ QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid 
 
   Quads that are outside of the scrap's outline aren't stored in the database, and simply discarded.
   */
-cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangulateTask::PointGrid &grid, const QSet<int> &pointsInScrap) {
+cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangulateTask::PointGrid &grid,
+                                                               const QSet<int> &pointsInScrap,
+                                                               const QPolygonF& polygon) {
     //The valid grid size, crop out the last band of points
     int width = grid.GridSize.width() - 1;
     int height = grid.GridSize.height() - 1;
 
     QuadDatabase quadDatabase;
 
+    //TODO: Optimization - this loop can be replace by iterating over the pointsInScrap
     for(int y = 0; y < height; y++) {
         for(int x = 0; x < width; x++) {
             int index = grid.index(x, y);
@@ -228,8 +263,18 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
                        pointsInScrap.contains(quad.bottomRight())) {
                 //Edge case
                 quadDatabase.PartialQuads.append(quad);
-
             }
+        }
+    }
+
+    //Go through all the polygon points and find which index that the point
+    for(int i = 0; i < polygon.size(); i++) {
+        int gridIndex = grid.index(polygon.at(i));
+        if(gridIndex != -1) {
+            Quad quad = grid.quad(gridIndex);
+            quadDatabase.PartialQuads.append(quad);
+        } else {
+            qDebug() << "This is a BUG! gridIndex == -1" << LOCATION;
         }
     }
 
@@ -277,6 +322,7 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
 
     optimizedIndices = fullTriangleIndices;
 
+    //FIXME: Make this work under windows
 //    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
 //                           fullTriangleIndices.size(),
 //                           points.size(),
@@ -324,6 +370,11 @@ QVector<uint> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::Qu
     return triangles;
 }
 
+bool distanceLessThan(const QPair<QPointF, double> &d1, const QPair<QPointF, double> &d2)
+{
+    return d1.second < d2.second;
+}
+
 /**
   This function calculates the edge condition where there are partial boxes
 
@@ -352,29 +403,161 @@ QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTa
 
         //Find the intersection
         QPolygonF intesection = scrapOutline.intersected(quadPolygon);
-        if(intesection.first() == intesection.last()) {
-            intesection.pop_back();
+
+        if(intesection.isEmpty()) {
+            qDebug() << "This is a bug! intesection is empty" << LOCATION;
+            continue;
         }
 
+        //Close the polygon
+        if(!intesection.isClosed()) {
+            intesection.append(intesection.first());
+        }
 
-        //Triangluate polygon!
-        QVector<QPointF> triangles;
-        bool couldTrianglate = cwTriangulate::Process(intesection, triangles);
+        QPolygonF realIntersectionPolygon = addPointsOnOverlapingEdges(intesection);
+        QList<QPolygonF> simplePolygons = createSimplePolygons(realIntersectionPolygon);
 
-        if(!couldTrianglate) {
-            qDebug() << "Couldn't triangulate ... Non-simple polygon?! " << LOCATION;
+        foreach(QPolygonF simplePolygon, simplePolygons) {
+            //Triangluate polygon!
+            QVector<QPointF> triangles;
+            bool couldTrianglate = cwTriangulate::Process(simplePolygon, triangles);
 
-            foreach(QPointF point, intesection) {
-                qDebug() << point.x() << point.y();
+            if(!couldTrianglate) {
+                qDebug() << "Couldn't triangulate ... Non-simple polygon?! " << LOCATION;
+
+                foreach(QPointF point, simplePolygon) {
+                    qDebug() << point.x() << point.y();
+                }
+                qDebug() << "**Is closed**:" << simplePolygon.isClosed();
+                foreach(QPointF point, intesection) {
+                    qDebug() << point.x() << point.y();
+                }
+                qDebug() << "-------------------------------";
             }
-            qDebug() << "-------------------------------";
 
+            allTriangles += triangles;
         }
-
-        allTriangles += triangles;
     }
 
     return allTriangles;
+}
+
+/**
+ * @brief cwTriangulateTask::fixOverlapingPolygon
+ * @param polygon - the polygon that's generated by Qt's intersected
+ * @return A polygon that has points on all the overlapping edges
+ *
+ * This will add points to the polygon where internal axis align edges overlap.
+ * This will add points at the begin of the overlapping edges.  This will allow
+ * create simplePolygons() to run correctly.
+ */
+QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon) const
+{        //Generate the real polygon
+    QPolygonF realIntersectionPolygon;
+
+    //First go through the intersection and find overlapping points
+    for(int i = 0; i < polygon.size() - 1; i++) {
+        QLineF line(polygon.at(i), polygon.at(i+1));
+
+        realIntersectionPolygon.append(line.p1());
+
+        QList< QPair<QPointF, double> > newPoints; //The new point, distance to p1
+
+        //Go through all the points in the intesection, and see if the point lays on the line
+        //This loop will ignore the points that are already in the line
+        int endIndex = i;
+        int current = (i + 2) % (polygon.size() - 1); //loop around
+        while(current != endIndex) {
+            QPointF point = polygon.at(current);
+
+            //If point lays on the line, then add it to the realIntersectionPolygon
+            //This only checks axis align bits
+            if(line.dx() == 0.0) {
+                if(point.x() == line.p1().x()) {
+                    double minY = qMin(line.p1().y(), line.p2().y());
+                    double maxY = qMax(line.p1().y(), line.p2().y());
+                    if(minY <= point.y() && point.y() <= maxY) {
+                        //Add point to realIntersectionPolygon
+                        double distance = QLineF(point, line.p1()).length();
+                        newPoints.append(QPair<QPointF, double>(point, distance));
+
+                    }
+                }
+            }
+
+            if(line.dy() == 0.0) {
+                if(point.y() == line.p1().y()) {
+                    double minX = qMin(line.p1().x(), line.p2().x());
+                    double maxX = qMax(line.p1().x(), line.p2().x());
+                    if(minX <= point.x() && point.x() <= maxX) {
+                        //Add point to realIntersectionPolygon
+                        double distance = QLineF(point, line.p1()).length();
+                        newPoints.append(QPair<QPointF, double>(point, distance));
+                    }
+                }
+            }
+
+            current = (current + 1) % (polygon.size() - 1); //loop around
+        }
+
+
+        if(!newPoints.isEmpty()) {
+            //Sort new points by distance to line.p1()
+            qStableSort(newPoints.begin(), newPoints.end(), distanceLessThan);
+
+            //Add the sorted points into realIntersectionPolygon
+            for(int ii = 0; ii < newPoints.size(); ii++) {
+                realIntersectionPolygon.append(newPoints.at(ii).first);
+            }
+        }
+    }
+
+    //Close it
+    if(!realIntersectionPolygon.isClosed()) {
+        realIntersectionPolygon.append(realIntersectionPolygon.first());
+    }
+
+    return realIntersectionPolygon;
+}
+
+/**
+ * @brief cwTriangulateTask::createSimplePolygons
+ * @param polygon - A complex polygon, that may contain overlapping axis aligned edges
+ * @return A list of simple polygons
+ */
+QList<QPolygonF> cwTriangulateTask::createSimplePolygons(QPolygonF polygon) const {
+    //Find polygons from the polygon
+    QList<QPolygonF> simplePolygons;
+    QPolygonF currentSimplePolygon;
+    for(int i = 0; i < polygon.size(); i++) {
+        QPointF point = polygon.at(i);
+        int index = currentSimplePolygon.indexOf(point);
+
+        //Index found?
+        if(index >= 0) {
+            //Create a simple polygon
+            QPolygonF simplePolygon;
+            for(int ii = index; ii < currentSimplePolygon.size(); ii++) {
+                simplePolygon.append(currentSimplePolygon.at(ii));
+            }
+            simplePolygon.append(point);
+
+            if(simplePolygon.isClosed()) {
+                simplePolygon.pop_back();
+            }
+
+            if(simplePolygon.size() > 2) {
+                simplePolygons.append(simplePolygon);
+            }
+
+            //Remove all the points to and including the index
+            currentSimplePolygon.remove(index, currentSimplePolygon.size() - index);
+        }
+
+        currentSimplePolygon.append(point);
+    }
+
+    return simplePolygons;
 }
 /**
     This function will add the unAddTriangles into indices.  It will also add triangle's points into

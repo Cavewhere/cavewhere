@@ -11,34 +11,34 @@
 #include <string.h>
 #include <assert.h>
 
-static const float EPSILON=0.0000000001f;
+static const double EPSILON=0.00000000001;
 
-float cwTriangulate::Area(const QVector<QPointF> &contour)
+double cwTriangulate::Area(const QVector<QPointF> &contour)
 {
 
   int n = contour.size();
 
-  float A=0.0f;
+  double A=0.0;
 
   for(int p=n-1,q=0; q<n; p=q++)
   {
     A+= contour[p].x()*contour[q].y() - contour[q].x()*contour[p].y();
   }
-  return A*0.5f;
+  return A*0.5;
 }
 
    /*
      InsideTriangle decides if a point P is Inside of the triangle
      defined by A, B, C.
    */
-bool cwTriangulate::InsideTriangle(float Ax, float Ay,
-                      float Bx, float By,
-                      float Cx, float Cy,
-                      float Px, float Py)
+bool cwTriangulate::InsideTriangle(double Ax, double Ay,
+                      double Bx, double By,
+                      double Cx, double Cy,
+                      double Px, double Py)
 
 {
-  float ax, ay, bx, by, cx, cy, apx, apy, bpx, bpy, cpx, cpy;
-  float cCROSSap, bCROSScp, aCROSSbp;
+  double ax, ay, bx, by, cx, cy, apx, apy, bpx, bpy, cpx, cpy;
+  double cCROSSap, bCROSScp, aCROSSbp;
 
   ax = Cx - Bx;  ay = Cy - By;
   bx = Ax - Cx;  by = Ay - Cy;
@@ -51,13 +51,13 @@ bool cwTriangulate::InsideTriangle(float Ax, float Ay,
   cCROSSap = cx*apy - cy*apx;
   bCROSScp = bx*cpy - by*cpx;
 
-  return ((aCROSSbp >= 0.0f) && (bCROSScp >= 0.0f) && (cCROSSap >= 0.0f));
+  return ((aCROSSbp >= 0.0) && (bCROSScp >= 0.0) && (cCROSSap >= 0.0));
 }
 
 bool cwTriangulate::Snip(const QVector<QPointF> &contour,int u,int v,int w,int n,int *V)
 {
   int p;
-  float Ax, Ay, Bx, By, Cx, Cy, Px, Py;
+  double Ax, Ay, Bx, By, Cx, Cy, Px, Py;
 
   Ax = contour[V[u]].x();
   Ay = contour[V[u]].y();
@@ -84,7 +84,7 @@ bool cwTriangulate::Snip(const QVector<QPointF> &contour,int u,int v,int w,int n
 bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &result)
 {
     QPolygonF polygon(contour);
-    if(polygon.isClosed()) {
+    while(polygon.isClosed()) {
         //Remove the last item
         polygon.pop_back();
     }
@@ -98,7 +98,7 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
 
   /* we want a counter-clockwise polygon in V */
 
-  if ( 0.0f < Area(polygon) )
+  if ( 0.0 < Area(polygon) )
     for (int v=0; v<n; v++) V[v] = v;
   else
     for(int v=0; v<n; v++) V[v] = (n-1)-v;

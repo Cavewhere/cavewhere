@@ -14,14 +14,14 @@ public:
                         QVector<QPointF> &result);
 
     // compute area of a contour/polygon
-    static float Area(const QVector<QPointF> &contour);
+    static double Area(const QVector<QPointF> &contour);
 
     // decide if point Px/Py is inside triangle defined by
     // (Ax,Ay) (Bx,By) (Cx,Cy)
-    static bool InsideTriangle(float Ax, float Ay,
-                        float Bx, float By,
-                        float Cx, float Cy,
-                        float Px, float Py);
+    static bool InsideTriangle(double Ax, double Ay,
+                        double Bx, double By,
+                        double Cx, double Cy,
+                        double Px, double Py);
 
 
   private:

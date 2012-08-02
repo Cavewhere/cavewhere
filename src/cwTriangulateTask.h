@@ -75,9 +75,11 @@ private:
     public:
         QSize GridSize;
         QVector<QPointF> Points;
+        QSizeF GridDeltaSize; //In PointsPerMeter
 
         Quad quad(int origin) const;
         int index(int x, int y) const;
+        int index(QPointF point) const;
         QPoint xyIndices(int) const;
         bool isValid(int index) const;
     };
@@ -123,12 +125,14 @@ private:
     void triangulateScrap(int index);
     PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const;
     QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
-    QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap);
+    QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap, const QPolygonF& polygon);
 
     //For triangulation
     cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
     QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
     QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
+    QPolygonF addPointsOnOverlapingEdges(QPolygonF polygon) const;
+    QList<QPolygonF> createSimplePolygons(QPolygonF polygon) const;
     void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
 
     //For transformation from note coords to local note coords
@@ -149,6 +153,7 @@ private:
 inline int cwTriangulateTask::PointGrid::index(int x, int y) const {
     return y * GridSize.width() + x;
 }
+
 
 /**
   \brief Gets the x and y indices at index of the grid
