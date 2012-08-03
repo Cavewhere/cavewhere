@@ -77,10 +77,14 @@ private:
         QVector<QPointF> Points;
         QSizeF GridDeltaSize; //In PointsPerMeter
 
+        bool intersects(const Quad& quad, const QPolygonF &polygon) const;
+        bool quadContainInsideOfPolygon(const Quad& quad, const QPolygonF& polygon) const;
+
         Quad quad(int origin) const;
         int index(int x, int y) const;
         int index(QPointF point) const;
         QPoint xyIndices(int) const;
+
         bool isValid(int index) const;
     };
 
@@ -125,7 +129,7 @@ private:
     void triangulateScrap(int index);
     PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const;
     QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
-    QuadDatabase createQuads(const PointGrid& grid, const QSet<int>& pointsInScrap, const QPolygonF& polygon);
+    QuadDatabase createQuads(const PointGrid& grid, const QPolygonF& polygon);
 
     //For triangulation
     cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
@@ -163,6 +167,7 @@ inline int cwTriangulateTask::PointGrid::index(int x, int y) const {
 inline QPoint cwTriangulateTask::PointGrid::xyIndices(int index) const {
     return QPoint(index % GridSize.width(), index / GridSize.width());
 }
+
 
 /**
   Retruns true if the index is in the point grid and false if it's not.

@@ -103,7 +103,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrapData.outline());
 
     //Creates list of quads that are on the edges or in the scrap
-    QuadDatabase quads = createQuads(pointGrid, gridPointsInScrap, scrapData.outline());
+    QuadDatabase quads = createQuads(pointGrid, scrapData.outline());
 
     //Triangulate the quads (this will update the outputs data)
     cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
@@ -235,7 +235,7 @@ QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid 
   Quads that are outside of the scrap's outline aren't stored in the database, and simply discarded.
   */
 cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangulateTask::PointGrid &grid,
-                                                               const QSet<int> &pointsInScrap,
+//                                                               const QSet<int> &pointsInScrap,
                                                                const QPolygonF& polygon) {
     //The valid grid size, crop out the last band of points
     int width = grid.GridSize.width() - 1;
@@ -249,35 +249,13 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
             int index = grid.index(x, y);
             Quad quad = grid.quad(index);
 
-            //If quad is in the outline
-            if(pointsInScrap.contains(quad.topLeft()) &&
-                   pointsInScrap.contains(quad.topRight()) &&
-                    pointsInScrap.contains(quad.bottomLeft()) &&
-                    pointsInScrap.contains(quad.bottomRight())) {
-                //Quad is completely in the outline
-                quadDatabase.FullQuads.append(quad);
-
-            } else if(pointsInScrap.contains(quad.topLeft()) ||
-                      pointsInScrap.contains(quad.topRight()) ||
-                       pointsInScrap.contains(quad.bottomLeft()) ||
-                       pointsInScrap.contains(quad.bottomRight())) {
-                //Edge case
+            if(grid.intersects(quad, polygon)) {
                 quadDatabase.PartialQuads.append(quad);
+            } else if(grid.quadContainInsideOfPolygon(quad, polygon)) {
+                quadDatabase.FullQuads.append(quad);
             }
         }
     }
-
-    //Go through all the polygon points and find which index that the point
-    for(int i = 0; i < polygon.size(); i++) {
-        int gridIndex = grid.index(polygon.at(i));
-        if(gridIndex != -1) {
-            Quad quad = grid.quad(gridIndex);
-            quadDatabase.PartialQuads.append(quad);
-        } else {
-            qDebug() << "This is a BUG! gridIndex == -1" << LOCATION;
-        }
-    }
-
     return quadDatabase;
 }
 
@@ -917,3 +895,55 @@ cwTriangulateTask::Quad cwTriangulateTask::PointGrid::quad(int origin) const {
 
     return cwTriangulateTask::Quad(topLeft, topRight, bottomLeft, bottomRight);
 }
+
+/**
+ * @brief cwTriangulateTask::PointGrid::intersects
+ * @param polygon
+ * @return True if the edges of the quad intersects with the edges of the polygon
+ */
+bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& quad, const QPolygonF &polygon) const
+{
+    if(polygon.size() < 2) { return false; }
+
+    QVector<QLineF> edges;
+    edges.reserve(4);
+    edges.append(QLineF(Points.at(quad.topLeft()), Points.at(quad.topRight())));
+    edges.append(QLineF(Points.at(quad.topRight()), Points.at(quad.bottomRight())));
+    edges.append(QLineF(Points.at(quad.bottomRight()), Points.at(quad.bottomLeft())));
+    edges.append(QLineF(Points.at(quad.bottomLeft()), Points.at(quad.topLeft())));
+
+    QPointF intersectionPoint;
+
+    for(int i = 0; i < polygon.size() - 1; i++) {
+        QLineF polygonEdge(polygon.at(i), polygon.at(i + 1));
+        foreach(QLineF edge, edges) {
+            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+                return true;
+            }
+        }
+    }
+
+    if(!polygon.isClosed()) {
+        QLineF polygonEdge(polygon.first(), polygon.last());
+        foreach(QLineF edge, edges) {
+            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief cwTriangulateTask::PointGrid::containInsideOf
+ * @param polygon
+ * @return True if the quad is completely inside of the polygon
+ */
+bool cwTriangulateTask::PointGrid::quadContainInsideOfPolygon(const cwTriangulateTask::Quad& quad, const QPolygonF &polygon) const
+{
+    return polygon.containsPoint(Points.at(quad.topLeft()), Qt::OddEvenFill) &&
+            polygon.containsPoint(Points.at(quad.topRight()), Qt::OddEvenFill) &&
+            polygon.containsPoint(Points.at(quad.bottomLeft()), Qt::OddEvenFill) &&
+            polygon.containsPoint(Points.at(quad.bottomRight()), Qt::OddEvenFill);
+}
+
