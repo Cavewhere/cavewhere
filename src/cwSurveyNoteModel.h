@@ -40,6 +40,8 @@ public:
 
     Q_INVOKABLE void addFromFiles(QStringList files, cwProject* project);
 
+    void stationPositionModelUpdated();
+
 signals:
 
 public slots:

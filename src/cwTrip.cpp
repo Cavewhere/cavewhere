@@ -276,6 +276,16 @@ QSet<cwStation> cwTrip::neighboringStations(QString stationName) const {
 }
 
 /**
+ * @brief cwTrip::stationPositionModelUpdated
+ *
+ * Called from the cwCave that the stations position model has updated
+ */
+void cwTrip::stationPositionModelUpdated()
+{
+    Notes->stationPositionModelUpdated();
+}
+
+/**
   \brief Gets all the unique stations for a trip
 
   A station may come up more than once on a trip, but only returns

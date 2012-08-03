@@ -71,6 +71,8 @@ public:
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
 
+    void stationPositionModelUpdated();
+
 signals:
     void nameChanged(QString name);
     void dateChanged(QDate date);

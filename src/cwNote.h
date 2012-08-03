@@ -81,6 +81,7 @@ signals:
     void parentTripChanged();
 
 public slots:
+    void updateScrapNoteTransform();
 
 private:
     cwTrip* ParentTrip;
@@ -98,9 +99,6 @@ private:
 
     void copy(const cwNote& object);
     void setupScrap(cwScrap* scrap);
-
-private slots:
-    void updateScrapNoteTransform();
 
 };
 

@@ -3,6 +3,7 @@
 #include "cwProject.h"
 #include "cwProjectImageProvider.h"
 #include "cwTrip.h"
+#include "cwNote.h"
 
 //Qt includes
 #include <QDebug>
@@ -113,6 +114,17 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   */
 void cwSurveyNoteModel::addFromFiles(QStringList files, cwProject* project) {
     project->addImages(files, this, SLOT(addNotesWithNewImages(QList<cwImage>)));
+}
+
+/**
+ * @brief cwTrip::stationPositionModelUpdated
+ *
+ * Called from the cwCave that the stations position model has updated
+ */
+void cwSurveyNoteModel::stationPositionModelUpdated() {
+    foreach(cwNote* note, Notes) {
+        note->updateScrapNoteTransform(); //The note transform depends on the model's positions
+    }
 }
 
 /**
