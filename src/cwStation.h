@@ -95,7 +95,7 @@ private:
 };
 
 inline uint qHash(const cwStation& station) {
-    return qHash(station.name());
+    return qHash(station.name().toLower());
 }
 
 inline QString cwStation::name() const { return Data->Name; }

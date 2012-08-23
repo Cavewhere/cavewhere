@@ -776,11 +776,6 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
 
         visibleStations.append(station1);
         visibleStations.append(station1);
-
-//        if(visibleStations.size() == 1) {
-//            visibleStations.append(stations.first());
-//        }
-//        visibleStations.append(stations.first());
     }
 
     return visibleStations;

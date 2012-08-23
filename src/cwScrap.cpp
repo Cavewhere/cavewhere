@@ -325,7 +325,7 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
             QSet< cwStation > neighborsStation2 = stationNeighbors[j];
 
             //See if they make up a shot
-            if(neighborsStation1.contains(station2.name()) && neighborsStation2.contains(station1.name())) {
+            if(neighborsStation1.contains(station2.name().toLower()) && neighborsStation2.contains(station1.name().toLower())) {
                 shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
             }
         }
@@ -389,8 +389,7 @@ cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1,
     double scale = lengthInCave / lengthOnPage;
 
     //calculate the north
-    double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized()));
-    angle = 360.0 - angle * cwGlobals::RadiansToDegrees;
+    double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized())) * cwGlobals::RadiansToDegrees;
 
     cwNoteTranformation noteTransform;
     noteTransform.scaleNumerator()->setValue(1);
@@ -741,6 +740,5 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
 void cwScrap::setParentCave(cwCave *cave) {
     if(cave != ParentCave) {
         ParentCave = cave;
-//        updateStationsWithNewCave();
     }
 }
