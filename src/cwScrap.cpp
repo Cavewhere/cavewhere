@@ -272,7 +272,7 @@ void cwScrap::updateNoteTransformation() {
 
     //Get all the stations that make shots on the page of notes
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
-    QList<cwNoteTranformation> transformations = calculateShotTransformations(shotStations);
+    QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
     cwNoteTranformation averageTransformation = averageTransformations(transformations);
 
     noteTransformation()->setScale(averageTransformation.scale());
@@ -337,11 +337,11 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
 /**
   This will create cwNoteTransformation for each shot in the list
   */
-QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
-    QList<cwNoteTranformation> transformations;
+QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
+    QList<ScrapShotTransform> transformations;
     for(int i = 0; i < shots.size(); i++) {
         QPair< cwNoteStation, cwNoteStation >& shot = shots[i];
-        cwNoteTranformation transformation = calculateShotTransformation(shot.first, shot.second);
+        ScrapShotTransform transformation = calculateShotTransformation(shot.first, shot.second);
         transformations.append(transformation);
     }
 
@@ -351,17 +351,17 @@ QList< cwNoteTranformation > cwScrap::calculateShotTransformations(QList< QPair 
 /**
   This will caluclate the transfromation between station1 and station2
   */
-cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
+cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
     if(parentCave() == NULL) {
         qDebug() << "Can't calculate shot transformation because parentCave is null" << LOCATION;
-        return cwNoteTranformation();
+        return ScrapShotTransform();
     }
 
     cwStationPositionLookup positionLookup = parentCave()->stationPositionLookup();
 
     //Make sure station1 and station2 exist in the lookup
     if(!positionLookup.hasPosition(station1.name()) || !positionLookup.hasPosition(station2.name())) {
-        return cwNoteTranformation();
+        return ScrapShotTransform();
     }
 
     QVector3D station1RealPos = positionLookup.position(station1.name());
@@ -388,42 +388,59 @@ cwNoteTranformation cwScrap::calculateShotTransformation(cwNoteStation station1,
     //calculate the scale
     double scale = lengthInCave / lengthOnPage;
 
-    //calculate the north
-    double angle = acos(QVector3D::dotProduct(realVector.normalized(), noteVector.normalized())) * cwGlobals::RadiansToDegrees;
+    realVector.normalize();
+    noteVector.normalize();
 
-    cwNoteTranformation noteTransform;
-    noteTransform.scaleNumerator()->setValue(1);
-    noteTransform.scaleDenominator()->setValue(scale);
-    noteTransform.setNorthUp(angle);
+    QVector3D zeroVector(0.0, 1.0, 0.0);
+    double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
+    QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
-    return noteTransform;
+    QMatrix4x4 rotationToNorth;
+    rotationToNorth.rotate(-angleToZero, crossProduct);
+
+    QVector3D rotatedNoteVector = rotationToNorth.map(noteVector);
+    return ScrapShotTransform(scale, rotatedNoteVector);
 }
 
 /**
   This will average all the transformatons into one transfromation
   */
-cwNoteTranformation cwScrap::averageTransformations(QList< cwNoteTranformation > shotTransforms) {
+cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) {
 
     if(shotTransforms.empty()) {
         return cwNoteTranformation();
     }
 
-    double angleAverage = 0.0;
+    //Values to be averaged
+    QVector3D errorVectorAverage;
     double scaleAverage = 0.0;
 
-    foreach(cwNoteTranformation transformation, shotTransforms) {
+    //Number of valid transformations
+    double numberValidTransforms = 0.0;
+
+    //Sum all the values
+    foreach(ScrapShotTransform transformation, shotTransforms) {
         //Make sure the note transform scale is valid
-        if(transformation.scale() != 1.0) {
-            angleAverage  += transformation.northUp();
-            scaleAverage += transformation.scaleDenominator()->value();
+        if(transformation.Scale != 0.0) {
+            errorVectorAverage += transformation.ErrorVector;
+            scaleAverage += transformation.Scale;
+            numberValidTransforms += 1.0;
         }
     }
 
-    angleAverage = angleAverage / (double)shotTransforms.size();
-    scaleAverage = scaleAverage / (double)shotTransforms.size();
+    if(numberValidTransforms == 0.0) {
+        qDebug() << "No valid transfroms" << LOCATION;
+        return cwNoteTranformation();
+    }
+
+    //Do the averaging
+    errorVectorAverage = errorVectorAverage / numberValidTransforms;
+    scaleAverage = scaleAverage / numberValidTransforms;
 
     cwNoteTranformation transformation;
-    transformation.setNorthUp(angleAverage);
+    double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
+
+    transformation.setNorthUp(angle);
     transformation.scaleDenominator()->setValue(scaleAverage);
 
     return transformation;

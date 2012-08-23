@@ -68,6 +68,7 @@ double cwNoteTranformation::scale() const {
   This returns the angle from north on the page, always assumed as up vector of (0,1)
   */
 double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const {
+
     //Figure out the vector between the points
     QVector2D vectorBetweenPoints = QVector2D(noteP2) - QVector2D(noteP1);
 
@@ -124,7 +125,7 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
 */
 QMatrix4x4 cwNoteTranformation::matrix() const {
     QMatrix4x4 matrix;
-    matrix.rotate(-northUp(), 0.0, 0.0, 1.0);
+    matrix.rotate(northUp(), 0.0, 0.0, 1.0);
     matrix.scale(1.0 / scale(), 1.0 / scale(), 1.0);
     return matrix;
 }

@@ -21,13 +21,13 @@ BaseScrapInteraction {
 
             if(mouse.button === Qt.LeftButton) {
                 if(scrap === null) {
-                   interaction.addScrap()
+                    interaction.addScrap()
                 }
 
                 //Scrap is completed, we just need to create a new scrap
                 var index
                 if(!lastPoint["IsSnapped"] && scrap.isClosed()) {
-                   interaction.addScrap()
+                    interaction.addScrap()
                     index = 0; //Insert the point at the begining of the new scrap
                 } else {
                     index = lastPoint["InsertIndex"]

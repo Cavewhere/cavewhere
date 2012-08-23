@@ -99,6 +99,23 @@ signals:
     void calculateNoteTransformChanged();
 
 private:
+
+    /**
+     * @brief The ScrapShot class
+     *
+     * This is for averaging shot transform.  This class has the scale of the shot and the
+     * QVector2D of how far off shot drawn on paper compared the shot's data.  The QVector2D
+     * has no error when it's equal to (0.0, 1.0, 0.0)
+     */
+    class ScrapShotTransform {
+    public:
+        ScrapShotTransform() : Scale(0.0) { }
+        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector) {}
+
+        double Scale;
+        QVector3D ErrorVector;
+    };
+
     //The outline of the scrap, in normalized points
     QPolygonF OutlinePoints;
 
@@ -122,9 +139,9 @@ private:
 
     //For note station transformation, automatic calculation
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-    QList< cwNoteTranformation > calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-    cwNoteTranformation calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-    cwNoteTranformation averageTransformations(QList< cwNoteTranformation > shotTransforms);
+    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
+    ScrapShotTransform calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
+    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms);
 
     const cwScrap& copy(const cwScrap& other);
 
