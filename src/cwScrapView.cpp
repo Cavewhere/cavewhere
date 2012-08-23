@@ -25,7 +25,7 @@ void cwScrapView::setNote(cwNote* note) {
     if(Note != note) {
 
         if(Note != NULL) {
-            disconnect(this, NULL, Note, NULL);
+            disconnect(Note, NULL, this, NULL);
         }
 
         Note = note;
@@ -155,7 +155,7 @@ void cwScrapView::updateAllScraps() {
                 setSelectedScrapItem(NULL);
             }
 
-            delete ScrapItems[i];
+            ScrapItems[i]->deleteLater();
             ScrapItems.removeLast();
         }
     }
