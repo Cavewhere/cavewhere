@@ -37,18 +37,12 @@ private:
 
     cwGLLinePlot* GLLinePlot;
 
-    bool Rerun;
-
     void connectCaves(cwCavingRegion* region);
     void connectCave(cwCave* cave);
     void connectTrips(cwCave* cave);
     void connectTrip(cwTrip* trip);
     void connectChunks(cwTrip* trip);
     void connectChunk(cwSurveyChunk* chunk);
-//    void connectShots(cwSurveyChunk* chunk);
-//    void connectShot(cwShot* shot);
-//    void connectStations(cwSurveyChunk* chunk);
-//    void connectStation(cwStationReference* station);
 
 private slots:
     void regionDestroyed(QObject* region);
@@ -59,8 +53,6 @@ private slots:
     void connectAddedCaves(int beginIndex, int endIndex);
     void connectAddedTrips(int beginIndex, int endIndex);
     void connectAddedChunks(int beginIndex, int endIndex);
-//    void connectAddedStations(int beginIndex, int endIndex);
-//    void connectAddedShots(int beginIndex, int endIndex);
 
 };
 
