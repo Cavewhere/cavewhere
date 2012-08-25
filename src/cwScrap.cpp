@@ -245,6 +245,24 @@ void cwScrap::setStationData(StationDataRole role, int noteStationIndex, QVarian
 }
 
 /**
+ * @brief cwScrap::hasStation
+ * @param name - name of the station
+ * @return True if the scrap has a reference to the station with name
+ *
+ * This does a linear search through the scrap and check if it has a station with name
+ */
+bool cwScrap::hasStation(QString name) const
+{
+    foreach(cwNoteStation station, stations()) {
+        if(station.name().compare(name, Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
   \brief Gets the station at stationId
 
   stationId - The station at stationId, if the station id is invalid, this returns

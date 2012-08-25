@@ -64,6 +64,7 @@ public:
     int numberOfStations() const;
     Q_INVOKABLE QVariant stationData(StationDataRole role, int noteStationIndex) const;
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
+    bool hasStation(QString name) const;
 
     cwNoteTranformation* noteTransformation() const;
 

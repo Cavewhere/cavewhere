@@ -7,6 +7,7 @@ class cwCave;
 class cwTrip;
 class cwSurveyChunk;
 class cwShot;
+class cwScrap;
 class cwStationReference;
 class cwLinePlotTask;
 class cwGLLinePlot;
@@ -26,6 +27,9 @@ public:
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
 signals:
+    stationPositionInCavesChanged(QList<cwCave*>);
+    stationPositionInTripsChanged(QList<cwTrip*>);
+    stationPositionInScrapsChanged(QList<cwScrap*>);
 
 public slots:
 

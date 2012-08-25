@@ -32,7 +32,7 @@ cwGLRenderer::cwGLRenderer(QQuickItem *parent) :
     connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
     setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
-    setAntialiasing(true);
+    setAntialiasing(false);
     setOpaquePainting(true);
 }
 

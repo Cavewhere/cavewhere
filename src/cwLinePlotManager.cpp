@@ -193,22 +193,23 @@ void cwLinePlotManager::updateLinePlot() {
     if(!LinePlotTask->isReady()) { return; }
     if(Region == NULL) { return; }
 
-    //Make sure the data is valid
-    QVector<cwStationPositionLookup> stationPositionsPerCave = LinePlotTask->stationLookup();
-    if(stationPositionsPerCave.size() != Region->caveCount()) {
-        //Hmmm, mismatch, rerun survex
-        qDebug() << "Station Lookup mismatch:" << stationPositionsPerCave.size() << "vs" << Region->caveCount() << LOCATION;
-        runSurvex();
-        return;
-    }
+    cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
 
     //Update all the positions for all the caves
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);
-        cave->setStationPositionModel(stationPositionsPerCave[i]);
+        if(resultData.caveData().contains(cave)) {
+
+            //Update the station position for a cave
+            cwStationPositionLookup lookup = resultData.caveData().value(cave);
+            cave->setStationPositionModel(lookup);
+
+        } else {
+            qDebug() << "Couldn't find cave:" << cave << LOCATION;
+        }
     }
 
     //Update the 3D plot
-    GLLinePlot->setPoints(LinePlotTask->stationPositions());
-    GLLinePlot->setIndexes(LinePlotTask->linePlotIndexData());
+    GLLinePlot->setPoints(resultData.stationPositions());
+    GLLinePlot->setIndexes(resultData.linePlotIndexData());
 }

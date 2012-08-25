@@ -7,6 +7,10 @@
 #include "cwPlotSauceXMLTask.h"
 #include "cwLinePlotGeometryTask.h"
 #include "cwCave.h"
+#include "cwTrip.h"
+#include "cwNote.h"
+#include "cwScrap.h"
+#include "cwSurveyNoteModel.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -52,10 +56,12 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     CenterlineGeometryTask = new cwLinePlotGeometryTask();
     CenterlineGeometryTask->setParentTask(this);
 
-    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
-    connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
+    connect(CenterlineGeometryTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
+    connect(CenterlineGeometryTask, SIGNAL(stopped()), SLOT(done()));
 
 }
+
+
 
 /**
   \brief Set's the data for the line plot task
@@ -66,14 +72,12 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
         return;
     }
 
+    //Copy over all region data
     *Region = region;
 
-    //Incode the the cave's index into the cave's name
-    for(int i = 0; i < Region->caveCount(); i++) {
-        cwCave* cave = Region->cave(i);
-        QString caveNameNoSpaces = cave->name().remove(" ");
-        cave->setName(QString("%1-%2").arg(i).arg(caveNameNoSpaces));
-    }
+    //Populate the original pointers
+    RegionOriginalPointers = RegionDataPtrs(region);
+
 }
 
 /**
@@ -90,6 +94,9 @@ void cwLinePlotTask::runTask() {
         done();
         return;
     }
+
+    //Change all the cave names, such that survex can handle them correctly
+    encodeCaveNames();
 
     int numCaves = Region->caveCount();
     CaveStationLookups.clear();
@@ -181,6 +188,11 @@ void cwLinePlotTask::generateCenterlineGeometry() {
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::linePlotTaskComplete() {
+
+    //Copy all the from the CenterLineGemoetryTask into the results
+    Result.StationPositions = CenterlineGeometryTask->pointData();
+    Result.LinePlotIndexData = CenterlineGeometryTask->indexData();
+
     // qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
@@ -220,14 +232,162 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
             return;
         }
 
-        CaveStationLookups[caveIndex].setPosition(stationName, position);
+        cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
+        if(lookup.hasPosition(stationName)) {
+            QVector3D oldPosition = lookup.position(stationName);
+            if(oldPosition != position) {
+                //Update the position
+                lookup.setPosition(stationName, position);
+                setStationAsChanged(caveIndex, stationName);
+            }
+        } else {
+            //New station
+            lookup.setPosition(stationName, position);
+            setStationAsChanged(caveIndex, stationName);
+        }
     }
 
-    Q_ASSERT(CaveStationLookups.size() == Region->caveCount());
+    //Update all cave station position models
+    for(int i = 0; i < Region->caveCount(); i++) {
+        //Get extrenal cave pointer
+        const cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
+        if(Result.Caves.contains(externalCave)) {
+            //Overwrite existing entry
+            Result.Caves.insert(externalCave, CaveStationLookups[i]);
 
+            //Update the region's station lookup
+            cwCave* cave = Region->cave(i);
+            cave->setStationPositionModel(CaveStationLookups[i]);
+        }
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::encodeCaveNames
+ *
+ * This encode's the cave's name. Allows survex to properly parse funny cavewhere cave names.
+ */
+void cwLinePlotTask::encodeCaveNames()
+{
+    //Encode the the cave's index into the cave's name
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);
-        cave->setStationPositionModel(CaveStationLookups[i]);
+        QString caveNameNoSpaces = cave->name().remove(" ");
+        cave->setName(QString("%1-%2").arg(i).arg(caveNameNoSpaces));
     }
-
 }
+
+/**
+ * @brief cwLinePlotTask::initializeCaveStationLookups
+ */
+void cwLinePlotTask::initializeCaveStationLookups()
+{
+    int numCaves = Region->caveCount();
+    CaveStationLookups.reserve(numCaves);
+    CaveStationLookups.resize(numCaves);
+
+    //Go through all the caves and get the current station lookup
+    //This will allows us to see which stations have change during the line plot task
+    for(int i = 0; i < numCaves; i++) {
+        cwCave* cave = Region->cave(i);
+        CaveStationLookups[i] = cave->stationPositionLookup();
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::setStationAsChanged
+ * @param stationName
+ *
+ * This adds the station to the changed list, and also adds all pointers that referance
+ * that station to the list as well
+ */
+void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
+{
+    cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
+
+    //Add the cave to the results with empty station lookup
+    const cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
+    Result.Caves.insert(externalCave, cwStationPositionLookup());
+
+    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
+        cwTrip* trip = cave->trip(tripIndex);
+        if(trip->hasStation(stationName)) {
+
+            //Get the trip that has been updated
+            //Warning, don't us externalTrip, it's not part of this thread
+            const cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
+
+            //Add the trip to the trips that have changes
+            Result.Trips.insert(externalTrip);
+        }
+
+        int scrapIndex = 0;
+        foreach(cwNote* note, trip->notes()->notes()) {
+            for(int i = 0; i < note->scraps().size(); i++) {
+                cwScrap* scrap = note->scrap(i);
+                if(scrap->hasStation(stationName)) {
+
+                    //Get the trip that has been updated
+                    //Warning, don't us externalScrap, it's not part of this thread
+                    const cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
+
+                    //Add the scrap to the scraps that have changed
+                    Result.Scraps.insert(externalScrap);
+                }
+
+                scrapIndex++;
+            }
+        }
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::TripDataPtrs::TripDataPtrs
+ * @param trip
+ *
+ * Copies all the scrap pointers out of the trip.  This allows the LinePlotTask to show exactly
+ * what has changed
+ */
+cwLinePlotTask::TripDataPtrs::TripDataPtrs(const cwTrip *trip)
+{
+    Trip = trip;
+    foreach(cwNote* note, trip->notes()->notes()) {
+        foreach(cwScrap* scrap, note->scraps()) {
+            Scraps.append(scrap);
+        }
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::CaveDataPtrs::CaveDataPtrs
+ * @param cave
+ *
+ * Copies all the trip pointers out of the trip.  This allows the LinePlotTask to show exactly
+ * what has changed
+ */
+cwLinePlotTask::CaveDataPtrs::CaveDataPtrs(const cwCave *cave)
+{
+    qDebug() << "Registering external cave:" << cave;
+
+    Cave = cave;
+    foreach(cwTrip* trip, cave->trips()) {
+        Trips.append(cwLinePlotTask::TripDataPtrs(trip));
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::CaveDataPtrs::CaveDataPtrs
+ * @param cave
+ *
+ * Copies all the cave pointers out of the trip.  This allows the LinePlotTask to show exactly
+ * what has changed
+ */
+cwLinePlotTask::RegionDataPtrs::RegionDataPtrs(const cwCavingRegion &region)
+{
+    foreach(cwCave* cave, region.caves()) {
+        Caves.append(cwLinePlotTask::CaveDataPtrs(cave));
+    }
+}
+
+
+

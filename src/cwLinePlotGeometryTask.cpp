@@ -57,19 +57,6 @@ void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
 
         PointData.append(iter.value());
     }
-
-//    QList< QWeakPointer<cwStation> > stations = cave->stations();
-////    qDebug() << "Stations:" << stations.size();
-//    foreach( QWeakPointer<cwStation> station, stations) {
-
-//        QSharedPointer<cwStation> fullStation = station.toStrongRef();
-
-//        //Add the station to the index map
-//        StationIndexLookup.insert(fullStation.data(), PointData.size());
-
-//        //Lookup the stations position
-////        PointData.append(fullStation->position());
-//    }
 }
 
 /**
