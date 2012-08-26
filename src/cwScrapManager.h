@@ -19,6 +19,7 @@ class cwProject;
 class cwGLScraps;
 class cwStationPositionLookup;
 class cwRemoveImageTask;
+class cwLinePlotManager;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 
@@ -35,6 +36,7 @@ public:
 
     void setRegion(cwCavingRegion* region);
     void setProject(cwProject* project);
+    void setLinePlotManager(cwLinePlotManager* linePlotManager);
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
@@ -44,8 +46,11 @@ signals:
 public slots:
     void updateAllScraps();
 
+    void updateScrapGeometryMorphOnly(QList<cwScrap*> scraps);
+
 private:
     cwCavingRegion* Region;
+    cwLinePlotManager* LinePlotManager;
 
     QList<QWeakPointer<cwScrap> > WaitingForUpdate;
 

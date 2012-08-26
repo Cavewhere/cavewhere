@@ -9,7 +9,7 @@ class cwSurveyChunk;
 class cwShot;
 class cwScrap;
 class cwStationReference;
-class cwLinePlotTask;
+#include "cwLinePlotTask.h"
 class cwGLLinePlot;
 
 //Qt includes
@@ -27,9 +27,9 @@ public:
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
 signals:
-    stationPositionInCavesChanged(QList<cwCave*>);
-    stationPositionInTripsChanged(QList<cwTrip*>);
-    stationPositionInScrapsChanged(QList<cwScrap*>);
+    void stationPositionInCavesChanged(QList<cwCave*>);
+    void stationPositionInTripsChanged(QList<cwTrip*>);
+    void stationPositionInScrapsChanged(QList<cwScrap*>);
 
 public slots:
 
@@ -47,6 +47,8 @@ private:
     void connectTrip(cwTrip* trip);
     void connectChunks(cwTrip* trip);
     void connectChunk(cwSurveyChunk* chunk);
+
+    void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 
 private slots:
     void regionDestroyed(QObject* region);

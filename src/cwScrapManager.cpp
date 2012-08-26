@@ -13,6 +13,7 @@
 #include "cwGLScraps.h"
 #include "cwRemoveImageTask.h"
 #include "cwImageResolution.h"
+#include "cwLinePlotManager.h"
 
 //Qt includes
 #include <QThread>
@@ -20,6 +21,7 @@
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     Region(NULL),
+    LinePlotManager(NULL),
     TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
@@ -67,6 +69,29 @@ void cwScrapManager::setProject(cwProject *project) {
 }
 
 /**
+ * @brief cwScrapManager::setLinePlotManager
+ * @param linePlotManager
+ *
+ * Sets the line plot manager for the scrap
+ */
+void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
+{
+    if(LinePlotManager != linePlotManager) {
+        if(LinePlotManager != NULL) {
+            disconnect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
+                    this, &cwScrapManager::updateScrapGeometryMorphOnly);
+        }
+
+        LinePlotManager = linePlotManager;
+
+        if(LinePlotManager != NULL) {
+            connect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
+                    this, &cwScrapManager::updateScrapGeometryMorphOnly);
+        }
+    }
+}
+
+/**
   This function is for testing
 
   This will gather all the scraps from all the caves, and trips, and notes and regenerate
@@ -84,6 +109,24 @@ void cwScrapManager::updateAllScraps() {
         }
     }
 
+    updateScrapGeometry(scraps);
+}
+
+/**
+ * @brief cwScrapManager::updateScrapGeometryWithStationPositions
+ * @param scraps
+ *
+ * This only remorphs the scraps geometry.  This doesn't cut out the scrap.
+ */
+void cwScrapManager::updateScrapGeometryMorphOnly(QList<cwScrap *> scraps)
+{
+    //Update all the note transformation, because the station positions have changed
+    foreach(cwScrap* scrap, scraps) {
+        scrap->updateNoteTransformation();
+    }
+
+    //Update the scrap geometry
+    //FIXME: We should only morph the existing geometry
     updateScrapGeometry(scraps);
 }
 

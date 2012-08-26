@@ -378,9 +378,10 @@ void cwCave::setStationPositionModel(const cwStationPositionLookup &model) {
     //FIXME: This call is really expensive because every time, the user change the
     // line plot, all the scrap transformations have to be updated.
     //Go through all the notes and update the automatic scrap transfrom for all scraps
-    foreach(cwTrip* trip, trips()) {
-        trip->stationPositionModelUpdated();
-    }
+    //This is probably the more stable way to do this, but it's slow
+    //    foreach(cwTrip* trip, trips()) {
+    //        trip->stationPositionModelUpdated();
+    //    }
 
     emit stationPositionModelChanged();
 }

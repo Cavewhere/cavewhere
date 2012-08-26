@@ -95,8 +95,13 @@ void cwLinePlotTask::runTask() {
         return;
     }
 
+    qDebug() << "Running line plot task";
+
     //Change all the cave names, such that survex can handle them correctly
     encodeCaveNames();
+
+    //Initilize the cave station lookup, from previous run
+    initializeCaveStationLookups();
 
     int numCaves = Region->caveCount();
     CaveStationLookups.clear();
@@ -235,6 +240,7 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
         cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
         if(lookup.hasPosition(stationName)) {
             QVector3D oldPosition = lookup.position(stationName);
+            qDebug() << "OldPosition" << oldPosition << position << (oldPosition != position);
             if(oldPosition != position) {
                 //Update the position
                 lookup.setPosition(stationName, position);
@@ -250,7 +256,7 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
     //Update all cave station position models
     for(int i = 0; i < Region->caveCount(); i++) {
         //Get extrenal cave pointer
-        const cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
+        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
         if(Result.Caves.contains(externalCave)) {
             //Overwrite existing entry
             Result.Caves.insert(externalCave, CaveStationLookups[i]);
@@ -306,7 +312,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
     cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
 
     //Add the cave to the results with empty station lookup
-    const cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
+    cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
     Result.Caves.insert(externalCave, cwStationPositionLookup());
 
     for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
@@ -315,7 +321,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
 
             //Get the trip that has been updated
             //Warning, don't us externalTrip, it's not part of this thread
-            const cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
+            cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
 
             //Add the trip to the trips that have changes
             Result.Trips.insert(externalTrip);
@@ -329,7 +335,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
 
                     //Get the trip that has been updated
                     //Warning, don't us externalScrap, it's not part of this thread
-                    const cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
+                    cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
 
                     //Add the scrap to the scraps that have changed
                     Result.Scraps.insert(externalScrap);
@@ -348,7 +354,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
  * Copies all the scrap pointers out of the trip.  This allows the LinePlotTask to show exactly
  * what has changed
  */
-cwLinePlotTask::TripDataPtrs::TripDataPtrs(const cwTrip *trip)
+cwLinePlotTask::TripDataPtrs::TripDataPtrs(cwTrip *trip)
 {
     Trip = trip;
     foreach(cwNote* note, trip->notes()->notes()) {
@@ -365,10 +371,8 @@ cwLinePlotTask::TripDataPtrs::TripDataPtrs(const cwTrip *trip)
  * Copies all the trip pointers out of the trip.  This allows the LinePlotTask to show exactly
  * what has changed
  */
-cwLinePlotTask::CaveDataPtrs::CaveDataPtrs(const cwCave *cave)
+cwLinePlotTask::CaveDataPtrs::CaveDataPtrs(cwCave *cave)
 {
-    qDebug() << "Registering external cave:" << cave;
-
     Cave = cave;
     foreach(cwTrip* trip, cave->trips()) {
         Trips.append(cwLinePlotTask::TripDataPtrs(trip));

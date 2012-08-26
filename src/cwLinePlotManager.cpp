@@ -8,6 +8,8 @@
 #include "cwLinePlotTask.h"
 #include "cwGLLinePlot.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyNoteModel.h"
+#include "cwScrap.h"
 #include "cwDebug.h"
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
@@ -121,6 +123,50 @@ void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
 }
 
 /**
+ * @brief cwLinePlotManager::validateResultsData
+ * @param results
+ *
+ * This goes through the results and removes
+ */
+void cwLinePlotManager::validateResultsData(cwLinePlotTask::LinePlotResultData &results)
+{
+    QMap<cwCave*, cwStationPositionLookup> validCaves;
+    QSet<cwTrip*> validTrips;
+    QSet<cwScrap*> validScraps;
+
+    //Update all the positions for all the caves
+    foreach(cwCave* cave, Region->caves()) {
+        if(results.caveData().contains(cave)) {
+
+            //Add this cave to the valid, needs to be updated list
+            validCaves.insert(cave, results.caveData().value(cave));
+
+            foreach(cwTrip* trip, cave->trips()) {
+                if(results.trips().contains(trip)) {
+
+                    //Add this trip to the valid trips
+                    validTrips.insert(trip);
+
+                    foreach(cwNote* note, trip->notes()->notes()) {
+                        foreach(cwScrap* scrap, note->scraps()) {
+                            if(results.scraps().contains(scrap)) {
+
+                                //Add this scrap to the valid scrap
+                                validScraps.insert(scrap);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    results.setCaveData(validCaves);
+    results.setTrip(validTrips);
+    results.setScraps(validScraps);
+}
+
+/**
   \brief Called when the region adds more caves
   */
 void cwLinePlotManager::connectAddedCaves(int beginIndex, int endIndex) {
@@ -170,15 +216,15 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != NULL) {
-        //        qDebug() << "----Run survex----" << LinePlotTask->status();
+        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
-            //            qDebug() << "Running the task";
+            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-            //            qDebug() << "Restart plot task";
+            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
@@ -195,21 +241,24 @@ void cwLinePlotManager::updateLinePlot() {
 
     cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
 
-    //Update all the positions for all the caves
-    for(int i = 0; i < Region->caveCount(); i++) {
-        cwCave* cave = Region->cave(i);
-        if(resultData.caveData().contains(cave)) {
+    //Validate all the objects in resultData, remove any that were delete before the task was over
+    validateResultsData(resultData); //Modifies resultData inplace
 
-            //Update the station position for a cave
-            cwStationPositionLookup lookup = resultData.caveData().value(cave);
-            cave->setStationPositionModel(lookup);
-
-        } else {
-            qDebug() << "Couldn't find cave:" << cave << LOCATION;
-        }
+    //Update all the positions for all the caves that need to be updated
+    QMapIterator<cwCave*, cwStationPositionLookup> iter(resultData.caveData());
+    while(iter.hasNext()) {
+        iter.next();
+        cwCave* cave = iter.key();
+        cwStationPositionLookup positionLookup = iter.value();
+        cave->setStationPositionModel(positionLookup);
     }
 
     //Update the 3D plot
     GLLinePlot->setPoints(resultData.stationPositions());
     GLLinePlot->setIndexes(resultData.linePlotIndexData());
+
+    emit stationPositionInCavesChanged(resultData.caveData().keys());
+    emit stationPositionInTripsChanged(resultData.trips().toList());
+    emit stationPositionInScrapsChanged(resultData.scraps().toList());
 }
+

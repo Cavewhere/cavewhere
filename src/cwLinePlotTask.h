@@ -39,16 +39,22 @@ public:
     public:
         LinePlotResultData() { }
 
-        QMap<const cwCave*, cwStationPositionLookup> caveData();
-        QSet<const cwTrip*> trips();
-        QSet<const cwScrap*> scraps();
-        QVector<QVector3D> stationPositions();
+        void setCaveData(QMap<cwCave*, cwStationPositionLookup> caveData);
+        void setTrip(QSet<cwTrip*> trips);
+        void setScraps(QSet<cwScrap*> scraps);
+        void setPositions(QVector<QVector3D> positions);
+        void setPlotIndexData(QVector<unsigned int> indexData);
+
+        QMap<cwCave*, cwStationPositionLookup> caveData() const;
+        QSet<cwTrip*> trips() const;
+        QSet<cwScrap*> scraps() const;
+        QVector<QVector3D> stationPositions() const;
         QVector<unsigned int> linePlotIndexData() const;
 
     private:
-        QMap<const cwCave*, cwStationPositionLookup> Caves;
-        QSet<const cwTrip*> Trips;
-        QSet<const cwScrap*> Scraps;
+        QMap<cwCave*, cwStationPositionLookup> Caves;
+        QSet<cwTrip*> Trips;
+        QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<unsigned int> LinePlotIndexData;
 
@@ -93,18 +99,18 @@ private:
     class TripDataPtrs {
     public:
         TripDataPtrs() {}
-        TripDataPtrs(const cwTrip* trip);
+        TripDataPtrs(cwTrip* trip);
 
-        const cwTrip* Trip;
-        QList<const cwScrap*> Scraps;
+        cwTrip* Trip;
+        QList<cwScrap*> Scraps;
     };
 
     class CaveDataPtrs {
     public:
         CaveDataPtrs() {}
-        CaveDataPtrs(const cwCave* cave);
+        CaveDataPtrs(cwCave* cave);
 
-        const cwCave* Cave;
+        cwCave* Cave;
         QList<TripDataPtrs> Trips;
     };
 
@@ -148,7 +154,7 @@ private:
  *
  * This functions aren't thread safe!! You should only call these if the task isn't running
  */
-inline QMap<const cwCave *, cwStationPositionLookup> cwLinePlotTask::LinePlotResultData::caveData()
+inline QMap<cwCave *, cwStationPositionLookup> cwLinePlotTask::LinePlotResultData::caveData() const
 {
     return Caves;
 }
@@ -159,7 +165,7 @@ inline QMap<const cwCave *, cwStationPositionLookup> cwLinePlotTask::LinePlotRes
  *
  * This functions aren't thread safe!! You should only call these if the task isn't running
  */
-inline QSet<const cwTrip *> cwLinePlotTask::LinePlotResultData::trips()
+inline QSet<cwTrip *> cwLinePlotTask::LinePlotResultData::trips() const
 {
     return Trips;
 }
@@ -170,7 +176,7 @@ inline QSet<const cwTrip *> cwLinePlotTask::LinePlotResultData::trips()
  *
  * This functions aren't thread safe!! You should only call these if the task isn't running
  */
-inline QSet<const cwScrap *> cwLinePlotTask::LinePlotResultData::scraps()
+inline QSet<cwScrap *> cwLinePlotTask::LinePlotResultData::scraps() const
 {
     return Scraps;
 }
@@ -181,7 +187,7 @@ inline QSet<const cwScrap *> cwLinePlotTask::LinePlotResultData::scraps()
  * This returns all the positions of the points.  This is used strictly for rendering.
  * This functions aren't thread safe!! You should only call these if the task isn't running
  */
-inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions()
+inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions() const
 {
     return StationPositions;
 }
@@ -198,6 +204,46 @@ inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexDa
 }
 
 /**
+ * @brief cwLinePlotTask::LinePlotResultData::setCaveData
+ * @param caveData
+ */
+inline void cwLinePlotTask::LinePlotResultData::setCaveData(QMap<cwCave*, cwStationPositionLookup> caveData) {
+    Caves = caveData;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setTrip
+ * @param trips
+ */
+inline void cwLinePlotTask::LinePlotResultData::setTrip(QSet<cwTrip*> trips) {
+    Trips = trips;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setScraps
+ * @param scraps
+ */
+inline void cwLinePlotTask::LinePlotResultData::setScraps(QSet<cwScrap*> scraps) {
+    Scraps = scraps;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setPositions
+ * @param positions
+ */
+inline void cwLinePlotTask::LinePlotResultData::setPositions(QVector<QVector3D> positions) {
+    StationPositions = positions;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setPlotIndexData
+ * @param indexData
+ */
+inline void cwLinePlotTask::LinePlotResultData::setPlotIndexData(QVector<unsigned int> indexData) {
+    LinePlotIndexData = indexData;
+}
+
+/**
  * @brief cwLinePlotTask::linePlotData
  * @return The resulting line plot data from the task.
  *
@@ -208,33 +254,5 @@ inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::linePlotData() const
 {
     return Result;
 }
-
-///**
-//  This functions aren't thread safe!!! You should only call these if the task isn't running
-
-//  This returns all the positions of the points.  This is used strictly for rendering.
-//  */
-//inline QVector<QVector3D> cwLinePlotTask::stationPositions() const {
-//    return CenterlineGeometryTask->pointData();
-//}
-
-///**
-//  This functions aren't thread safe!! You should only call these if the task isn't running
-
-//  Returns all the plot line data indexes.  This is to construct a line array
-//  */
-//inline QVector<unsigned int> cwLinePlotTask::linePlotIndexData() const {
-//    return CenterlineGeometryTask->indexData();
-//}
-
-///**
-//  Get's the station position lookups for all the caves in the region
-
-//  The lookups are in the same order as the cave's in the region
-//  */
-//inline QVector<cwStationPositionLookup> cwLinePlotTask::stationLookup() const
-//{
-//    return CaveStationLookups;
-//}
 
 #endif // CWLINEPLOTTASK_H
