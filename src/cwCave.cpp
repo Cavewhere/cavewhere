@@ -39,6 +39,9 @@ cwCave& cwCave::Copy(const cwCave& object) {
     //Set the name of the cave
     setName(object.name());
 
+    //Set the station positions
+    setStationPositionLookup(object.stationPositionLookup());
+
     //Remove all the old trips
     int lastTripIndex = Trips.size() - 1;
     Trips.clear();
@@ -372,7 +375,7 @@ QList<cwStation> cwCave::stations() const {
   This holds all the position for al the stations in the cave (this is populated
   after the loop closure has completed)
   */
-void cwCave::setStationPositionModel(const cwStationPositionLookup &model) {
+void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
     StationPositionModel = model;
 
     //FIXME: This call is really expensive because every time, the user change the
@@ -383,5 +386,5 @@ void cwCave::setStationPositionModel(const cwStationPositionLookup &model) {
     //        trip->stationPositionModelUpdated();
     //    }
 
-    emit stationPositionModelChanged();
+    emit stationPositionPositionChanged();
 }

@@ -88,15 +88,12 @@ void cwGLScraps::updateData()
             foreach(cwNote* note, trip->notes()->notes()) {
                 foreach(cwScrap* scrap, note->scraps()) {
                     Scraps.append(GLScrap(scrap->triangulationData(), project()));
-                    qDebug() << "Creating scrap!";
                 }
             }
         }
     }
 
     setDirty(false);
-
-    qDebug() << "Scrap geometry updated!";
 }
 
 /**

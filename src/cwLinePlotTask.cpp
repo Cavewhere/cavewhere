@@ -89,24 +89,22 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
   4. Update the survey data
   */
 void cwLinePlotTask::runTask() {
-    //  qDebug() << "\n-------------------------------------";
+//     qDebug() << "\n-------------------------------------";
     if(!isRunning()) {
         done();
         return;
     }
 
-    qDebug() << "Running line plot task";
+//    qDebug() << "Running line plot task";
+
+    //Clear the previous results
+    Result.clear();
 
     //Change all the cave names, such that survex can handle them correctly
     encodeCaveNames();
 
     //Initilize the cave station lookup, from previous run
     initializeCaveStationLookups();
-
-    int numCaves = Region->caveCount();
-    CaveStationLookups.clear();
-    CaveStationLookups.reserve(numCaves);
-    CaveStationLookups.resize(numCaves);
 
     Time.start();
     exportData();
@@ -121,7 +119,7 @@ void cwLinePlotTask::exportData() {
         return;
     }
 
-    //  qDebug() << "Status" << status();
+//    qDebug() << "Running export data status:" << status();
     SurvexExporter->setData(*Region);
     SurvexExporter->start();
 }
@@ -136,7 +134,7 @@ void cwLinePlotTask::runCavern() {
         return;
     }
 
-    //qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
+//    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
     CavernTask->start();
 }
 
@@ -150,7 +148,7 @@ void cwLinePlotTask::convertToXML() {
         return;
     }
 
-    //  qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
+//    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
@@ -161,7 +159,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-    //  qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
+//    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
@@ -184,7 +182,7 @@ void cwLinePlotTask::generateCenterlineGeometry() {
     //Clear all the stations from the parser
     PlotSauceParseTask->clearStationPositions();
 
-    //  qDebug() << "Generating centerline geometry" << status();
+//    qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
 }
@@ -198,7 +196,7 @@ void cwLinePlotTask::linePlotTaskComplete() {
     Result.StationPositions = CenterlineGeometryTask->pointData();
     Result.LinePlotIndexData = CenterlineGeometryTask->indexData();
 
-    // qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
+//    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
 
@@ -240,7 +238,6 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
         cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
         if(lookup.hasPosition(stationName)) {
             QVector3D oldPosition = lookup.position(stationName);
-            qDebug() << "OldPosition" << oldPosition << position << (oldPosition != position);
             if(oldPosition != position) {
                 //Update the position
                 lookup.setPosition(stationName, position);
@@ -263,7 +260,7 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
 
             //Update the region's station lookup
             cwCave* cave = Region->cave(i);
-            cave->setStationPositionModel(CaveStationLookups[i]);
+            cave->setStationPositionLookup(CaveStationLookups[i]);
         }
     }
 }
@@ -393,5 +390,18 @@ cwLinePlotTask::RegionDataPtrs::RegionDataPtrs(const cwCavingRegion &region)
     }
 }
 
-
+/**
+* @brief cwLinePlotTask::LinePlotResultData::setCaveData
+* @param caveData
+*
+* Clear the results
+*/
+void cwLinePlotTask::LinePlotResultData::clear()
+{
+    Caves.clear();
+    Trips.clear();
+    Scraps.clear();
+    StationPositions.clear();
+    LinePlotIndexData.clear();
+}
 

@@ -191,7 +191,6 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     //Create the scrap data list
     QList<cwTriangulateInData> scrapData;
     foreach(cwScrap* scrap, scraps) {
-        qDebug() << "Update scrap geometry for: " << scrap;
         scrapData.append(mapScrapToTriangulateInData(scrap));
     }
 

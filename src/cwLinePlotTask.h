@@ -39,11 +39,13 @@ public:
     public:
         LinePlotResultData() { }
 
+        void clear();
+
         void setCaveData(QMap<cwCave*, cwStationPositionLookup> caveData);
         void setTrip(QSet<cwTrip*> trips);
         void setScraps(QSet<cwScrap*> scraps);
         void setPositions(QVector<QVector3D> positions);
-        void setPlotIndexData(QVector<unsigned int> indexData);
+        void setPlotIndexData(QVector<unsigned int> indexData);      
 
         QMap<cwCave*, cwStationPositionLookup> caveData() const;
         QSet<cwTrip*> trips() const;
@@ -202,6 +204,7 @@ inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexDa
 {
     return LinePlotIndexData;
 }
+
 
 /**
  * @brief cwLinePlotTask::LinePlotResultData::setCaveData

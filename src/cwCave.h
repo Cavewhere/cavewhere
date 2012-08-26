@@ -41,7 +41,7 @@ public:
     int indexOf(cwTrip* trip) const;
 
     cwStationPositionLookup stationPositionLookup() const;
-    void setStationPositionModel(const cwStationPositionLookup& model);
+    void setStationPositionLookup(const cwStationPositionLookup& model);
 
 //    bool hasStation(QString name);
 //    QWeakPointer<cwStation> station(QString name);
@@ -61,7 +61,7 @@ signals:
 
     void nameChanged(QString name);
 
-    void stationPositionModelChanged();
+    void stationPositionPositionChanged();
 
 //    void stationAddedToCave(QString name);
 //    void stationRemovedFromCave(QString name);

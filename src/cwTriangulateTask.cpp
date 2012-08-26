@@ -301,11 +301,11 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     optimizedIndices = fullTriangleIndices;
 
     //FIXME: Make this work under windows
-//    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
-//                           fullTriangleIndices.size(),
-//                           points.size(),
-//                           optimizedIndices.data(),
-//                           24); //Optimize for 24 triangle count
+    Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
+                           fullTriangleIndices.size(),
+                           points.size(),
+                           optimizedIndices.data(),
+                           24); //Optimize for 24 triangle count
 
     //Set the output's data
     cwTriangulatedData data;

@@ -11,6 +11,7 @@ cwLabel3dGroup::cwLabel3dGroup(cwLabel3dView *parent) :
 
 cwLabel3dGroup::~cwLabel3dGroup()
 {
+
     foreach(QQuickItem* item, LabelItems) {
         item->deleteLater();
     }

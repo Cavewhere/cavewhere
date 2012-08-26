@@ -1,5 +1,6 @@
 //Our includes
 #include "cwCavernTask.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QReadLocker>
@@ -16,6 +17,7 @@ cwCavernTask::cwCavernTask(QObject *parent) :
 {
     CavernProcess = new QProcess(this);
     connect(CavernProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(cavernFinished(int,QProcess::ExitStatus)));
+    connect(CavernProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
 }
 
 /**
@@ -118,4 +120,17 @@ void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus)
         stop();
     }
     done();
+}
+
+/**
+* @brief cwCavernTask::processError
+* @param error
+*
+* Called when cavern process has errored
+*/
+void cwCavernTask::processError(QProcess::ProcessError error)
+{
+   qDebug() << "Cavern has errored out with ProcessError code" << error << LOCATION;
+   stop();
+   done();
 }

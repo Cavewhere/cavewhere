@@ -98,7 +98,7 @@ void cwLinePlotLabelView::updateCaveStations(cwCave *cave) {
  * @param cave
  */
 void cwLinePlotLabelView::connectCave(cwCave *cave) {
-    connect(cave, &cwCave::stationPositionModelChanged, this, &cwLinePlotLabelView::updateStations);
+    connect(cave, &cwCave::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
 }
 
 /**
@@ -107,7 +107,7 @@ void cwLinePlotLabelView::connectCave(cwCave *cave) {
  */
 void cwLinePlotLabelView::disconnectCave(cwCave *cave)
 {
-    disconnect(cave, &cwCave::stationPositionModelChanged, this, &cwLinePlotLabelView::updateStations);
+    disconnect(cave, &cwCave::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
 }
 
 /**

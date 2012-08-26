@@ -57,9 +57,6 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   */
 void cwAddImageTask::runTask() {
 
-    QTime time;
-    time.start();
-
     //Clear all previous data
     Images.clear();
 
@@ -70,10 +67,10 @@ void cwAddImageTask::runTask() {
     calculateNumberOfSteps();
 
     bool couldCreate = CompressionContext->create();
-    qDebug() << "Could create context:" << couldCreate;
+//    qDebug() << "Could create context:" << couldCreate;
 
     bool couldMakeCurrent = CompressionContext->makeCurrent(Window);
-    qDebug() << "Could make curernt: " << couldMakeCurrent;
+//    qDebug() << "Could make curernt: " << couldMakeCurrent;
 
     glEnable(GL_TEXTURE_2D);
 
@@ -97,8 +94,6 @@ void cwAddImageTask::runTask() {
     }
 
     CompressionContext->doneCurrent();
-
-    qDebug() << "Finished with image:" << time.elapsed();
 
     //Finished
     done();
