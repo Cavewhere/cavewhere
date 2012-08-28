@@ -53,6 +53,7 @@ public:
     void setScraps(QList<cwScrap*> scraps);
     void removeScraps(int begin, int end);
     int indexOfScrap(cwScrap* scrap) const;
+    bool hasScraps() const;
 
     cwImageResolution* imageResolution() const;
     double dotPerMeter() const;
@@ -148,7 +149,16 @@ inline cwCave *cwNote::parentCave() const {
  */
 inline int cwNote::indexOfScrap(cwScrap *scrap) const
 {
-   return Scraps.indexOf(scrap);
+    return Scraps.indexOf(scrap);
+}
+
+/**
+ * @brief cwNote::hasScraps
+ * @return True if this note has 1 or more scraps, and false if it has none
+ */
+inline bool cwNote::hasScraps() const
+{
+    return !Scraps.isEmpty();
 }
 
 /**

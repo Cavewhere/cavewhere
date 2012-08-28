@@ -41,6 +41,7 @@ public:
     Q_INVOKABLE void addFromFiles(QStringList files, cwProject* project);
 
     void stationPositionModelUpdated();
+    bool hasNotes() const;
 
 signals:
 
@@ -83,5 +84,15 @@ inline cwTrip* cwSurveyNoteModel::parentTrip() const {
 inline cwCave* cwSurveyNoteModel::parentCave() const {
     return ParentCave;
 }
+
+/**
+ * @brief cwSurveyNoteModel::hasNotes
+ * @return True if the model has notes and false if it doesn't
+ */
+inline bool cwSurveyNoteModel::hasNotes() const
+{
+    return !Notes.isEmpty();
+}
+
 
 #endif // CWSURVEYNOTEMODEL_H
