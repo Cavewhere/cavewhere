@@ -37,6 +37,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
+    TriangulateTask->stop();
     TriangulateThread->quit();
     TriangulateThread->wait();
 }

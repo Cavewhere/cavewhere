@@ -86,7 +86,7 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
     numberExtra = group->Labels.size() - group->LabelItems.size();
     for(int i = 0; i < numberExtra; i++) {
         QQuickItem* newItem = qobject_cast<QQuickItem*>(Component->create());
-        newItem->setParent(this);
+        newItem->setParent(group);
         newItem->setParentItem(this);
         group->LabelItems.append(newItem);
     }
