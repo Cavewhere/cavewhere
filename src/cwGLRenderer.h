@@ -1,9 +1,6 @@
 #ifndef CWGLRENDERER_H
 #define CWGLRENDERER_H
 
-//GLEW includes
-//#include <GL/glew.h>
-
 //Qt includes
 #include <QOpenGLBuffer>
 #include <QQuaternion>

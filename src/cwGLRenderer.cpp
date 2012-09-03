@@ -1,6 +1,3 @@
-//Glew includes
-#include "GL/glew.h"
-
 //Our includes
 #include "cwGLRenderer.h"
 #include "cwCamera.h"

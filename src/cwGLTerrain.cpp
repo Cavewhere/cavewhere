@@ -1,6 +1,3 @@
-//Glew includes
-#include <GL/glew.h>
-
 //Our include
 #include "cwGLTerrain.h"
 #include "cwEdgeTile.h"

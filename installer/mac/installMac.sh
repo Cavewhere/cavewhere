@@ -12,7 +12,6 @@ echo "Running macdeployqt"
 macdeployqt Cavewhere.app
 
 echo "Coping libraries"
-cp /usr/lib/libGLEW.1.6.0.dylib Cavewhere.app/Contents/Frameworks/libGLEW.1.6.0.dylib
 cp -r /Developer/Applications/Qt/imports/QtDesktop Cavewhere.app/Contents/MacOS
 
 echo "Coping QML"
@@ -20,10 +19,6 @@ cp -r ../../qml Cavewhere.app/Contents/MacOS
 
 echo "Coping Shaders"
 cp -r ../../shaders Cavewhere.app/Contents/MacOS
-
-
-echo "Installing name tool on glew"
-install_name_tool -change /usr/lib/libGLEW.1.6.0.dylib @executable_path/../Frameworks/libGLEW.1.6.0.dylib Cavewhere.app/Contents/MacOS/Cavewhere
 
 echo "Installing name tool on plotSauce"
 install_name_tool -change QtXml.framework/Versions/4/QtXml @executable_path/../Frameworks/QtXml.framework/Versions/4/QtXml Cavewhere.app/Contents/MacOS/plotsauce

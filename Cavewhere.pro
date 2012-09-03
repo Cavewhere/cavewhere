@@ -421,7 +421,7 @@ INCLUDEPATH += src src/utils . .ui
 DEPENDPATH += INCLUDEPATH
 
 unix {
-    LIBS += -lz -lGLEW -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
+    LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 
 }
@@ -433,7 +433,6 @@ macx {
 }
 
 win32 {
-    GLEW = C:/windowsBuild/libs/win32/glew-1.7.0-win32/glew-1.7.0
     SQUISH = C:/windowsBuild/libs/win32/squish-1.11/squish-1.11
     BOOST = c:/windowsBuild/libs/win32/boost_1_48_0/boost_1_48_0
     ZLIBSOURCE = C:/windowsBuild/libs/win32/zlib-1.2.5
@@ -441,10 +440,6 @@ win32 {
 
     #This is so std::numerical_limits works
     DEFINES += NOMINMAX
-
-    #Statically link glew
-    INCLUDEPATH += "$${GLEW}/include"
-    LIBS += -L"$${GLEW}/lib" -lglew32
 
     INCLUDEPATH += "$${SQUISH}"
     LIBS += -L"$${SQUISH}/lib/vs9" -lsquishd
@@ -458,20 +453,6 @@ win32 {
     debug {
         CONFIG += console
     }
-
-#    INCLUDEPATH += C:/Users/saraf/cavewhere/glew-1.7.0/include
-#    LIBS += -LC:/Us_ers/saraf/cavewhere/glew-1.7.0/lib -lglew32
-
-#    INCLUDEPATH += "C:/Program Files (x86)/GnuWin32/include"
-#    LIBS += -L"C:/Program Files (x86)/GnuWin32/lib" -lzlib
-
-#    INCLUDEPATH += "C:/Users/saraf/cavewhere/trunk/squish-1.11"
-#    LIBS += -L"C:/Users/saraf/cavewhere/trunk/squish-1.11/lib/vs9" -lsquish
-
-#    INCLUDEPATH += "C:/Users/saraf/cavewhere/sqlite-amalgamation-3070900"
-
-#    INCLUDEPATH += "C:/Users/saraf/cavewhere/boost_1_48_0/boost_1_48_0"
-#    LIBS += -L"C:\Users\saraf\cavewhere\boost_1_48_0\boost_1_48_0\bin.v2\libs\serialization\build\gcc-mingw-4.5.3\release\link-static\threading-multi" -lboost_serialization
 }
 
 
