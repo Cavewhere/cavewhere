@@ -66,6 +66,8 @@ void cwTriangulateTask::runTask() {
   */
 void cwTriangulateTask::cropScraps() {
     foreach(cwTriangulateInData data, Scraps) {
+        if(!isRunning()) { return; }
+
         QRectF cropArea = data.outline().boundingRect();
         CropTask->setOriginal(data.noteImage());
         CropTask->setRectF(cropArea);
@@ -83,7 +85,7 @@ void cwTriangulateTask::cropScraps() {
   */
 void cwTriangulateTask::triangulateScraps() {
     //For each scrap
-    for(int i = 0; i < Scraps.size(); i++) {
+    for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         triangulateScrap(i);
     }
 }

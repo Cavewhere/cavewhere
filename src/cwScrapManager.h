@@ -40,7 +40,6 @@ public:
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
-
 signals:
     
 public slots:
@@ -50,7 +49,8 @@ private:
     cwCavingRegion* Region;
     cwLinePlotManager* LinePlotManager;
 
-    QList<QWeakPointer<cwScrap> > WaitingForUpdate;
+    QList<QWeakPointer<cwScrap> > WaitingForUpdate; //These are the scraps that are running through task
+    QSet<QWeakPointer<cwScrap> > DirtyScraps; //These are the scraps that need to be updated
 
     //The task that'll be run
     QThread* TriangulateThread;
@@ -73,7 +73,7 @@ private:
     void disconnectNote(cwNote* note);
     void disconnectScrap(cwScrap* scrap);
 
-    void updateScrapGeometry(QList<cwScrap *> scraps);
+    void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations, const cwStationPositionLookup& positionLookup) const;
 
@@ -108,10 +108,21 @@ private slots:
     void updateScrapWithNewNoteTransform(); //This is called by cwNoteTransform
 
     void updateStationPositionChangedForScraps(QList<cwScrap*> scraps);
+    void rerunDirtyScraps();
 
     void taskFinished();
 
 };
+
+/**
+ * @brief qHash
+ * @param scrapPointer
+ * @return The hash for a weak pointer cwScrap
+ */
+inline uint qHash(const QWeakPointer<cwScrap> &scrapPointer)
+{
+    return qHash(scrapPointer.data());
+}
 
 
 
