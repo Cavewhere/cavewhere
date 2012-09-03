@@ -20,6 +20,8 @@ RegionViewer {
         onWheel: {
             zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
         }
+
+        onPositionChanged: {}
     }
 
     LinePlotLabelView {
@@ -36,7 +38,7 @@ RegionViewer {
                 target: interaction;
 
                 onPositionChanged: {
-                    renderer.pan(Qt.point(mouse.x, mouse.y))
+                    renderer.pan(Qt.point(mouseX, mouseY))
                 }
 
                 onReleased: {
@@ -51,7 +53,7 @@ RegionViewer {
                 target: interaction;
 
                 onPositionChanged: {
-                    renderer.rotate(Qt.point(mouse.x, mouse.y));
+                    renderer.rotate(Qt.point(mouseX, mouseY));
                 }
 
                 onReleased: {

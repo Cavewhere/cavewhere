@@ -4,27 +4,14 @@
 #
 #-------------------------------------------------
 
-greaterThan(QT_MAJOR_VERSION, 4) {
-   #For porting qt4 to qt5
-#   QT += widgets
-#   QT += quick1
-   QT += opengl
+QT += opengl
 
    #Extra modules
-   QT += sql concurrent xml qml quick 3d
-} else {
-   QT += core gui declarative xml opengl sql
-}
+QT += core sql concurrent xml qml quick 3d
+
 
 TARGET = Cavewhere
 TEMPLATE = app
-
-# Include JS debugger library if QMLJSDEBUGGER_PATH is set
-!isEmpty(QMLJSDEBUGGER_PATH) {
-    include($$QMLJSDEBUGGER_PATH/qmljsdebugger-lib.pri)
-} else {
-    DEFINES -= QMLJSDEBUGGER
-}
 
 OBJECTS_DIR = .obj
 UI_DIR = .ui
@@ -434,20 +421,6 @@ INCLUDEPATH += src src/utils . .ui
 DEPENDPATH += INCLUDEPATH
 
 unix {
-    INCLUDEPATH += /usr/local/include /opt/local/include \
-    /home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtOpenGL \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtQML \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtQuick \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtCore \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtGui \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtConcurrent \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/Qt3D \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtSql \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtXml \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/QtXmlPatterns \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include/Qt \
-/home/blitz/Qt5.0.0beta/Desktop/Qt/5.0.0-beta/gcc_64/include
-
     LIBS += -lz -lGLEW -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 

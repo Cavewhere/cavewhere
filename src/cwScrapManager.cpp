@@ -295,7 +295,6 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
 
     if(TriangulateTask->isReady()) {
         //Running
-        qDebug() << "Running";
         QList<cwTriangulateInData> scrapData;
         WaitingForUpdate.clear();
         foreach(QWeakPointer<cwScrap> scrap, DirtyScraps) {
@@ -310,7 +309,6 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
         TriangulateTask->start();
     } else {
         //Isn't ready!, restart the task
-        qDebug() << "Restart!";
         TriangulateTask->restart();
     }
 }

@@ -18,7 +18,7 @@ const QString cwProjectImageProvider::RequestMetadataSQL = "SELECT type,width,he
 const QByteArray cwProjectImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
 
 cwProjectImageProvider::cwProjectImageProvider() :
-    QQmlImageProvider(QQmlImageProvider::Image)
+    QQuickImageProvider(QQuickImageProvider::Image)
 {
 
 
