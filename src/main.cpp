@@ -55,7 +55,8 @@ int main(int argc, char *argv[])
     format.setSamples(4);
 
     cwRootData* rootData = new cwRootData(&view);
-    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
+//    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
+//    rootData->project()->load(QDir::homePath() + "/test.cw");
     QQmlContext* context = view.rootContext();
     context->setContextObject(rootData);
     context->setContextProperty("mainWindow", &view);
@@ -74,8 +75,6 @@ int main(int argc, char *argv[])
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
     view.setWindowFlags(Qt::Window | Qt::WindowMinimizeButtonHint | Qt::WindowCloseButtonHint);
     view.show();
-
-    a.setQuitOnLastWindowClosed(false);
 
     return a.exec();
 }
