@@ -87,7 +87,13 @@ void cwGLScraps::updateData()
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
                 foreach(cwScrap* scrap, note->scraps()) {
-                    Scraps.append(GLScrap(scrap->triangulationData(), project()));
+                    cwTriangulatedData data = scrap->triangulationData();
+                    cwGeometryItersecter::Object geometryObject(Scraps.size(),
+                                                                data.points(),
+                                                                data.indices(),
+                                                                cwGeometryItersecter::Triangles);
+                    Intersecter.addObject(geometryObject);
+                    Scraps.append(GLScrap(data, project()));
                 }
             }
         }
@@ -180,6 +186,8 @@ void cwGLScraps::setProject(cwProject* project) {
         emit projectChanged();
     }
 }
+
+
 
 
 

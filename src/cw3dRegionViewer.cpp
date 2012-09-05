@@ -25,10 +25,7 @@
 #include <QRect>
 #include <QMouseEvent>
 #include <QWheelEvent>
-#include <QMouseEventTransition>
-#include <QKeyEventTransition>
 #include <QDebug>
-#include <QGraphicsSceneWheelEvent>
 #include <QtConcurrentMap>
 #include <QFontMetrics>
 #include <QQuickCanvas>
@@ -101,6 +98,7 @@ void cw3dRegionViewer::initializeGL() {
   */
 void cw3dRegionViewer::resizeGL() {
     QMatrix4x4 projectionMatrix;
+    //projectionMatrix.ortho(-250, 250, -250, 250, -10000, 10000);
     projectionMatrix.perspective(55, width() / (float)height(), 1, 10000);
     Camera->setProjectionMatrix(projectionMatrix);
 }
@@ -113,16 +111,24 @@ void cw3dRegionViewer::resizeGL() {
  * Unprojects the screen point at point and returns a QVector3d in world coordinates
  */
 QVector3D cw3dRegionViewer::unProject(QPoint point) {
+
     //Create a ray from the back projection front and back plane
     QVector3D frontPoint = Camera->unProject(point, 0.0);
     QVector3D backPoint = Camera->unProject(point, 1.0);
     QVector3D direction = QVector3D(backPoint - frontPoint).normalized();
     QRay3D ray(frontPoint, direction);
 
-    //See where it intercest geometry
-    double t = Plane->plane().intersection(ray);
+    //See if it hits any of the scraps
+    double t = Scraps->intersecter().intersects(ray);
+
     if(qIsNaN(t)) {
-        return QVector3D();
+
+        //See where it intersects ground plane geometry
+        t = Plane->plane().intersection(ray);
+        if(qIsNaN(t)) {
+            return QVector3D();
+        }
+
     }
 
     return ray.point(t);
@@ -179,8 +185,6 @@ void cw3dRegionViewer::pan(QPoint position) {
     //Find the intsection on the plane
     bool hasIntersection;
     QVector3D intersection = xyPlane.intersectAsRay(ray, &hasIntersection);
-
-
 
     //Ray and plane are parallel, can't do anything with this
     if(!hasIntersection) { return; }

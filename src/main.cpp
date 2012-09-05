@@ -1,13 +1,12 @@
 //Qt includes
 #include <QGuiApplication>
 #include <QApplication>
+#include <QQmlContext>
 #include <QThread>
 #include <QtQuick/QQuickView>
-#include <QQmlContext>
 #include <QModelIndex>
 #include <QtWidgets/QWidget>
 #include <QDir>
-#include <QQmlEngine>
 #include <QImageReader>
 
 //Our includes

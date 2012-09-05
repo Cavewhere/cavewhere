@@ -5,6 +5,7 @@
 #include "cwGLObject.h"
 #include "cwTriangulatedData.h"
 #include "cwImageTexture.h"
+#include "cwGeometryItersecter.h"
 class cwCavingRegion;
 class cwProject;
 
@@ -26,6 +27,7 @@ public:
     cwProject* project() const;
     void setProject(cwProject* project);
 
+    cwGeometryItersecter intersecter() const;
 
     void updateGeometry();
     void setCavingRegion(cwCavingRegion* region);
@@ -67,6 +69,9 @@ private:
 
     QList<GLScrap> Scraps;
 
+    //This is a temporary test
+    cwGeometryItersecter Intersecter;
+
     void initializeShaders();
 
 };
@@ -80,6 +85,11 @@ Gets project
 */
 inline cwProject* cwGLScraps::project() const {
     return Project;
+}
+
+inline cwGeometryItersecter cwGLScraps::intersecter() const
+{
+    return Intersecter;
 }
 
 #endif // CWGLSCRAPS_H
