@@ -156,7 +156,8 @@ SOURCES += src/main.cpp \
     src/cwSelectionManager.cpp \
     src/cwUnitValue.cpp \
     src/cwImageResolution.cpp \
-    src/cwRemoveImageTask.cpp
+    src/cwRemoveImageTask.cpp \
+    src/cwGeometryItersecter.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -300,7 +301,8 @@ HEADERS  += \
     src/cwSelectionManager.h \
     src/cwUnitValue.h \
     src/cwImageResolution.h \
-    src/cwRemoveImageTask.h
+    src/cwRemoveImageTask.h \
+    src/cwGeometryItersecter.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \

@@ -5,6 +5,7 @@
 class cwSurvexBlockData;
 class cwCave;
 class cwTrip;
+class cwSurveyChunk;
 #include "cwUndoer.h"
 
 //Qt includes
@@ -32,6 +33,9 @@ private:
     void setBlocks(QList<cwSurvexBlockData*> blocks);
 
     void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
+
+    void fixEquatedStationNames(cwSurveyChunk* chunk, cwSurvexBlockData* currentBlock);
+
 };
 
 inline QList<cwSurvexBlockData*> cwSurvexGlobalData::blocks() const {

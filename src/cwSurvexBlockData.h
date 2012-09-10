@@ -11,6 +11,7 @@ class cwTripCalibration;
 
 //Qt includes
 #include <QList>
+#include <QString>
 #include <QObject>
 #include <QDate>
 
@@ -43,6 +44,10 @@ public:
     void setName(QString name);
     QString name() const;
 
+    void addToEquated(QStringList stationNames) const;
+    QList<QStringList> equatedStations() const;
+    QString equatedStation(QString fullStationName) const;
+
     void setDate(QDate date);
     QDate date() const;
 
@@ -72,6 +77,7 @@ private:
     QList<cwSurveyChunk*> Chunks;
     QList<cwSurvexLRUDChunk> LRUDChunks;
     QList<cwSurvexBlockData*> ChildBlocks;
+    QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
     cwSurvexBlockData* ParentBlock;
 
     //Mutible elements
@@ -112,6 +118,31 @@ inline int cwSurvexBlockData::chunkCount() {
   */
 inline QString cwSurvexBlockData::name() const {
     return Name;
+}
+
+/**
+ * @brief cwSurvexBlockData::addToEquated
+ * @param adds a list of stationNames that are equal to each other.
+ */
+void cwSurvexBlockData::addToEquated(QStringList stationNames) const
+{
+    EqualStations.append(stationNames);
+}
+
+QList<QStringList> cwSurvexBlockData::equatedStations() const
+{
+    return EqualStations;
+}
+
+/**
+ * @brief cwSurvexBlockData::equatedStation
+ * @param fullStationName
+ * @return
+ *
+ * T
+ */
+QString cwSurvexBlockData::equatedStation(QString fullStationName) const
+{
 }
 
 /**

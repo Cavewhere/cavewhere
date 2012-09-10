@@ -122,12 +122,15 @@ void cwSurvexImporter::loadFile(QString filename) {
     //Open the survex file
     QFile file;
     bool fileIsOpen = openFile(file, filename);
-    if(!fileIsOpen) { return; }
+    if(!fileIsOpen) {
+        return;
+    }
 
     //Add the file to the include stack
     IncludeStack.append(Include(file.fileName()));
 
     //Update the status
+    qDebug() << "Importing:" << file.fileName();
     emit statusMessage("Importing " + file.fileName() );
 
     while(!file.atEnd() && isRunning()) {
@@ -155,6 +158,11 @@ void cwSurvexImporter::loadFile(QString filename) {
   Adds an error to the error stack if it can open a file
   */
 bool cwSurvexImporter::openFile(QFile& file, QString filename) {
+    qDebug() << "Filename:" << filename;
+    if(filename.compare("/home/blitz/Downloads/houping201204/caves/48H-H12-2-erwang/temp-print_water_works.svx") == 0) {
+        qDebug() << "Trying to open file:" << filename;
+    }
+
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
         //This maybe a relative path to the rootFile
@@ -166,7 +174,9 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
 
         //Find the filename, this is needed because, filename case insensitive
         foreach(QString entry, entries) {
-            if(entry.contains(filename, Qt::CaseInsensitive)) {
+            QRegExp regExp(".+/" + entry + "(\\.svx)?$");
+            regExp.setCaseSensitivity(Qt::CaseInsensitive);
+            if(regExp.exactMatch(filename)) {
                 filename = entry;
                 break;
             }
@@ -189,6 +199,7 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
     //Make sure we don't reopen the same file twice
     if(qFind(IncludeFiles, filename) != IncludeFiles.end() && !IncludeFiles.empty()) {
         //File has already been included... Do nothing
+        qDebug() << "Already been included:" << filename;
         return false;
     }
 
@@ -281,6 +292,10 @@ void cwSurvexImporter::parseLine(QString line) {
                 parseCalibrate(arg);
             } else if(compare(command, "units")) {
                 parseUnits(arg);
+            } else if(compare(command, "export")) {
+                //Just ignore
+            } else if(compare(command, "equate")) {
+
             } else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
@@ -848,6 +863,23 @@ void cwSurvexImporter::parseUnits(QString line) {
 }
 
 /**
+ * @brief cwSurvexImporter::parseEquate
+ * @param line - The line of all the station's that are equal
+ */
+void cwSurvexImporter::parseEquate(QString line)
+{
+    QRegExp splitRegex("\\s+");
+    QStringList equalStations = line.split(splitRegex);
+
+    if(equalStations.size() <= 1) {
+        Errors.append(QString("Error: *equate on %1 has only one station").arg(currentLineNumber()));
+        return;
+    }
+
+    CurrentBlock->addToEquated(equalStations);
+}
+
+/**
   \brief Runs the stats on the survex files
 
   This will go through all the survex file and
@@ -919,7 +951,8 @@ void cwSurvexImporter::updateLRUDForCurrentBlock() {
  */
 void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cwStation after)
 {
-    foreach(cwSurveyChunk* chunk, CurrentBlock->Chunks) {
+    for(int i = 0; i < CurrentBlock->Chunks.size(); i++) {
+        cwSurveyChunk* chunk = CurrentBlock->Chunks.at(i);
         QList<int> stationIndices = chunk->indicesOfStation(station.name());
         if(!stationIndices.isEmpty()) {
             foreach(int index, stationIndices) {
@@ -932,7 +965,35 @@ void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cw
 
                 if(beforeGood && afterGood) {
                     chunk->setStation(station, index);
-                    return;
+                    break;
+                }
+
+                //Try altrating shot orintation. A good test case is the Erwong Dong survex file
+                if(index == 0) {
+
+                    //Get the previous chunk
+                    if(i > 1) {
+                        cwSurveyChunk* previousChunk = CurrentBlock->Chunks.at(i - 1);
+
+                        //Get the last station in the previous chunk
+                        beforeStationName = previousChunk->stations().last().name();
+                        beforeGood = !before.isValid() || beforeStationName.compare(before.name(), Qt::CaseInsensitive) == 0;
+                    }
+                } else if(index == chunk->stationCount() - 1) {
+                    //Last index in the chunk
+                    if(i < CurrentBlock->Chunks.size() - 1) {
+                        cwSurveyChunk* nextChunk = CurrentBlock->Chunks.at(i + 1);
+
+                        //Get the first station in the next chunk
+                        afterStationName = nextChunk->stations().first().name();
+                        afterGood = !after.isValid() || afterStationName.compare(after.name(), Qt::CaseInsensitive) == 0;
+                    }
+                }
+
+                //After station should be good.
+                if(beforeGood && afterGood) {
+                    chunk->setStation(station, index);
+                    break;
                 }
             }
         }

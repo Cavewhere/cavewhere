@@ -116,11 +116,67 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         foreach(cwSurveyChunk* chunk, currentBlock->chunks()) {
             cwSurveyChunk* newChunk = new cwSurveyChunk(*chunk);
             currentTrip->addChunk(newChunk);
+
+            //Fix station that need to be Equated
+            fixEquatedStationNames(newChunk, currentBlock);
         }
     }
 
     //Recusive call
     foreach(cwSurvexBlockData* childBlock, currentBlock->childBlocks()) {
         cavesHelper(caves, childBlock, currentCave, currentTrip);
+    }
+}
+
+/**
+ * @brief cwSurvexGlobalData::fixEquatedStationNames
+ * @param chunk
+ * @param currentBlock
+ *
+ * This will take the current block and see if any of the stations in chunk, are in any of the
+ * parent's equates.  If the station is in the equate, then the station will be renamed.
+ */
+void cwSurvexGlobalData::fixEquatedStationNames(cwSurveyChunk *chunk, cwSurvexBlockData *currentBlock)
+{
+    for(int i = 0; i < chunk->stationCount(); i++) {
+        cwStation station = chunk->station(i);
+
+        QString fullStationName = station.name();
+        if(!currentBlock->name().isEmpty()) {
+            fullStationName.prepend(currentBlock->name() + ".");
+        }
+
+        QStringList fullStationNameList;
+        fullStationNameList.append(fullStationName);
+
+        //While the currentBlock is trip or structure and the parent is null
+        while((currentBlock->importType() == cwSurvexBlockData::Trip ||
+              currentBlock->importType() == cwSurvexBlockData::Structure)
+              &&
+              currentBlock->parentBlock() != NULL)
+        {
+            currentBlock = currentBlock->parentBlock();
+
+            for
+
+            //What the station is equal to
+            QString fullEquateStationName = currentBlock->equatedStation(fullStationName);
+            QStringList brokenDownNameList = fullEquateStationName.split('.').last();
+
+            //Make sure we found a name.  If the current station isn't equated to anything
+            //the name will not be updated.
+            if(!brokenDownNameList.isEmpty()) {
+                QString newStationName = brokenDownNameList.last();
+
+                //If the station name is different, the
+                if(newStationName != station.name()) {
+                    station.setName(newStationName);
+                    chunk->setStation(station, i);
+
+                    //Update the fullStationName with the Equate station name
+                    fullStationName = fullEquateStationName;
+                }
+            }
+        }
     }
 }
