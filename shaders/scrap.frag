@@ -26,12 +26,12 @@ void main() {
 //  vec4 sauce = vec4(gTexCoord, 0.0, 1.0); //(0.5, 0.5, 1.0, 1.0);
   vec4 textureSample = texture2D(Texture, vTexCoord);
 
-  float normElevation = (elevation - 100.0) / (300.0 - 100.0);
-  vec3 elevationColor = normElevation * vec3(1.0, 0.0, 0.0) + vec3(0.5, 0.5, 0.5);
+//  float normElevation = (elevation - 100.0) / (300.0 - 100.0);
+//  vec3 elevationColor = normElevation * vec3(1.0, 0.0, 0.0) + vec3(0.5, 0.5, 0.5);
 
 
 //  float amplifyValue = amplify(triangleDistance, 85.0, 0.0);
-  gl_FragColor = vec4(elevationColor, 1.0) * textureSample;
+  gl_FragColor = textureSample;
 
 //  gl_FragColor = (1.0 - amplifyValue) * vec4(0.0, 0.2, .0, 1.0) + amplifyValue * textureSample;
 }
