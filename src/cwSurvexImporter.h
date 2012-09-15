@@ -169,6 +169,7 @@ private:
     void parseCalibrate(QString line);
     void parseUnits(QString line);
     void parseEquate(QString line);
+    void parseExport(QString line);
 
     void runStats(QString filename);
 

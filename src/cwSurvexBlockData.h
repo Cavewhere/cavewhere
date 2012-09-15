@@ -11,6 +11,7 @@ class cwTripCalibration;
 
 //Qt includes
 #include <QList>
+#include <QStringList>
 #include <QString>
 #include <QObject>
 #include <QDate>
@@ -44,9 +45,11 @@ public:
     void setName(QString name);
     QString name() const;
 
-    void addToEquated(QStringList stationNames) const;
-    QList<QStringList> equatedStations() const;
-    QString equatedStation(QString fullStationName) const;
+    void addToEquated(QStringList stationNames);
+    QStringList equatedStations(QString fullStationName) const;
+
+    void addExportStations(QStringList exportStations);
+    QStringList exportStations() const;
 
     void setDate(QDate date);
     QDate date() const;
@@ -78,6 +81,7 @@ private:
     QList<cwSurvexLRUDChunk> LRUDChunks;
     QList<cwSurvexBlockData*> ChildBlocks;
     QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
+    QSet<QString> ExportStations; //Holds a station name that is exported for equates
     cwSurvexBlockData* ParentBlock;
 
     //Mutible elements
@@ -124,26 +128,10 @@ inline QString cwSurvexBlockData::name() const {
  * @brief cwSurvexBlockData::addToEquated
  * @param adds a list of stationNames that are equal to each other.
  */
-void cwSurvexBlockData::addToEquated(QStringList stationNames) const
-{
+inline void cwSurvexBlockData::addToEquated(QStringList stationNames) {
     EqualStations.append(stationNames);
 }
 
-QList<QStringList> cwSurvexBlockData::equatedStations() const
-{
-    return EqualStations;
-}
-
-/**
- * @brief cwSurvexBlockData::equatedStation
- * @param fullStationName
- * @return
- *
- * T
- */
-QString cwSurvexBlockData::equatedStation(QString fullStationName) const
-{
-}
 
 /**
   \brief Get's all the chunks held by the block
@@ -205,5 +193,13 @@ inline cwTripCalibration* cwSurvexBlockData::calibration() const {
     return Calibration;
 }
 
+/**
+ * @brief cwSurvexBlockData::exportStations
+ * @return All the export stations in this block
+ */
+inline QStringList cwSurvexBlockData::exportStations() const
+{
+    return QStringList(ExportStations.toList());
+}
 
 #endif // CWSURVEXBLOCKDATA_H

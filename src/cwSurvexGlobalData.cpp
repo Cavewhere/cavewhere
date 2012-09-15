@@ -118,7 +118,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
             currentTrip->addChunk(newChunk);
 
             //Fix station that need to be Equated
-            fixEquatedStationNames(newChunk, currentBlock);
+            fixStationNames(newChunk, currentBlock);
         }
     }
 
@@ -131,23 +131,33 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 /**
  * @brief cwSurvexGlobalData::fixEquatedStationNames
  * @param chunk
- * @param currentBlock
+ * @param rootBlock - The block that's holds the chunk.
  *
  * This will take the current block and see if any of the stations in chunk, are in any of the
  * parent's equates.  If the station is in the equate, then the station will be renamed.
  */
-void cwSurvexGlobalData::fixEquatedStationNames(cwSurveyChunk *chunk, cwSurvexBlockData *currentBlock)
+void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData *chunkBlock)
 {
+    QMap<QString, QString> equateMap;
+
+    //First pass find all the equates for all the stations
     for(int i = 0; i < chunk->stationCount(); i++) {
         cwStation station = chunk->station(i);
+
+        cwSurvexBlockData* currentBlock = chunkBlock;
+
+        if(equateMap.contains(station.name())) {
+//            station.setName(equateMap.value(station.name()));
+//            chunk->setStation(station, i);
+            continue;
+        }
 
         QString fullStationName = station.name();
         if(!currentBlock->name().isEmpty()) {
             fullStationName.prepend(currentBlock->name() + ".");
         }
 
-        QStringList fullStationNameList;
-        fullStationNameList.append(fullStationName);
+        QStringList equatedStations;
 
         //While the currentBlock is trip or structure and the parent is null
         while((currentBlock->importType() == cwSurvexBlockData::Trip ||
@@ -157,26 +167,31 @@ void cwSurvexGlobalData::fixEquatedStationNames(cwSurveyChunk *chunk, cwSurvexBl
         {
             currentBlock = currentBlock->parentBlock();
 
-            for
+            QStringList currentEquatedStations = currentBlock->equatedStations(fullStationName);
+            equatedStations.append(currentEquatedStations);
+        }
 
-            //What the station is equal to
-            QString fullEquateStationName = currentBlock->equatedStation(fullStationName);
-            QStringList brokenDownNameList = fullEquateStationName.split('.').last();
+        if(!equatedStations.isEmpty()) {
 
-            //Make sure we found a name.  If the current station isn't equated to anything
-            //the name will not be updated.
-            if(!brokenDownNameList.isEmpty()) {
-                QString newStationName = brokenDownNameList.last();
+            QString keyName = station.name();
 
-                //If the station name is different, the
-                if(newStationName != station.name()) {
-                    station.setName(newStationName);
-                    chunk->setStation(station, i);
-
-                    //Update the fullStationName with the Equate station name
-                    fullStationName = fullEquateStationName;
+            //Try to map all equated stations to this station, if they haven't already been equated
+            foreach(QString fullEquatedStationName, equatedStations) {
+                if(!fullEquatedStationName.isEmpty()) {
+                    QString stationName = fullEquatedStationName.split('.').last();
+                    equateMap.insert(keyName, stationName);
                 }
             }
+        }
+    }
+
+    //Second pass
+    for(int i = 0; i < chunk->stationCount(); i++) {
+        cwStation station = chunk->station(i);
+
+        if(equateMap.contains(station.name())) {
+            station.setName(equateMap.value(station.name()));
+            chunk->setStation(station, i);
         }
     }
 }

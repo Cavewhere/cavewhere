@@ -130,7 +130,6 @@ void cwSurvexImporter::loadFile(QString filename) {
     IncludeStack.append(Include(file.fileName()));
 
     //Update the status
-    qDebug() << "Importing:" << file.fileName();
     emit statusMessage("Importing " + file.fileName() );
 
     while(!file.atEnd() && isRunning()) {
@@ -158,11 +157,6 @@ void cwSurvexImporter::loadFile(QString filename) {
   Adds an error to the error stack if it can open a file
   */
 bool cwSurvexImporter::openFile(QFile& file, QString filename) {
-    qDebug() << "Filename:" << filename;
-    if(filename.compare("/home/blitz/Downloads/houping201204/caves/48H-H12-2-erwang/temp-print_water_works.svx") == 0) {
-        qDebug() << "Trying to open file:" << filename;
-    }
-
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists() && !IncludeStack.isEmpty()) {
         //This maybe a relative path to the rootFile
@@ -199,7 +193,6 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
     //Make sure we don't reopen the same file twice
     if(qFind(IncludeFiles, filename) != IncludeFiles.end() && !IncludeFiles.empty()) {
         //File has already been included... Do nothing
-        qDebug() << "Already been included:" << filename;
         return false;
     }
 
@@ -293,9 +286,9 @@ void cwSurvexImporter::parseLine(QString line) {
             } else if(compare(command, "units")) {
                 parseUnits(arg);
             } else if(compare(command, "export")) {
-                //Just ignore
-            } else if(compare(command, "equate")) {
 
+            } else if(compare(command, "equate")) {
+                parseEquate(arg);
             } else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
@@ -877,6 +870,18 @@ void cwSurvexImporter::parseEquate(QString line)
     }
 
     CurrentBlock->addToEquated(equalStations);
+}
+
+/**
+ * @brief cwSurvexImporter::parseExport
+ * @param line
+ *
+ * This parses the export stations
+ */
+void cwSurvexImporter::parseExport(QString line)
+{
+    QStringList stations = line.split(QRegExp("\s+"));
+    CurrentBlock->addExportStations(stations);
 }
 
 /**

@@ -1,6 +1,6 @@
 //Our includes
 #include "cwUsedStationsTask.h"
-
+#include "cwDebug.h"
 
 //Qt includes
 #include <QRegExp>
@@ -69,7 +69,7 @@ cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation sta
         cwUsedStationsTask::SplitStationName splitStation(surveyName, stationName);
         return splitStation;
     } else {
-        qDebug() << "Can't match: " << station.name();
+        qDebug() << "Can't match: " << station.name() << LOCATION;
     }
     return cwUsedStationsTask::SplitStationName();
 }

@@ -34,7 +34,7 @@ private:
 
     void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
 
-    void fixEquatedStationNames(cwSurveyChunk* chunk, cwSurvexBlockData* currentBlock);
+    void fixStationNames(cwSurveyChunk* chunk, cwSurvexBlockData* currentBlock);
 
 };
 
