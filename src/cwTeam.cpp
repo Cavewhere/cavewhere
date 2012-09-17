@@ -53,10 +53,10 @@ QVariant cwTeam::data(const QModelIndex &index, int role) const {
 
 void cwTeam::setData(int row, cwTeam::TeamModelRoles role, const QVariant &data) {
     QModelIndex modelIndex = index(row);
-    setData(modelIndex, role, data);
+    setData(modelIndex, data, role);
 }
 
-bool cwTeam::setData(QModelIndex index, int role, const QVariant &data) {
+bool cwTeam::setData(const QModelIndex& index, const QVariant &data, int role) {
     if(!index.isValid()) {
         return false;
     }

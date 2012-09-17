@@ -40,7 +40,7 @@ public:
     void setFrontSights(bool hasFrontSights);
     void setBackSights(bool hasBackSights);
 
-    QRectF boundingRect();
+    QRectF boundingRectangle();
 
     static float elementHeight();
     static float heightHint(int numberElements);

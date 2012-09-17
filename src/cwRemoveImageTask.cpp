@@ -3,7 +3,9 @@
 #include "cwProject.h"
 
 cwRemoveImageTask::cwRemoveImageTask(QObject *parent)
+    : cwProjectIOTask(parent)
 {
+
 }
 
 /**

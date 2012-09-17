@@ -82,15 +82,15 @@ namespace
     }
     bool s_vertexScoresComputed = ComputeVertexScores();
 
-    inline float FindVertexCacheScore(unsigned int cachePosition, unsigned int maxSizeVertexCache)
-    {
-        return s_vertexCacheScores[maxSizeVertexCache][cachePosition];
-    }
+//    inline float FindVertexCacheScore(unsigned int cachePosition, unsigned int maxSizeVertexCache)
+//    {
+//        return s_vertexCacheScores[maxSizeVertexCache][cachePosition];
+//    }
 
-    inline float FindVertexValenceScore(unsigned int numActiveTris)
-    {
-        return s_vertexValenceScores[numActiveTris];
-    }
+//    inline float FindVertexValenceScore(unsigned int numActiveTris)
+//    {
+//        return s_vertexValenceScores[numActiveTris];
+//    }
 
     float FindVertexScore(unsigned int numActiveFaces, unsigned int cachePosition, unsigned int vertexCacheSize)
     {

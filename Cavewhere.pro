@@ -426,25 +426,26 @@ unix {
     LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 
-    INCLUDEPATH += \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtOpenGL \
-#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtQML \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtQuick \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtCore \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtGui \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtConcurrent \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/Qt3D \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtSql \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtXml \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtXmlPatterns \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/Qt \
-    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include
+#    INCLUDEPATH += \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtOpenGL \
+##    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtQML \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtQuick \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtCore \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtGui \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtConcurrent \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/Qt3D \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtSql \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtXml \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtXmlPatterns \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/Qt \
+#    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include
 }
 
 macx {
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.6
     LIBS += -L/opt/local/lib
     ICON = icon.icns
+    INCLUDEPATH += /opt/local/include
 }
 
 win32 {

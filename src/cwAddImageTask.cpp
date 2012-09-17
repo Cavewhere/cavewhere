@@ -67,10 +67,18 @@ void cwAddImageTask::runTask() {
     calculateNumberOfSteps();
 
     bool couldCreate = CompressionContext->create();
-//    qDebug() << "Could create context:" << couldCreate;
+    if(!couldCreate) {
+        qDebug() << "Could create context:" << couldCreate << LOCATION;
+        done();
+        return;
+    }
 
     bool couldMakeCurrent = CompressionContext->makeCurrent(Window);
-//    qDebug() << "Could make curernt: " << couldMakeCurrent;
+    if(!couldMakeCurrent) {
+        qDebug() << "Could make curernt: " << couldMakeCurrent << LOCATION;
+        done();
+        return;
+    }
 
     glEnable(GL_TEXTURE_2D);
 

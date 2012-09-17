@@ -266,7 +266,8 @@ void cwRegionTreeModel::removeIndex(QModelIndex item) {
     }
 }
 
-Qt::ItemFlags cwRegionTreeModel::flags ( const QModelIndex & /*index*/) {
+Qt::ItemFlags cwRegionTreeModel::flags ( const QModelIndex & index) const {
+    Q_UNUSED(index);
     return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
 }
 

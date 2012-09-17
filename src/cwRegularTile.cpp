@@ -37,7 +37,7 @@ void cwRegularTile::generateIndexes() {
         }
     }
 
-    unsigned int largestInt = indexOf(numVertices - 1, numVertices - 1) + 1;
+//    unsigned int largestInt = indexOf(numVertices - 1, numVertices - 1) + 1;
 
     Indexes.clear();
     Indexes.reserve(tempIndexes.size());

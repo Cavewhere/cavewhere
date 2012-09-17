@@ -880,7 +880,7 @@ void cwSurvexImporter::parseEquate(QString line)
  */
 void cwSurvexImporter::parseExport(QString line)
 {
-    QStringList stations = line.split(QRegExp("\s+"));
+    QStringList stations = line.split(QRegExp("\\s+"));
     CurrentBlock->addExportStations(stations);
 }
 

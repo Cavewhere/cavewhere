@@ -47,7 +47,7 @@ public:
     Q_INVOKABLE QVariant data ( const QModelIndex & index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
     Q_INVOKABLE void removeIndex(QModelIndex item);
-    Qt::ItemFlags flags ( const QModelIndex & index);
+    Qt::ItemFlags flags ( const QModelIndex & index) const;
 
     Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;

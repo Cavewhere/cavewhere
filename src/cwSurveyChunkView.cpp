@@ -558,7 +558,7 @@ void cwSurveyChunkView::setBackSights(bool hasBackSights) {
     }
 }
 
-QRectF cwSurveyChunkView::boundingRect() {
+QRectF cwSurveyChunkView::boundingRectangle() {
     QRectF childrenBounds = childrenRect();
     childrenBounds.setHeight(heightHint(StationRows.size()));
     return childrenBounds;
@@ -1431,7 +1431,7 @@ QQuickItem *cwSurveyChunkView::previousTabFromLeft(int rowIndex) {
 void cwSurveyChunkView::updateDimensions() {
     if(!interfaceValid()) { return; }
 
-    QRectF rect = boundingRect();
+    QRectF rect = boundingRectangle();
 //    qDebug() << "BoundingRect:" << rect.height() << height();
 
     setWidth(rect.width());

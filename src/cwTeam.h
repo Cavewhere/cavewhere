@@ -35,8 +35,8 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
 
+    virtual bool setData(const QModelIndex& index, const QVariant& data, int role);
     Q_INVOKABLE void setData(int index, cwTeam::TeamModelRoles role, const QVariant& data);
-    bool setData(QModelIndex index, int role, const QVariant& data);
 
 
 signals:
