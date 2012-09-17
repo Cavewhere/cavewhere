@@ -8,6 +8,7 @@
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
 
+
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
     cwGLObject(parent),
     ShaderProgram(NULL)
@@ -138,6 +139,23 @@ void cwGLLinePlot::updateData() {
     LinePlotIndexBuffer.release();
 
     IndexBufferSize = Indexes.size();
+
+    if(geometryItersecter() != NULL) {
+        geometryItersecter()->clear(this);
+
+        //For geometry intersection
+        cwGeometryItersecter::Object geometryObject(
+                    this, //This object's pointer
+                    0, //Id
+                    Points,
+                    Indexes,
+                    cwGeometryItersecter::Lines);
+
+        qDebug() << "Adding geometry objet!!!!";
+
+        //FIXME: This could potentially slow down the rendering.
+        geometryItersecter()->addObject(geometryObject);
+    }
 
     setDirty(false);
 }

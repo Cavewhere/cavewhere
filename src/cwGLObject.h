@@ -7,6 +7,7 @@
 //Our includes
 class cwCamera;
 class cwShaderDebugger;
+#include "cwGeometryItersecter.h"
 
 class cwGLObject : public QObject
 {
@@ -16,6 +17,9 @@ public:
     virtual void initialize() = 0;
     virtual void draw() = 0;
     virtual void updateData() {}
+
+    void setGeometryItersecter(cwGeometryItersecter* itersecter);
+    cwGeometryItersecter* geometryItersecter() const;
 
     void setCamera(cwCamera* camera);
     cwCamera* camera() const;
@@ -31,6 +35,7 @@ protected:
 private:
     cwCamera* Camera;
     cwShaderDebugger* ShaderDebugger;
+    cwGeometryItersecter* Intersector;
     bool Dirty;
 };
 
@@ -58,6 +63,15 @@ inline bool cwGLObject::isDirty() const
 inline void cwGLObject::setDirty(bool isDirty)
 {
     Dirty = isDirty;
+}
+
+/**
+ * @brief cwGLObject::geometryItersecter
+ * @return The current geometry intersector
+ */
+inline cwGeometryItersecter *cwGLObject::geometryItersecter() const
+{
+    return Intersector;
 }
 
 

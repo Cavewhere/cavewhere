@@ -17,6 +17,7 @@
 #include "cwGLScraps.h"
 #include "cwStationPositionLookup.h"
 #include "cwGLGridPlane.h"
+#include "cwGeometryItersecter.h"
 
 //Qt includes
 #include <QPainter>
@@ -36,6 +37,8 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 {
     Region = NULL;
 
+    GeometryItersecter = new cwGeometryItersecter();
+
     Terrain = new cwGLTerrain(this);
     Terrain->setCamera(Camera);
     Terrain->setShaderDebugger(ShaderDebugger);
@@ -45,10 +48,12 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     LinePlot = new cwGLLinePlot(this);
     LinePlot->setCamera(Camera);
     LinePlot->setShaderDebugger(ShaderDebugger);
+    LinePlot->setGeometryItersecter(GeometryItersecter);
 
     Scraps = new cwGLScraps(this);
     Scraps->setCamera(Camera);
     Scraps->setShaderDebugger(ShaderDebugger);
+    Scraps->setGeometryItersecter(GeometryItersecter);
 
     Plane = new cwGLGridPlane(this);
     Plane->setCamera(Camera);
@@ -119,7 +124,7 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
     QRay3D ray(frontPoint, direction);
 
     //See if it hits any of the scraps
-    double t = Scraps->intersecter().intersects(ray);
+    double t = GeometryItersecter->intersects(ray);
 
     if(qIsNaN(t)) {
 
@@ -146,6 +151,8 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
 QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
     if(LinePlot->isDirty()) {
         LinePlot->updateData();
+
+
     }
 
     if(Scraps->isDirty()) {

@@ -11,6 +11,7 @@ class cwGLTerrain;
 class cwGLLinePlot;
 class cwGLScraps;
 class cwGLGridPlane;
+class cwGeometryItersecter;
 
 class cw3dRegionViewer : public cwGLRenderer
 {
@@ -56,6 +57,7 @@ protected:
 
 private:
     //For interaction
+    cwGeometryItersecter* GeometryItersecter;
     QVector3D LastMouseGlobalPosition; //For panning
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;

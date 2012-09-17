@@ -77,26 +77,34 @@ void cwGLScraps::draw() {
 /**
  * @brief cwGLScraps::updateData
  *
- * Updates the
+ * Updates the scrap geometry.  Make sure geometryItersecter isn't NULL
  */
 void cwGLScraps::updateData()
 {
+    if(geometryItersecter() == NULL) { return; }
+
+    //Clear the rendering GL stuff
     Scraps.clear();
 
-    foreach(cwCave* cave, Region->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                foreach(cwScrap* scrap, note->scraps()) {
-                    cwTriangulatedData data = scrap->triangulationData();
-                    cwGeometryItersecter::Object geometryObject(Scraps.size(),
-                                                                data.points(),
-                                                                data.indices(),
-                                                                cwGeometryItersecter::Triangles);
-                    Intersecter.addObject(geometryObject);
-                    Scraps.append(GLScrap(data, project()));
-                }
-            }
-        }
+    //Clear the itersecter of it's data for this object
+    geometryItersecter()->clear(this);
+
+    QList<cwTriangulatedData> allData = updatedTriangulatedData();
+    Scraps.reserve(allData.size());
+
+    foreach(cwTriangulatedData data, allData) {
+        Scraps.append(GLScrap(data, project()));
+
+        //For geometry intersection
+        cwGeometryItersecter::Object geometryObject(
+                    this, //This object's pointer
+                    Scraps.size(), //Id
+                    data.points(),
+                    data.indices(),
+                    cwGeometryItersecter::Triangles);
+
+        //FIXME: This could potentially slow down the rendering.
+        geometryItersecter()->addObject(geometryObject);
     }
 
     setDirty(false);
@@ -187,6 +195,30 @@ void cwGLScraps::setProject(cwProject* project) {
     }
 }
 
+/**
+ * @brief cwGLScraps::updatedTriangulatedData
+ * @return Get's all the triangulated data that needs to be updated
+ */
+QList<cwTriangulatedData> cwGLScraps::updatedTriangulatedData() const
+{
+    //Goes through all the caves, trips, notes and scraps and get triangulationData
+
+    QList<cwTriangulatedData> allData;
+
+    if(Region != NULL) {
+        foreach(cwCave* cave, Region->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                foreach(cwNote* note, trip->notes()->notes()) {
+                    foreach(cwScrap* scrap, note->scraps()) {
+                        allData.append(scrap->triangulationData());
+                    }
+                }
+            }
+        }
+    }
+
+    return allData;
+}
 
 
 
