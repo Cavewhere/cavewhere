@@ -20,7 +20,7 @@ Item {
         property int lastMousePosition;
 
         onPressed: {
-            lastMousePosition = mapToItem(null, mouse.x, 0).x;
+            lastMousePosition = mapToItem(null, mouseX, 0).x;
         }
 
         states: [
@@ -31,7 +31,7 @@ Item {
 
                     onPositionChanged: {
                         //Change the databar width
-                        var mappedX = mapToItem(null, mouse.x, 0).x;
+                        var mappedX = mapToItem(null, mouseX, 0).x;
 
                         switch(expandDirection) {
                         case "left":
