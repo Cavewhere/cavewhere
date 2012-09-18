@@ -11,6 +11,7 @@
 #include "cwNote.h"
 #include "cwScrap.h"
 #include "cwSurveyNoteModel.h"
+#include "cwSurveyChunk.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -200,7 +201,15 @@ void cwLinePlotTask::linePlotTaskComplete() {
     done();
 }
 
+/**
+ * @brief cwLinePlotTask::updateStationPositionForCaves
+ * @param stationPostions
+ */
 void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup& stationPostions) {
+
+    //Index all the stations for quick lookup
+    indexStations();
+
     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
     while( iter.hasNext() ) {
         iter.next();
@@ -306,41 +315,81 @@ void cwLinePlotTask::initializeCaveStationLookups()
  */
 void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
 {
-    cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
+//    cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
 
     //Add the cave to the results with empty station lookup
     cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
-    Result.Caves.insert(externalCave, cwStationPositionLookup());
+    if(!Result.Caves.contains(externalCave)) {
+        Result.Caves.insert(externalCave, cwStationPositionLookup());
+    }
 
-    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
-        cwTrip* trip = cave->trip(tripIndex);
-        if(trip->hasStation(stationName)) {
+    const StationTripScrapLookup& lookup = TripLookups[caveIndex];
+    QList<int> tripIndexes = lookup.trips(stationName);
+    QList<QPair<int, int> > scrapIndexes = lookup.scraps(stationName);
 
-            //Get the trip that has been updated
-            //Warning, don't us externalTrip, it's not part of this thread
-            cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
+    foreach(int tripIndex, tripIndexes) {
+        //Get the trip that has been updated
+        //Warning, don't us externalTrip, it's not part of this thread
+        cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
 
-            //Add the trip to the trips that have changes
-            Result.Trips.insert(externalTrip);
-        }
+        //Add the trip to the trips that have changes
+        Result.Trips.insert(externalTrip);
+    }
 
-        int scrapIndex = 0;
-        foreach(cwNote* note, trip->notes()->notes()) {
-            for(int i = 0; i < note->scraps().size(); i++) {
-                cwScrap* scrap = note->scrap(i);
-                if(scrap->hasStation(stationName)) {
+    for(int i = 0; i < scrapIndexes.size(); i++) {
+        QPair<int, int> index = scrapIndexes.at(i);
+        int tripIndex = index.first;
+        int scrapIndex = index.second;
 
-                    //Get the trip that has been updated
-                    //Warning, don't us externalScrap, it's not part of this thread
-                    cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
+        //Get the trip that has been updated
+        //Warning, don't us externalScrap, it's not part of this thread
+        cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
 
-                    //Add the scrap to the scraps that have changed
-                    Result.Scraps.insert(externalScrap);
-                }
+        //Add the scrap to the scraps that have changed
+        Result.Scraps.insert(externalScrap);
+    }
 
-                scrapIndex++;
-            }
-        }
+//    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
+//        cwTrip* trip = cave->trip(tripIndex);
+//        if(trip->hasStation(stationName)) {
+
+
+//        }
+
+//        int scrapIndex = 0;
+//        foreach(cwNote* note, trip->notes()->notes()) {
+//            for(int i = 0; i < note->scraps().size(); i++) {
+//                cwScrap* scrap = note->scrap(i);
+//                if(scrap->hasStation(stationName)) {
+
+//                    //Get the trip that has been updated
+//                    //Warning, don't us externalScrap, it's not part of this thread
+//                    cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
+
+//                    //Add the scrap to the scraps that have changed
+//                    Result.Scraps.insert(externalScrap);
+//                }
+
+//                scrapIndex++;
+//            }
+//        }
+//    }
+}
+
+/**
+ * @brief cwLinePlotTask::indexStations
+ *
+ * This will go through each cave and it's trips and scraps and map them by station name
+ *
+ * This will provide quick lookup for a cwTrip or cwScrap based the station name
+ */
+void cwLinePlotTask::indexStations()
+{
+    //Resize the number of trip lookups based on the number of caves
+    TripLookups.resize(Region->caveCount());
+
+    for(int i = 0; i < Region->caveCount() && isRunning(); i++) {
+        TripLookups[i] = StationTripScrapLookup(Region->cave(i));
     }
 }
 
@@ -403,5 +452,37 @@ void cwLinePlotTask::LinePlotResultData::clear()
     Scraps.clear();
     StationPositions.clear();
     LinePlotIndexData.clear();
+}
+
+/**
+ * @brief cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup
+ * @param cave
+ *
+ * This will go through the cave and index the scrap, and trip information by stationName
+ */
+cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
+{
+    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
+        cwTrip* trip = cave->trip(tripIndex);
+        foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
+            foreach(cwStation station, surveyChunk->stations()) {
+                //Add trip to the multi hash
+                MapStationToTrip.insertMulti(station.name(), tripIndex);
+            }
+        }
+
+        int scrapIndex = 0;
+        foreach(cwNote* note, trip->notes()->notes()) {
+            for(int i = 0; i < note->scraps().size(); i++) {
+                cwScrap* scrap = note->scrap(i);
+
+                foreach(cwNoteStation noteStation, scrap->stations()) {
+                    MapStationToScrap.insertMulti(noteStation.name(), QPair<int, int>(tripIndex, scrapIndex));
+                }
+
+                scrapIndex++;
+            }
+        }
+    }
 }
 

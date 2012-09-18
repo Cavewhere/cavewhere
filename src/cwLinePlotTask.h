@@ -93,7 +93,7 @@ private:
      * that the station's position has changed.  This is extremely useful for alerting
      * when a specific scrap needs to be updated.
      *
-     * It is unsafe to use the points in the this data structure.  But are used for
+     * It is unsafe to use the pointers in the this data structure.  But are used for
      * book keeping only.
      *
      * This could possibly be replaced by id's in the future
@@ -124,10 +124,30 @@ private:
         QList<CaveDataPtrs> Caves;
     };
 
+    /**
+     * @brief The StationCaveLookup class
+     *
+     * Stores a lookup for all the stations and scraps in a cave.  This will a station to multiple
+     * trips / scraps
+     */
+    class StationTripScrapLookup {
+    public:
+        StationTripScrapLookup(cwCave* cave);
+        StationTripScrapLookup() { }
+
+        QList<int> trips(QString stationName) const;
+        QList<QPair<int, int> > scraps(QString stationName) const;
+
+    private:
+        QHash<QString, int> MapStationToTrip; //Multi map of a station to multiple trips indexes
+        QHash<QString, QPair<int, int> > MapStationToScrap; //Multi map of a station to multiple scraps indexes (first index is cave, then scrap index)
+    };
+
     //The region data
     cwCavingRegion* Region; //Local copy of the region, we can modify this
     RegionDataPtrs RegionOriginalPointers; //Allows use to notify the which of the original data has changed
     QVector<cwStationPositionLookup> CaveStationLookups; //Copies of all the cave station lookups that are going to be modified
+    QVector<StationTripScrapLookup> TripLookups; //Generated in indexStations()
 
     //The temparary survex file
     QTemporaryFile* SurvexFile;
@@ -148,6 +168,7 @@ private:
     void encodeCaveNames();
     void initializeCaveStationLookups();
     void setStationAsChanged(int caveIndex, QString stationName);
+    void indexStations();
 };
 
 /**
@@ -257,5 +278,26 @@ inline cwLinePlotTask::LinePlotResultData cwLinePlotTask::linePlotData() const
 {
     return Result;
 }
+
+/**
+ * @brief cwLinePlotTask::StationTripScrapLookup::trips
+ * @param stationName
+ * @return All the trips that contain stationName
+ */
+inline QList<int> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const
+{
+    return MapStationToTrip.values(stationName);
+}
+
+/**
+ * @brief cwLinePlotTask::StationTripScrapLookup::scraps
+ * @param stationName
+ * @return All the scraps that contain stationName
+ */
+inline QList<QPair<int, int> > cwLinePlotTask::StationTripScrapLookup::scraps(QString stationName) const
+{
+    return MapStationToScrap.values(stationName);
+}
+
 
 #endif // CWLINEPLOTTASK_H
