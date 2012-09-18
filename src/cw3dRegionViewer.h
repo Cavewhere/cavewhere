@@ -46,6 +46,10 @@ private slots:
     //Interaction events
     void resetView();
 
+    void rotateLastPosition();
+    void zoomLastPosition();
+    void translateLastPosition();
+
     virtual void resizeGL();
 
 protected:
@@ -70,11 +74,23 @@ private:
     cwGLScraps* Scraps;
     cwGLGridPlane* Plane;
 
+    QTimer* RotationInteractionTimer;
+    QPoint TimeoutRotationPosition;
+
+    QTimer* ZoomInteractionTimer;
+    QPoint ZoomPosition;
+    int ZoomDelta;
+
+    QTimer* TranslateTimer;
+    QPoint TranslatePosition;
+
     //For rendering label
     cwCavingRegion* Region;
 
     void renderStationLabels(QPainter* painter);
     void renderStationLabels(QPainter* painter, cwCave* cave);
+
+    void setupInteractionTimers();
 
 };
 

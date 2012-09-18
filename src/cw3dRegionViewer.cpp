@@ -58,6 +58,8 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Plane = new cwGLGridPlane(this);
     Plane->setCamera(Camera);
     Plane->setShaderDebugger(ShaderDebugger);
+
+    setupInteractionTimers();
 }
 
 /**
@@ -175,6 +177,152 @@ void cw3dRegionViewer::startPanning(QPoint position) {
   Pans the view allow the a plane
   */
 void cw3dRegionViewer::pan(QPoint position) {
+    TranslatePosition = position;
+    if(!TranslateTimer->isActive()) {
+        TranslateTimer->start();
+    }
+}
+
+/**
+  Called when the rotation is about to begin
+  */
+void cw3dRegionViewer::startRotating(QPoint position) {
+    position = Camera->mapToGLViewport(position);
+    LastMouseGlobalPosition = unProject(position);
+    LastMousePosition = position;
+}
+
+/**
+  Rotates the view
+  */
+void cw3dRegionViewer::rotate(QPoint position) {
+    TimeoutRotationPosition = position;
+    if(!RotationInteractionTimer->isActive()) {
+        RotationInteractionTimer->start();
+    }
+}
+
+/**
+  Zooms the view
+  */
+void cw3dRegionViewer::zoom(QPoint position, int delta) {
+    ZoomPosition = position;
+    if(!ZoomInteractionTimer->isActive()) {
+        ZoomInteractionTimer->start();
+        ZoomDelta = delta;
+    } else {
+        ZoomDelta += delta;
+    }
+}
+
+/**
+  \brief Resets the view
+  */
+void cw3dRegionViewer::resetView() {
+    //    QMatrix4x4 projectionMatrix;
+    //    projectionMatrix.perspective(55, 1.0, .1, 10000); //ortho(-2.0, 2.0, -2.0, 2.0, -2.0, 2.0);
+    //    Camera->setProjectionMatrix(projectionMatrix);
+
+    Pitch = 90.0;
+    Azimuth = 0.0;
+
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
+
+    CurrentRotation =  pitchQuat * azimuthQuat;
+
+    QMatrix4x4 viewMatrix;
+    viewMatrix.translate(QVector3D(0.0, 0.0, -2));
+    Camera->setViewMatrix(viewMatrix);
+
+    update();
+}
+
+/**
+ * @brief cw3dRegionViewer::rotateLastPosition
+ *
+ * This is called by the timer, after the timer has consumed mouse events.  This prevents
+ * rendering thread to be starved
+ */
+void cw3dRegionViewer::rotateLastPosition()
+{
+    QPoint position = TimeoutRotationPosition;
+
+    position = Camera->mapToGLViewport(position);
+    QPoint currentMousePosition = position;
+    QPointF delta = LastMousePosition - currentMousePosition;
+    LastMousePosition = currentMousePosition;
+    delta /= 2.0;
+
+    //Calculate the new pitch
+    Pitch = qMin(90.0f, qMax(-90.0f, Pitch + (float)delta.y()));
+
+    //Calculate the new azimuth
+    Azimuth = fmod(Azimuth - delta.x(), 360);
+
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
+    QQuaternion newQuat =  pitchQuat * azimuthQuat;
+    QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
+    CurrentRotation = newQuat;
+
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(LastMouseGlobalPosition);
+    viewMatrix.rotate(rotationDifferance);
+    viewMatrix.translate(-LastMouseGlobalPosition);
+    Camera->setViewMatrix(viewMatrix);
+
+    update();
+}
+
+/**
+ * @brief cw3dRegionViewer::zoomLastPosition
+ *
+ * This is called by the timer, after the timer has consumed mouse events.  This prevents
+ * rendering thread to be starved
+ */
+void cw3dRegionViewer::zoomLastPosition()
+{
+    int delta = ZoomDelta;
+    QPoint position = ZoomPosition;
+
+    //Make the event position into gl viewport
+    QPoint mappedPos = Camera->mapToGLViewport(position);
+
+    //Get the ray from the front of the screen to the back of the screen
+    QVector3D front = Camera->unProject(mappedPos, 0.0);
+
+    //Find the intsection on the plane
+    QVector3D intersection = unProject(mappedPos);
+
+    //Smallray
+    QVector3D ray = intersection - front;
+    float rayLength = ray.length();
+    ray.normalize();
+
+    float t = .0005 * delta;
+    t = qMax(-1.0f, qMin(1.0f, t));
+    t = rayLength * t;
+
+    QVector3D newPositionDelta = ray * t;
+
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(newPositionDelta);
+    Camera->setViewMatrix(viewMatrix);
+
+    update();
+}
+
+/**
+ * @brief cw3dRegionViewer::translateLastPosition
+ *
+ * This is called by the timer, after the timer has consumed mouse events.  This prevents
+ * rendering thread to be starved
+ */
+void cw3dRegionViewer::translateLastPosition()
+{
+    QPoint position = TranslatePosition;
+
     QPoint mappedPos = Camera->mapToGLViewport(position);
 
     //Get the ray from the front of the screen to the back of the screen
@@ -207,185 +355,6 @@ void cw3dRegionViewer::pan(QPoint position) {
 }
 
 /**
-  Called when the rotation is about to begin
-  */
-void cw3dRegionViewer::startRotating(QPoint position) {
-    position = Camera->mapToGLViewport(position);
-    LastMouseGlobalPosition = unProject(position);
-    LastMousePosition = position;
-}
-
-/**
-  Rotates the view
-  */
-void cw3dRegionViewer::rotate(QPoint position) {
-    position = Camera->mapToGLViewport(position);
-    QPoint currentMousePosition = position;
-    QPointF delta = LastMousePosition - currentMousePosition;
-    LastMousePosition = currentMousePosition;
-    delta /= 2.0;
-
-    //Calculate the new pitch
-    Pitch = qMin(90.0f, qMax(-90.0f, Pitch + (float)delta.y()));
-
-    //Calculate the new azimuth
-    Azimuth = fmod(Azimuth - delta.x(), 360);
-
-    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
-    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
-    QQuaternion newQuat =  pitchQuat * azimuthQuat;
-    QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
-    CurrentRotation = newQuat;
-
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(LastMouseGlobalPosition);
-    viewMatrix.rotate(rotationDifferance);
-    viewMatrix.translate(-LastMouseGlobalPosition);
-    Camera->setViewMatrix(viewMatrix);
-
-    update();
-}
-
-//void cw3dRegionViewer::wheelEvent(QGraphicsSceneWheelEvent *event) {
-//    zoom(event);
-//    event->accept();
-//}
-
-/**
-  Zooms the view
-  */
-void cw3dRegionViewer::zoom(QPoint position, int delta) {
-
-    //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(position);
-
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
-
-    //Find the intsection on the plane
-    QVector3D intersection = unProject(mappedPos);
-
-    //Smallray
-    QVector3D ray = intersection - front;
-    float rayLength = ray.length();
-    ray.normalize();
-
-    float t = .0005 * delta;
-    t = qMax(-1.0f, qMin(1.0f, t));
-    t = rayLength * t;
-
-    QVector3D newPositionDelta = ray * t;
-
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(newPositionDelta);
-    Camera->setViewMatrix(viewMatrix);
-
-    update();
-}
-
-/**
-  \brief Resets the view
-  */
-void cw3dRegionViewer::resetView() {
-    //    QMatrix4x4 projectionMatrix;
-    //    projectionMatrix.perspective(55, 1.0, .1, 10000); //ortho(-2.0, 2.0, -2.0, 2.0, -2.0, 2.0);
-    //    Camera->setProjectionMatrix(projectionMatrix);
-
-    Pitch = 90.0;
-    Azimuth = 0.0;
-
-    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
-    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
-
-    CurrentRotation =  pitchQuat * azimuthQuat;
-
-    QMatrix4x4 viewMatrix;
-    viewMatrix.translate(QVector3D(0.0, 0.0, -2));
-    Camera->setViewMatrix(viewMatrix);
-
-    update();
-}
-
-///**
-//  \brief This renders the station labels for the caving region
-
-//  This will go through all the caves and render station labels for them
-//  */
-//void cw3dRegionViewer::renderStationLabels(QPainter* painter) {
-//    //Clear the collision lable kd-tree
-//    LabelKdTree.clear();
-
-//    for(int i = 0; i < Region->caveCount(); i++) {
-//       cwCave* cave = Region->cave(i);
-//       renderStationLabels(painter, cave);
-//    }
-
-//   // LabelKdTree.paintTree(painter, QRect(QPoint(0, 0), QSize(width(), height())));
-//}
-
-///**
-//  \brief This renders the station labels for a cave
-//  */
-//void cw3dRegionViewer::renderStationLabels(QPainter* painter, cwCave* cave) {
-
-//    cwStationPositionLookup stations = cave->stationPositionModel();
-
-
-//    QVector< QPair<QString, QVector3D> > uniqueStations;
-//    uniqueStations.reserve(stations.positions().count());
-
-//    //Populate the vector of unique stations, this is so we can thread the transformation
-//    QMapIterator<QString, QVector3D> mapIter(stations.positions());
-//    while(mapIter.hasNext()) {
-//        mapIter.next();
-//        uniqueStations.append(QPair<QString, QVector3D>(mapIter.key(), mapIter.value()));
-//    }
-
-//    //Transforms all the station's points
-//    QtConcurrent::blockingMap(uniqueStations,
-//                              TransformPoint(Camera->viewProjectionMatrix(),
-//                                             Camera->viewport()));
-
-
-//    QFont defaultFont;
-//    QFontMetrics fontMetrics(defaultFont);
-
-//    //Go through all the station points and render the text
-//    QVectorIterator< QPair<QString, QVector3D> >iter(uniqueStations);
-//    while(iter.hasNext()) {
-//         QPair<QString, QVector3D> stationPair = iter.next();
-//         QVector3D projectedStationPosition = stationPair.second;
-
-//        //Clip the stations to the rendering area
-//        if(projectedStationPosition.z() > 1.0 ||
-//                projectedStationPosition.z() < 0.0 ||
-//                !Camera->viewport().contains(projectedStationPosition.x(), projectedStationPosition.y())) {
-//            continue;
-//        }
-
-//        QString stationName = stationPair.first;
-
-//        //See if stationName overlaps with other stations
-//        QPoint topLeftPoint = projectedStationPosition.toPoint();
-//        QSize stationNameTextSize = fontMetrics.size(Qt::TextSingleLine, stationName);
-//        QRect stationRect(topLeftPoint, stationNameTextSize);
-//        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
-//        bool couldAddText = LabelKdTree.addRect(stationRect);
-
-//        if(couldAddText) {
-//            painter->save();
-//            painter->setPen(Qt::white);
-//            painter->drawText(topLeftPoint + QPoint(1,1), stationName);
-
-//            painter->setPen(Qt::black);
-//            painter->drawText(topLeftPoint, stationName);
-//            painter->restore();
-//        }
-//    }
-//}
-
-
-/**
   \brief Sets the caving region for the renderer
   */
 void cw3dRegionViewer::setCavingRegion(cwCavingRegion* region) {
@@ -393,4 +362,35 @@ void cw3dRegionViewer::setCavingRegion(cwCavingRegion* region) {
         Region = region;
         emit cavingRegionChanged();
     }
+}
+
+/**
+ * @brief cw3dRegionViewer::setupInteractionTimers
+ *
+ * This sets up the interaction timers.  This prevents the operating system from firing more
+ * mouse events than it needs to.
+ *
+ * On linux, mouse events are fired very, very quickly, causing the rendering thread to strave
+ *
+ * The timers prevent the starvation
+ */
+void cw3dRegionViewer::setupInteractionTimers()
+{
+    int interactionInterval = 1/60; //60hz
+    RotationInteractionTimer = new QTimer(this);
+    ZoomInteractionTimer = new QTimer(this);
+    TranslateTimer = new QTimer(this);
+
+    RotationInteractionTimer->setInterval(interactionInterval);
+    RotationInteractionTimer->setSingleShot(true);
+
+    ZoomInteractionTimer->setInterval(interactionInterval);
+    ZoomInteractionTimer->setSingleShot(true);
+
+    TranslateTimer->setInterval(interactionInterval);
+    TranslateTimer->setSingleShot(true);
+
+    connect(RotationInteractionTimer, &QTimer::timeout, this, &cw3dRegionViewer::rotateLastPosition);
+    connect(ZoomInteractionTimer, &QTimer::timeout, this, &cw3dRegionViewer::zoomLastPosition);
+    connect(TranslateTimer, &QTimer::timeout, this, &cw3dRegionViewer::translateLastPosition);
 }

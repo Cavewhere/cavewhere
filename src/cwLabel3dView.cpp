@@ -157,9 +157,9 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         //See if stationName overlaps with other stations
         QPoint topLeftPoint = projectedStationPosition.toPoint();
-        QSize stationNameTextSize(item->width() * 1.5, item->height() * 1.5);
+        QSize stationNameTextSize(item->width() * 1.1, item->height() * 1.1);
         QRect stationRect(topLeftPoint, stationNameTextSize);
-        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.5);
+        stationRect.moveTop(stationRect.top() - stationNameTextSize.height() / 1.1);
         bool couldAddText = LabelKdTree.addRect(stationRect);
 
         if(couldAddText) {
