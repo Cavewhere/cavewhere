@@ -237,7 +237,7 @@ void cwProject::newProject() {
 /**
   Loads the project, loads all the files to the project
   */
-void cwProject::load(QString filename) {
+void cwProject::loadFile(QString filename) {
 
     //Load the region task
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
@@ -558,5 +558,6 @@ void cwProject::load()
     loadDialog->setFileMode(QFileDialog::ExistingFile);
     loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
     loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    loadDialog->open(this, SLOT(load(QString)));
+    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
+    loadDialog->show();
 }

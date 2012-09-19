@@ -59,7 +59,7 @@ signals:
     void undoStackChanged();
 
 public slots:
-     void load(QString filename);
+     void loadFile(QString filename);
 
 private:
 
