@@ -117,7 +117,7 @@ void cwImageItem::initializeShaders() {
     cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
 
-    ImageProgram = new QOpenGLShaderProgram(this);
+    ImageProgram = new QOpenGLShaderProgram();
     ImageProgram->addShader(imageVertexShader);
     ImageProgram->addShader(imageFragmentShader);
 

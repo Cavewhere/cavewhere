@@ -123,7 +123,7 @@ void cwGLScraps::initializeShaders() {
 //    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
 //    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
 
-    Program = new QOpenGLShaderProgram(this);
+    Program = new QOpenGLShaderProgram();
     Program->addShader(scrapVertexShader);
     Program->addShader(scrapFragmentShader);
 //    Program->addShader(scrapGeometryShader);

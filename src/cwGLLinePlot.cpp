@@ -33,7 +33,7 @@ void cwGLLinePlot::initializeShaders() {
     cwGLShader* linePlotFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     linePlotFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.frag");
 
-    ShaderProgram = new QOpenGLShaderProgram(this);
+    ShaderProgram = new QOpenGLShaderProgram();
     ShaderProgram->addShader(linePlotVertexShader);
     ShaderProgram->addShader(linePlotFragmentShader);
 

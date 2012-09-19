@@ -14,7 +14,7 @@
 
 cwGLGridPlane::cwGLGridPlane(QObject* parent) :
     cwGLObject(parent),
-    Plane(QPlane3D(QVector3D(0.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0))),
+    Plane(QPlane3D(QVector3D(0.0, 0.0, -250.0), QVector3D(0.0, 0.0, 1.0))),
     Extent(10000.0),
     Program(NULL)
 {
@@ -103,7 +103,7 @@ void cwGLGridPlane::initializeShaders() {
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/grid.frag");
 
-    Program = new QOpenGLShaderProgram(this);
+    Program = new QOpenGLShaderProgram();
     Program->addShader(vertexShader);
     Program->addShader(fragmentShader);
 

@@ -19,8 +19,9 @@ cwGLTerrain::cwGLTerrain(QObject *parent) :
 
 cwGLTerrain::~cwGLTerrain()
 {
-    delete EdgeTile;
-    delete RegularTile;
+    //FIXME: EdgeTile should be destroyed by the QSceneGraph.  Don't destroy them here
+//    delete EdgeTile;
+//    delete RegularTile;
 }
 
 /**
@@ -37,7 +38,7 @@ void cwGLTerrain::initialize() {
 //    cwGLShader* tileGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
 //    tileGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
 
-    TileProgram = new QOpenGLShaderProgram(this);
+    TileProgram = new QOpenGLShaderProgram();
     TileProgram->addShader(tileVertexShader);
     TileProgram->addShader(tileFragmentShader);
 //    TileProgram->addShader(tileGeometryShader);
