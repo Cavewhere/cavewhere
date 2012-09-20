@@ -34,24 +34,16 @@ public:
     explicit cwGLRenderer(QQuickItem *parent = 0);
     ~cwGLRenderer();
 
-//    QVector3D unProject(QPoint point);
-
+    cwShaderDebugger* shaderDebugger() const;
+    cwGeometryItersecter* geometryItersecter() const;
     cwCamera* camera() const;
 
 signals:
     void glWidgetChanged();
     void cameraChanged();
 
-
-//public slots:
-//    void setGLWidget(QGLWidget* widget);
-//    QGLWidget* glWidget();
-
-
 protected:
     virtual void initializeGL() {}
-
-//    QGLWidget* GLWidget; //This is so we make current when setting up the object
 
     //Shaders for testing
     cwShaderDebugger* ShaderDebugger;
@@ -59,14 +51,12 @@ protected:
     //The main camera for the viewer
     cwCamera* Camera;
 
+    //For interaction
+    cwGeometryItersecter* GeometryItersecter;
+
     bool Initialized;
 
-    //For querying the depth buffer in the renderer
-    float sampleDepthBuffer(QPoint point);
-
     virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
-
-//    virtual void geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry);
 
 protected slots:
     virtual void resizeGL() {}
@@ -79,5 +69,15 @@ private slots:
 
 inline cwCamera* cwGLRenderer::camera() const { return Camera; }
 inline void cwGLRenderer::updateRenderer() { update(); }
+
+inline cwShaderDebugger *cwGLRenderer::shaderDebugger() const
+{
+    return ShaderDebugger;
+}
+
+inline cwGeometryItersecter *cwGLRenderer::geometryItersecter() const
+{
+    return GeometryItersecter;
+}
 
 #endif // CWGLRENDERER_H

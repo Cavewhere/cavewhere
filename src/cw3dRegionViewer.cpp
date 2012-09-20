@@ -37,27 +37,18 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 {
     Region = NULL;
 
-    GeometryItersecter = new cwGeometryItersecter();
-
-    Terrain = new cwGLTerrain(this);
-    Terrain->setCamera(Camera);
-    Terrain->setShaderDebugger(ShaderDebugger);
+    Terrain = new cwGLTerrain();
     Terrain->setNumberOfLevels(10);
     //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
-    LinePlot = new cwGLLinePlot(this);
-    LinePlot->setCamera(Camera);
-    LinePlot->setShaderDebugger(ShaderDebugger);
-    LinePlot->setGeometryItersecter(GeometryItersecter);
+    LinePlot = new cwGLLinePlot();
+    Scraps = new cwGLScraps();
+    Plane = new cwGLGridPlane();
 
-    Scraps = new cwGLScraps(this);
-    Scraps->setCamera(Camera);
-    Scraps->setShaderDebugger(ShaderDebugger);
-    Scraps->setGeometryItersecter(GeometryItersecter);
-
-    Plane = new cwGLGridPlane(this);
-    Plane->setCamera(Camera);
-    Plane->setShaderDebugger(ShaderDebugger);
+    Terrain->setScene(this);
+    LinePlot->setScene(this);
+    Scraps->setScene(this);
+    Plane->setScene(this);
 
     setupInteractionTimers();
 }

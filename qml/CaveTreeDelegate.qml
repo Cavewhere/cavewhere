@@ -163,6 +163,7 @@ FocusScope {
                 anchors.rightMargin: 5
                 text: Qt.formatDateTime(date, "yyyy-MM-dd")
 
+
                 onStartedEditting: {
                     view.currentIndex = index
                     view.focus = true

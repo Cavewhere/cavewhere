@@ -60,8 +60,6 @@ protected:
 
 
 private:
-    //For interaction
-    cwGeometryItersecter* GeometryItersecter;
     QVector3D LastMouseGlobalPosition; //For panning
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;

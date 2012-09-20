@@ -7,6 +7,7 @@
 //Our includes
 class cwCamera;
 class cwShaderDebugger;
+class cwGLRenderer;
 #include "cwGeometryItersecter.h"
 
 class cwGLObject : public QObject
@@ -18,13 +19,11 @@ public:
     virtual void draw() = 0;
     virtual void updateData() {}
 
-    void setGeometryItersecter(cwGeometryItersecter* itersecter);
+    void setScene(cwGLRenderer* renderer);
+    cwGLRenderer* scene() const;
+
     cwGeometryItersecter* geometryItersecter() const;
-
-    void setCamera(cwCamera* camera);
     cwCamera* camera() const;
-
-    void setShaderDebugger(cwShaderDebugger* debugger);
     cwShaderDebugger* shaderDebugger() const;
 
     bool isDirty() const;
@@ -33,46 +32,24 @@ protected:
     void setDirty(bool isDirty);
 
 private:
-    cwCamera* Camera;
-    cwShaderDebugger* ShaderDebugger;
-    cwGeometryItersecter* Intersector;
+    cwGLRenderer* Scene;
     bool Dirty;
 };
-
-inline void cwGLObject::setCamera(cwCamera* camera) {
-    Camera = camera;
-}
-
-inline cwCamera* cwGLObject::camera() const {
-    return Camera;
-}
-
-inline void cwGLObject::setShaderDebugger(cwShaderDebugger* debugger) {
-    ShaderDebugger = debugger;
-}
-
-inline cwShaderDebugger* cwGLObject::shaderDebugger() const {
-    return ShaderDebugger;
-}
 
 inline bool cwGLObject::isDirty() const
 {
     return Dirty;
 }
 
-inline void cwGLObject::setDirty(bool isDirty)
-{
-    Dirty = isDirty;
-}
+
 
 /**
- * @brief cwGLObject::geometryItersecter
- * @return The current geometry intersector
+ * @brief cwGLObject::scene
+ * @returns The scene that is resposible for this object
  */
-inline cwGeometryItersecter *cwGLObject::geometryItersecter() const
+inline cwGLRenderer *cwGLObject::scene() const
 {
-    return Intersector;
+    return Scene;
 }
-
 
 #endif // CWGLOBJECT_H

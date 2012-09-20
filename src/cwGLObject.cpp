@@ -1,28 +1,48 @@
+//Our includes
 #include "cwGLObject.h"
+#include "cwGLRenderer.h"
 
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent)
 {
-    ShaderDebugger = NULL;
-    Camera = NULL;
-    Intersector = NULL;
     Dirty = false;
+    Scene = NULL;
 }
 
-/**
- * @brief cwGLObject::setGeometryItersecter
- * @param intersecter
- *
- * This will set the intersector dirty such that the itersector is updated correctly
- */
-void cwGLObject::setGeometryItersecter(cwGeometryItersecter *itersecter)
+void cwGLObject::setScene(cwGLRenderer *renderer)
 {
-    if(Intersector != itersecter) {
-        Intersector = itersecter;
+    if(Scene != renderer) {
+        Scene = renderer;
         setDirty(true);
     }
 }
 
+ cwCamera* cwGLObject::camera() const {
+    return Scene == NULL ? NULL : Scene->camera();
+}
 
+ cwShaderDebugger* cwGLObject::shaderDebugger() const {
+    return Scene == NULL ? NULL : Scene->shaderDebugger();
+}
 
+/**
+ * @brief cwGLObject::geometryItersecter
+ * @return The current geometry intersector
+ */
+ cwGeometryItersecter *cwGLObject::geometryItersecter() const
+{
+    return Scene == NULL ? NULL : Scene->geometryItersecter();
+}
+
+ /**
+  * @brief cwGLObject::setDirty
+  * @param isDirty - Set the cwGLObject to dirty.
+  */
+ void cwGLObject::setDirty(bool isDirty)
+ {
+     Dirty = isDirty;
+     if(Scene != NULL) {
+         Scene->update();
+     }
+ }
 
