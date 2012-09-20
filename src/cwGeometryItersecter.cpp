@@ -50,10 +50,12 @@ void cwGeometryItersecter::clear(cwGLObject *parentObject)
     }
 
     QList<Node>::iterator iter = Nodes.begin();
-    for(; iter != Nodes.end(); iter++) {
+    while(iter != Nodes.end()) {
         Node& currentNode = *iter;
         if(currentNode.Object.parent() == parentObject) {
             iter = Nodes.erase(iter);
+        } else {
+            iter++;
         }
     }
 }
@@ -146,7 +148,7 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
 
         //Make sure the node is valid
         if(!node.BoundingBox.isNull()) {
-            Nodes.append(Node(object, i));
+            Nodes.append(node);
         }
     }
 }

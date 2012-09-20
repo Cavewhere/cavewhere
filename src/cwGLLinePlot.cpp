@@ -151,8 +151,6 @@ void cwGLLinePlot::updateData() {
                     Indexes,
                     cwGeometryItersecter::Lines);
 
-        qDebug() << "Adding geometry objet!!!!";
-
         //FIXME: This could potentially slow down the rendering.
         geometryItersecter()->addObject(geometryObject);
     }

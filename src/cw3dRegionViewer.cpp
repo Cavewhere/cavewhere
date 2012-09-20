@@ -153,8 +153,6 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
 QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
     if(LinePlot->isDirty()) {
         LinePlot->updateData();
-
-
     }
 
     if(Scraps->isDirty()) {
