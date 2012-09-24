@@ -286,7 +286,7 @@ void cwSurvexImporter::parseLine(QString line) {
             } else if(compare(command, "units")) {
                 parseUnits(arg);
             } else if(compare(command, "export")) {
-
+                parseExport(arg);
             } else if(compare(command, "equate")) {
                 parseEquate(arg);
             } else {
@@ -307,6 +307,9 @@ void cwSurvexImporter::parseLine(QString line) {
             break;
         case Passage:
             parsePassageData(line);
+            break;
+        case NoSurvey:
+            //Just ignore!
             break;
         }
     }
@@ -374,8 +377,10 @@ void cwSurvexImporter::parseDataFormat(QString line) {
     } else if(compare(dataFormatType, "passage")) {
         setCurrentDataEntryType(Passage);
         CurrentBlock->addLRUDChunk();
+    } else if(compare(dataFormatType, "nosurvey")) {
+        setCurrentDataEntryType(NoSurvey);
     } else {
-        addError("Normal and passage data are supported, using default format");
+        addError("Normal, passage data, nosurvey are supported, using default format");
         setCurrentDataEntryType(Normal);
         setCurrentDataFormat(BeginEndState::defaultDataFormat());
     }

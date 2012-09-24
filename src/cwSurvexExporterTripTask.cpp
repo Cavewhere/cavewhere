@@ -182,7 +182,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
   */
 void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) {
 
-    QString dataLineTemplate("%1%2 %3 %4 %5");
+    QString dataLineTemplate("%1 %2 %3 %4 %5");
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         stream << "*data passage station left right up down ignoreall" << endl;

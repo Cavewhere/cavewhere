@@ -66,7 +66,8 @@ private:
       */
     enum DataEntryType {
         Normal,
-        Passage
+        Passage,
+        NoSurvey
     };
 
     class Include {

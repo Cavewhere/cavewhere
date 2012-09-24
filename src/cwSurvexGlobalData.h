@@ -6,6 +6,7 @@ class cwSurvexBlockData;
 class cwCave;
 class cwTrip;
 class cwSurveyChunk;
+#include "cwStation.h"
 #include "cwUndoer.h"
 
 //Qt includes
@@ -35,6 +36,11 @@ private:
     void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
 
     void fixStationNames(cwSurveyChunk* chunk, cwSurvexBlockData* currentBlock);
+    void fixDuplicatedStationInShot(cwSurveyChunk* chunk, cwSurvexBlockData* caveSurvexBlock);
+
+    void populateEquateMap(cwSurvexBlockData* block);
+    QString generateUniqueStationName(QString oldStationName, cwSurvexBlockData* caveSurvexBlock) const;
+
 
 };
 

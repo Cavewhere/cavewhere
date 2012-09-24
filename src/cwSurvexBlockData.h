@@ -92,6 +92,9 @@ private:
     cwTeam* Team;
     cwTripCalibration* Calibration;
 
+    //For caves, used station names, and equating stations
+    QMap<QString, QString> EquateMap;  //All stations get added to the map
+
     void addChildBlock(cwSurvexBlockData* blockData);
     void addChunk(cwSurveyChunk* chunk);
     void addLRUDChunk();

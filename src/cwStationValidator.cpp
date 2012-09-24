@@ -16,7 +16,7 @@ QValidator::State cwStationValidator::validate( QString & input, int & pos ) con
     }
 
     QRegExpValidator validator;
-    QRegExp regExp("\\w+(\\.\\w+)*");
+    QRegExp regExp("\\w+");
     validator.setRegExp(regExp);
     return validator.validate(input, pos);
 }

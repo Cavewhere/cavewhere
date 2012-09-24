@@ -6,6 +6,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStationPositionLookup.h"
+#include "cwDebug.h"
 
 cwLinePlotGeometryTask::cwLinePlotGeometryTask(QObject *parent) :
     cwTask(parent)
@@ -70,6 +71,8 @@ void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
 void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
     cwCave* cave = Region->cave(caveIndex);
 
+    unsigned int firstStationIndex;
+
     //Go through all the trips in the cave
     for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
         cwTrip* trip = cave->trip(tripIndex);
@@ -80,16 +83,26 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
             if(chunk->stationCount() < 2) { continue; }
 
             cwStation firstStation = chunk->station(0);
-            unsigned int previousStationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave->name(), firstStation.name()), 0);
+
+            QString fullName = fullStationName(caveIndex, cave->name(), firstStation.name());
+            if(!StationIndexLookup.contains(fullName)) {
+                qDebug() << "Warning! Couldn't find station position index (will result in rendering artifacts): " << fullName << LOCATION;
+            }
+
+            unsigned int previousStationIndex = StationIndexLookup.value(fullName, 0);
 
             //Go through all the the stations/shots in the chunk
             for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
                 cwStation station = chunk->station(stationIndex);
 
                 //Look up the index
-                QString fullName = fullStationName(caveIndex, cave->name(), station.name());
+                fullName = fullStationName(caveIndex, cave->name(), station.name());
                 if(StationIndexLookup.contains(fullName)) {
                     unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave->name(), station.name()), 0);
+
+                    if(station.name() == "1") {
+                        firstStationIndex = previousStationIndex;
+                    }
 
                     IndexData.append(previousStationIndex);
                     IndexData.append(stationIndex);
