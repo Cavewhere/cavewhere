@@ -75,6 +75,11 @@ Item {
                     text: "Survex (.svx)"
                     onTriggered: surveyImportManager.importSurvex()
                 }
+
+                MenuItem {
+                    text: "Compass (.dat)"
+                    onTriggered: surveyImportManager.importCompassDataFile();
+                }
             }
         }
     }

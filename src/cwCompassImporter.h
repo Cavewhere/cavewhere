@@ -7,6 +7,7 @@
 
 //Qt include
 #include <QRegExp>
+#include <QStringList>
 class QFile;
 
 
@@ -21,9 +22,9 @@ class cwCompassImporter : public cwTask
 public:
     explicit cwCompassImporter(QObject *parent = 0);
 
-    void setCompassDataFile(QString filename);
+    void setCompassDataFiles(QStringList filename);
 
-    cwCave cave() const;
+    QList<cwCave> caves() const;
 
 protected:
     void runTask();
@@ -34,16 +35,22 @@ public slots:
     
 private:
     //Input
-    QString CompassDataFile;
+    QStringList CompassDataFiles;
 
     //Output
-    cwCave Cave;
+    QList<cwCave> Caves;
 
     //Status info
     int LineCount;
+    QString CurrentFilename;
+    cwCave* CurrentCave;
     cwTrip* CurrentTrip;
+    bool CurrentFileGood;
+
+    //Regex
     QRegExp SurveyNameRegExp;
     QRegExp DateRegExp;
+    QRegExp CalibrationRegExp;
 
     void verifyCompassDataFileExists();
     void parseFile();
@@ -59,24 +66,23 @@ private:
 
 };
 
-/**
- * @brief cwCompassImporter::setCompassDataFile
- * @param filename
- *
- * Sets the compass data file
- */
-inline void cwCompassImporter::setCompassDataFile(QString filename)
-{
-    CompassDataFile = filename;
-}
 
 /**
  * @brief cwCompassImporter::cave
  * @return Returns the resulting cave.
  */
-inline cwCave cwCompassImporter::cave() const
+inline QList<cwCave> cwCompassImporter::caves() const
 {
-    return Cave;
+    return Caves;
+}
+
+/**
+ * @brief cwCompassImporter::setCompassDataFiles
+ * @param filenames - Sets the compass data file list
+ */
+inline void cwCompassImporter::setCompassDataFiles(QStringList filenames)
+{
+    CompassDataFiles = filenames;
 }
 
 

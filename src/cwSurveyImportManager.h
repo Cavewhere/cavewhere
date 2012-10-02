@@ -4,9 +4,11 @@
 //Qt includes
 #include <QObject>
 #include <QUndoStack>
+#include <QStringList>
 
 //Our includes
 class cwCavingRegion;
+class cwCompassImporter;
 
 /**
     This class allows qml to import data
@@ -16,6 +18,7 @@ class cwSurveyImportManager : public QObject
     Q_OBJECT
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);
+    ~cwSurveyImportManager();
     
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
@@ -23,14 +26,24 @@ public:
     void setUndoStack(QUndoStack* undoStack);
 
     Q_INVOKABLE void importSurvex();
+    Q_INVOKABLE void importCompassDataFile();
 
 signals:
     
 public slots:
 
+private slots:
+    void compassImporterFinished();
+    void compassMessages(QString message);
+
 private:
+    QThread* ImportThread;
+
     cwCavingRegion* CavingRegion;
     QUndoStack* UndoStack;
+
+    QStringList QueuedCompassFile;
+    cwCompassImporter* CompassImporter;
 
 
 };
