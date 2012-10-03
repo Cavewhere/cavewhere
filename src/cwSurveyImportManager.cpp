@@ -15,6 +15,8 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     CompassImporter(new cwCompassImporter())
 {
     CompassImporter->setThread(ImportThread);
+    connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
+    connect(CompassImporter, &cwCompassImporter::statusMessage, this, &cwSurveyImportManager::compassMessages);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()

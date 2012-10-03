@@ -33,6 +33,8 @@ bool cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         stream << CompassNewLine;
     }
 
+    stream << 0x1A;
+
     return true;
 }
 

@@ -3,6 +3,10 @@
 #include "cwTrip.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
+#include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwShot.h"
+#include "cwLength.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -36,6 +40,7 @@ void cwCompassImporter::runTask()
         CurrentFileGood = true;
         CurrentTrip = NULL;
         LineCount = 0;
+        UsingBacksight = false;
 
         //Make sure file is good
         verifyCompassDataFileExists();
@@ -111,6 +116,7 @@ void cwCompassImporter::parseSurvey(QFile *file)
     if(!CurrentFileGood) { return; }
 
     CurrentTrip = new cwTrip();
+    CurrentCave->addTrip(CurrentTrip);
 
     parseCaveName(file);
     parseTripName(file);
@@ -119,6 +125,11 @@ void cwCompassImporter::parseSurvey(QFile *file)
     parseSurveyFormatAndCalibration(file);
     parseSurveyData(file);
 
+    qint64 position = file->pos();
+    QByteArray lastLine = file->readLine();
+    if(!lastLine.contains(0x1A)) {
+        file->seek(position); //Go back
+    }
 }
 
 /**
@@ -132,10 +143,10 @@ bool cwCompassImporter::isFileGood(QFile *file, QString infoHelp)
     if(file->error() != QFile::NoError) {
         //TODO: Fix error message
         emit statusMessage(QString("Hmm, while trying to parse %1, the Compass data file (%1) has error: %2. In %3 on line %4")
-                      .arg(file->errorString())
-                      .arg(infoHelp)
-                      .arg(CurrentFilename)
-                      .arg(LineCount));
+                           .arg(file->errorString())
+                           .arg(infoHelp)
+                           .arg(CurrentFilename)
+                           .arg(LineCount));
         CurrentFileGood = false;
         return false;
     }
@@ -150,14 +161,15 @@ void cwCompassImporter::parseCaveName(QFile *file)
 {
     if(!CurrentFileGood) { return; }
     QString caveName = file->readLine();
+
     caveName = caveName.trimmed();
 
     LineCount++;
 
     if(caveName.size() > 80) {
         emit statusMessage(QString("I found the cave name to be longer than 80 characters. I'm trimming it to 80 characters, in %1 on line %2")
-                      .arg(CurrentFilename)
-                      .arg(LineCount));
+                           .arg(CurrentFilename)
+                           .arg(LineCount));
         caveName.resize(80);
     }
 
@@ -181,8 +193,8 @@ void cwCompassImporter::parseTripName(QFile *file)
 
     if(tripName.size() > 12) {
         emit statusMessage(QString("I found the trip name to be longer than 12 characters. I'm trimming it to 12 characters, in %1 on line %2")
-                      .arg(CurrentFilename)
-                      .arg(LineCount));
+                           .arg(CurrentFilename)
+                           .arg(LineCount));
         tripName.resize(12);
     }
 
@@ -211,8 +223,8 @@ void cwCompassImporter::parseTripDate(QFile *file)
         //Couldn't parse the date
         //TODO: Add warning that we couldn't parse the date
         emit statusMessage(QString("I couldn't parse the date in %1 on line %2")
-                      .arg(CurrentFilename)
-                      .arg(LineCount));
+                           .arg(CurrentFilename)
+                           .arg(LineCount));
     } else {
         QString monthString = DateRegExp.cap(1);
         QString dayString = DateRegExp.cap(2);
@@ -223,16 +235,16 @@ void cwCompassImporter::parseTripDate(QFile *file)
         if(!okay) {
             //TODO: Add warning that we couldn't parse the date
             emit statusMessage(QString("I couldn't understand the month.  I found \"%1\". It needs to be a number. Line %2")
-                          .arg(monthString)
-                          .arg(LineCount));
+                               .arg(monthString)
+                               .arg(LineCount));
             return;
         }
 
         if(month < 1 || month > 12) {
             //Bad month
             emit statusMessage(QString("I found the month to be \"%1\" it needs to be between 1 and 12. Line %2")
-                          .arg(month)
-                          .arg(LineCount));
+                               .arg(month)
+                               .arg(LineCount));
 
             return;
         }
@@ -241,15 +253,15 @@ void cwCompassImporter::parseTripDate(QFile *file)
         if(!okay) {
             //TODO: Add warning that we couldn't parse the date
             emit statusMessage(QString("I couldn't understand the day.  I found \"%1\". It needs to be a number. Line %2")
-                          .arg(dayString)
-                          .arg(LineCount));
+                               .arg(dayString)
+                               .arg(LineCount));
             return;
         }
 
         if(day < 1 || day > 31) {
             emit statusMessage(QString("I found an wrong day of the month, %1 on line %2. It should be between 1 and 31.")
-                          .arg(day)
-                          .arg(LineCount));
+                               .arg(day)
+                               .arg(LineCount));
             return;
         }
 
@@ -267,9 +279,9 @@ void cwCompassImporter::parseTripDate(QFile *file)
         if(year < 1900) {
             int newYear = 1900 + year;
             emit statusMessage(QString("I assuming year that %1 is really %2 on line %3")
-                          .arg(year)
-                          .arg(newYear)
-                          .arg(LineCount));
+                               .arg(year)
+                               .arg(newYear)
+                               .arg(LineCount));
             year = newYear;
         }
 
@@ -306,8 +318,8 @@ void cwCompassImporter::parseSurveyTeam(QFile *file)
 
     if(surveyTeam.size() > 100) {
         emit statusMessage(QString("I found the team to be longer than 100 characters. I'm trimming it to 100 characters, in %1 on line %2")
-                      .arg(CurrentFilename)
-                      .arg(LineCount));
+                           .arg(CurrentFilename)
+                           .arg(LineCount));
         surveyTeam.resize(100);
     }
 
@@ -345,14 +357,9 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
         QString lengthCorrectionString = CalibrationRegExp.cap(5);
 
 
-        bool okay;
-        double declination = declinationString.toDouble(&okay);
-        if(okay) {
+        double declination;
+        if(convertNumber(declinationString, "declination", &declination)) {
             CurrentTrip->calibrations()->setDeclination(declination);
-        } else {
-            emit statusMessage(QString("I couldn't read the declination because it's not a number in %1 on line %2")
-                               .arg(CurrentFilename)
-                               .arg(LineCount));
         }
 
         if(!(compassCorrectionString.isEmpty() ||
@@ -360,39 +367,62 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
              lengthCorrectionString.isEmpty()))
         {
 
-            double compassCorrection = compassCorrectionString.toDouble(&okay);
-            if(okay) {
+            double compassCorrection;
+            double clinoCorrection;
+            double lengthCorrection;
+
+            if(convertNumber(compassCorrectionString, "compass correction", &compassCorrection)) {
                 CurrentTrip->calibrations()->setFrontCompassCalibration(compassCorrection);
                 CurrentTrip->calibrations()->setBackCompassCalibration(compassCorrection);
-            } else {
-                emit statusMessage(QString("I couldn't read compass correction because it's not a number in %1 on line %2")
-                                   .arg(CurrentFilename)
-                                   .arg(LineCount));
             }
 
-            double clinoCorrection = clinoCorrectionString.toDouble(&okay);
-            if(okay) {
+            if(convertNumber(clinoCorrectionString, "clino correction", &clinoCorrection)) {
                 CurrentTrip->calibrations()->setFrontClinoCalibration(clinoCorrection);
                 CurrentTrip->calibrations()->setBackClinoCalibration(clinoCorrection);
-            } else {
-                emit statusMessage(QString("I couldn't read clino correction because it's not a number in %1 on line %2")
-                                   .arg(CurrentFilename)
-                                   .arg(LineCount));
             }
 
-            double lengthCorrection = lengthCorrectionString.toDouble(&okay);
-            if(okay) {
+            if(convertNumber(lengthCorrectionString, "length correcton", &lengthCorrection)) {
                 CurrentTrip->calibrations()->setTapeCalibration(lengthCorrection);
-
-            } else {
-                emit statusMessage(QString("I couldn't read length correction because it's not a number in %1 on line %2")
-                                                               .arg(CurrentFilename)
-                                                               .arg(LineCount));
             }
         }
 
+        if(fileFormatString.size() == 11 || fileFormatString.size() == 12) {
+            if(fileFormatString.at(0) != 'D') {
+                emit statusMessage(QString("I can only understand Degrees for the Bearing Units. Converting all Bearing units to Degrees. In %1 on line %2")
+                                   .arg(CurrentFilename)
+                                   .arg(LineCount));
+            }
 
+            if(fileFormatString.at(1) == 'D') {
+                CurrentTrip->calibrations()->setDistanceUnit(cwUnits::Feet);
+            } else if(fileFormatString.at(1) == 'M') {
+                CurrentTrip->calibrations()->setDistanceUnit(cwUnits::Meters);
+            } else {
+                CurrentTrip->calibrations()->setDistanceUnit(cwUnits::Feet);
+                emit statusMessage(QString("I can't use Feet and Inches.  Converting all length measurements to decimal feet. In %1 on line %2")
+                                   .arg(CurrentFilename)
+                                   .arg(LineCount));
+            }
 
+            if(fileFormatString.at(3) != 'D') {
+                emit statusMessage(QString("I can only understand Degrees for the Inclination Units. Converting all Inclination units to Degrees. In %1 on line %2")
+                                   .arg(CurrentFilename)
+                                   .arg(LineCount));
+            }
+
+            if(fileFormatString.size() == 12) {
+                if(fileFormatString.at(11) == 'B') {
+                    UsingBacksight = true;
+                }
+            }
+
+        } else {
+            emit statusMessage(QString("I found that the file format to be %1. It must be 11 or 12 characters long. In file %2, on line %3")
+                               .arg(fileFormatString.size())
+                               .arg(CurrentFilename)
+                               .arg(LineCount)
+                               );
+        }
 
     } else {
         emit statusMessage(QString("I couldn't understand the calibration line found in %1 on line %2")
@@ -408,5 +438,112 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
  */
 void cwCompassImporter::parseSurveyData(QFile *file)
 {
+    //Skip 3 lines
+    file->readLine();
+    LineCount++;
+    if(!isFileGood(file, "")) { return; }
 
+    file->readLine();
+    LineCount++;
+    if(!isFileGood(file, "")) { return; }
+
+    file->readLine();
+    LineCount++;
+    if(!isFileGood(file, "")) { return; }
+
+    QString dataLine;
+    while(!file->atEnd()) {
+        dataLine = file->readLine();
+        LineCount++;
+        if(!isFileGood(file, "data line")) { return; }
+
+        //Make sure not at the end of the survey section
+        if(!dataLine.isEmpty() && dataLine.at(0) == 0x0C) { break; }
+
+        QStringList dataStrings = dataLine.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+
+        if(dataStrings.size() >= 9) {
+            QString fromStationName = dataStrings.at(0);
+            QString toStationName = dataStrings.at(1);
+            QString lengthString = dataStrings.at(2);
+            QString bearingString = dataStrings.at(3);
+            QString inclinationString = dataStrings.at(4);
+            QString leftString = dataStrings.at(5);
+            QString rightString = dataStrings.at(6);
+            QString upString = dataStrings.at(7);
+            QString downString = dataStrings.at(8);
+
+            cwStation fromStation(fromStationName);
+            cwStation toStation(toStationName);
+            cwShot shot;
+
+            double length;
+            double bearing;
+            double inclination;
+            double left;
+            double right;
+            double up;
+            double down;
+
+            if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
+            if(!convertNumber(bearingString, "bearing", &bearing)) { CurrentFileGood = false; return; }
+            if(!convertNumber(inclinationString, "inclination", &inclination)) { CurrentFileGood = false; return; }
+            if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
+            if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
+            if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
+            if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
+
+            shot.setDistance(cwUnits::convert(length, cwUnits::Feet, CurrentTrip->calibrations()->distanceUnit()));
+            shot.setCompass(bearing);
+            shot.setClino(inclination);
+
+            fromStation.setLeft(left);
+            fromStation.setRight(right);
+            fromStation.setUp(up);
+            fromStation.setDown(down);
+
+            if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {
+                QString backCompassString = dataStrings.at(9);
+                QString backClinoString = dataStrings.at(10);
+
+                double backCompass;
+                double backClino;
+
+                if(!convertNumber(backCompassString, "back compass", &backCompass)) { CurrentFileGood = false; return; }
+                if(!convertNumber(backClinoString, "back clino", &backClino)) { CurrentFileGood = false; return; }
+
+                shot.setBackCompass(backCompass);
+                shot.setBackClino(backClino);
+            }
+
+            CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
+        } else {
+            emit statusMessage(QString("Data string doesn't have enough fields. I need at least 9 but found only %1 in %2 on line %3")
+                               .arg(dataStrings.size())
+                               .arg(CurrentFilename)
+                               .arg(LineCount));
+        }
+    }
+}
+
+/**
+ * @brief cwCompassImporter::covertNumber
+ * @param name
+ * @param field
+ * @param value
+ * @return
+ */
+bool cwCompassImporter::convertNumber(QString numberString, QString field, double *value)
+{
+    bool okay;
+    *value = numberString.toDouble(&okay);
+    if(!okay) {
+        emit statusMessage(QString("I couldn't read %1 because it's not a number (I found \"%4\" instead) in %2 on line %3")
+                           .arg(field)
+                           .arg(CurrentFilename)
+                           .arg(LineCount)
+                           .arg(numberString));
+        return false;
+    }
+    return true;
 }

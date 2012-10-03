@@ -133,15 +133,47 @@ void cwTrip::setCalibration(cwTripCalibration* calibration) {
     }
 }
 
-///**
-//  Sets the distance unit for the trip
-//  */
-//void cwTrip::setDistanceUnit(cwUnits::LengthUnit newDistanceUnit) {
-//    if(DistanceUnit != newDistanceUnit) {
-//        DistanceUnit = newDistanceUnit;
-//        emit distanceUnitChanged(DistanceUnit);
-//    }
-//}
+/**
+ * @brief cwTrip::addShotToLastChunk
+ * @param fromStation
+ * @param toStation
+ * @param shot
+ *
+ * This is a convenance functon for adding shots to the trip
+ */
+void cwTrip::addShotToLastChunk(const cwStation &fromStation, const cwStation &toStation, const cwShot &shot)
+{
+    cwSurveyChunk* chunk;
+    if(chunks().isEmpty()) {
+        //Create a new chunk
+        chunk = new cwSurveyChunk();
+        addChunk(chunk);
+    } else {
+        chunk = Chunks.last();
+    }
+
+    if(chunk->canAddShot(fromStation, toStation)) {
+        chunk->appendShot(fromStation, toStation, shot);
+    } else {
+        if(!chunk->isValid()) {
+            //error
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name();
+            return;
+        }
+
+        chunk = new cwSurveyChunk();
+        addChunk(chunk);
+        //Chunks.append(chunk);
+        if(chunk->canAddShot(fromStation, toStation)) {
+            chunk->appendShot(fromStation, toStation, shot);
+        } else {
+            //error
+            qDebug() << "Can't add shot to a brand spanken new cwSurveyChunk" << fromStation.name() << toStation.name();
+            return;
+        }
+    }
+}
+
 
 /**
   \brief Remove the chunks

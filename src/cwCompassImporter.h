@@ -46,6 +46,7 @@ private:
     cwCave* CurrentCave;
     cwTrip* CurrentTrip;
     bool CurrentFileGood;
+    bool UsingBacksight;
 
     //Regex
     QRegExp SurveyNameRegExp;
@@ -63,6 +64,8 @@ private:
     void parseSurveyTeam(QFile* file);
     void parseSurveyFormatAndCalibration(QFile* file);
     void parseSurveyData(QFile* file);
+
+    bool convertNumber(QString numberString, QString field, double* value);
 
 };
 

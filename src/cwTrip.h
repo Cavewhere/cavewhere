@@ -9,6 +9,7 @@ class cwCave;
 class cwTeam;
 class cwTripCalibration;
 class cwSurveyNoteModel;
+class cwShot;
 #include "cwUndoer.h"
 
 //Qt include
@@ -51,6 +52,7 @@ public:
 
     cwSurveyNoteModel* notes() const;
 
+    void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
     void removeChunks(int begin, int end);
     void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
@@ -187,5 +189,6 @@ inline cwTripCalibration* cwTrip::calibrations() const {
 inline cwSurveyNoteModel* cwTrip::notes() const {
     return Notes;
 }
+
 
 #endif // CWSURVERYCHUNKGROUP_H
