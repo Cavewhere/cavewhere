@@ -15,5 +15,6 @@ cwFileDialogHelper::cwFileDialogHelper(QObject *parent) :
 void cwFileDialogHelper::open() {
     QFileDialog* dialog = new QFileDialog();
     dialog->setFileMode(QFileDialog::ExistingFiles);
-    dialog->open(this, SIGNAL(filesSelected(QStringList)));
+    connect(dialog, SIGNAL(filesSelected(QStringList)), this, SIGNAL(filesSelected(QStringList)));
+    dialog->show(); //dialog->open(this, SIGNAL(filesSelected(QStringList)));
 }

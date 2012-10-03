@@ -20,10 +20,6 @@ cwCompassImporter::cwCompassImporter(QObject *parent) :
 
 }
 
-
-
-
-
 /**
  * @brief cwCompassImporter::runTask
  *
@@ -40,7 +36,6 @@ void cwCompassImporter::runTask()
         CurrentFileGood = true;
         CurrentTrip = NULL;
         LineCount = 0;
-        UsingBacksight = false;
 
         //Make sure file is good
         verifyCompassDataFileExists();
@@ -412,7 +407,9 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
 
             if(fileFormatString.size() == 12) {
                 if(fileFormatString.at(11) == 'B') {
-                    UsingBacksight = true;
+                    CurrentTrip->calibrations()->setBackSights(true);
+                } else {
+                    CurrentTrip->calibrations()->setBackSights(false);
                 }
             }
 
@@ -517,6 +514,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             }
 
             CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
+            if(!CurrentTrip->chunks().isEmpty()) {
+                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+                int secondToLastStation = lastChunk->stationCount() - 2;
+                lastChunk->setStation(fromStation, secondToLastStation);
+            }
         } else {
             emit statusMessage(QString("Data string doesn't have enough fields. I need at least 9 but found only %1 in %2 on line %3")
                                .arg(dataStrings.size())

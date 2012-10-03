@@ -46,12 +46,13 @@ private:
     cwCave* CurrentCave;
     cwTrip* CurrentTrip;
     bool CurrentFileGood;
-    bool UsingBacksight;
 
     //Regex
     QRegExp SurveyNameRegExp;
     QRegExp DateRegExp;
     QRegExp CalibrationRegExp;
+
+    static const QString CompassImportKey;
 
     void verifyCompassDataFileExists();
     void parseFile();

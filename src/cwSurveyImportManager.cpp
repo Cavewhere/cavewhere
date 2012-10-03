@@ -7,6 +7,7 @@
 //Qt includes
 #include <QFileDialog>
 #include <QThread>
+#include <QSettings>
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
@@ -38,6 +39,7 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
   \brief Opens the survex importer dialog
   */
 void cwSurveyImportManager::importSurvex() {
+
     cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(cavingRegion());
     survexImportDialog->setUndoStack(UndoStack);
     survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
@@ -51,7 +53,15 @@ void cwSurveyImportManager::importSurvex() {
  */
 void cwSurveyImportManager::importCompassDataFile()
 {
-    QStringList dataFiles = QFileDialog::getOpenFileNames(NULL, "Compass Data File", QString(), "*.dat");
+    static const QString compassImportKey = "LastCompassImportFilename";
+
+    QSettings settings;
+    QString lastFile = settings.value(compassImportKey).toString();
+    QStringList dataFiles = QFileDialog::getOpenFileNames(NULL, "Compass Data File", lastFile, "*.dat");
+
+    if(!dataFiles.isEmpty()) {
+        settings.setValue(compassImportKey, dataFiles.first());
+    }
 
     if(CompassImporter->isReady()) {
         CompassImporter->setCompassDataFiles(dataFiles + QueuedCompassFile);
