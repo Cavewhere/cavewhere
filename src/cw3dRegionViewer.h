@@ -4,6 +4,7 @@
 //Qt includes
 #include <QVector3D>
 #include <QMatrix4x4>
+#include <QPlane3D>
 
 //Our includes
 #include "cwGLRenderer.h"
@@ -61,6 +62,7 @@ protected:
 
 private:
     QVector3D LastMouseGlobalPosition; //For panning
+    QPlane3D PanPlane;
     QPointF LastMousePosition; //For rotation
     QQuaternion CurrentRotation;
     float Pitch;
