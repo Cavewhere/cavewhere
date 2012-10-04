@@ -1,3 +1,6 @@
+//Glew includes
+#include <GL/glew.h>
+
 //Our includes
 #include "cwGLRenderer.h"
 #include "cwCamera.h"
@@ -58,6 +61,7 @@ void cwGLRenderer::privateResizeGL() {
 
 QSGNode * cwGLRenderer::updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data) {
     if(!Initialized) {
+        glewInit();
         initializeGL();
         Initialized = true;
     }

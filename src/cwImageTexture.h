@@ -1,6 +1,9 @@
 #ifndef CWIMAGETEXTURE_H
 #define CWIMAGETEXTURE_H
 
+//GLew includes
+#include <GL/glew.h>
+
 //Qt include
 #include <QObject>
 #include <QFutureWatcher>

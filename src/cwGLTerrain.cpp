@@ -6,6 +6,7 @@
 #include "cwShaderDebugger.h"
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
+#include "cwMath.h"
 
 cwGLTerrain::cwGLTerrain(QObject *parent) :
     cwGLObject(parent)
@@ -56,14 +57,14 @@ void cwGLTerrain::initialize() {
     UniformModelMatrix = TileProgram->uniformLocation("ModelMatrix");
     TileProgram->setUniformValue("colorBG", Qt::gray);
 
-    EdgeTile->setCamera(camera());
-    RegularTile->setCamera(camera());
+//    EdgeTile->setCamera(camera());
+//    RegularTile->setCamera(camera());
 
     EdgeTile->setShaderProgram(TileProgram);
     RegularTile->setShaderProgram(TileProgram);
 
-    EdgeTile->setShaderDebugger(shaderDebugger());
-    RegularTile->setShaderDebugger(shaderDebugger());
+//    EdgeTile->setShaderDebugger(shaderDebugger());
+//    RegularTile->setShaderDebugger(shaderDebugger());
 
     EdgeTile->initialize();
     RegularTile->initialize();

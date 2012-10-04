@@ -63,6 +63,7 @@ void cwGLScraps::draw() {
         scrap.Texture->bind();
 
         glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, NULL);
+        qDebug() << "After draw!";
 
         scrap.IndexBuffer.release();
         scrap.PointBuffer.release();

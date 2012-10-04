@@ -375,9 +375,12 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
 int cwAddImageTask::saveToDXT1Format(QImage image) {
     //Convert and compress using dxt1
     //20 times slower on my computer
-    //QByteArray outputData1 = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
-
+//#ifdef WIN32
+    //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
+//    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+//#else
     QByteArray outputData = openglDxt1Compression(image);
+//#endif
 
     if(outputData.isEmpty()) {
         return -1;
@@ -578,7 +581,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);
         QByteArray compressedByteArray(compressed_size, 0);
-        glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
+        glGetCompressedTexImageARB(GL_TEXTURE_2D, 0, compressedByteArray.data());
 
         return compressedByteArray;
     }
@@ -586,6 +589,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
     qDebug() << "Error: Couldn't compress image" << LOCATION;
     return QByteArray();
 }
+
 
 /**
   Gets the number of dots per meter of the image

@@ -1,6 +1,9 @@
 #ifndef CWLOADIMAGETASK_H
 #define CWLOADIMAGETASK_H
 
+//Glew includes
+#include <GL/glew.h>
+
 //Our includes
 #include "cwProjectIOTask.h"
 #include "cwImage.h"
@@ -15,6 +18,7 @@
 #include <QOpenGLContext> //For getting the opengl context
 #include <QWindow>
 #include <QDebug>
+#include <QGLFunctions>
 
 //Squish includes
 #include <squish.h>

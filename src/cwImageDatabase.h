@@ -1,6 +1,9 @@
 #ifndef CWIMAGEDATABASE_H
 #define CWIMAGEDATABASE_H
 
+//GLew includes
+#include <GL/glew.h>
+
 //Qt includes
 #include <QObject>
 

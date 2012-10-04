@@ -4,14 +4,11 @@
 #
 #-------------------------------------------------
 
-QT += opengl
-
-   #Extra modules
-QT += core sql concurrent xml qml quick 3d
-
-
 TARGET = Cavewhere
 TEMPLATE = app
+
+   #Extra modules
+QT += core sql concurrent xml qml quick 3d opengl
 
 OBJECTS_DIR = .obj
 UI_DIR = .ui
@@ -454,81 +451,91 @@ win32 {
     SQUISH = C:/windowsBuild/libs/win32/squish-1.11/squish-1.11
     BOOST = c:/windowsBuild/libs/win32/boost_1_48_0/boost_1_48_0
     ZLIBSOURCE = C:/windowsBuild/libs/win32/zlib-1.2.5
-    ZLIBDLL = C:/windowsBuild/libs/win32/zlib125dll
+    GLEW = C:/windowsBuild/libs/win32/glew-1.7.0-win32/glew-1.7.0
 
     #This is so std::numerical_limits works
     DEFINES += NOMINMAX
 
     INCLUDEPATH += "$${SQUISH}"
-    LIBS += -L"$${SQUISH}/lib/vs9" -lsquishd
+    LIBS += -L"$${SQUISH}/lib/vs9"
 
     INCLUDEPATH += "$${BOOST}"
     LIBS += -L"$${BOOST}/stage/lib"
 
     INCLUDEPATH += "$${ZLIBSOURCE}"
-    LIBS += -L"$${ZLIBDLL}/static32" -lzlibstat
+    LIBS += -L"$${ZLIBSOURCE}"
+
+    INCLUDEPATH += $${GLEW}/include
+    LIBS += -L$${GLEW}/lib
+
 
     debug {
         CONFIG += console
+        #LIBS += -lzlibd -lsquishd
+
+        message("Building Win32 in Debug")
+
+        #Copy all the libraries
+        DESTDIR_WIN = debug
+        DESTDIR_WIN ~= s,/,\\,g
+        QT_BIN_WIN = $$[QT_INSTALL_BINS]
+        QT_BIN_WIN ~= s,/,\\,g
+        ZLIBSOURCE_WIN = $${ZLIBSOURCE}
+        ZLIBSOURCE_WIN ~= s,/,\\,g
+
+#        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlibd1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQuickd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtOpenGLd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQMLd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt3Dd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtWidgetsd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtXmld5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtConcurrentd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtSqld5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtGuid5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtCored5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtV8d5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtNetworkd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuin49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuuc49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icudt49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y c:\\windows\\system32\\MSVCP100D.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y c:\\windows\\system32\\MSVCR100D.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${GLEW}\\bin\\glew32.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
     }
+
+    release {
+        CONFIG += console
+        LIBS += -lzlib -lsquish -lglew32
+
+        message("Building Win32 in Release")
+
+        #Copy all the libraries
+        DESTDIR_WIN = release
+        DESTDIR_WIN ~= s,/,\\,g
+        QT_BIN_WIN = $$[QT_INSTALL_BINS]
+        QT_BIN_WIN ~= s,/,\\,g
+        ZLIBSOURCE_WIN = $${ZLIBSOURCE}
+        ZLIBSOURCE_WIN ~= s,/,\\,g
+        GLEW_WIN = $${GLEW}
+        GLEW_WIN ~= s,/,\\,g
+
+#        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlib1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQuick5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtOpenGL5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQML5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt3D5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtWidgets5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtXml5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtConcurrent5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtSql5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtGui5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtCore5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtV85.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtNetwork5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuin49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuuc49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icudt49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+#        system($$quote(cmd /c copy /y $${GLEW_WIN}\\bin\\glew32.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,3 +1,7 @@
+//Glew includes
+#include <GL/glew.h>
+
+//Our includes
 #include "cwQMLRegister.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"

@@ -20,7 +20,7 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 
 cwImageTexture::~cwImageTexture()
 {
-    //FIXME: Texture needs to be delete when object is destroyed
+    //FIXME: Texture needs to be delete when object is destroyed, this cause a crash on exit
     //    if(TextureId != 0) {
 //        glDeleteTextures(1, &TextureId);
 //    }
@@ -88,7 +88,7 @@ void cwImageTexture::updateData() {
         QSize size = image.second;
 
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
-            glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+            glCompressedTexImage2DARB(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
             trueMipmapLevel++;
