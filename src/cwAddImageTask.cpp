@@ -25,6 +25,7 @@
 #include <QImageWriter>
 #include <QBuffer>
 #include <QtConcurrentMap>
+#include <QOpenGLContext>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -581,7 +582,11 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);
         QByteArray compressedByteArray(compressed_size, 0);
+#ifdef WIN32
         glGetCompressedTexImageARB(GL_TEXTURE_2D, 0, compressedByteArray.data());
+#else
+        glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
+#endif
 
         return compressedByteArray;
     }

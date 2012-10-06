@@ -2,7 +2,9 @@
 #define CWIMAGEDATABASE_H
 
 //GLew includes
+#ifdef WIN32
 #include <GL/glew.h>
+#endif
 
 //Qt includes
 #include <QObject>

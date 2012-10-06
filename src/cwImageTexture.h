@@ -1,8 +1,10 @@
 #ifndef CWIMAGETEXTURE_H
 #define CWIMAGETEXTURE_H
 
+#ifdef WIN32
 //GLew includes
 #include <GL/glew.h>
+#endif
 
 //Qt include
 #include <QObject>

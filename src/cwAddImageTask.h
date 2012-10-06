@@ -1,8 +1,10 @@
 #ifndef CWLOADIMAGETASK_H
 #define CWLOADIMAGETASK_H
 
+#ifdef WIN32
 //Glew includes
 #include <GL/glew.h>
+#endif
 
 //Our includes
 #include "cwProjectIOTask.h"
@@ -15,10 +17,9 @@
 #include <QDir>
 #include <QSqlDatabase>
 #include <QAtomicInt>
-#include <QOpenGLContext> //For getting the opengl context
 #include <QWindow>
 #include <QDebug>
-#include <QGLFunctions>
+#include <QOpenGLContext>
 
 //Squish includes
 #include <squish.h>

@@ -88,9 +88,15 @@ void cwImageTexture::updateData() {
         QSize size = image.second;
 
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
+#ifdef WIN32
             glCompressedTexImage2DARB(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
+#else
+            glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                                   size.width(), size.height(), 0,
+                                   imageData.size(), imageData.data());
+#endif
             trueMipmapLevel++;
         }
     }

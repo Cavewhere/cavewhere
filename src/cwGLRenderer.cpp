@@ -1,5 +1,7 @@
+#ifdef WIN32
 //Glew includes
 #include <GL/glew.h>
+#endif
 
 //Our includes
 #include "cwGLRenderer.h"
@@ -61,7 +63,9 @@ void cwGLRenderer::privateResizeGL() {
 
 QSGNode * cwGLRenderer::updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data) {
     if(!Initialized) {
+#ifdef WIN32
         glewInit();
+#endif
         initializeGL();
         Initialized = true;
     }

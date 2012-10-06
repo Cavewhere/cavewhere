@@ -1,8 +1,10 @@
 #ifndef CWGLRENDERER_H
 #define CWGLRENDERER_H
 
+#ifdef WIN32
 //Glew includes
 #include <GL/glew.h>
+#endif
 
 //Qt includes
 #include <QOpenGLBuffer>

@@ -96,8 +96,11 @@ void cw3dRegionViewer::initializeGL() {
   */
 void cw3dRegionViewer::resizeGL() {
     QMatrix4x4 projectionMatrix;
-    //projectionMatrix.ortho(-250, 250, -250, 250, -10000, 10000);
-    projectionMatrix.perspective(55, width() / (float)height(), 1, 10000);
+
+    double zoom = 25; //50meters
+
+    projectionMatrix.ortho(-width() / zoom, width() / zoom, -height() / zoom, height() / zoom, -10000, 10000);
+    //projectionMatrix.perspective(55, width() / (float)height(), 1, 10000);
     Camera->setProjectionMatrix(projectionMatrix);
 }
 
@@ -159,7 +162,8 @@ QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdateP
   */
 void cw3dRegionViewer::startPanning(QPoint position) {
     QPoint mappedPosition = Camera->mapToGLViewport(position);
-    LastMouseGlobalPosition = unProject(mappedPosition);
+    //LastMouseGlobalPosition = unProject(mappedPosition);
+    LastMouseGlobalPosition = QVector3D(mappedPosition);
 
     //Get the ray from the front of the screen to the back of the screen
     //Using the center of the screen
@@ -325,21 +329,25 @@ void cw3dRegionViewer::translateLastPosition()
 
     QPoint mappedPos = Camera->mapToGLViewport(position);
 
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
-    QVector3D back = Camera->unProject(mappedPos, 1.0);
+    QVector3D translateAmount = QVector3D(mappedPos) - LastMouseGlobalPosition;
+    translateAmount.setX(translateAmount.x() / 1000.0);
+    translateAmount.setY(translateAmount.y() / 1000.0);
 
-    //Create the ray that'll intersect
-    QRay3D ray(front, back);
+//    //Get the ray from the front of the screen to the back of the screen
+//    QVector3D front = Camera->unProject(mappedPos, 0.0);
+//    QVector3D back = Camera->unProject(mappedPos, 1.0);
 
-    //Find the intsection on the plane
-    double t = PanPlane.intersection(ray); //xyPlane.intersectAsRay(ray, &hasIntersection);
+//    //Create the ray that'll intersect
+//    QRay3D ray(front, back);
 
-    //Ray and plane are parallel, can't do anything with this
-    if(qIsNaN(t)) { return; }
+//    //Find the intsection on the plane
+//    double t = PanPlane.intersection(ray); //xyPlane.intersectAsRay(ray, &hasIntersection);
 
-    QVector3D intersection = ray.point(t);
-    QVector3D translateAmount = intersection - LastMouseGlobalPosition;
+//    //Ray and plane are parallel, can't do anything with this
+//    if(qIsNaN(t)) { return; }
+
+//    QVector3D intersection = ray.point(t);
+//    QVector3D translateAmount = intersection - LastMouseGlobalPosition;
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(translateAmount);
