@@ -9,6 +9,7 @@
 #include "cwRegionSaveTask.h"
 #include "cwRegionLoadTask.h"
 #include "cwGlobals.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QDir>
@@ -93,9 +94,14 @@ void cwProject::createTempProjectFile() {
   */
 void cwProject::createDefaultSchema() {
 
+    //Create the database with full vacuum so we don't use up tons of space
+    QSqlQuery vacuumQuery(ProjectDatabase);
+    QString query = QString("PRAGMA auto_vacuum = 1");
+    vacuumQuery.exec(query);
+
     //Create the caving region
     QSqlQuery createCavingRegionTable(ProjectDatabase);
-    QString query =
+    query =
             QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
             QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
             QString("qCompress_XML BLOB") + //Last index
@@ -103,12 +109,12 @@ void cwProject::createDefaultSchema() {
 
     bool couldPrepare = createCavingRegionTable.prepare(query);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare table Caving Region:" << createCavingRegionTable.lastError().databaseText() << query;
+        qDebug() << "Couldn't prepare table Caving Region:" << createCavingRegionTable.lastError().databaseText() << query << LOCATION;
     }
 
     bool couldCreate = createCavingRegionTable.exec();
     if(!couldCreate) {
-        qDebug() << "Couldn't create table Caving Region: " << createCavingRegionTable.lastError().databaseText();
+        qDebug() << "Couldn't create table Caving Region: " << createCavingRegionTable.lastError().databaseText() << LOCATION;
     }
 
     //Create the caving region
@@ -125,12 +131,12 @@ void cwProject::createDefaultSchema() {
 
     couldPrepare = createImagesTable.prepare(query);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare table images:" << createImagesTable.lastError().databaseText() << query;
+        qDebug() << "Couldn't prepare table images:" << createImagesTable.lastError().databaseText() << query << LOCATION;
     }
 
     couldCreate = createImagesTable.exec();
     if(!couldCreate) {
-        qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText();
+        qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText() << LOCATION;
     }
 }
 
@@ -375,164 +381,6 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
 
     return true;
 }
-
-/**
-  Adds new directories back into the cwXMLProject
-  */
-//void cwProject::addCaveDirectories(int beginCave, int endCave) {
-//    for(int i = beginCave; i <= endCave; i++) {
-//        cwCave* cave = Region->cave(i);
-
-//        //Connect the cave
-//        connectCave(cave);
-
-//        if(cave != NULL) {
-//            //See if the cave already exist
-//            if(CaveLookup.contains(cave)) {
-//                //Directory already exists
-//                return;
-//            } else {
-//                //Create a new directory
-//                createNewCaveDirectory(cave);
-//            }
-//        }
-
-//        //Add trip directories for existing trips
-//        if(cave->hasTrips()) {
-//            addTripDirectories(cave, 0, cave->tripCount() - 1);
-//        }
-//    }
-//}
-
-/**
-  \brief This create a new directory for the cave
-
-  This makes sure that the cave's name is politically correct with the filesystem.
-  All illegal charactors must be discared.
-
-  This will uses the cave's name. To try to create the directory
-  */
-//void cwProject::createNewCaveDirectory(cwCave* cave) {
-//    //Where the new cave will be added to
-//    QDir baseCavesDirectory = ProjectDir.absolutePath() + "/" + CavesDir;
-
-//    //Get the unique directoryName
-//    QString directoryName = uniqueFile(baseCavesDirectory, cave->name());
-
-//    //Create this directory
-//    bool couldCreate = baseCavesDirectory.mkpath(directoryName);
-
-//    if(!couldCreate) {
-//        qDebug() << "Couldn't create cave directory: " << baseCavesDirectory.absoluteFilePath(directoryName);
-//        return;
-//    }
-
-//    //Add the directory to the lookup
-//    QDir caveDir(baseCavesDirectory.absoluteFilePath(directoryName));
-//    CaveLookup.insert(cave, caveDir);
-//}
-
-///**
-//  \brief Adds trip directories for the project
-//  */
-//void cwProject::addTripDirectories(int beginTrip, int endTrip) {
-//    //Sender is always a cave!!!
-//    cwCave* parentCave = static_cast<cwCave*>(sender());
-
-//    addTripDirectories(parentCave, beginTrip, endTrip);
-//}
-
-///**
-//  \brief Adds trip directories for the project
-
-//  \param parentCave - The parent cave
-//  \param beginTrip - The first trip index in the cave
-//  \param endTrip - The last trip index in the cave
-//  */
-// void cwProject::addTripDirectories(cwCave* parentCave, int beginTrip, int endTrip) {
-//     for(int i = beginTrip; i <= endTrip; i++) {
-//         cwTrip* trip = parentCave->trip(i);
-
-//         if(!TripLookup.contains(trip)) {
-//             createNewTripDirectory(parentCave, trip);
-//         }
-//     }
-// }
-
-///**
-//  \brief Adds a new trip directory for the project
-//  */
-//void cwProject::createNewTripDirectory(cwCave* parentCave, cwTrip* trip) {
-
-//    if(parentCave == NULL || !CaveLookup.contains(parentCave)) {
-//        qDebug() << "Parent Cave is invalid:" << parentCave;
-//        return;
-//    }
-
-//    //Find the parentCave directory
-//    QDir parentCaveDirectory = CaveLookup.value(parentCave, QDir());
-
-//    if(!parentCaveDirectory.exists()) {
-//        //Parent cave directory doesn't exist!
-//        qDebug() << "Parent cave directory, " << parentCaveDirectory << "doesn't exist!!!";
-//    }
-
-//    //Try to make the trips directory
-//    parentCaveDirectory.mkdir(TripsDir);
-
-//    //Trip to make the trip directory
-//    QDir baseTripsDirectory(parentCaveDirectory.absolutePath() + "/" + TripsDir);
-//    QString tripDirectory = uniqueFile(baseTripsDirectory, trip->name());
-
-//    //Create the trip directory
-//    bool couldCreate = baseTripsDirectory.mkdir(tripDirectory);
-
-//    if(!couldCreate) {
-//        qDebug() << "Couldn't create trips directory" << baseTripsDirectory.absoluteFilePath(tripDirectory);
-//    }
-
-//    QDir tripDir(baseTripsDirectory.absoluteFilePath(tripDirectory));
-//    TripLookup.insert(trip, tripDir);
-//}
-
-///**
-//  \brief This removes all the evil directory charactors that windows doesn't like
-//  */
-//QString cwProject::removeEvilCharacters(QString filename) {
-//    filename.remove('<');
-//    filename.remove('>');
-//    filename.remove(':');
-//    filename.remove('"');
-//    filename.remove('/');
-//    filename.remove('\\');
-//    filename.remove('|');
-//    filename.remove('?');
-//    filename.remove('*');
-//    return filename;
-//}
-
-///**
-//  \brief This makes sure that baseDirectory + file is a unique file
-
-//  If it's a unquie directory then a unmodified file is return, else
-//  file is incremented.
-
-//  This also tries to remove all evil characters.
-//  */
-//QString cwProject::uniqueFile(QDir baseDirectory, QString file) {
-//    //Remove evil windows characters
-//    file = removeEvilCharacters(file);
-
-//    //Check to see if the name already exists
-//    QString checkName = file;
-//    int counter = 1;
-//    while(baseDirectory.exists(checkName)) {
-//        checkName = QString("%1 %2").arg(file).arg(counter);
-//        counter++;
-//    }
-
-//    return checkName;
-//}
 
 /**
  * @brief cwProject::setUndoStack

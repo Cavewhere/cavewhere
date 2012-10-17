@@ -155,7 +155,8 @@ SOURCES += src/main.cpp \
     src/cwImageResolution.cpp \
     src/cwRemoveImageTask.cpp \
     src/cwGeometryItersecter.cpp \
-    src/cwCompassImporter.cpp
+    src/cwCompassImporter.cpp \
+    src/cwImageCleanupTask.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -301,7 +302,8 @@ HEADERS  += \
     src/cwImageResolution.h \
     src/cwRemoveImageTask.h \
     src/cwGeometryItersecter.h \
-    src/cwCompassImporter.h
+    src/cwCompassImporter.h \
+    src/cwImageCleanupTask.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \

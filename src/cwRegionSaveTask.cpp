@@ -31,7 +31,10 @@ void cwRegionSaveTask::runTask() {
         xmlSaveArchive << BOOST_SERIALIZATION_NVP(Region);
 
         //Write the data to the database
-       writeXMLToDatabase(QString::fromStdString(stream.str()));
+        writeXMLToDatabase(QString::fromStdString(stream.str()));
+
+        //Cleanup unused images
+
 
         Database.close();
     }

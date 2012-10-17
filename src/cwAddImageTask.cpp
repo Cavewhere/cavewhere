@@ -100,6 +100,8 @@ void cwAddImageTask::runTask() {
         if(isRunning()) {
             emit addedImages(images());
         }
+    } else {
+        qDebug() << "Couldn't connect to the database!" << LOCATION;
     }
 
     CompressionContext->doneCurrent();

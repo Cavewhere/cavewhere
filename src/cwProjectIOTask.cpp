@@ -12,6 +12,8 @@
 #include <QTimer>
 #include <QDebug>
 
+QAtomicInt cwProjectIOTask::DatabaseConnectionCounter;
+
 cwProjectIOTask::cwProjectIOTask(QObject* parent) :
     cwTask(parent)
 {
@@ -24,11 +26,12 @@ cwProjectIOTask::cwProjectIOTask(QObject* parent) :
   */
 bool cwProjectIOTask::connectToDatabase(QString connectionName) {
     //Connect to the database
-    Database = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+    int nextConnectonName = DatabaseConnectionCounter.fetchAndAddAcquire(1);
+    Database = QSqlDatabase::addDatabase("QSQLITE", QString("%1-%2").arg(connectionName).arg(nextConnectonName));
     Database.setDatabaseName(DatabasePath);
     bool connected = Database.open();
     if(!connected) {
-        qDebug() << "Couldn't connect to database for LoadImageTask:" << DatabasePath << LOCATION;
+        qDebug() << "Couldn't connect to database for" << connectionName << DatabasePath << LOCATION;
         stop();
     }
 

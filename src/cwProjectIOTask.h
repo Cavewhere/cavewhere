@@ -7,6 +7,7 @@ class cwCavingRegion;
 
 //Qt includes
 #include <QSqlDatabase>
+#include <QAtomicInt>
 
 /**
   cXMLProjectLoadTask
@@ -25,6 +26,8 @@ protected:
     //For database access
     QString DatabasePath;
     QSqlDatabase Database; //sqlite database
+
+    static QAtomicInt DatabaseConnectionCounter;
 
     bool connectToDatabase(QString connectionName);
     bool beginTransation(const char *restartSlot = NULL);
