@@ -57,20 +57,31 @@ MouseArea {
             selectByMouse: activeFocus;
             activeFocusOnPress: false
 
-            function defaultKeyHandling(event) {
-                if(event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            //FIXME: Revert back to orinial code
+            //This is a work around to QTBUG-27300
+            property int pressKeyEvent
+            signal pressKeyPressed; //This is emitted every time key is pressed
+
+            function defaultKeyHandling() {
+                if(pressKeyEvent === Qt.Key_Return || pressKeyEvent === Qt.Key_Enter) {
                     enterPressed()
                     var commited = coreClickInput.commitChanges()
-                    event.accepted = commited
-                } else if(event.key === Qt.Key_Escape) {
+//                    event.accepted = commited
+                } else if(pressKeyEvent === Qt.Key_Escape) {
                     escapePressed()
                     coreClickInput.closeEditor();
-                    event.accepted = true
+//                    event.accepted = true
                 }
             }
 
             Keys.onPressed: {
-                defaultKeyHandling(event)
+                pressKeyEvent = event.key;
+                pressKeyPressed();
+//                defaultKeyHandling(event)
+            }
+
+            onPressKeyPressed: {
+                defaultKeyHandling();
             }
         }
 

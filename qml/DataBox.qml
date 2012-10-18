@@ -14,6 +14,7 @@ Item {
     property int rowIndex: -1
     property int dataRole
 
+
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
 
@@ -33,14 +34,14 @@ Item {
         state = 'MiddleTyping';
     }
 
-    function handleTab(event) {
-        if(event.key === Qt.Key_Tab) {
+    function handleTab(eventKey) {
+        if(eventKey === Qt.Key_Tab) {
             surveyChunkView.tab(rowIndex, dataRole)
-            event.accepted = true
-        } else if(event.key === 1 + Qt.Key_Tab) {
+//            event.accepted = true
+        } else if(eventKey === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
             surveyChunkView.previousTab(rowIndex, dataRole)
-            event.accepted = true
+//            event.accepted = true
         }
     }
 
@@ -113,7 +114,7 @@ Item {
     }
 
     Keys.onPressed: {
-        handleTab(event);
+        handleTab(event.key);
         surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
         if(event.key === Qt.Key_Backspace) {
@@ -161,36 +162,67 @@ Item {
             PropertyChanges {
                 target: globalShadowTextInput.textInput
 
-                Keys.onPressed: {
-                    if(event.key === Qt.Key_Tab ||
-                            event.key === 1 + Qt.Key_Tab ||
-                            event.key === Qt.Key_Space)
+                onPressKeyPressed: {
+                    if(pressKeyEvent === Qt.Key_Tab ||
+                            pressKeyEvent === 1 + Qt.Key_Tab ||
+                            pressKeyEvent === Qt.Key_Space)
                     {
                         var commited = editor.commitChanges()
                         if(!commited) { return; }
                     }
 
-                    if(event.key === Qt.Key_Space) {
+                    if(pressKeyEvent === Qt.Key_Space) {
                         surveyChunk.parentTrip.addNewChunk();
                     }
 
                     //Tab to the next entry on enter
-                    if(event.key === Qt.Key_Enter ||
-                            event.key === Qt.Key_Return) {
+                    if(pressKeyEvent === Qt.Key_Enter ||
+                            pressKeyEvent === Qt.Key_Return) {
                         surveyChunkView.tab(rowIndex, dataRole)
                     }
 
                     //Use teh default keyhanding that the GlobalShadowTextInput has
-                    defaultKeyHandling(event);
+                    defaultKeyHandling();
 
                     //Handle the tabbing
-                    dataBox.handleTab(event);
+                    dataBox.handleTab(pressKeyEvent);
 
-                    if(event.accepted) {
+                    if(pressKeyEvent.accepted) {
                         //Have the editor commit changes
                         dataBox.state = ''; //Default state
                     }
                 }
+
+//                Keys.onPressed: {
+//                    if(event.key === Qt.Key_Tab ||
+//                            event.key === 1 + Qt.Key_Tab ||
+//                            event.key === Qt.Key_Space)
+//                    {
+//                        var commited = editor.commitChanges()
+//                        if(!commited) { return; }
+//                    }
+
+//                    if(event.key === Qt.Key_Space) {
+//                        surveyChunk.parentTrip.addNewChunk();
+//                    }
+
+//                    //Tab to the next entry on enter
+//                    if(event.key === Qt.Key_Enter ||
+//                            event.key === Qt.Key_Return) {
+//                        surveyChunkView.tab(rowIndex, dataRole)
+//                    }
+
+//                    //Use teh default keyhanding that the GlobalShadowTextInput has
+//                    defaultKeyHandling(event);
+
+//                    //Handle the tabbing
+//                    dataBox.handleTab(event);
+
+//                    if(event.accepted) {
+//                        //Have the editor commit changes
+//                        dataBox.state = ''; //Default state
+//                    }
+//                }
 
                 onFocusChanged: {
                     if(!focus) {
