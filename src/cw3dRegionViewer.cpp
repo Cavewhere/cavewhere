@@ -379,7 +379,7 @@ void cw3dRegionViewer::setCavingRegion(cwCavingRegion* region) {
  */
 void cw3dRegionViewer::setupInteractionTimers()
 {
-    int interactionInterval = 12; //1/60; //60hz
+    int interactionInterval = 15; //1/60; //60hz
     RotationInteractionTimer = new QTimer(this);
     ZoomInteractionTimer = new QTimer(this);
     TranslateTimer = new QTimer(this);
