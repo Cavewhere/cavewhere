@@ -24,6 +24,7 @@ class cwImageItem : public cwGLRenderer
 
 public:
     cwImageItem(QQuickItem *parent = 0);
+    ~cwImageItem() { qDebug() << "Deleted image item!"; }
 
     void setImage(const cwImage& image);
     cwImage image() const;

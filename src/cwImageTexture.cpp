@@ -20,6 +20,10 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 
 cwImageTexture::~cwImageTexture()
 {
+    if(LoadNoteWatcher != NULL) {
+        LoadNoteWatcher->deleteLater();
+    }
+
     //FIXME: Texture needs to be delete when object is destroyed, this cause a crash on exit
     //    if(TextureId != 0) {
 //        glDeleteTextures(1, &TextureId);
@@ -133,7 +137,7 @@ void cwImageTexture::reinitilizeLoadNoteWatcher()
         LoadNoteWatcher->deleteLater();
     }
 
-    LoadNoteWatcher = new QFutureWatcher<QPair<QByteArray, QSize> >(this);
+    LoadNoteWatcher = new QFutureWatcher<QPair<QByteArray, QSize> >();
     connect(LoadNoteWatcher, &QFutureWatcher<QPair<QByteArray, QSize> >::finished, this, &cwImageTexture::markAsDirty);
     connect(LoadNoteWatcher, &QFutureWatcher<QPair<QByteArray, QSize> >::finished, this, &cwImageTexture::textureUploaded);
 }

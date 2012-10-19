@@ -17,11 +17,9 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    NoteTexture(new cwImageTexture(this))
+    NoteTexture(new cwImageTexture())
 {
-    //Called when the image is finished loading
-    connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
-    connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
+
     ImageProperties->setImage(Image);
 
     setOpaquePainting(false);
@@ -102,6 +100,10 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
+    //Called when the image is finished loading
+    connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
+    connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
+
     initializeShaders();
     initializeVertexBuffers();
     initializeTexture();

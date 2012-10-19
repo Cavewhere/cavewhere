@@ -41,6 +41,8 @@ cwGLRenderer::cwGLRenderer(QQuickItem *parent) :
 
 cwGLRenderer::~cwGLRenderer() {
     delete GeometryItersecter;
+    Camera->deleteLater();
+    ShaderDebugger->deleteLater();
 }
 
 
