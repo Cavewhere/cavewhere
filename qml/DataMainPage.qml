@@ -29,6 +29,7 @@ Rectangle {
         return null;
     }
 
+
     DataSideBar {
         id: dataSideBar
         width: 300;
@@ -37,6 +38,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.topMargin: 5
     }
+
 
     Image {
         fillMode: Image.TileVertically
@@ -49,41 +51,15 @@ Rectangle {
         z:2
     }
 
+
     Splitter {
         id: splitter
         anchors.bottom: parent.bottom
         anchors.top: parent.top
         anchors.left: dataSideBar.right
         resizeObject: dataSideBar
-//        z:1
-
-//        MouseArea {
-//            id: splitterMouseArea
-//            anchors.fill: parent
-
-//            property int lastMousePosition;
-
-//            onPressed: {
-//                lastMousePosition = mapToItem(null, mouse.x, 0).x;
-//            }
-
-//            states: [
-//                State {
-//                    when: splitterMouseArea.pressed
-//                    PropertyChanges {
-//                        target: splitterMouseArea
-
-//                        onPositionChanged: {
-//                            //Change the databar width
-//                            var mappedX = mapToItem(null, mouse.x, 0).x;
-//                            dataSideBar.width +=  mappedX - lastMousePosition
-//                            lastMousePosition = mappedX
-//                        }
-//                    }
-//                }
-//            ]
-//        }
     }
+
 
     Rectangle {
         id: caveTabs
@@ -93,36 +69,24 @@ Rectangle {
         anchors.right: parent.right
         anchors.leftMargin: -1
 
+
         AllCavesTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.RegionType) ? 1.0 : 0.0
-//                Behavior on opacity {
-//                NumberAnimation {
-//                    duration: 300
-//                }
-//            }
         }
 
         CaveTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.CaveType) ? 1.0 : 0.0
             currentCave: getObject(RegionTreeModel.CaveType)
-//            Behavior on opacity {
-//                NumberAnimation {
-//                    duration: 300
-//                }
-//            }
         }
 
         TripTabWidget {
             anchors.fill: parent
             opacity: currentIndexIsType(RegionTreeModel.TripType) ? 1.0 : 0.0
             currentTrip: getObject(RegionTreeModel.TripType)
-//            Behavior on opacity {
-//                NumberAnimation {
-//                    duration: 300
-//                }
-//            }
+
         }
     }
+
 }

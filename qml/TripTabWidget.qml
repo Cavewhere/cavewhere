@@ -5,6 +5,7 @@ DataTabWidget {
     id: tripTabWidget
     property Trip currentTrip:  null
 
+
     Text {
         property string label: "Overview"
         property string icon:  "qrc:icons/dataOverview.png"
@@ -32,17 +33,6 @@ DataTabWidget {
 
     }
 
-//    Text {
-//        property string label: "Team"
-//        property string icon: "qrc:icons/team.png"
-//        text: "This is the Team page"
-//    }
-
-//    Text {
-//        property string label: "Calibrations"
-//        property string icon: "qrc:icons/calibration.png"
-//        text: "This is the Team page"
-//    }
 
     Text {
         property string label: "Pictures"
@@ -55,4 +45,5 @@ DataTabWidget {
         property string icon: "qrc:icons/log.png"
         text: "This is the Log page"
     }
+
 }
