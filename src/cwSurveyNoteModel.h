@@ -58,6 +58,8 @@ private:
     void initModel();
     void copy(const cwSurveyNoteModel& object);
 
+    QList<cwNote*> validateNoteImages(QList<cwNote*> notes) const;
+
 public slots:
     void addNotesWithNewImages(QList<cwImage> images);
 

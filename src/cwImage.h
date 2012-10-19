@@ -43,6 +43,7 @@ public:
     bool operator !=(const cwImage& other) const;
 
     bool isValid() const;
+    bool iconIsValid() const;
 
 private:
     class PrivateData : public QSharedData {
@@ -159,6 +160,15 @@ inline int cwImage::originalDotsPerMeter() const {
   */
 inline bool cwImage::isValid() const {
     return Data->OriginalId > -1;
+}
+
+/**
+ * @brief cwImage::iconIsValid
+ * @return returns true if the icon id is valid
+ */
+inline bool cwImage::iconIsValid() const
+{
+    return Data->IconId > -1;
 }
 
 

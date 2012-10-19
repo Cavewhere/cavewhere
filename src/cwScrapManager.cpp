@@ -721,11 +721,10 @@ void cwScrapManager::taskFinished() {
             cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
             scrap->setTriangulationData(triangleData);
 
-            //TODO: For debugging should be removed
-            QList<cwImage> images;
-            images.append(scrapDataset[i].croppedImage());
-
-            scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
+//            //TODO: For debugging should be removed
+//            QList<cwImage> images;
+//            images.append(scrapDataset[i].croppedImage());
+//            scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
         }
 
         GLScraps->setCavingRegion(Region);

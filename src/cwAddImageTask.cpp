@@ -163,7 +163,12 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         cwImage imageIds;
 
         //Copy the original image to the database
-        QImage originalImage = copyOriginalImage(imagePath, &imageIds);
+        QImage originalImage;
+        if(MipmapOnly) {
+            originalImage = QImage(imagePath);
+        } else {
+            originalImage = copyOriginalImage(imagePath, &imageIds);
+        }
 
         images.append(PrivateImageData(imageIds, originalImage, imagePath));
     }
@@ -175,7 +180,9 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         //Where the database image ideas are stored
         cwImage imageIds;
 
-        copyOriginalImage(originalImage, &imageIds);
+        if(!MipmapOnly) {
+            copyOriginalImage(originalImage, &imageIds);
+        }
 
         images.append(PrivateImageData(imageIds, originalImage));
     }

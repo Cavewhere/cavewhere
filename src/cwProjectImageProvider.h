@@ -37,6 +37,8 @@ private:
     QString ProjectPath;
     QMutex ProjectPathMutex;
 
+    static QAtomicInt ConnectionCounter;
+
     QString projectPath() const;
 };
 

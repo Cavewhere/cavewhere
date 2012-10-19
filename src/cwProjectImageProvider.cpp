@@ -17,6 +17,8 @@ const QString cwProjectImageProvider::RequestImageSQL = "SELECT type,width,heigh
 const QString cwProjectImageProvider::RequestMetadataSQL = "SELECT type,width,height,dotsPerMeter from Images where id=?";
 const QByteArray cwProjectImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
 
+QAtomicInt cwProjectImageProvider::ConnectionCounter;
+
 cwProjectImageProvider::cwProjectImageProvider() :
     QQuickImageProvider(QQuickImageProvider::Image)
 {
@@ -125,15 +127,16 @@ cwImageData cwProjectImageProvider::originalMetadata(const cwImage &image) const
   Gets the metadata of the image at id
   */
 cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
-    QString databaseName = QString("resquestImage/%1").arg(id);
-    if(QSqlDatabase::contains(databaseName)) {
-        QSqlDatabase::removeDatabase(databaseName);
-    }
 
+    //Needed to get around const correctness
+    cwProjectImageProvider* castedConstThis = const_cast<cwProjectImageProvider*>(this);
+    int connectionName = castedConstThis->ConnectionCounter.fetchAndAddAcquire(1);
+
+//    QString databaseName = QString("resquestImage/%1").arg(counter);
     QString request = metaDataOnly ? "requestMetadata/%1" : "resquestImage/%1";
 
     //Define the database
-    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", request.arg(id));
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", request.arg(connectionName));
     database.setDatabaseName(projectPath());
 
     //Create an sql connection
@@ -159,35 +162,34 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
 
     //Set the id that we're searching for
     query.bindValue(0, id);
-    query.exec();
+    successful = query.exec();
 
-    //Extract the data
-    QSqlRecord record = query.record();
-    if(record.isEmpty()) {
-        qDebug() << "cwProjectImageProvider:: No data extracted for " << id;
+    if(!successful) {
+        qDebug() << "Couldn't exec query image id:" << id << LOCATION;
         return cwImageData();
     }
 
-    //Get the first row
-    query.next();
+    if(query.next()) {
+        QByteArray type = query.value(0).toByteArray();
+        int width = query.value(1).toInt();
+        int height = query.value(2).toInt();
+        QSize size = QSize(width, height);
+        int dotsPerMeter = query.value(3).toInt();
 
-    QByteArray type = query.value(0).toByteArray();
-    int width = query.value(1).toInt();
-    int height = query.value(2).toInt();
-    QSize size = QSize(width, height);
-    int dotsPerMeter = query.value(3).toInt();
-
-    QByteArray imageData;
-    if(!metaDataOnly) {
-        imageData = query.value(4).toByteArray();
-        //Remove the zlib compression from the image
-        if(QString(type) == QString(cwProjectImageProvider::Dxt1_GZ_Extension)) {
-            //Decompress the QByteArray
-            imageData = qUncompress(imageData);
+        QByteArray imageData;
+        if(!metaDataOnly) {
+            imageData = query.value(4).toByteArray();
+            //Remove the zlib compression from the image
+            if(QString(type) == QString(cwProjectImageProvider::Dxt1_GZ_Extension)) {
+                //Decompress the QByteArray
+                imageData = qUncompress(imageData);
+            }
         }
+        return cwImageData(size, dotsPerMeter, type, imageData);
     }
 
-    return cwImageData(size, dotsPerMeter, type, imageData);
+    qDebug() << "Query has no data for id:" << id << LOCATION;
+    return cwImageData();
 }
 
 /**

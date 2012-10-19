@@ -64,6 +64,30 @@ void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
 
     endResetModel();
 }
+
+/**
+ * @brief cwSurveyNoteModel::validateNoteImages
+ * @param notes
+ * @return A list of notes that are valid.  Valid notes are ones with valid original images.
+ *
+ * If it's note a valid note. The note will be deleted. NULL notes aren't added to the the valid note
+ * list
+ */
+QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) const
+{
+    QList<cwNote*> validNotes;
+    foreach(cwNote* note, notes) {
+        if(note != NULL) {
+            if(note->image().isValid() && note->image().iconIsValid()) {
+                validNotes.append(note);
+            } else {
+                note->deleteLater();
+            }
+        }
+    }
+    return validNotes;
+}
+
 /**
   \brief Get's the number of row in the model
   */
@@ -149,12 +173,16 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
   */
 void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
     int lastIndex = rowCount();
-    beginInsertRows(QModelIndex(), lastIndex, lastIndex + notes.size());
 
-    Notes.append(notes);
+    //Remove all invalid notes
+    QList<cwNote*> validNotes = validateNoteImages(notes);
+
+    beginInsertRows(QModelIndex(), lastIndex, lastIndex + validNotes.size());
+
+    Notes.append(validNotes);
 
     //Update the parent trips in the notes
-    foreach(cwNote* note, notes) {
+    foreach(cwNote* note, validNotes) {
         note->setParentTrip(parentTrip());
     }
 
