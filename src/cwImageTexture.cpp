@@ -5,6 +5,7 @@
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
+#include <QVector2D>
 
 /**
 
@@ -24,10 +25,11 @@ cwImageTexture::~cwImageTexture()
         LoadNoteWatcher->deleteLater();
     }
 
-    //FIXME: Texture needs to be delete when object is destroyed, this cause a crash on exit
-    //    if(TextureId != 0) {
-//        glDeleteTextures(1, &TextureId);
-//    }
+    if(TextureId != 0) {
+        glDeleteTextures(1, &TextureId);
+    }
+
+    NoteVertexBuffer.destroy();
 }
 
 /**
@@ -42,6 +44,23 @@ void cwImageTexture::initialize()
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP );
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    //Create the vertex buffer
+    NoteVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    NoteVertexBuffer.create();    //Create the vertexes buffer to render a quad
+
+    QVector<QVector2D> vertices;
+    vertices.reserve(4);
+    vertices.append(QVector2D(0.0, 1.0));
+    vertices.append(QVector2D(0.0, 0.0));
+    vertices.append(QVector2D(1.0, 1.0));
+    vertices.append(QVector2D(1.0, 0.0));
+
+    //Allocate the buffer array for this object
+    NoteVertexBuffer.bind();
+    NoteVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+    NoteVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
+    NoteVertexBuffer.release();
 }
 
 /**

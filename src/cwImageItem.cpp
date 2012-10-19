@@ -11,18 +11,28 @@
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 
+QOpenGLShaderProgram* cwImageItem::ImageProgram = NULL;
+int cwImageItem::vVertex = -1;
+int cwImageItem::ModelViewProjectionMatrix = -1;
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLRenderer(parent),
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    NoteTexture(new cwImageTexture())
+    NoteTexture(new cwImageTexture()) //Temporary until init
 {
 
     ImageProperties->setImage(Image);
 
     setOpaquePainting(false);
+}
+
+cwImageItem::~cwImageItem()
+{
+    if(NoteTexture != NULL) {
+        NoteTexture->deleteLater();
+    }
 }
 
 /**
@@ -100,12 +110,16 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
+    cwImageTexture* oldNoteTexture = NoteTexture;
+    NoteTexture = new cwImageTexture();
+    NoteTexture->setProject(oldNoteTexture->project());
+    NoteTexture->setImage(oldNoteTexture->image());
+
     //Called when the image is finished loading
     connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
     connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
 
     initializeShaders();
-    initializeVertexBuffers();
     initializeTexture();
 }
 
@@ -113,52 +127,32 @@ void cwImageItem::initializeGL() {
   Initilizes the shaders for this object
   */
 void cwImageItem::initializeShaders() {
-    cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
+    if(ImageProgram == NULL) {
+        cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
+        imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
 
-    cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
+        cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
+        imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
 
-    ImageProgram = new QOpenGLShaderProgram();
-    ImageProgram->addShader(imageVertexShader);
-    ImageProgram->addShader(imageFragmentShader);
+        ImageProgram = new QOpenGLShaderProgram();
+        ImageProgram->addShader(imageVertexShader);
+        ImageProgram->addShader(imageFragmentShader);
 
-    bool linkingErrors = ImageProgram->link();
-    if(!linkingErrors) {
-        qDebug() << "Linking errors:" << ImageProgram->log();
+        bool linkingErrors = ImageProgram->link();
+        if(!linkingErrors) {
+            qDebug() << "Linking errors:" << ImageProgram->log();
+        }
+
+        ImageProgram->bind();
+
+        vVertex = ImageProgram->attributeLocation("vVertex");
+        ModelViewProjectionMatrix = ImageProgram->uniformLocation("ModelViewProjectionMatrix");
+
+        ImageProgram->setUniformValue("Texture", 0); //set the texture unit to 0
     }
 
-    ShaderDebugger->addShaderProgram(ImageProgram);
-
-    ImageProgram->bind();
-
-    vVertex = ImageProgram->attributeLocation("vVertex");
-    ModelViewProjectionMatrix = ImageProgram->uniformLocation("ModelViewProjectionMatrix");
-
-    ImageProgram->setUniformValue("Texture", 0); //set the texture unit to 0
 }
 
-/**
-  Initilizes geometry for rendering the texture
-  */
-void cwImageItem::initializeVertexBuffers() {
-    //Create the vertex buffer
-    NoteVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-    NoteVertexBuffer.create();    //Create the vertexes buffer to render a quad
-
-    QVector<QVector2D> vertices;
-    vertices.reserve(4);
-    vertices.append(QVector2D(0.0, 1.0));
-    vertices.append(QVector2D(0.0, 0.0));
-    vertices.append(QVector2D(1.0, 1.0));
-    vertices.append(QVector2D(1.0, 0.0));
-
-    //Allocate the buffer array for this object
-    NoteVertexBuffer.bind();
-    NoteVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    NoteVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
-    NoteVertexBuffer.release();
-}
 
 /**
   \brief The initilizes the texture map
@@ -218,19 +212,16 @@ void cwImageItem::paint(QPainter* painter) {
 
     painter->beginNativePainting();
 
-    NoteVertexBuffer.bind();
+    glEnable(GL_TEXTURE_2D);
+    NoteTexture->bind();
 
     ImageProgram->bind();
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     ImageProgram->enableAttributeArray(vVertex);
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
 
-    glEnable(GL_TEXTURE_2D);
-    NoteTexture->bind();
-
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
-    NoteVertexBuffer.release();
     ImageProgram->release();
     NoteTexture->release();
 

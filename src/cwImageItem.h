@@ -24,7 +24,7 @@ class cwImageItem : public cwGLRenderer
 
 public:
     cwImageItem(QQuickItem *parent = 0);
-    ~cwImageItem() { qDebug() << "Deleted image item!"; }
+    ~cwImageItem();
 
     void setImage(const cwImage& image);
     cwImage image() const;
@@ -70,14 +70,14 @@ private:
     QPointF RotationCenter;
 
     //For rendering
-    int vVertex; //!< The attribute location of the vVertex
-    int ModelViewProjectionMatrix; //!< The attribute location for modelViewProjection matrix
+    static int vVertex; //!< The attribute location of the vVertex
+    static int ModelViewProjectionMatrix; //!< The attribute location for modelViewProjection matrix
     cwImageTexture* NoteTexture;
-    QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
-    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
+    static QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
+//    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();
-    void initializeVertexBuffers();
+//    void initializeVertexBuffers();
     void initializeTexture();
 
 private slots:
