@@ -164,11 +164,11 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
 
         //Copy the original image to the database
         QImage originalImage;
-        if(MipmapOnly) {
-            originalImage = QImage(imagePath);
-        } else {
+//        if(MipmapOnly) {
+//            originalImage = QImage(imagePath);
+//        } else {
             originalImage = copyOriginalImage(imagePath, &imageIds);
-        }
+//        }
 
         images.append(PrivateImageData(imageIds, originalImage, imagePath));
     }
@@ -180,9 +180,10 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         //Where the database image ideas are stored
         cwImage imageIds;
 
-        if(!MipmapOnly) {
+        //FIXME: This !Mipmap break carpeting, becaus cwImage.isValid() fails???
+//        if(!MipmapOnly) {
             copyOriginalImage(originalImage, &imageIds);
-        }
+//        }
 
         images.append(PrivateImageData(imageIds, originalImage));
     }
