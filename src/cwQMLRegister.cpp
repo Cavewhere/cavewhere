@@ -71,10 +71,14 @@
 #include "cwSelectionManager.h"
 #include "cwUnitValue.h"
 #include "cwImageResolution.h"
+#include "cwExportRegionViewerToImageTask.h"
 
 //#include <QGLWidget>
 
 #include <cwMenuWindow.h>
+
+//Qt registeration
+#include <QQuickWindow>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -141,6 +145,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSelectionManager>("Cavewhere", 1, 0, "SelectionManager");
     qmlRegisterType<cwUnitValue>();
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
+    qmlRegisterType<cwExportRegionViewerToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
 
     qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
+    qmlRegisterType<QQuickWindow>("Cavewhere", 1, 0, "QuickWindow");
 }

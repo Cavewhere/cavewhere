@@ -54,9 +54,11 @@ int main(int argc, char *argv[])
     format.setSamples(4);
 
     cwRootData* rootData = new cwRootData(&view);
+    rootData->setQuickWindow(&view);
 //    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
 //    rootData->project()->load(QDir::homePath() + "/test.cw");
     QQmlContext* context = view.rootContext();
+
     context->setContextObject(rootData);
     context->setContextProperty("mainWindow", &view);
 

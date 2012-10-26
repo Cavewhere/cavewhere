@@ -6,6 +6,7 @@
 class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
+class QQuickWindow;
 
 //Our includes
 class cwRegionTreeModel;
@@ -34,19 +35,22 @@ class cwRootData : public QObject
     Q_PROPERTY(cwSurveyExportManager* surveyExportManager READ surveyExportManager NOTIFY surveyExportManagerChanged)
     Q_PROPERTY(cwSurveyImportManager* surveyImportManager READ surveyImportManager NOTIFY surveyImportManagerChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(QQuickWindow* quickWindow READ quickWindow WRITE setQuickWindow NOTIFY quickWindowChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
     cwCavingRegion* region() const;
     cwRegionTreeModel* regionModel() const;
     cwItemSelectionModel* regionSelectionModel() const;
-    void setGLWidget(QGLWidget* mainGLWidget);
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;
     cwProject* project() const;
     cwSurveyExportManager* surveyExportManager() const;
     cwSurveyImportManager* surveyImportManager() const;
     QUndoStack* undoStack() const;
+    QQuickWindow* quickWindow() const;
+
+    void setQuickWindow(QQuickWindow* quickWindow);
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* defaultTrip() const;
@@ -61,10 +65,10 @@ signals:
     void surveyExportManagerChanged();
     void surveyImportManagerChanged();
     void undoStackChanged();
+    void quickWindowChanged();
 
     void defaultTripChanged();
     void defaultTripCalibrationChanged();
-
 
 public slots:
 
@@ -77,6 +81,7 @@ private:
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
+    QQuickWindow* QuickWindow; //!< For exporting the 3d screen to a file
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -157,4 +162,10 @@ inline cwSurveyImportManager* cwRootData::surveyImportManager() const {
     return SurveyImportManager;
 }
 
+/**
+Gets quickWindow
+*/
+inline QQuickWindow* cwRootData::quickWindow() const {
+    return QuickWindow;
+}
 #endif // CWGLOBALQMLDATA_H

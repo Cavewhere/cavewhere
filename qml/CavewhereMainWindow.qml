@@ -9,6 +9,8 @@ Rectangle {
 
     FileButtonAndMenu {
         id: fileMenuButton
+
+        terrainRenderer: terrainRendererId
     }
 
     MainSideBar {
@@ -42,6 +44,7 @@ Rectangle {
 
 //       Replace with the view
         GLTerrainRenderer {
+            id: terrainRendererId
 //            visible: mainSideBar.pageShown == "view"
 //            glWidget: mainGLWidget
             cavingRegion: region

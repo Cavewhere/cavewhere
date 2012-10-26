@@ -52,6 +52,8 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager = new cwSurveyImportManager(this);
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
+
+
 }
 
 /**
@@ -59,4 +61,14 @@ Gets undoStack
 */
 QUndoStack* cwRootData::undoStack() const {
     return Project->undoStack();
+}
+
+/**
+Sets quickWindow
+*/
+void cwRootData::setQuickWindow(QQuickWindow* quickWindow) {
+    if(QuickWindow != quickWindow) {
+        QuickWindow = quickWindow;
+        emit quickWindowChanged();
+    }
 }

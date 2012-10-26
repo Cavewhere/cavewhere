@@ -4,6 +4,8 @@ import QtQuick 2.0
 Rectangle {
     id: fileMenuButton
 
+    property var terrainRenderer; //For taking screenshots
+
     width: 100
     height: Math.max(caveIcon.height, textItem.height)
 
@@ -55,6 +57,18 @@ Rectangle {
         MenuItem {
             text: "Compute Scraps"
             onTriggered: scrapManager.updateAllScraps()
+        }
+
+        MenuItem {
+            text: "Screenshot"
+            onTriggered: {
+
+                var exporter = Qt.createQmlObject('import QtQuick 2.0; import Cavewhere 1.0; ExportRegioonViewerToImageTask {}', fileMenuButton, "");
+                exporter.window = quickWindow;
+                exporter.regionViewer = terrainRenderer;
+                exporter.takeScreenshot();
+                exporter.destroy();
+            }
         }
 
         MenuItem {
