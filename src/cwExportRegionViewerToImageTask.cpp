@@ -4,6 +4,9 @@
 //Qt includes
 #include <QLabel>
 #include <QQuickWindow>
+#include <QApplication>
+#include <QScreen>
+#include <QPainter>
 
 cwExportRegionViewerToImageTask::cwExportRegionViewerToImageTask() :
     Window(NULL),
@@ -30,20 +33,74 @@ void cwExportRegionViewerToImageTask::takeScreenshot() const
         return;
     }
 
-    for(int i = 1; i <= 5; i++) {
-        QMatrix4x4 matrix = RegionViewer->camera()->viewMatrix();
-        matrix.translate(0, 0, -100 * i);
-        RegionViewer->camera()->setViewMatrix(matrix);
+    //Save old projection
+    cwProjection originalProj = RegionViewer->camera()->projection();
 
-        QRectF bounds = RegionViewer->mapRectToScene(QRectF(0, 0, RegionViewer->width(), RegionViewer->height()));
-
-        qDebug() << "Taking screeshot " << bounds;
-        QImage grabbedWindow = Window->grabWindow();
-        grabbedWindow = grabbedWindow.copy(bounds.toRect());
-        QLabel* label = new QLabel();
-        label->setPixmap(QPixmap::fromImage(grabbedWindow));
-        label->show();
+    //Make sure the original projection is something we can work with
+    if(originalProj.type() == cwProjection::Unknown) {
+        qDebug() << "Don't know how to change projection, this is probably a bug" << LOCATION;
+        return;
     }
+
+    //Current resolution
+    double currentResolution = QApplication::primaryScreen()->physicalDotsPerInch(); //DPI
+    double resolutionScale = DotPerInch / currentResolution;
+
+    QRectF bounds = RegionViewer->mapRectToScene(QRectF(0, 0, RegionViewer->width(), RegionViewer->height()));
+    QSize tileSize = bounds.size().toSize();
+    QSize imageSize = tileSize * resolutionScale;
+    int border = 0;
+
+    int columns = (imageSize.width() + tileSize.width() - 1) / tileSize.width();
+    int rows = (imageSize.height() + tileSize.height() - 1) / tileSize.height();
+
+    //Final image
+    QImage combinedImage(imageSize, QImage::Format_ARGB32);
+    QPainter painter(&combinedImage);
+
+    for(int column = 0; column < columns; column++) {
+        for(int row = 0; row < rows; row++) {
+
+            double left = originalProj.left() + (originalProj.right() - originalProj.left())
+                 * (column * tileSize.width() - border) / imageSize.width();
+            double right = left + (originalProj.right() - originalProj.left()) * tileSize.width() / imageSize.width();
+            double bottom = originalProj.bottom() + (originalProj.top() - originalProj.bottom())
+                   * (row * tileSize.height() - border) / imageSize.height();
+            double top = bottom + (originalProj.top() - originalProj.bottom()) * tileSize.height() / imageSize.height();
+
+            cwProjection projection;
+            switch(originalProj.type()) {
+            case cwProjection::Perspective:
+            case cwProjection::PerspectiveFrustum:
+                projection.setFrustum(left, right, bottom, top, originalProj.near(), originalProj.far());
+                break;
+            case cwProjection::Ortho:
+                projection.setOrtho(left, right, bottom, top, originalProj.near(), originalProj.far());
+                break;
+            default:
+                break;
+            }
+
+            RegionViewer->camera()->setProjection(projection);
+
+            QImage grabbedWindow = Window->grabWindow();
+            grabbedWindow = grabbedWindow.copy(bounds.toRect()); //Copy the image
+
+            //Draw the tile on the final image
+            double x = column * tileSize.width();
+            double y = (imageSize.height() - row * tileSize.height()) - tileSize.height();
+            QPoint position(x, y);
+            painter.drawImage(position, grabbedWindow);
+
+
+        }
+    }
+
+    painter.end();
+
+    RegionViewer->camera()->setProjection(originalProj);
+
+    combinedImage.save("/home/blitz/test.png");
 }
 
 /**

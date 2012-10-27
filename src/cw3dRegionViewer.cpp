@@ -18,6 +18,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwGLGridPlane.h"
 #include "cwGeometryItersecter.h"
+#include "cwProjection.h"
 
 //Qt includes
 #include <QPainter>
@@ -95,13 +96,14 @@ void cw3dRegionViewer::initializeGL() {
   This updates the projection matrix for the view
   */
 void cw3dRegionViewer::resizeGL() {
-    QMatrix4x4 projectionMatrix;
 
 //    double zoom = 25; //50meters
 //    projectionMatrix.ortho(-width() / zoom, width() / zoom, -height() / zoom, height() / zoom, -10000, 10000);
 
-    projectionMatrix.perspective(55, width() / (float)height(), 1, 10000);
-    Camera->setProjectionMatrix(projectionMatrix);
+    cwProjection projection;
+    projection.setPerspective(55, width() / (float)height(), 1, 10000);
+
+    Camera->setProjection(projection);
 }
 
 /**

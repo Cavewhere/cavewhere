@@ -1,6 +1,9 @@
 #ifndef CWCAMERA_H
 #define CWCAMERA_H
 
+//Our includes
+#include "cwProjection.h"
+
 //Qt includes
 #include <QObject>
 #include <QRect>
@@ -15,8 +18,8 @@ public:
     void setViewport(QRect viewport);
     QRect viewport() const;
 
-    void setProjectionMatrix(QMatrix4x4 matrix);
-    QMatrix4x4 projectionMatrix() const;
+    void setProjection(cwProjection projection);
+    cwProjection projection() const;
 
     void setViewMatrix(QMatrix4x4 matrix);
     QMatrix4x4 viewMatrix() const;
@@ -45,9 +48,21 @@ public slots:
 
 private:
     QRect Viewport;
-    QMatrix4x4 ProjectionMatrix;
     QMatrix4x4 ViewMatrix;
     QMatrix4x4 ViewProjectionMatrix;
+    cwProjection Projection;
+
+
+    //Projection matrix
+    bool Perspective; //This camera is using a perspective projection
+    double Left;
+    double Right;
+    double Bottom;
+    double Top;
+    double Near;
+    double Far;
+
+
     bool ViewProjectionMatrixIsDirty;
 };
 
@@ -71,8 +86,8 @@ inline QRect cwCamera::viewport() const {
 /**
   Gets the projection matrix for the camera
   */
-inline QMatrix4x4 cwCamera::projectionMatrix() const {
-    return ProjectionMatrix;
+inline cwProjection cwCamera::projection() const {
+    return Projection;
 }
 
 /**

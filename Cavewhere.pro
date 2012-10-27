@@ -157,7 +157,8 @@ SOURCES += src/main.cpp \
     src/cwGeometryItersecter.cpp \
     src/cwCompassImporter.cpp \
     src/cwImageCleanupTask.cpp \
-    src/cwExportRegionViewerToImageTask.cpp
+    src/cwExportRegionViewerToImageTask.cpp \
+    src/cwProjection.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -305,7 +306,8 @@ HEADERS  += \
     src/cwGeometryItersecter.h \
     src/cwCompassImporter.h \
     src/cwImageCleanupTask.h \
-    src/cwExportRegionViewerToImageTask.h
+    src/cwExportRegionViewerToImageTask.h \
+    src/cwProjection.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \

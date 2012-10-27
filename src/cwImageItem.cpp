@@ -6,6 +6,7 @@
 #include "cwImageProperties.h"
 #include "cwGlobalDirectory.h"
 #include "cwImageTexture.h"
+#include "cwProjection.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -188,11 +189,11 @@ void cwImageItem::resizeGL() {
     QPoint center(width() / 2.0, height() / 2.0);
     QVector3D oldViewCenter = Camera->unProject(center, 0.0);
 
-    QMatrix4x4 orthognalProjection;
-    orthognalProjection.ortho(0.0, widthProjection,
-                              0.0, heightProjection,
-                              -1.0, 1.0);
-    Camera->setProjectionMatrix(orthognalProjection);
+    cwProjection orthognalProjection;
+    orthognalProjection.setOrtho(0.0, widthProjection,
+                                 0.0, heightProjection,
+                                 -1.0, 1.0);
+    Camera->setProjection(orthognalProjection);
 
     QVector3D newViewCenter = Camera->unProject(center, 0.0);
     QVector3D difference = newViewCenter - oldViewCenter;

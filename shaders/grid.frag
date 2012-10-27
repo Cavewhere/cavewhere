@@ -79,7 +79,8 @@ void main() {
 
 
     //float depth = ((projectedPosition.z / projectedPosition.w) + 1.0) * 0.5 / 7.5;
-    const vec4 planeColor = vec4(0.5, 0.5, 0.5, 1.0);
+    //const vec4 planeColor = vec4(0.5, 0.5, 0.5, 1.0);
+    const vec4 planeColor = vec4(1.0, 1.0, 1.0, 0.0);
     float c = contour(100.0, 1.0) * contour(1000.0, 1.5);
 
     gl_FragColor = vec4(c, c, c, 1.0)* planeColor;

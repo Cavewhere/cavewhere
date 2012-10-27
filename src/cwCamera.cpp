@@ -18,7 +18,7 @@ cwCamera::cwCamera(QObject *parent) :
   */
 QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const {
 
-   QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * viewMatrix * modelMatrix;
+   QMatrix4x4 modelViewProjectionMatrix = Projection.matrix() * viewMatrix * modelMatrix;
 
    bool canInvert;
    QMatrix4x4 inverseMatrix = modelViewProjectionMatrix.inverted(&canInvert);
@@ -59,8 +59,8 @@ QPointF cwCamera::mapToQtViewport(QPointF glViewportPoint) const
 /**
   Sets the projection matrix for the camera
   */
-void cwCamera::setProjectionMatrix(QMatrix4x4 matrix) {
-    ProjectionMatrix = matrix;
+void cwCamera::setProjection(cwProjection projection) {
+    Projection = projection;
     ViewProjectionMatrixIsDirty = true;
     emit projectionChanged();
 }
@@ -79,7 +79,7 @@ void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
   */
 QMatrix4x4 cwCamera::viewProjectionMatrix() {
     if(ViewProjectionMatrixIsDirty) {
-        ViewProjectionMatrix = ProjectionMatrix * ViewMatrix;
+        ViewProjectionMatrix = Projection.matrix() * ViewMatrix;
         ViewProjectionMatrix.optimize();
         ViewProjectionMatrixIsDirty = false;
     }
@@ -125,7 +125,7 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
   */
  QPointF cwCamera::project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const
  {
-      QMatrix4x4 modelViewProjectionMatrix = ProjectionMatrix * viewMatrix * modelMatrix;
+      QMatrix4x4 modelViewProjectionMatrix = Projection.matrix() * viewMatrix * modelMatrix;
       QVector3D projectedPoint = modelViewProjectionMatrix * point;
       QVector3D viewportQt = mapNormalizeScreenToGLViewport(projectedPoint);
       return mapToQtViewport(viewportQt.toPointF());
