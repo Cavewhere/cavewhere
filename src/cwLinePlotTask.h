@@ -26,6 +26,24 @@ class cwLinePlotTask : public cwTask
     Q_OBJECT
 public:
 
+    class LinePlotCaveData {
+    public:
+        LinePlotCaveData();
+
+        void setDepth(double depth);
+        void setLength(double length);
+        void setStationPositions(cwStationPositionLookup positionLookup);
+
+        double depth() const;
+        double length() const;
+        cwStationPositionLookup stationPositions() const;
+
+    private:
+        double Depth;
+        double Length;
+        cwStationPositionLookup Lookup;
+    };
+
     /**
      * @brief The CaveStationData class
      *
@@ -41,20 +59,20 @@ public:
 
         void clear();
 
-        void setCaveData(QMap<cwCave*, cwStationPositionLookup> caveData);
+        void setCaveData(QMap<cwCave*, LinePlotCaveData> caveData);
         void setTrip(QSet<cwTrip*> trips);
         void setScraps(QSet<cwScrap*> scraps);
         void setPositions(QVector<QVector3D> positions);
         void setPlotIndexData(QVector<unsigned int> indexData);      
 
-        QMap<cwCave*, cwStationPositionLookup> caveData() const;
+        QMap<cwCave*, LinePlotCaveData> caveData() const;
         QSet<cwTrip*> trips() const;
         QSet<cwScrap*> scraps() const;
         QVector<QVector3D> stationPositions() const;
         QVector<unsigned int> linePlotIndexData() const;
 
     private:
-        QMap<cwCave*, cwStationPositionLookup> Caves;
+        QMap<cwCave*, LinePlotCaveData> Caves;
         QSet<cwTrip*> Trips;
         QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
@@ -85,6 +103,9 @@ private slots:
 
     //For setting up all the station positions
     void updateStationPositionForCaves(const cwStationPositionLookup& stationPostions);
+
+    //Update the depth and length data
+    void updateDepthLength();
 
 private:
     /**
@@ -177,7 +198,7 @@ private:
  *
  * This functions aren't thread safe!! You should only call these if the task isn't running
  */
-inline QMap<cwCave *, cwStationPositionLookup> cwLinePlotTask::LinePlotResultData::caveData() const
+inline QMap<cwCave *, cwLinePlotTask::LinePlotCaveData> cwLinePlotTask::LinePlotResultData::caveData() const
 {
     return Caves;
 }
@@ -231,7 +252,7 @@ inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexDa
  * @brief cwLinePlotTask::LinePlotResultData::setCaveData
  * @param caveData
  */
-inline void cwLinePlotTask::LinePlotResultData::setCaveData(QMap<cwCave*, cwStationPositionLookup> caveData) {
+inline void cwLinePlotTask::LinePlotResultData::setCaveData(QMap<cwCave *, LinePlotCaveData> caveData) {
     Caves = caveData;
 }
 
@@ -298,6 +319,70 @@ inline QList<QPair<int, int> > cwLinePlotTask::StationTripScrapLookup::scraps(QS
 {
     return MapStationToScrap.values(stationName);
 }
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::setDepth
+ * @param depth - This is the cave depth calculated by the task
+ */
+inline cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
+    Depth(0.0),
+    Length(0.0)
+{
+}
+
+
+inline void cwLinePlotTask::LinePlotCaveData::setDepth(double depth)
+{
+    Depth = depth;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::setLength
+ * @param length
+ */
+inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
+{
+    Length = length;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::setStationPositions
+ * @param positionLookup
+ */
+inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPositionLookup positionLookup)
+{
+    Lookup = positionLookup;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::depth
+ * @return The depth of the cave
+ */
+inline double cwLinePlotTask::LinePlotCaveData::depth() const
+{
+    return Depth;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::length
+ * @return The length of the cave
+ */
+inline double cwLinePlotTask::LinePlotCaveData::length() const
+{
+    return Length;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::stationPositions
+ * @return All the station positions of the cave
+ */
+inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
+{
+    return Lookup;
+}
+
+
+
 
 
 #endif // CWLINEPLOTTASK_H

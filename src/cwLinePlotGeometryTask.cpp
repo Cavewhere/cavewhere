@@ -7,6 +7,13 @@
 #include "cwSurveyChunk.h"
 #include "cwStationPositionLookup.h"
 #include "cwDebug.h"
+#include "cwLength.h"
+
+//Std includes
+#include <limits>
+
+//Qt includes
+#include <QLineF>
 
 cwLinePlotGeometryTask::cwLinePlotGeometryTask(QObject *parent) :
     cwTask(parent)
@@ -29,6 +36,7 @@ void cwLinePlotGeometryTask::runTask() {
     for(int caveIndex = 0; caveIndex < Region->caveCount(); caveIndex++) {
         addStationPositions(caveIndex);
         addShotLines(caveIndex);
+
     }
 
     PointData.squeeze();
@@ -71,6 +79,10 @@ void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
 void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
     cwCave* cave = Region->cave(caveIndex);
 
+    double minDepth = std::numeric_limits<double>::max();
+    double maxDepth = -std::numeric_limits<double>::max();
+    double length = 0.0; //Cave's length
+
     unsigned int firstStationIndex;
 
     //Go through all the trips in the cave
@@ -91,6 +103,10 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
 
             unsigned int previousStationIndex = StationIndexLookup.value(fullName, 0);
 
+            QVector3D previousPoint = PointData.at(previousStationIndex);
+            minDepth = qMin(minDepth, previousPoint.z());
+            maxDepth = qMax(maxDepth, previousPoint.z());
+
             //Go through all the the stations/shots in the chunk
             for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
                 cwStation station = chunk->station(stationIndex);
@@ -100,9 +116,17 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
                 if(StationIndexLookup.contains(fullName)) {
                     unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave->name(), station.name()), 0);
 
+                    //FIXME: is this if statement valid.  Do it do anything
                     if(station.name() == "1") {
                         firstStationIndex = previousStationIndex;
                     }
+
+                    //Depth and length calculation
+                    QVector3D currentPoint = PointData.at(stationIndex);
+                    minDepth = qMin(minDepth, currentPoint.z());
+                    maxDepth = qMax(maxDepth, currentPoint.z());
+                    length += QLineF(previousPoint.toPointF(), currentPoint.toPointF()).length();
+                    previousPoint = currentPoint;
 
                     IndexData.append(previousStationIndex);
                     IndexData.append(stationIndex);
@@ -112,6 +136,14 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
             }
         }
     }
+
+    //Update the length and depth information for the cave
+    double depth = maxDepth - minDepth;
+    cave->length()->setUnit(cwUnits::Meters);
+    cave->depth()->setUnit(cwUnits::Meters);
+    cave->length()->setValue(length);
+    cave->depth()->setValue(depth);
 }
+
 
 

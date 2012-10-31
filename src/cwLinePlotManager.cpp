@@ -11,6 +11,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwScrap.h"
 #include "cwDebug.h"
+#include "cwLength.h"
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
@@ -130,7 +131,7 @@ void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
  */
 void cwLinePlotManager::validateResultsData(cwLinePlotTask::LinePlotResultData &results)
 {
-    QMap<cwCave*, cwStationPositionLookup> validCaves;
+    QMap<cwCave*, cwLinePlotTask::LinePlotCaveData> validCaves;
     QSet<cwTrip*> validTrips;
     QSet<cwScrap*> validScraps;
 
@@ -245,12 +246,21 @@ void cwLinePlotManager::updateLinePlot() {
     validateResultsData(resultData); //Modifies resultData inplace
 
     //Update all the positions for all the caves that need to be updated
-    QMapIterator<cwCave*, cwStationPositionLookup> iter(resultData.caveData());
+    //Also update the length and depth information
+    QMapIterator<cwCave*, cwLinePlotTask::LinePlotCaveData> iter(resultData.caveData());
     while(iter.hasNext()) {
         iter.next();
         cwCave* cave = iter.key();
-        cwStationPositionLookup positionLookup = iter.value();
-        cave->setStationPositionLookup(positionLookup);
+        cwLinePlotTask::LinePlotCaveData caveData = iter.value();
+
+        cave->setStationPositionLookup(caveData.stationPositions());
+
+        //Update the cave's depth and length
+        double length = cwUnits::convert(caveData.length(), cwUnits::Meters, (cwUnits::LengthUnit)cave->length()->unit());
+        double depth = cwUnits::convert(caveData.depth(), cwUnits::Meters, (cwUnits::LengthUnit)cave->depth()->unit());
+
+        cave->length()->setValue(length);
+        cave->depth()->setValue(depth);
     }
 
     //Update the 3D plot

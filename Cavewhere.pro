@@ -419,7 +419,10 @@ OTHER_FILES += \
     qml/ScrapPointMouseArea.qml \
     qml/FloatingGroupBox.qml \
     qml/NoteResolution.qml \
-    qml/UnitValueInput.qml
+    qml/UnitValueInput.qml \
+    qml/CaveOverviewPage.qml \
+    qml/CaveLengthComponent.qml \
+    qml/CaveLengthAndDepth.qml
 
 RESOURCES += \
     icons.qrc

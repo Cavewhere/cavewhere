@@ -6,15 +6,16 @@
 #include <QStringList>
 #include <QDebug>
 
-double cwUnits::LengthUnitsToMeters[cwUnits::LengthUnitless + 1] = {0.0254, //Inches
-                                                        0.3048, //Feet
-                                                        0.9144, //Yard
-                                                        1.0, //Meter
-                                                        0.001, //millimeter
-                                                        0.01, //cm
-                                                        1000.0, //km
-                                                        0.0 //Unitless
-                                                       };
+double cwUnits::LengthUnitsToMeters[cwUnits::Miles + 1] = {0.0254, //Inches
+                                                           0.3048, //Feet
+                                                           0.9144, //Yard
+                                                           1.0, //Meter
+                                                           0.001, //millimeter
+                                                           0.01, //cm
+                                                           1000.0, //km
+                                                           0.0, //Unitless
+                                                           1609.340 //Miles
+                                                          };
 
 
 double cwUnits::ResolutionUnitToDotPerMeters[cwUnits::DotsPerMeter + 1] = {
@@ -34,12 +35,12 @@ double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthU
         return value;
     }
 
-    if(to < 0 || to > LengthUnitless ) {
+    if(to < 0 || to > Miles ) {
         qDebug() << "Can't convert to unit" << LOCATION;
         return value;
     }
 
-    if(from < 0 || from > LengthUnitless) {
+    if(from < 0 || from > Miles) {
         qDebug() << "Can't convert from unit" << LOCATION;
         return value;
     }
@@ -55,7 +56,7 @@ double cwUnits::convert(double value, cwUnits::LengthUnit from, cwUnits::LengthU
 QStringList cwUnits::lengthUnitNames()
 {
     QStringList units;
-    for(int i = Inches; i <= LengthUnitless; i++) {
+    for(int i = Inches; i <= Miles; i++) {
         units.append(unitName((LengthUnit)i));
     }
     return units;
@@ -83,6 +84,8 @@ QString cwUnits::unitName(cwUnits::LengthUnit unit)
         return "km";
     case LengthUnitless:
         return "unitless";
+    case Miles:
+        return "mi";
     default:
         return "error";
     }
@@ -124,6 +127,8 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
         return Centimeters;
     } else if(unitString == "km") {
         return Kilometers;
+    } else if(unitString == "mi") {
+        return Miles;
     }
     return LengthUnitless;
 }
@@ -181,6 +186,20 @@ QString cwUnits::unitName(cwUnits::ImageResolutionUnit unit)
         return "Dots per meter";
     default:
         return "Unknown";
+    }
+}
+
+cwUnits::ImageResolutionUnit cwUnits::toImageResolutionUnit(QString unitString)
+{
+    if(unitString == "Dots per inch") {
+        return DotsPerInch;
+    } else if(unitString == "Dots per centimeter") {
+        return DotsPerCentimeter;
+    } else if(unitString == "Dots per meter") {
+        return DotsPerMeter;
+    } else {
+        qDebug() << "This is a BUG! Can't convert " << unitString << " to image resolution, returning dots per inch";
+        return DotsPerInch;
     }
 }
 

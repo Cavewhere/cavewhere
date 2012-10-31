@@ -22,7 +22,8 @@ public:
         Millimeters,       //!< Millimeters
         Centimeters,       //!< Centimeters
         Kilometers,       //!< Kilometers
-        LengthUnitless  //!< Invalid units or unit less
+        LengthUnitless,  //!< Invalid units or unit less
+        Miles
     };
 
     // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
@@ -44,13 +45,13 @@ public:
                           cwUnits::ImageResolutionUnit to);
     static QStringList imageResolutionUnitNames();
     static QString unitName(cwUnits::ImageResolutionUnit unit);
+    static cwUnits::ImageResolutionUnit toImageResolutionUnit(QString unitString);
 
+private:
+    static double LengthUnitsToMeters[Miles + 1];
+    static double ResolutionUnitToDotPerMeters[DotsPerMeter + 1];
 
-    private:
-        static double LengthUnitsToMeters[LengthUnitless + 1];
-        static double ResolutionUnitToDotPerMeters[DotsPerMeter + 1];
-
-        static double convert(double value, double fromFactor, double toFactor);
+    static double convert(double value, double fromFactor, double toFactor);
 
 };
 

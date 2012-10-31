@@ -33,8 +33,9 @@ public:
     void setUpdateValue(bool updateAutomatically);
     bool isUpdatingValue() const;
 
-    virtual QStringList unitNames() = 0;
-    virtual QString unitName(int unit) = 0;
+    virtual QStringList unitNames() const = 0;
+    virtual QString unitName(int unit) const = 0;
+    Q_INVOKABLE virtual int toUnitType(QString unitName) const = 0;
 
 
 signals:

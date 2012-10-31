@@ -25,8 +25,9 @@ Rectangle {
     }
 
     UsedStationsWidget {
+        id: usedStationWidgetId
 
-        anchors.left: parent.left
+        anchors.left: lengthDepthContainerId.right
         anchors.top: caveNameText.bottom
         anchors.bottom: parent.bottom
         anchors.leftMargin: 5
@@ -34,4 +35,23 @@ Rectangle {
         width: 250
     }
 
+    Rectangle {
+        id: lengthDepthContainerId
+
+        color: "lightgray"
+        anchors.left: parent.left
+        anchors.top: usedStationWidgetId.top
+        anchors.margins: 5
+
+        width: caveLengthAndDepthId.width + 10
+        height: caveLengthAndDepthId.height + 10
+
+        CaveLengthAndDepth {
+            id: caveLengthAndDepthId
+
+            anchors.centerIn: parent
+
+            currentCave: cavePageArea.currentCave
+        }
+    }
 }

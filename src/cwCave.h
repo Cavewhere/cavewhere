@@ -3,6 +3,7 @@
 
 //Our include
 class cwTrip;
+class cwLength;
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
@@ -20,6 +21,8 @@ class cwCave : public QObject, public cwUndoer
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(cwLength* length READ length NOTIFY lengthChanged)
+    Q_PROPERTY(cwLength* depth READ depth NOTIFY depthChanged)
 
 public:
     explicit cwCave(QObject* parent = NULL);
@@ -29,6 +32,9 @@ public:
 
     QString name() const;
     void setName(QString name);
+
+    cwLength* length() const;
+    cwLength* depth() const;
 
     int tripCount() const;
     cwTrip* trip(int index) const;
@@ -63,6 +69,9 @@ signals:
 
     void stationPositionPositionChanged();
 
+    void lengthChanged(); //Never called
+    void depthChanged(); //Never called
+
 //    void stationAddedToCave(QString name);
 //    void stationRemovedFromCave(QString name);
 //    void stationDataChanged(QSharedPointer<cwStation>, cwStation::DataRoles role);
@@ -70,6 +79,9 @@ signals:
 protected:
     QList<cwTrip*> Trips;
     QString Name;
+
+    cwLength* Length;
+    cwLength* Depth;
 
     cwStationPositionLookup StationPositionModel;
 
@@ -202,6 +214,23 @@ inline cwTrip* cwCave::trip(int index) const {
 //    }
 //}
 
+/**
+ * @brief cwCave::length
+ * @return The cave's current length
+ */
+inline cwLength *cwCave::length() const
+{
+   return Length;
+}
+
+/**
+ * @brief cwCave::depth
+ * @return The cave's current depth
+ */
+inline cwLength *cwCave::depth() const
+{
+    return Depth;
+}
 
 /**
   \brief Gets the index of the trip inside of the cave

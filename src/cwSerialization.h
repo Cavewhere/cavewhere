@@ -30,7 +30,7 @@
 #include <boost/serialization/collections_save_imp.hpp>
 
 BOOST_CLASS_VERSION(cwCavingRegion, 1)
-BOOST_CLASS_VERSION(cwCave, 1)
+BOOST_CLASS_VERSION(cwCave, 2)
 BOOST_CLASS_VERSION(cwNote, 2)
 BOOST_CLASS_VERSION(cwStation, 1)
 BOOST_CLASS_VERSION(cwTrip, 1)
@@ -110,10 +110,16 @@ namespace boost {
         QList<cwTrip*> trips = cave.trips();
         archive << BOOST_SERIALIZATION_NVP(trips);
 
+        int lengthUnit = cave.length()->unit();
+        int depthUnit = cave.depth()->unit();
+
+        archive << BOOST_SERIALIZATION_NVP(lengthUnit);
+        archive << BOOST_SERIALIZATION_NVP(depthUnit);
+
     }
 
     template<class Archive>
-    void load(Archive & archive, cwCave& cave, const unsigned int /*version*/) {
+    void load(Archive & archive, cwCave& cave, const unsigned int version) {
 
         //Load the name
         QString name;
@@ -125,6 +131,17 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(trips);
         foreach(cwTrip* trip, trips) {
             cave.addTrip(trip);
+        }
+
+        if(version >= 2) {
+            int lengthUnit;
+            int depthUnit;
+
+            archive >> BOOST_SERIALIZATION_NVP(lengthUnit);
+            archive >> BOOST_SERIALIZATION_NVP(depthUnit);
+
+            cave.length()->setUnit(lengthUnit);
+            cave.depth()->setUnit(depthUnit);
         }
     }
 

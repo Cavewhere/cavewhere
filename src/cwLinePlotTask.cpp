@@ -13,6 +13,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyChunk.h"
 #include "cwDebug.h"
+#include "cwLength.h"
 
 //Qt includes
 #include <QDebug>
@@ -197,6 +198,9 @@ void cwLinePlotTask::linePlotTaskComplete() {
     Result.StationPositions = CenterlineGeometryTask->pointData();
     Result.LinePlotIndexData = CenterlineGeometryTask->indexData();
 
+    //Update the depth and length of the cave
+    updateDepthLength();
+
 //    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
     done();
 }
@@ -264,12 +268,36 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
         //Get extrenal cave pointer
         cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
         if(Result.Caves.contains(externalCave)) {
+
+            LinePlotCaveData caveData;
+            caveData.setStationPositions(CaveStationLookups[i]);
+
             //Overwrite existing entry
-            Result.Caves.insert(externalCave, CaveStationLookups[i]);
+            Result.Caves.insert(externalCave, caveData);
 
             //Update the region's station lookup
             cwCave* cave = Region->cave(i);
             cave->setStationPositionLookup(CaveStationLookups[i]);
+        }
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::updateDepthLength
+ */
+void cwLinePlotTask::updateDepthLength()
+{
+    //Update all cave station position models
+    for(int i = 0; i < Region->caveCount(); i++) {
+        //Get the region's caves
+        cwCave* cave = Region->cave(i);
+
+        //Get extrenal cave pointer
+        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
+        if(Result.Caves.contains(externalCave)) {
+            LinePlotCaveData& caveData = Result.Caves[externalCave];
+            caveData.setDepth(cave->depth()->convertTo(cwUnits::Meters).value()); //Sets the depth(in meters)
+            caveData.setLength(cave->length()->convertTo(cwUnits::Meters).value()); //Set the length(in meters)
         }
     }
 }
@@ -320,7 +348,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
     //Add the cave to the results with empty station lookup
     cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
     if(!Result.Caves.contains(externalCave)) {
-        Result.Caves.insert(externalCave, cwStationPositionLookup());
+        Result.Caves.insert(externalCave, LinePlotCaveData());
     }
 
     const StationTripScrapLookup& lookup = TripLookups[caveIndex];
@@ -485,4 +513,6 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
         }
     }
 }
+
+
 

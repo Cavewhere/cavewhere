@@ -13,8 +13,9 @@ public:
     cwImageResolution(double value, cwUnits::ImageResolutionUnit unit, QObject* parent = 0);
     cwImageResolution(const cwImageResolution& other);
 
-    QStringList unitNames();
-    QString unitName(int unit);
+    QStringList unitNames() const;
+    QString unitName(int unit) const;
+    int toUnitType(QString unitName) const;
     
     Q_INVOKABLE cwImageResolution convertTo(cwUnits::ImageResolutionUnit to) const;
 
@@ -25,14 +26,19 @@ protected:
 };
 
 
-inline QStringList cwImageResolution::unitNames()
+inline QStringList cwImageResolution::unitNames() const
 {
     return cwUnits::imageResolutionUnitNames();
 }
 
-inline QString cwImageResolution::unitName(int unit)
+inline QString cwImageResolution::unitName(int unit) const
 {
     return cwUnits::unitName((cwUnits::ImageResolutionUnit)unit);
+}
+
+inline int cwImageResolution::toUnitType(QString unitName) const
+{
+    return cwUnits::toImageResolutionUnit(unitName);
 }
 
 

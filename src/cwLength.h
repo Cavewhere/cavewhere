@@ -20,8 +20,9 @@ public:
     cwLength(double value, cwUnits::LengthUnit unit, QObject* parent = 0);
     cwLength(const cwLength& other);
 
-    QStringList unitNames();
-    QString unitName(int unit);
+    QStringList unitNames() const;
+    QString unitName(int unit) const;
+    int toUnitType(QString unitString) const;
 
     cwLength convertTo(cwUnits::LengthUnit to) const;
 
@@ -34,15 +35,25 @@ protected:
 /**
   Returns all the unit names for the length object
   */
-inline QStringList cwLength::unitNames() {
+inline QStringList cwLength::unitNames() const {
     return cwUnits::lengthUnitNames();
 }
 
 /**
   Converts the unit into a string
   */
-inline QString cwLength::unitName(int unit) {
+inline QString cwLength::unitName(int unit) const {
     return cwUnits::unitName((cwUnits::LengthUnit)unit);
+}
+
+/**
+ * @brief cwLength::unitFromName
+ * @param name - The string name of the unit
+ * @return Return's the enumerate name of the unit from the name
+ */
+inline int cwLength::toUnitType(QString unitString) const
+{
+    return (int)cwUnits::toLengthUnit(unitString);
 }
 
 #endif // CWLENGTH_H

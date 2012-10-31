@@ -2,10 +2,18 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwStation.h"
+#include "cwLength.h"
 
 cwCave::cwCave(QObject* parent) :
-    QObject(parent)
+    QObject(parent),
+    Length(new cwLength(this)),
+    Depth(new cwLength(this))
 {
+    Length->setUnit(cwUnits::Meters);
+    Depth->setUnit(cwUnits::Meters);
+
+    Length->setUpdateValue(true);
+    Depth->setUpdateValue(true);
 }
 
 /**
@@ -13,7 +21,9 @@ cwCave::cwCave(QObject* parent) :
   */
 cwCave::cwCave(const cwCave& object) :
     QObject(NULL),
-    cwUndoer()
+    cwUndoer(),
+    Length(new cwLength(this)),
+    Depth(new cwLength(this))
 {
     Copy(object);
 }
@@ -63,6 +73,9 @@ cwCave& cwCave::Copy(const cwCave& object) {
         emit insertedTrips(0, object.tripCount() - 1);
     }
 
+    *Length = *(object.Length);
+    *Depth = *(object.Depth);
+
     return *this;
 }
 
@@ -74,6 +87,8 @@ void cwCave::setName(QString name) {
         pushUndo(new NameCommand(this, name));
     }
 }
+
+
 
 /**
   Adds a new trip to the cave
