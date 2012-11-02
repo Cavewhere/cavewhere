@@ -14,6 +14,7 @@ Item {
     property int rowIndex: -1
     property int dataRole
 
+    signal rightClick(var mouse);
 
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
@@ -50,8 +51,14 @@ Item {
 
         enabled: !editor.isEditting
 
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+
         onClicked: {
             dataBox.focus = true
+
+            if(mouse.button == Qt.RightButton) {
+                rightClick(mouse)
+            }
         }
     }
 

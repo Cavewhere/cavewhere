@@ -53,6 +53,9 @@ public:
     cwClinoStates::State clinoState() const;
     cwClinoStates::State backClinoState() const;
 
+    bool isDistanceIncluded() const;
+    void setDistanceIncluded(bool isDistanceIncluded);
+
     bool isValid() const;
 
     bool sameIntervalPointer(const cwShot& other) const;
@@ -80,6 +83,8 @@ private:
         cwCompassStates::State BackCompassState;
         cwClinoStates::State ClinoState;
         cwClinoStates::State BackClinoState;
+
+        bool IncludeDistance;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -114,6 +119,15 @@ inline cwClinoStates::State cwShot::backClinoState() const {
     return Data->BackClinoState;
 }
 
+/**
+ * @brief cwShot::isDistanceIncluded
+ * @return True if the shot should be included in the length or false if it should be excluded
+ */
+inline bool cwShot::isDistanceIncluded() const
+{
+    return Data->IncludeDistance;
+}
+
 inline double cwShot::distance() const {
     return Data->Distance;
 }
@@ -137,6 +151,20 @@ inline double cwShot::backClino() const {
 inline bool cwShot::isValid() const {
     return distanceState() == cwDistanceStates::Valid;
 }
+
+/**
+ * @brief cwShot::setDistanceIncluded
+ * @param includeDistance
+ * If true the shot will be included in the distance caluclation, otherwise, it'll be
+ * excluded.
+ *
+ * By default this is true.
+ */
+inline void cwShot::setDistanceIncluded(bool includeDistance)
+{
+    Data->IncludeDistance = includeDistance;
+}
+
 
 /**
   This return's true if the other shot has the same intertal point as this shot

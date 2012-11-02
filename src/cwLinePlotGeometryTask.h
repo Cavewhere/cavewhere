@@ -20,7 +20,22 @@ class cwCave;
 class cwLinePlotGeometryTask : public cwTask
 {
     Q_OBJECT
+
 public:
+
+    class LengthAndDepth {
+    public:
+        LengthAndDepth() : Depth(-1), Length(-1) { }
+        LengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
+
+        double length() const { return Length; }
+        double depth() const { return Depth; }
+
+    private:
+        double Depth;
+        double Length;
+    };
+
     explicit cwLinePlotGeometryTask(QObject *parent = 0);
 
     //Inputs
@@ -29,6 +44,7 @@ public:
     //Outputs
     QVector<QVector3D> pointData() const;
     QVector<unsigned int> indexData() const;
+    QVector<LengthAndDepth> cavesLengthAndDepths() const;
 
 protected:
     void runTask();
@@ -44,6 +60,7 @@ private:
     //Outputs
     QVector<QVector3D> PointData;
     QVector<unsigned int> IndexData;
+    QVector<LengthAndDepth> CavesLengthAndDepths;
 
     //Lookup to look up the station and get it's index
     QMap< QString, unsigned int > StationIndexLookup;
@@ -77,6 +94,15 @@ inline QVector<QVector3D> cwLinePlotGeometryTask::pointData() const {
   */
 inline QVector<unsigned int> cwLinePlotGeometryTask::indexData() const {
     return IndexData;
+}
+
+/**
+ * @brief cwLinePlotGeometryTask::cavesLengthAndDepths
+ * @return Get all the cave's lengths and depths
+ */
+inline QVector<cwLinePlotGeometryTask::LengthAndDepth> cwLinePlotGeometryTask::cavesLengthAndDepths() const
+{
+    return CavesLengthAndDepths;
 }
 
 /**

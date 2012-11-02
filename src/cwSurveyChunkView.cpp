@@ -113,6 +113,8 @@ void cwSurveyChunkView::tab(int rowIndex, int role) {
             nextItem = shotRow.backCompass();
         }
         break;
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+        break;
     case cwSurveyChunk::ShotCompassRole:
         if(HasBackSights) {
             nextItem = shotRow.backCompass();
@@ -167,6 +169,8 @@ void cwSurveyChunkView::previousTab(int rowIndex, int role) {
         previousItem = getNavigationStationRow(rowIndex + 1).stationName();
         break;
     }
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+        break;
     case cwSurveyChunk::ShotCompassRole:
         previousItem = shotRow.distance();
         break;
@@ -262,6 +266,8 @@ QQuickItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
         return NULL;
     case cwSurveyChunk::ShotDistanceRole:
         return getNavigationStationRow(rowIndex + 1).stationName();
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+        return NULL;
     case cwSurveyChunk::ShotCompassRole:
         return getNavigationShotRow(rowIndex).distance();
     case cwSurveyChunk::ShotBackCompassRole:
@@ -331,6 +337,8 @@ QQuickItem* cwSurveyChunkView::navArrowRight(int rowIndex, int role)  {
         return getNavigationStationRow(rowIndex).down();
     case cwSurveyChunk::StationDownRole:
         return NULL;
+    default:
+        return NULL;
     }
     return NULL;
 }
@@ -376,6 +384,8 @@ QQuickItem* cwSurveyChunkView::navArrowUp(int rowIndex, int role)  {
         return getNavigationStationRow(rowIndex - 1).up();
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex - 1).down();
+    default:
+        return NULL;
     }
     return NULL;
 }
@@ -421,6 +431,8 @@ QQuickItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
         return getNavigationStationRow(rowIndex + 1).up();
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex + 1).down();
+    default:
+        return NULL;
     }
     return NULL;
 }
@@ -461,6 +473,8 @@ QQuickItem *cwSurveyChunkView::databox(int rowIndex, int role)
         return getNavigationStationRow(rowIndex).up();
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex).down();
+    default:
+        return NULL;
     }
     return NULL;
 }
@@ -478,6 +492,7 @@ void cwSurveyChunkView::updateData(cwSurveyChunk::DataRole role, int index) {
         updateStationData(role, index);
         break;
     case cwSurveyChunk::ShotDistanceRole:
+    case cwSurveyChunk::ShotDistanceIncludedRole:
     case cwSurveyChunk::ShotCompassRole:
     case cwSurveyChunk::ShotBackCompassRole:
     case cwSurveyChunk::ShotClinoRole:
@@ -1458,9 +1473,16 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) 
     if(index < 0 || index >= ShotRows.size()) { return; }
 
     QQuickItem* shotItem;
+    const char* propertyName = "dataValue";
+
     switch(role) {
     case cwSurveyChunk::ShotDistanceRole:
+        //Get the shot distance
         shotItem = ShotRows[index].distance();
+        break;
+    case cwSurveyChunk::ShotDistanceIncludedRole:
+        shotItem = ShotRows[index].distance();
+        propertyName = "distanceIncluded";
         break;
     case cwSurveyChunk::ShotCompassRole:
         shotItem = ShotRows[index].frontCompass();
@@ -1479,7 +1501,7 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) 
     }
 
     QVariant data = SurveyChunk->data(role, index);
-    shotItem->setProperty("dataValue", data);
+    shotItem->setProperty(propertyName, data);
 }
 
 /**

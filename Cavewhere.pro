@@ -422,7 +422,8 @@ OTHER_FILES += \
     qml/UnitValueInput.qml \
     qml/CaveOverviewPage.qml \
     qml/CaveLengthComponent.qml \
-    qml/CaveLengthAndDepth.qml
+    qml/CaveLengthAndDepth.qml \
+    qml/ContextMenuButton.qml
 
 RESOURCES += \
     icons.qrc

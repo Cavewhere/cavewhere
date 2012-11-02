@@ -72,7 +72,8 @@ QPair<double, int> cwTripLengthTask::distanceOfChunk(const cwSurveyChunk *chunk)
     double distance = 0.0;
     int numberOfShots = 0;
     foreach(cwShot shot, chunk->shots()) {
-        if(shot.distanceState() == cwDistanceStates::Valid) {
+        if(shot.distanceState() == cwDistanceStates::Valid &&
+                shot.isDistanceIncluded()) {
             distance += shot.distance();
             numberOfShots++;
         }

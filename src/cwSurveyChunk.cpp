@@ -391,6 +391,7 @@ bool cwSurveyChunk::isStationRole(cwSurveyChunk::DataRole role) const {
 bool cwSurveyChunk::isShotRole(cwSurveyChunk::DataRole role) const {
     switch(role) {
     case ShotDistanceRole:
+    case ShotDistanceIncludedRole:
     case ShotCompassRole:
     case ShotBackCompassRole:
     case ShotClinoRole:
@@ -539,6 +540,8 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
             return shot.distance();
         }
         break;
+    case ShotDistanceIncludedRole:
+        return shot.isDistanceIncluded();
     case ShotCompassRole:
         if(shot.compassState() == cwCompassStates::Valid) {
             return shot.compass();
@@ -639,29 +642,31 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
         return;
     }
 
-    QString dataString = data.toString();
     cwShot& shot = Shots[index];
 
     switch(role) {
     case ShotDistanceRole:
-        shot.setDistance(dataString);
-        dataChanged(role, index);
+        shot.setDistance(data.toString());
+        emit dataChanged(role, index);
+    case ShotDistanceIncludedRole:
+        shot.setDistanceIncluded(data.toBool());
+        emit dataChanged(role, index);
         break;
     case ShotCompassRole:
-        shot.setCompass(dataString);
-        dataChanged(role, index);
+        shot.setCompass(data.toString());
+        emit dataChanged(role, index);
         break;
     case ShotBackCompassRole:
-        shot.setBackCompass(dataString);
-        dataChanged(role, index);
+        shot.setBackCompass(data.toString());
+        emit dataChanged(role, index);
         break;
     case ShotClinoRole:
-        shot.setClino(dataString);
-        dataChanged(role, index);
+        shot.setClino(data.toString());
+        emit dataChanged(role, index);
         break;
     case ShotBackClinoRole:
-        shot.setBackClino(dataString);
-        dataChanged(role, index);
+        shot.setBackClino(data.toString());
+        emit  dataChanged(role, index);
         break;
     default:
         qDebug() << "Can't find role:" << role << LOCATION;

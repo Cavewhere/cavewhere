@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     QQuickView view;
 
     QSurfaceFormat format = view.format();
-    format.setSamples(4);
+//    format.setSamples(4);
 
     cwRootData* rootData = new cwRootData(&view);
     rootData->setQuickWindow(&view);

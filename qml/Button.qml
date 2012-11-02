@@ -41,13 +41,7 @@ Rectangle {
 
             //anchors.left: iconOnTheLeft ? parent.left : buttonText.right
             anchors.right: iconOnTheLeft && hasText ? buttonText.left : parent.right
-            anchors.rightMargin: {
-                if(hasText) {
-                    return status == Image.Ready && iconOnTheLeft ? 3 : 0
-                } else {
-                    return 0;
-                }
-            }
+            anchors.rightMargin: status == Image.Ready && iconOnTheLeft ? 3 : 0
             anchors.verticalCenter: parent.verticalCenter
 
             visible: status == Image.Ready
@@ -71,6 +65,20 @@ Rectangle {
 
 
         }
+
+        states: [
+            State {
+                when: !hasText
+
+                AnchorChanges {
+                    target: icon
+                    anchors.right: undefined
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+            }
+        ]
+
     }
 
     MouseArea {

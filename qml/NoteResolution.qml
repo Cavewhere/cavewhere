@@ -34,47 +34,29 @@ FloatingGroupBox {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-
         UnitValueInput {
             unitValue: resolution
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        Button {
-            id: moreButton
-            iconSource: "qrc:/icons/moreArrowDown.png"
-            iconSize: Qt.size(8, 8)
-            height: 12
+        ContextMenuButton {
             anchors.verticalCenter: parent.verticalCenter
 
-            onClicked: {
-                resolutionPopupMenu.popupOnTopOf(moreButton, 0, moreButton.height)
-            }
-
-            ContextMenu {
-                id: resolutionPopupMenu
-
-                MenuItem {
-                    text: {
-                        var tripName = ""
-                        if(note !== null && note.parentTrip() !== null) {
-                            tripName = note.parentTrip().name
-                        }
-                        return "<b>Propagate resolution</b> for each note in " + tripName
+            MenuItem {
+                text: {
+                    var tripName = ""
+                    if(note !== null && note.parentTrip() !== null) {
+                        tripName = note.parentTrip().name
                     }
-                    onTriggered: note.propagateResolutionNotesInTrip();
+                    return "<b>Propagate resolution</b> for each note in " + tripName
                 }
-
-                MenuItem {
-                    text: "<b>Reset</b> to original"
-                    onTriggered: note.resetImageResolution()
-                }
-
+                onTriggered: note.propagateResolutionNotesInTrip();
             }
 
+            MenuItem {
+                text: "<b>Reset</b> to original"
+                onTriggered: note.resetImageResolution()
+            }
         }
-
-
     }
-
 }

@@ -42,7 +42,8 @@ cwShot::PrivateData::PrivateData() :
     CompassState(cwCompassStates::Empty),
     BackCompassState(cwCompassStates::Empty),
     ClinoState(cwClinoStates::Empty),
-    BackClinoState(cwClinoStates::Empty)
+    BackClinoState(cwClinoStates::Empty),
+    IncludeDistance(true)
 {
 
 }
@@ -252,3 +253,4 @@ void cwShot::setPrivateClinoState(cwClinoStates::State &memberState, cwClinoStat
         break;
     }
 }
+

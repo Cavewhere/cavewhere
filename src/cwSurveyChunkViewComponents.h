@@ -53,6 +53,7 @@ private:
     QQmlComponent* TitleDelegate;
     QQmlComponent* FrontSiteDelegate;
     QQmlComponent* BackSiteDelegate;
+    QQmlComponent* ShotDistanceDelegate;
 
     cwStationValidator* StationValidator;
     cwDistanceValidator* DistanceValidator;
@@ -69,33 +70,27 @@ inline QQmlComponent* cwSurveyChunkViewComponents::titleDelegate() const {
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::stationDelegate() const {
-    //return Delegate;
     return StationDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::leftDelegate() const {
     return Delegate;
-    //    return LeftDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::rightDelegate() const {
     return Delegate;
-    //    return RightDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::upDelegate() const {
     return Delegate;
-    //    return UpDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::downDelegate() const {
     return Delegate;
-    //    return DownDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::distanceDelegate() const {
-    return Delegate;
-    //    return DistanceDelegate;
+    return ShotDistanceDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::frontCompassDelegate() const {

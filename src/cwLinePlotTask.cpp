@@ -19,6 +19,20 @@
 #include <QDebug>
 #include <QTime>
 
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::setDepth
+ * @param depth - This is the cave depth calculated by the task
+ */
+inline cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
+    DepthLengthChanged(false),
+    Depth(0.0),
+    Length(0.0),
+    StationPostionsChanged(false)
+{
+}
+
+
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
@@ -287,18 +301,24 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
  */
 void cwLinePlotTask::updateDepthLength()
 {
+    QVector<cwLinePlotGeometryTask::LengthAndDepth> caveLengthAndDepth = CenterlineGeometryTask->cavesLengthAndDepths();
+    Q_ASSERT(Region->caveCount() == caveLengthAndDepth.size());
+
     //Update all cave station position models
     for(int i = 0; i < Region->caveCount(); i++) {
         //Get the region's caves
-        cwCave* cave = Region->cave(i);
+        cwLinePlotGeometryTask::LengthAndDepth lengthAndDepth = caveLengthAndDepth.at(i);
 
         //Get extrenal cave pointer
         cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
-        if(Result.Caves.contains(externalCave)) {
-            LinePlotCaveData& caveData = Result.Caves[externalCave];
-            caveData.setDepth(cave->depth()->convertTo(cwUnits::Meters).value()); //Sets the depth(in meters)
-            caveData.setLength(cave->length()->convertTo(cwUnits::Meters).value()); //Set the length(in meters)
+
+        if(!Result.Caves.contains(externalCave)) {
+            Result.Caves[externalCave] = LinePlotCaveData();
         }
+
+        LinePlotCaveData& caveData = Result.Caves[externalCave];
+        caveData.setLength(lengthAndDepth.length());
+        caveData.setDepth(lengthAndDepth.depth());
     }
 }
 
@@ -376,32 +396,6 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
         //Add the scrap to the scraps that have changed
         Result.Scraps.insert(externalScrap);
     }
-
-//    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
-//        cwTrip* trip = cave->trip(tripIndex);
-//        if(trip->hasStation(stationName)) {
-
-
-//        }
-
-//        int scrapIndex = 0;
-//        foreach(cwNote* note, trip->notes()->notes()) {
-//            for(int i = 0; i < note->scraps().size(); i++) {
-//                cwScrap* scrap = note->scrap(i);
-//                if(scrap->hasStation(stationName)) {
-
-//                    //Get the trip that has been updated
-//                    //Warning, don't us externalScrap, it's not part of this thread
-//                    cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
-
-//                    //Add the scrap to the scraps that have changed
-//                    Result.Scraps.insert(externalScrap);
-//                }
-
-//                scrapIndex++;
-//            }
-//        }
-//    }
 }
 
 /**

@@ -39,7 +39,7 @@ BOOST_CLASS_VERSION(cwImage, 1)
 BOOST_CLASS_VERSION(cwTripCalibration, 1)
 BOOST_CLASS_VERSION(cwSurveyChunk, 1)
 BOOST_CLASS_VERSION(cwStationReference, 1)
-BOOST_CLASS_VERSION(cwShot, 1)
+BOOST_CLASS_VERSION(cwShot, 2)
 BOOST_CLASS_VERSION(cwScrap, 1)
 BOOST_CLASS_VERSION(cwNoteStation, 1)
 BOOST_CLASS_VERSION(cwNoteTranformation, 1)
@@ -500,6 +500,7 @@ namespace boost {
         int backCompassState = shot.backCompassState();
         int clinoState = shot.clinoState();
         int backClinoState = shot.backClinoState();
+        bool includeDistance = shot.isDistanceIncluded();
 
         archive << BOOST_SERIALIZATION_NVP(Distance);
         archive << BOOST_SERIALIZATION_NVP(Compass);
@@ -511,10 +512,11 @@ namespace boost {
         archive << BOOST_SERIALIZATION_NVP(backCompassState);
         archive << BOOST_SERIALIZATION_NVP(clinoState);
         archive << BOOST_SERIALIZATION_NVP(backClinoState);
+        archive << BOOST_SERIALIZATION_NVP(includeDistance);
     }
 
     template<class Archive>
-    void load(Archive &archive, cwShot &shot, const unsigned int) {
+    void load(Archive &archive, cwShot &shot, const unsigned int version) {
 
         double Distance;
         double Compass;
@@ -527,6 +529,8 @@ namespace boost {
         int backCompassState;
         int clinoState;
         int backClinoState;
+
+        bool includeDistance;
 
         archive >> BOOST_SERIALIZATION_NVP(Distance);
         archive >> BOOST_SERIALIZATION_NVP(Compass);
@@ -550,6 +554,11 @@ namespace boost {
         shot.setBackCompassState((cwCompassStates::State)backCompassState);
         shot.setClinoState((cwClinoStates::State)clinoState);
         shot.setBackClinoState((cwClinoStates::State)backClinoState);
+
+        if(version >= 2) {
+            archive >> BOOST_SERIALIZATION_NVP(includeDistance);
+            shot.setDistanceIncluded(includeDistance);
+        }
     }
 
     ////////////////////////// cwScrap ////////////////////////////////////////

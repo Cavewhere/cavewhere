@@ -253,14 +253,18 @@ void cwLinePlotManager::updateLinePlot() {
         cwCave* cave = iter.key();
         cwLinePlotTask::LinePlotCaveData caveData = iter.value();
 
-        cave->setStationPositionLookup(caveData.stationPositions());
+        if(caveData.hasStationPositionsChanged()) {
+            cave->setStationPositionLookup(caveData.stationPositions());
+        }
 
-        //Update the cave's depth and length
-        double length = cwUnits::convert(caveData.length(), cwUnits::Meters, (cwUnits::LengthUnit)cave->length()->unit());
-        double depth = cwUnits::convert(caveData.depth(), cwUnits::Meters, (cwUnits::LengthUnit)cave->depth()->unit());
+        if(caveData.hasDepthLengthChanged()) {
+            //Update the cave's depth and length
+            double length = cwUnits::convert(caveData.length(), cwUnits::Meters, (cwUnits::LengthUnit)cave->length()->unit());
+            double depth = cwUnits::convert(caveData.depth(), cwUnits::Meters, (cwUnits::LengthUnit)cave->depth()->unit());
 
-        cave->length()->setValue(length);
-        cave->depth()->setValue(depth);
+            cave->length()->setValue(length);
+            cave->depth()->setValue(depth);
+        }
     }
 
     //Update the 3D plot

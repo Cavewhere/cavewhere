@@ -38,9 +38,15 @@ public:
         double length() const;
         cwStationPositionLookup stationPositions() const;
 
+        bool hasDepthLengthChanged() const;
+        bool hasStationPositionsChanged() const;
+
     private:
+        bool DepthLengthChanged;
         double Depth;
         double Length;
+
+        bool StationPostionsChanged;
         cwStationPositionLookup Lookup;
     };
 
@@ -320,20 +326,11 @@ inline QList<QPair<int, int> > cwLinePlotTask::StationTripScrapLookup::scraps(QS
     return MapStationToScrap.values(stationName);
 }
 
-/**
- * @brief cwLinePlotTask::LinePlotCaveData::setDepth
- * @param depth - This is the cave depth calculated by the task
- */
-inline cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
-    Depth(0.0),
-    Length(0.0)
-{
-}
-
 
 inline void cwLinePlotTask::LinePlotCaveData::setDepth(double depth)
 {
     Depth = depth;
+    DepthLengthChanged = true;
 }
 
 /**
@@ -343,6 +340,7 @@ inline void cwLinePlotTask::LinePlotCaveData::setDepth(double depth)
 inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
 {
     Length = length;
+    DepthLengthChanged = true;
 }
 
 /**
@@ -352,6 +350,7 @@ inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
 inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPositionLookup positionLookup)
 {
     Lookup = positionLookup;
+    StationPostionsChanged = true;
 }
 
 /**
@@ -379,6 +378,26 @@ inline double cwLinePlotTask::LinePlotCaveData::length() const
 inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
 {
     return Lookup;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged
+ *
+ * Return's true if the depth and the legth has     changed
+ */
+inline bool cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged() const
+{
+    return DepthLengthChanged;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged
+ *
+ * Return's true if the station positions have changed
+ */
+inline bool cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged() const
+{
+    return StationPostionsChanged;
 }
 
 

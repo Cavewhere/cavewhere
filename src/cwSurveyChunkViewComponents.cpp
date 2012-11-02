@@ -22,29 +22,15 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
     TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
     FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
     BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
-    //    LeftDelegate = new QQmlComponent(engine, "qml/LeftDataBox.qml", this);
-//    RightDelegate = new QQmlComponent(engine, "qml/RightDataBox.qml", this);
-//    UpDelegate = new QQmlComponent(engine, "qml/UpDataBox.qml", this);
-//    DownDelegate = new QQmlComponent(engine, "qml/DownDataBox.qml", this);
-//    DistanceDelegate = new QQmlComponent(engine, "qml/ShotDistanceDataBox.qml", this);
-//    FrontCompassDelegate = new QQmlComponent(engine, "qml/FrontCompassReadBox.qml", this);
-//    BackCompassDelegate = new QQmlComponent(engine, "qml/BackCompassReadBox.qml", this);
-//    FrontClinoDelegate = new QQmlComponent(engine, "qml/FrontClinoReadBox.qml", this);
-//    BackClinoDelegate = new QQmlComponent(engine, "qml/BackClinoReadBox.qml", this);
+    ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/ShotDistanceDataBox.qml", this);
 
     //Print error if there are any
     printErrors(Delegate);
     printErrors(StationDelegate);
     printErrors(TitleDelegate);
-//    printErrors(LeftDelegate);
-//    printErrors(RightDelegate);
-//    printErrors(UpDelegate);
-//    printErrors(DownDelegate);
-//    printErrors(DistanceDelegate);
-//    printErrors(FrontCompassDelegate);
-//    printErrors(BackCompassDelegate);
-//    printErrors(FrontClinoDelegate);
-//    printErrors(BackClinoDelegate);
+    printErrors(FrontSiteDelegate);
+    printErrors(BackSiteDelegate);
+    printErrors(ShotDistanceDelegate);
 
     StationValidator = new cwStationValidator(this);
     DistanceValidator = new cwDistanceValidator(this);

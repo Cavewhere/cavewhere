@@ -33,6 +33,7 @@ public:
         StationUpRole,
         StationDownRole,
         ShotDistanceRole,
+        ShotDistanceIncludedRole,
         ShotCompassRole,
         ShotBackCompassRole,
         ShotClinoRole,

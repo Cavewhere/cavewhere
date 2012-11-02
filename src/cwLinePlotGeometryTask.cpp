@@ -32,6 +32,7 @@ void cwLinePlotGeometryTask::runTask() {
     PointData.clear();
     IndexData.clear();
     StationIndexLookup.clear();
+    CavesLengthAndDepths.resize(Region->caveCount());
 
     for(int caveIndex = 0; caveIndex < Region->caveCount(); caveIndex++) {
         addStationPositions(caveIndex);
@@ -110,6 +111,7 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
             //Go through all the the stations/shots in the chunk
             for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
                 cwStation station = chunk->station(stationIndex);
+                cwShot shot = chunk->shot(stationIndex - 1);
 
                 //Look up the index
                 fullName = fullStationName(caveIndex, cave->name(), station.name());
@@ -123,9 +125,11 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
 
                     //Depth and length calculation
                     QVector3D currentPoint = PointData.at(stationIndex);
-                    minDepth = qMin(minDepth, currentPoint.z());
-                    maxDepth = qMax(maxDepth, currentPoint.z());
-                    length += QLineF(previousPoint.toPointF(), currentPoint.toPointF()).length();
+                    if(shot.isDistanceIncluded()) {
+                        minDepth = qMin(minDepth, currentPoint.z());
+                        maxDepth = qMax(maxDepth, currentPoint.z());
+                        length += QLineF(previousPoint.toPointF(), currentPoint.toPointF()).length();
+                    }
                     previousPoint = currentPoint;
 
                     IndexData.append(previousStationIndex);
@@ -139,10 +143,7 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
 
     //Update the length and depth information for the cave
     double depth = maxDepth - minDepth;
-    cave->length()->setUnit(cwUnits::Meters);
-    cave->depth()->setUnit(cwUnits::Meters);
-    cave->length()->setValue(length);
-    cave->depth()->setValue(depth);
+    CavesLengthAndDepths[caveIndex] = LengthAndDepth(length, depth);
 }
 
 
