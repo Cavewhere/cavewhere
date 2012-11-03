@@ -1589,6 +1589,8 @@ void cwSurveyChunkView::updateShotRowData(int index) {
     updateShotData(cwSurveyChunk::ShotDistanceRole,
                    index);
 
+    updateShotData(cwSurveyChunk::ShotDistanceIncludedRole,
+                   index);
 
     updateShotData(cwSurveyChunk::ShotCompassRole,
                    index);
