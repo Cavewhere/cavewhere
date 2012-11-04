@@ -175,8 +175,14 @@ void cw3dRegionViewer::startPanning(QPoint position) {
     QVector3D front = eyeMatrix.map(QVector3D(0.0, 0.0, -1.0));
     QVector3D back = eyeMatrix.map(QVector3D(0.0, 0.0, 1.0));
 
+    QVector3D direction = QVector3D(front - back).normalized();
+
     //Create the plane
-    PanPlane = QPlane3D(LastMouseGlobalPosition, (front - back));
+    PanPlane = QPlane3D(LastMouseGlobalPosition, direction);
+
+    TranslatePosition = position;
+    translateLastPosition();
+
 }
 
 /**
@@ -331,16 +337,20 @@ void cw3dRegionViewer::translateLastPosition()
 
     QPoint mappedPos = Camera->mapToGLViewport(position);
 
-//    QVector3D translateAmount = QVector3D(mappedPos) - LastMouseGlobalPosition;
-//    translateAmount.setX(translateAmount.x() / 1000.0);
-//    translateAmount.setY(translateAmount.y() / 1000.0);
+    //For ortho projection hack
+    //    QVector3D translateAmount = QVector3D(mappedPos) - LastMouseGlobalPosition;
+    //    translateAmount.setX(translateAmount.x() / 1000.0);
+    //    translateAmount.setY(translateAmount.y() / 1000.0);
 
     //Get the ray from the front of the screen to the back of the screen
     QVector3D front = Camera->unProject(mappedPos, 0.0);
     QVector3D back = Camera->unProject(mappedPos, 1.0);
 
+    QVector3D direction = front - back;
+    direction.normalize();
+
     //Create the ray that'll intersect
-    QRay3D ray(front, back);
+    QRay3D ray(front, direction);
 
     //Find the intsection on the plane
     double t = PanPlane.intersection(ray); //xyPlane.intersectAsRay(ray, &hasIntersection);
