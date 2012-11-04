@@ -410,6 +410,11 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         }
     }
 
+    //Write out if the distance is included
+    if(!shot.isDistanceIncluded()) {
+        stream << "#|L# ";
+    }
+
     stream << CompassNewLine;
 }
 
