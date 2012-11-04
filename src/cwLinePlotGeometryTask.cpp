@@ -128,7 +128,7 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
                     if(shot.isDistanceIncluded()) {
                         minDepth = qMin(minDepth, (double)currentPoint.z());
                         maxDepth = qMax(maxDepth, (double)currentPoint.z());
-                        length += QLineF(previousPoint.toPointF(), currentPoint.toPointF()).length();
+                        length += QVector3D(currentPoint - previousPoint).length();
                     }
                     previousPoint = currentPoint;
 
