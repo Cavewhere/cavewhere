@@ -53,6 +53,7 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
 
+    QuickWindow = NULL;
 
 }
 
