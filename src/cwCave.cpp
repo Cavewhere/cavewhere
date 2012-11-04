@@ -149,37 +149,6 @@ void cwCave::removeTrip(int i) {
     pushUndo(new RemoveTripCommand(this, i, i));
 }
 
-///**
-//  \brief Removes a station for the lookup
-
-//  If the weak pointer is still valid, then this function does nothing
-//  */
-//void cwCave::removeStation(QString name) {
-//    QWeakPointer<cwStation> pointer = StationLookup[name];
-//    if(pointer.isNull()) {
-//        StationLookup.remove(name);
-//    }
-//}
-
-///**
-//  \brief This sets the station's data based on it's role
-
-//  This creates a undo / redo command and pushes it onto the undo stack
-//  */
-//void cwCave::setStationData(QSharedPointer<cwStation> station,
-//                            QVariant data,
-//                            cwStation::DataRoles role) {
-
-//    station->setData(data, role);
-//}
-
-///**
-//  \brief This gets the stations data base on the role
-//  */
-//QVariant cwCave::stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const {
-//    return station->data(role);
-//}
-
 /**
   \brief Sets the undo stack for the cave and all of it's children
   */
@@ -189,23 +158,21 @@ void cwCave::setUndoStackForChildren() {
 
 
 cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
-    CavePtr = QWeakPointer<cwCave>(cave);
+    CavePtr = cave;
     newName = name;
     oldName = cave->name();
     setText(QString("Change cave's name to %1").arg(name));
 }
 
 void cwCave::NameCommand::redo() {
-    if(CavePtr.isNull()) { return; }
-    cwCave* cave = CavePtr.data();
+    cwCave* cave = CavePtr; //.data();
     cave->Name = newName;
     emit cave->nameChanged(cave->Name);
 }
 
 
 void cwCave::NameCommand::undo() {
-    if(CavePtr.isNull()) { return; }
-    cwCave* cave = CavePtr.data();
+    cwCave* cave = CavePtr; //.data();
     cave->Name = oldName;
     emit cave->nameChanged(cave->Name);
 }
@@ -227,8 +194,7 @@ cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
 }
 
 void cwCave::InsertRemoveTrip::insertTrips() {
-    if(CavePtr.isNull()) { return; }
-    cwCave* cave = CavePtr.data();
+    cwCave* cave = CavePtr; //.data();
     emit cave->beginInsertTrips(BeginIndex, EndIndex);
     for(int i = 0; i < Trips.size(); i++) {
         int index = BeginIndex + i;
@@ -242,8 +208,7 @@ void cwCave::InsertRemoveTrip::insertTrips() {
 }
 
 void cwCave::InsertRemoveTrip::removeTrips() {
-    if(CavePtr.isNull()) { return; }
-    cwCave* cave = CavePtr.data();
+    cwCave* cave = CavePtr; //.data();
     emit cave->beginRemoveTrips(BeginIndex, EndIndex);
 
     //Remove all the trips from the back to the front
@@ -317,58 +282,6 @@ void cwCave::RemoveTripCommand::undo() {
     insertTrips();
 }
 
-//cwCave::StationDataCommand::StationDataCommand(cwCave* cave,
-//        QSharedPointer<cwStation> station,
-//        QVariant data,
-//        cwStation::DataRoles role) {
-//    Cave = cave;
-//    Station = station;
-//    OldData = station->data(role);
-//    NewData = data;
-//    Role = role;
-
-//    QString commandText;
-//    switch(role) {
-//    case cwStation::NameRole:
-//        commandText = QString("Stations Name - %1").arg(data.toString());
-//        break;
-//    case cwStation::LeftRole:
-//        commandText = QString("Station %1's left to %1").arg(station->name()).arg(data.toString());
-//        break;
-//    case cwStation::RightRole:
-//        commandText = QString("Station %1's right to %1").arg(station->name()).arg(data.toString());
-//        break;
-//    case cwStation::UpRole:
-//        commandText = QString("Station %1's up to %1").arg(station->name()).arg(data.toString());
-//        break;
-//    case cwStation::DownRole:
-//        commandText = QString("Station %1's down to %1").arg(station->name()).arg(data.toString());
-//        break;
-////    case cwStation::PositionRole: {
-////        QVector3D position = data.value<QVector3D>();
-////        commandText = QString("Station %1's position to %1, %2, %3")
-////                .arg(station->name())
-////                .arg(position.x())
-////                .arg(position.y())
-////                .arg(position.z());
-////        break;
-////    }
-//    }
-//    setText(commandText);
-//}
-
-//void cwCave::StationDataCommand::redo() {
-//    if(Cave.isNull()) { return; }
-//    Station->setData(NewData, Role);
-//    emit Cave.data()->stationDataChanged(Station, Role);
-//}
-
-//void cwCave::StationDataCommand::undo() {
-//    if(Cave.isNull()) { return; }
-//    Station->setData(OldData, Role);
-//    emit Cave.data()->stationDataChanged(Station, Role);
-//}
-
 /**
   \brief Gets all the stations in the cave
 
@@ -392,14 +305,6 @@ QList<cwStation> cwCave::stations() const {
   */
 void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
     StationPositionModel = model;
-
-    //FIXME: This call is really expensive because every time, the user change the
-    // line plot, all the scrap transformations have to be updated.
-    //Go through all the notes and update the automatic scrap transfrom for all scraps
-    //This is probably the more stable way to do this, but it's slow
-    //    foreach(cwTrip* trip, trips()) {
-    //        trip->stationPositionModelUpdated();
-    //    }
 
     emit stationPositionPositionChanged();
 }

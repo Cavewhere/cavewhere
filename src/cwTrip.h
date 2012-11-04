@@ -111,7 +111,7 @@ private:
         void redo();
         void undo();
     private:
-        QWeakPointer<cwTrip> Trip;
+        cwTrip* Trip;
         QString NewName;
         QString OldName;
     };
@@ -122,7 +122,7 @@ private:
         void redo();
         void undo();
     private:
-        QWeakPointer<cwTrip> Trip;
+        cwTrip* Trip;
         QDate NewDate;
         QDate OldDate;
     };

@@ -38,6 +38,7 @@ public:
     virtual bool setData(const QModelIndex& index, const QVariant& data, int role);
     Q_INVOKABLE void setData(int index, cwTeam::TeamModelRoles role, const QVariant& data);
 
+    virtual QHash<int, QByteArray> roleNames() const;
 
 signals:
 
@@ -45,9 +46,6 @@ public slots:
 
 private:
     QList<cwTeamMember> Team;
-
-    void setupRoles();
-
 };
 
 /**

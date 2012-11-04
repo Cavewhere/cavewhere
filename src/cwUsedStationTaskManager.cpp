@@ -7,7 +7,8 @@
 #include <QThread>
 
 cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    Cave(NULL)
 {
     Thread = new QThread(this);
     Thread->start();
@@ -46,25 +47,35 @@ void cwUsedStationTaskManager::setListenToCaveChanges(bool listen) {
   Sets the cave for the manager
   */
 void cwUsedStationTaskManager::setCave(cwCave* cave) {
-    Cave = cave;
-    calculateUsedStations();
+    if(Cave != cave) {
+        if(Cave != NULL) {
+            disconnect(Cave, SIGNAL(destroyed()), this, SLOT(caveDestroyed()));
+        }
+
+        Cave = cave;
+
+        if(Cave != NULL) {
+            connect(Cave, SIGNAL(destroyed()), this, SLOT(caveDestroyed()));
+            calculateUsedStations();
+        }
+    }
 }
 
 /**
   This starts the running the used station task on an external thread
   */
 void cwUsedStationTaskManager::calculateUsedStations() {
-    if(Cave.isNull()) { return; }
-
     if(Task->isReady()) {
-        QList<cwStation> stations = Cave.data()->stations();
+        if(Cave != NULL) {
+            QList<cwStation> stations = Cave->stations();
 
-        QMetaObject::invokeMethod(Task, //Object
-                                  "setStationNames", //Function
-                                  Qt::AutoConnection, //Connection to the function
-                                  Q_ARG(QList<cwStation>, stations)); //Arguments to the function
+            QMetaObject::invokeMethod(Task, //Object
+                                      "setStationNames", //Function
+                                      Qt::AutoConnection, //Connection to the function
+                                      Q_ARG(QList<cwStation>, stations)); //Arguments to the function
 
-        Task->start();
+            Task->start();
+        }
     } else {
         Task->restart();
     }
@@ -78,25 +89,18 @@ void cwUsedStationTaskManager::setUsedStations(QList<QString> stations) {
     emit usedStationsChanged();
 }
 
-///**
-//  Gets all the station names for the current cave.
+/**
+ * @brief cwUsedStationTaskManager::caveDestroyed
+ *
+ * Stops listening to the station, because it's being destoried
+ */
+void cwUsedStationTaskManager::caveDestroyed()
+{
+    disconnect(Cave, 0, this, 0);
+    Cave = NULL;
+}
 
-//  This assumes the cave isn't null
-// */
-//QList<QString> cwUsedStationTaskManager::allCaveStationNames() const {
-//    cwCave* currentCave = Cave.data();
-//    QList< cwStation > stations = currentCave->stations();
 
-//    QList< QString > stationNames;
-//    foreach( QWeakPointer <cwStation> currentStation, stations) {
-//        if(currentStation.isNull()) { continue; }
-
-//        cwStation* station = currentStation.data();
-//        stationNames.append(station->name());
-//    }
-
-//    return stationNames;
-//}
 
 /**
   \brief Helper function to setListenToCaveChanges
@@ -108,12 +112,11 @@ void cwUsedStationTaskManager::setUsedStations(QList<QString> stations) {
   If Cave is null this function does nothing
   */
 void cwUsedStationTaskManager::hookupCaveToTask() {
-    if(Cave.isNull()) { return; }
-    cwCave* cave = Cave.data();
+    if(Cave == NULL) { return; }
     if(ListenToCaveChanges) {
-        connect(cave, SIGNAL(stationAddedToCave(QString)), SLOT(calculateUsedStations()));
-        connect(cave, SIGNAL(stationRemovedFromCave(QString)), SLOT(calculateUsedStations()));
+        connect(Cave, SIGNAL(stationAddedToCave(QString)), SLOT(calculateUsedStations()));
+        connect(Cave, SIGNAL(stationRemovedFromCave(QString)), SLOT(calculateUsedStations()));
     } else {
-        disconnect(cave, 0, this, 0);
+        disconnect(Cave, 0, this, 0);
     }
 }

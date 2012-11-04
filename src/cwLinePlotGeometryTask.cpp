@@ -105,8 +105,8 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
             unsigned int previousStationIndex = StationIndexLookup.value(fullName, 0);
 
             QVector3D previousPoint = PointData.at(previousStationIndex);
-            minDepth = qMin(minDepth, previousPoint.z());
-            maxDepth = qMax(maxDepth, previousPoint.z());
+            minDepth = qMin(minDepth, (double)previousPoint.z());
+            maxDepth = qMax(maxDepth, (double)previousPoint.z());
 
             //Go through all the the stations/shots in the chunk
             for(int stationIndex = 1; stationIndex < chunk->stationCount(); stationIndex++) {
@@ -126,8 +126,8 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
                     //Depth and length calculation
                     QVector3D currentPoint = PointData.at(stationIndex);
                     if(shot.isDistanceIncluded()) {
-                        minDepth = qMin(minDepth, currentPoint.z());
-                        maxDepth = qMax(maxDepth, currentPoint.z());
+                        minDepth = qMin(minDepth, (double)currentPoint.z());
+                        maxDepth = qMax(maxDepth, (double)currentPoint.z());
                         length += QLineF(previousPoint.toPointF(), currentPoint.toPointF()).length();
                     }
                     previousPoint = currentPoint;

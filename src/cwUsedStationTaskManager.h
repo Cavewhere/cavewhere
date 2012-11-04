@@ -14,9 +14,9 @@ class cwUsedStationTaskManager : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwCave* cave READ cave WRITE setCave);
-    Q_PROPERTY(bool listenToCaveChanges READ listenToCaveChanges WRITE setListenToCaveChanges);
-    Q_PROPERTY(QStringList usedStations READ usedStations NOTIFY usedStationsChanged);
+    Q_PROPERTY(cwCave* cave READ cave WRITE setCave)
+    Q_PROPERTY(bool listenToCaveChanges READ listenToCaveChanges WRITE setListenToCaveChanges)
+    Q_PROPERTY(QStringList usedStations READ usedStations NOTIFY usedStationsChanged)
 
 public:
     explicit cwUsedStationTaskManager(QObject *parent = 0);
@@ -38,9 +38,10 @@ signals:
 
 private slots:
     void setUsedStations(QList<QString> stations);
+    void caveDestroyed();
 
 private:
-    QWeakPointer<cwCave> Cave; //The cave where all the stations live
+    cwCave* Cave; //The cave where all the stations live
     cwUsedStationsTask* Task; //The task that creates the used stations
     QStringList UsedStations; //List of used stations
     bool ListenToCaveChanges; //This flag connects the cave to task to rerun it
@@ -55,7 +56,7 @@ private:
   Get's the cave for this task
   */
 inline cwCave* cwUsedStationTaskManager::cave() {
-    return Cave.isNull() ? NULL : Cave.data();
+    return Cave;
 }
 
 /**

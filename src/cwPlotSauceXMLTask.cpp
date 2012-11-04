@@ -109,7 +109,7 @@ void cwPlotSauceXMLTask::ParseXML(QByteArray xmlData) {
     if(!errorMessage.isEmpty()) {
         //There was an error
         qWarning() << "Plot Sauce XML parse error: " << errorMessage;
-        qWarning() << QString::fromAscii(xmlData);
+        qWarning() << QString::fromLocal8Bit(xmlData);
         return;
     }
 

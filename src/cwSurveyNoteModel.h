@@ -43,6 +43,8 @@ public:
     void stationPositionModelUpdated();
     bool hasNotes() const;
 
+    virtual QHash<int, QByteArray> roleNames() const;
+
 signals:
 
 public slots:
@@ -95,6 +97,8 @@ inline bool cwSurveyNoteModel::hasNotes() const
 {
     return !Notes.isEmpty();
 }
+
+
 
 
 #endif // CWSURVEYNOTEMODEL_H

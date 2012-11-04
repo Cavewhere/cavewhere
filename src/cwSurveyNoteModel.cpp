@@ -16,15 +16,17 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     ParentCave(NULL)
 {
     ImagePathString = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
+}
 
-    //For qml
+QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
+{
     QHash<int, QByteArray> roles;
     roles.reserve(2);
     roles[ImageOriginalPathRole] = "imageOriginalPath";
     roles[ImageIconPathRole] = "imageIconPath";
     roles[ImageRole] = "image";
     roles[NoteObjectRole] = "noteObject";
-    setRoleNames(roles);
+    return roles;
 }
 
 cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
@@ -45,8 +47,6 @@ cwSurveyNoteModel& cwSurveyNoteModel::operator=(const cwSurveyNoteModel& object)
   \brief Does a deap copy of all the notes in the notemodel
   */
 void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
-
-    setRoleNames(object.roleNames());
 
     beginResetModel();
 

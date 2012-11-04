@@ -14,14 +14,17 @@ cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
     Region(NULL)
 {
 
+}
+
+QHash<int, QByteArray> cwRegionTreeModel::roleNames() const
+{
     QHash<int, QByteArray> roles;
     roles[TypeRole] = "indexType";
     roles[NameRole] = "name";
     roles[DateRole] = "date"; //Only valid for trips
     roles[ObjectRole] = "object";
     roles[IconSourceRole] = "iconSource";
-    setRoleNames(roles);
-
+    return roles;
 }
 
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {

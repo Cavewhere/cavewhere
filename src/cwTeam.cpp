@@ -8,7 +8,6 @@
 cwTeam::cwTeam(QObject *parent) :
     QAbstractListModel(parent)
 {
-    setupRoles();
 }
 
 /**
@@ -17,8 +16,6 @@ cwTeam::cwTeam(QObject *parent) :
 cwTeam::cwTeam(const cwTeam& team) :
     QAbstractListModel(NULL)
 {
-    setupRoles();
-
     //Copy the data
     Team = team.Team;
 }
@@ -56,6 +53,14 @@ void cwTeam::setData(int row, cwTeam::TeamModelRoles role, const QVariant &data)
     setData(modelIndex, data, role);
 }
 
+QHash<int, QByteArray> cwTeam::roleNames() const
+{
+    QHash<int, QByteArray> roles;
+    roles[NameRole] = "name";
+    roles[JobsRole] = "jobs";
+    return roles;
+}
+
 bool cwTeam::setData(const QModelIndex& index, const QVariant &data, int role) {
     if(!index.isValid()) {
         return false;
@@ -83,16 +88,6 @@ bool cwTeam::setData(const QModelIndex& index, const QVariant &data, int role) {
         return false;
     }
 
-}
-
-/**
-  Sets up the roles for this model, this is used for qml
-  */
-void cwTeam::setupRoles() {
-    QHash<int, QByteArray> roles;
-    roles[NameRole] = "name";
-    roles[JobsRole] = "jobs";
-    setRoleNames(roles);
 }
 
 /**

@@ -33,7 +33,7 @@ void cwGunZipReader::runTask() {
     const int bufferSize = 32 * 1024;
     buffer.resize(bufferSize); //32k buffer
 
-    gzFile file = gzopen((const char*)Filename.toAscii(), "r");
+    gzFile file = gzopen((const char*)Filename.toLocal8Bit(), "r");
     int numberOfBytesCopied = 0;
     while((numberOfBytesCopied = gzread(file, buffer.data(), buffer.size())) && isRunning()) {
         buffer.resize(numberOfBytesCopied);

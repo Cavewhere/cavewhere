@@ -49,13 +49,6 @@ public:
     cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionLookup(const cwStationPositionLookup& model);
 
-//    bool hasStation(QString name);
-//    QWeakPointer<cwStation> station(QString name);
-//    void addStation(QSharedPointer<cwStation> station);
-//    void removeStation(QString name);
-//    void setStationData(QSharedPointer<cwStation> station, QVariant data, cwStation::DataRoles role);
-//    QVariant stationData(QSharedPointer<cwStation> station, cwStation::DataRoles role) const;
-
     QList< cwStation > stations() const;
 
 signals:
@@ -72,10 +65,6 @@ signals:
     void lengthChanged(); //Never called
     void depthChanged(); //Never called
 
-//    void stationAddedToCave(QString name);
-//    void stationRemovedFromCave(QString name);
-//    void stationDataChanged(QSharedPointer<cwStation>, cwStation::DataRoles role);
-
 protected:
     QList<cwTrip*> Trips;
     QString Name;
@@ -84,8 +73,6 @@ protected:
     cwLength* Depth;
 
     cwStationPositionLookup StationPositionModel;
-
-//    QMap<QString, QWeakPointer<cwStation> > StationLookup;
 
     virtual void setUndoStackForChildren();
 private:
@@ -99,7 +86,7 @@ private:
         void redo();
         void undo();
     private:
-        QWeakPointer<cwCave> CavePtr;
+        cwCave* CavePtr;
         QString newName;
         QString oldName;
     };
@@ -115,7 +102,7 @@ private:
 
         QList<cwTrip*> Trips;
     private:
-        QWeakPointer<cwCave> CavePtr;
+        cwCave* CavePtr;
         int BeginIndex;
         int EndIndex;
         bool OwnsTrips;
@@ -135,23 +122,6 @@ private:
         virtual void redo();
         virtual void undo();
     };
-
-//    class StationDataCommand : public QUndoCommand {
-//    public:
-//        StationDataCommand(cwCave* cave,
-//                           QSharedPointer<cwStation> station,
-//                           QVariant data,
-//                           cwStation::DataRoles role);
-//        virtual void redo();
-//        virtual void undo();
-
-//    private:
-//        QWeakPointer<cwCave> Cave;
-//        QSharedPointer<cwStation> Station;
-//        QVariant NewData;
-//        QVariant OldData;
-//        cwStation::DataRoles Role;
-//    };
 
 };
 
@@ -187,32 +157,6 @@ inline cwTrip* cwCave::trip(int index) const {
     if(index < 0 || index >= Trips.size()) { return NULL; }
     return Trips[index];
 }
-
-///**
-//  \brief Test if this caves has a station with the name, name.
-
-//  Returns true if it has a station with that name
-//  */
-//inline bool cwCave::hasStation(QString name) {
-//    QWeakPointer<cwStation> pointer = station(name);
-//    return !pointer.isNull();
-//}
-
-///**
-//  \brief Get's the station from it's name
-//  */
-//inline QWeakPointer<cwStation> cwCave::station(QString name) {
-//    return StationLookup.value(name.toLower(), QWeakPointer<cwStation>());
-//}
-
-///**
-//  \brief Adds the station to the cave
-//  */
-//inline void cwCave::addStation(QSharedPointer<cwStation> station) {
-//    if(!station->name().isEmpty()) {
-//        StationLookup[station->name().toLower()] = station.toWeakRef();
-//    }
-//}
 
 /**
  * @brief cwCave::length

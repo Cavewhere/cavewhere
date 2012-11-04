@@ -58,6 +58,8 @@ public:
 
     Q_INVOKABLE int row(const QModelIndex& index) const;
 
+    virtual QHash<int, QByteArray> roleNames() const;
+
 signals:
 
 public slots:
@@ -139,6 +141,8 @@ inline bool cwRegionTreeModel::isRegion(const QModelIndex &index) const {
 inline int cwRegionTreeModel::row(const QModelIndex &index) const {
     return index.row();
 }
+
+
 
 
 #endif // CWREGIONTREEMODEL_H

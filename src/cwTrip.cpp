@@ -363,39 +363,39 @@ void cwTrip::setParentCave(cwCave* parentCave) {
 cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
     Trip = trip;
     NewName = name;
-    OldName = Trip.data()->name();
+    OldName = Trip->name();
     setText(QString("Change trip's name to %1").arg(name));
 }
 
 void cwTrip::NameCommand::redo() {
-    if(Trip.isNull()) { return; }
-    Trip.data()->Name = NewName;
-    emit Trip.data()->nameChanged(Trip.data()->Name);
+//    if(Trip.isNull()) { return; }
+    Trip->Name = NewName;
+    emit Trip->nameChanged(Trip->Name);
 }
 
 void cwTrip::NameCommand::undo() {
-    if(Trip.isNull()) { return; }
-    Trip.data()->Name = OldName;
-    emit Trip.data()->nameChanged(Trip.data()->Name);
+//    if(Trip.isNull()) { return; }
+    Trip->Name = OldName;
+    emit Trip->nameChanged(Trip->Name);
 }
 
 cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
     Trip = trip;
     NewDate = date;
-    OldDate = Trip.data()->date();
+    OldDate = Trip->date();
     setText(QString("Change trip's date to %1").arg(NewDate.toString(Qt::TextDate)));
 }
 
 void cwTrip::DateCommand::redo() {
-    if(Trip.isNull()) { return; }
-    Trip.data()->Date = NewDate;
-    emit Trip.data()->dateChanged(Trip.data()->Date);
+//    if(Trip.isNull()) { return; }
+    Trip->Date = NewDate;
+    emit Trip->dateChanged(Trip->Date);
 }
 
 void cwTrip::DateCommand::undo() {
-    if(Trip.isNull()) { return; }
-    Trip.data()->Date = OldDate;
-    emit Trip.data()->dateChanged(Trip.data()->Date);
+//    if(Trip.isNull()) { return; }
+    Trip->Date = OldDate;
+    emit Trip->dateChanged(Trip->Date);
 }
 
 /**

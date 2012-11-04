@@ -144,6 +144,16 @@ void cwScrapManager::rerunDirtyScraps()
 }
 
 /**
+ * @brief cwScrapManager::scrapDeleted
+ * @param scrap, called when the scrap was delete
+ */
+void cwScrapManager::scrapDeleted(QObject *scrapObj)
+{
+    cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
+    addToDeletedScraps(scrap);
+}
+
+/**
  * @brief cwScrapManager::updateExistingScrapGeometryHelper
  * @param scrap
  *
@@ -167,6 +177,13 @@ void cwScrapManager::regenerateScrapGeometryHelper(cwScrap *scrap)
     QList<cwScrap*> scraps;
     scraps.append(scrap);
     updateScrapGeometry(scraps);
+}
+
+void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
+{
+    if(TriangulateTask->isRunning()) {
+        DeletedScraps.insert(scrap);
+    }
 }
 
 /**
@@ -291,18 +308,18 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     foreach(cwScrap* scrap, scraps) {
-        DirtyScraps.insert(QWeakPointer<cwScrap>(scrap));
+        connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+        DirtyScraps.insert(scrap);
     }
 
     if(TriangulateTask->isReady()) {
         //Running
         QList<cwTriangulateInData> scrapData;
         WaitingForUpdate.clear();
-        foreach(QWeakPointer<cwScrap> scrap, DirtyScraps) {
-            if(!scrap.isNull()) {
-                WaitingForUpdate.append(scrap);
-                scrapData.append(mapScrapToTriangulateInData(scrap.data()));
-            }
+
+        foreach(cwScrap* scrap, scraps) {
+            WaitingForUpdate.append(scrap);
+            scrapData.append(mapScrapToTriangulateInData(scrap));
         }
 
         TriangulateTask->setProjectFilename(Project->filename());
@@ -464,6 +481,7 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
 {
     for(int i = begin; i <= end; i++) {
         cwScrap* scrap = parentNote->scrap(i);
+        addToDeletedScraps(scrap);
 
         //Connect the scrap
         disconnectScrap(scrap);
@@ -675,6 +693,9 @@ void cwScrapManager::taskFinished() {
         QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
 
         //Clear all the scraps that need to be update, because we are updating now
+        foreach(cwScrap* scrap, DirtyScraps) {
+            disconnect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+        }
         DirtyScraps.clear();
 
         //Make sure there's the same amount of data
@@ -690,23 +711,25 @@ void cwScrapManager::taskFinished() {
         QList<cwScrap*> validScraps;
         QList<cwTriangulatedData> validScrapTriangleDataset;
         for(int i = 0; i < WaitingForUpdate.size(); i++) {
-            QWeakPointer<cwScrap> weakPtrScrap = WaitingForUpdate.at(i);
+            cwScrap* scrap = WaitingForUpdate.at(i);
             cwTriangulatedData triangleData = scrapDataset.at(i);
-
-            //Make sure the scrap still exists
-            //FIXME: This will not work with UNDO/REDO because the pointer will still be valid,
-            // even through it's remove in the undo stack
-            if(!weakPtrScrap.isNull()) {
-                validScraps.append(weakPtrScrap.data());
+            if(!DeletedScraps.contains(scrap)) {
+                validScraps.append(scrap);
                 validScrapTriangleDataset.append(triangleData);
             } else {
-                //Remove the cropped image that's not needed
+                //Scrap has been delete
                 imagesToRemove.append(triangleData.croppedImage());
+                continue;
             }
         }
 
+        DeletedScraps.clear();
+
+        //FIXME: Do we remove all cropped images???
+        //Removed all cropped image data
         foreach(cwScrap* scrap, validScraps) {
             cwImage image = scrap->triangulationData().croppedImage();
+            qDebug() << "Image is valid:" << image.isValid();
             if(image.isValid()) {
                 imagesToRemove.append(image);
             }
@@ -720,11 +743,6 @@ void cwScrapManager::taskFinished() {
             cwScrap* scrap = validScraps.at(i);
             cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
             scrap->setTriangulationData(triangleData);
-
-//            //TODO: For debugging should be removed
-//            QList<cwImage> images;
-//            images.append(scrapDataset[i].croppedImage());
-//            scrap->parentNote()->parentTrip()->notes()->addNotesWithNewImages(images);
         }
 
         GLScraps->setCavingRegion(Region);

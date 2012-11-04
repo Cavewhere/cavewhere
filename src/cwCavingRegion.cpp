@@ -207,8 +207,8 @@ cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
   \brief Insert the caves in this command into the region
   */
 void cwCavingRegion::InsertRemoveCave::insertCaves() {
-    if(Region.isNull()) { return; }
-    cwCavingRegion* regionPtr = Region.data();
+   // if(Region.isNull()) { return; }
+    cwCavingRegion* regionPtr = Region; //.data();
 
     emit regionPtr->beginInsertCaves(BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
@@ -227,8 +227,8 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
   \brief Removes the caves in this command from the region
   */
 void cwCavingRegion::InsertRemoveCave::removeCaves() {
-    if(Region.isNull()) { return; }
-    cwCavingRegion* regionPtr = Region.data();
+//    if(Region.isNull()) { return; }
+    cwCavingRegion* regionPtr = Region; //.data();
 
     emit regionPtr->beginRemoveCaves(BeginIndex, EndIndex);
 

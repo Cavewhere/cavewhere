@@ -73,7 +73,7 @@ private:
 
         QList< cwCave* > Caves;
     private:
-        QWeakPointer<cwCavingRegion> Region;
+        cwCavingRegion* Region;
         int BeginIndex;
         int EndIndex;
         bool OwnsCaves; //!< If the undo command own the caves, ie, it'll delete them

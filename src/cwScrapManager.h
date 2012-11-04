@@ -49,8 +49,9 @@ private:
     cwCavingRegion* Region;
     cwLinePlotManager* LinePlotManager;
 
-    QList<QWeakPointer<cwScrap> > WaitingForUpdate; //These are the scraps that are running through task
-    QSet<QWeakPointer<cwScrap> > DirtyScraps; //These are the scraps that need to be updated
+    QList<cwScrap*> WaitingForUpdate; //These are the scraps that are running through task
+    QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
+    QSet<cwScrap*> DeletedScraps; //All the deleted scraps
 
     //The task that'll be run
     QThread* TriangulateThread;
@@ -87,6 +88,8 @@ private:
     void updateExistingScrapGeometryHelper(cwScrap* scrap);
     void regenerateScrapGeometryHelper(cwScrap* scrap);
 
+    void addToDeletedScraps(cwScrap* scrap);
+
 private slots:
     void cavesInserted(int begin, int end);
     void cavesRemoved(int begin, int end);
@@ -109,6 +112,8 @@ private slots:
 
     void updateStationPositionChangedForScraps(QList<cwScrap*> scraps);
     void rerunDirtyScraps();
+
+    void scrapDeleted(QObject* scrap);
 
     void taskFinished();
 
