@@ -469,6 +469,7 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             QString rightString = dataStrings.at(6);
             QString upString = dataStrings.at(7);
             QString downString = dataStrings.at(8);
+            QString flags = dataStrings.size() >= 10 ? dataStrings.at(9) : QString();
 
             cwStation fromStation(fromStationName);
             cwStation toStation(toStationName);
@@ -511,6 +512,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
 
                 shot.setBackCompass(backCompass);
                 shot.setBackClino(backClino);
+            }
+
+            //Exclude length from calculation
+            if(flags.contains("L")) {
+                shot.setDistanceIncluded(false);
             }
 
             CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
