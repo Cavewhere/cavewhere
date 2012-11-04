@@ -72,6 +72,9 @@ public:
     cwSurveyChunk* parentChunkOfShot(int shotIndex) const;
     int chunkShotIndex(int shotIndex) const;
 
+    void setIncludeDistance(bool includeLength);
+    bool isDistanceInclude() const;
+
 signals:
     void nameChanged();
     void importTypeChanged();
@@ -91,6 +94,8 @@ private:
     QDate Date;
     cwTeam* Team;
     cwTripCalibration* Calibration;
+
+    bool IncludeDistance;
 
     //For caves, used station names, and equating stations
     QMap<QString, QString> EquateMap;  //All stations get added to the map
@@ -204,5 +209,26 @@ inline QStringList cwSurvexBlockData::exportStations() const
 {
     return QStringList(ExportStations.toList());
 }
+
+/**
+ * @brief cwSurvexBlockData::setIncludeDistance
+ * @param includeLength
+ *
+ * If false the distance shot length will be excluded
+ */
+inline void cwSurvexBlockData::setIncludeDistance(bool includeLength)
+{
+    IncludeDistance = includeLength;
+}
+
+/**
+ * @brief cwSurvexBlockData::isDistanceInclude
+ * @return True if the distance is include, and false, if it's not
+ */
+inline bool cwSurvexBlockData::isDistanceInclude() const
+{
+    return IncludeDistance;
+}
+
 
 #endif // CWSURVEXBLOCKDATA_H

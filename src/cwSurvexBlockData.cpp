@@ -10,7 +10,8 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
     ParentBlock(NULL),
     Type(NoImport),
     Team(new cwTeam(this)),
-    Calibration(new cwTripCalibration(this))
+    Calibration(new cwTripCalibration(this)),
+    IncludeDistance(true)
 {
 }
 
@@ -166,21 +167,6 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      return numShots;
  }
 
-// /**
-//   \brief Gets the shot at an index
-
-//   \param index - the index of the shot
-//   */
-// cwShot cwSurvexBlockData::shot(int index) const {
-//     foreach(cwSurveyChunk* chunk, Chunks) {
-//         if(index < chunk->shotCount()) {
-//             return chunk->shot(index);
-//         }
-//         index -= chunk->shotCount();
-//     }
-//     return cwShot();
-// }
-
  /**
    Get's the parent cwSurveyChunk at shot index
    */
@@ -204,6 +190,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      }
      return -1;
  }
+
 
  /**
   * @brief cwSurvexBlockData::equatedStations

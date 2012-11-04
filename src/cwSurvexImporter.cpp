@@ -289,6 +289,8 @@ void cwSurvexImporter::parseLine(QString line) {
                 parseExport(arg);
             } else if(compare(command, "equate")) {
                 parseEquate(arg);
+            } else if(compare(command, "flags")) {
+                parseFlags(arg);
             } else {
                 addWarning(QString("Unknown survex keyword:") + command);
             }
@@ -504,6 +506,7 @@ void cwSurvexImporter::parseNormalData(QString line) {
     shot.setBackCompass(extractData(data, BackCompass));
     shot.setClino(extractData(data, Clino));
     shot.setBackClino(extractData(data, BackClino));
+    shot.setDistanceIncluded(CurrentBlock->isDistanceInclude());
 
     addShotToCurrentChunk(fromStation, toStation, shot);
 }
@@ -887,6 +890,46 @@ void cwSurvexImporter::parseExport(QString line)
 {
     QStringList stations = line.split(QRegExp("\\s+"));
     CurrentBlock->addExportStations(stations);
+}
+
+/**
+ * @brief cwSurvexImporter::parseFlags
+ * @param line
+ *
+ * This parses the flags
+ *
+ * Currently, surface isn't support.
+ */
+void cwSurvexImporter::parseFlags(QString line)
+{
+    QStringList flags = line.split(QRegExp("\\s+"));
+
+    bool flagOperator = true;
+    bool excludeLength = false;
+    foreach(QString flag, flags) {
+        if(flag.compare("duplicate", Qt::CaseInsensitive) == 0) {
+            excludeLength = flagOperator;
+            flagOperator = true;
+
+            //Flip, becuause we're including
+            CurrentBlock->setIncludeDistance(!excludeLength);
+        } else if(flag.compare("splay", Qt::CaseInsensitive) == 0) {
+            excludeLength = flagOperator;
+            flagOperator = true;
+
+            //Flip, becuause we're including
+            CurrentBlock->setIncludeDistance(!excludeLength);
+        } else if(flag.compare("surface", Qt::CaseInsensitive) == 0) {
+            Errors.append(QString("Warning: *flags surface isn't support at this time, excluding shot lengths"));
+            excludeLength = flagOperator;
+            flagOperator = true;
+
+            //Flip, becuause we're including
+            CurrentBlock->setIncludeDistance(!excludeLength);
+        } else if(flag.compare("not", Qt::CaseInsensitive) == 0) {
+            flagOperator = false;
+        }
+    }
 }
 
 /**

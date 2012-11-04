@@ -376,7 +376,17 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
                    .arg(backClino, TextPadding);
         }
 
+        //Distance should be excluded, mark as duplicate
+        if(!shot.isDistanceIncluded()) {
+            stream << "*flags duplicate" << endl;
+        }
+
         stream << line << endl;
+
+        //Turn duplication off
+        if(!shot.isDistanceIncluded()) {
+            stream << "*flags not duplicate" << endl;
+        }
 
         emit progressed(i);
     }

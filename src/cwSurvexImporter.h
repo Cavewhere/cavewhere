@@ -171,6 +171,7 @@ private:
     void parseUnits(QString line);
     void parseEquate(QString line);
     void parseExport(QString line);
+    void parseFlags(QString line);
 
     void runStats(QString filename);
 

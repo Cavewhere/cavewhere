@@ -29,8 +29,9 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 
     stream << "*begin " << caveName << " ;" << cave->name() << endl << endl;
 
-    stream << "*sd compass 2.0 degrees" << endl;
-    stream << "*sd clino 2.0 degrees" << endl << endl;
+    //This fucks up shit in cavern
+   // stream << "*sd compass 2.0 degrees" << endl;
+   // stream << "*sd clino 2.0 degrees" << endl << endl;
 
     //Haven't done anything
     TotalProgress = 0;
