@@ -82,6 +82,7 @@ QQuickItem* cwAbstractPointManager::createItem() {
     QQuickItem* item = qobject_cast<QQuickItem*>(ItemComponent->create(context));
     if(item == NULL) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
+        qDebug() << "Compiling errors:" << ItemComponent->errorString();
         return NULL;
     }
 
