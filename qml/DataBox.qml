@@ -138,6 +138,17 @@ Item {
     }
 
     Keys.onSpacePressed: {
+        var trip = surveyChunk.parentTrip;
+        if(trip.numberOfChunks > 0) {
+            var lastChunkIndex = trip.numberOfChunks - 1
+            console.log("LastChunkIndex:" + lastChunkIndex)
+            var lastChunk = trip.chunk(lastChunkIndex);
+            if(lastChunk.isStationAndShotsEmpty()) {
+                surveyChunkView.parent.setFocus(lastChunkIndex)
+                return;
+            }
+        }
+
         surveyChunk.parentTrip.addNewChunk();
     }
 

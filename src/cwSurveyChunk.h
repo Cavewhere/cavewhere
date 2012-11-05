@@ -66,6 +66,8 @@ public:
 
     void setStation(cwStation station, int index);
 
+    Q_INVOKABLE bool isStationAndShotsEmpty() const;
+
 signals:
     void parentTripChanged();
 

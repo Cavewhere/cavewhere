@@ -54,9 +54,9 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
 
             if(Trip != NULL) {
                 //Add chunks to the view
-                AddChunks(0, Trip->numberOfChunks() - 1);
+                addChunks(0, Trip->numberOfChunks() - 1);
 
-                connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(AddChunks(int,int)));
+                connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(addChunks(int,int)));
                 connect(Trip->calibrations(), SIGNAL(frontSightsChanged()), SLOT(updateChunksFrontSights()));
                 connect(Trip->calibrations(), SIGNAL(backSightsChanged()), SLOT(updateChunksBackSights()));
             }
@@ -89,7 +89,7 @@ void cwSurveyChunkGroupView::setViewportY(float y) {
     if(ViewportArea.y() != y) {
         //qDebug() << "Set viewport y:" << y;
         ViewportArea.moveTop(y - this->y());
-        UpdateActiveChunkViews();
+        updateActiveChunkViews();
         emit viewportYChanged();
     }
 }
@@ -112,7 +112,7 @@ void cwSurveyChunkGroupView::setViewportHeight(float height) {
     if(ViewportArea.height() != height) {
        // qDebug() << "Set viewport height: " << height;
         ViewportArea.setHeight(height);
-        UpdateActiveChunkViews();
+        updateActiveChunkViews();
         emit viewportHeightChanged();
     }
 }
@@ -150,7 +150,7 @@ void cwSurveyChunkGroupView::keyPressEvent(QKeyEvent *event) {
   This will check what chunks should be shown, and which chunk should be hidden
   The hidden chunks will be deleted (exept if whitelisted) New views may be created, if nessary
   */
-void cwSurveyChunkGroupView::UpdateActiveChunkViews() {
+void cwSurveyChunkGroupView::updateActiveChunkViews() {
     QPair<int, int> range = VisableRange();
     if(range.first < 0 || range.first >= ChunkViews.size()) { return; }
     if(range.second < 0 || range.second >= ChunkViews.size()) { return; }
@@ -281,7 +281,7 @@ void cwSurveyChunkGroupView::DeleteChunkView(int index) {
 
   This will cause a view to become focused
   */
-void cwSurveyChunkGroupView::SetFocus(int index) {
+void cwSurveyChunkGroupView::setFocus(int index) {
     if(index < 0 || index >= ChunkViews.size()) { return; }
     CreateChunkView(index); //Make sure the chunk exists;
     cwSurveyChunkView* surveyChunk = ChunkViews.at(index);
@@ -324,7 +324,7 @@ void cwSurveyChunkGroupView::updateAboveBelowAndPosition(int index) {
 /**
   Adds new chunks to the view from beginIndex to endIndex
   */
-void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
+void cwSurveyChunkGroupView::addChunks(int beginIndex, int endIndex) {
     if(Trip == NULL) { return; }
     ///qDebug() << "Adding chunks " << beginIndex << endIndex;
 
@@ -337,12 +337,12 @@ void cwSurveyChunkGroupView::AddChunks(int beginIndex, int endIndex) {
         ChunkBoundingRects.insert(i, QRectF());
     }
 
-    UpdateContentArea(beginIndex, endIndex);
-    UpdateActiveChunkViews();
+    updateContentArea(beginIndex, endIndex);
+    updateActiveChunkViews();
 
     //If only one chunk is added set the focus on it
     if(beginIndex == endIndex) {
-        SetFocus(beginIndex);
+        setFocus(beginIndex);
     }
 }
 
@@ -355,8 +355,8 @@ void cwSurveyChunkGroupView::UpdateChunkHeight() {
     cwSurveyChunkView* chunkView = qobject_cast<cwSurveyChunkView*>(sender());
     if(chunkView != NULL) {
         int index = ChunkViews.indexOf(chunkView);
-        UpdateContentArea(index, ChunkViews.size() - 1);
-        UpdateActiveChunkViews();
+        updateContentArea(index, ChunkViews.size() - 1);
+        updateActiveChunkViews();
     }
 }
 
@@ -498,7 +498,7 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
 
   Will update the interal positions of those chunks, this allows the caching of elements
   */
-void cwSurveyChunkGroupView::UpdateContentArea(int beginIndex, int endIndex) {
+void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
     //Make sure beginIndex and endIndex are good
     if(beginIndex < 0 || beginIndex >= Trip->numberOfChunks()) { return; }
     if(endIndex < 0 || endIndex >= Trip->numberOfChunks()) { return; }

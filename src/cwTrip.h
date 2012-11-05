@@ -59,7 +59,7 @@ public:
     Q_INVOKABLE void addNewChunk();
 
     int numberOfChunks() const;
-    cwSurveyChunk* chunk(int i) const;
+    Q_INVOKABLE cwSurveyChunk* chunk(int i) const;
     QList<cwSurveyChunk*> chunks() const;
 
     void setParentCave(cwCave* parentCave);

@@ -477,6 +477,45 @@ void cwSurveyChunk::setStation(cwStation station, int index){
 }
 
 /**
+ * @brief cwSurveyChunk::isStationAndShotsEmpty
+ * @return This return true if all the station and shot data
+ * is empty.  If thes chunk has any station or shot data this returns false.
+ *
+ * The chunk can have shot and station, but if the no data in the shot and
+ * stations then this return false.
+ */
+bool cwSurveyChunk::isStationAndShotsEmpty() const
+{
+    if(!isValid()) {
+        return true;
+    }
+
+    foreach(cwStation station, Stations) {
+        if(!station.name().isEmpty() ||
+                station.leftInputState() != cwDistanceStates::Empty ||
+                station.rightInputState() != cwDistanceStates::Empty ||
+                station.upInputState() != cwDistanceStates::Empty ||
+                station.downInputState() != cwDistanceStates::Empty)
+        {
+            return false;
+        }
+    }
+
+    foreach(cwShot shot, Shots) {
+        if(shot.distanceState() != cwDistanceStates::Empty ||
+                shot.backCompassState() != cwCompassStates::Empty ||
+                shot.compassState() != cwCompassStates::Empty ||
+                shot.clinoState() != cwClinoStates::Empty ||
+                shot.backClinoState() != cwClinoStates::Empty)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
   \brief Get's the chunk data based on a role
   */
 QVariant cwSurveyChunk::data(DataRole role, int index) const {

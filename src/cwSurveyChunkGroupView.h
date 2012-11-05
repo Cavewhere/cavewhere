@@ -50,6 +50,7 @@ public:
     /// That keeps this rectangle visible
     Q_INVOKABLE QRectF ensureVisibleRect() const;
 
+    Q_INVOKABLE void setFocus(int index);
 
 signals:
     void tripChanged();
@@ -91,14 +92,14 @@ private:
     cwSurveyChunkTrimmer* ChunkTrimmer;
 
     void UpdatePosition(int index);
-    void UpdateActiveChunkViews();
-    void UpdateContentArea(int beginIndex, int endIndex);
+    void updateActiveChunkViews();
+    void updateContentArea(int beginIndex, int endIndex);
 
     QPair<int, int> VisableRange();
     void CreateChunkView(int index);
     void DeleteChunkView(int index);
 
-    void SetFocus(int index);
+
 
     void updateAboveBelowAndPosition(int index);
 
@@ -106,7 +107,7 @@ private:
 
 private slots:
     //void InsertRows(int start, int end);
-    void AddChunks(int beginIndex, int endIndex);
+    void addChunks(int beginIndex, int endIndex);
 
     void UpdateChunkHeight();
     void SetEnsureVisibleRect(QRectF rect);
