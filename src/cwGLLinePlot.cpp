@@ -99,8 +99,8 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
     MinZValue = std::numeric_limits<float>::max();
 
     for(int i = 0; i < pointData.size(); i++) {
-        MaxZValue = qMax(MaxZValue, pointData[i].z());
-        MinZValue = qMin(MinZValue, pointData[i].z());
+        MaxZValue = qMax(MaxZValue, (float)pointData[i].z());
+        MinZValue = qMin(MinZValue, (float)pointData[i].z());
     }
 
     Points = pointData;

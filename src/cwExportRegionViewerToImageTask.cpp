@@ -8,7 +8,8 @@
 #include <QScreen>
 #include <QPainter>
 
-cwExportRegionViewerToImageTask::cwExportRegionViewerToImageTask() :
+cwExportRegionViewerToImageTask::cwExportRegionViewerToImageTask(QObject *parent) :
+    QObject(parent),
     Window(NULL),
     RegionViewer(NULL),
     DotPerInch(300)
@@ -21,7 +22,7 @@ cwExportRegionViewerToImageTask::cwExportRegionViewerToImageTask() :
  *
  * This will be the resulting image's dpi
  */
-void cwExportRegionViewerToImageTask::setDPI(int dotPerInch)
+void cwExportRegionViewerToImageTask::setDPI(double dotPerInch)
 {
     DotPerInch = dotPerInch;
 }

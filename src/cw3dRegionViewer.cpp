@@ -38,6 +38,8 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 {
     Region = NULL;
 
+    ZoomLevel = 1.0; //1 pixel = 1 meter
+
     Terrain = new cwGLTerrain();
     Terrain->setNumberOfLevels(10);
     //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
@@ -50,6 +52,8 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     LinePlot->setScene(this);
     Scraps->setScene(this);
     Plane->setScene(this);
+
+    setAntialiasing(true);
 
     setupInteractionTimers();
 }
@@ -68,7 +72,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
-    Plane->draw();
+    //Plane->draw();
 
     glDisable(GL_DEPTH_TEST);
 
@@ -97,11 +101,9 @@ void cw3dRegionViewer::initializeGL() {
   */
 void cw3dRegionViewer::resizeGL() {
 
-//    double zoom = 25; //50meters
-//    projectionMatrix.ortho(-width() / zoom, width() / zoom, -height() / zoom, height() / zoom, -10000, 10000);
+    cwProjection projection = orthoProjection();
 
-    cwProjection projection;
-    projection.setPerspective(55, width() / (float)height(), 1, 10000);
+    //projection.setPerspective(55, width() / (float)height(), 1, 10000);
 
     Camera->setProjection(projection);
 }
@@ -295,34 +297,18 @@ void cw3dRegionViewer::rotateLastPosition()
  */
 void cw3dRegionViewer::zoomLastPosition()
 {
-    int delta = ZoomDelta;
-    QPoint position = ZoomPosition;
-
-    //Make the event position into gl viewport
-    QPoint mappedPos = Camera->mapToGLViewport(position);
-
-    //Get the ray from the front of the screen to the back of the screen
-    QVector3D front = Camera->unProject(mappedPos, 0.0);
-
-    //Find the intsection on the plane
-    QVector3D intersection = unProject(mappedPos);
-
-    //Smallray
-    QVector3D ray = intersection - front;
-    float rayLength = ray.length();
-    ray.normalize();
-
-    float t = .0005 * delta;
-    t = qMax(-1.0f, qMin(1.0f, t));
-    t = rayLength * t;
-
-    QVector3D newPositionDelta = ray * t;
-
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(newPositionDelta);
-    Camera->setViewMatrix(viewMatrix);
-
-    update();
+    switch(Camera->projection().type()) {
+    case cwProjection::Perspective:
+    case cwProjection::PerspectiveFrustum:
+        zoomPerspective();
+        break;
+    case cwProjection::Ortho:
+        zoomOrtho();
+        break;
+    default:
+        qDebug() << "Can't zoom because of an unknown projection";
+        return;
+    }
 }
 
 /**
@@ -408,4 +394,78 @@ void cw3dRegionViewer::setupInteractionTimers()
     connect(RotationInteractionTimer, &QTimer::timeout, this, &cw3dRegionViewer::rotateLastPosition);
     connect(ZoomInteractionTimer, &QTimer::timeout, this, &cw3dRegionViewer::zoomLastPosition);
     connect(TranslateTimer, &QTimer::timeout, this, &cw3dRegionViewer::translateLastPosition);
+}
+
+/**
+ * @brief cw3dRegionViewer::zoomPerspective
+ *
+ * Zoom with a perspective transfromation
+ */
+void cw3dRegionViewer::zoomPerspective()
+{
+    int delta = ZoomDelta;
+    QPoint position = ZoomPosition;
+
+    //Make the event position into gl viewport
+    QPoint mappedPos = Camera->mapToGLViewport(position);
+    //Get the ray from the front of the screen to the back of the screen
+    QVector3D front = Camera->unProject(mappedPos, 0.0);
+
+    //Find the intsection on the plane
+    QVector3D intersection = unProject(mappedPos);
+
+    //Smallray
+    QVector3D ray = intersection - front;
+    float rayLength = ray.length();
+    ray.normalize();
+
+    float t = .0005 * delta;
+    t = qMax(-1.0f, qMin(1.0f, t));
+    t = rayLength * t;
+
+    QVector3D newPositionDelta = ray * t;
+
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(newPositionDelta);
+    Camera->setViewMatrix(viewMatrix);
+}
+
+/**
+ * @brief cw3dRegionViewer::zoomOrtho
+ *
+ * Zoom with an orthoganal projection
+ */
+void cw3dRegionViewer::zoomOrtho()
+{
+    int delta = ZoomDelta;
+    QPoint position = ZoomPosition;
+
+    //Make the event position into gl viewport
+    QPoint mappedPos = Camera->mapToGLViewport(position);
+
+    double direction = delta > 0 ? 1.1 : 0.9;
+    ZoomLevel = ZoomLevel *  direction;
+
+    QVector3D before = Camera->unProject(mappedPos, 1.0);
+
+    cwProjection projection = orthoProjection();
+    Camera->setProjection(orthoProjection());
+
+    QVector3D after = Camera->unProject(mappedPos, 1.0);
+
+    QVector3D changeInPosition = after - before;
+    QMatrix4x4 newTranslationMatrix = Camera->viewMatrix();
+    newTranslationMatrix.translate(changeInPosition);
+    Camera->setViewMatrix(newTranslationMatrix);
+}
+
+/**
+ * @brief cw3dRegionViewer::orthoProjection
+ * @return This get the current ortho projection at the current zoom level
+ */
+cwProjection cw3dRegionViewer::orthoProjection() const
+{
+    cwProjection projection;
+    projection.setOrtho(-width() / 2.0 * ZoomLevel, width() / 2.0 * ZoomLevel, -height() / 2.0 * ZoomLevel, height() / 2.0 * ZoomLevel, -10000, 10000);
+    return projection;
 }

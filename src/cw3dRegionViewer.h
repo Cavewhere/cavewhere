@@ -80,6 +80,7 @@ private:
     QTimer* ZoomInteractionTimer;
     QPoint ZoomPosition;
     int ZoomDelta;
+    double ZoomLevel; //This is for orthoginal projections, This is in pixel / meter
 
     QTimer* TranslateTimer;
     QPoint TranslatePosition;
@@ -89,6 +90,11 @@ private:
 
     void renderStationLabels(QPainter* painter);
     void renderStationLabels(QPainter* painter, cwCave* cave);
+
+    void zoomPerspective();
+    void zoomOrtho();
+
+    cwProjection orthoProjection() const;
 
     void setupInteractionTimers();
 
