@@ -865,6 +865,7 @@ void cwSurveyChunkView::createTitlebar() {
     UpTitle->setProperty("text", "U");
     DownTitle->setProperty("text", "D");
 
+    StationTitle->setProperty("width", StationTitle->property("width").toDouble() + 6.0);
     StationTitle->setProperty("height", elementHeight());
     DistanceTitle->setProperty("height", elementHeight());
     AzimuthTitle->setProperty("height", elementHeight());

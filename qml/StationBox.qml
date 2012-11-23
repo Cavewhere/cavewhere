@@ -39,11 +39,18 @@ DataBox {
 
     Rectangle {
         id: guessAreaBackground
-        radius: 5
+//        radius: 5
         color: style.floatingWidgetColor
         anchors.centerIn: parent
         visible: false
         border.color: "#888888"
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+                commitAutoStation()
+            }
+        }
     }
 
     Column {
@@ -55,13 +62,17 @@ DataBox {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#444444"
-            text: "Good?"
+            text: "Press Enter"
+            font.pixelSize: 10
+            font.bold: true
+            horizontalAlignment: Text.AlignHCenter
         }
 
         Text {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#333333"
+//            font.pixelSize: 11
         }
     }
 
