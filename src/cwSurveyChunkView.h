@@ -56,6 +56,10 @@ public:
     Q_INVOKABLE void navigationArrow(int rowIndex, int role, int key);
     Q_INVOKABLE void ensureDataBoxVisible(int rowIndex, int role);
 
+    Q_INVOKABLE void showRemoveBoxsOnStations(int begin, int end);
+    Q_INVOKABLE void showRemoveBoxsOnShots(int begin, int end);
+    Q_INVOKABLE void hideRemoveBoxs();
+
 signals:
     void modelChanged();
 
@@ -233,6 +237,9 @@ private:
     void setItemFocus(QQuickItem* item);
 
     QQuickItem* databox(int rowIndex, int role);
+
+    void removeBoxVisible(bool visible, StationRow row);
+    void removeBoxVisible(bool visible, ShotRow row);
 
 };
 

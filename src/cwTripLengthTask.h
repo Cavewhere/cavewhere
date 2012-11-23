@@ -37,7 +37,6 @@ signals:
     void tripChanged();
 
 private slots:
-   void chunkRemoved(int begin, int end);
    void chunkAdded(int begin, int end);
 
    void disconnectTrip();

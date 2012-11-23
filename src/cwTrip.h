@@ -57,6 +57,7 @@ public:
     void insertChunk(int row, cwSurveyChunk* chunk);
     void addChunk(cwSurveyChunk* chunk);
     Q_INVOKABLE void addNewChunk();
+    Q_INVOKABLE void removeChunk(cwSurveyChunk* chunk);
 
     int numberOfChunks() const;
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;

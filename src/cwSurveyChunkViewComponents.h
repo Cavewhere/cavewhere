@@ -36,6 +36,7 @@ public:
     QQmlComponent* backCompassDelegate() const;
     QQmlComponent* frontClinoDelegate() const;
     QQmlComponent* backClinoDelegate() const;
+    QQmlComponent* removeDataDelegate() const;
 
     cwValidator* stationValidator() const;
     cwValidator* lrudValidator() const;
@@ -54,6 +55,7 @@ private:
     QQmlComponent* FrontSiteDelegate;
     QQmlComponent* BackSiteDelegate;
     QQmlComponent* ShotDistanceDelegate;
+    QQmlComponent* RemoveDataDelegate;
 
     cwStationValidator* StationValidator;
     cwDistanceValidator* DistanceValidator;
@@ -108,6 +110,7 @@ inline QQmlComponent* cwSurveyChunkViewComponents::frontClinoDelegate() const {
 inline QQmlComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
     return BackSiteDelegate;
 }
+
 
 inline cwValidator *cwSurveyChunkViewComponents::stationValidator() const {
     return StationValidator;

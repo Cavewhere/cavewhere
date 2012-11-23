@@ -57,6 +57,7 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
                 addChunks(0, Trip->numberOfChunks() - 1);
 
                 connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(addChunks(int,int)));
+                connect(Trip, SIGNAL(chunksRemoved(int,int)), SLOT(removeChunks(int,int)));
                 connect(Trip->calibrations(), SIGNAL(frontSightsChanged()), SLOT(updateChunksFrontSights()));
                 connect(Trip->calibrations(), SIGNAL(backSightsChanged()), SLOT(updateChunksBackSights()));
             }
@@ -343,6 +344,32 @@ void cwSurveyChunkGroupView::addChunks(int beginIndex, int endIndex) {
     //If only one chunk is added set the focus on it
     if(beginIndex == endIndex) {
         setFocus(beginIndex);
+    }
+}
+
+/**
+ * @brief cwSurveyChunkGroupView::removeChunks
+ * @param beginIndex
+ * @param endIndex
+ *
+ * Removes the chunks between beginIndex and endIndex
+ */
+void cwSurveyChunkGroupView::removeChunks(int beginIndex, int endIndex)
+{
+    if(Trip == NULL) { return; }
+
+    for(int i = beginIndex; i <= endIndex; i++) {
+        ChunkViews.at(i)->deleteLater();
+        ChunkViews.removeAt(i);
+        ChunkBoundingRects.removeAt(i);
+    }
+
+    updateContentArea(beginIndex, endIndex);
+    updateActiveChunkViews();
+
+    if(ChunkViews.isEmpty()) {
+        emit contentHeightChanged();
+        emit contentWidthChanged();
     }
 }
 

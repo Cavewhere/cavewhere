@@ -8,6 +8,7 @@
 #include "cwDebug.h"
 #include "cwValidator.h"
 #include "cwSurveyChunkTrimmer.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -257,6 +258,8 @@ void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
     }
 }
 
+
+
 /**
   Moves the focus to the left
   */
@@ -478,6 +481,7 @@ QQuickItem *cwSurveyChunkView::databox(int rowIndex, int role)
     }
     return NULL;
 }
+
 
 /**
   \brief This update the survey chunk's data
@@ -1604,4 +1608,69 @@ void cwSurveyChunkView::updateShotRowData(int index) {
     updateShotData(cwSurveyChunk::ShotBackClinoRole,
                    index);
 
+}
+
+/**
+ * @brief cwSurveyChunkView::showRemoveBoxsOnStations
+ * @param begin
+ * @param end
+ *
+ * This shows remove boxes (on stations), gives the user feedback between begin and end
+ *
+ */
+void cwSurveyChunkView::showRemoveBoxsOnStations(int begin, int end)
+{
+    for(int i = begin; i <= end; i++) {
+        StationRow stationRow = getStationRow(i);
+        removeBoxVisible(true, stationRow);
+    }
+}
+
+/**
+ * @brief cwSurveyChunkView::showRemoveBoxsOnShot
+ * @param begin
+ * @param end
+ *
+ * This shows remove boxes (on stations), gives the user feedback between begin and end
+ */
+void cwSurveyChunkView::showRemoveBoxsOnShots(int begin, int end)
+{
+    for(int i = begin; i <= end; i++) {
+        ShotRow shotRow = getShotRow(i);
+        removeBoxVisible(true, shotRow);
+    }
+}
+
+/**
+ * @brief cwSurveyChunkView::hideRemoveBoxs
+ *
+ * This hides all the remove boxs
+ */
+void cwSurveyChunkView::hideRemoveBoxs()
+{
+    for(int i = 0; i < StationRows.count(); i++) {
+        removeBoxVisible(false, StationRows.at(i));
+    }
+
+    for(int i = 0; i < ShotRows.count(); i++) {
+        removeBoxVisible(false, ShotRows.at(i));
+    }
+}
+
+void cwSurveyChunkView::removeBoxVisible(bool visible, cwSurveyChunkView::StationRow stationRow)
+{
+    stationRow.stationName()->setProperty("aboutToDelete", visible);
+    stationRow.left()->setProperty("aboutToDelete", visible);
+    stationRow.right()->setProperty("aboutToDelete", visible);
+    stationRow.up()->setProperty("aboutToDelete", visible);
+    stationRow.down()->setProperty("aboutToDelete", visible);
+}
+
+void cwSurveyChunkView::removeBoxVisible(bool visible, cwSurveyChunkView::ShotRow shotRow)
+{
+    shotRow.distance()->setProperty("aboutToDelete", visible);
+    shotRow.frontCompass()->setProperty("aboutToDelete", visible);
+    shotRow.frontClino()->setProperty("aboutToDelete", visible);
+    shotRow.backCompass()->setProperty("aboutToDelete", visible);
+    shotRow.backClino()->setProperty("aboutToDelete", visible);
 }

@@ -231,6 +231,26 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
      addChunk(chunk);
  }
 
+ /**
+  * @brief cwTrip::removeChunk
+  * @param chunk
+  *
+  * Search through all the chunks, if it find the chunk, the chuck will
+  * be removed and delete, with deleteLater().  If the chunk doesn't exist
+  * in this trip then this function does nothing.
+  */
+ void cwTrip::removeChunk(cwSurveyChunk *chunk)
+ {
+     int index = 0;
+     foreach(cwSurveyChunk* currentChunk, chunks()) {
+         if(currentChunk == chunk) {
+             removeChunks(index, index);
+             break;
+         }
+         index++;
+     }
+ }
+
 /**
   \brief Set chunks for the group
 

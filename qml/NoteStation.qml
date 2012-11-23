@@ -93,6 +93,5 @@ ScrapPointItem {
             propagateComposedEvents: true
             onClicked: select()
         }
-
     }
 }

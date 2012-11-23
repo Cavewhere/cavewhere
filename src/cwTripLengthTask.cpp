@@ -27,7 +27,6 @@ void cwTripLengthTask::setTrip(cwTrip *trip) {
         if(Trip != NULL) {
             connect(Trip, SIGNAL(destroyed()), SLOT(disconnectTrip()));
             connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(chunkAdded(int,int)));
-            connect(Trip, SIGNAL(chunksRemoved(int,int)), SLOT(chunkRemoved(int,int)));
             connect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), SLOT(restart()));
             connectChunks();
 
@@ -81,16 +80,6 @@ QPair<double, int> cwTripLengthTask::distanceOfChunk(const cwSurveyChunk *chunk)
     return QPair<double, int>(distance, numberOfShots);
 }
 
-/**
-
-  */
-void cwTripLengthTask::chunkRemoved(int begin, int end)
-{
-    for(int i = begin; i <= end; i++) {
-        cwSurveyChunk* chunk = Trip->chunk(i);
-        disconnectChunk(chunk);
-    }
-}
 
 void cwTripLengthTask::chunkAdded(int begin, int end)
 {

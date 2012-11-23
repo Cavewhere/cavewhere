@@ -19,6 +19,7 @@ void cwSurveyChunkTrimmer::setChunk(cwSurveyChunk *chunk) {
     if(Chunk != NULL) {
         connect(Chunk, SIGNAL(stationsAdded(int,int)), SLOT(addLastEmptyStation()));
         connect(Chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(addLastEmptyStation()));
+        connect(Chunk, SIGNAL(destroyed()), SLOT(chunkDestroyed()));
 
         addLastEmptyStation();
     }
@@ -111,6 +112,16 @@ void cwSurveyChunkTrimmer::addLastEmptyStation() {
         Chunk->appendNewShot();
         connect(Chunk, SIGNAL(stationsAdded(int,int)), SLOT(addLastEmptyStation()));
     }
+}
+
+/**
+ * @brief cwSurveyChunkTrimmer::chunkDestroyed
+ *
+ * Called if the chunk is destroyed
+ */
+void cwSurveyChunkTrimmer::chunkDestroyed()
+{
+    Chunk = NULL;
 }
 
 /**

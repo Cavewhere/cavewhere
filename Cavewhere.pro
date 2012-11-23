@@ -423,7 +423,8 @@ OTHER_FILES += \
     qml/CaveOverviewPage.qml \
     qml/CaveLengthComponent.qml \
     qml/CaveLengthAndDepth.qml \
-    qml/ContextMenuButton.qml
+    qml/ContextMenuButton.qml \
+    qml/RemoveDataRectangle.qml
 
 RESOURCES += \
     icons.qrc

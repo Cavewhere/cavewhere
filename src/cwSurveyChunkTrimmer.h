@@ -51,6 +51,7 @@ private:
 
 private slots:
     void addLastEmptyStation();
+    void chunkDestroyed();
 
 };
 

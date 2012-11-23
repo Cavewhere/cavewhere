@@ -108,6 +108,7 @@ private:
 private slots:
     //void InsertRows(int start, int end);
     void addChunks(int beginIndex, int endIndex);
+    void removeChunks(int beginIndex, int endIndex);
 
     void UpdateChunkHeight();
     void SetEnsureVisibleRect(QRectF rect);

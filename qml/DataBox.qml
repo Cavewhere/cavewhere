@@ -10,6 +10,8 @@ Item {
     property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
     property SurveyChunkView surveyChunkView;
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
+    property alias contextMenuItems: rightClickMenu.children
+    property alias aboutToDelete: removeBoxId.visible
 
     property int rowIndex: -1
     property int dataRole
@@ -44,6 +46,42 @@ Item {
             surveyChunkView.previousTab(rowIndex, dataRole)
 //            event.accepted = true
         }
+    }
+
+    onRightClick: {
+        //Show menu
+        rightClickMenu.popupOnTopOf(dataBox, mouse.x, mouse.y)
+    }
+
+    ContextMenu {
+        id: rightClickMenu
+
+        MenuItem {
+            text: "Remove Chunk"
+            onTriggered: {
+                surveyChunk.parentTrip.removeChunk(surveyChunk)
+            }
+
+            onContainsMouseChanged: {
+                var lastStationIndex = surveyChunk.stationCount() - 1;
+                var lastShotIndex = surveyChunk.shotCount() - 1;
+
+                if(containsMouse) {
+                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
+                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
+                } else {
+                    surveyChunkView.hideRemoveBoxs();
+                }
+            }
+        }
+    }
+
+    RemoveDataRectangle {
+        id: removeBoxId
+        visible: false
+        anchors.fill: parent
+        anchors.rightMargin: -1
+        z: 1
     }
 
     MouseArea {
