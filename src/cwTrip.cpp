@@ -88,7 +88,7 @@ cwTrip::~cwTrip()
   \brief Set's the name of the survey trip
   */
 void cwTrip::setName(QString name) {
-    if(name != Name) {
+    if(name != Name && !name.isEmpty()) {
         pushUndo(new NameCommand(this, name));
     }
 }
@@ -97,7 +97,7 @@ void cwTrip::setName(QString name) {
   Sets the date of the trip
   */
 void cwTrip::setDate(QDate date) {
-    if(date != Date) {
+    if(date != Date && !date.isNull()) {
         pushUndo(new DateCommand(this, date));
     }
 }

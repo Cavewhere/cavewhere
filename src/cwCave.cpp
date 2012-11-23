@@ -83,7 +83,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
   \brief Sets the name of the cwCave
   */
 void cwCave::setName(QString name) {
-    if(Name != name) {
+    if(Name != name && !name.isEmpty()) {
         pushUndo(new NameCommand(this, name));
     }
 }
