@@ -245,6 +245,8 @@ void cwProject::newProject() {
   */
 void cwProject::loadFile(QString filename) {
 
+    if(filename.isEmpty()) { return; }
+
     //Load the region task
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
     connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(updateRegionData(cwCavingRegion*)));
@@ -402,10 +404,13 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
  */
 void cwProject::load()
 {
-    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
-    loadDialog->setFileMode(QFileDialog::ExistingFile);
-    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
-    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
-    loadDialog->show();
+    QString filename = QFileDialog::getOpenFileName(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+    loadFile(filename);
+
+//    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+//    loadDialog->setFileMode(QFileDialog::ExistingFile);
+//    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
+//    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+//    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
+//    loadDialog->show();
 }

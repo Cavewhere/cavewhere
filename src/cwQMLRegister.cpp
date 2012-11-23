@@ -17,19 +17,15 @@
 #include "cwCompassValidator.h"
 #include "cwDistanceValidator.h"
 #include "cwSurveyNoteModel.h"
-//#include "cwNoteItem.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwRegionTreeModel.h"
-//#include "cwImportSurvexDialog.h"
 #include "cwLinePlotManager.h"
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
-//#include "cwGLRenderer.h"
 #include "cwGLLinePlot.h"
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
-#include "cwImageDatabase.h"
 #include "cwFileDialogHelper.h"
 #include "cwProjectImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
@@ -37,13 +33,11 @@
 #include "cwBaseScrapInteraction.h"
 #include "cwCamera.h"
 #include "cwImageItem.h"
-//#include "cwWheelArea.h"
 #include "cwScrapView.h"
 #include "cwScrapItem.h"
 #include "cwTransformUpdater.h"
 #include "cwBaseNoteStationInteraction.h"
 #include "cwScrap.h"
-//#include "cwNoteStationView.h"
 #include "cwScrapStationView.h"
 #include "cwNoteTranformation.h"
 #include "cwScrapItem.h"
@@ -72,8 +66,6 @@
 #include "cwUnitValue.h"
 #include "cwImageResolution.h"
 #include "cwExportRegionViewerToImageTask.h"
-
-//#include <QGLWidget>
 
 #include <cwMenuWindow.h>
 
