@@ -85,7 +85,6 @@ SOURCES += src/main.cpp \
     src/cwGLLinePlot.cpp \
     src/cwCollisionRectKdTree.cpp \
     src/cw3dRegionViewer.cpp \
-    src/cwImageDatabase.cpp \
     src/cwImage.cpp \
     src/cwImageData.cpp \
     src/cwProject.cpp \
@@ -230,7 +229,6 @@ HEADERS  += \
     src/cwGLLinePlot.h \
     src/cwCollisionRectKdTree.h \
     src/cw3dRegionViewer.h \
-    src/cwImageDatabase.h \
     src/cwImage.h \
     src/cwImageData.h \
     src/cwProject.h \
