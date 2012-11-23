@@ -162,14 +162,6 @@ inline cwCave* cwTrip::parentCave() {
 }
 
 
-
-///**
-//  \brief Gets the distance unit for the trip
-//  */
-//inline cwUnits::LengthUnit cwTrip::distanceUnit() const {
-//    return DistanceUnit;
-//}
-
 /**
   \brief Gets the survey team for the trip
   */

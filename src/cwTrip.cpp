@@ -26,8 +26,6 @@ void cwTrip::Copy(const cwTrip& object)
 {
     ParentCave = NULL;
 
-//    DistanceUnit = cwUnits::Meters;
-
     //Copy the name of the trip
     setName(object.Name);
     setDate(object.Date);
@@ -372,10 +370,6 @@ void cwTrip::setParentCave(cwCave* parentCave) {
         ParentCave = parentCave;
         setParent(parentCave);
 
-//        foreach(cwSurveyChunk* chunk, Chunks) {
-//            chunk->updateStationsWithNewCave();
-//        }
-
         Notes->setParentCave(ParentCave);
     }
 }
@@ -388,13 +382,11 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 }
 
 void cwTrip::NameCommand::redo() {
-//    if(Trip.isNull()) { return; }
     Trip->Name = NewName;
     emit Trip->nameChanged(Trip->Name);
 }
 
 void cwTrip::NameCommand::undo() {
-//    if(Trip.isNull()) { return; }
     Trip->Name = OldName;
     emit Trip->nameChanged(Trip->Name);
 }
@@ -407,13 +399,11 @@ cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
 }
 
 void cwTrip::DateCommand::redo() {
-//    if(Trip.isNull()) { return; }
     Trip->Date = NewDate;
     emit Trip->dateChanged(Trip->Date);
 }
 
 void cwTrip::DateCommand::undo() {
-//    if(Trip.isNull()) { return; }
     Trip->Date = OldDate;
     emit Trip->dateChanged(Trip->Date);
 }
