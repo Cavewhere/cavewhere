@@ -29,6 +29,10 @@ Rectangle {
         return null;
     }
 
+    function resetSideBar() {
+        dataSideBar.caveSidebar.reset();
+    }
+
 
     DataSideBar {
         id: dataSideBar

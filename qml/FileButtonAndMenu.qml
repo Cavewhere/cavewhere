@@ -5,6 +5,7 @@ Rectangle {
     id: fileMenuButton
 
     property var terrainRenderer; //For taking screenshots
+    property DataMainPage dataPage;
 
     width: 100
     height: Math.max(caveIcon.height, textItem.height)
@@ -36,7 +37,10 @@ Rectangle {
 
         MenuItem {
             text: "New"
-            onTriggered: project.newProject();
+            onTriggered:{
+                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
+                project.newProject();
+            }
         }
 
         MenuItem {
@@ -51,7 +55,10 @@ Rectangle {
 
         MenuItem {
             text: "Load"
-            onTriggered: project.load();
+            onTriggered: {
+                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
+                project.load();
+            }
         }
 
         MenuItem {

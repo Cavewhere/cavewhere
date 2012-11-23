@@ -151,6 +151,7 @@ void cwScrapManager::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
     addToDeletedScraps(scrap);
+    DirtyScraps.remove(scrap); //scrapObj);
 }
 
 /**

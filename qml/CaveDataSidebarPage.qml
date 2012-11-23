@@ -25,10 +25,14 @@ Rectangle {
             var caveElementObject = regionModel.data(caveElement.index, RegionTreeModel.ObjectRole);
 
             if(removedObject === caveElementObject) {
-                regionVisualDataModel.rootIndex = cavesElement.index
-                view.currentIndex = cavesElement.viewIndex
+                reset()
             }
         }
+    }
+
+    function reset() {
+        regionVisualDataModel.rootIndex = cavesElement.index
+        view.currentIndex = cavesElement.viewIndex
     }
 
     Component.onCompleted: {
