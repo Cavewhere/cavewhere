@@ -579,8 +579,8 @@ float cwSurveyChunkGroupView::contentHeight() const {
 }
 
 float cwSurveyChunkGroupView::contentWidth() {
-    if(ChunkBoundingRects.isEmpty()) { return 500.0; }
-//    qDebug() << "Children width: " << childrenBoundingRect().width();
+    if(ChunkBoundingRects.isEmpty()) { return 392.141; }
+//    qDebug() << "Children width: " << childrenRect().width();
     return childrenRect().width();
 }
 

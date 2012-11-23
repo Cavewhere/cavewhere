@@ -34,7 +34,7 @@ Rectangle {
         id: flickArea
 
         contentHeight: column.height
-        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth)
+        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
 
         anchors.top: parent.top
         anchors.bottom: parent.bottom
