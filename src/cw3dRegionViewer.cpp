@@ -30,7 +30,6 @@
 #include <QDebug>
 #include <QtConcurrentMap>
 #include <QFontMetrics>
-#include <QQuickCanvas>
 #include <QRay3D>
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :

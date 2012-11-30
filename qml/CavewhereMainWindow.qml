@@ -11,6 +11,7 @@ Rectangle {
         id: fileMenuButton
 
         terrainRenderer: terrainRendererId
+        dataPage: dataMainPageId
     }
 
     MainSideBar {
@@ -60,6 +61,7 @@ Rectangle {
         }
 
         DataMainPage {
+            id: dataMainPageId
         //visible: mainSideBar.pageShown == "data"
             width:  parent.width
             height: parent.height

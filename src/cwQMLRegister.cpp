@@ -67,8 +67,6 @@
 #include "cwImageResolution.h"
 #include "cwExportRegionViewerToImageTask.h"
 
-#include <cwMenuWindow.h>
-
 //Qt registeration
 #include <QQuickWindow>
 
@@ -103,10 +101,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwBaseScrapInteraction>("Cavewhere", 1, 0, "BaseScrapInteraction");
     qmlRegisterType<cwCamera>("Cavewhere", 1, 0, "Camera");
     qmlRegisterType<cwImageItem>("Cavewhere", 1, 0, "ImageItem");
-//    qmlRegisterType<cwWheelArea>("Cavewhere", 1, 0, "WheelArea");
     qmlRegisterType<cwScrapView>("Cavewhere", 1, 0, "ScrapView");
     qmlRegisterType<cwTransformUpdater>("Cavewhere", 1, 0, "TransformUpdater");
-//    qmlRegisterType<cwNoteStationView>("Cavewhere", 1, 0, "NoteStationView");
     qmlRegisterType<cwScrapStationView>("Cavewhere", 1, 0, "ScrapStationView");
     qmlRegisterType<cwScrap>("Cavewhere", 1, 0, "Scrap");
     qmlRegisterType<cwBaseNoteStationInteraction>("Cavewhere", 1, 0, "BaseNoteStationInteraction");
@@ -139,6 +135,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
     qmlRegisterType<cwExportRegionViewerToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
 
-    qmlRegisterType<cwMenuWindow>("Cavewhere", 1, 0, "MenuWindow");
     qmlRegisterType<QQuickWindow>("Cavewhere", 1, 0, "QuickWindow");
 }

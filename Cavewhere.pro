@@ -138,7 +138,6 @@ SOURCES += src/main.cpp \
     src/cwSurveyImportManager.cpp \
     src/cwTripLengthTask.cpp \
     src/cwSurvexLRUDChunk.cpp \
-    src/cwMenuWindow.cpp \
     src/cwGLGridPlane.cpp \
     src/cwLabel3dView.cpp \
     src/cwLabel3dItem.cpp \
@@ -286,7 +285,6 @@ HEADERS  += \
     src/cwSurveyImportManager.h \
     src/cwTripLengthTask.h \
     src/cwSurvexLRUDChunk.h \
-    src/cwMenuWindow.h \
     src/cwGLGridPlane.h \
     src/cwLabel3dView.h \
     src/cwLabel3dItem.h \
