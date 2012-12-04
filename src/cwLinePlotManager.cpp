@@ -273,6 +273,6 @@ void cwLinePlotManager::updateLinePlot() {
 
     emit stationPositionInCavesChanged(resultData.caveData().keys());
     emit stationPositionInTripsChanged(resultData.trips().toList());
-    emit stationPositionInScrapsChanged(resultData.scraps().toList());
+    emit stationPositionInScrapsChanged(resultData.scraps().toList());  //FIXME: This is for testing only!
 }
 

@@ -6,6 +6,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwDebug.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -99,6 +100,12 @@ QSet<int> cwImageCleanupTask::extractAllValidImageIds()
                 cwImage image = note->image();
                 QSet<int> imageIds = imageToSet(image);
                 ids = ids.unite(imageIds);
+
+                foreach(cwScrap* scrap, note->scraps()) {
+                    image = scrap->triangulationData().croppedImage();
+                    imageIds = imageToSet(image);
+                    ids = ids.unite(imageIds);
+                }
             }
         }
     }

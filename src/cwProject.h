@@ -9,6 +9,7 @@ class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
 class cwTrip;
+class cwScrapManager;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -37,6 +38,9 @@ public:
 
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
+
+    cwScrapManager* scrapManager();
+    void setScrapManager(cwScrapManager* manager);
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void save();
@@ -70,6 +74,8 @@ private:
 
     //The region that this project looks after
     cwCavingRegion* Region;
+
+    //This prevents the scrapmanager for regenerating all
 
     //For loading images from the disk into this project
     QThread* LoadSaveThread;

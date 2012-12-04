@@ -26,7 +26,8 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     TriangulateTask(new cwTriangulateTask()),
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(NULL),
-    GLScraps(NULL)
+    GLScraps(NULL),
+    AutomaticUpdate(true)
 {
     TriangulateTask->setThread(TriangulateThread);
 
@@ -113,7 +114,7 @@ void cwScrapManager::updateAllScraps() {
         }
     }
 
-    updateScrapGeometry(scraps);
+    updateScrapGeometryHelper(scraps);
 }
 
 /**
@@ -135,7 +136,7 @@ void cwScrapManager::updateStationPositionChangedForScraps(QList<cwScrap *> scra
 
     //Update the scrap geometry
     //FIXME: We should only morph the existing geometry
-    updateScrapGeometry(scraps);
+    updateScrapGeometry(scraps);  //Explict call, don't check automatic update
 }
 
 void cwScrapManager::rerunDirtyScraps()
@@ -307,6 +308,13 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
   3. Morph the geometry to the station positions
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
+    if(AutomaticUpdate) {
+        updateScrapGeometryHelper(scraps);
+    }
+}
+
+void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
+{
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     foreach(cwScrap* scrap, scraps) {
         connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
@@ -693,6 +701,11 @@ void cwScrapManager::taskFinished() {
 
         QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
 
+        if(scrapDataset.isEmpty()) {
+            //No scrap data udpated...
+            return;
+        }
+
         //Clear all the scraps that need to be update, because we are updating now
         foreach(cwScrap* scrap, DirtyScraps) {
             disconnect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
@@ -726,7 +739,6 @@ void cwScrapManager::taskFinished() {
 
         DeletedScraps.clear();
 
-        //FIXME: Do we remove all cropped images???
         //Removed all cropped image data
         foreach(cwScrap* scrap, validScraps) {
             cwImage image = scrap->triangulationData().croppedImage();
@@ -760,4 +772,20 @@ void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
 {
     GLScraps = glScraps;
     GLScraps->setProject(Project);
+    if(Region != NULL) {
+        GLScraps->setCavingRegion(Region);
+    }
+}
+
+/**
+    Sets automaticUpdate
+
+    If true (default) this class will update the 3d geometry of the scrap when data has
+    change.  Otherwise, scraps must be updated manaually, using updateAllScraps().
+*/
+void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
+    if(AutomaticUpdate != automaticUpdate) {
+        AutomaticUpdate = automaticUpdate;
+        emit automaticUpdateChanged();
+    }
 }

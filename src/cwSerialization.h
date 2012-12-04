@@ -20,6 +20,7 @@
 #include "cwTeamMember.h"
 #include "cwReadingStates.h"
 #include "cwQtSerialization.h"
+#include "cwTriangulatedData.h"
 
 //Boost xml includes
 #include <boost/archive/xml_iarchive.hpp>
@@ -28,6 +29,7 @@
 #include <boost/serialization/collection_traits.hpp>
 #include <boost/serialization/collections_load_imp.hpp>
 #include <boost/serialization/collections_save_imp.hpp>
+#include <boost/serialization/binary_object.hpp>
 
 BOOST_CLASS_VERSION(cwCavingRegion, 1)
 BOOST_CLASS_VERSION(cwCave, 2)
@@ -40,13 +42,14 @@ BOOST_CLASS_VERSION(cwTripCalibration, 1)
 BOOST_CLASS_VERSION(cwSurveyChunk, 1)
 BOOST_CLASS_VERSION(cwStationReference, 1)
 BOOST_CLASS_VERSION(cwShot, 2)
-BOOST_CLASS_VERSION(cwScrap, 1)
+BOOST_CLASS_VERSION(cwScrap, 2)
 BOOST_CLASS_VERSION(cwNoteStation, 1)
 BOOST_CLASS_VERSION(cwNoteTranformation, 1)
 BOOST_CLASS_VERSION(cwLength, 1)
 BOOST_CLASS_VERSION(cwImageResolution, 1)
 BOOST_CLASS_VERSION(cwTeam, 1)
 BOOST_CLASS_VERSION(cwTeamMember, 1)
+BOOST_CLASS_VERSION(cwTriangulatedData, 1)
 
 BOOST_SERIALIZATION_SPLIT_FREE(cwCave)
 BOOST_SERIALIZATION_SPLIT_FREE(cwCavingRegion)
@@ -66,6 +69,7 @@ BOOST_SERIALIZATION_SPLIT_FREE(cwLength)
 BOOST_SERIALIZATION_SPLIT_FREE(cwImageResolution)
 BOOST_SERIALIZATION_SPLIT_FREE(cwTeam)
 BOOST_SERIALIZATION_SPLIT_FREE(cwTeamMember)
+BOOST_SERIALIZATION_SPLIT_FREE(cwTriangulatedData)
 
 /**
   All the saving and loading for all the objects
@@ -570,17 +574,19 @@ namespace boost {
         QList<cwNoteStation> stations = scrap.stations();
         cwNoteTranformation* noteTransformion = scrap.noteTransformation();
         bool calulateNoteTransform = scrap.calculateNoteTransform();
+        cwTriangulatedData triangleData = scrap.triangulationData();
 
         archive << BOOST_SERIALIZATION_NVP(outlinePoints);
         archive << BOOST_SERIALIZATION_NVP(stations);
         archive << BOOST_SERIALIZATION_NVP(noteTransformion);
         archive << BOOST_SERIALIZATION_NVP(calulateNoteTransform);
+
+        //This can be saved optionally, data can be regenerated
+        archive << BOOST_SERIALIZATION_NVP(triangleData);
     }
 
     template<class Archive>
     void load(Archive &archive, cwScrap &scrap, const unsigned int version) {
-        Q_UNUSED(version)
-
         QVector<QPointF> outlinePoints;
         QList<cwNoteStation> stations;
         cwNoteTranformation* noteTransformion;
@@ -599,6 +605,73 @@ namespace boost {
         delete noteTransformion; //Delete it
 
         scrap.setCalculateNoteTransform(calulateNoteTransform);
+
+        if(version >= 2) {
+            cwTriangulatedData triangleData;
+            archive >> BOOST_SERIALIZATION_NVP(triangleData);
+            scrap.setTriangulationData(triangleData);
+        }
+
+    }
+
+    ////////////////////////// cwTriangulatedData ////////////////////////////////////////
+    template<class Archive>
+    void save(Archive &archive, const cwTriangulatedData &triangluatedData, const unsigned int version) {
+        Q_UNUSED(version);
+
+        cwImage croppedImage = triangluatedData.croppedImage();
+
+        QByteArray binaryData;
+
+        {
+            QDataStream dataStream(&binaryData, QIODevice::WriteOnly);
+            dataStream << triangluatedData.points();
+            dataStream << triangluatedData.texCoords();
+            dataStream << triangluatedData.indices();
+        }
+
+        int binaryDataSize = binaryData.size();
+        qDebug() << "BinaryData Save:" << binaryDataSize << triangluatedData.points().size();
+
+        archive << BOOST_SERIALIZATION_NVP(croppedImage);
+        archive << BOOST_SERIALIZATION_NVP(binaryDataSize);
+        archive << make_nvp("triangleGeometryData", make_binary_object(binaryData.data(), binaryData.size()));
+    }
+
+    template<class Archive>
+    void load(Archive &archive, cwTriangulatedData &triangluatedData, const unsigned int version) {
+        Q_UNUSED(version);
+
+        cwImage croppedImage;
+        int binaryDataSize;
+        QByteArray binaryData;
+
+        archive >> BOOST_SERIALIZATION_NVP(croppedImage);
+        archive >> BOOST_SERIALIZATION_NVP(binaryDataSize);
+
+        qDebug() << "Binary size:" << binaryDataSize;
+
+        //Resize the binary data
+        binaryData.resize(binaryDataSize);
+
+        //Read in the binary data
+        archive >> make_nvp("triangleGeometryData", make_binary_object(binaryData.data(), binaryData.size()));
+
+        //Extra the binary data
+        QDataStream dataStream(binaryData);
+
+        QVector<QVector3D> points;
+        QVector<QVector2D> texCoords;
+        QVector<uint> indices;
+
+        dataStream >> points;
+        dataStream >> texCoords;
+        dataStream >> indices;
+
+        triangluatedData.setCroppedImage(croppedImage);
+        triangluatedData.setPoints(points);
+        triangluatedData.setTexCoords(texCoords);
+        triangluatedData.setIndices(indices);
     }
 
     ////////////////////////// cwNoteStation ////////////////////////////////////////

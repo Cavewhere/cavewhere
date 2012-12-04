@@ -763,6 +763,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     Stations = other.Stations;
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
+    TriangulationData = other.TriangulationData;
 
     emit stationsReset();
 

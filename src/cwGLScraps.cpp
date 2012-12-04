@@ -92,8 +92,13 @@ void cwGLScraps::updateData()
     QList<cwTriangulatedData> allData = updatedTriangulatedData();
     Scraps.reserve(allData.size());
 
+    qDebug() << "TriangleData:" << allData.size();
+
     foreach(cwTriangulatedData data, allData) {
         Scraps.append(GLScrap(data, project()));
+
+        qDebug() << "Number of points:" << data.points().size();
+        qDebug() << "Indices:" << data.indices().size();
 
         //For geometry intersection
         cwGeometryItersecter::Object geometryObject(
@@ -190,7 +195,16 @@ Sets project
 */
 void cwGLScraps::setProject(cwProject* project) {
     if(Project != project) {
+        if(Project != NULL) {
+            disconnect(Project, &cwProject::filenameChanged, this, &cwGLScraps::updateGeometry);
+        }
+
         Project = project;
+
+        if(Project != NULL) {
+            connect(Project, &cwProject::filenameChanged, this, &cwGLScraps::updateGeometry);
+        }
+
         emit projectChanged();
     }
 }

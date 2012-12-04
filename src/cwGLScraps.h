@@ -27,7 +27,6 @@ public:
     cwProject* project() const;
     void setProject(cwProject* project);
 
-    void updateGeometry();
     void setCavingRegion(cwCavingRegion* region);
 
     void initialize();
@@ -38,6 +37,7 @@ signals:
     void projectChanged();
 
 public slots:
+    void updateGeometry();
 
 private:
     class GLScrap {

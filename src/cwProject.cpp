@@ -266,6 +266,8 @@ void cwProject::loadFile(QString filename) {
   This should only be called by cwRegionLoadTask
   */
 void cwProject::updateRegionData(cwCavingRegion* region) {
+    TempProject = false;
+
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
 
     //Copy the data from the loaded region
@@ -273,7 +275,6 @@ void cwProject::updateRegionData(cwCavingRegion* region) {
 
     //Update the project filename
     setFilename(loadTask->databaseFilename());
-    TempProject = false;
 }
 
 /**
@@ -413,4 +414,9 @@ void cwProject::load()
 //    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
 //    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
 //    loadDialog->show();
+}
+
+
+void cwProject::setScrapManager(cwScrapManager *manager)
+{
 }

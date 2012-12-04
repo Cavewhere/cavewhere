@@ -30,6 +30,9 @@ class cwLinePlotManager;
 class cwScrapManager : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+
 public:
     explicit cwScrapManager(QObject *parent = 0);
     ~cwScrapManager();
@@ -40,8 +43,12 @@ public:
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
+    bool automaticUpdate() const;
+    void setAutomaticUpdate(bool automaticUpdate);
+
 signals:
-    
+    void automaticUpdateChanged();
+
 public slots:
     void updateAllScraps();
 
@@ -62,6 +69,8 @@ private:
     //For testing only
     cwGLScraps* GLScraps;
 
+    bool AutomaticUpdate; //!<
+
     void connectCave(cwCave* cave);
     void connectTrip(cwTrip* trip);
     void connectNoteModel(cwSurveyNoteModel* noteModel);
@@ -75,6 +84,7 @@ private:
     void disconnectScrap(cwScrap* scrap);
 
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
+    void updateScrapGeometryHelper(QList<cwScrap *> scraps);
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations, const cwStationPositionLookup& positionLookup) const;
 
@@ -127,6 +137,15 @@ private slots:
 inline uint qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
     return qHash(scrapPointer.data());
+}
+
+/**
+Gets automaticUpdate
+
+ If true the scrap manager automatically update the 3d geometry of the scrap
+*/
+inline bool cwScrapManager::automaticUpdate() const {
+    return AutomaticUpdate;
 }
 
 
