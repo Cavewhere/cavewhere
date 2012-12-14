@@ -450,7 +450,7 @@ unix {
 macx {
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.6
     LIBS += -L/opt/local/lib
-    ICON = icon.icns
+    ICON = cavewhereIcon.icns
     INCLUDEPATH += /opt/local/include
 }
 
