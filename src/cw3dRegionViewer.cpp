@@ -71,7 +71,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
-    Plane->draw();
+//    Plane->draw();
 
     glDisable(GL_DEPTH_TEST);
 
@@ -467,3 +467,32 @@ cwProjection cw3dRegionViewer::orthoProjection() const
     projection.setOrtho(-width() / 2.0 * ZoomLevel, width() / 2.0 * ZoomLevel, -height() / 2.0 * ZoomLevel, height() / 2.0 * ZoomLevel, -10000, 10000);
     return projection;
 }
+
+/**
+ * @brief cw3dRegionViewer::perspectiveProjection
+ * @return The current prespective projection for the viewer
+ */
+cwProjection cw3dRegionViewer::perspectiveProjection() const
+{
+    cwProjection projection;
+    projection.setPerspective(55, width() / (float)height(), 1, 10000);
+    return projection;
+}
+
+/**
+ * @brief cw3dRegionViewer::projectionType
+ * @return Get's the current projection type of the viewer
+ */
+cw3dRegionViewer::ProjectionType cw3dRegionViewer::projectionType() const
+{
+    switch(camera()->projection().type()) {
+    case cwProjection::Perspective:
+        return Prespective;
+    case cwProjection::Ortho:
+        return Orthoganal;
+    default:
+        return Unknown;
+    }
+
+}
+

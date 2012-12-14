@@ -55,8 +55,20 @@ Rectangle {
 
             Component.onCompleted: {
                 //Setup the linePlotManager with the glLinePlot
-                linePlotManager.setGLLinePlot(linePlot);
-                scrapManager.setGLScraps(scraps);
+                linePlotManager.setGLLinePlot(terrainRendererId.linePlot);
+                scrapManager.setGLScraps(terrainRendererId.scraps);
+            }
+
+            Row {
+                Button {
+                    id: perspectiveButtonId
+
+                }
+
+                Button {
+                    id: orthoganlButtonId
+
+                }
             }
         }
 

@@ -22,10 +22,21 @@ class cw3dRegionViewer : public cwGLRenderer
     Q_PROPERTY(cwGLScraps* scraps READ scraps)
 
 public:
+
+    enum ProjectionType {
+        Prespective,
+        Orthoganal,
+        Unknown
+    };
+
     cw3dRegionViewer(QQuickItem* parent = 0);
 
     virtual void paint(QPainter* painter);
     Q_INVOKABLE virtual void initializeGL();
+
+    void setProjectionType(ProjectionType type);
+    ProjectionType projectionType() const;
+
 public slots:
     cwGLLinePlot* linePlot();
     cwGLScraps* scraps() const;
@@ -40,6 +51,8 @@ public slots:
     void rotate(QPoint currentMousePos);
 
     void zoom(QPoint position, int delta);
+
+
 signals:
     void cavingRegionChanged();
 
@@ -95,6 +108,7 @@ private:
     void zoomOrtho();
 
     cwProjection orthoProjection() const;
+    cwProjection perspectiveProjection() const;
 
     void setupInteractionTimers();
 
@@ -118,6 +132,7 @@ inline cwGLScraps *cw3dRegionViewer::scraps() const
 inline cwCavingRegion* cw3dRegionViewer::cavingRegion() const {
     return Region;
 }
+
 
 
 #endif // CW3DREGIONVIEWER_H
