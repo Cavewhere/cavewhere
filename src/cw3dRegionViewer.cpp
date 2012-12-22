@@ -71,7 +71,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
-    //Plane->draw();
+    Plane->draw();
 
     glDisable(GL_DEPTH_TEST);
 
@@ -101,8 +101,7 @@ void cw3dRegionViewer::initializeGL() {
 void cw3dRegionViewer::resizeGL() {
 
     cwProjection projection = orthoProjection();
-
-    //projection.setPerspective(55, width() / (float)height(), 1, 10000);
+//    projection.setPerspective(55, width() / (float)height(), 1, 10000);
 
     Camera->setProjection(projection);
 }

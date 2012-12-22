@@ -74,16 +74,6 @@ Item {
         anchors.fill: autoTransformCheckBox
     }
 
-    Rectangle {
-        width: 20
-        height: 15
-        anchors.left: checkBoxGroup.left
-        anchors.leftMargin: 6
-
-        y: scrapInfoText.height / 2.0
-        color: "red"
-    }
-
     Desktop.CheckBox {
         id: autoTransformCheckBox
         text: "Auto Calculate"
