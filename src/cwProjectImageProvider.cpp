@@ -11,6 +11,7 @@
 #include <QVariant>
 #include <QMutexLocker>
 #include <QDebug>
+#include <QSqlError>
 
 const QString cwProjectImageProvider::Name = "sqlimagequery";
 const QString cwProjectImageProvider::RequestImageSQL = "SELECT type,width,height,dotsPerMeter,imageData from Images where id=?";
@@ -142,7 +143,7 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
     //Create an sql connection
     bool connected = database.open();
     if(!connected) {
-        qDebug() << "cwProjectImageProvider:: Couldn't connect to database:" << ProjectPath;
+        qDebug() << "cwProjectImageProvider:: Couldn't connect to database:" << ProjectPath << database.lastError().text() << LOCATION;
         return cwImageData();
     }
 
@@ -157,6 +158,7 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
 
     if(!successful) {
         qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << RequestImageSQL;
+        database.close();
         return cwImageData();
     }
 
@@ -166,6 +168,7 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
 
     if(!successful) {
         qDebug() << "Couldn't exec query image id:" << id << LOCATION;
+        database.close();
         return cwImageData();
     }
 
@@ -185,9 +188,12 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
                 imageData = qUncompress(imageData);
             }
         }
+
+        database.close();
         return cwImageData(size, dotsPerMeter, type, imageData);
     }
 
+    database.close();
     qDebug() << "Query has no data for id:" << id << LOCATION;
     return cwImageData();
 }
