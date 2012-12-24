@@ -164,7 +164,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
 
         if(couldAddText) {
             item->setVisible(true);
-            item->setPos(projectedStationPosition.toPointF());
+            item->setPosition(projectedStationPosition.toPointF());
         } else {
             item->setVisible(false);
         }

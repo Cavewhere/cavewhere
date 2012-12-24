@@ -74,7 +74,6 @@ int main(int argc, char *argv[])
     view.setFormat(format);
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
-    view.setWindowFlags(Qt::Window);
     view.show();
 
     return a.exec();

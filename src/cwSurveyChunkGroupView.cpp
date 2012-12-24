@@ -506,7 +506,7 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
 
     int previousIndex = index - 1;
     if(previousIndex < 0) {
-        ChunkViews[index]->setPos(QPointF(0.0f, 0.0f));
+        ChunkViews[index]->setPosition(QPointF(0.0f, 0.0f));
         return;
     }
 
@@ -516,7 +516,7 @@ void cwSurveyChunkGroupView::UpdatePosition(int index) {
     float y = mapRectFromItem(previousView, previousView->boundingRectangle()).bottom(); //height(); // + buffer;
 
     cwSurveyChunkView* view = ChunkViews[index];
-    view->setPos(QPointF(x, y));
+    view->setPosition(QPointF(x, y));
 }
 
 /**

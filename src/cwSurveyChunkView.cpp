@@ -875,7 +875,7 @@ void cwSurveyChunkView::createTitlebar() {
     UpTitle->setProperty("height", elementHeight());
     DownTitle->setProperty("height", elementHeight());
 
-    StationTitle->setPos(QPointF(0, 0));
+    StationTitle->setPosition(QPointF(0, 0));
     DistanceTitle->setX(mapRectFromItem(StationTitle, StationTitle->boundingRect()).right() - 1);
     DistanceTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).center().y() + 1);
     AzimuthTitle->setX(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).right() - 1);
@@ -1041,11 +1041,11 @@ void cwSurveyChunkView::positionElement(QQuickItem* item, const QQuickItem* titl
     size = !size.isValid() ? titleRect.size() + QSizeF(-1, 0) : size;
     float y = titleRect.bottom() + titleRect.height() * index;
     QPointF position(titleRect.left(), yOffset + y - 1);
-    //item->setPos(position - QPointF(0.0, size.height()));
-    if(item->pos() == QPointF(0.0, 0.0)) {
+    //item->setPosition(position - QPointF(0.0, size.height()));
+    if(item->position() == QPointF(0.0, 0.0)) {
         //Not position yet
         item->setOpacity(0.0);
-        item->setPos(position);
+        item->setPosition(position);
         item->setProperty("opacity", 1.0);
     } else {
         //Animate the change in position
