@@ -34,8 +34,9 @@ public:
     virtual void paint(QPainter* painter);
     Q_INVOKABLE virtual void initializeGL();
 
-    void setProjectionType(ProjectionType type);
-    ProjectionType projectionType() const;
+    cwProjection orthoProjection() const;
+    cwProjection perspectiveProjection() const;
+
 
 public slots:
     cwGLLinePlot* linePlot();
@@ -52,9 +53,9 @@ public slots:
 
     void zoom(QPoint position, int delta);
 
-
 signals:
     void cavingRegionChanged();
+    void resized();
 
 private slots:
     //Interaction events
@@ -107,8 +108,8 @@ private:
     void zoomPerspective();
     void zoomOrtho();
 
-    cwProjection orthoProjection() const;
-    cwProjection perspectiveProjection() const;
+//    cwProjection orthoProjection() const;
+//    cwProjection perspectiveProjection() const;
 
     void setupInteractionTimers();
 

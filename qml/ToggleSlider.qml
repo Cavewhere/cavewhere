@@ -1,0 +1,141 @@
+import QtQuick 2.0
+
+Item {
+    id: toggleSliderId
+
+    property int sliderRange: greenBackgroundId.width - sliderButtonId.width
+    property bool isLeft: sliderPos <= 0.0
+    property bool isRight: sliderPos >= 1.0
+    property bool setLeft
+    property bool setRight
+    property real sliderPos: sliderButtonId.x / sliderRange //From 0 to 1.0
+
+    property alias leftText: leftTextId.text
+    property alias rightText: rightTextId.text
+
+    width: sliderButtonId.width + rightTextId.width + 8
+    height: greenBackgroundId.height
+
+    onSetLeftChanged: {
+        if(setLeft) {
+            sliderButtonId.x = 0;
+        }
+    }
+
+    onSetRightChanged: {
+        if(setRight) {
+            sliderButtonId.x = sliderPos
+        }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+
+        onPressed: {
+            if(sliderButtonId.x == 0) {
+                sliderButtonId.x = sliderRange
+            } else {
+                sliderButtonId.x = 0
+            }
+        }
+    }
+
+    Image {
+        id: greenBackgroundId
+//        source: "qrc:icons/toggleSlider/greenSliderBackground.png"
+        source: "qrc:icons/toggleSlider/graySliderBackGround.png"
+        anchors.left: parent.left
+        anchors.right: parent.right
+
+
+    }
+
+//    Image {
+//        id: blueBackgroundId
+////        source: "qrc:icons/toggleSlider/blueSliderBackground.png"
+//        source: "qrc:icons/toggleSlider/graySliderBackGround.png"
+//        anchors.left: parent.left
+//        anchors.right: parent.right
+//        opacity: sliderButtonId.x / sliderRange
+//    }
+
+    Item {
+        id: leftClipBox
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: sliderButtonId.left
+        anchors.left: parent.left
+
+        clip: true
+
+        Text {
+            id: leftTextId
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 4
+            opacity: sliderButtonId.x / sliderRange
+        }
+    }
+
+    Item {
+        id: rightClipBox
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.left: sliderButtonId.right
+
+        clip: true
+
+        Text {
+            id: rightTextId
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 4
+            opacity:  1.0 - (sliderButtonId.x / sliderRange)
+        }
+    }
+
+    Image {
+        id: sliderButtonId
+        source: "qrc:icons/toggleSlider/buttonSlider.png"
+
+        Behavior on x {
+            id: behaviorId
+            NumberAnimation {}
+        }
+
+        MouseArea {
+            property int firstPointX: 0
+
+            anchors.fill: parent
+
+            onPressed: {
+                firstPointX = mapToItem(toggleSliderId, mouse.x, 0).x
+                behaviorId.enabled = false
+            }
+
+            onPositionChanged: {
+                var currentPosition = mapToItem(toggleSliderId, mouse.x, 0).x;
+                var delta = currentPosition - firstPointX;
+                sliderButtonId.x = Math.min(sliderRange,
+                                             Math.max(0, sliderButtonId.x + delta));
+                firstPointX = currentPosition
+            }
+
+            onReleased: {
+                behaviorId.enabled = true
+                var locationPercent = sliderButtonId.x / sliderRange;
+
+                if(locationPercent > 0.5) {
+                    sliderButtonId.x = sliderRange
+                } else {
+                    sliderButtonId.x = 0
+                }
+            }
+        }
+    }
+
+
+
+
+}

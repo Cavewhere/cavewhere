@@ -59,17 +59,12 @@ Rectangle {
                 scrapManager.setGLScraps(terrainRendererId.scraps);
             }
 
-            Row {
-                Button {
-                    id: perspectiveButtonId
-
-                }
-
-                Button {
-                    id: orthoganlButtonId
-
-                }
+            CameraSettings {
+                id: cameraSettings
+                viewer: terrainRendererId
             }
+
+
         }
 
         DataMainPage {

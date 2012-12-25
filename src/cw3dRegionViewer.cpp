@@ -71,7 +71,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
-//    Plane->draw();
+    Plane->draw();
 
     glDisable(GL_DEPTH_TEST);
 
@@ -93,17 +93,16 @@ void cw3dRegionViewer::initializeGL() {
     glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }
 
+
 /**
   \brief Called when the viewer's size changes
 
   This updates the projection matrix for the view
   */
 void cw3dRegionViewer::resizeGL() {
-
-    cwProjection projection = orthoProjection();
-//    projection.setPerspective(55, width() / (float)height(), 1, 10000);
-
-    Camera->setProjection(projection);
+    emit resized();
+//    cwProjection projection = orthoProjection();
+//    Camera->setProjection(projection);
 }
 
 /**
@@ -231,10 +230,6 @@ void cw3dRegionViewer::zoom(QPoint position, int delta) {
   \brief Resets the view
   */
 void cw3dRegionViewer::resetView() {
-    //    QMatrix4x4 projectionMatrix;
-    //    projectionMatrix.perspective(55, 1.0, .1, 10000); //ortho(-2.0, 2.0, -2.0, 2.0, -2.0, 2.0);
-    //    Camera->setProjectionMatrix(projectionMatrix);
-
     Pitch = 90.0;
     Azimuth = 0.0;
 
@@ -320,11 +315,6 @@ void cw3dRegionViewer::translateLastPosition()
     QPoint position = TranslatePosition;
 
     QPoint mappedPos = Camera->mapToGLViewport(position);
-
-    //For ortho projection hack
-    //    QVector3D translateAmount = QVector3D(mappedPos) - LastMouseGlobalPosition;
-    //    translateAmount.setX(translateAmount.x() / 1000.0);
-    //    translateAmount.setY(translateAmount.y() / 1000.0);
 
     //Get the ray from the front of the screen to the back of the screen
     QVector3D front = Camera->unProject(mappedPos, 0.0);
@@ -442,7 +432,7 @@ void cw3dRegionViewer::zoomOrtho()
     QPoint mappedPos = Camera->mapToGLViewport(position);
 
     double direction = delta > 0 ? 1.1 : 0.9;
-    ZoomLevel = ZoomLevel *  direction;
+    ZoomLevel = ZoomLevel * direction;
 
     QVector3D before = Camera->unProject(mappedPos, 1.0);
 
@@ -477,22 +467,5 @@ cwProjection cw3dRegionViewer::perspectiveProjection() const
     cwProjection projection;
     projection.setPerspective(55, width() / (float)height(), 1, 10000);
     return projection;
-}
-
-/**
- * @brief cw3dRegionViewer::projectionType
- * @return Get's the current projection type of the viewer
- */
-cw3dRegionViewer::ProjectionType cw3dRegionViewer::projectionType() const
-{
-    switch(camera()->projection().type()) {
-    case cwProjection::Perspective:
-        return Prespective;
-    case cwProjection::Ortho:
-        return Orthoganal;
-    default:
-        return Unknown;
-    }
-
 }
 

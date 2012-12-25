@@ -18,6 +18,7 @@ public:
     void setViewport(QRect viewport);
     QRect viewport() const;
 
+    Q_INVOKABLE void setCustomProjection(QMatrix4x4 matrix);
     void setProjection(cwProjection projection);
     cwProjection projection() const;
 
@@ -82,6 +83,8 @@ inline void cwCamera::setViewport(QRect viewport) {
 inline QRect cwCamera::viewport() const {
     return Viewport;
 }
+
+
 
 /**
   Gets the projection matrix for the camera

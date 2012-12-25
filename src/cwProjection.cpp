@@ -19,6 +19,7 @@ cwProjection::cwProjection() :
  */
 void cwProjection::setFrustum(double left, double right, double bottom, double top, double near, double far)
 {
+    Data->Matrix.setToIdentity();
     Data->Matrix.frustum(left, right, bottom, top, near, far);
 
     Data->Left = left;
@@ -63,6 +64,7 @@ void cwProjection::setPerspective(double angle, double aspect, double near, doub
  */
 void cwProjection::setOrtho(double left, double right, double bottom, double top, double near, double far)
 {
+    Data->Matrix.setToIdentity();
     Data->Matrix.ortho(left, right, bottom, top, near, far);
     Data->Left = left;
     Data->Right = right;

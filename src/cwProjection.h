@@ -42,6 +42,8 @@ public:
     double fieldOfView() const;
     double aspectRatio() const;
 
+    bool isNull() const;
+
 private:
 
 class PrivateData : public QSharedData {
@@ -167,6 +169,15 @@ inline double cwProjection::fieldOfView() const
 inline double cwProjection::aspectRatio() const
 {
     return Data->AspectRatio;
+}
+
+/**
+ * @brief cwProjection::isNull
+ * @return
+ */
+inline bool cwProjection::isNull() const
+{
+    return Data->Matrix.isIdentity();
 }
 
 

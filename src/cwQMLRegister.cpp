@@ -66,6 +66,9 @@
 #include "cwUnitValue.h"
 #include "cwImageResolution.h"
 #include "cwExportRegionViewerToImageTask.h"
+#include "cwOrthogonalProjection.h"
+#include "cwPerspectiveProjection.h"
+#include "cwMatrix4x4Animation.h"
 
 //Qt registeration
 #include <QQuickWindow>
@@ -134,6 +137,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwUnitValue>();
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
     qmlRegisterType<cwExportRegionViewerToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
+    qmlRegisterType<cwOrthogonalProjection>("Cavewhere", 1, 0, "OrthogonalProjection");
+    qmlRegisterType<cwPerspectiveProjection>("Cavewhere", 1, 0, "PerspectiveProjection");
+    qmlRegisterType<cwMatrix4x4Animation>("Cavewhere", 1, 0, "Matrix4x4Animation");
 
     qmlRegisterType<QQuickWindow>("Cavewhere", 1, 0, "QuickWindow");
 }

@@ -156,7 +156,11 @@ SOURCES += src/main.cpp \
     src/cwCompassImporter.cpp \
     src/cwImageCleanupTask.cpp \
     src/cwExportRegionViewerToImageTask.cpp \
-    src/cwProjection.cpp
+    src/cwProjection.cpp \
+    src/cwAbstractProjection.cpp \
+    src/cwOrthogonalProjection.cpp \
+    src/cwPerspectiveProjection.cpp \
+    src/cwMatrix4x4Animation.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -303,7 +307,11 @@ HEADERS  += \
     src/cwCompassImporter.h \
     src/cwImageCleanupTask.h \
     src/cwExportRegionViewerToImageTask.h \
-    src/cwProjection.h
+    src/cwProjection.h \
+    src/cwAbstractProjection.h \
+    src/cwOrthogonalProjection.h \
+    src/cwPerspectiveProjection.h \
+    src/cwMatrix4x4Animation.h
 
 
 FORMS    += \ #src/cwMainWindow.ui \
@@ -420,7 +428,9 @@ OTHER_FILES += \
     qml/CaveLengthComponent.qml \
     qml/CaveLengthAndDepth.qml \
     qml/ContextMenuButton.qml \
-    qml/RemoveDataRectangle.qml
+    qml/RemoveDataRectangle.qml \
+    qml/CameraSettings.qml \
+    qml/ToggleSlider.qml
 
 RESOURCES += \
     icons.qrc

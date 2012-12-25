@@ -57,6 +57,17 @@ QPointF cwCamera::mapToQtViewport(QPointF glViewportPoint) const
 }
 
 /**
+ * @brief cwCamera::setCustomProjection
+ * @param matrix - This set a custom projection matrix.
+ */
+void cwCamera::setCustomProjection(QMatrix4x4 matrix)
+{
+   Projection.setMatrix(matrix);
+   ViewProjectionMatrixIsDirty = true;
+   emit projectionChanged();
+}
+
+/**
   Sets the projection matrix for the camera
   */
 void cwCamera::setProjection(cwProjection projection) {
