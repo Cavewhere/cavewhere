@@ -16,8 +16,6 @@ Item {
         spacing: 10
         interactive: false
 
-        highlightMoveDuration: 200
-
         delegate: ImageExplorer {
             width: view.width
             height: view.height

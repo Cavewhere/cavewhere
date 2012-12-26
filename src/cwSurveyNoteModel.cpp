@@ -21,7 +21,6 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
 QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
-    roles.reserve(2);
     roles[ImageOriginalPathRole] = "imageOriginalPath";
     roles[ImageIconPathRole] = "imageIconPath";
     roles[ImageRole] = "image";
