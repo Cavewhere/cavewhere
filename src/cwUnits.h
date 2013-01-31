@@ -15,22 +15,22 @@ class cwUnits : public QObject
 public:
     // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
     enum LengthUnit {
-        Inches,       //!< Inches
-        Feet,       //!< Feet
-        Yards,       //!< Yards
-        Meters,        //!< Meters
-        Millimeters,       //!< Millimeters
-        Centimeters,       //!< Centimeters
-        Kilometers,       //!< Kilometers
-        LengthUnitless,  //!< Invalid units or unit less
-        Miles
+        Inches = 0,       //!< Inches
+        Feet = 1,       //!< Feet
+        Yards = 2,       //!< Yards
+        Meters = 3,        //!< Meters
+        Millimeters = 4,       //!< Millimeters
+        Centimeters = 5,       //!< Centimeters
+        Kilometers = 6,       //!< Kilometers
+        LengthUnitless = 7,  //!< Invalid units or unit less
+        Miles = 8
     };
 
     // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
     enum ImageResolutionUnit {
-        DotsPerInch,
-        DotsPerCentimeter,
-        DotsPerMeter
+        DotsPerInch = 0,
+        DotsPerCentimeter = 1,
+        DotsPerMeter = 2
     };
 
     static double convert(double value,

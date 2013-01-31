@@ -3,24 +3,24 @@
 
 namespace cwDistanceStates {
 enum State {
-    Valid, //Distance data should be valid
-    Empty //User hasn't enter any data
+    Valid = 0, //Distance data should be valid
+    Empty = 1 //User hasn't enter any data
 };
 }
 
 namespace cwCompassStates {
 enum State {
-    Valid, //Distance data should be valid
-    Empty //User hasn't enter any data
+    Valid = 0, //Distance data should be valid
+    Empty = 1 //User hasn't enter any data
 };
 }
 
 namespace cwClinoStates {
 enum State {
-    Valid, //Distance data should be valid
-    Empty, //User hasn't enter any data
-    Down, //User has enter the keyword down
-    Up //User has enter the keyword up
+    Valid = 0, //Distance data should be valid
+    Empty = 1, //User hasn't enter any data
+    Down = 2, //User has enter the keyword down
+    Up = 3 //User has enter the keyword up
 };
 }
 

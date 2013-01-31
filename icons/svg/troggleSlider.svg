@@ -15,7 +15,10 @@
    id="svg2"
    version="1.1"
    inkscape:version="0.48.2 r9819"
-   sodipodi:docname="troggleSlider.svg">
+   sodipodi:docname="troggleSlider.svg"
+   inkscape:export-filename="/Users/vpicaver/Documents/Projects/cavewhere/icons/trogleSlider/buttonSlider.png"
+   inkscape:export-xdpi="90"
+   inkscape:export-ydpi="90">
   <defs
      id="defs4">
     <linearGradient
@@ -36,7 +39,7 @@
          offset="0"
          id="stop4091" />
       <stop
-         style="stop-color:#99f899;stop-opacity:1;"
+         style="stop-color:#a1f9a1;stop-opacity:1;"
          offset="1"
          id="stop4093" />
     </linearGradient>
@@ -124,88 +127,12 @@
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient3789"
-       id="linearGradient4012"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0.80262251,0,0,0.70239136,-36.693154,33.747492)"
-       x1="82.859589"
-       y1="18.626514"
-       x2="83.416115"
-       y2="59.376514" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3773"
-       id="linearGradient4014"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="matrix(0.7851546,0,0,0.72602839,-70.426732,-5.5898321)"
-       x1="94.433044"
-       y1="112.18628"
-       x2="94.504181"
-       y2="67.695824" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
-       id="linearGradient4047"
-       gradientUnits="userSpaceOnUse"
-       x1="93.55764"
-       y1="76.025513"
-       x2="93.73819"
-       y2="29.243021" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
-       id="linearGradient4049"
-       gradientUnits="userSpaceOnUse"
-       x1="93.55764"
-       y1="76.025513"
-       x2="93.73819"
-       y2="29.243021" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3773"
-       id="linearGradient4051"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(7,14)"
-       x1="87.182983"
-       y1="3.0050316"
-       x2="86.54805"
-       y2="61.755032" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
        id="linearGradient4053"
        gradientUnits="userSpaceOnUse"
        x1="93.55764"
        y1="76.025513"
        x2="93.73819"
        y2="29.243021" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
-       id="linearGradient4055"
-       gradientUnits="userSpaceOnUse"
-       x1="93.55764"
-       y1="76.025513"
-       x2="93.73819"
-       y2="29.243021" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
-       id="linearGradient4057"
-       gradientUnits="userSpaceOnUse"
-       x1="93.55764"
-       y1="76.025513"
-       x2="93.73819"
-       y2="29.243021" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3773"
-       id="linearGradient4059"
-       gradientUnits="userSpaceOnUse"
-       gradientTransform="translate(7,14)"
-       x1="87.182983"
-       y1="3.0050316"
-       x2="86.54805"
-       y2="61.755032" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient3789"
@@ -235,16 +162,6 @@
        y1="3.0050316"
        x2="86.54805"
        y2="61.755032" />
-    <linearGradient
-       inkscape:collect="always"
-       xlink:href="#linearGradient3789"
-       id="linearGradient4069"
-       gradientUnits="userSpaceOnUse"
-       x1="93.55764"
-       y1="76.025513"
-       x2="93.73819"
-       y2="29.243021"
-       gradientTransform="matrix(0.77568726,0,0,0.68394356,34.766249,115.53156)" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#linearGradient4095"
@@ -325,7 +242,10 @@
     <g
        id="g3976"
        transform="matrix(0.77568726,0,0,0.68394356,34.412691,71.160615)"
-       style="fill:url(#linearGradient3994);fill-opacity:1;stroke-width:1.37292409;stroke-miterlimit:4;stroke-dasharray:none">
+       style="fill:url(#linearGradient3994);fill-opacity:1;stroke-width:1.37292409;stroke-miterlimit:4;stroke-dasharray:none"
+       inkscape:export-filename="/Users/vpicaver/Documents/Projects/cavewhere/icons/trogleSlider/graySliderBackGround.png"
+       inkscape:export-xdpi="90"
+       inkscape:export-ydpi="90">
       <rect
          style="fill:url(#linearGradient4008);fill-opacity:1;stroke:none"
          id="rect3771"
@@ -350,7 +270,10 @@
        height="31.748491"
        x="58.019169"
        y="133.07587"
-       ry="3.7644644" />
+       ry="3.7644644"
+       inkscape:export-filename="/Users/vpicaver/Documents/Projects/cavewhere/icons/trogleSlider/greenSliderBackground.png"
+       inkscape:export-xdpi="90"
+       inkscape:export-ydpi="90" />
     <rect
        ry="3.7644644"
        y="175.16577"
@@ -358,10 +281,16 @@
        height="31.748491"
        width="92.589958"
        id="rect4071"
-       style="fill:url(#linearGradient4073);fill-opacity:1;stroke:url(#linearGradient4075);stroke-width:1;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none" />
+       style="fill:url(#linearGradient4073);fill-opacity:1;stroke:url(#linearGradient4075);stroke-width:1;stroke-linejoin:round;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+       inkscape:export-filename="/Users/vpicaver/Documents/Projects/cavewhere/icons/trogleSlider/blueSliderBlackground.png"
+       inkscape:export-xdpi="90"
+       inkscape:export-ydpi="90" />
     <g
        id="g4114"
-       transform="translate(2.058129,41.601995)">
+       transform="translate(-2.941871,40.601995)"
+       inkscape:export-filename="/Users/vpicaver/Documents/Projects/cavewhere/icons/trogleSlider/g4114.png"
+       inkscape:export-xdpi="90"
+       inkscape:export-ydpi="90">
       <g
          id="g4107">
         <g

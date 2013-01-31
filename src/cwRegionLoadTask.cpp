@@ -31,7 +31,7 @@ void cwRegionLoadTask::runTask() {
     bool connected = connectToDatabase("loadRegionTask");
     if(connected) {
 
-        //This makes sure that sqllite is clean up after it self
+        //This makes sure that sqlite is clean up after it self
         insureVacuuming();
 
         //Get the xmlData from the database
@@ -100,6 +100,14 @@ QString cwRegionLoadTask::readXMLFromDatabase() {
 
     QByteArray xmlData = selectCavingRegion.value(0).toByteArray();
     return QString(xmlData);
+}
+
+/**
+ * @brief cwRegionLoadTask::readProtoBufferFromDatabase
+ * @return This reads the proto buffer from the database
+ */
+QString cwRegionLoadTask::readProtoBufferFromDatabase()
+{
 }
 
 /**

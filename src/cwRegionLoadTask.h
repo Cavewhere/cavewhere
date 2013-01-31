@@ -21,6 +21,7 @@ protected:
 
 private:
     QString readXMLFromDatabase();
+    QString readProtoBufferFromDatabase();
 
     void insureVacuuming();
 

@@ -430,7 +430,9 @@ OTHER_FILES += \
     qml/ContextMenuButton.qml \
     qml/RemoveDataRectangle.qml \
     qml/CameraSettings.qml \
-    qml/ToggleSlider.qml
+    qml/ToggleSlider.qml \
+    src/cavewhere.proto \
+    src/qt.proto
 
 RESOURCES += \
     icons.qrc
@@ -438,8 +440,20 @@ RESOURCES += \
 INCLUDEPATH += src src/utils . .ui
 DEPENDPATH += INCLUDEPATH
 
+#For compiling Google ProtoBuffer
+PROTO_FILES += \
+    src/cavewhere.proto \
+    src/qt.proto
+
+protoc.output = src/serialization/${QMAKE_FILE_BASE}.pb.cc
+protoc.commands = /usr/local/bin/protoc --proto_path=src --cpp_out=src/serialization ${QMAKE_FILE_NAME}
+protoc.input = PROTO_FILES
+protoc.CONFIG = target_predeps
+protoc.variable_out = SOURCES
+QMAKE_EXTRA_COMPILERS += protoc
+
 unix {
-    LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization
+    LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization -lprotobuf
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 
 #    INCLUDEPATH += \
