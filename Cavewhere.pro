@@ -311,8 +311,9 @@ HEADERS  += \
     src/cwAbstractProjection.h \
     src/cwOrthogonalProjection.h \
     src/cwPerspectiveProjection.h \
-    src/cwMatrix4x4Animation.h
-
+    src/cwMatrix4x4Animation.h \
+    src/serialization/cavewhere.pb.h \
+    src/serialization/qt.pb.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
@@ -432,12 +433,13 @@ OTHER_FILES += \
     qml/CameraSettings.qml \
     qml/ToggleSlider.qml \
     src/cavewhere.proto \
-    src/qt.proto
+    src/qt.proto \
+    docs/FileFormatDocumentation.txt
 
 RESOURCES += \
-    icons.qrc
+    resources.qrc
 
-INCLUDEPATH += src src/utils . .ui
+INCLUDEPATH += src src/utils src/serialization . .ui
 DEPENDPATH += INCLUDEPATH
 
 #For compiling Google ProtoBuffer
@@ -452,8 +454,17 @@ protoc.CONFIG = target_predeps
 protoc.variable_out = SOURCES
 QMAKE_EXTRA_COMPILERS += protoc
 
+
+
+macx {
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.7
+    LIBS += -L/opt/local/lib -lboost_serialization-mt -lboost_wserialization-mt
+    ICON = cavewhereIcon.icns
+    INCLUDEPATH += /opt/local/include
+}
+
 unix {
-    LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lboost_serialization -lboost_wserialization -lprotobuf
+    LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lprotobuf
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
 
 #    INCLUDEPATH += \
@@ -471,11 +482,8 @@ unix {
 #    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include
 }
 
-macx {
-    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.6
-    LIBS += -L/opt/local/lib
-    ICON = cavewhereIcon.icns
-    INCLUDEPATH += /opt/local/include
+linux {
+    LIBS += -lboost_serialization -lboost_wserialization
 }
 
 win32 {

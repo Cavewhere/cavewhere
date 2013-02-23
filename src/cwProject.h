@@ -56,6 +56,8 @@ public:
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
     static bool removeImage(const QSqlDatabase& database, cwImage image);
 
+    static void createDefaultSchema(const QSqlDatabase& database);
+
     bool isTemporaryProject() const;
 
 signals:
@@ -85,6 +87,9 @@ private:
 
     void createTempProjectFile();
     void createDefaultSchema();
+
+    static void createTable(const QSqlDatabase& database, QString sql); //Helpers to createDefaultSchema
+    static void insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames); //Helpers to createDefaultSchema
 
     void setFilename(QString newFilename);
 

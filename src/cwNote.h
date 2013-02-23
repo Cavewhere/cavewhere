@@ -21,7 +21,7 @@ class cwNote : public QObject
     Q_PROPERTY(int original READ original NOTIFY originalChanged)
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
-    Q_PROPERTY(float rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
+    Q_PROPERTY(double rotate READ rotate WRITE setRotate NOTIFY rotateChanged)
     Q_PROPERTY(cwImageResolution* imageResolution READ imageResolution NOTIFY imageResolutionChanged)
 
 public:
@@ -35,8 +35,8 @@ public:
     int original() const;
     int icon() const;
 
-    void setRotate(float degrees);
-    float rotate() const;
+    void setRotate(double degrees);
+    double rotate() const;
 
     void setParentTrip(cwTrip* trip);
     Q_INVOKABLE cwTrip* parentTrip() const;
@@ -130,7 +130,7 @@ inline int cwNote::icon() const {
 /**
   \brief Sets the rotation for the notes
   */
-inline float cwNote::rotate() const {
+inline double cwNote::rotate() const {
     return DisplayRotation;
 }
 

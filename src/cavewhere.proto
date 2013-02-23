@@ -40,7 +40,7 @@ message SurveyNoteModel {
 
 message Note {
     optional Image image = 1;
-    optional float rotation = 2;
+    optional double rotation = 2;
     repeated Scrap scraps = 3;
     optional ImageResolution imageResolution = 4;
 }
@@ -54,19 +54,17 @@ message Image {
 }
 
 message TripCalibration {
-    optional bool correctCompassBacksight = 1;
-    optional bool correctClinoBacksight = 2;
-    optional bool CorrectedCompassBacksight = 3;
-    optional bool CorrectedClinoBacksight = 4;
-    optional float TapeCalibration = 5;
-    optional float FrontCompassCalibration = 6;
-    optional float FrontClinoCalibration = 7;
-    optional float BackCompasssCalibration = 8;
-    optional float BackClinoCalibration= 9;
-    optional float Declination = 10;
-    optional Units.LengthUnit DistanceUnit = 11;
-    optional bool hasFrontSights = 12;
-    optional bool hasBackSights = 13;
+    optional bool correctedCompassBacksight = 1;
+    optional bool correctedClinoBacksight = 2;
+    optional double tapeCalibration = 3;
+    optional double frontCompassCalibration = 4;
+    optional double frontClinoCalibration = 5;
+    optional double backCompasssCalibration = 6;
+    optional double backClinoCalibration= 7;
+    optional double declination = 8;
+    optional Units.LengthUnit distanceUnit = 9;
+    optional bool frontSights = 10;
+    optional bool backSights = 11;
 }
 
 message SurveyChunk {
@@ -148,7 +146,7 @@ message ImageResolution {
 }
 
 message Team {
-    repeated TeamMember teamMember = 1;
+    repeated TeamMember teamMembers = 1;
 }
 
 message TeamMember {

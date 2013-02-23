@@ -150,10 +150,15 @@ void cwAddImageTask::calculateNumberOfSteps() {
   */
 void cwAddImageTask::tryAddingImagesToDatabase() {
     bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
-    if(!good) { return; }
+    if(!good) {
+        qDebug() << "Couldn't begin transaction!";
+        return;
+    }
 
     //Database image, original image
     QList< PrivateImageData > images;
+
+    qDebug() << "Adding new images:" << NewImagePaths.size() << NewImages.size();
 
     //Go through all the images strings
     for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
@@ -187,6 +192,8 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
 
         images.append(PrivateImageData(imageIds, originalImage));
     }
+
+    qDebug() << "Number of images:" << images.size();
 
     //Go through all the images
     for(int i = 0; i < images.size() && isRunning(); i++) {

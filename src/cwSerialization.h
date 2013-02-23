@@ -649,7 +649,7 @@ namespace boost {
         archive >> BOOST_SERIALIZATION_NVP(croppedImage);
         archive >> BOOST_SERIALIZATION_NVP(binaryDataSize);
 
-        qDebug() << "Binary size:" << binaryDataSize;
+//        qDebug() << "Binary size:" << binaryDataSize;
 
         //Resize the binary data
         binaryData.resize(binaryDataSize);

@@ -102,8 +102,8 @@ void cwNote::setImage(cwImage image) {
 
   \param degrees - The rotation in degrees
   */
-void cwNote::setRotate(float degrees) {
-    degrees = fmod((double)degrees, 360.0);
+void cwNote::setRotate(double degrees) {
+    degrees = fmod(degrees, 360.0);
     if(degrees != DisplayRotation) {
         DisplayRotation = degrees;
         emit rotateChanged(DisplayRotation);

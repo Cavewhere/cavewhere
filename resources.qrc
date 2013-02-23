@@ -63,5 +63,8 @@
         <file>icons/toggleSlider/graySliderBackGround.png</file>
         <file>icons/toggleSlider/buttonSlider.png</file>
         <file>icons/toggleSlider/blueSliderBackground.png</file>
+        <file>docs/FileFormatDocumentation.txt</file>
+        <file>src/qt.proto</file>
+        <file>src/cavewhere.proto</file>
     </qresource>
 </RCC>

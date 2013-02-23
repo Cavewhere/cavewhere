@@ -63,6 +63,7 @@ void cwProject::createTempProjectFile() {
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
     TempProject = true;
 
+    qDebug() << "Creating temp files:" << ProjectFile;
 
     //Create and open a new database connection
     ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
@@ -93,50 +94,78 @@ void cwProject::createTempProjectFile() {
 
   */
 void cwProject::createDefaultSchema() {
+    createDefaultSchema(ProjectDatabase);
+}
 
-    //Create the database with full vacuum so we don't use up tons of space
-    QSqlQuery vacuumQuery(ProjectDatabase);
-    QString query = QString("PRAGMA auto_vacuum = 1");
-    vacuumQuery.exec(query);
-
+/**
+ * @brief cwProject::addTable
+ * @param tableName - Used only for warning messages
+ * @param sql - The sql that run on the project database
+ */
+void cwProject::createTable(const QSqlDatabase& database, QString sql)
+{
     //Create the caving region
-    QSqlQuery createCavingRegionTable(ProjectDatabase);
-    query =
-            QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("qCompress_XML BLOB") + //Last index
-            QString(")");
+    QSqlQuery createObjectDataTable(database);
 
-    bool couldPrepare = createCavingRegionTable.prepare(query);
+    bool couldPrepare = createObjectDataTable.prepare(sql);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare table Caving Region:" << createCavingRegionTable.lastError().databaseText() << query << LOCATION;
+        qDebug() << "Couldn't prepare table:" << createObjectDataTable.lastError().databaseText() << sql << LOCATION;
     }
 
-    bool couldCreate = createCavingRegionTable.exec();
+    bool couldCreate = createObjectDataTable.exec();
     if(!couldCreate) {
-        qDebug() << "Couldn't create table Caving Region: " << createCavingRegionTable.lastError().databaseText() << LOCATION;
+        qDebug() << "Couldn't create table:" << createObjectDataTable.lastError().databaseText() << LOCATION;
+    }
+}
+
+/**
+ * @brief cwProject::insertDocumentation
+ * @param files - A pair Contains the filename and the path to the content of the file
+ * @param pair.first - The filename that's stored in the project
+ * @param pair.second - The path, usually a resaurce, to the content
+ */
+void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames) //QString filename, QString pathToContent)
+{
+    QSqlQuery deleteDocsQuery(database);
+    QString deleteQuery = "delete * from FileFormatDocumenation";
+    bool success = deleteDocsQuery.exec(deleteQuery);
+    if(!success) {
+        qDebug() << "Couldn't delete delete contents from FileFormatDocumenation" << LOCATION;
     }
 
-    //Create the caving region
-    QSqlQuery createImagesTable(ProjectDatabase);
-    query =
-            QString("CREATE TABLE IF NOT EXISTS Images (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("type STRING,") + //Type of image
-            QString("shouldDelete BOOL,") + //If the image should be delete
-            QString("width INTEGER,") + //The width of the image
-            QString("height INTEGER,") + //The height of the image
-            QString("dotsPerMeter INTEGER,") + //The resolution of the image
-            QString("imageData BLOB)"); //The blob that stores the image data
+    QSqlQuery insertDocsQuery(database);
+    QString query =
+            QString("insert into FileFormatDocumenation") +
+            QString(" (filename, content) values (?, ?)");
 
-    couldPrepare = createImagesTable.prepare(query);
+    bool couldPrepare = insertDocsQuery.prepare(query);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare table images:" << createImagesTable.lastError().databaseText() << query << LOCATION;
+        qDebug() << "Couldn't prepare insertDocsQuery:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
     }
 
-    couldCreate = createImagesTable.exec();
-    if(!couldCreate) {
-        qDebug() << "Couldn't create table Images: " << createImagesTable.lastError().databaseText() << LOCATION;
+    //Go through all the documenation files
+    QPair<QString, QString> filePair;
+    foreach(filePair, filenames) {
+        QString filename = filePair.first;
+        QString pathToFile = filePair.second;
+
+
+        QFile file(pathToFile);
+        bool couldOpen = file.open(QFile::ReadOnly);
+        if(!couldOpen) {
+            qDebug() << "Couldn't open documentation file:" << pathToFile << LOCATION;
+            continue;
+        }
+
+        QByteArray fileContent = file.readAll();
+
+        insertDocsQuery.bindValue(0, filename);
+        insertDocsQuery.bindValue(1, fileContent);
+        bool success = insertDocsQuery.exec();
+
+        if(!success) {
+            qDebug() << "Couldn't execute query:" << insertDocsQuery.lastError().databaseText() << query << LOCATION;
+        }
     }
 }
 
@@ -386,6 +415,63 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
 }
 
 /**
+ * @brief cwProject::createDefaultSchema
+ * @param database
+ */
+void cwProject::createDefaultSchema(const QSqlDatabase &database)
+{
+
+    //Create the database with full vacuum so we don't use up tons of space
+    QSqlQuery vacuumQuery(database);
+    QString query = QString("PRAGMA auto_vacuum = 1");
+    vacuumQuery.exec(query);
+
+    //Create the caving region
+    QString objectDataQuery =
+            QString("CREATE TABLE IF NOT EXISTS ObjectData (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("protoBuffer BLOB") + //Last index
+            QString(")");
+
+    //Create ObjectData
+    createTable(database, objectDataQuery);
+
+    QString documentationTableQuery =
+            QString("CREATE TABLE IF NOT EXISTS FileFormatDocumenation (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("filename STRING,") +
+            QString("content STRING)");
+    createTable(database, documentationTableQuery);
+
+    QList< QPair< QString, QString> > docsFiles;
+    docsFiles.append(QPair<QString, QString>("README.txt", ":/docs/FileFormatDocumentation.txt"));
+    docsFiles.append(QPair<QString, QString>("qt.pro", ":/src/qt.proto"));
+    docsFiles.append(QPair<QString, QString>("cavewhere.pro", ":/src/qt.proto"));
+    insertDocumentation(database, docsFiles);
+
+    //FIXME: Remove once Proto buffer fixes the file format
+    //Create the caving region
+    query =
+            QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("qCompress_XML BLOB") + //Last index
+            QString(")");
+    createTable(database, query);
+
+    //Create the caving region
+    QString imageTableQuery =
+            QString("CREATE TABLE IF NOT EXISTS Images (") +
+            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
+            QString("type STRING,") + //Type of image
+            QString("shouldDelete BOOL,") + //If the image should be delete
+            QString("width INTEGER,") + //The width of the image
+            QString("height INTEGER,") + //The height of the image
+            QString("dotsPerMeter INTEGER,") + //The resolution of the image
+            QString("imageData BLOB)"); //The blob that stores the image data
+    createTable(database, imageTableQuery);
+}
+
+/**
  * @brief cwProject::setUndoStack
  * @param undoStack - The undo stack for the project
  *
@@ -408,15 +494,16 @@ void cwProject::load()
     QString filename = QFileDialog::getOpenFileName(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
     loadFile(filename);
 
-//    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
-//    loadDialog->setFileMode(QFileDialog::ExistingFile);
-//    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
-//    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-//    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
-//    loadDialog->show();
+    //    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+    //    loadDialog->setFileMode(QFileDialog::ExistingFile);
+    //    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
+    //    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+    //    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
+    //    loadDialog->show();
 }
 
 
 void cwProject::setScrapManager(cwScrapManager *manager)
 {
+    Q_UNUSED(manager)
 }
