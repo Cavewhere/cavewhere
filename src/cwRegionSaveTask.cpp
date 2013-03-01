@@ -221,6 +221,7 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
     protoImage->set_iconid(image.icon());
     protoImage->set_dotpermeter(image.originalDotsPerMeter());
     saveSize(protoImage->mutable_size(), image.origianlSize());
+    saveSizeF(protoImage->mutable_cliparea(), image.clipArea());
     foreach(int mipmapId, image.mipmaps()) {
         protoImage->add_mipmapids(mipmapId);
     }
@@ -344,6 +345,17 @@ void cwRegionSaveTask::saveSize(QtProto::QSize *protoSize, QSize size)
 {
    protoSize->set_width(size.width());
    protoSize->set_height(size.height());
+}
+
+/**
+ * @brief cwRegionSaveTask::saveSizeF
+ * @param protoSize
+ * @param size
+ */
+void cwRegionSaveTask::saveSizeF(QtProto::QSizeF *protoSize, QSizeF size)
+{
+    protoSize->set_width(size.width());
+    protoSize->set_height(size.height());
 }
 
 /**

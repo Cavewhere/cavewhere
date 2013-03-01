@@ -51,6 +51,7 @@ message Image {
     repeated int32 mipmapIds = 3;
     optional QtProto.QSize size = 4;
     optional int32 dotPerMeter = 5;
+    optional QtProto.QSizeF clipArea = 6;
 }
 
 message TripCalibration {

@@ -79,6 +79,7 @@ private:
     void saveString(QtProto::QString* protoString, QString string);
     void saveDate(QtProto::QDate* protoDate, QDate date);
     void saveSize(QtProto::QSize* protoSize, QSize size);
+    void saveSizeF(QtProto::QSizeF* protoSize, QSizeF size);
     void savePointF(QtProto::QPointF* protoPointF, QPointF point);
     void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
     void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);

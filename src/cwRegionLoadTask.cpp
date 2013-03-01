@@ -62,7 +62,12 @@ void cwRegionLoadTask::runTask() {
  */
 bool cwRegionLoadTask::loadFromProtoBuffer()
 {
-    QByteArray protoBufferData = readProtoBufferFromDatabase();
+    bool okay;
+    QByteArray protoBufferData = readProtoBufferFromDatabase(&okay);
+
+    if(!okay) {
+        return false;
+    }
 
     CavewhereProto::CavingRegion region;
     bool couldParse = region.ParseFromArray(protoBufferData.data(), protoBufferData.size());
@@ -83,7 +88,7 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
  * @brief cwRegionLoadTask::readProtoBufferFromDatabase
  * @return This reads the proto buffer from the database
  */
-QByteArray cwRegionLoadTask::readProtoBufferFromDatabase()
+QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
 {
     QSqlQuery selectObjectData(Database);
     QString queryStr =
@@ -99,16 +104,17 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase()
     QSqlRecord record = selectObjectData.record();
 
     if(record.isEmpty()) {
-        qDebug() << "Hmmmm, no caving regions to load";
-        stop();
+        qDebug() << "Hmmmm, no caving regions to load from protoBuffer";
+        *okay = false;
         return QByteArray();
     }
 
     //Get the first row
     selectObjectData.next();
 
-    QByteArray xmlData = selectObjectData.value(0).toByteArray();
-    return xmlData;
+    *okay = true;
+    QByteArray data = selectObjectData.value(0).toByteArray();
+    return data;
 }
 
 /**
@@ -315,6 +321,8 @@ cwImage cwRegionLoadTask::loadImage(const CavewhereProto::Image& protoImage)
     image.setOriginalDotsPerMeter(protoImage.dotpermeter());
     image.setOriginalSize(loadSize(protoImage.size()));
 
+    if(protoImage.has_cliparea()) { image.setClipArea(loadSizeF(protoImage.cliparea())); }
+
     QList<int> mipmaps;
     mipmaps.reserve(protoImage.mipmapids_size());
     for(int i = 0; i < protoImage.mipmapids_size(); i++) {
@@ -520,9 +528,22 @@ QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate)
  * @param protoSize
  * @return
  */
-QSize cwRegionLoadTask::loadSize(const QtProto::QSize& protoSize)
+QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize)
 {
     QSize size;
+    size.setWidth(protoSize.width());
+    size.setHeight(protoSize.height());
+    return size;
+}
+
+/**
+ * @brief cwRegionLoadTask::loadSizeF
+ * @param protoSize
+ * @return
+ */
+QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize)
+{
+    QSizeF size;
     size.setWidth(protoSize.width());
     size.setHeight(protoSize.height());
     return size;
@@ -595,7 +616,6 @@ QString cwRegionLoadTask::readXMLFromDatabase() {
 
     if(record.isEmpty()) {
         qDebug() << "Hmmmm, no caving regions to load";
-        stop();
         return QString();
     }
 

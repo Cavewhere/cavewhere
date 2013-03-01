@@ -42,7 +42,7 @@ protected:
 
 private:
     bool loadFromProtoBuffer();
-    QByteArray readProtoBufferFromDatabase();
+    QByteArray readProtoBufferFromDatabase(bool* okay);
 
     void loadCavingRegion(const CavewhereProto::CavingRegion& region);
     void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave);
@@ -77,6 +77,7 @@ private:
     QString loadString(const QtProto::QString& protoString);
     QDate loadDate(const QtProto::QDate& protoDate);
     QSize loadSize(const QtProto::QSize& protoSize);
+    QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
     QPointF loadPointF(const QtProto::QPointF& protoPointF);
     QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
     QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);

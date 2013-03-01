@@ -31,6 +31,11 @@ message QSize {
     required int32 height = 2;
 }
 
+message QSizeF {
+    required double width = 1;
+    required double height = 2;
+}
+
 message QStringList {
     repeated QString strings = 1;
 }
