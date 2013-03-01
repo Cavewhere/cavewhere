@@ -79,7 +79,7 @@ void cwShaderDebugger::recompileShader(QString path) {
         qDebug() << "\t" << qPrintable(shader->log());
     }
 
-    qDebug() << "Linking program";
+    qDebug() << "Linking program" << qPrintable(shader->sourceFile());
     if(programLinked) {
         qDebug() << "\t Successful.";
     } else {

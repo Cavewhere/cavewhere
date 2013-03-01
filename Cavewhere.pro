@@ -434,7 +434,8 @@ OTHER_FILES += \
     qml/ToggleSlider.qml \
     src/cavewhere.proto \
     src/qt.proto \
-    docs/FileFormatDocumentation.txt
+    docs/FileFormatDocumentation.txt \
+    Cavewhere.rc
 
 RESOURCES += \
     resources.qrc
@@ -447,8 +448,17 @@ PROTO_FILES += \
     src/cavewhere.proto \
     src/qt.proto
 
+unix {
+    PROTOC = /usr/local/bin/protoc
+}
+
+win32 {
+    PROTO = C:/windowsBuild/libs/win32/protobuf-2.5.0rc1/vsprojects
+    PROTOC = $${PROTO}/Release/protoc.exe
+}
+
 protoc.output = src/serialization/${QMAKE_FILE_BASE}.pb.cc
-protoc.commands = /usr/local/bin/protoc --proto_path=src --cpp_out=src/serialization ${QMAKE_FILE_NAME}
+protoc.commands = $${PROTOC} --proto_path=src --cpp_out=src/serialization ${QMAKE_FILE_NAME}
 protoc.input = PROTO_FILES
 protoc.CONFIG = target_predeps
 protoc.variable_out = SOURCES
@@ -490,27 +500,28 @@ win32 {
     SQUISH = C:/windowsBuild/libs/win32/squish-1.11/squish-1.11
     BOOST = c:/windowsBuild/libs/win32/boost_1_48_0/boost_1_48_0
     ZLIBSOURCE = C:/windowsBuild/libs/win32/zlib-1.2.5
-    GLEW = C:/windowsBuild/libs/win32/glew-1.7.0-win32/glew-1.7.0
+    PROTO = C:/windowsBuild/libs/win32/protobuf-2.5.0rc1/vsprojects
+
+    RC_FILE = Cavewhere.rc
 
     #This is so std::numerical_limits works
     DEFINES += NOMINMAX
 
-    INCLUDEPATH += "$${SQUISH}"
-    LIBS += -L"$${SQUISH}/lib/vs9"
+    INCLUDEPATH += $${SQUISH}
+    LIBS += -L$${SQUISH}/lib/vs9
 
-    INCLUDEPATH += "$${BOOST}"
-    LIBS += -L"$${BOOST}/stage/lib"
+    INCLUDEPATH += $${BOOST}
+    LIBS += -L$${BOOST}/stage/lib
 
-    INCLUDEPATH += "$${ZLIBSOURCE}"
-    LIBS += -L"$${ZLIBSOURCE}"
+    INCLUDEPATH += $${ZLIBSOURCE}
+    LIBS += -L$${ZLIBSOURCE}
 
-    INCLUDEPATH += $${GLEW}/include
-    LIBS += -L$${GLEW}/lib
+    INCLUDEPATH += $${PROTO}/include
 
-
-    debug {
+    CONFIG(debug, debug|release) {
         CONFIG += console
-        #LIBS += -lzlibd -lsquishd
+        LIBS += -L$${PROTO}/Debug/
+        LIBS += -lzlibd -lsquishd -llibprotobuf
 
         message("Building Win32 in Debug")
 
@@ -522,7 +533,7 @@ win32 {
         ZLIBSOURCE_WIN = $${ZLIBSOURCE}
         ZLIBSOURCE_WIN ~= s,/,\\,g
 
-#        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlibd1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlibd1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
 #        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQuickd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
 #        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtOpenGLd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
 #        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQMLd5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
@@ -540,12 +551,12 @@ win32 {
 #        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icudt49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
 #        system($$quote(cmd /c copy /y c:\\windows\\system32\\MSVCP100D.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
 #        system($$quote(cmd /c copy /y c:\\windows\\system32\\MSVCR100D.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${GLEW}\\bin\\glew32.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
     }
 
-    release {
+    CONFIG(release, debug|release) {
         CONFIG += console
-        LIBS += -lzlib -lsquish -lglew32
+        LIBS += -L$${PROTO}/Release/
+        LIBS += -lzlib -lsquish -llibprotobuf
 
         message("Building Win32 in Release")
 
@@ -556,25 +567,30 @@ win32 {
         QT_BIN_WIN ~= s,/,\\,g
         ZLIBSOURCE_WIN = $${ZLIBSOURCE}
         ZLIBSOURCE_WIN ~= s,/,\\,g
-        GLEW_WIN = $${GLEW}
-        GLEW_WIN ~= s,/,\\,g
 
-#        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlib1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQuick5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtOpenGL5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtQML5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt3D5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtWidgets5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtXml5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtConcurrent5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtSql5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtGui5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtCore5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtV85.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\QtNetwork5.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuin49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuuc49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icudt49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
-#        system($$quote(cmd /c copy /y $${GLEW_WIN}\\bin\\glew32.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${ZLIBSOURCE_WIN}\\zlib1.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Quick.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5OpenGL.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5QML.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt53D.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Widgets.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Xml.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Concurrent.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Sql.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Gui.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Core.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5V8.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\Qt5Network.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuin49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icuuc49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\icudt49.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\libGLESv2.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\D3DCompiler_43.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c copy /y $${QT_BIN_WIN}\\libEGL.dll $${DESTDIR_WIN}$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\plugins\\platforms $${DESTDIR_WIN}\\platforms$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\plugins\\imageformats $${DESTDIR_WIN}\\imageformats$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\plugins\\sqldrivers $${DESTDIR_WIN}\\sqldrivers$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\qml\\QtDesktop $${DESTDIR_WIN}\\QtDesktop$$escape_expand(\\n\\t)))
+        system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\qml\\QtQuick.2 $${DESTDIR_WIN}\\QtQuick.2$$escape_expand(\\n\\t)))
      }
 }

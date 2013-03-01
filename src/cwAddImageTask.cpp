@@ -345,7 +345,8 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
 void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds) {
     int numberOfLevels = numberOfMipmapLevels(originalImage.size());
 
-    QImage scaledImage = originalImage;
+    QSizeF clipArea;
+    QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
     QList<int> mipmapIds;
 
     QSize scaledImageSize = scaledImage.size();
@@ -367,6 +368,7 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
     }
 
     imageIds->setMipmaps(mipmapIds);
+    imageIds->setClipArea(clipArea);
 }
 
 /**
@@ -393,12 +395,12 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
 int cwAddImageTask::saveToDXT1Format(QImage image) {
     //Convert and compress using dxt1
     //20 times slower on my computer
-//#ifdef WIN32
+#ifdef Q_OS_WIN
     //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
-//    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
-//#else
+    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+#else
     QByteArray outputData = openglDxt1Compression(image);
-//#endif
+#endif
 
     if(outputData.isEmpty()) {
         return -1;
@@ -574,6 +576,7 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
  *
  * This assumes that the opengl context is bound
  */
+#ifndef Q_OS_WIN
 QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
 {
     glBindTexture(GL_TEXTURE_2D, Texture);
@@ -599,11 +602,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);
         QByteArray compressedByteArray(compressed_size, 0);
-#ifdef WIN32
-        glGetCompressedTexImageARB(GL_TEXTURE_2D, 0, compressedByteArray.data());
-#else
         glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
-#endif
 
         return compressedByteArray;
     }
@@ -611,6 +610,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
     qDebug() << "Error: Couldn't compress image" << LOCATION;
     return QByteArray();
 }
+#endif
 
 
 /**
@@ -626,5 +626,93 @@ int cwAddImageTask::dotsPerMeter(QImage image) const {
     return image.dotsPerMeterX();
 }
 
+/**
+ * @brief cwAddImageTask::ensureImageDivisibleBy4
+ * @param originalImage
+ * @param renderTextureSize
+ * @return The image that's divisible by 4 in both the height and width
+ * The image will be place an 0, 0 (upper left corner).  Extra padding
+ * will be added to the right and bottom of the image.  RenderSize will
+ * return with normalize area where the image is valid. RenderSize should
+ * be close to 1.0 or exactly 1.0 if the originalImage's dimensions are
+ * divisible by 4.
+ *
+ *  The mipmaps should be
+ * compressed with DXT1 compression, and for ANGLE (for windows)
+ * the mipmaps dimension have to be divisible by 4.  This is
+ * a D3D requirement (ANGLE converts opengl to D3D on windows).
+ * If the mipmap isn't divisible by 4 it will cause a crash (an abort).
+ *
+ * renderTextureSize hold the area of the image that should be
+ * used for rendering.  This value should be in normalized cooridanates
+ * frome 0.0 to 1.0.  Usually the renderTextureSize should be close to
+ * 1.0.  This (width, height) can be multiplied against the texture coordinates
+ * to get the true texture cordinates.
+ */
+QImage cwAddImageTask::ensureImageDivisibleBy4(QImage originalImage, QSizeF *clipArea)
+{
+    Q_ASSERT(clipArea != NULL);
+
+    QSize imageSize = originalImage.size();
+    int widthRemainder = imageSize.width() % 4;
+    int heightRemainder = imageSize.height() % 4;
+
+    if(widthRemainder == 0 && heightRemainder == 0) {
+        //Simple case, everything peachy
+        *clipArea = QSizeF(1.0, 1.0);
+        return originalImage;
+    }
+
+    //Need to add padding to the image
+    int newWidth;
+    if(widthRemainder == 0) {
+        newWidth = imageSize.width();
+    } else {
+        newWidth = ((imageSize.width() / 4) + 1) * 4; //Integer math
+    }
+    double validWidth = imageSize.width() / (double)newWidth;
+
+    int newHeight;
+    if(heightRemainder == 0) {
+        newHeight = imageSize.height();
+    } else {
+        newHeight = ((imageSize.height() / 4) + 1) * 4; //Integer math
+    }
+    double validHeight = imageSize.height() / (double)newHeight;
+
+    QImage paddedImage(newWidth, newHeight, QImage::Format_ARGB32_Premultiplied);
+
+    int heightDiff = newHeight - imageSize.height();
+    int widthDiff = newWidth - imageSize.width();
+
+
+    QPainter painter(&paddedImage);
+
+    if(heightRemainder != 0) {
+        QImage topImage = originalImage.copy(0, 0, imageSize.width(), 1);
+        for(int i = 0; i < heightDiff; i++) {
+            painter.drawImage(QPoint(0, i), topImage);
+        }
+    }
+
+    if(widthRemainder != 0) {
+        QRect copyArea(imageSize.width() - 1, 0, 1, imageSize.height());
+        QImage rightImage = originalImage.copy(copyArea);
+        for(int i = 0; i < widthDiff; i++) {
+            painter.drawImage(QPoint(imageSize.width() + i, heightDiff), rightImage);
+        }
+    }
+
+    painter.drawImage(QPoint(0, heightDiff), originalImage);
+    painter.end();
+
+    Q_ASSERT(validWidth > 0);
+    Q_ASSERT(validHeight > 0);
+    Q_ASSERT(validWidth <= 1.0);
+    Q_ASSERT(validHeight <= 1.0);
+
+    *clipArea = QSizeF(validWidth, validHeight);
+    return paddedImage;
+}
 
 

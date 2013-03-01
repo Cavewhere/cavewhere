@@ -43,7 +43,6 @@ void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
         }
 
         emit transformUpdaterChanged();
-        update();
     }
 }
 
@@ -308,6 +307,8 @@ void cwAbstractPointManager::privateUpdateItemPosition(int index) {
  */
 void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
 {
+    if(item == NULL) { return; }
+
     //Update assumed stuff
     item->setProperty("pointIndex", index);
     item->setProperty("parentView", QVariant::fromValue(this));

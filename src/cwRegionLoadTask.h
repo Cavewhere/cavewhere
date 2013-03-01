@@ -16,8 +16,8 @@ class cwImageResolution;
 class cwNoteStation;
 class cwNoteTranformation;
 class cwLength;
-#include "cwTeamMember.h";
-#include "cwStation.h";
+#include "cwTeamMember.h"
+#include "cwStation.h"
 #include "cwShot.h"
 #include "cwTriangulatedData.h"
 #include "cwImage.h"

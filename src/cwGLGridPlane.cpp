@@ -45,6 +45,7 @@ void cwGLGridPlane::draw() {
 
     TriangleVertexBuffer.release();
 
+    Program->disableAttributeArray(vVertex);
     Program->release();
 }
 

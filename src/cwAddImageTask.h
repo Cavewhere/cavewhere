@@ -1,11 +1,6 @@
 #ifndef CWLOADIMAGETASK_H
 #define CWLOADIMAGETASK_H
 
-#ifdef WIN32
-//Glew includes
-#include <GL/glew.h>
-#endif
-
 //Our includes
 #include "cwProjectIOTask.h"
 #include "cwImage.h"
@@ -96,6 +91,7 @@ private:
     int saveToDXT1Format(QImage image);
     QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
     QByteArray openglDxt1Compression(QImage image);
+    QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
 
     void calculateNumberOfSteps();
     int numberOfMipmapLevels(QSize imageSize) const;

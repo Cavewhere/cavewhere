@@ -50,12 +50,13 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         //Strange copying to make sure the newCaves are
         //On the correct thread
         cwCave* newCave = new cwCave(*cave);
-        newCave->moveToThread(thread());
 
         // FIXME : Test on windows
         //We need to comment this out because it's bad programming,
         //Can't notify other threads with sendEvent, ASSERTs on windows
         newCave->setParent(this);  //Uncomment because this cause problems with QML
+
+        newCave->moveToThread(thread());
 
         Caves.append(newCave);
     }

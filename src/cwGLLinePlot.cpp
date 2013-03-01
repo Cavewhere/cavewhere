@@ -87,6 +87,7 @@ void cwGLLinePlot::draw() {
     LinePlotVertexBuffer.release();
     LinePlotIndexBuffer.release();
 
+    ShaderProgram->disableAttributeArray(vVertex);
     ShaderProgram->release();
 }
 

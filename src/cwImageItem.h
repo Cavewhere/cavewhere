@@ -71,7 +71,8 @@ private:
 
     //For rendering
     static int vVertex; //!< The attribute location of the vVertex
-    static int ModelViewProjectionMatrix; //!< The attribute location for modelViewProjection matrix
+    static int ModelViewProjectionMatrix; //!< The uniform location for modelViewProjection matrix
+    static int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
     cwImageTexture* NoteTexture;
     static QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
 //    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer

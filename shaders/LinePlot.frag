@@ -1,5 +1,9 @@
 //#version 330
 
+#ifdef GL_ES
+precision highp float;
+#endif
+
 varying float depth;
 
 //out vec4 fragColor;

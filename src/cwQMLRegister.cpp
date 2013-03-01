@@ -1,8 +1,3 @@
-//Glew includes
-#ifdef WIN32
-#include <GL/glew.h>
-#endif
-
 //Our includes
 #include "cwQMLRegister.h"
 #include "cwSurveyChunk.h"

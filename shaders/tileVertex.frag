@@ -1,6 +1,10 @@
 // simple fragment shader
 //#version 140
 
+#ifdef GL_ES
+precision highp float;
+#extension GL_OES_standard_derivatives : enable
+#endif
 
 //varying vec3 gTriangleDistance;
 //varying vec3 gPosition;

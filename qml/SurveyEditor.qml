@@ -16,46 +16,58 @@ Rectangle {
         trip: currentTrip
     }
 
-    ScrollBar {
-        id: surveyEditorScollbar
-        anchors.top: flickArea.top
-        anchors.bottom: flickArea.bottom
-        anchors.left: flickArea.right
-        orientation: Qt.Vertical
-        minimumValue: 0
-        maximumValue: flickArea.contentHeight - height < 0 ? 0 : flickArea.contentHeight - height
-        visible: maximumValue > 0
-        singleStep: 1
-        onValueChanged: flickArea.contentY = value
-    }
+    //    ScrollBar {
+    //        id: surveyEditorScollbar
+    //        anchors.top: flickArea.top
+    //        anchors.bottom: flickArea.bottom
+    //        anchors.left: flickArea.right
+    //        orientation: Qt.Vertical
+    //        minimumValue: 0
+    //        maximumValue: flickArea.contentHeight - height < 0 ? 0 : flickArea.contentHeight - height
+    //        visible: maximumValue > 0
+    //        singleStep: 1
+    //        onValueChanged: flickArea.contentY = value
+    //    }
 
 
-    Flickable {
-        id: flickArea
+    //    Flickable {
+    //        id: flickArea
 
-        contentHeight: column.height
-        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
+    //        contentHeight: column.height
+    //        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
+
+    //        anchors.top: parent.top
+    //        anchors.bottom: parent.bottom
+    //        anchors.left: parent.left
+    //        anchors.margins: 1;
+
+    //        clip: true;
+
+    /**
+              Moves the flickable such that r is always shown
+              */
+
+
+    //        onContentYChanged: {
+    //            surveyEditorScollbar.value = contentY
+    //        }
+
+    ScrollArea {
+        id: scrollAreaId
 
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 1;
 
-        clip: true;
+        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
-        /**
-              Moves the flickable such that r is always shown
-              */
         function ensureVisible(r){
             if (contentY >= r.y) {
                 contentY = r.y;
             } else if (contentY+height <= r.y+r.height) {
                 contentY = r.y+r.height-height;
             }
-        }
-
-        onContentYChanged: {
-            surveyEditorScollbar.value = contentY
         }
 
         Column {
@@ -88,12 +100,12 @@ Rectangle {
                 height: contentHeight
                 width: view.contentWidth
 
-                viewportX: flickArea.contentX;
-                viewportY: flickArea.contentY;
-                viewportWidth: flickArea.width;
-                viewportHeight: flickArea.height;
+                viewportX: scrollAreaId.contentX;
+                viewportY: scrollAreaId.contentY;
+                viewportWidth: scrollAreaId.width;
+                viewportHeight: scrollAreaId.height;
 
-                onEnsureVisibleRectChanged: flickArea.ensureVisible(ensureVisibleRect);
+                onEnsureVisibleRectChanged: scrollAreaId.ensureVisible(ensureVisibleRect);
             }
 
             Text {
@@ -149,9 +161,17 @@ Rectangle {
         }
     }
 
+    MouseArea {
+        anchors.fill: scrollAreaId
+        onPressed: {
+            scrollAreaId.forceActiveFocus()
+            mouse.accepted = false;
+        }
+    }
+
     NoteExplorer {
         noteModel: currentTrip !== null ? currentTrip.notes : null
-        anchors.left: surveyEditorScollbar.right
+        anchors.left: scrollAreaId.right
         anchors.right: parent.right
         anchors.top: area.top
         anchors.bottom: area.bottom

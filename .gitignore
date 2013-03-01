@@ -816,3 +816,10 @@ Cavewhere.old.app/Contents/MacOS/share/survex/sk.msg
 Cavewhere.old.app/Contents/PkgInfo
 Cavewhere.old.app/Contents/Resources/empty.lproj
 Cavewhere.old.app/Contents/Resources/icon.icns
+.obj/*
+debug/*
+release/*
+.moc/*
+Makefile.*
+src/serialization/*
+installer/windows/output/*

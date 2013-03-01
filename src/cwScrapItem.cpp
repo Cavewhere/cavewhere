@@ -92,6 +92,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
+    if(Scrap == NULL) { return oldNode; }
     if(!oldNode) {
         oldNode = new QSGTransformNode();
         PolygonNode = new cwSGPolygonNode();

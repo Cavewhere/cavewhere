@@ -78,6 +78,8 @@ void cwLinePlotGeometryTask::addStationPositions(int caveIndex) {
   OpenGL can the draw lines between the point data and the indexData
   */
 void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
+    if(PointData.isEmpty()) { return; }
+
     cwCave* cave = Region->cave(caveIndex);
 
     double minDepth = std::numeric_limits<double>::max();

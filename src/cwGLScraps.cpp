@@ -48,9 +48,9 @@ void cwGLScraps::draw() {
     glEnable(GL_TEXTURE_2D);
 
     foreach(GLScrap scrap, Scraps) {
-        if(scrap.Texture->isDirty()) {
-            scrap.Texture->updateData();
-        }
+        scrap.Texture->updateData();
+
+        scrap.Texture->bind();
 
         scrap.IndexBuffer.bind();
 
@@ -60,17 +60,19 @@ void cwGLScraps::draw() {
         scrap.TexCoords.bind();
         Program->setAttributeBuffer(vScrapTexCoords, GL_FLOAT, 0, 2);
 
-        scrap.Texture->bind();
-
         glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, NULL);
 
         scrap.IndexBuffer.release();
         scrap.PointBuffer.release();
         scrap.TexCoords.release();
+
+        scrap.Texture->release();
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    Program->disableAttributeArray(vVertex);
+    Program->disableAttributeArray(vScrapTexCoords);
     Program->release();
 }
 
@@ -92,13 +94,10 @@ void cwGLScraps::updateData()
     QList<cwTriangulatedData> allData = updatedTriangulatedData();
     Scraps.reserve(allData.size());
 
-    qDebug() << "TriangleData:" << allData.size();
-
     foreach(cwTriangulatedData data, allData) {
-        Scraps.append(GLScrap(data, project()));
+        Q_ASSERT(data.points().size() == data.texCoords().size());
 
-        qDebug() << "Number of points:" << data.points().size();
-        qDebug() << "Indices:" << data.indices().size();
+        Scraps.append(GLScrap(data, project()));
 
         //For geometry intersection
         cwGeometryItersecter::Object geometryObject(
@@ -142,6 +141,9 @@ void cwGLScraps::initializeShaders() {
     }
 
     shaderDebugger()->addShaderProgram(Program);
+
+//    Program->bind();
+
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     vVertex = Program->attributeLocation("vVertex");
     vScrapTexCoords = Program->attributeLocation("vScrapTexCoords");

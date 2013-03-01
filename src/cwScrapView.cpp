@@ -131,9 +131,6 @@ void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
 
         updateAllScraps();
 
-        //Update the matrix node when the transformUpdater's matrix has changed
-        connect(TransformUpdater, SIGNAL(matrixChanged()), SLOT(update()));
-
         emit transformUpdaterChanged();
     }
 }

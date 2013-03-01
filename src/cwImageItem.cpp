@@ -15,6 +15,7 @@
 QOpenGLShaderProgram* cwImageItem::ImageProgram = NULL;
 int cwImageItem::vVertex = -1;
 int cwImageItem::ModelViewProjectionMatrix = -1;
+int cwImageItem::CropAreaUniform = -1;
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLRenderer(parent),
@@ -144,14 +145,12 @@ void cwImageItem::initializeShaders() {
             qDebug() << "Linking errors:" << ImageProgram->log();
         }
 
-        ImageProgram->bind();
-
         vVertex = ImageProgram->attributeLocation("vVertex");
         ModelViewProjectionMatrix = ImageProgram->uniformLocation("ModelViewProjectionMatrix");
+        CropAreaUniform = ImageProgram->uniformLocation("CropArea");
 
         ImageProgram->setUniformValue("Texture", 0); //set the texture unit to 0
     }
-
 }
 
 
@@ -220,9 +219,11 @@ void cwImageItem::paint(QPainter* painter) {
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     ImageProgram->enableAttributeArray(vVertex);
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
+    ImageProgram->setUniformValue(CropAreaUniform, image().clipArea());
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
+    ImageProgram->disableAttributeArray(vVertex);
     ImageProgram->release();
     NoteTexture->release();
 

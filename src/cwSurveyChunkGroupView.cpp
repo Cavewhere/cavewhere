@@ -573,12 +573,12 @@ void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
 
   This is the height if all the elements where displayed at once
   */
-float cwSurveyChunkGroupView::contentHeight() const {
+double cwSurveyChunkGroupView::contentHeight() const {
     if(ChunkBoundingRects.isEmpty()) { return 0.0; }
-    return ChunkBoundingRects.last().bottom() - ChunkBoundingRects.first().top() + 1;
+    return ChunkBoundingRects.last().bottom() - ChunkBoundingRects.first().top() + 1.0;
 }
 
-float cwSurveyChunkGroupView::contentWidth() {
+double cwSurveyChunkGroupView::contentWidth() {
     if(ChunkBoundingRects.isEmpty()) { return 392.141; }
 //    qDebug() << "Children width: " << childrenRect().width();
     return childrenRect().width();

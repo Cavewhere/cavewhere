@@ -12,6 +12,7 @@ cwSGPolygonNode::cwSGPolygonNode() {
     setMaterial(material);
     setFlags(QSGNode::OwnsMaterial);
     setFlags(QSGNode::OwnsGeometry);
+    setGeometry(new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 0));
 }
 
 void cwSGPolygonNode::setPolygon(const QPolygonF &polygon) {

@@ -1,11 +1,6 @@
 #ifndef CWIMAGETEXTURE_H
 #define CWIMAGETEXTURE_H
 
-#ifdef WIN32
-//GLew includes
-#include <GL/glew.h>
-#endif
-
 //Qt include
 #include <QObject>
 #include <QFutureWatcher>
@@ -50,6 +45,32 @@ public slots:
     void updateData();
 
 private:
+
+    class LoadImageData {
+    public:
+        QByteArray ImageData;
+        QSize ImageDataSize;
+    };
+
+    /**
+      This class allow use to load the mipmaps in a thread way
+      from the database
+
+      The project filename must be set so we can load the data
+*/
+    class LoadImageKernal {
+    public:
+        LoadImageKernal(QString projectFilename) :
+            Filename(projectFilename)
+        {    }
+
+        typedef LoadImageData result_type;
+
+        LoadImageData operator()(int imageId);
+
+        QString Filename;
+    };
+
     QString ProjectFilename; //!<
     cwImage Image; //!< The image that this texture represent
 
@@ -59,28 +80,13 @@ private:
     QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
 
     //For loading the image from disk
-    QFutureWatcher<QPair<QByteArray, QSize> >* LoadNoteWatcher;
+    QFutureWatcher<LoadImageData>* LoadNoteWatcher;
 
-    /**
-      This class allow use to load the mipmaps in a thread way
-      from the database
 
-      The project filename must be set so we can load the data
-*/
-    class LoadImage {
-    public:
-        LoadImage(QString projectFilename) :
-            Filename(projectFilename) {    }
-
-        typedef QPair<QByteArray, QSize> result_type;
-
-        QPair<QByteArray, QSize> operator()(int imageId);
-
-        QString Filename;
-    };
 
     void startLoadingImage();
     void reinitilizeLoadNoteWatcher();
+    bool isDivisibleBy4(QSize size) const;
 
 private slots:
     void markAsDirty();

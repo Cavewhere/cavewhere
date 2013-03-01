@@ -119,6 +119,9 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Create the texture coordinates
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
+    //Covert the texCoords to D3D divisible by 4
+    texCoords = croppedImage.scaleTexCoords(texCoords);
+
     //Morph the points
     QVector<QVector3D> points = morphPoints(triangleData.points(), scrapData, toLocal, croppedImage);
 
@@ -303,7 +306,7 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     optimizedIndices = fullTriangleIndices;
 
     //FIXME: Make this work under windows
-#ifndef Q_WS_WIN
+#ifndef Q_OS_WIN
     Forsyth::OptimizeFaces(fullTriangleIndices.constData(),
                            fullTriangleIndices.size(),
                            points.size(),

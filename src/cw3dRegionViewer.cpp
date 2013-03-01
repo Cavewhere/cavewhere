@@ -31,6 +31,7 @@
 #include <QtConcurrentMap>
 #include <QFontMetrics>
 #include <QRay3D>
+#include <QGLFunctions>
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwGLRenderer(parent)
@@ -52,7 +53,9 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Scraps->setScene(this);
     Plane->setScene(this);
 
+#ifndef Q_OS_WIN
     setAntialiasing(true);
+#endif
 
     setupInteractionTimers();
 }
@@ -89,8 +92,6 @@ void cw3dRegionViewer::initializeGL() {
     Scraps->initialize();
     LinePlot->initialize();
     Plane->initialize();
-
-    glEnableClientState(GL_VERTEX_ARRAY); // activate vertex coords array
 }
 
 

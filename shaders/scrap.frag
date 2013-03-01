@@ -1,11 +1,14 @@
 // simple fragment shader
 //#version 330
 
+#ifdef GL_ES
+precision highp float;
+#endif
 
 //varying vec3 gTriangleDistance;
-varying vec3 vPosition;
+//varying vec3 vPosition;
 varying vec2 vTexCoord;
-varying float elevation;
+//varying float elevation;
 
 //out vec4 fragColor;
 
@@ -23,7 +26,7 @@ uniform sampler2D Texture;
 void main() {
 //  float triangleDistance = min(gTriangleDistance.x, min(gTriangleDistance.y, gTriangleDistance.z));
 
-//  vec4 sauce = vec4(gTexCoord, 0.0, 1.0); //(0.5, 0.5, 1.0, 1.0);
+  //vec4 sauce = vec4(vTexCoord, 0.0, 1.0); //(0.5, 0.5, 1.0, 1.0);
   vec4 textureSample = texture2D(Texture, vTexCoord);
 
 //  float normElevation = (elevation - 100.0) / (300.0 - 100.0);

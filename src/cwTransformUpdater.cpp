@@ -117,6 +117,7 @@ void cwTransformUpdater::updateTransformMatrix() {
     qtViewportMatrix.translate(1.0, -1.0, 0.0);
 
     TransformMatrix = qtViewportMatrix * Camera->viewProjectionMatrix() * ModelMatrix;
+
     emit matrixChanged();
 }
 

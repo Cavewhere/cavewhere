@@ -77,7 +77,7 @@ inline float cwScrapStationView::shotLineScale() const {
  */
 inline QUrl cwScrapStationView::qmlSource() const
 {
-    return cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml";
+    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml");
 }
 
 

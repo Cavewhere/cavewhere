@@ -151,6 +151,7 @@ Item {
         onFinishedEditting: {
             surveyChunk.setData(dataRole, rowIndex, newText)
             dataBox.state = ""; //Go back to the default state
+            dataBox.forceActiveFocus();
         }
 
         onStartedEditting: {

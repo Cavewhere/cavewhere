@@ -200,6 +200,7 @@ void cwRegionLoadTask::loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel
         loadNote(protoNoteModel.notes(i), note);
         notes.append(note);
     }
+
     noteModel->addNotes(notes);
 }
 

@@ -1,7 +1,3 @@
-#ifdef WIN32
-//Glew includes
-#include <GL/glew.h>
-#endif
 
 //Our includes
 #include "cwGLRenderer.h"
@@ -45,8 +41,6 @@ cwGLRenderer::~cwGLRenderer() {
     ShaderDebugger->deleteLater();
 }
 
-
-
 void cwGLRenderer::privateResizeGL() {
 //    if(GLWidget == NULL) { return; }
     if(width() == 0.0 || height() == 0.0) { return; }
@@ -65,9 +59,6 @@ void cwGLRenderer::privateResizeGL() {
 
 QSGNode * cwGLRenderer::updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data) {
     if(!Initialized) {
-#ifdef WIN32
-        glewInit();
-#endif
         initializeGL();
         Initialized = true;
     }

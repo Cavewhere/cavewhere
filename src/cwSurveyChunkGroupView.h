@@ -32,8 +32,8 @@ public:
     void setTrip(cwTrip* trip);
     cwTrip* trip() const;
 
-    float contentHeight() const;
-    float contentWidth();
+    double contentHeight() const;
+    double contentWidth();
 
     float viewportX() const;
     float viewportY() const;

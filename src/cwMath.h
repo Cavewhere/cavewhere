@@ -8,7 +8,7 @@
 #include <math.h>
 #include <QtGlobal>
 
-#ifdef WIN32 //Need this for x86 windows
+#ifdef Q_OS_WIN //Need this for x86 windows
 inline double exp2(double value) {
     return pow(2.0, value);
 }
