@@ -77,12 +77,8 @@ private:
     bool TextureDirty; //!< true when the image needs to be updated
     GLuint TextureId; //!< Texture object
 
-    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
-
     //For loading the image from disk
     QFutureWatcher<LoadImageData>* LoadNoteWatcher;
-
-
 
     void startLoadingImage();
     void reinitilizeLoadNoteWatcher();
@@ -121,7 +117,6 @@ inline cwImage cwImageTexture::image() const {
   */
 inline void cwImageTexture::bind() {
     glBindTexture(GL_TEXTURE_2D, TextureId);
-    NoteVertexBuffer.bind();
 }
 
 /**
@@ -129,7 +124,6 @@ inline void cwImageTexture::bind() {
   */
 inline void cwImageTexture::release() {
     glBindTexture(GL_TEXTURE_2D, 0);
-    NoteVertexBuffer.release();
 }
 
 #endif // CWIMAGETEXTURE_H

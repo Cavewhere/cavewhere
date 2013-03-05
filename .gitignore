@@ -823,3 +823,4 @@ release/*
 Makefile.*
 src/serialization/*
 installer/windows/output/*
+qrc_resources.cpp

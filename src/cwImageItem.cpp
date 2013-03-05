@@ -35,6 +35,8 @@ cwImageItem::~cwImageItem()
     if(NoteTexture != NULL) {
         NoteTexture->deleteLater();
     }
+
+    GeometryVertexBuffer.destroy();
 }
 
 /**
@@ -122,6 +124,7 @@ void cwImageItem::initializeGL() {
     connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
 
     initializeShaders();
+    initializeVertexBuffers();
     initializeTexture();
 }
 
@@ -151,6 +154,31 @@ void cwImageItem::initializeShaders() {
 
         ImageProgram->setUniformValue("Texture", 0); //set the texture unit to 0
     }
+}
+
+/**
+ * @brief cwImageItem::initializeVertexBuffers
+ *
+ * Initilizes all the vertex buffers
+ */
+void cwImageItem::initializeVertexBuffers()
+{
+    //Create the vertex buffer
+    GeometryVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    GeometryVertexBuffer.create();    //Create the vertexes buffer to render a quad
+
+    QVector<QVector2D> vertices;
+    vertices.reserve(4);
+    vertices.append(QVector2D(0.0, 1.0));
+    vertices.append(QVector2D(0.0, 0.0));
+    vertices.append(QVector2D(1.0, 1.0));
+    vertices.append(QVector2D(1.0, 0.0));
+
+    //Allocate the buffer array for this object
+    GeometryVertexBuffer.bind();
+    GeometryVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+    GeometryVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
+    GeometryVertexBuffer.release();
 }
 
 
@@ -214,6 +242,7 @@ void cwImageItem::paint(QPainter* painter) {
 
     glEnable(GL_TEXTURE_2D);
     NoteTexture->bind();
+    GeometryVertexBuffer.bind();
 
     ImageProgram->bind();
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
@@ -226,6 +255,7 @@ void cwImageItem::paint(QPainter* painter) {
     ImageProgram->disableAttributeArray(vVertex);
     ImageProgram->release();
     NoteTexture->release();
+    GeometryVertexBuffer.release();
 
     painter->endNativePainting();
 }

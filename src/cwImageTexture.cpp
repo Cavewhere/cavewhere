@@ -29,8 +29,6 @@ cwImageTexture::~cwImageTexture()
     if(TextureId != 0) {
         glDeleteTextures(1, &TextureId);
     }
-
-    NoteVertexBuffer.destroy();
 }
 
 /**
@@ -45,23 +43,6 @@ void cwImageTexture::initialize()
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    //Create the vertex buffer
-    NoteVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-    NoteVertexBuffer.create();    //Create the vertexes buffer to render a quad
-
-    QVector<QVector2D> vertices;
-    vertices.reserve(4);
-    vertices.append(QVector2D(0.0, 1.0));
-    vertices.append(QVector2D(0.0, 0.0));
-    vertices.append(QVector2D(1.0, 1.0));
-    vertices.append(QVector2D(1.0, 0.0));
-
-    //Allocate the buffer array for this object
-    NoteVertexBuffer.bind();
-    NoteVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    NoteVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
-    NoteVertexBuffer.release();
 }
 
 /**

@@ -75,10 +75,10 @@ private:
     static int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
     cwImageTexture* NoteTexture;
     static QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
-//    QOpenGLBuffer NoteVertexBuffer; //!< The vertex buffer
+    QOpenGLBuffer GeometryVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();
-//    void initializeVertexBuffers();
+    void initializeVertexBuffers();
     void initializeTexture();
 
 private slots:
