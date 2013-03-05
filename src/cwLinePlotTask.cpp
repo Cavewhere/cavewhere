@@ -19,6 +19,8 @@
 #include <QDebug>
 #include <QTime>
 
+//Std includes
+#include <math.h>
 
 /**
  * @brief cwLinePlotTask::LinePlotCaveData::setDepth
@@ -228,12 +230,20 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
     //Index all the stations for quick lookup
     indexStations();
 
+    double positionPrecision = 3; //position to 3 digits
+    double positionFactor = pow(10.0, positionPrecision);
+
     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
     while( iter.hasNext() ) {
         iter.next();
 
         QString name = iter.key();
         QVector3D position = iter.value();
+
+        //Cut off positions to 3 digits
+        position.setX(qRound(position.x() * positionFactor) / positionFactor);
+        position.setY(qRound(position.y() * positionFactor) / positionFactor);
+        position.setZ(qRound(position.z() * positionFactor) / positionFactor);
 
         QString caveIndexString = name.section('-', 0, 0); //Extract the index
         QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest

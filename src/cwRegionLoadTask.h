@@ -21,6 +21,7 @@ class cwLength;
 #include "cwShot.h"
 #include "cwTriangulatedData.h"
 #include "cwImage.h"
+#include "cwStationPositionLookup.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -71,6 +72,7 @@ private:
     cwTeamMember loadTeamMember(const CavewhereProto::TeamMember& protoTeamMember);
     cwStation loadStation(const CavewhereProto::Station& protoStation);
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
+    cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
 
 
     //Utils

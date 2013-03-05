@@ -162,6 +162,9 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
         loadTrip(protoCave.trips(i), trip);
         cave->addTrip(trip);
     }
+
+    cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.stationpositionlookup());
+    cave->setStationPositionLookup(stationLookup);
 }
 
 /**
@@ -500,6 +503,23 @@ cwShot cwRegionLoadTask::loadShot(const CavewhereProto::Shot& protoShot)
     shot.setDistanceIncluded(protoShot.includedistance());
 
     return shot;
+}
+
+/**
+ * @brief cwRegionLoadTask::loadStationPositionLookup
+ * @param protoStationLookup
+ * @return Return's the station lookup for the cave
+ */
+cwStationPositionLookup cwRegionLoadTask::loadStationPositionLookup(const CavewhereProto::StationPositionLookup &protoStationLookup)
+{
+    cwStationPositionLookup stationLookup;
+    for(int i = 0; i < protoStationLookup.stationpositions_size(); i++) {
+        const CavewhereProto::StationPositionLookup_NamePosition& namePosition = protoStationLookup.stationpositions(i);
+        QString name = loadString(namePosition.stationname());
+        QVector3D position = loadVector3D(namePosition.position());
+        stationLookup.setPosition(name, position);
+    }
+    return stationLookup;
 }
 
 /**

@@ -18,6 +18,7 @@
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwProject.h"
+#include "cwStationPositionLookup.h"
 
 //Serielization includes
 #include "cwSerialization.h"
@@ -105,6 +106,8 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
         CavewhereProto::Trip* protoTrip = protoCave->add_trips();
         saveTrip(protoTrip, trip);
     }
+
+    saveStationLookup(protoCave->mutable_stationpositionlookup(), cave->stationPositionLookup());
 }
 
 /**
@@ -453,9 +456,6 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
     protoShot->set_clinostate((CavewhereProto::ClinoStates_State)shot.clinoState());
     protoShot->set_backclinostate((CavewhereProto::ClinoStates_State)shot.backClinoState());
     protoShot->set_includedistance(shot.isDistanceIncluded());
-
-
-    qDebug() << "Save " << shot.backClinoState() << shot.backCompassState() << protoShot->backclinostate() << protoShot->backcompassstate();
 }
 
 /**
@@ -469,6 +469,27 @@ void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
         saveCave(protoCave, cave);
     }
 
+}
+
+/**
+ * @brief cwRegionSaveTask::saveStationLookup
+ * @param positionLookup
+ * @param stationLookup
+ *
+ * Saves the station position lookup
+ */
+void cwRegionSaveTask::saveStationLookup(CavewhereProto::StationPositionLookup *positionLookup,
+                                         const cwStationPositionLookup &stationLookup)
+{
+    QMap<QString, QVector3D> positions = stationLookup.positions();
+    QMapIterator<QString, QVector3D> iter(positions);
+    while(iter.hasNext()) {
+        iter.next();
+
+        CavewhereProto::StationPositionLookup_NamePosition* namePosition = positionLookup->add_stationpositions();
+        saveString(namePosition->mutable_stationname(), iter.key());
+        saveVector3D(namePosition->mutable_position(), iter.value());
+    }
 }
 
 /**

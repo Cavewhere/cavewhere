@@ -20,6 +20,7 @@ class cwLength;
 class cwTeamMember;
 class cwStation;
 class cwShot;
+class cwStationPositionLookup;
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -74,6 +75,8 @@ private:
     void saveShot(CavewhereProto::Shot* protoShot,
                   const cwShot& shot);
     void saveCavingRegion(CavewhereProto::CavingRegion& region);
+    void saveStationLookup(CavewhereProto::StationPositionLookup* positionLookup,
+                           const cwStationPositionLookup& stationLookup);
 
     //Utils
     void saveString(QtProto::QString* protoString, QString string);

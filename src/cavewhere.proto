@@ -11,6 +11,7 @@ message Cave {
     repeated Trip trips = 2;
     optional Units.LengthUnit lengthUnit = 3;
     optional Units.LengthUnit depthUnit = 4;
+    optional StationPositionLookup stationPositionLookup = 5;
 }
 
 message Trip {
@@ -172,5 +173,14 @@ message Units {
         DotsPerInch = 0;
         DotsPerCentimeter = 1;
         DotsPerMeter = 2;
+    }
+}
+
+message StationPositionLookup {
+    repeated NamePosition stationPositions = 1;
+
+    message NamePosition {
+        required QtProto.QString stationName = 1;
+        required QtProto.QVector3D position = 2;
     }
 }
