@@ -468,9 +468,9 @@ QMAKE_EXTRA_COMPILERS += protoc
 
 macx {
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.7
-    LIBS += -L/opt/local/lib -lboost_serialization-mt -lboost_wserialization-mt
+    LIBS += -L/usr/local/lib -lboost_serialization-mt -lboost_wserialization-mt
     ICON = cavewhereIcon.icns
-    INCLUDEPATH += /opt/local/include
+    INCLUDES += /usr/local/include
 }
 
 unix {
