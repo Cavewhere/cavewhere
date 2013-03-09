@@ -9,9 +9,11 @@
 #include <QSize>
 #include <QGLFunctions>
 #include <QOpenGLBuffer>
+#include <QVector2D>
 
 //Our includes
 #include "cwImage.h"
+class cwTextureUploadTask;
 
 class cwImageTexture : public QObject
 {
@@ -33,6 +35,8 @@ public:
 
     QString project() const;
     void setProject(QString project);
+
+    QVector2D scaleTexCoords() const;
 
     bool isDirty() const;
 
@@ -73,6 +77,7 @@ private:
 
     QString ProjectFilename; //!<
     cwImage Image; //!< The image that this texture represent
+    QVector2D ScaleTexCoords; //!< How the texture should be scalede
 
     bool TextureDirty; //!< true when the image needs to be updated
     GLuint TextureId; //!< Texture object
@@ -80,9 +85,11 @@ private:
     //For loading the image from disk
     QFutureWatcher<LoadImageData>* LoadNoteWatcher;
 
+    static QThread* TextureLoadingThread;
+    cwTextureUploadTask* TextureUploadTask;
+
     void startLoadingImage();
     void reinitilizeLoadNoteWatcher();
-    bool isDivisibleBy4(QSize size) const;
 
 private slots:
     void markAsDirty();

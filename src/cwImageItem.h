@@ -68,6 +68,7 @@ private:
     //QString ProjectFilename;
     QMatrix4x4 RotationModelMatrix;
     QPointF RotationCenter;
+    QString ProjectFilename;
 
     //For rendering
     static int vVertex; //!< The attribute location of the vVertex

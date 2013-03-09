@@ -120,7 +120,7 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
     //Covert the texCoords to D3D divisible by 4
-    texCoords = croppedImage.scaleTexCoords(texCoords);
+    texCoords = scaleTexCoordinates(croppedImage, texCoords);
 
     //Morph the points
     QVector<QVector3D> points = morphPoints(triangleData.points(), scrapData, toLocal, croppedImage);
@@ -636,6 +636,24 @@ QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D>
     }
 
     return texCoords;
+}
+
+/**
+ * @brief cwTriangulateTask::scaleTexCoordinates
+ * @param image
+ * @param texCoords
+ * @return The scaled tex coordinates
+ *
+ * Because of D3D ANGLE, there's extra padding added to the images.  This padding needs to be scaled away
+ * because the image isn't exactly the same coordinates as the original. The padding will either be 0, 1, 2, or 3
+ * pixels.  The D3D textures have to divisable by 4.
+ */
+QVector<QVector2D> cwTriangulateTask::scaleTexCoordinates(const cwImage &image, QVector<QVector2D> texCoords) const
+{
+    cwImageProvider imageProvider;
+    imageProvider.setProjectPath(ProjectFilename);
+    QVector2D texCoordsScale = imageProvider.scaleTexCoords(image);
+    return cwImage::scaleTexCoords(texCoordsScale, texCoords);
 }
 
 /**

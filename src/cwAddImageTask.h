@@ -42,6 +42,9 @@ public:
     //Options for adding
     void setMipmapsOnly(bool mipmapOnly);
 
+    //Regenerate mipmaps
+    void regenerateMipmapsOn(cwImage image);
+
     ///////////// Results ///////////////////
     QList<cwImage> images();
 
@@ -77,6 +80,8 @@ private:
 
     bool MipmapOnly; //Doesn't save the original or create an icon
 
+    cwImage RegenerateImage; //This updates the mipmaps for the image
+
     QAtomicInt Progress;
     QOpenGLContext* CompressionContext;
     QWindow* Window;
@@ -88,7 +93,7 @@ private:
 
     void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
-    int saveToDXT1Format(QImage image);
+    int saveToDXT1Format(QImage image, int id = -1);
     QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
     QByteArray openglDxt1Compression(QImage image);
     QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
@@ -97,6 +102,8 @@ private:
     int numberOfMipmapLevels(QSize imageSize) const;
     QSize halfSize(QSize size) const;
     int dotsPerMeter(QImage image) const;
+
+    void regenerateMipmaps();
 
     void IncreaseProgress();
 
@@ -141,6 +148,15 @@ inline void cwAddImageTask::setNewImages(QList<QImage> images) {
 inline void cwAddImageTask::setMipmapsOnly(bool mipmapOnly)
 {
     MipmapOnly = mipmapOnly;
+}
+
+/**
+ * @brief cwAddImageTask::regenerateMipmapsOn
+ * @param image
+ */
+inline void cwAddImageTask::regenerateMipmapsOn(cwImage image)
+{
+   RegenerateImage = image;
 }
 
 /**

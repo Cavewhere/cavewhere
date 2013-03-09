@@ -2,7 +2,7 @@
 #include "cwAddImageTask.h"
 #include "cwProject.h"
 #include "cwImageData.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwDebug.h"
 //#include "cwImageDatabase.h"
 
@@ -46,9 +46,6 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
     Texture = 0;
 
     MipmapOnly = false;
-//    ComperssionContext->create();
-
-//    qDebug() << "Context created: " << GLWindow->context();
 }
 
 /**
@@ -158,8 +155,6 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
     //Database image, original image
     QList< PrivateImageData > images;
 
-    qDebug() << "Adding new images:" << NewImagePaths.size() << NewImages.size();
-
     //Go through all the images strings
     for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
         QString imagePath = NewImagePaths[i];
@@ -193,8 +188,6 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         images.append(PrivateImageData(imageIds, originalImage));
     }
 
-    qDebug() << "Number of images:" << images.size();
-
     //Go through all the images
     for(int i = 0; i < images.size() && isRunning(); i++) {
         cwImage& imageIds = images[i].Id;
@@ -213,6 +206,18 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         Images.append(imageIds);
 
       //  emit progressed(i + 1);
+    }
+
+    if(RegenerateImage.isValid()) {
+        //Regenerate the mipmaps based on what's aleardy in the database
+
+        cwImageProvider imageProvider;
+        imageProvider.setProjectPath(databaseFilename());
+        QImage originalImage = imageProvider.image(RegenerateImage.original());
+
+        if(!originalImage.isNull()) {
+            createMipmaps(originalImage, "", &RegenerateImage);
+        }
     }
 
     endTransation();
@@ -342,7 +347,10 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
   The return stringList is a list of all the mipmaps, starting with level 0 going to level
   size-1 of the list.
   */
-void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds) {
+void cwAddImageTask::createMipmaps(QImage originalImage,
+                                   QString imageFilename,
+                                   cwImage* imageIds) {
+
     int numberOfLevels = numberOfMipmapLevels(originalImage.size());
 
     QSizeF clipArea;
@@ -351,24 +359,32 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
 
     QSize scaledImageSize = scaledImage.size();
 
+    bool regeneratingMipmaps = numberOfLevels == imageIds->mipmaps().size();
+
     for(int i = 0; i < numberOfLevels && isRunning(); i++) {
         emit statusMessage(QString("Compressing %1 of %2 bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
 
         //Rescaled the image
         scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
+        int mipmapId = -1;
+        if(regeneratingMipmaps) {
+            mipmapId = imageIds->mipmaps().at(i);
+        }
+
         //Export the image to DXT1 format
-        int mipmapId = saveToDXT1Format(scaledImage);
+        mipmapId = saveToDXT1Format(scaledImage, mipmapId);
 
         //Add the path to the mipmapPath
-        mipmapIds.append(mipmapId);
+        if(!regeneratingMipmaps) {
+            mipmapIds.append(mipmapId);
+        }
 
         //Create the new width and height, by halfing them
         scaledImageSize = halfSize(scaledImageSize);
     }
 
     imageIds->setMipmaps(mipmapIds);
-    imageIds->setClipArea(clipArea);
 }
 
 /**
@@ -391,8 +407,9 @@ void cwAddImageTask::createMipmaps(QImage originalImage, QString imageFilename, 
   35% by default.
 
   \param image - The image that'll be converted
+  \param id - The id that'll be overwritten by the task
   */
-int cwAddImageTask::saveToDXT1Format(QImage image) {
+int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
     //Convert and compress using dxt1
     //20 times slower on my computer
 #ifdef Q_OS_WIN
@@ -410,8 +427,16 @@ int cwAddImageTask::saveToDXT1Format(QImage image) {
     outputData = qCompress(outputData, 9);
 
     //Add the image to the database
-    cwImageData iconImageData(image.size(), 0, cwProjectImageProvider::Dxt1_GZ_Extension, outputData);
-    int imageId = cwProject::addImage(Database, iconImageData);
+    cwImageData iconImageData(image.size(), 0, cwImageProvider::Dxt1_GZ_Extension, outputData);
+
+    int imageId;
+    if(id == -1) {
+        //Add the image
+        imageId = cwProject::addImage(Database, iconImageData);
+    } else {
+        imageId = id;
+        cwProject::updateImage(Database, iconImageData, id);
+    }
 
     return imageId;
  }
@@ -624,6 +649,28 @@ int cwAddImageTask::dotsPerMeter(QImage image) const {
         return 0;
     }
     return image.dotsPerMeterX();
+}
+
+/**
+ * @brief cwAddImageTask::regenerateMipmaps
+ *
+ * This regenerates the mipmaps for RegenerateImage.  This might be used
+ * to regenerate the correct mipmap compression for moble devices or
+ * if the compression was incorrect generate the first time.
+ */
+void cwAddImageTask::regenerateMipmaps()
+{
+    if(RegenerateImage.isValid()) {
+        //Get the original image from the database
+        cwImageProvider imageProvider;
+        imageProvider.setProjectPath(databaseFilename());
+
+        QImage original = imageProvider.image(RegenerateImage.original());
+
+
+
+
+    }
 }
 
 /**

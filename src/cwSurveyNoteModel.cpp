@@ -1,7 +1,7 @@
 //Our inculdes
 #include "cwSurveyNoteModel.h"
 #include "cwProject.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwTrip.h"
 #include "cwNote.h"
 
@@ -15,7 +15,7 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     ParentTrip(NULL),
     ParentCave(NULL)
 {
-    ImagePathString = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
+    ImagePathString = QString("image://") + cwImageProvider::Name + QString("/%1");
 }
 
 QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const

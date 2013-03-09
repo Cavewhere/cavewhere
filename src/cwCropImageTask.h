@@ -4,7 +4,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwImage.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwProjectIOTask.h"
 class cwAddImageTask;
 
@@ -42,7 +42,7 @@ private:
     cwImage CroppedImage;
 
     //For extracting image data from the database
-    cwProjectImageProvider ImageProvider;
+    cwImageProvider ImageProvider;
 
     //For writting the cropped image
     cwAddImageTask* AddImageTask;

@@ -91,7 +91,6 @@ SOURCES += src/main.cpp \
     src/cwAddImageTask.cpp \
     src/cwFileDialogHelper.cpp \
     src/cwGunZipReader.cpp \
-    src/cwProjectImageProvider.cpp \
     src/cwProjectIOTask.cpp \
     src/cwRegionIOTask.cpp \
     src/cwRegionSaveTask.cpp \
@@ -160,7 +159,9 @@ SOURCES += src/main.cpp \
     src/cwAbstractProjection.cpp \
     src/cwOrthogonalProjection.cpp \
     src/cwPerspectiveProjection.cpp \
-    src/cwMatrix4x4Animation.cpp
+    src/cwMatrix4x4Animation.cpp \
+    src/cwTextureUploadTask.cpp \
+    src/cwImageProvider.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -238,7 +239,6 @@ HEADERS  += \
     src/cwAddImageTask.h \
     src/cwFileDialogHelper.h \
     src/cwGunZipReader.h \
-    src/cwProjectImageProvider.h \
     src/cwSerialization.h \
     src/cwQtSerialization.h \
     src/cwProjectIOTask.h \
@@ -313,7 +313,9 @@ HEADERS  += \
     src/cwPerspectiveProjection.h \
     src/cwMatrix4x4Animation.h \
     src/serialization/cavewhere.pb.h \
-    src/serialization/qt.pb.h
+    src/serialization/qt.pb.h \
+    src/cwTextureUploadTask.h \
+    src/cwImageProvider.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \

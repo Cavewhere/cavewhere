@@ -367,7 +367,7 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
     bool successful = query.prepare(SQL);
 
     if(!successful) {
-        qDebug() << "Couldn't create Insert Images query: " << query.lastError();
+        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
         return -1;
     }
 
@@ -381,6 +381,34 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
 
     //Get the id of the last inserted id
     return query.lastInsertId().toInt();
+}
+
+/**
+ * @brief cwProject::updateImage
+ * @param database - The database where the image is going to be inserted into
+ * @param imageData - The data that going to update the image
+ * @param id - The id of the image that needs to be updated
+ * @return True if image was update successfully and false, if unsuccessful
+ */
+bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
+{
+    QString SQL("UPDATE Images SET type=?, width=?, height=?, dotsPerMeter=?, imageData=? where id=?");
+
+    QSqlQuery query(database);
+    bool successful = query.prepare(SQL);
+
+    if(!successful) {
+        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
+        return false;
+    }
+
+    query.bindValue(0, imageData.format());
+    query.bindValue(1, imageData.size().width());
+    query.bindValue(2, imageData.size().height());
+    query.bindValue(3, imageData.dotsPerMeter());
+    query.bindValue(4, imageData.data());
+    query.bindValue(5, id);
+    return query.exec();
 }
 
 /**
@@ -493,13 +521,6 @@ void cwProject::load()
 {
     QString filename = QFileDialog::getOpenFileName(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
     loadFile(filename);
-
-    //    QFileDialog* loadDialog = new QFileDialog(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
-    //    loadDialog->setFileMode(QFileDialog::ExistingFile);
-    //    loadDialog->setAcceptMode(QFileDialog::AcceptOpen);
-    //    loadDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    //    connect(loadDialog, &QFileDialog::fileSelected, this, &cwProject::loadFile);
-    //    loadDialog->show();
 }
 
 

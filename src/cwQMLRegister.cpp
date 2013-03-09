@@ -22,7 +22,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwFileDialogHelper.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
 #include "cwBasePanZoomInteraction.h"
 #include "cwBaseScrapInteraction.h"

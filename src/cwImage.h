@@ -39,16 +39,13 @@ public:
     void setOriginalDotsPerMeter(int dotsPerMeter);
     int originalDotsPerMeter() const;
 
-    void setClipArea(QSizeF clipArea);
-    QSizeF clipArea() const;
-
     bool operator ==(const cwImage& other) const;
     bool operator !=(const cwImage& other) const;
 
     bool isValid() const;
     bool iconIsValid() const;
 
-    QVector<QVector2D> scaleTexCoords(QVector<QVector2D> texCoords) const;
+    static QVector<QVector2D> scaleTexCoords(QVector2D scaleTexCoords, QVector<QVector2D> texCoords);
 
 private:
     class PrivateData : public QSharedData {
@@ -61,7 +58,6 @@ private:
         int OriginalDotsPerMeter;
 
         QList<int> Mipmaps;
-        QSizeF ClipArea;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -160,33 +156,6 @@ inline void cwImage::setOriginalDotsPerMeter(int dotsPerMeter) {
 inline int cwImage::originalDotsPerMeter() const {
     return Data->OriginalDotsPerMeter;
 }
-
-/**
- * @brief cwImage::setValidTextureSize
- * @param clipArea
- *
- * Sets the valid texture size for the mipmaps.  The mipmaps are
- * compressed with DXT1 compression, and for ANGLE (for windows)
- * the mipmaps dimension have to be divisible by 4.  This is
- * a D3D requirement (ANGLE converts opengl to D3D on windows).
- * If the mipmap isn't divisible by 4 it will cause a crash.
- *
- * clipArea hold the area of the image that should be
- * used for rendering.  This value should be in normalized cooridanates
- * frome 0.0 to 1.0.  Usually the ValidTextureSize should be close to
- * 1.0.  This (width, height) can be multiplied against the texture coordinates
- * to get the true texture cordinates.
- */
-inline void cwImage::setClipArea(QSizeF clipArea)
-{
-    Data->ClipArea = clipArea;
-}
-
-inline QSizeF cwImage::clipArea() const
-{
-    return Data->ClipArea;
-}
-
 
 /**
   \brief Returns false if the image isn't valid and true if it is valid.

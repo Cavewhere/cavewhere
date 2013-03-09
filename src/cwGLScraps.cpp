@@ -99,7 +99,7 @@ void cwGLScraps::updateData()
 
         Scraps.append(GLScrap(data, project()));
 
-        //For geometry intersection
+        //For geometry intersection, mouse z depth
         cwGeometryItersecter::Object geometryObject(
                     this, //This object's pointer
                     Scraps.size(), //Id

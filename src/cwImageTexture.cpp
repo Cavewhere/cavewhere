@@ -1,12 +1,16 @@
 //Our includes
 #include "cwImageTexture.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
+#include "cwTextureUploadTask.h"
 #include "cwDebug.h"
 
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 #include <QVector2D>
+#include <QWindow>
+
+QThread* cwImageTexture::TextureLoadingThread = NULL;
 
 /**
 
@@ -15,9 +19,13 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     QObject(parent),
     TextureDirty(false),
     TextureId(0),
-    LoadNoteWatcher(NULL)
+    LoadNoteWatcher(NULL),
+    TextureUploadTask(NULL)
 {
-    reinitilizeLoadNoteWatcher();
+    if(TextureLoadingThread == NULL) {
+        TextureLoadingThread = new QThread();
+        TextureLoadingThread->start(QThread::LowPriority);
+    }
 }
 
 cwImageTexture::~cwImageTexture()
@@ -57,6 +65,15 @@ void cwImageTexture::setProject(QString project) {
 }
 
 /**
+ * @brief cwImageTexture::scaleTexCoords
+ * @return  How the text are should be scaled
+ */
+QVector2D cwImageTexture::scaleTexCoords() const
+{
+    return ScaleTexCoords;
+}
+
+/**
 Sets image
 */
 void cwImageTexture::setImage(cwImage image) {
@@ -73,12 +90,18 @@ void cwImageTexture::setImage(cwImage image) {
 void cwImageTexture::updateData() {
     if(!isDirty()) { return; }
 
-    QList<LoadImageData>mipmaps = LoadNoteWatcher->future().results();
+    if(TextureUploadTask == NULL) {
+        TextureDirty = false;
+        return;
+    }
+
+    QList<QPair<QByteArray, QSize> > mipmaps = TextureUploadTask->mipmaps();
+    ScaleTexCoords = TextureUploadTask->scaleTexCoords();
 
     if(mipmaps.empty()) { return; }
 
-    QSize firstLevel = mipmaps.first().ImageDataSize;
-    if(!isDivisibleBy4(firstLevel)) {
+    QSize firstLevel = mipmaps.first().second;
+    if(!cwTextureUploadTask::isDivisibleBy4(firstLevel)) {
         qDebug() << "Trying to upload an image that isn't divisible by 4. This will crash ANGLE on windows." << LOCATION;
         TextureDirty = false;
         return;
@@ -95,11 +118,11 @@ void cwImageTexture::updateData() {
     for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
 
         //Get the mipmap data
-        LoadImageData image = mipmaps.at(mipmapLevel);
-        QByteArray imageData = image.ImageData;
-        QSize size = image.ImageDataSize;
+        QPair<QByteArray, QSize> image = mipmaps.at(mipmapLevel);
+        QByteArray imageData = image.first;
+        QSize size = image.second;
 
-        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {            
+        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
@@ -123,11 +146,20 @@ void cwImageTexture::updateData() {
 void cwImageTexture::startLoadingImage()
 {
     if(Image.isValid() && !project().isEmpty()) {
-        //Load the notes in an asyn way
-        LoadNoteWatcher->cancel(); //Cancel previous run, if still running
-        QFuture<LoadImageData> future = QtConcurrent::mapped(Image.mipmaps(),
-                                                             LoadImageKernal(ProjectFilename));
-        LoadNoteWatcher->setFuture(future);
+
+        if(TextureUploadTask == NULL) {
+            TextureUploadTask = new cwTextureUploadTask();
+            TextureUploadTask->setThread(TextureLoadingThread);
+
+            connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::markAsDirty);
+            connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::textureUploaded);
+        }
+
+        if(TextureUploadTask->isRunning()) { return; }
+
+        TextureUploadTask->setImage(image());
+        TextureUploadTask->setProjectFilename(ProjectFilename);
+        TextureUploadTask->start();
     }
 }
 
@@ -136,28 +168,10 @@ void cwImageTexture::startLoadingImage()
  */
 void cwImageTexture::reinitilizeLoadNoteWatcher()
 {
-    if(LoadNoteWatcher != NULL) {
-        //Clean up the memory
-        LoadNoteWatcher->deleteLater();
+    if(TextureUploadTask == NULL) {
+        TextureUploadTask->deleteLater();
+        TextureUploadTask = NULL;
     }
-
-    LoadNoteWatcher = new QFutureWatcher<LoadImageData>();
-    connect(LoadNoteWatcher, &QFutureWatcher<LoadImageData>::finished, this, &cwImageTexture::markAsDirty);
-    connect(LoadNoteWatcher, &QFutureWatcher<LoadImageData>::finished, this, &cwImageTexture::textureUploaded);
-}
-
-/**
- * @brief cwImageTexture::isDivisibleBy4
- * @param size
- * @return True if the size is divisible by 4
- *
- * This is to prevent D3D from crashing when using ANGLE
- */
-bool cwImageTexture::isDivisibleBy4(QSize size) const
-{
-    int widthRemainder = size.width() % 4;
-    int heightRemainder = size.height() % 4;
-    return widthRemainder == 0 && heightRemainder == 0;
 }
 
 void cwImageTexture::markAsDirty()
@@ -172,7 +186,7 @@ void cwImageTexture::markAsDirty()
   */
 cwImageTexture::LoadImageData cwImageTexture::LoadImageKernal::operator ()(int imageId) {
     //Extract the image data from the imageProvider
-    cwProjectImageProvider imageProvidor;
+    cwImageProvider imageProvidor;
     imageProvidor.setProjectPath(Filename);
 
     LoadImageData data;

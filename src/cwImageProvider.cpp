@@ -1,5 +1,5 @@
 //Our includes
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -13,14 +13,14 @@
 #include <QDebug>
 #include <QSqlError>
 
-const QString cwProjectImageProvider::Name = "sqlimagequery";
-const QString cwProjectImageProvider::RequestImageSQL = "SELECT type,width,height,dotsPerMeter,imageData from Images where id=?";
-const QString cwProjectImageProvider::RequestMetadataSQL = "SELECT type,width,height,dotsPerMeter from Images where id=?";
-const QByteArray cwProjectImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
+const QString cwImageProvider::Name = "sqlimagequery";
+const QString cwImageProvider::RequestImageSQL = "SELECT type,width,height,dotsPerMeter,imageData from Images where id=?";
+const QString cwImageProvider::RequestMetadataSQL = "SELECT type,width,height,dotsPerMeter from Images where id=?";
+const QByteArray cwImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
 
-QAtomicInt cwProjectImageProvider::ConnectionCounter;
+QAtomicInt cwImageProvider::ConnectionCounter;
 
-cwProjectImageProvider::cwProjectImageProvider() :
+cwImageProvider::cwImageProvider() :
     QQuickImageProvider(QQuickImageProvider::Image)
 {
 
@@ -33,7 +33,7 @@ cwProjectImageProvider::cwProjectImageProvider() :
 
   See Qt docs for details
   */
-QImage cwProjectImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) {
+QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize) {
     bool okay;
     int sqlId = id.toInt(&okay);
 
@@ -78,7 +78,7 @@ QImage cwProjectImageProvider::requestImage(const QString &id, QSize *size, cons
 
   If the format is dxt1.gz then this will unzip the data
   */
-QByteArray cwProjectImageProvider::requestImageData(int id, QSize* size, QByteArray* type) {
+QByteArray cwImageProvider::requestImageData(int id, QSize* size, QByteArray* type) {
     //Set the default size
     *size = QSize(0, 0);
 
@@ -104,7 +104,7 @@ QByteArray cwProjectImageProvider::requestImageData(int id, QSize* size, QByteAr
 /**
  *Sets the project path so we can connect and extract data from it
  */
-void cwProjectImageProvider::setProjectPath(QString projectPath) {
+void cwImageProvider::setProjectPath(QString projectPath) {
     QMutexLocker locker(&ProjectPathMutex);
     ProjectPath = projectPath;
 }
@@ -112,7 +112,7 @@ void cwProjectImageProvider::setProjectPath(QString projectPath) {
 /**
   Returns the project path where the images will be extracted from
   */
-QString cwProjectImageProvider::projectPath() const {
+QString cwImageProvider::projectPath() const {
     QMutexLocker locker(const_cast<QMutex*>(&ProjectPathMutex));
     return ProjectPath;
 }
@@ -120,17 +120,17 @@ QString cwProjectImageProvider::projectPath() const {
 /**
   Gets the metadata of the original image
   */
-cwImageData cwProjectImageProvider::originalMetadata(const cwImage &image) const {
+cwImageData cwImageProvider::originalMetadata(const cwImage &image) const {
     return data(image.original(), true); //Only get the metadata of the original
 }
 
 /**
   Gets the metadata of the image at id
   */
-cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
+cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
     //Needed to get around const correctness
-    cwProjectImageProvider* castedConstThis = const_cast<cwProjectImageProvider*>(this);
+    cwImageProvider* castedConstThis = const_cast<cwImageProvider*>(this);
     int connectionName = castedConstThis->ConnectionCounter.fetchAndAddAcquire(1);
 
 //    QString databaseName = QString("resquestImage/%1").arg(counter);
@@ -183,7 +183,7 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
         if(!metaDataOnly) {
             imageData = query.value(4).toByteArray();
             //Remove the zlib compression from the image
-            if(QString(type) == QString(cwProjectImageProvider::Dxt1_GZ_Extension)) {
+            if(QString(type) == QString(cwImageProvider::Dxt1_GZ_Extension)) {
                 //Decompress the QByteArray
                 imageData = qUncompress(imageData);
             }
@@ -202,11 +202,28 @@ cwImageData cwProjectImageProvider::data(int id, bool metaDataOnly) const {
   \brief Gets a QImage from the image provider.  If the image at id is null, then
   this will return a empty image
   */
-QImage cwProjectImageProvider::image(int id) const
+QImage cwImageProvider::image(int id) const
 {
     cwImageData imageData = data(id);
-    if(imageData.format() != cwProjectImageProvider::Dxt1_GZ_Extension) {
+    if(imageData.format() != cwImageProvider::Dxt1_GZ_Extension) {
         return QImage::fromData(imageData.data(), imageData.format());
     }
     return QImage();
+}
+
+/**
+ * @brief cwProjectImageProvider::scaleTexCoords
+ * @param id
+ * @return This returns the
+ */
+QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
+{
+    if(image.mipmaps().isEmpty()) {
+        return QVector2D(1.0, 1.0);
+    }
+
+    QSize originalSize = data(image.original(), true).size();
+    QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
+    return QVector2D(firstMipmapSize.width() / (double)originalSize.width(),
+                     firstMipmapSize.height() / (double)originalSize.height());
 }

@@ -324,8 +324,6 @@ cwImage cwRegionLoadTask::loadImage(const CavewhereProto::Image& protoImage)
     image.setOriginalDotsPerMeter(protoImage.dotpermeter());
     image.setOriginalSize(loadSize(protoImage.size()));
 
-    if(protoImage.has_cliparea()) { image.setClipArea(loadSizeF(protoImage.cliparea())); }
-
     QList<int> mipmaps;
     mipmaps.reserve(protoImage.mipmapids_size());
     for(int i = 0; i < protoImage.mipmapids_size(); i++) {

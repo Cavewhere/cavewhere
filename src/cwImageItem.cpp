@@ -2,7 +2,7 @@
 #include "cwImageItem.h"
 #include "cwGLShader.h"
 #include "cwShaderDebugger.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 #include "cwImageProperties.h"
 #include "cwGlobalDirectory.h"
 #include "cwImageTexture.h"
@@ -22,7 +22,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    NoteTexture(new cwImageTexture()) //Temporary until init
+    NoteTexture(new cwImageTexture())
 {
 
     ImageProperties->setImage(Image);
@@ -36,7 +36,7 @@ cwImageItem::~cwImageItem()
         NoteTexture->deleteLater();
     }
 
-    GeometryVertexBuffer.destroy();
+//    GeometryVertexBuffer.destroy();
 }
 
 /**
@@ -46,7 +46,9 @@ void cwImageItem::setImage(const cwImage& image) {
     if(Image != image) {
         Image = image;
         ImageProperties->setImage(Image);
-        NoteTexture->setImage(Image);
+        if(NoteTexture != NULL) {
+            NoteTexture->setImage(Image);
+        }
         resizeGL();
     }
 }
@@ -114,10 +116,9 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
-    cwImageTexture* oldNoteTexture = NoteTexture;
     NoteTexture = new cwImageTexture();
-    NoteTexture->setProject(oldNoteTexture->project());
-    NoteTexture->setImage(oldNoteTexture->image());
+    NoteTexture->setProject(ProjectFilename);
+    NoteTexture->setImage(Image);
 
     //Called when the image is finished loading
     connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
@@ -248,7 +249,7 @@ void cwImageItem::paint(QPainter* painter) {
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     ImageProgram->enableAttributeArray(vVertex);
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
-    ImageProgram->setUniformValue(CropAreaUniform, image().clipArea());
+    ImageProgram->setUniformValue(CropAreaUniform, NoteTexture->scaleTexCoords());
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
@@ -256,6 +257,8 @@ void cwImageItem::paint(QPainter* painter) {
     ImageProgram->release();
     NoteTexture->release();
     GeometryVertexBuffer.release();
+
+    glGetError();
 
     painter->endNativePainting();
 }
@@ -272,7 +275,8 @@ void cwImageItem::paint(QPainter* painter) {
 QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data)
 {
     NoteTexture->updateData();
-    return cwGLRenderer::updatePaintNode(oldNode, data);
+    QSGNode* node = cwGLRenderer::updatePaintNode(oldNode, data);
+    return node;
 }
 
 
@@ -305,12 +309,15 @@ QPointF cwImageItem::mapNoteToQtViewport(QPointF mapNote) const
   The project filename allow this imageItem to extra data from disk.
   */
 void cwImageItem::setProjectFilename(QString filename) {
-    NoteTexture->setProject(filename);
+    ProjectFilename = filename;
+    if(NoteTexture != NULL) {
+        NoteTexture->setProject(ProjectFilename);
+    }
 }
 
 /**
   \brief Gets the project Filename
   */
 QString cwImageItem::projectFilename() const {
-    return NoteTexture->project();
+    return ProjectFilename;
 }

@@ -8,6 +8,7 @@
 #include <QtWidgets/QWidget>
 #include <QDir>
 #include <QImageReader>
+#include <QOpenGLFunctions>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -20,7 +21,7 @@
 #include "cwQMLRegister.h"
 #include "cwRootData.h"
 #include "cwProject.h"
-#include "cwProjectImageProvider.h"
+#include "cwImageProvider.h"
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +38,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
+    qRegisterMetaType<GLuint>("GLuint");
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");
@@ -63,10 +65,10 @@ int main(int argc, char *argv[])
     context->setContextProperty("mainWindow", &view);
 
     //This allow to extra image data from the project's image database
-    cwProjectImageProvider* imageProvider = new cwProjectImageProvider();
+    cwImageProvider* imageProvider = new cwImageProvider();
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-    context->engine()->addImageProvider(cwProjectImageProvider::Name, imageProvider);
+    context->engine()->addImageProvider(cwImageProvider::Name, imageProvider);
 
     //Allow the engine to quit the application
     QObject::connect(context->engine(), SIGNAL(quit()), &a, SLOT(quit()));
