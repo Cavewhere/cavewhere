@@ -141,7 +141,7 @@ void cwScrapManager::updateStationPositionChangedForScraps(QList<cwScrap *> scra
 
 void cwScrapManager::rerunDirtyScraps()
 {
-    updateScrapGeometry();
+    updateScrapGeometry(DirtyScraps.toList());
 }
 
 /**
@@ -315,6 +315,8 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
 
 void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
+    if(scraps.isEmpty()) { return; }
+
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     foreach(cwScrap* scrap, scraps) {
         connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
@@ -513,6 +515,11 @@ void cwScrapManager::cavesInserted(int begin, int end) {
     for(int i = begin; i <= end; i++) {
         cwCave* cave = Region->cave(i);
         connectCave(cave);
+
+        if(cave->hasTrips()) {
+            int lastTripIndex = cave->tripCount() - 1;
+            tripsInsertedHelper(cave, 0, lastTripIndex);
+        }
     }
 }
 

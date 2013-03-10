@@ -82,10 +82,15 @@ void cwCropImageTask::runTask() {
 
     Q_ASSERT(AddImageTask->isReady());
 
-    QList<cwImage> croppedImages = AddImageTask->images();
-    Q_ASSERT(croppedImages.size() == 1);
+    //We need to make sure we're still running, because the AddImageTask
+    //May have stopped, if the user stopped this task.  If the user stopped
+    //this task, the addImageTask may return no images.
+    if(isRunning()) {
+        QList<cwImage> croppedImages = AddImageTask->images();
+        Q_ASSERT(croppedImages.size() == 1);
 
-    CroppedImage = croppedImages.first();
+        CroppedImage = croppedImages.first();
+    }
 
     done();
 }
