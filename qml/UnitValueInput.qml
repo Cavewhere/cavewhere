@@ -30,6 +30,8 @@ Row {
                 privateData.valueToCustomUnits[type] = i;
             }
         }
+
+        unitInput.unit = unitInput.updateUnit();
     }
 
     ClickTextInput {
@@ -41,6 +43,14 @@ Row {
     UnitInput {
         id: unitInput
 
+        function updateUnit() {
+            if(unitValue !== null && privateData.customUnitsToValue.length > 0) {
+                return privateData.valueToCustomUnits[unitValue.unit];
+            } else {
+                return defaultUnit
+            }
+        }
+
         unitModel: {
             if(unitValue !== null) {
                 return unitValue.unitNames;
@@ -49,17 +59,12 @@ Row {
             }
         }
 
-        unit: {
-            if(unitValue !== null && privateData.customUnitsToValue.length > 0) {
-                return privateData.valueToCustomUnits[unitValue.unit];
-            } else {
-                return defaultUnit
-            }
-        }
+        unit: updateUnit()
 
         onNewUnit: {
             if(unitValue !== null) {
                 unitValue.unit = privateData.customUnitsToValue[unit]
+                unitInput.unit = updateUnit()
             }
         }
     }
