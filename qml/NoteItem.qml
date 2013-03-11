@@ -12,12 +12,7 @@ ImageItem {
     clip: true
     rotation: note !== null ? note.rotate : 0
 
-    //For rendering scraps onto the view
-    ScrapView {
-        id: scrapViewId
-        note: noteArea.note
-        transformUpdater: transformUpdaterId
-    }
+
 
     PanZoomInteraction {
         id: panZoomInteraction
@@ -67,6 +62,7 @@ ImageItem {
         imageItem: noteArea
         basePanZoomInteraction: panZoomInteraction
         transformUpdater: transformUpdaterId
+        z:1
     }
 
     NoteScaleInteraction {
@@ -76,6 +72,7 @@ ImageItem {
         basePanZoomInteraction: panZoomInteraction
         transformUpdater: transformUpdaterId
         note: noteArea.note
+        z:1
     }
 
     NoteDPIInteraction {
@@ -85,6 +82,7 @@ ImageItem {
         basePanZoomInteraction: panZoomInteraction
         transformUpdater: transformUpdaterId
         imageResolution: note != null ? note.imageResolution : null
+        z:1
     }
 
     InteractionManager {
@@ -134,6 +132,12 @@ ImageItem {
         }
     }
 
+    //For rendering scraps onto the view
+    ScrapView {
+        id: scrapViewId
+        note: noteArea.note
+        transformUpdater: transformUpdaterId
+    }
 
     states: [
         State {
