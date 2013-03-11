@@ -51,46 +51,42 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
     }
 
     QPointF noteCoordinate = imageItem()->mapQtViewportToNote(qtViewportPosition);
-    double buffer = 7.5;
+    double buffer = 7.5; //In pixels
 
-//    foreach(cwScrap* scrap, note()->scraps()) {
+    //Go through each scrap polygon's lines
+    for(int i = 0; i < Scrap->numberOfPoints() - 1; i++) {
+        QPointF p1 = Scrap->points().at(i);
+        QPointF p2 = Scrap->points().at(i+1);
+        QLineF line(p1, p2);
+        float angle = line.angle();
 
-        //Go through each scrap polygon's lines
-        for(int i = 0; i < Scrap->numberOfPoints() - 1; i++) {
-            QPointF p1 = Scrap->points().at(i);
-            QPointF p2 = Scrap->points().at(i+1);
-            QLineF line(p1, p2);
-            float angle = line.angle();
+        QTransform transform;
+        transform.rotate(-360.0 + angle);
+        transform.translate(-p1.x(), -p1.y());
 
-            QTransform transform;
-            transform.rotate(-360.0 + angle);
-            transform.translate(-p1.x(), -p1.y());
+        QLineF transLine = transform.map(line);
+        QPointF rotatedNoteCoord = transform.map(noteCoordinate);
 
-            QLineF transLine = transform.map(line);
-            QPointF rotatedNoteCoord = transform.map(noteCoordinate);
+        QPointF mappedBuffer = imageItem()->mapQtViewportToNote(QPoint(0, buffer));
+        QPointF origin = imageItem()->mapQtViewportToNote(QPoint(0, 0));
+        double bufferNoteCoords = QLineF(origin, mappedBuffer).length();
 
-//            qDebug() << "Line:" << (-360.0 + angle) << line << transLine << "rotatedNoteCoord" << rotatedNoteCoord;
+        p1 = transLine.p1();
+        p2 = transLine.p2();
 
-            //Converted the rotated stuff back into pixels
-            p1 = imageItem()->mapNoteToQtViewport(transLine.p1());
-            p2 = imageItem()->mapNoteToQtViewport(transLine.p2());
-            rotatedNoteCoord = imageItem()->mapNoteToQtViewport(rotatedNoteCoord);
+        p1 += QPointF(0.0, -bufferNoteCoords);
+        p2 += QPointF(0.0, bufferNoteCoords);
 
-            p1 += QPointF(0.0, -buffer);
-            p2 += QPointF(0.0, buffer);
-
-            QRectF rect(p1, p2);
-            if(rect.contains(rotatedNoteCoord)) {
-                QPointF closest(rotatedNoteCoord.x(), rect.center().y());
-                QPointF closestNoteCoord = ImageItem->mapQtViewportToNote(closest.toPoint());
-                QTransform inverse = transform.inverted();
-                closestNoteCoord = inverse.map(closestNoteCoord);
-                return cwClosestPoint(closestNoteCoord, i+1);
-            }
+        QRectF rect(p1, p2);
+        if(rect.contains(rotatedNoteCoord)) {
+            QPointF closestNoteCoord(rotatedNoteCoord.x(), rect.center().y());
+            QTransform inverse = transform.inverted();
+            closestNoteCoord = inverse.map(closestNoteCoord);
+            return cwClosestPoint(closestNoteCoord, i+1);
         }
-//    }
+    }
 
-        return cwClosestPoint();
+    return cwClosestPoint();
 }
 
 /**
