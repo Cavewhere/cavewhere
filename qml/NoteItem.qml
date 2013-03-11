@@ -12,6 +12,13 @@ ImageItem {
     clip: true
     rotation: note !== null ? note.rotate : 0
 
+    //For rendering scraps onto the view
+    ScrapView {
+        id: scrapViewId
+        note: noteArea.note
+        transformUpdater: transformUpdaterId
+    }
+
     PanZoomInteraction {
         id: panZoomInteraction
         anchors.fill: parent
@@ -127,12 +134,6 @@ ImageItem {
         }
     }
 
-    //For rendering scraps onto the view
-    ScrapView {
-        id: scrapViewId
-        note: noteArea.note
-        transformUpdater: transformUpdaterId
-    }
 
     states: [
         State {

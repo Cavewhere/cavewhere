@@ -16,23 +16,22 @@ Item {
             item.visible = false;
         }
 
-            interaction.visible = true;
+        interaction.visible = true;
+    }
+
+    function activeDefaultInteraction() {
+        active(defaultInteraction)
+    }
+
+    Component.onCompleted: {
+        for(var i = 0; i < interactions.length; i++) {
+            var interaction = interactions[i];
+            interaction.visible = false
+            interaction.activated.connect(active);
+            interaction.deactivated.connect(activeDefaultInteraction);
         }
 
-            function activeDefaultInteraction() {
-                console.log("Active at default interaction")
-                active(defaultInteraction)
-            }
+        active(defaultInteraction)
+    }
 
-                Component.onCompleted: {
-                    for(var i = 0; i < interactions.length; i++) {
-                        var interaction = interactions[i];
-                        interaction.visible = false
-                        interaction.activated.connect(active);
-                        interaction.deactivated.connect(activeDefaultInteraction);
-                    }
-
-                    active(defaultInteraction)
-                }
-
-            }
+}
