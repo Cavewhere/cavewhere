@@ -26,7 +26,7 @@
  * @brief cwLinePlotTask::LinePlotCaveData::setDepth
  * @param depth - This is the cave depth calculated by the task
  */
-inline cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
+cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
     Depth(0.0),
     Length(0.0),
