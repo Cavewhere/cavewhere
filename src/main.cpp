@@ -9,6 +9,8 @@
 #include <QDir>
 #include <QImageReader>
 #include <QOpenGLFunctions>
+#include <QMessageBox>
+
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -22,6 +24,19 @@
 #include "cwRootData.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
+
+QUrl mainWindowSourcePath() {
+    QString mainWindowPath = "/qml/CavewhereMainWindow.qml";
+    QString workingDirectory = QDir::currentPath() + mainWindowPath;
+    QString applicationDirectory = QApplication::applicationDirPath() + mainWindowPath;
+    if(QFileInfo(workingDirectory).isFile()) {
+        return QUrl::fromLocalFile(workingDirectory);
+    } else if(QFileInfo(applicationDirectory).isFile()){
+        return QUrl::fromLocalFile(applicationDirectory);
+    }
+    qDebug() << "Couldn't find Main Window searched:" << workingDirectory << "and" << applicationDirectory;
+    return QUrl();
+}
 
 int main(int argc, char *argv[])
 {
@@ -73,10 +88,21 @@ int main(int argc, char *argv[])
     //Allow the engine to quit the application
     QObject::connect(context->engine(), SIGNAL(quit()), &a, SLOT(quit()));
 
-    view.setFormat(format);
-    view.setResizeMode(QQuickView::SizeRootObjectToView);
-    view.setSource(QUrl::fromLocalFile("qml/CavewhereMainWindow.qml"));
-    view.show();
+    QUrl mainWindowPath = mainWindowSourcePath();
+
+    if(!mainWindowPath.isEmpty()) {
+        view.setFormat(format);
+        view.setResizeMode(QQuickView::SizeRootObjectToView);
+        view.setSource(mainWindowPath);
+        view.show();
+    } else {
+        QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
+                                              "Cavewhere Failed to Load Main Window",
+                                              "ಠ_ರೃ Cavewhere has failed to load its main window... <br><b>This is a bug!</b>",
+                                              QMessageBox::Close);
+        mainWindowNotFoundMessage.exec();
+        return 1;
+    }
 
     return a.exec();
 }

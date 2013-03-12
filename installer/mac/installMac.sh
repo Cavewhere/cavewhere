@@ -1,5 +1,7 @@
 #!/bin/bash
 
+qtDir=~/Qt5.0.0/5.0.0/clang_64
+
 echo "Cavewhere Mac Installer"
 
 echo "Delete rm Cavewhere"
@@ -9,10 +11,11 @@ echo "Copying bundle"
 cp -r ../../Cavewhere.app .
 
 echo "Running macdeployqt"
-macdeployqt Cavewhere.app
+$qtDir/bin/macdeployqt Cavewhere.app
 
-echo "Coping libraries"
-cp -r /Developer/Applications/Qt/imports/QtDesktop Cavewhere.app/Contents/MacOS
+echo "Coping QML Plugins"
+cp -r $qtDir/qml/QtDesktop Cavewhere.app/Contents/MacOS
+cp -r $qtDir/qml/QtQuick.2 Cavewhere.app/Contents/MacOS
 
 echo "Coping QML"
 cp -r ../../qml Cavewhere.app/Contents/MacOS
@@ -21,16 +24,22 @@ echo "Coping Shaders"
 cp -r ../../shaders Cavewhere.app/Contents/MacOS
 
 echo "Installing name tool on plotSauce"
-install_name_tool -change QtXml.framework/Versions/4/QtXml @executable_path/../Frameworks/QtXml.framework/Versions/4/QtXml Cavewhere.app/Contents/MacOS/plotsauce
-install_name_tool -change QtCore.framework/Versions/4/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/4/QtCore Cavewhere.app/Contents/MacOS/plotsauce
-install_name_tool -change QtGui.framework/Versions/4/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/4/QtGui Cavewhere.app/Contents/MacOS/plotsauce
+install_name_tool -change $qtDir/lib/QtXml.framework/Versions/5/QtXml @executable_path/../Frameworks/QtXml.framework/Versions/5/QtXml Cavewhere.app/Contents/MacOS/plotsauce
+install_name_tool -change $qtDir/lib/QtCore.framework/Versions/5/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/5/QtCore Cavewhere.app/Contents/MacOS/plotsauce
+install_name_tool -change $qtDir/lib/QtGui.framework/Versions/5/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/5/QtGui Cavewhere.app/Contents/MacOS/plotsauce
 
-echo "Installing name tool on qt desktop"
-install_name_tool -change QtDeclarative.framework/Versions/4/QtDeclarative @executable_path/../Frameworks/QtDeclarative.framework/Versions/4/QtDeclarative Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtScript.framework/Versions/4/QtScript @executable_path/../Frameworks/QtScript.framework/Versions/4/QtScript Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtCore.framework/Versions/4/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/4/QtCore Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtSvg.framework/Versions/4/QtSvg @executable_path/../Frameworks/QtSvg.framework/Versions/4/QtSvg Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtGui.framework/Versions/4/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/4/QtGui Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtSql.framework/Versions/4/QtSql @executable_path/../Frameworks/QtSql.framework/Versions/4/QtSql Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtXmlPatterns.framework/Versions/4/QtXmlPatterns @executable_path/../Frameworks/QtXmlPatterns.framework/Versions/4/QtXmlPatterns Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
-install_name_tool -change QtNetwork.framework/Versions/4/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/4/QtNetwork Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+echo "Installing name tool on QtDesktop"
+install_name_tool -change $qtDir/lib/QtQuick.framework/Versions/5/QtQuick @executable_path/../Frameworks/QtQuick.framework/Versions/5/QtQuick Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+install_name_tool -change $qtDir/lib/QtQml.framework/Versions/5/QtQml @executable_path/../Frameworks/QtQml.framework/Versions/5/QtQml Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+install_name_tool -change $qtDir/lib/QtCore.framework/Versions/5/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/5/QtCore Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+install_name_tool -change $qtDir/lib/QtGui.framework/Versions/5/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/5/QtGui Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+install_name_tool -change $qtDir/lib/QtNetwork.framework/Versions/5/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/5/QtNetwork Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+install_name_tool -change $qtDir/lib/QtWidgets.framework/Versions/5/QtWidgets @executable_path/../Frameworks/QtWidgets.framework/Versions/5/QtWidgets Cavewhere.app/Contents/MacOS/QtDesktop/plugin/libstyleplugin.dylib
+
+echo "Installing name tool on QtQuick.2"
+install_name_tool -change $qtDir/lib/QtQuick.framework/Versions/5/QtQuick @executable_path/../Frameworks/QtQuick.framework/Versions/5/QtQuick Cavewhere.app/Contents/MacOS/QtQuick.2/libqtquick2plugin.dylib
+install_name_tool -change $qtDir/lib/QtQml.framework/Versions/5/QtQml @executable_path/../Frameworks/QtQml.framework/Versions/5/QtQml Cavewhere.app/Contents/MacOS/QtQuick.2/libqtquick2plugin.dylib
+install_name_tool -change $qtDir/lib/QtCore.framework/Versions/5/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/5/QtCore Cavewhere.app/Contents/MacOS/QtQuick.2/libqtquick2plugin.dylib
+install_name_tool -change $qtDir/lib/QtGui.framework/Versions/5/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/5/QtGui Cavewhere.app/Contents/MacOS/QtQuick.2/libqtquick2plugin.dylib
+install_name_tool -change $qtDir/lib/QtNetwork.framework/Versions/5/QtNetwork @executable_path/../Frameworks/QtNetwork.framework/Versions/5/QtNetwork Cavewhere.app/Contents/MacOS/QtQuick.2/libqtquick2plugin.dylib
+
