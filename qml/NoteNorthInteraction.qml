@@ -21,6 +21,16 @@ Interaction {
         interaction.deactivate();
     }
 
+    //This calculate the north angle
+    function calculateNorthUp(mouse) {
+        var secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+        return noteTransform.calculateNorth(privateData.firstLocation, secondLocation);
+    }
+
+    function updateArrowSecondPoint(mouse) {
+        northArrow.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+    }
+
 
     Keys.onEscapePressed: done()
 
@@ -61,6 +71,34 @@ Interaction {
         }
     }
 
+    Text {
+        id: northAngleTextId
+
+        property int angle: 0
+
+        function updatePosition() {
+            var point = imageItem.mapNoteToQtViewport(northArrow.p1);
+            x = point.x
+            y = point.y
+        }
+
+        text: angle + "°"
+        visible: false
+
+        style: Text.Outline
+        styleColor: "#EEEEEE"
+
+        Connections {
+            target: northArrow.transformUpdater
+            onUpdated: northAngleTextId.updatePosition()
+        }
+
+        Connections {
+            target: northArrow
+            onP1Changed: northAngleTextId.updatePosition()
+        }
+    }
+
     NorthArrowItem {
         id: northArrow
         anchors.fill: parent
@@ -85,15 +123,15 @@ Interaction {
                     if(pressedButtons == Qt.RightButton) {
                         basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                     } else {
-                        northArrow.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                        updateArrowSecondPoint(mouse);
+                        northAngleTextId.angle = calculateNorthUp(mouse);
                     }
                 }
 
                 onClicked: {
                     if(mouse.button === Qt.LeftButton) {
-                        var secondLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                        noteTransform.northUp = noteTransform.calculateNorth(privateData.firstLocation, secondLocation);
-                        northArrow.p2 = secondLocation
+                        updateArrowSecondPoint(mouse);
+                        noteTransform.northUp = calculateNorthUp(mouse)
                         done()
                     }
                 }
@@ -102,6 +140,11 @@ Interaction {
             PropertyChanges {
                 target: helpBoxId
                 text: "<b>Click</b> the north arrow's second point"
+            }
+
+            PropertyChanges {
+                target: northAngleTextId
+                visible: true;
             }
         }
     ]

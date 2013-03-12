@@ -42,7 +42,7 @@ public:
     Q_INVOKABLE void updateRotationCenter();
 
     Q_INVOKABLE QPointF mapQtViewportToNote(QPoint qtViewportCoordinate);
-    QPointF mapNoteToQtViewport(QPointF mapNote) const;
+    Q_INVOKABLE QPointF mapNoteToQtViewport(QPointF mapNote) const;
 
 
 signals:
