@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QScreen>
 #include <QPainter>
+#include <QTemporaryFile>
 
 cwExportRegionViewerToImageTask::cwExportRegionViewerToImageTask(QObject *parent) :
     QObject(parent),
@@ -101,7 +102,13 @@ void cwExportRegionViewerToImageTask::takeScreenshot() const
 
     RegionViewer->camera()->setProjection(originalProj);
 
-    combinedImage.save("/home/blitz/test.png");
+    QTemporaryFile tempFile;
+    tempFile.setAutoRemove(false);
+    tempFile.open();
+
+    QString filename = tempFile.fileName() + ".png";
+    combinedImage.save(filename);
+    qDebug() << "Saved screenshot to:" << filename;
 }
 
 /**
