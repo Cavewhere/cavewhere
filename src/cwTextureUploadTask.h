@@ -38,8 +38,11 @@ private:
     QList< QPair< QByteArray, QSize > > Mipmaps;
     QVector2D ScaleTexCoords;
 
-    void initializeTexture();
     void loadMipmapsFromDisk();
+    void ensurePowerOfTwo();
+    void ensurePowerOfTwo(QPair< QByteArray, QSize >& mipmap);
+
+    void updateScaleTexCoords();
 
 signals:
     

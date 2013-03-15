@@ -211,19 +211,19 @@ QImage cwImageProvider::image(int id) const
     return QImage();
 }
 
-/**
- * @brief cwProjectImageProvider::scaleTexCoords
- * @param id
- * @return This returns the
- */
-QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
-{
-    if(image.mipmaps().isEmpty()) {
-        return QVector2D(1.0, 1.0);
-    }
+///**
+// * @brief cwProjectImageProvider::scaleTexCoords
+// * @param id
+// * @return This returns the
+// */
+//QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
+//{
+//    if(image.mipmaps().isEmpty()) {
+//        return QVector2D(1.0, 1.0);
+//    }
 
-    QSize originalSize = data(image.original(), true).size();
-    QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
-    return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
-                     originalSize.height() / (double)firstMipmapSize.height());
-}
+//    QSize originalSize = data(image.original(), true).size();
+//    QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
+//    return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
+//                     originalSize.height() / (double)firstMipmapSize.height());
+//}

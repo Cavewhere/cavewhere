@@ -27,7 +27,7 @@ public:
     cwImageData originalMetadata(const cwImage& image) const;
     cwImageData data(int id, bool metaDataOnly = false) const;
     QImage image(int id) const;
-    QVector2D scaleTexCoords(const cwImage &image) const;
+//    QVector2D scaleTexCoords(const cwImage &image) const;
 
 public slots:
     void setProjectPath(QString projectPath);

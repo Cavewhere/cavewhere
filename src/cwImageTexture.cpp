@@ -46,8 +46,8 @@ void cwImageTexture::initialize()
 {
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); //LINEAR_MIPMAP_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); //GL_NEAREST); //LINEAR );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -122,7 +122,8 @@ void cwImageTexture::updateData() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
-        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
+        if(size.width() < maxTextureSize && size.height() < maxTextureSize) { // &&
+                //size.width() >= 4 && size.height() >= 4) {
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
