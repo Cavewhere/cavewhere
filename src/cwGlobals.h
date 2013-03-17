@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QString>
+#include <QFileDialog>
 
 class cwGlobals
 {
@@ -14,6 +15,8 @@ public:
     static const double DegreesToRadians;
 
     static QString addExtension(QString filename, QString extensionHint);
+    static QString openFile(QString caption,  QString filter, QString qSettingsKey = "", QFileDialog::Options = 0);
+    static QStringList openFiles(QString caption, QString filter, QString qSettingsKey = "", QFileDialog::Options = 0);
 };
 
 #endif // CWGLOBALS_H

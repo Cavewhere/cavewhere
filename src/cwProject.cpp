@@ -20,6 +20,7 @@
 #include <QSqlError>
 #include <QUndoStack>
 #include <QFileDialog>
+#include <QSettings>
 
 /**
   By default, a project is open to a temporary directory
@@ -519,7 +520,7 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
  */
 void cwProject::load()
 {
-    QString filename = QFileDialog::getOpenFileName(NULL, "Load Cavewhere Project", "", "Cavewhere Project (*.cw)");
+    QString filename = cwGlobals::openFile("Load Cavewhere Project", "Cavewhere Project (*.cw)", QString("OpenProject"));
     loadFile(filename);
 }
 

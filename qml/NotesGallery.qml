@@ -209,6 +209,10 @@ Rectangle {
 
                 FileDialogHelper {
                     id: fileDialog;
+                    filter: "Images (*.png *.jpg *.jpeg *.tiff)"
+                    multipleFiles: true
+                    settingKey: "lastNoteGalleryImageLocation"
+                    caption: "Load Images"
                     onFilesSelected: noteGallery.imagesAdded(selected)
                 }
             }
