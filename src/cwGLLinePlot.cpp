@@ -63,11 +63,11 @@ void cwGLLinePlot::initializeBuffers() {
     LinePlotIndexBuffer.create();
 
     LinePlotVertexBuffer.bind();
-    LinePlotVertexBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+    LinePlotVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     LinePlotVertexBuffer.release();
 
     LinePlotIndexBuffer.bind();
-    LinePlotIndexBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+    LinePlotIndexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     LinePlotIndexBuffer.release();
 }
 
