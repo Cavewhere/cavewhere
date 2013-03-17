@@ -67,7 +67,7 @@ void cwTextureUploadTask::loadMipmapsFromDisk()
         }
     }
 
-//    ScaleTexCoords = imageProvidor.scaleTexCoords(Image);
+    ScaleTexCoords = imageProvidor.scaleTexCoords(Image);
 
     QSize imageSize;
     //Load all the mipmaps
@@ -81,109 +81,7 @@ void cwTextureUploadTask::loadMipmapsFromDisk()
 
     Mipmaps = mipmaps;
 
-    //Make sure that the mipmaps are powers of two
-//    ensurePowerOfTwo();
-
-    updateScaleTexCoords();
-
-    for(int i = 0; i < Mipmaps.size(); i++) {
-        qDebug() << "BytemapSize: " << Mipmaps.at(i).first.size() << Mipmaps.at(i).second;
-    }
 }
-
-/**
- * @brief cwTextureUploadTask::ensurePowerOfTwo
- *
- * This ensures that the texture and mipmaps are of a power of two.  This
- * is nessary for some computers (mostly intel sucky graphics cards)  That don't
- * support power of two textures with dxt1
- */
-void cwTextureUploadTask::ensurePowerOfTwo()
-{
-    for(int i = 0; i < Mipmaps.size(); i++) {
-        ensurePowerOfTwo(Mipmaps[i]);
-    }
-}
-
-/**
- * @brief cwTextureUploadTask::ensurePowerOfTwo
- *
- * This ensures that the texture and mipmaps are of a power of two.  This
- * is nessary for some computers (mostly intel sucky graphics cards)  That don't
- * support power of two textures with dxt1
- *
- * This will modify mipmap in place.  This will not change the mipmap if the mipmap
- * is already a power of two in both directions.
- */
-void cwTextureUploadTask::ensurePowerOfTwo(QPair<QByteArray, QSize> &mipmap)
-{
-//    Q_ASSERT(isDivisibleBy4(mipmap.second));
-
-    static const int blockSize = 8; //8 Bytes for DXT1 compression
-    static const int blockPixelSize = 4; //4 pixels in each dimension
-
-    QSize size = mipmap.second;
-    QByteArray image = mipmap.first;
-    int xBlocks = (int)ceil(size.width() / (double)blockPixelSize);
-    int yBlocks = (int)ceil(size.height() / (double)blockPixelSize);
-    int numberOfBlocks = xBlocks * yBlocks;
-
-    //Ensure that the mipmap is the correct size
-    qDebug() << "BlockSize:" << numberOfBlocks * blockSize << image.size();
-    Q_ASSERT(numberOfBlocks * blockSize == image.size());
-
-    int newWidth = pow(2,ceil(log2(size.width())));
-    int newHeight = pow(2, ceil(log2(size.height())));
-
-    QSize newSize(newWidth, newHeight);
-
-    qDebug() << "NewSize:" << newSize << size;
-
-    if(size != newSize) {
-
-        int sizeInBytes = (newWidth / blockPixelSize) * (newHeight / blockPixelSize) * blockSize;
-        QByteArray newImage;
-        newImage.resize(sizeInBytes);
-
-        //Start copying blocks from one array to another
-        const char* imageData = image.constData();
-        char* newImageData = newImage.data();
-
-        int oldRowBytes = size.width() / blockPixelSize * blockSize;
-        int newRowBytes = newSize.width() / blockPixelSize * blockSize;
-
-        for(int row = 0; row < yBlocks; row++) {
-             memcpy(&(newImageData[row * newRowBytes]), &(imageData[row * oldRowBytes]), oldRowBytes);
-        }
-
-        mipmap.first = newImage;
-        mipmap.second = newSize;
-    }
-}
-
-/**
- * @brief cwTextureUploadTask::updateScaleTexCoords
- */
-void cwTextureUploadTask::updateScaleTexCoords()
-{
-    if(Mipmaps.isEmpty()) {
-        ScaleTexCoords = QVector2D(1.0, 1.0);
-        return;
-    }
-
-    cwImageProvider imageProvider;
-    imageProvider.setProjectPath(ProjectFilename);
-
-    QSize originalSize = imageProvider.data(Image.original(), true).size();
-    QSize firstMipmapSize = Mipmaps.first().second;
-
-    qDebug() << "OriginalSize: " << Image.original() << originalSize << firstMipmapSize;
-
-    ScaleTexCoords = QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
-                     originalSize.height() / (double)firstMipmapSize.height());
-}
-
-
 
 /**
  * @brief cwImageTexture::isDivisibleBy4

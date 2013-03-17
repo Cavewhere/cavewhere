@@ -45,8 +45,6 @@ public:
     bool isValid() const;
     bool iconIsValid() const;
 
-    static QVector<QVector2D> scaleTexCoords(QVector2D scaleTexCoords, QVector<QVector2D> texCoords);
-
 private:
     class PrivateData : public QSharedData {
     public:

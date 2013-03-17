@@ -49,32 +49,6 @@ public slots:
     void updateData();
 
 private:
-
-    class LoadImageData {
-    public:
-        QByteArray ImageData;
-        QSize ImageDataSize;
-    };
-
-    /**
-      This class allow use to load the mipmaps in a thread way
-      from the database
-
-      The project filename must be set so we can load the data
-*/
-    class LoadImageKernal {
-    public:
-        LoadImageKernal(QString projectFilename) :
-            Filename(projectFilename)
-        {    }
-
-        typedef LoadImageData result_type;
-
-        LoadImageData operator()(int imageId);
-
-        QString Filename;
-    };
-
     QString ProjectFilename; //!<
     cwImage Image; //!< The image that this texture represent
     QVector2D ScaleTexCoords; //!< How the texture should be scalede
@@ -82,14 +56,11 @@ private:
     bool TextureDirty; //!< true when the image needs to be updated
     GLuint TextureId; //!< Texture object
 
-    //For loading the image from disk
-    QFutureWatcher<LoadImageData>* LoadNoteWatcher;
-
     static QThread* TextureLoadingThread;
     cwTextureUploadTask* TextureUploadTask;
 
     void startLoadingImage();
-    void reinitilizeLoadNoteWatcher();
+    void reinitilizeLoadNoteTask();
 
 private slots:
     void markAsDirty();

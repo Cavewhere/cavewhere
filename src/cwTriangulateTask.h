@@ -143,7 +143,7 @@ private:
     QMatrix4x4 localNormalizedCoordinates(const QRectF& bounds) const;
     QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords) const;
     QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords) const;
-//    QVector<QVector2D> scaleTexCoordinates(const cwImage& image, QVector<QVector2D> texCoords) const;
+    QVector<QVector2D> scaleTexCoordinates(const cwImage& image, QVector<QVector2D> texCoords) const;
 
     //For morphing
     QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);

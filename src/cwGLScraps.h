@@ -61,6 +61,7 @@ private:
 
     QOpenGLShaderProgram* Program;
     int UniformModelViewProjectionMatrix;
+    int UniformScaleTexCoords;
     int vVertex;
     int vScrapTexCoords;
 

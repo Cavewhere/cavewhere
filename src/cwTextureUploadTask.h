@@ -39,8 +39,6 @@ private:
     QVector2D ScaleTexCoords;
 
     void loadMipmapsFromDisk();
-    void ensurePowerOfTwo();
-    void ensurePowerOfTwo(QPair< QByteArray, QSize >& mipmap);
 
     void updateScaleTexCoords();
 

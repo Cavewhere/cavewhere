@@ -251,16 +251,12 @@ void cwImageItem::paint(QPainter* painter) {
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
     ImageProgram->setUniformValue(CropAreaUniform, NoteTexture->scaleTexCoords());
 
-    qDebug() << "scaleTexCoords:" << NoteTexture->scaleTexCoords();
-
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
     ImageProgram->disableAttributeArray(vVertex);
     ImageProgram->release();
     NoteTexture->release();
     GeometryVertexBuffer.release();
-
-    glGetError();
 
     painter->endNativePainting();
 }

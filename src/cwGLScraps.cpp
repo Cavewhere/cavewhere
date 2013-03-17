@@ -48,6 +48,8 @@ void cwGLScraps::draw() {
     glEnable(GL_TEXTURE_2D);
 
     foreach(GLScrap scrap, Scraps) {
+        Program->setUniformValue(UniformScaleTexCoords, scrap.Texture->scaleTexCoords());
+
         scrap.Texture->updateData();
 
         scrap.Texture->bind();
@@ -143,10 +145,11 @@ void cwGLScraps::initializeShaders() {
     shaderDebugger()->addShaderProgram(Program);
 
 //    Program->bind();
-
+    UniformScaleTexCoords = Program->uniformLocation("vTexCoordsScale");
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     vVertex = Program->attributeLocation("vVertex");
     vScrapTexCoords = Program->attributeLocation("vScrapTexCoords");
+
 //    Program->setUniformValue("colorBG", Qt::green);
     Program->setUniformValue("Texture", 0);
 

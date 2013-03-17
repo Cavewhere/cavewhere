@@ -19,7 +19,6 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     QObject(parent),
     TextureDirty(false),
     TextureId(0),
-    LoadNoteWatcher(NULL),
     TextureUploadTask(NULL)
 {
     if(TextureLoadingThread == NULL) {
@@ -30,13 +29,7 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 
 cwImageTexture::~cwImageTexture()
 {
-    if(LoadNoteWatcher != NULL) {
-        LoadNoteWatcher->deleteLater();
-    }
 
-    if(TextureId != 0) {
-        glDeleteTextures(1, &TextureId);
-    }
 }
 
 /**
@@ -46,8 +39,17 @@ void cwImageTexture::initialize()
 {
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); //LINEAR_MIPMAP_LINEAR);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); //GL_NEAREST); //LINEAR );
+
+#ifdef Q_OS_WIN
+    //Only upload one texture, GL_LINEAR, because some intel cards,
+    //don't support npot dxt1 copression, so we just used GL_LINEAR
+    //FIXME: ADD to rendering settings! Use mipmaps.
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+#else
+    //All other platforms
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+#endif
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -122,19 +124,24 @@ void cwImageTexture::updateData() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
-        if(size.width() < maxTextureSize && size.height() < maxTextureSize) { // &&
-                //size.width() >= 4 && size.height() >= 4) {
+        if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
 
             trueMipmapLevel++;
+
+#ifdef Q_OS_WIN
+            //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
+            //FIXME: ADD to rendering settings!
+            break;
+#endif //Q_OS_WIN
         }
     }
 
     release();
 
-    reinitilizeLoadNoteWatcher();
+    reinitilizeLoadNoteTask();
 
     TextureDirty = false;
 }
@@ -167,7 +174,7 @@ void cwImageTexture::startLoadingImage()
 /**
  * @brief cwImageTexture::reinitilizeLoadNoteWatcher
  */
-void cwImageTexture::reinitilizeLoadNoteWatcher()
+void cwImageTexture::reinitilizeLoadNoteTask()
 {
     if(TextureUploadTask == NULL) {
         TextureUploadTask->deleteLater();
@@ -178,25 +185,6 @@ void cwImageTexture::reinitilizeLoadNoteWatcher()
 void cwImageTexture::markAsDirty()
 {
     TextureDirty = true;
-}
-
-/**
-  \brief Allow QtConturrent to create a QImage
-
-  This returns a opengl formatted image
-  */
-cwImageTexture::LoadImageData cwImageTexture::LoadImageKernal::operator ()(int imageId) {
-    //Extract the image data from the imageProvider
-    cwImageProvider imageProvidor;
-    imageProvidor.setProjectPath(Filename);
-
-    LoadImageData data;
-
-    QByteArray imageData = imageProvidor.requestImageData(imageId, &data.ImageDataSize);
-
-    data.ImageData = imageData;
-
-    return data;
 }
 
 
