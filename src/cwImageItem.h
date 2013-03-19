@@ -26,6 +26,7 @@ public:
     cwImageItem(QQuickItem *parent = 0);
     ~cwImageItem();
 
+    Q_INVOKABLE void clearImage();
     void setImage(const cwImage& image);
     cwImage image() const;
 

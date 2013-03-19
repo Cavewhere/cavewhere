@@ -36,7 +36,17 @@ cwImageItem::~cwImageItem()
         NoteTexture->deleteLater();
     }
 
-//    GeometryVertexBuffer.destroy();
+    //    GeometryVertexBuffer.destroy();
+}
+
+/**
+ * @brief cwImageItem::clearImage
+ *
+ * This will clear the cwImage from the image item.
+ */
+void cwImageItem::clearImage()
+{
+    this->setImage(cwImage());
 }
 
 /**
@@ -50,6 +60,7 @@ void cwImageItem::setImage(const cwImage& image) {
             NoteTexture->setImage(Image);
         }
         resizeGL();
+        update(); //Force an update even if the image is null
     }
 }
 
@@ -196,6 +207,8 @@ void cwImageItem::initializeTexture() {
   \brief Called when the note item is resized
   */
 void cwImageItem::resizeGL() {
+
+
     QSize imageSize = Image.origianlSize();
     if(!imageSize.isValid()) { return; }
 
@@ -230,6 +243,8 @@ void cwImageItem::resizeGL() {
     Camera->setViewMatrix(viewMatrix);
 
     Camera->setViewport(QRect(QPoint(0.0, 0.0), windowSize));
+
+    //Schedule an update
     update();
 }
 

@@ -18,6 +18,7 @@ QThread* cwImageTexture::TextureLoadingThread = NULL;
 cwImageTexture::cwImageTexture(QObject *parent) :
     QObject(parent),
     TextureDirty(false),
+    DeleteTexture(false),
     TextureId(0),
     TextureUploadTask(NULL)
 {
@@ -81,7 +82,15 @@ Sets image
 void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
-        startLoadingImage();
+
+        if(Image.isValid()) {
+            startLoadingImage();
+        } else {
+            qDebug() << "Delete texture!";
+            DeleteTexture = true;
+            markAsDirty();
+        }
+
         emit imageChanged();
     }
 }
@@ -91,6 +100,12 @@ void cwImageTexture::setImage(cwImage image) {
   */
 void cwImageTexture::updateData() {
     if(!isDirty()) { return; }
+
+    if(DeleteTexture) {
+        deleteGLTexture();
+        TextureDirty = false;
+        return;
+    }
 
     if(TextureUploadTask == NULL) {
         TextureDirty = false;
@@ -141,7 +156,7 @@ void cwImageTexture::updateData() {
 
     release();
 
-    reinitilizeLoadNoteTask();
+    deleteLoadNoteTask();
 
     TextureDirty = false;
 }
@@ -165,6 +180,7 @@ void cwImageTexture::startLoadingImage()
 
         if(TextureUploadTask->isRunning()) { return; }
 
+        DeleteTexture = false;
         TextureUploadTask->setImage(image());
         TextureUploadTask->setProjectFilename(ProjectFilename);
         TextureUploadTask->start();
@@ -174,11 +190,26 @@ void cwImageTexture::startLoadingImage()
 /**
  * @brief cwImageTexture::reinitilizeLoadNoteWatcher
  */
-void cwImageTexture::reinitilizeLoadNoteTask()
+void cwImageTexture::deleteLoadNoteTask()
 {
-    if(TextureUploadTask == NULL) {
+    if(TextureUploadTask != NULL) {
+        TextureUploadTask->stop();
         TextureUploadTask->deleteLater();
         TextureUploadTask = NULL;
+    }
+}
+
+/**
+ * @brief cwImageTexture::deleteGLTexture
+ *
+ * This deletes the image texture
+ */
+void cwImageTexture::deleteGLTexture()
+{
+    if(TextureId > 0) {
+        glDeleteTextures(0, &TextureId);
+        TextureId = 0;
+        DeleteTexture = false;
     }
 }
 

@@ -54,13 +54,15 @@ private:
     QVector2D ScaleTexCoords; //!< How the texture should be scalede
 
     bool TextureDirty; //!< true when the image needs to be updated
+    bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
 
     static QThread* TextureLoadingThread;
     cwTextureUploadTask* TextureUploadTask;
 
     void startLoadingImage();
-    void reinitilizeLoadNoteTask();
+    void deleteLoadNoteTask();
+    void deleteGLTexture();
 
 private slots:
     void markAsDirty();

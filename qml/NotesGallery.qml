@@ -136,6 +136,7 @@ Rectangle {
                     noteArea.image = currentItem.noteObject.image;
                 } else {
                     noteGallery.currentNote = null;
+                    noteArea.clearImage();
                 }
             }
 
@@ -310,8 +311,6 @@ Rectangle {
         scrapsVisible: false
         note: currentNote
     }
-
-
 
     SequentialAnimation {
         id: noteRotationAnimation
