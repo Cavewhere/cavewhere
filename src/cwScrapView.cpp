@@ -33,10 +33,10 @@ void cwScrapView::setNote(cwNote* note) {
         if(Note != NULL) {
             connect(Note, SIGNAL(scrapAdded()), SLOT(addScrapItem()));
             connect(Note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
-
-            //This is full reset, update all the scraps
-            updateAllScraps();
         }
+
+        //This is full reset, update all the scraps
+        updateAllScraps();
 
         emit noteChanged();
     }
@@ -141,9 +141,12 @@ void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
   This will update all the scrap polygons
   */
 void cwScrapView::updateAllScraps() {
-    if(note() == NULL) { return; }
-
-    int numberOfScraps = note()->scraps().size();
+    int numberOfScraps;
+    if(note() != NULL) {
+        numberOfScraps = note()->scraps().size();
+    } else {
+        numberOfScraps = 0;
+    }
 
     if(ScrapItems.size() > numberOfScraps) {
         //Delete unused polygons

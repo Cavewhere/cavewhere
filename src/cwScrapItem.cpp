@@ -76,10 +76,10 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
         OutlinePointView->setScrap(Scrap);
 
         if(Scrap != NULL) {
-            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(update()));
-            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(update()));
-            connect(Scrap, SIGNAL(pointChanged(int,int)), SLOT(update()));
-            update();
+            connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updatePoints()));
+            connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updatePoints()));
+            connect(Scrap, SIGNAL(pointChanged(int,int)), SLOT(updatePoints()));
+            updatePoints();
         }
 
         emit scrapChanged();
@@ -92,7 +92,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
  * @return See qt documentation
  */
 QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData *) {
-    if(Scrap == NULL) { return oldNode; }
+//    if(ScrapPoints.isEmpty()) { return oldNode; }
     if(!oldNode) {
         oldNode = new QSGTransformNode();
         PolygonNode = new cwSGPolygonNode();
@@ -101,8 +101,8 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
         oldNode->appendChildNode(PolygonNode);
         oldNode->appendChildNode(OutlineNode);
 
-        PolygonNode->setPolygon(QPolygonF(Scrap->points()));
-        OutlineNode->setLineStrip(Scrap->points());
+        PolygonNode->setPolygon(QPolygonF(ScrapPoints));
+        OutlineNode->setLineStrip(ScrapPoints);
     }
 
     if(transformUpdater()) {
@@ -120,10 +120,21 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
         OutlineNode->setLineWidth(1.0);
     }
 
-    PolygonNode->setPolygon(QPolygonF(Scrap->points()));
-    OutlineNode->setLineStrip(Scrap->points());
+    PolygonNode->setPolygon(ScrapPoints);
+    OutlineNode->setLineStrip(ScrapPoints);
 
     return oldNode;
+}
+
+/**
+ * @brief cwScrapItem::updatePoints
+ */
+void cwScrapItem::updatePoints()
+{
+    if(Scrap != NULL) {
+        ScrapPoints = Scrap->points();
+        update();
+    }
 }
 
 /**

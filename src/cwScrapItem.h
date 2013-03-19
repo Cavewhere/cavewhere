@@ -75,16 +75,21 @@ private:
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
     cwScrapOutlinePointView* OutlinePointView; //!< All the control points around the scrap
+    QVector<QPointF> ScrapPoints;
 
     //For showing all the control points around the scrap
     QQmlComponent* OutlineControlPoints;
     QList<QQuickItem*> OutlineStation;
+
 
     cwSelectionManager* SelectionManager; //!< For selection for control items (this is passed to child class)
     bool Selected; //!< True if the scrap is select and false if it isn't
 
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+
+protected slots:
+    void updatePoints();
 
 };
 

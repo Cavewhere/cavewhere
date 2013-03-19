@@ -12,6 +12,7 @@ Rectangle {
     anchors.fill: parent
     anchors.margins: 3
 
+
     /**
       For displaying the note as icons in a gallery
       */
@@ -129,6 +130,15 @@ Rectangle {
 
             spacing: 3
 
+            function updateCurrentNote() {
+                if(currentItem != null) {
+                    noteGallery.currentNote = currentItem.noteObject
+                    noteArea.image = currentItem.noteObject.image;
+                } else {
+                    noteGallery.currentNote = null;
+                }
+            }
+
             MouseArea {
                 anchors.fill: parent
 
@@ -138,12 +148,8 @@ Rectangle {
                 }
             }
 
-            onCurrentIndexChanged: {
-                if(currentItem != null) {
-                    noteGallery.currentNote = currentItem.noteObject
-                    noteArea.image = currentItem.noteObject.image;
-                }
-            }
+            onCurrentIndexChanged: updateCurrentNote()
+            onCountChanged: updateCurrentNote()
         }
     }
 
