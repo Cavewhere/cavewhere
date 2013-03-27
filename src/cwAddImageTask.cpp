@@ -164,13 +164,15 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
 
         //Copy the original image to the database
         QImage originalImage;
-//        if(MipmapOnly) {
-//            originalImage = QImage(imagePath);
-//        } else {
-            originalImage = copyOriginalImage(imagePath, &imageIds);
-//        }
+        //        if(MipmapOnly) {
+        //            originalImage = QImage(imagePath);
+        //        } else {
+        originalImage = copyOriginalImage(imagePath, &imageIds);
+        //        }
 
-        images.append(PrivateImageData(imageIds, originalImage, imagePath));
+        if(!originalImage.isNull()) {
+            images.append(PrivateImageData(imageIds, originalImage, imagePath));
+        }
     }
 
     //Go through all the images
@@ -181,9 +183,9 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         cwImage imageIds;
 
         //FIXME: This !Mipmap break carpeting, becaus cwImage.isValid() fails???
-//        if(!MipmapOnly) {
-            copyOriginalImage(originalImage, &imageIds);
-//        }
+        //        if(!MipmapOnly) {
+        copyOriginalImage(originalImage, &imageIds);
+        //        }
 
         images.append(PrivateImageData(imageIds, originalImage));
     }
@@ -205,7 +207,7 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         //Add image ids to the list of images that are returned
         Images.append(imageIds);
 
-      //  emit progressed(i + 1);
+        //  emit progressed(i + 1);
     }
 
     if(RegenerateImage.isValid()) {
@@ -393,10 +395,10 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
 
   This takes the largest dimension and takes the log2 of it.
   */
- int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
-     double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
-     return (int)log2(largestDimension) + 1;
- }
+int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
+    double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
+    return (int)log2(largestDimension) + 1;
+}
 
 
 /**
@@ -439,7 +441,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
     }
 
     return imageId;
- }
+}
 
 using namespace squish;
 
@@ -497,30 +499,30 @@ public:
         int mask = 0;
         for( int py = 0; py < 4; ++py )
         {
-                for( int px = 0; px < 4; ++px )
+            for( int px = 0; px < 4; ++px )
+            {
+                // get the source pixel in the image
+                int sx = block.Position.x() + px;
+                int sy = block.Position.y() + py;
+
+                // enable if we're in the image
+                if( sx < ImageSize.width() && sy < ImageSize.height() )
                 {
-                        // get the source pixel in the image
-                        int sx = block.Position.x() + px;
-                        int sy = block.Position.y() + py;
+                    // copy the rgba value
+                    u8 const* sourcePixel = block.RGBA + 4*( ImageSize.width() * sy + sx );
+                    for( int i = 0; i < 4; ++i ) {
+                        *targetPixel++ = *sourcePixel++;
+                    }
 
-                        // enable if we're in the image
-                        if( sx < ImageSize.width() && sy < ImageSize.height() )
-                        {
-                                // copy the rgba value
-                                u8 const* sourcePixel = block.RGBA + 4*( ImageSize.width() * sy + sx );
-                                for( int i = 0; i < 4; ++i ) {
-                                    *targetPixel++ = *sourcePixel++;
-                                }
-
-                                // enable this pixel
-                                mask |= ( 1 << ( 4*py + px ) );
-                        }
-                        else
-                        {
-                                // skip this pixel as its outside the image
-                                targetPixel += 4;
-                        }
+                    // enable this pixel
+                    mask |= ( 1 << ( 4*py + px ) );
                 }
+                else
+                {
+                    // skip this pixel as its outside the image
+                    targetPixel += 4;
+                }
+            }
         }
 
         CompressMasked(sourceRgba, mask, block.BlockData, Flags);
@@ -538,19 +540,19 @@ public:
 
 static int FixFlags( int flags )
 {
-        // grab the flag bits
-        int method = flags & ( kDxt1 | kDxt3 | kDxt5 );
-        int fit = flags & ( kColourIterativeClusterFit | kColourClusterFit | kColourRangeFit );
-        int extra = flags & kWeightColourByAlpha;
+    // grab the flag bits
+    int method = flags & ( kDxt1 | kDxt3 | kDxt5 );
+    int fit = flags & ( kColourIterativeClusterFit | kColourClusterFit | kColourRangeFit );
+    int extra = flags & kWeightColourByAlpha;
 
-        // set defaults
-        if( method != kDxt3 && method != kDxt5 )
-                method = kDxt1;
-        if( fit != kColourRangeFit && fit != kColourIterativeClusterFit )
-                fit = kColourClusterFit;
+    // set defaults
+    if( method != kDxt3 && method != kDxt5 )
+        method = kDxt1;
+    if( fit != kColourRangeFit && fit != kColourIterativeClusterFit )
+        fit = kColourClusterFit;
 
-        // done
-        return method | fit | extra;
+    // done
+    return method | fit | extra;
 }
 
 /**
@@ -579,13 +581,13 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
     QList<Block> computeBlocks;
     for( int y = 0; y < image.height(); y += 4 )
     {
-            for( int x = 0; x < image.width(); x += 4 )
-            {
-                    computeBlocks.append(Block(x, y, convertedFormat.bits(), targetBlock));
+        for( int x = 0; x < image.width(); x += 4 )
+        {
+            computeBlocks.append(Block(x, y, convertedFormat.bits(), targetBlock));
 
-                    // advance
-                    targetBlock += bytesPerBlock;
-            }
+            // advance
+            targetBlock += bytesPerBlock;
+        }
     }
 
     //This takes all the compute blocks and compresses them using squish
@@ -621,8 +623,8 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
     // if the compression has been successful
     if (compressed == GL_TRUE)
     {
-//        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT,
-//                                 &internalformat);
+        //        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT,
+        //                                 &internalformat);
         GLint compressed_size;
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);

@@ -106,10 +106,53 @@ Rectangle {
 
         color: "#4A4F57"
 
+        ShadowRectangle {
+            id: errorBoxId
+
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: errorColumnId.height + 10
+            anchors.leftMargin: 5
+            anchors.rightMargin: 5
+            anchors.topMargin: 5
+            visible: errorText.text != ""
+
+            color: "red";
+
+            Column {
+                id: errorColumnId
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Text {
+                    id: errorText
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: 3
+                    text: imageValidator.errorMessage
+                    wrapMode: Text.WordWrap
+                }
+
+                Button {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Okay"
+                    onClicked: {
+                        imageValidator.clearErrorMessage()
+                    }
+                }
+            }
+        }
+
         ListView {
             id: galleryView
 
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: errorBoxId.bottom
+            anchors.bottom: parent.bottom
+
             anchors.margins: 4
 
             delegate: listDelegate
@@ -174,7 +217,7 @@ Rectangle {
 
         Row {
             id: mainToolBar
-            property var iconSize: Qt.size(42, 42)
+            property size iconSize: Qt.size(42, 42)
 
             spacing: 3
 
@@ -220,7 +263,14 @@ Rectangle {
                     multipleFiles: true
                     settingKey: "lastNoteGalleryImageLocation"
                     caption: "Load Images"
-                    onFilesSelected: noteGallery.imagesAdded(selected)
+                    onFilesSelected: {
+                        var validImages = imageValidator.validateImages(selected);
+                        noteGallery.imagesAdded(validImages)
+                    }
+                }
+
+                ImageValidator {
+                    id: imageValidator
                 }
             }
         }

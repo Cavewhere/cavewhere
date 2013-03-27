@@ -161,7 +161,8 @@ SOURCES += src/main.cpp \
     src/cwPerspectiveProjection.cpp \
     src/cwMatrix4x4Animation.cpp \
     src/cwTextureUploadTask.cpp \
-    src/cwImageProvider.cpp
+    src/cwImageProvider.cpp \
+    src/cwImageValidator.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -315,7 +316,8 @@ HEADERS  += \
     src/serialization/cavewhere.pb.h \
     src/serialization/qt.pb.h \
     src/cwTextureUploadTask.h \
-    src/cwImageProvider.h
+    src/cwImageProvider.h \
+    src/cwImageValidator.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
