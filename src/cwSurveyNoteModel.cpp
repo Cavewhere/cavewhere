@@ -92,6 +92,7 @@ QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) con
   */
 int cwSurveyNoteModel::rowCount(const QModelIndex &parent) const {
     if(parent != QModelIndex()) { return 0; } //There's data at the root
+    qDebug() << "Notes size:" << Notes.size();
     return Notes.size();
 }
 
@@ -176,7 +177,7 @@ void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
     //Remove all invalid notes
     QList<cwNote*> validNotes = validateNoteImages(notes);
 
-    beginInsertRows(QModelIndex(), lastIndex, lastIndex + validNotes.size());
+    beginInsertRows(QModelIndex(), lastIndex, lastIndex + validNotes.size() - 1);
 
     Notes.append(validNotes);
 

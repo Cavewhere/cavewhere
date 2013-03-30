@@ -112,7 +112,7 @@ Rectangle {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: errorColumnId.height + 10
+            height: visible ? errorColumnId.height + 10 : 0
             anchors.leftMargin: 5
             anchors.rightMargin: 5
             anchors.topMargin: 5
@@ -188,12 +188,16 @@ Rectangle {
 
                 onClicked: {
                     var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
-                    galleryView.currentIndex = index;
+                    console.log("Index clicked:" + index)
+                    if(index >= 0 && index < galleryView.count) {
+                        galleryView.currentIndex = index;
+                    }
                 }
             }
 
             onCurrentIndexChanged: updateCurrentNote()
             onCountChanged: updateCurrentNote()
+
         }
     }
 
