@@ -7,6 +7,7 @@
 #include "cwGlobalDirectory.h"
 #include "cwImageTexture.h"
 #include "cwProjection.h"
+#include "cwGLImageItemResources.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -22,7 +23,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    NoteTexture(new cwImageTexture())
+    GLResources(NULL)
 {
 
     ImageProperties->setImage(Image);
@@ -32,11 +33,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
 
 cwImageItem::~cwImageItem()
 {
-    if(NoteTexture != NULL) {
-        NoteTexture->deleteLater();
-    }
 
-    //    GeometryVertexBuffer.destroy();
 }
 
 /**
@@ -56,8 +53,8 @@ void cwImageItem::setImage(const cwImage& image) {
     if(Image != image) {
         Image = image;
         ImageProperties->setImage(Image);
-        if(NoteTexture != NULL) {
-            NoteTexture->setImage(Image);
+        if(GLResources != NULL && GLResources->NoteTexture != NULL) {
+            GLResources->NoteTexture->setImage(Image);
         }
         resizeGL();
         update(); //Force an update even if the image is null
@@ -127,13 +124,16 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
-    NoteTexture = new cwImageTexture();
-    NoteTexture->setProject(ProjectFilename);
-    NoteTexture->setImage(Image);
+    GLResources = new cwGLImageItemResources();
+    GLResources->setContext(QOpenGLContext::currentContext());
+
+    GLResources->NoteTexture = new cwImageTexture();
+    GLResources->NoteTexture->setProject(ProjectFilename);
+    GLResources->NoteTexture->setImage(Image);
 
     //Called when the image is finished loading
-    connect(NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
-    connect(NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
+    connect(GLResources->NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
+    connect(GLResources->NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
 
     initializeShaders();
     initializeVertexBuffers();
@@ -176,8 +176,8 @@ void cwImageItem::initializeShaders() {
 void cwImageItem::initializeVertexBuffers()
 {
     //Create the vertex buffer
-    GeometryVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-    GeometryVertexBuffer.create();    //Create the vertexes buffer to render a quad
+    GLResources->GeometryVertexBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    GLResources->GeometryVertexBuffer.create();    //Create the vertexes buffer to render a quad
 
     QVector<QVector2D> vertices;
     vertices.reserve(4);
@@ -187,10 +187,10 @@ void cwImageItem::initializeVertexBuffers()
     vertices.append(QVector2D(1.0, 0.0));
 
     //Allocate the buffer array for this object
-    GeometryVertexBuffer.bind();
-    GeometryVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    GeometryVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
-    GeometryVertexBuffer.release();
+    GLResources->GeometryVertexBuffer.bind();
+    GLResources->GeometryVertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
+    GLResources->GeometryVertexBuffer.allocate(vertices.data(), vertices.size() * sizeof(QVector2D));
+    GLResources->GeometryVertexBuffer.release();
 }
 
 
@@ -199,7 +199,7 @@ void cwImageItem::initializeVertexBuffers()
   */
 void cwImageItem::initializeTexture() {
     //Generate the color texture
-    NoteTexture->initialize();
+    GLResources->NoteTexture->initialize();
 }
 
 
@@ -257,23 +257,31 @@ void cwImageItem::paint(QPainter* painter) {
     painter->beginNativePainting();
 
     glEnable(GL_TEXTURE_2D);
-    NoteTexture->bind();
-    GeometryVertexBuffer.bind();
+    GLResources->NoteTexture->bind();
+    GLResources->GeometryVertexBuffer.bind();
 
     ImageProgram->bind();
     ImageProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     ImageProgram->enableAttributeArray(vVertex);
     ImageProgram->setUniformValue(ModelViewProjectionMatrix, Camera->viewProjectionMatrix() * RotationModelMatrix);
-    ImageProgram->setUniformValue(CropAreaUniform, NoteTexture->scaleTexCoords());
+    ImageProgram->setUniformValue(CropAreaUniform, GLResources->NoteTexture->scaleTexCoords());
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the quad
 
     ImageProgram->disableAttributeArray(vVertex);
     ImageProgram->release();
-    NoteTexture->release();
-    GeometryVertexBuffer.release();
+    GLResources->NoteTexture->release();
+    GLResources->GeometryVertexBuffer.release();
 
     painter->endNativePainting();
+}
+
+/**
+ * @brief cwImageItem::releaseResources
+ */
+void cwImageItem::releaseResources()
+{
+    GLResources->deleteLater();
 }
 
 /**
@@ -287,7 +295,9 @@ void cwImageItem::paint(QPainter* painter) {
  */
 QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data)
 {
-    NoteTexture->updateData();
+    if(GLResources != NULL) {
+        GLResources->NoteTexture->updateData();
+    }
     QSGNode* node = cwGLRenderer::updatePaintNode(oldNode, data);
     return node;
 }
@@ -323,8 +333,8 @@ QPointF cwImageItem::mapNoteToQtViewport(QPointF mapNote) const
   */
 void cwImageItem::setProjectFilename(QString filename) {
     ProjectFilename = filename;
-    if(NoteTexture != NULL) {
-        NoteTexture->setProject(ProjectFilename);
+    if(GLResources != NULL && GLResources->NoteTexture != NULL) {
+        GLResources->NoteTexture->setProject(ProjectFilename);
     }
 }
 

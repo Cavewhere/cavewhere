@@ -88,6 +88,9 @@ void cwGLScraps::updateData()
     if(geometryItersecter() == NULL) { return; }
 
     //Clear the rendering GL stuff
+    foreach(GLScrap scrap, Scraps) {
+        scrap.releaseResources();
+    }
     Scraps.clear();
 
     //Clear the itersecter of it's data for this object
@@ -192,6 +195,14 @@ cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project)
     Texture->initialize();
     Texture->setProject(project->filename());
     Texture->setImage(data.croppedImage());
+}
+
+void cwGLScraps::GLScrap::releaseResources()
+{
+    PointBuffer.release();
+    IndexBuffer.release();
+    TexCoords.release();
+    delete Texture;
 }
 
 

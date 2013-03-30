@@ -823,4 +823,5 @@ release/*
 Makefile.*
 src/serialization/*
 installer/windows/output/*
+installer/mac/Cavewhere.app/*
 qrc_resources.cpp

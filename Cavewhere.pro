@@ -162,7 +162,9 @@ SOURCES += src/main.cpp \
     src/cwMatrix4x4Animation.cpp \
     src/cwTextureUploadTask.cpp \
     src/cwImageProvider.cpp \
-    src/cwImageValidator.cpp
+    src/cwImageValidator.cpp \
+    src/cwGLResources.cpp \
+    src/cwGLImageItemResources.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -317,7 +319,9 @@ HEADERS  += \
     src/serialization/qt.pb.h \
     src/cwTextureUploadTask.h \
     src/cwImageProvider.h \
-    src/cwImageValidator.h
+    src/cwImageValidator.h \
+    src/cwGLResources.h \
+    src/cwGLImageItemResources.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \

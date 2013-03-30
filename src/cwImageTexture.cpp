@@ -28,9 +28,15 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     }
 }
 
+/**
+ * @brief cwImageTexture::~cwImageTexture
+ *
+ * The deconstructor assumes that the current opengl context has
+ * been set, and this object is being destroyed in the correct thread
+ */
 cwImageTexture::~cwImageTexture()
 {
-
+    glDeleteTextures(1, &TextureId);
 }
 
 /**
@@ -86,7 +92,6 @@ void cwImageTexture::setImage(cwImage image) {
         if(Image.isValid()) {
             startLoadingImage();
         } else {
-            qDebug() << "Delete texture!";
             DeleteTexture = true;
             markAsDirty();
         }

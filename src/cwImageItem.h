@@ -9,6 +9,7 @@
 #include "cwGLRenderer.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+class cwGLImageItemResources;
 class cwImageTexture;
 class cwImageProperties;
 
@@ -57,6 +58,7 @@ protected:
     virtual void initializeGL();
     virtual void resizeGL();
     virtual void paint(QPainter* painter);
+    virtual void releaseResources();
 
     virtual QSGNode * updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data);
 
@@ -72,12 +74,13 @@ private:
     QString ProjectFilename;
 
     //For rendering
+    cwGLImageItemResources* GLResources;
     static int vVertex; //!< The attribute location of the vVertex
     static int ModelViewProjectionMatrix; //!< The uniform location for modelViewProjection matrix
     static int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
-    cwImageTexture* NoteTexture;
+//    cwImageTexture* NoteTexture;
     static QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
-    QOpenGLBuffer GeometryVertexBuffer; //!< The vertex buffer
+//    QOpenGLBuffer GeometryVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();
     void initializeVertexBuffers();

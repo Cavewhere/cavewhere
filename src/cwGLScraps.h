@@ -50,9 +50,11 @@ private:
         QOpenGLBuffer IndexBuffer;
         QOpenGLBuffer TexCoords;
 
-        int NumberOfIndices;
+        int NumberOfIndices;       
 
-        QSharedPointer<cwImageTexture> Texture;
+        cwImageTexture* Texture;
+
+        void releaseResources();
 
     };
 
