@@ -92,7 +92,6 @@ QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) con
   */
 int cwSurveyNoteModel::rowCount(const QModelIndex &parent) const {
     if(parent != QModelIndex()) { return 0; } //There's data at the root
-    qDebug() << "Notes size:" << Notes.size();
     return Notes.size();
 }
 

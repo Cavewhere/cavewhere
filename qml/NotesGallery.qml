@@ -188,7 +188,6 @@ Rectangle {
 
                 onClicked: {
                     var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
-                    console.log("Index clicked:" + index)
                     if(index >= 0 && index < galleryView.count) {
                         galleryView.currentIndex = index;
                     }
