@@ -17,19 +17,8 @@
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
     Project(NULL),
-    Region(NULL)
+    MaxScrapId(0)
 {
-}
-
-/**
-  \brief This goes through all the scraps in the region and uploads the data to the graphics card.
-
-  This will clear all previously stored data
-  */
-void cwGLScraps::updateGeometry() {
-    if(Region == NULL) { return; }
-
-    setDirty(true);
 }
 
 void cwGLScraps::initialize() {
@@ -87,36 +76,101 @@ void cwGLScraps::updateData()
 {
     if(geometryItersecter() == NULL) { return; }
 
-    //Clear the rendering GL stuff
-    foreach(GLScrap scrap, Scraps) {
-        scrap.releaseResources();
+    foreach(PendingScrapCommand command, PendingChanges.values()) {
+        switch(command.type()) {
+        case PendingScrapCommand::AddScrap:
+        {
+            //For geometry intersection, mouse z depth
+            int scrapId = -1;
+
+            if(Scraps.contains(command.scrap())) {
+                GLScrap& glScrap = Scraps[command.scrap()];
+                glScrap.update(command.triangulatedData());
+                scrapId = glScrap.ScrapId;
+            } else {
+                GLScrap glScrap(command.triangulatedData(), project());
+                glScrap.ScrapId = MaxScrapId++;
+                scrapId = glScrap.ScrapId;
+                Scraps.insert(command.scrap(), glScrap);
+            }
+
+            cwGeometryItersecter::Object geometryObject(
+                        this, //This object's pointer
+                        scrapId, //Id
+                        command.triangulatedData().points(),
+                        command.triangulatedData().indices(),
+                        cwGeometryItersecter::Triangles);
+
+            //Update the geometry intersector
+            geometryItersecter()->addObject(geometryObject);
+            break;
+        }
+        case PendingScrapCommand::RemoveScrap:
+        {
+            if(Scraps.contains(command.scrap())) {
+                 GLScrap& glScrap = Scraps[command.scrap()];
+                 geometryItersecter()->removeObject(this, glScrap.ScrapId);
+                 glScrap.releaseResources();
+                 Scraps.remove(command.scrap());
+            }
+            break;
+        }
+        default:
+            break;
+        }
     }
-    Scraps.clear();
 
-    //Clear the itersecter of it's data for this object
-    geometryItersecter()->clear(this);
-
-    QList<cwTriangulatedData> allData = updatedTriangulatedData();
-    Scraps.reserve(allData.size());
-
-    foreach(cwTriangulatedData data, allData) {
-        Q_ASSERT(data.points().size() == data.texCoords().size());
-
-        Scraps.append(GLScrap(data, project()));
-
-        //For geometry intersection, mouse z depth
-        cwGeometryItersecter::Object geometryObject(
-                    this, //This object's pointer
-                    Scraps.size(), //Id
-                    data.points(),
-                    data.indices(),
-                    cwGeometryItersecter::Triangles);
-
-        //FIXME: This could potentially slow down the rendering.
-        geometryItersecter()->addObject(geometryObject);
-    }
-
+    PendingChanges.clear();
     setDirty(false);
+}
+
+/**
+ * @brief cwGLScraps::addScrapToUpdate
+ * @param scrap - The scrap.  This isn't used, just for book keeping
+ * @param data - The trianglated data for this scrap
+ *
+ * This will add the scrap and the data to pending
+ */
+void cwGLScraps::addScrapToUpdate(cwScrap *scrap)
+{
+    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
+                                                      scrap,
+                                                      scrap->triangulationData());
+
+    if(PendingChanges.contains(scrap)) {
+        PendingScrapCommand command = PendingChanges.value(scrap);
+        if(command.type() == PendingScrapCommand::RemoveScrap) {
+            //Replace with a add command
+            PendingChanges.insert(scrap, command);
+            setDirty(true);
+        }
+    } else {
+        PendingChanges.insert(scrap, command);
+        setDirty(true);
+    }
+}
+
+/**
+ * @brief cwGLScraps::removeScrap
+ * @param scrap
+ */
+void cwGLScraps::removeScrap(cwScrap *scrap)
+{
+    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::RemoveScrap,
+                                                      scrap,
+                                                      cwTriangulatedData());
+
+    if(PendingChanges.contains(scrap)) {
+        PendingScrapCommand command = PendingChanges.value(scrap);
+        if(command.type() == PendingScrapCommand::AddScrap) {
+            //Scrap has been removed
+            PendingChanges.insert(scrap, command);
+            setDirty(true);
+        }
+    } else {
+        PendingChanges.insert(scrap, command);
+        setDirty(true);
+    }
 }
 
 /**
@@ -161,39 +215,55 @@ void cwGLScraps::initializeShaders() {
 
 cwGLScraps::GLScrap::GLScrap() :
     NumberOfIndices(0),
+    ScrapId(-1),
     Texture(NULL)
+
 {
 
 }
 
 cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project) :
+    ScrapId(-1),
     Texture(new cwImageTexture())
 {
     PointBuffer = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
     PointBuffer.create();
+
+    IndexBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+    IndexBuffer.create();
+
+    TexCoords = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    TexCoords.create();
+
+    //Upload the texture to the graphics card
+    Texture->initialize();
+    Texture->setProject(project->filename());
+
+    update(data);
+}
+
+/**
+ * @brief cwGLScraps::GLScrap::update
+ * @param data.  This update the data in the glSCrap
+ */
+void cwGLScraps::GLScrap::update(const cwTriangulatedData &data)
+{
     PointBuffer.bind();
     int pointBufferSize = data.points().size() * sizeof(QVector3D);
     PointBuffer.allocate(data.points().constData(), pointBufferSize);
     PointBuffer.release();
 
-    IndexBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
-    IndexBuffer.create();
     IndexBuffer.bind();
     int indexBufferSize = data.indices().size() * sizeof(uint);
     IndexBuffer.allocate(data.indices().constData(), indexBufferSize);
     IndexBuffer.release();
     NumberOfIndices = data.indices().size();
 
-    TexCoords = QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-    TexCoords.create();
     TexCoords.bind();
     int texCoordSize = data.texCoords().size() * sizeof(QVector2D);
     TexCoords.allocate(data.texCoords().constData(), texCoordSize);
     TexCoords.release();
 
-    //Upload the texture to the graphics card
-    Texture->initialize();
-    Texture->setProject(project->filename());
     Texture->setImage(data.croppedImage());
 }
 
@@ -211,45 +281,10 @@ Sets project
 */
 void cwGLScraps::setProject(cwProject* project) {
     if(Project != project) {
-        if(Project != NULL) {
-            disconnect(Project, &cwProject::filenameChanged, this, &cwGLScraps::updateGeometry);
-        }
-
         Project = project;
-
-        if(Project != NULL) {
-            connect(Project, &cwProject::filenameChanged, this, &cwGLScraps::updateGeometry);
-        }
-
         emit projectChanged();
     }
 }
-
-/**
- * @brief cwGLScraps::updatedTriangulatedData
- * @return Get's all the triangulated data that needs to be updated
- */
-QList<cwTriangulatedData> cwGLScraps::updatedTriangulatedData() const
-{
-    //Goes through all the caves, trips, notes and scraps and get triangulationData
-
-    QList<cwTriangulatedData> allData;
-
-    if(Region != NULL) {
-        foreach(cwCave* cave, Region->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                foreach(cwNote* note, trip->notes()->notes()) {
-                    foreach(cwScrap* scrap, note->scraps()) {
-                        allData.append(scrap->triangulationData());
-                    }
-                }
-            }
-        }
-    }
-
-    return allData;
-}
-
 
 
 

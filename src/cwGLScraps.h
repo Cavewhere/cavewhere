@@ -8,6 +8,7 @@
 #include "cwGeometryItersecter.h"
 class cwCavingRegion;
 class cwProject;
+class cwScrap;
 
 //Qt includes
 #include <QOpenGLShaderProgram>
@@ -33,13 +34,45 @@ public:
     void draw();
     void updateData();
 
+    void addScrapToUpdate(cwScrap* scrap);
+    void removeScrap(cwScrap* scrap);
+
 signals:
     void projectChanged();
 
-public slots:
-    void updateGeometry();
-
 private:
+    class PendingScrapCommand {
+    public:
+        enum Type {
+            AddScrap,
+            RemoveScrap,
+            Unknown
+        };
+
+        PendingScrapCommand() :
+            CommandType(Unknown),
+            Scrap(NULL)
+        {
+
+        }
+
+        PendingScrapCommand(Type type, cwScrap* scrap, cwTriangulatedData data) :
+            CommandType(type),
+            Scrap(scrap),
+            Data(data)
+        { }
+
+        Type type() const { return CommandType; }
+        cwScrap* scrap() const { return Scrap; }
+        cwTriangulatedData triangulatedData() const { return Data; }
+
+    private:
+        Type CommandType;
+        cwScrap* Scrap;
+        cwTriangulatedData Data;
+
+    };
+
     class GLScrap {
 
     public:
@@ -50,34 +83,38 @@ private:
         QOpenGLBuffer IndexBuffer;
         QOpenGLBuffer TexCoords;
 
-        int NumberOfIndices;       
+        int NumberOfIndices;
+        int ScrapId; //For intersection
 
         cwImageTexture* Texture;
+
+        void update(const cwTriangulatedData& data);
 
         void releaseResources();
 
     };
 
     cwProject* Project; //!< The project file for loading textures
-    cwCavingRegion* Region;
 
+    //Pending data to update
+    QHash<cwScrap*, PendingScrapCommand> PendingChanges;
+
+    //Data in the rendering thread
     QOpenGLShaderProgram* Program;
     int UniformModelViewProjectionMatrix;
     int UniformScaleTexCoords;
     int vVertex;
     int vScrapTexCoords;
+    QHash<cwScrap*, GLScrap> Scraps;
+    int MaxScrapId;
 
-    QList<GLScrap> Scraps;
+//    QList<GLScrap> Scraps;
 
-    QList<cwTriangulatedData> updatedTriangulatedData() const;
+//    QList<cwTriangulatedData> updatedTriangulatedData() const;
 
     void initializeShaders();
 
 };
-
-inline void cwGLScraps::setCavingRegion(cwCavingRegion *region) {
-    Region = region;
-}
 
 /**
 Gets project

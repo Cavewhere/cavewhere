@@ -70,11 +70,14 @@ void cwGeometryItersecter::clear(cwGLObject *parentObject)
 void cwGeometryItersecter::removeObject(cwGLObject *parentObject, uint id)
 {
     QList<Node>::iterator iter = Nodes.begin();
-    for(; iter != Nodes.end(); iter++) {
+    while(iter != Nodes.end()) {
         Node& currentNode = *iter;
         if(currentNode.Object.parent() == parentObject &&
-                currentNode.Object.id() == id) {
+                currentNode.Object.id() == id)
+        {
             iter = Nodes.erase(iter);
+        } else {
+            ++iter;
         }
     }
 }
@@ -114,7 +117,8 @@ double cwGeometryItersecter::intersects(const QRay3D &ray) const
  * @brief cwGeometryItersecter::addTriangles
  * @param object
  *
- * Adds the object as a triangle
+ * Adds the object as a triangle, if the object already exist is the
+ * interecter, the object will be replaced.
  */
 void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &object)
 {
@@ -123,6 +127,8 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
         qDebug() << "Can't add object" << object.parent() << object.id() << "because it has an invalid indexes" << LOCATION;
         return;
     }
+
+    removeObject(object.parent(), object.id());
 
     for(int i = 0; i < object.indexes().size(); i+=3) {
         Nodes.append(Node(object, i));
@@ -133,7 +139,10 @@ void cwGeometryItersecter::addTriangles(const cwGeometryItersecter::Object &obje
  * @brief cwGeometryItersecter::addLines
  * @param object
  *
- * Adds the object as a lines
+ * Adds the object as a lines.
+ *
+ * If the object already exists in the intersecter the object will be replace with
+ * the new data.
  */
 void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
 {
@@ -142,6 +151,8 @@ void cwGeometryItersecter::addLines(const cwGeometryItersecter::Object &object)
         qDebug() << "Can't add object" << object.parent() << object.id() << "because it has an invalid indexes" << LOCATION;
         return;
     }
+
+    removeObject(object.parent(), object.id());
 
     for(int i = 0; i < object.indexes().size(); i+=2) {
         Node node = Node(object, i);

@@ -476,6 +476,9 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 
         //Connect the scrap
         connectScrap(scrap);
+
+        //Add the scrap data that's already in it
+        GLScraps->addScrapToUpdate(scrap);
     }
 
     //Update all the scrap geometry for the scrap
@@ -496,10 +499,9 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
 
         //Connect the scrap
         disconnectScrap(scrap);
-    }
 
-    //Update all the scrap data that exists
-    GLScraps->updateGeometry();
+        GLScraps->removeScrap(scrap);
+    }
 }
 
 
@@ -763,10 +765,8 @@ void cwScrapManager::taskFinished() {
             cwScrap* scrap = validScraps.at(i);
             cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
             scrap->setTriangulationData(triangleData);
+            GLScraps->addScrapToUpdate(scrap);
         }
-
-        GLScraps->setCavingRegion(Region);
-        GLScraps->updateGeometry();
 
         qDebug() << "Task finished!";
     }
@@ -779,9 +779,6 @@ void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
 {
     GLScraps = glScraps;
     GLScraps->setProject(Project);
-    if(Region != NULL) {
-        GLScraps->setCavingRegion(Region);
-    }
 }
 
 /**
