@@ -200,16 +200,17 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    ShadowRectangle {
         id: mainButtonArea
 
         z: 1
 
         anchors.right: parent.right
         anchors.top:  parent.top
+        anchors.rightMargin: 5
 
-        width: childrenRect.width + 6
-        height: childrenRect.height + 6
+        width: mainToolBar.width + 6
+        height: mainToolBar.height + 6
 
         radius: style.floatingWidgetRadius
         color: style.floatingWidgetColor
@@ -280,20 +281,22 @@ Rectangle {
     }
 
 
-    Rectangle {
+    ShadowRectangle {
         id: carpetButtonArea
         visible: false
         z: 1
 
         anchors.right: parent.right
         anchors.top:  parent.top
+        anchors.rightMargin: 5
 
-        width: childrenRect.width + 6
-        height: childrenRect.height + 6
+        width: carpetRowId.width + 6
+        height: carpetRowId.height + 6
 
         radius: mainButtonArea.radius
         color: "#EEEEEE"
         Row {
+            id: carpetRowId
             spacing: 3
             //anchors.centerIn: parent
 
