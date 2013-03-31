@@ -17,15 +17,22 @@
 #include <QQmlContext>
 #include <QPen>
 #include <QSGTransformNode>
+#include <QSGFlatColorMaterial>
 
 cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     cwScrapPointView(parent),
-    ShotLineScale(1.0),
+    LineDataDirty(false),
+    ScaleAnimation(new QVariantAnimation(this)),
     OldTransformUpdater(NULL)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
-    connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLines);
+    ScaleAnimation->setStartValue(QPointF(0.0, 0.0));
+    ScaleAnimation->setEndValue(QPointF(1.0, 1.0));
+    ScaleAnimation->setDuration(100);
+    connect(ScaleAnimation, SIGNAL(valueChanged(QVariant)), this, SLOT(update()));
+
+    connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLinesWithAnimation);
     connect(this, &cwScrapStationView::transformUpdaterChanged, this, &cwScrapStationView::updateTransformUpdate);
 }
 
@@ -65,18 +72,15 @@ void cwScrapStationView::setScrap(cwScrap* scrap) {
 }
 
 /**
- * @brief cwScrapStationView::setShotLineScale
- * @param scale
+ * @brief cwScrapStationView::updateShotLinesWithAnimation
+ *
+ * This update the line data, as well as start a scaling animation
  */
-void cwScrapStationView::setShotLineScale(float scale) {
-    if(ShotLineScale != scale) {
-        scale = ShotLineScale;
-        emit shotLineScaleChanged();
-        update();
-    }
+void cwScrapStationView::updateShotLinesWithAnimation()
+{
+    updateShotLines();
+    ScaleAnimation->start();
 }
-
-
 
 /**
   \brief When a station has been selected, this updates the shot lines
@@ -138,6 +142,8 @@ void cwScrapStationView::updateShotLines() {
         }
     }
 
+    LineDataDirty = true;
+
     //Update the node geometry
     update();
 }
@@ -175,17 +181,51 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
 {
     if(!oldNode) {
         oldNode = new QSGTransformNode();
-        ShotLinesNode = new cwSGLinesNode();
 
-        oldNode->appendChildNode(ShotLinesNode);
+        QSGFlatColorMaterial* forgroundColor = new QSGFlatColorMaterial();
+        forgroundColor->setColor(QColor(0x19,0x19,0x19));
+
+        QSGFlatColorMaterial* backgroundColor = new QSGFlatColorMaterial();
+        backgroundColor->setColor(QColor(0xb5,0xe8,0xe0));
+
+        ShotLinesNodeBackground = new cwSGLinesNode();
+        ShotLinesNodeForground = new cwSGLinesNode();
+
+        ShotLinesNodeBackground->setLineWidth(3.0);
+        ShotLinesNodeForground->setLineWidth(1.0);
+
+        ShotLinesNodeBackground->setMaterial(backgroundColor);
+        ShotLinesNodeForground->setMaterial(forgroundColor);
+
+        oldNode->appendChildNode(ShotLinesNodeBackground);
+        oldNode->appendChildNode(ShotLinesNodeForground);
     }
 
     if(transformUpdater()) {
+        QPointF scale = ScaleAnimation->currentValue().toPointF();
+        QMatrix4x4 scaleMatrix;
+        scaleMatrix.scale(scale.x(), scale.y(), 1.0);
+
+        cwNoteStation noteStation = scrap()->station(selectedItemIndex());
+        QPointF position = noteStation.positionOnNote();
+
+        QMatrix4x4 toOrigin;
+        toOrigin.translate(QVector3D(-position.x(), -position.y(), 0.0));
+
+        QMatrix4x4 fromOrigin;
+        fromOrigin.translate(QVector3D(position.x(), position.y(), 0.0));
+
+        QMatrix4x4 matrix = transformUpdater()->matrix();
+
         QSGTransformNode* transformNode = static_cast<QSGTransformNode*>(oldNode);
-        transformNode->setMatrix(transformUpdater()->matrix());
+        transformNode->setMatrix(matrix * fromOrigin * scaleMatrix * toOrigin);
     }
 
-    ShotLinesNode->setLines(ShotLines);
+    if(LineDataDirty) {
+        ShotLinesNodeBackground->setLines(ShotLines);
+        ShotLinesNodeForground->setLines(ShotLines);
+        LineDataDirty = false;
+    }
 
     return oldNode;
 }

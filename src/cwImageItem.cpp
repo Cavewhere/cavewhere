@@ -28,6 +28,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
 
     ImageProperties->setImage(Image);
 
+    setAntialiasing(true);
     setOpaquePainting(false);
 }
 
