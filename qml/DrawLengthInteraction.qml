@@ -63,7 +63,7 @@ Interaction {
         anchors.fill: parent
     }
 
-    Rectangle {
+    ShadowRectangle {
         id: lengthRect
 
         visible: false
@@ -73,6 +73,19 @@ Interaction {
 
         width: row.width + row.x * 2
         height: row.height + row.y * 2
+
+        MouseArea {
+            //This mouse area prevents the interaction from using the mouse,
+            //when the user clicks in the area of the input
+            anchors.fill: parent
+            onPressed: {
+                mouse.accepted = true
+            }
+
+            onReleased: {
+                mouse.accepted = true;
+            }
+        }
 
         Style {
             id: style

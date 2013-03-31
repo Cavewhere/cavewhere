@@ -43,7 +43,7 @@ Item {
         text: "Scrap Info"
     }
 
-    Rectangle {
+    ShadowRectangle {
         id: backgroundRect
 
         color: style.floatingWidgetColor

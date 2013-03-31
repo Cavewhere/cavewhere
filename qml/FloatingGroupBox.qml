@@ -25,7 +25,7 @@ Item {
         font.bold:  true
     }
 
-    Rectangle {
+    ShadowRectangle {
         id: backgroundRect
 
         color: style.floatingWidgetColor

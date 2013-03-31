@@ -109,6 +109,8 @@ ImageItem {
     Column {
         anchors.top: parent.top
         anchors.left: parent.left
+        anchors.leftMargin: 5
+        anchors.topMargin: 5
         spacing: 5
         z: 2
 

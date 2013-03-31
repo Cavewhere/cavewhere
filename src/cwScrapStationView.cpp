@@ -29,7 +29,7 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
 
     ScaleAnimation->setStartValue(QPointF(0.0, 0.0));
     ScaleAnimation->setEndValue(QPointF(1.0, 1.0));
-    ScaleAnimation->setDuration(100);
+    ScaleAnimation->setDuration(200);
     connect(ScaleAnimation, SIGNAL(valueChanged(QVariant)), this, SLOT(update()));
 
     connect(this, &cwScrapStationView::selectedItemIndexChanged, this, &cwScrapStationView::updateShotLinesWithAnimation);
