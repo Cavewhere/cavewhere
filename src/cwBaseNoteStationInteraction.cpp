@@ -77,27 +77,6 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
     }
 }
 
-///**
-//Called when the scrap has changed
-//*/
-//void cwBaseNoteStationInteraction::setScrap(cwScrap* scrap) {
-//    if(Scrap != scrap) {
-//        Scrap = scrap;
-//        emit scrapChanged();
-//    }
-//}
-
-///**
-//  Sets the note station view
-//  */
-//void cwBaseNoteStationInteraction::setNoteStationView(cwNoteStationView* stationView) {
-//    if(NoteStationView != stationView) {
-//        NoteStationView = stationView;
-//        emit noteStationViewChanged();
-//    }
-//}
-
-
 /**
     Sets the scrapView for the station interaction
 */
