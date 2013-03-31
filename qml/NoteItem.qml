@@ -118,6 +118,7 @@ ImageItem {
             id: noteResolutionId
             note: noteArea.note
             onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
+            visible: scrapsVisible
         }
 
         NoteTransformEditor {
