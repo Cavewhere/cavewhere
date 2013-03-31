@@ -15,6 +15,13 @@ ScrapPointItem {
         }
     }
 
+    /**
+      When call this opens the editor for this note station`
+      */
+    function startEditting() {
+        stationName.openEditor();
+    }
+
     width: 2
     height: 2
 

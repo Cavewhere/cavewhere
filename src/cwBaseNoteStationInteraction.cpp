@@ -69,6 +69,12 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
 
     //Get the last station in the list and select it
     scrapItem->stationView()->setSelectedItemIndex(scrap->numberOfStations() - 1);
+
+    //If this is the first item, we'll need to make it go into edit mode
+    if(scrap->numberOfStations() == 1) {
+        QQuickItem* stationItem = scrapItem->stationView()->selectedItem();
+        QMetaObject::invokeMethod(stationItem, "startEditting");
+    }
 }
 
 ///**
