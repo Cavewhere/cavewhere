@@ -75,8 +75,7 @@ BaseScrapInteraction {
 
     HelpBox {
         id: scrapHelpBox
-        text: "Trace a scrap by <b>clicking</b> points around it <br>
-        Press <b>spacebar</b> to add a new scrap"
+        text: "Trace a cave section by <b>clicking</b> points around it."
     }
 
     Rectangle {
