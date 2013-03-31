@@ -5,6 +5,8 @@
 #include "cwNote.h"
 #include "cwImageItem.h"
 #include "cwScrapOutlinePointView.h"
+#include "cwTrip.h"
+#include "cwSurveyNoteModel.h"
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
@@ -21,8 +23,18 @@ cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     scrap
   */
 void cwBaseScrapInteraction::addScrap() {
+    //Get the last transform
+    cwNoteTranformation* transform = lastNoteTransformation();
+
     setScrap(new cwScrap());
-    note()->addScrap(Scrap);
+
+    if(transform != NULL) {
+        //Used the previous note transform
+        scrap()->setCalculateNoteTransform(false);
+        *(scrap()->noteTransformation()) = *transform; //Copy the note transform data to the scrap
+    }
+
+    note()->addScrap(scrap());
 }
 
 /**
@@ -87,6 +99,41 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
     }
 
     return cwClosestPoint();
+}
+
+/**
+ * @brief cwBaseScrapInteraction::lastNoteTransformation
+ * @return Will return the last note tranformation.  This will return NULL
+ * if the wasn't a previous note transformation from this trip
+ */
+cwNoteTranformation *cwBaseScrapInteraction::lastNoteTransformation() const
+{
+    cwNote* lastScrapNote = NULL;
+    if(note()->hasScraps()) {
+        lastScrapNote = note();
+    } else {
+        cwSurveyNoteModel* model = note()->parentTrip()->notes();
+        int index = model->notes().indexOf(note());
+        int previousNote = index - 1;
+        while(previousNote >= 0) {
+            lastScrapNote = model->notes().at(previousNote);
+            if(lastScrapNote->hasScraps()) {
+                break;
+            }
+            previousNote--;
+        }
+    }
+
+    if(lastScrapNote != NULL) {
+        if(lastScrapNote->hasScraps()) {
+            cwScrap* lastScrap = lastScrapNote->scraps().last();
+            if(!lastScrap->calculateNoteTransform()) {
+                return lastScrap->noteTransformation();
+            }
+        }
+    }
+
+    return NULL;
 }
 
 /**

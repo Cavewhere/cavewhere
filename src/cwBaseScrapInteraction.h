@@ -6,6 +6,7 @@
 class cwScrap;
 class cwImageItem;
 class cwScrapOutlinePointView;
+class cwNoteTranformation;
 
 class cwBaseScrapInteraction : public cwNoteInteraction
 {
@@ -61,6 +62,8 @@ private:
     void closeCurrentScrap();
 
     cwClosestPoint calcClosestPoint(QPoint qtViewportPosition) const;
+
+    cwNoteTranformation* lastNoteTransformation() const;
 
 private slots:
     void deactivating();
