@@ -3,9 +3,9 @@
 #include <QApplication>
 #include <QQmlContext>
 #include <QThread>
-#include <QtQuick/QQuickView>
+#include <QQuickView>
 #include <QModelIndex>
-#include <QtWidgets/QWidget>
+#include <QWidget>
 #include <QDir>
 #include <QImageReader>
 #include <QOpenGLFunctions>
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
     format.setSamples(4);
 
     cwRootData* rootData = new cwRootData(&view);
-    rootData->setQuickWindow(&view);
+    rootData->setQuickView(&view);
 //    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
 //    rootData->project()->load(QDir::homePath() + "/test.cw");
     QQmlContext* context = view.rootContext();

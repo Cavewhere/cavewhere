@@ -164,7 +164,8 @@ SOURCES += src/main.cpp \
     src/cwImageProvider.cpp \
     src/cwImageValidator.cpp \
     src/cwGLResources.cpp \
-    src/cwGLImageItemResources.cpp
+    src/cwGLImageItemResources.cpp \
+    src/cwQMLReload.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -321,7 +322,8 @@ HEADERS  += \
     src/cwImageProvider.h \
     src/cwImageValidator.h \
     src/cwGLResources.h \
-    src/cwGLImageItemResources.h
+    src/cwGLImageItemResources.h \
+    src/cwQMLReload.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \

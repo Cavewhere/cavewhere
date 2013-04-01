@@ -10,6 +10,7 @@
 #include "cwSurveyExportManager.h"
 #include "cwSurveyImportManager.h"
 #include "cwItemSelectionModel.h"
+#include "cwQMLReload.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -53,8 +54,9 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
 
-    QuickWindow = NULL;
+    QuickView = NULL;
 
+    QMLReloader = new cwQMLReload(this);
 }
 
 /**
@@ -67,9 +69,10 @@ QUndoStack* cwRootData::undoStack() const {
 /**
 Sets quickWindow
 */
-void cwRootData::setQuickWindow(QQuickWindow* quickWindow) {
-    if(QuickWindow != quickWindow) {
-        QuickWindow = quickWindow;
+void cwRootData::setQuickView(QQuickView* quickView) {
+    if(QuickView != quickView) {
+        QuickView = quickView;
+        QMLReloader->setQuickView(QuickView);
         emit quickWindowChanged();
     }
 }

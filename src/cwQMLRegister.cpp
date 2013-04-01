@@ -65,9 +65,10 @@
 #include "cwPerspectiveProjection.h"
 #include "cwMatrix4x4Animation.h"
 #include "cwImageValidator.h"
+#include "cwQMLReload.h"
 
 //Qt registeration
-#include <QQuickWindow>
+#include <QQuickView>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -137,6 +138,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwPerspectiveProjection>("Cavewhere", 1, 0, "PerspectiveProjection");
     qmlRegisterType<cwMatrix4x4Animation>("Cavewhere", 1, 0, "Matrix4x4Animation");
     qmlRegisterType<cwImageValidator>("Cavewhere", 1, 0, "ImageValidator");
+    qmlRegisterType<cwQMLReload>("Cavewhere", 1, 0, "QMLReload");
 
-    qmlRegisterType<QQuickWindow>("Cavewhere", 1, 0, "QuickWindow");
+    qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
 }

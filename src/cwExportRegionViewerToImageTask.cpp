@@ -114,7 +114,7 @@ void cwExportRegionViewerToImageTask::takeScreenshot() const
 /**
 Sets window
 */
-void cwExportRegionViewerToImageTask::setWindow(QQuickWindow* window) {
+void cwExportRegionViewerToImageTask::setWindow(QQuickView* window) {
     if(Window != window) {
         Window = window;
         emit windowChanged();

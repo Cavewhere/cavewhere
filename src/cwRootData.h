@@ -6,7 +6,7 @@
 class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
-class QQuickWindow;
+class QQuickView;
 
 //Our includes
 class cwRegionTreeModel;
@@ -19,6 +19,7 @@ class cwTrip;
 class cwSurveyExportManager;
 class cwSurveyImportManager;
 class cwItemSelectionModel;
+class cwQMLReload;
 
 class cwRootData : public QObject
 {
@@ -35,7 +36,8 @@ class cwRootData : public QObject
     Q_PROPERTY(cwSurveyExportManager* surveyExportManager READ surveyExportManager NOTIFY surveyExportManagerChanged)
     Q_PROPERTY(cwSurveyImportManager* surveyImportManager READ surveyImportManager NOTIFY surveyImportManagerChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack NOTIFY undoStackChanged)
-    Q_PROPERTY(QQuickWindow* quickWindow READ quickWindow WRITE setQuickWindow NOTIFY quickWindowChanged)
+    Q_PROPERTY(QQuickView* quickView READ quickView WRITE setQuickView NOTIFY quickWindowChanged)
+    Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -48,9 +50,10 @@ public:
     cwSurveyExportManager* surveyExportManager() const;
     cwSurveyImportManager* surveyImportManager() const;
     QUndoStack* undoStack() const;
-    QQuickWindow* quickWindow() const;
+    QQuickView* quickView() const;
+    cwQMLReload* qmlReloader() const;
 
-    void setQuickWindow(QQuickWindow* quickWindow);
+    void setQuickView(QQuickView* quickView);
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* defaultTrip() const;
@@ -66,7 +69,7 @@ signals:
     void surveyImportManagerChanged();
     void undoStackChanged();
     void quickWindowChanged();
-
+    void qmlReloaderChanged();
     void defaultTripChanged();
     void defaultTripCalibrationChanged();
 
@@ -81,7 +84,8 @@ private:
     cwProject* Project; //!< For saving and loading, image saving and loading
     cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
-    QQuickWindow* QuickWindow; //!< For exporting the 3d screen to a file
+    QQuickView* QuickView; //!< For exporting the 3d screen to a file
+    cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -165,7 +169,16 @@ inline cwSurveyImportManager* cwRootData::surveyImportManager() const {
 /**
 Gets quickWindow
 */
-inline QQuickWindow* cwRootData::quickWindow() const {
-    return QuickWindow;
+inline QQuickView* cwRootData::quickView() const {
+    return QuickView;
 }
+
+/**
+Gets qmlReloader
+*/
+
+inline cwQMLReload* cwRootData::qmlReloader() const {
+    return QMLReloader;
+}
+
 #endif // CWGLOBALQMLDATA_H

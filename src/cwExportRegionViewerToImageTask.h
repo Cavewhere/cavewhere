@@ -8,7 +8,7 @@
 
 //Qt includes
 #include <QImage>
-#include <QQuickWindow>
+#include <QQuickView>
 
 /**
  * @brief The cwExportRegionViewerToImageTask class
@@ -19,14 +19,14 @@ class cwExportRegionViewerToImageTask : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QQuickWindow* window READ window WRITE setWindow NOTIFY windowChanged)
+    Q_PROPERTY(QQuickView* window READ window WRITE setWindow NOTIFY windowChanged)
     Q_PROPERTY(cw3dRegionViewer* regionViewer READ regionViewer WRITE setRegionViewer NOTIFY regionViewerChanged)
 
 public:
     cwExportRegionViewerToImageTask(QObject* parent = NULL);
 
-    QQuickWindow* window() const;
-    void setWindow(QQuickWindow* window);
+    QQuickView* window() const;
+    void setWindow(QQuickView* window);
 
     //Inputs
     void setDPI(double dotPerInch);
@@ -45,7 +45,7 @@ signals:
 protected:
 
 private:
-    QQuickWindow* Window; //!<
+    QQuickView* Window; //!<
     cw3dRegionViewer* RegionViewer; //!<
 
     //Inputs
@@ -56,7 +56,7 @@ private:
 /**
 Gets window
 */
-inline QQuickWindow* cwExportRegionViewerToImageTask::window() const {
+inline QQuickView* cwExportRegionViewerToImageTask::window() const {
     return Window;
 }
 

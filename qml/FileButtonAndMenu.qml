@@ -71,7 +71,7 @@ Rectangle {
             onTriggered: {
 
                 var exporter = Qt.createQmlObject('import QtQuick 2.0; import Cavewhere 1.0; ExportRegioonViewerToImageTask {}', fileMenuButton, "");
-                exporter.window = quickWindow;
+                exporter.window = quickView;
                 exporter.regionViewer = terrainRenderer;
 
                 //Hide all children
@@ -88,6 +88,11 @@ Rectangle {
                     terrainRenderer.children[i].visible = true
                 }
             }
+        }
+
+        MenuItem {
+            text: "Reload"
+            onTriggered: qmlReloader.reload();
         }
 
         MenuItem {
