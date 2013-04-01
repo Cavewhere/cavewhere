@@ -443,7 +443,8 @@ OTHER_FILES += \
     src/cavewhere.proto \
     src/qt.proto \
     docs/FileFormatDocumentation.txt \
-    Cavewhere.rc
+    Cavewhere.rc \
+    qml/RemoveAskBox.qml
 
 RESOURCES += \
     resources.qrc

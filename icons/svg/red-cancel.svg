@@ -1,0 +1,28 @@
+<?xml version="1.0"?><svg width="50" height="50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <title>red cancel</title>
+ <defs>
+  <linearGradient id="linearGradient5190">
+   <stop stop-color="#ffffff" id="stop5192" offset="0"/>
+   <stop stop-color="#ff0000" id="stop5194" offset="1"/>
+  </linearGradient>
+  <linearGradient y2="0.92415" x2="0.524706" y1="-0.000009" x1="0.261268" id="linearGradient2109" xlink:href="#linearGradient5190"/>
+  <linearGradient id="linearGradient5197">
+   <stop stop-color="#ffffff" id="stop5199" offset="0"/>
+   <stop stop-color="#ff0000" id="stop5201" offset="1"/>
+  </linearGradient>
+  <linearGradient y2="-0.147551" x2="0.721243" y1="0.946096" x1="0.953924" id="linearGradient2107" xlink:href="#linearGradient5197"/>
+ </defs>
+ <metadata id="metadata2051">image/svg+xmlround error warning buttonLumen Design StudioLumen Design Studioerror warning iconerroriconbuttonredstopnowarningnegativedeletecancel</metadata>
+ <g>
+  <title>Layer 1</title>
+  <g id="layer1">
+   <g transform="matrix(0.261285, 0, 0, 0.261285, 57.1169, -1.40355)" id="g2100">
+    <path fill="red" fill-rule="evenodd" stroke="#cb0000" stroke-width="20.127882" marker-start="none" marker-mid="none" marker-end="none" stroke-miterlimit="4" stroke-dashoffset="0" d="m-46.953365,100.277908a76.7155,76.7155 0 1 1 -153.431004,0a76.7155,76.7155 0 1 1 153.431004,0z" id="path2174"/>
+    <path fill="url(#linearGradient2107)" fill-rule="evenodd" stroke-width="0" stroke-miterlimit="4" stroke-dashoffset="0" id="path2540" d="m-105.019379,168.522385c19.046631,-5.103516 34.173218,-17.658203 43.228703,-33.823914c14.707672,-34.818115 -40.166813,46.69989 -85.491291,31.890625c13.176041,4.832214 27.813293,5.804993 42.262589,1.933289z"/>
+    <path fill="url(#linearGradient2109)" fill-rule="evenodd" stroke-width="0" stroke-miterlimit="4" stroke-dashoffset="0" d="m-123.552063,28.953293c-39.437042,0 -71.4422,32.847351 -71.4422,73.322144c0,5.473877 0.607452,10.801819 1.717499,15.934387c39.205109,-75.467834 81.445587,-27.962952 135.907047,-43.546631c-10.635441,-26.797791 -36.264317,-45.7099 -66.182346,-45.7099z" id="path2197"/>
+    <path opacity="0.735294" fill="white" stroke-width="1px" d="m-101.786163,139.628464l-21.679062,-21.679077l-21.882996,21.882935l-17.875549,-17.875549l21.88298,-21.882996l-21.679077,-21.679077l17.39978,-17.39978l21.679077,21.679077l21.950958,-21.950928l17.875549,17.875549l-21.950928,21.950989l21.679077,21.679016l-17.399811,17.399841" id="text2705"/>
+    <path fill="white" stroke-width="1px" d="m-101.911652,136.596848l-21.587509,-21.587524l-21.757477,21.757507l-14.901611,-14.901611l21.757492,-21.757507l-21.587509,-21.587463l14.50499,-14.505005l21.587509,21.587463l21.814133,-21.814148l14.901611,14.901611l-21.814148,21.814148l21.587494,21.587524l-14.504974,14.505005" id="text2713"/>
+   </g>
+  </g>
+ </g>
+</svg>

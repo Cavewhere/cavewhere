@@ -66,5 +66,6 @@
         <file>docs/FileFormatDocumentation.txt</file>
         <file>src/qt.proto</file>
         <file>src/cavewhere.proto</file>
+        <file>icons/svg/red-cancel.svg</file>
     </qresource>
 </RCC>

@@ -72,6 +72,38 @@ Rectangle {
                 }
             }
 
+            Image {
+                id: removeImageId
+
+                source: "qrc:/icons/svg/red-cancel.svg"
+
+                width: 24
+                height: 24
+
+                anchors.right: parent.right
+                anchors.top: parent.top
+
+                visible: galleryView.currentIndex == index
+
+                opacity: removeImageMouseArea.containsMouse ? 1.0 : .75;
+
+                MouseArea {
+                    id: removeImageMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: removeAskDialog.show()
+                }
+            }
+
+            RemoveAskBox {
+                id: removeAskDialog
+                anchors.right: removeImageId.horizontalCenter
+                anchors.top: removeImageId.verticalCenter
+                onRemove: {
+                    notesModel.removeNote(index);
+                }
+            }
+
             /**
                   Probably could be allocated and deleted on the fly
                   */
@@ -186,11 +218,15 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
 
+                propagateComposedEvents: true
+
                 onClicked: {
                     var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
                     if(index >= 0 && index < galleryView.count) {
                         galleryView.currentIndex = index;
                     }
+
+                    mouse.accepted = false
                 }
             }
 

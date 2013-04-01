@@ -80,6 +80,12 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
 
     loadCavingRegion(region);
 
+    //Clean up old images
+    cwImageCleanupTask imageCleanupTask;
+    imageCleanupTask.setDatabaseFilename(databaseFilename());
+    imageCleanupTask.setRegion(Region);
+    imageCleanupTask.start();
+
     Database.close();
     return true;
 }

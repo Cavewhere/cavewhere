@@ -140,6 +140,24 @@ void cwSurveyNoteModel::addFromFiles(QStringList files, cwProject* project) {
 }
 
 /**
+ * @brief cwSurveyNoteModel::removeNote
+ * @param index - This remove the note at index
+ */
+void cwSurveyNoteModel::removeNote(int index)
+{
+    QModelIndex modelIndex = this->index(index);
+    if(!modelIndex.isValid()) { return; } //Invalid index
+
+    beginRemoveRows(QModelIndex(), index, index);
+
+    cwNote* note = Notes.at(index);
+    Notes.removeAt(index);
+    note->deleteLater();
+
+    endRemoveRows();
+}
+
+/**
  * @brief cwTrip::stationPositionModelUpdated
  *
  * Called from the cwCave that the stations position model has updated
