@@ -25,6 +25,10 @@
 #include "cwProject.h"
 #include "cwImageProvider.h"
 
+#ifndef CAVEWHERE_VERSION
+#define CAVEWHERE_VERSION "Sauce-Release"
+#endif
+
 QUrl mainWindowSourcePath() {
     QString mainWindowPath = "/qml/CavewhereMainWindow.qml";
     QString workingDirectory = QDir::currentPath() + mainWindowPath;
@@ -66,6 +70,7 @@ int main(int argc, char *argv[])
     cwQMLRegister::registerQML();
 
     QQuickView view;
+    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
 
     QSurfaceFormat format = view.format();
     format.setSamples(4);
