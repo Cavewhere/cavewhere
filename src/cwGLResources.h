@@ -18,6 +18,9 @@ signals:
     
 public slots:
     
+private slots:
+    void contextDestroyed();
+
 private:
     QOpenGLContext* Context;
 
