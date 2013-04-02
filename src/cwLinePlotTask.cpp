@@ -233,6 +233,8 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
     double positionPrecision = 3; //position to 3 digits
     double positionFactor = pow(10.0, positionPrecision);
 
+    QRegExp regex("(\\d+)\\.(\\w+)");
+
     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
     while( iter.hasNext() ) {
         iter.next();
@@ -245,45 +247,49 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
         position.setY(qRound(position.y() * positionFactor) / positionFactor);
         position.setZ(qRound(position.z() * positionFactor) / positionFactor);
 
-        QString caveIndexString = name.section('-', 0, 0); //Extract the index
-        QString caveNameAndStation = name.section('-', 1, -1); //Extract the rest
-        QString stationName = caveNameAndStation.section(".", 1, 1); //Extract the station
-        QString caveName = name.section(".", 0, 0);
+        if(regex.exactMatch(name)) {
 
-        bool okay;
-        int caveIndex = caveIndexString.toInt(&okay);
+            QString caveIndexString = regex.cap(1); //Extract the index
+            QString stationName = regex.cap(2);//Extract the station
+            QString caveName = caveIndexString;
 
-        if(!okay) {
-            qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
-            return;
-        }
+            bool okay;
+            int caveIndex = caveIndexString.toInt(&okay);
 
-        //Make sure the index is good
-        if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
-            qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
-            return;
-        }
+            if(!okay) {
+                qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+                return;
+            }
 
-        cwCave* cave = Region->cave(caveIndex);
+            //Make sure the index is good
+            if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
+                qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+                return;
+            }
 
-        //Make sure the caveName is valid
-        if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
-            qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
-            return;
-        }
+            cwCave* cave = Region->cave(caveIndex);
 
-        cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
-        if(lookup.hasPosition(stationName)) {
-            QVector3D oldPosition = lookup.position(stationName);
-            if(oldPosition != position) {
-                //Update the position
+            //Make sure the caveName is valid
+            if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
+                qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
+                return;
+            }
+
+            cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
+            if(lookup.hasPosition(stationName)) {
+                QVector3D oldPosition = lookup.position(stationName);
+                if(oldPosition != position) {
+                    //Update the position
+                    lookup.setPosition(stationName, position);
+                    setStationAsChanged(caveIndex, stationName);
+                }
+            } else {
+                //New station
                 lookup.setPosition(stationName, position);
                 setStationAsChanged(caveIndex, stationName);
             }
         } else {
-            //New station
-            lookup.setPosition(stationName, position);
-            setStationAsChanged(caveIndex, stationName);
+            qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
         }
     }
 
@@ -342,8 +348,8 @@ void cwLinePlotTask::encodeCaveNames()
     //Encode the the cave's index into the cave's name
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);
-        QString caveNameNoSpaces = cave->name().remove(" ");
-        cave->setName(QString("%1-%2").arg(i).arg(caveNameNoSpaces));
+//        QString caveNameNoSpaces = cave->name().remove(" ");
+        cave->setName(QString("%1").arg(i)); //.arg(caveNameNoSpaces));
     }
 }
 
