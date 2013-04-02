@@ -475,7 +475,8 @@ protoc.CONFIG = target_predeps
 protoc.variable_out = SOURCES
 QMAKE_EXTRA_COMPILERS += protoc
 
-QMAKE_CXXFLAGS += -DCAVEWHERE_VERSION=\\\"`git describe`\\\"
+CavewhereVersion = $$system(git describe)
+QMAKE_CXXFLAGS += -DCAVEWHERE_VERSION=\\\"$${CavewhereVersion}\\\"
 
 macx {
     QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.7
