@@ -235,6 +235,10 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
 
     QRegExp regex("(\\d+)\\.(\\w+)");
 
+    //This vector is populated with all the stations for each cave
+    QVector<cwStationPositionLookup> caveStations;
+    caveStations.resize(CaveStationLookups.size());
+
     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
     while( iter.hasNext() ) {
         iter.next();
@@ -275,22 +279,52 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
                 return;
             }
 
-            cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
-            if(lookup.hasPosition(stationName)) {
-                QVector3D oldPosition = lookup.position(stationName);
-                if(oldPosition != position) {
-                    //Update the position
-                    lookup.setPosition(stationName, position);
-                    setStationAsChanged(caveIndex, stationName);
-                }
-            } else {
-                //New station
-                lookup.setPosition(stationName, position);
-                setStationAsChanged(caveIndex, stationName);
-            }
+            cwStationPositionLookup& lookup = caveStations[caveIndex];
+            lookup.setPosition(stationName, position);
+
+//            cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
+//            if(lookup.hasPosition(stationName)) {
+//                QVector3D oldPosition = lookup.position(stationName);
+//                if(oldPosition != position) {
+//                    //Update the position
+//                    lookup.setPosition(stationName, position);
+//                    setStationAsChanged(caveIndex, stationName);
+//                }
+//            } else {
+//                //New station
+//                lookup.setPosition(stationName, position);
+//                setStationAsChanged(caveIndex, stationName);
+//            }
         } else {
             qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
         }
+    }
+
+    //Go through all the stations and compare the to there previous positions
+    //If they have been updated then, this will add them to the station changed
+    for(int i = 0; i < caveStations.size(); i++) {
+        cwStationPositionLookup& newLookup = caveStations[i];
+        cwStationPositionLookup& oldLookup = CaveStationLookups[i];
+
+        QMap<QString, QVector3D> newPositions = newLookup.positions();
+        QMap<QString, QVector3D> oldPositions = oldLookup.positions();
+
+        foreach(QString stationName, newPositions.keys()) {
+            if(oldPositions.contains(stationName)) {
+                //Compare new point with old point
+                QVector3D newPoint = newPositions.value(stationName);
+                QVector3D oldPoint = oldPositions.value(stationName);
+                if(newPoint != oldPoint) {
+                    setStationAsChanged(i, stationName);
+                }
+            } else {
+                //New point
+                setStationAsChanged(i, stationName);
+            }
+        }
+
+        //Update the new station lookup with the new station lookup
+        CaveStationLookups[i] = caveStations[i];
     }
 
     //Update all cave station position models
