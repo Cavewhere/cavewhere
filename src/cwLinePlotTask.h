@@ -196,6 +196,11 @@ private:
     void initializeCaveStationLookups();
     void setStationAsChanged(int caveIndex, QString stationName);
     void indexStations();
+
+    QVector<cwStationPositionLookup> splitLookupByCave(const cwStationPositionLookup& stationPostions);
+    void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations);
+    void updateExteralCaveStationLookups();
+
 };
 
 /**

@@ -230,120 +230,14 @@ void cwLinePlotTask::updateStationPositionForCaves(const cwStationPositionLookup
     //Index all the stations for quick lookup
     indexStations();
 
-    double positionPrecision = 3; //position to 3 digits
-    double positionFactor = pow(10.0, positionPrecision);
+    //Splite up stationPostions for each indiviual cave
+    QVector<cwStationPositionLookup> caveStationLookups = splitLookupByCave(stationPostions);
 
-    QRegExp regex("(\\d+)\\.(\\w+)");
-
-    //This vector is populated with all the stations for each cave
-    QVector<cwStationPositionLookup> caveStations;
-    caveStations.resize(CaveStationLookups.size());
-
-    QMapIterator<QString, QVector3D> iter(stationPostions.positions());
-    while( iter.hasNext() ) {
-        iter.next();
-
-        QString name = iter.key();
-        QVector3D position = iter.value();
-
-        //Cut off positions to 3 digits
-        position.setX(qRound(position.x() * positionFactor) / positionFactor);
-        position.setY(qRound(position.y() * positionFactor) / positionFactor);
-        position.setZ(qRound(position.z() * positionFactor) / positionFactor);
-
-        if(regex.exactMatch(name)) {
-
-            QString caveIndexString = regex.cap(1); //Extract the index
-            QString stationName = regex.cap(2);//Extract the station
-            QString caveName = caveIndexString;
-
-            bool okay;
-            int caveIndex = caveIndexString.toInt(&okay);
-
-            if(!okay) {
-                qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
-                return;
-            }
-
-            //Make sure the index is good
-            if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
-                qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
-                return;
-            }
-
-            cwCave* cave = Region->cave(caveIndex);
-
-            //Make sure the caveName is valid
-            if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
-                qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
-                return;
-            }
-
-            cwStationPositionLookup& lookup = caveStations[caveIndex];
-            lookup.setPosition(stationName, position);
-
-//            cwStationPositionLookup& lookup = CaveStationLookups[caveIndex];
-//            if(lookup.hasPosition(stationName)) {
-//                QVector3D oldPosition = lookup.position(stationName);
-//                if(oldPosition != position) {
-//                    //Update the position
-//                    lookup.setPosition(stationName, position);
-//                    setStationAsChanged(caveIndex, stationName);
-//                }
-//            } else {
-//                //New station
-//                lookup.setPosition(stationName, position);
-//                setStationAsChanged(caveIndex, stationName);
-//            }
-        } else {
-            qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
-        }
-    }
-
-    //Go through all the stations and compare the to there previous positions
-    //If they have been updated then, this will add them to the station changed
-    for(int i = 0; i < caveStations.size(); i++) {
-        cwStationPositionLookup& newLookup = caveStations[i];
-        cwStationPositionLookup& oldLookup = CaveStationLookups[i];
-
-        QMap<QString, QVector3D> newPositions = newLookup.positions();
-        QMap<QString, QVector3D> oldPositions = oldLookup.positions();
-
-        foreach(QString stationName, newPositions.keys()) {
-            if(oldPositions.contains(stationName)) {
-                //Compare new point with old point
-                QVector3D newPoint = newPositions.value(stationName);
-                QVector3D oldPoint = oldPositions.value(stationName);
-                if(newPoint != oldPoint) {
-                    setStationAsChanged(i, stationName);
-                }
-            } else {
-                //New point
-                setStationAsChanged(i, stationName);
-            }
-        }
-
-        //Update the new station lookup with the new station lookup
-        CaveStationLookups[i] = caveStations[i];
-    }
+    //Update all the lookups that are part of this class
+    updateInteralCaveStationLookups(caveStationLookups);
 
     //Update all cave station position models
-    for(int i = 0; i < Region->caveCount(); i++) {
-        //Get extrenal cave pointer
-        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
-        if(Result.Caves.contains(externalCave)) {
-
-            LinePlotCaveData caveData;
-            caveData.setStationPositions(CaveStationLookups[i]);
-
-            //Overwrite existing entry
-            Result.Caves.insert(externalCave, caveData);
-
-            //Update the region's station lookup
-            cwCave* cave = Region->cave(i);
-            cave->setStationPositionLookup(CaveStationLookups[i]);
-        }
-    }
+    updateExteralCaveStationLookups();
 }
 
 /**
@@ -464,6 +358,138 @@ void cwLinePlotTask::indexStations()
         TripLookups[i] = StationTripScrapLookup(Region->cave(i));
     }
 }
+
+/**
+ * @brief cwLinePlotTask::splitLookupByCave
+ * @param stationPostions
+ * @return
+ */
+QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStationPositionLookup &stationPostions)
+{
+    double positionPrecision = 3; //position to 3 digits
+     double positionFactor = pow(10.0, positionPrecision);
+
+     QRegExp regex("(\\d+)\\.(\\w+)");
+
+     //This vector is populated with all the stations for each cave
+     QVector<cwStationPositionLookup> caveStations;
+     caveStations.resize(CaveStationLookups.size());
+
+     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
+     while( iter.hasNext() ) {
+         iter.next();
+
+         QString name = iter.key();
+         QVector3D position = iter.value();
+
+         //Cut off positions to 3 digits
+         position.setX(qRound(position.x() * positionFactor) / positionFactor);
+         position.setY(qRound(position.y() * positionFactor) / positionFactor);
+         position.setZ(qRound(position.z() * positionFactor) / positionFactor);
+
+         if(regex.exactMatch(name)) {
+
+             QString caveIndexString = regex.cap(1); //Extract the index
+             QString stationName = regex.cap(2);//Extract the station
+             QString caveName = caveIndexString;
+
+             bool okay;
+             int caveIndex = caveIndexString.toInt(&okay);
+
+             if(!okay) {
+                 qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+                 return QVector<cwStationPositionLookup>();
+             }
+
+             //Make sure the index is good
+             if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
+                 qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+                 return QVector<cwStationPositionLookup>();
+             }
+
+             cwCave* cave = Region->cave(caveIndex);
+
+             //Make sure the caveName is valid
+             if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
+                 qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
+                 return QVector<cwStationPositionLookup>();
+             }
+
+             cwStationPositionLookup& lookup = caveStations[caveIndex];
+             lookup.setPosition(stationName, position);
+
+         } else {
+             qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
+         }
+     }
+
+     return caveStations;
+}
+
+/**
+ * @brief cwLinePlotTask::updateInteralCaveStationLookups
+ * @param caveStations
+ *
+ * Go through all the stations and compare the to there previous positions
+ * If they have been updated then, this will add them to the station changed
+ */
+void cwLinePlotTask::updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations)
+{
+    //Go through all the stations and compare the to there previous positions
+    //If they have been updated then, this will add them to the station changed
+    for(int i = 0; i < caveStations.size(); i++) {
+        cwStationPositionLookup& newLookup = caveStations[i];
+        cwStationPositionLookup& oldLookup = CaveStationLookups[i];
+
+        QMap<QString, QVector3D> newPositions = newLookup.positions();
+        QMap<QString, QVector3D> oldPositions = oldLookup.positions();
+
+        foreach(QString stationName, newPositions.keys()) {
+            if(oldPositions.contains(stationName)) {
+                //Compare new point with old point
+                QVector3D newPoint = newPositions.value(stationName);
+                QVector3D oldPoint = oldPositions.value(stationName);
+                if(newPoint != oldPoint) {
+                    setStationAsChanged(i, stationName);
+                }
+            } else {
+                //New point
+                setStationAsChanged(i, stationName);
+            }
+        }
+
+        //Update the new station lookup with the new station lookup
+        CaveStationLookups[i] = caveStations[i];
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::updateExteralCaveStationLookups
+ *
+ * Update all cave station position models
+ */
+void cwLinePlotTask::updateExteralCaveStationLookups()
+{
+    //Update all cave station position models
+    for(int i = 0; i < Region->caveCount(); i++) {
+        //Get extrenal cave pointer
+        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
+        if(Result.Caves.contains(externalCave)) {
+
+            LinePlotCaveData caveData;
+            caveData.setStationPositions(CaveStationLookups[i]);
+
+            //Overwrite existing entry
+            Result.Caves.insert(externalCave, caveData);
+
+            //Update the region's station lookup
+            cwCave* cave = Region->cave(i);
+            cave->setStationPositionLookup(CaveStationLookups[i]);
+        }
+    }
+}
+
+
 
 /**
  * @brief cwLinePlotTask::TripDataPtrs::TripDataPtrs
