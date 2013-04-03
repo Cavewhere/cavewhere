@@ -202,7 +202,7 @@ void cwScrapManager::connectCave(cwCave *cave) {
  * @param trip
  */
 void cwScrapManager::connectTrip(cwTrip *trip) {
-    Q_UNUSED(trip);
+    connectNoteModel(trip->notes());
 }
 
 /**

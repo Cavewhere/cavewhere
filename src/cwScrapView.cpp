@@ -31,7 +31,7 @@ void cwScrapView::setNote(cwNote* note) {
         Note = note;
 
         if(Note != NULL) {
-            connect(Note, SIGNAL(scrapAdded()), SLOT(addScrapItem()));
+            connect(Note, &cwNote::insertedScraps, this, &cwScrapView::insertScrapItem);
             connect(Note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
         }
 
@@ -45,7 +45,7 @@ void cwScrapView::setNote(cwNote* note) {
 /**
   \brief Updates all the scrap items that are in the view
   */
-void cwScrapView:: addScrapItem() {
+void cwScrapView:: insertScrapItem(int begin, int end) {
     if(Note == NULL) {
         return;
     }
@@ -61,19 +61,28 @@ void cwScrapView:: addScrapItem() {
         return;
     }
 
+    Q_ASSERT(begin <= end);
+    Q_ASSERT(begin >= 0);
+    Q_ASSERT(end >= 0);
+    Q_ASSERT(begin < Note->scraps().size());
+    Q_ASSERT(end < Note->scraps().size());
+
     //Create a new scrap item
     QQmlContext* context = QQmlEngine::contextForObject(this);
-    cwScrapItem* scrapItem = new cwScrapItem(context, this);
-    scrapItem->setScrap(Note->scraps().last());
-    scrapItem->setTransformUpdater(TransformUpdater);
-    scrapItem->setSelectionManager(SelectionManager);
-//    connect(scrapItem, SIGNAL(selectedChanged()), SLOT(updateSelection()), Qt::UniqueConnection);
 
+    for(int i = begin; i <= end; i++) {
+        cwScrapItem* scrapItem = new cwScrapItem(context, this);
+        scrapItem->setScrap(Note->scraps().last());
+        scrapItem->setTransformUpdater(TransformUpdater);
+        scrapItem->setSelectionManager(SelectionManager);
 
-    ScrapItems.append(scrapItem);
+        ScrapItems.insert(i, scrapItem);
+    }
 
     //Select the scrapItem
-    setSelectScrapIndex(ScrapItems.size() - 1);
+    if(begin == end) {
+        setSelectScrapIndex(ScrapItems.size() - 1);
+    }
 }
 
 /**
@@ -257,3 +266,4 @@ void cwScrapView::updateRemovedScraps(int begin, int end)
     Q_UNUSED(end);
     updateAllScraps();
 }
+

@@ -56,7 +56,7 @@ signals:
 public slots:
 
 private slots:
-    void addScrapItem();
+    void insertScrapItem(int begin, int end);
     void updateAllScraps();
     void updateSelection();
     void updateRemovedScraps(int begin, int end);

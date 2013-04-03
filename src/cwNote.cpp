@@ -158,7 +158,10 @@ void cwNote::addScrap(cwScrap* scrap) {
 
     setupScrap(scrap);
     Scraps.append(scrap);
-    emit scrapAdded();
+
+    int lastIndex = Scraps.size() - 1;
+
+    emit insertedScraps(lastIndex, lastIndex);
 }
 
 /**
