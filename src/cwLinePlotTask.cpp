@@ -336,9 +336,11 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
         //Get the trip that has been updated
         //Warning, don't us externalScrap, it's not part of this thread
         cwScrap* externalScrap = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Scraps.at(scrapIndex);
+        cwTrip* externalTrip = RegionOriginalPointers.Caves.at(caveIndex).Trips.at(tripIndex).Trip;
 
         //Add the scrap to the scraps that have changed
         Result.Scraps.insert(externalScrap);
+        Result.Trips.insert(externalTrip); //Need to add the parent trip, because it might not be added, because scrap may exist in a differnt trip than the data
     }
 }
 
