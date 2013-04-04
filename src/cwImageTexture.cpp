@@ -36,7 +36,7 @@ cwImageTexture::cwImageTexture(QObject *parent) :
  */
 cwImageTexture::~cwImageTexture()
 {
-    glDeleteTextures(1, &TextureId);
+    deleteGLTexture();
 }
 
 /**

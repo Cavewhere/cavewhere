@@ -353,11 +353,11 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
                                    QString imageFilename,
                                    cwImage* imageIds) {
 
-    int numberOfLevels = numberOfMipmapLevels(originalImage.size());
-
     QSizeF clipArea;
     QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
     QList<int> mipmapIds;
+
+    int numberOfLevels = numberOfMipmapLevels(scaledImage.size());
 
     QSize scaledImageSize = scaledImage.size();
 
