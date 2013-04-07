@@ -5,6 +5,7 @@ Item {
 
     property list<Interaction> interactions
     property Interaction defaultInteraction
+    property Interaction activeInteraction: null
 
     //This function hides all other interaction and shows the active interaction
     function active(interaction) {
@@ -17,6 +18,7 @@ Item {
         }
 
         interaction.visible = true;
+        activeInteraction = interaction
     }
 
     function activeDefaultInteraction() {

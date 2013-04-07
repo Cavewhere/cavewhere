@@ -12,8 +12,6 @@ ImageItem {
     clip: true
     rotation: note !== null ? note.rotate : 0
 
-
-
     PanZoomInteraction {
         id: panZoomInteraction
         anchors.fill: parent
@@ -97,6 +95,23 @@ ImageItem {
             noteDPIInteraction
         ]
         defaultInteraction: panZoomInteraction
+
+        onActiveInteractionChanged: {
+            if(activeInteraction == defaultInteraction) {
+                switch(noteArea.state) {
+                case "ADD-SCRAP":
+                    addScrapInteraction.activate();
+                    break;
+                case "ADD-STATION":
+                    addStationInteraction.activate();
+                    break;
+                case "SELECT":
+                    noteSelectionInteraction.activate();
+                    break;
+                }
+            }
+        }
+
     }
 
     //This allows note coordinates to be mapped to opengl coordinates
@@ -178,7 +193,6 @@ ImageItem {
             to: ""
             ScriptAction {
                 script: {
-                    //console.log("State change to default!");
                     scrapViewId.clearSelection();
                     interactionManagerId.active(panZoomInteraction)
                 }
@@ -188,7 +202,9 @@ ImageItem {
         Transition {
             to: "SELECT"
             ScriptAction {
-                script: interactionManagerId.active(noteSelectionInteraction)
+                script: {
+                    interactionManagerId.active(noteSelectionInteraction)
+                }
             }
         }
 

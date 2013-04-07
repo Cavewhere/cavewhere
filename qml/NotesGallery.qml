@@ -334,7 +334,6 @@ Rectangle {
         Row {
             id: carpetRowId
             spacing: 3
-            //anchors.centerIn: parent
 
             IconButton {
                 iconSource: "qrc:icons/back.png"
@@ -449,10 +448,6 @@ Rectangle {
                 scrapsVisible: true
             }
 
-//            PropertyChanges {
-//                target: noteArea
-//                state: ""
-//            }
         },
 
         State {
