@@ -31,7 +31,7 @@ public:
     void draw();
 
     void setRotation(QQuaternion quaternion);
-    QQuaternion rotation() const;
+    QQuaternion modelView() const;
 
 
 signals:
@@ -67,7 +67,7 @@ private:
     QOpenGLBuffer CompassVertexBuffer;
     QOpenGLBuffer TextureGeometryBuffer;
 
-    QOpenGLFramebufferObject* CompassFramebuffer;
+    QOpenGLFramebufferObject* CompassFramebuffer; //Can be a multi-sample or texture framebuffer
     QOpenGLFramebufferObject* ShadowBufferFramebuffer;
     QOpenGLFramebufferObject* HorizonalShadowBufferFramebuffer;
 
@@ -77,6 +77,7 @@ private:
     int vVertex;
     int vColor;
     int ModelViewProjectionMatrixUniform;
+    int IgnoreColorUniform;
 
     //Shader attributes for the shadow compass shader
     int vVertexShadow;
@@ -102,6 +103,8 @@ private:
     void generateStarGeometry(QVector<CompassGeometry> &triangles, Direction direction);
 
     void drawShadow();
+    void drawCompass(QOpenGLFramebufferObject *framebuffer, bool withColors, QMatrix4x4 modelView = QMatrix4x4());
+    void drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView = QMatrix4x4());
 
 //    void drawStar(Direction top);
 

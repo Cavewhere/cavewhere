@@ -49,28 +49,57 @@ void cwGLCompass::initialize()
 void cwGLCompass::draw()
 {
 
-    drawShadow();
+    QMatrix4x4 rotationMatrix;
+    rotationMatrix.rotate(RotationQuaternion);
 
-    //Draw the shadow
-    QMatrix4x4 orthoMatrix;
-    orthoMatrix.ortho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+    bool lookingDown = rotationMatrix.map(QVector3D(0.0, 0.0, 1.0)).z() > 0.0;
 
-    glViewport(0, 0, camera()->viewport().width(), camera()->viewport().height());
+    QMatrix4x4 modelView;
+    modelView.translate(0.5, 0.5, 0.0);
+    modelView.rotate(RotationQuaternion);
+    modelView.translate(-0.5, -0.5, 0.0);
+    modelView.translate(0.0, 0.0, -0.25);
+
+    //Draw to the framebuffers
+    if(lookingDown) { drawShadow(); }
+    drawCompass(CompassFramebuffer, true, rotationMatrix);
+
+    //Draw framebuffers to rendering buffer
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
-    ShadowOutputProgram->bind();
-    ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);
-    ShadowOutputProgram->setUniformValue(ModelViewProjectionMatrixShadowOutputUniform, orthoMatrix);
-    ShadowOutputProgram->setUniformValue(TextureUnitShadowOutputUniform, 0);
-    ShadowOutputProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
-    glBindTexture(GL_TEXTURE_2D, ShadowBufferFramebuffer->texture());
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    TextureGeometryBuffer.release();
-    ShadowOutputProgram->disableAttributeArray(vVertexShadow);
-    ShadowOutputProgram->release();
+    glDepthMask(false);
+
+    if(lookingDown) { drawFramebuffer(ShadowBufferFramebuffer, modelView); }
+    drawFramebuffer(CompassFramebuffer);
+
+    glDepthMask(true);
     glEnable(GL_DEPTH_TEST);
+
+//    //Draw the shadow
+//    QMatrix4x4 orthoMatrix;
+//    orthoMatrix.ortho(-1.0, 4.0, -1.0, 4.0, -1.0, 1.0);
+
+//    QMatrix4x4 rotationMatrix;
+//    rotationMatrix.translate(0.5, 0.5, 0.0);
+//    rotationMatrix.rotate(RotationQuaternion);
+//    rotationMatrix.translate(-0.5, -0.5, 0.0);
+
+//    glViewport(0, 0, camera()->viewport().width(), camera()->viewport().height());
+
+//    ShadowOutputProgram->bind();
+//    ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);
+//    ShadowOutputProgram->setUniformValue(ModelViewProjectionMatrixShadowOutputUniform, orthoMatrix * rotationMatrix);
+//    ShadowOutputProgram->setUniformValue(TextureUnitShadowOutputUniform, 0);
+//    ShadowOutputProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
+//    glBindTexture(GL_TEXTURE_2D, ShadowBufferFramebuffer->texture());
+//    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+//    glBindTexture(GL_TEXTURE_2D, 0);
+//    TextureGeometryBuffer.release();
+//    ShadowOutputProgram->disableAttributeArray(vVertexShadow);
+//    ShadowOutputProgram->release();
+
+
 
 
 }
@@ -90,7 +119,7 @@ void cwGLCompass::setRotation(QQuaternion quaternion)
  * @brief cwGLCompass::rotation
  * @return Get's the rotation quaterion
  */
-QQuaternion cwGLCompass::rotation() const
+QQuaternion cwGLCompass::modelView() const
 {
     return RotationQuaternion;
 }
@@ -244,6 +273,7 @@ void cwGLCompass::initializeCompassShader()
     vVertex = Program->attributeLocation("qt_Vertex");
     vColor = Program->attributeLocation("qt_Color");
     ModelViewProjectionMatrixUniform = Program->uniformLocation("qt_ModelViewProjectionMatrix");
+    IgnoreColorUniform = Program->uniformLocation("ignoreColor");
 }
 
 /**
@@ -251,17 +281,27 @@ void cwGLCompass::initializeCompassShader()
  */
 void cwGLCompass::initializeFramebuffer()
 {
-    CompassFramebuffer = new QOpenGLFramebufferObject(QSize(512, 512), GL_TEXTURE_2D);
-    ShadowBufferFramebuffer = new QOpenGLFramebufferObject(QSize(512, 512), GL_TEXTURE_2D);
+    //If it support multi-sampling
+    QOpenGLFramebufferObjectFormat formatCompass;
+    formatCompass.setAttachment(QOpenGLFramebufferObject::Depth);
+    formatCompass.setMipmap(true);
+    CompassFramebuffer = new QOpenGLFramebufferObject(QSize(512, 512), formatCompass);
+    ShadowBufferFramebuffer = new QOpenGLFramebufferObject(QSize(512, 512), formatCompass);
     HorizonalShadowBufferFramebuffer = new QOpenGLFramebufferObject(QSize(512, 512), GL_TEXTURE_2D);
 
-    ShadowBufferFramebuffer->bind();
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    ShadowBufferFramebuffer->release();
+    glBindTexture(GL_TEXTURE_2D, CompassFramebuffer->texture());
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-    HorizonalShadowBufferFramebuffer->bind();
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    HorizonalShadowBufferFramebuffer->release();
+    glBindTexture(GL_TEXTURE_2D, ShadowBufferFramebuffer->texture());
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 /**
@@ -284,7 +324,7 @@ void cwGLCompass::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints
     rotationMatrix.setToIdentity();
 
     QVector3D black(0.0, 0.0, 0.0); //Black
-    QVector3D white(0.0, 0.0, 0.0); //0.9, 0.9, 0.9); //White
+    QVector3D white(0.9, 0.9, 0.9); //White
     QVector3D currentColor;
 
     //Which side should be black first
@@ -336,49 +376,14 @@ void cwGLCompass::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints
  */
 void cwGLCompass::drawShadow()
 {
-    QMatrix4x4 orthoMatrix;
-    orthoMatrix.ortho(-1.6, 1.6, -1.6, 1.6, -1.5, 1.5);
-
-    QMatrix4x4 rotationMatrix;
-    rotationMatrix.rotate(RotationQuaternion);
-
-    QMatrix4x4 shadowMatrix;
-    shadowMatrix.translate(0.0, 0.0, -1.0);
-    shadowMatrix.scale(1.25, 1.25, 1.0);
-
-    //----------- Draw the before framebuffer ---------------
-    Program->bind();
-    Program->enableAttributeArray(vVertex);
-    Program->enableAttributeArray(vColor);
-
-    Program->setUniformValue(ModelViewProjectionMatrixUniform, orthoMatrix * rotationMatrix);
-
-    CompassVertexBuffer.bind();
-
-    Program->setAttributeBuffer(vVertex, GL_FLOAT, offsetof(CompassGeometry, Position), 3, sizeof(CompassGeometry));
-    Program->setAttributeBuffer(vColor, GL_FLOAT, offsetof(CompassGeometry, Color), 3, sizeof(CompassGeometry));
 
     //Save the current framebuffer so we can rebind it
     GLint previousFramebuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
-    ShadowBufferFramebuffer->bind();
+    drawCompass(ShadowBufferFramebuffer, false);
 
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT); // | GL_DEPTH_BUFFER_BIT);
-    glViewport(0, 0, ShadowBufferFramebuffer->width(), ShadowBufferFramebuffer->height());
-
-    //Draw compass rose
-    glDrawArrays(GL_TRIANGLES, 0, NumberOfPoints);
-
-//    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
-
-    CompassVertexBuffer.release();
-
-    Program->disableAttributeArray(vVertex);
-    Program->disableAttributeArray(vColor);
-    Program->release();
-
+    QMatrix4x4 orthoMatrix;
     orthoMatrix.setToIdentity();
     orthoMatrix.ortho(0.0, 1.0, 0.0, 1.0, 0.0, 1.0);
 
@@ -418,3 +423,82 @@ void cwGLCompass::drawShadow()
     YShadowProgram->disableAttributeArray(vVertexShadow);
     YShadowProgram->release();
 }
+
+/**
+ * @brief cwGLCompass::drawCompass
+ *
+ * Draw the compass
+ */
+void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withColors, QMatrix4x4 rotation)
+{
+    //Save the current framebuffer so we can rebind it
+    GLint previousFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
+    framebuffer->bind();
+
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(0, 0, framebuffer->width(), framebuffer->height());
+
+    QMatrix4x4 orthoMatrix;
+    orthoMatrix.ortho(-1.6, 1.6, -1.6, 1.6, -1.5, 1.5);
+
+    QMatrix4x4 shadowMatrix;
+    shadowMatrix.translate(0.0, 0.0, -1.0);
+    shadowMatrix.scale(1.25, 1.25, 1.0);
+
+    //----------- Draw the before framebuffer ---------------
+    Program->bind();
+    Program->enableAttributeArray(vVertex);
+    Program->enableAttributeArray(vColor);
+
+    Program->setUniformValue(ModelViewProjectionMatrixUniform, orthoMatrix * rotation);
+    Program->setUniformValue(IgnoreColorUniform, !withColors);
+
+    CompassVertexBuffer.bind();
+
+    Program->setAttributeBuffer(vVertex, GL_FLOAT, offsetof(CompassGeometry, Position), 3, sizeof(CompassGeometry));
+    Program->setAttributeBuffer(vColor, GL_FLOAT, offsetof(CompassGeometry, Color), 3, sizeof(CompassGeometry));
+
+    //Draw compass rose
+    glDrawArrays(GL_TRIANGLES, 0, NumberOfPoints);
+
+    CompassVertexBuffer.release();
+
+    Program->disableAttributeArray(vVertex);
+    Program->disableAttributeArray(vColor);
+    Program->release();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
+}
+
+void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView)
+{
+    //Draw the shadow
+    QMatrix4x4 orthoMatrix;
+    orthoMatrix.ortho(-1.0, 4.0, -1.0, 4.0, -1.0, 1.0);
+
+    glViewport(0, 0, camera()->viewport().width(), camera()->viewport().height());
+
+    ShadowOutputProgram->bind();
+    ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);
+    ShadowOutputProgram->setUniformValue(ModelViewProjectionMatrixShadowOutputUniform, orthoMatrix * modelView);
+    ShadowOutputProgram->setUniformValue(TextureUnitShadowOutputUniform, 0);
+    TextureGeometryBuffer.bind();
+    ShadowOutputProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
+    glBindTexture(GL_TEXTURE_2D, framebuffer->texture());
+
+    if(framebuffer->format().mipmap()) {
+        qDebug() << "Generating mipmap for " << framebuffer->texture();
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    TextureGeometryBuffer.release();
+    ShadowOutputProgram->disableAttributeArray(vVertexShadow);
+    ShadowOutputProgram->release();
+
+}
+

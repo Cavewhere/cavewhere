@@ -72,13 +72,13 @@ varying highp vec2 qt_TexCoord0;
 //}
 
 
-const float sigma = 7.0;     // The sigma value for the gaussian function: higher value means more blur
+const float sigma = 5.0;     // The sigma value for the gaussian function: higher value means more blur
                          // A good value for 9x9 is around 3 to 5
                          // A good value for 7x7 is around 2.5 to 4
                          // A good value for 5x5 is around 2 to 3.5
                          // ... play around with this based on what you need :)
 
-const float blurSize = 0.002;  // This should usually be equal to
+const float blurSize = 0.008;  // This should usually be equal to
                          // 1.0f / texture_pixel_width for a horizontal blur, and
                          // 1.0f / texture_pixel_height for a vertical blur.
 
@@ -89,10 +89,10 @@ const float pi = 3.14159265;
 // The following are all mutually exclusive macros for various
 // seperable blurs of varying kernel size
 #if defined(VERTICAL_BLUR_9)
-const float numBlurPixelsPerSide = 11.0;
+const float numBlurPixelsPerSide = 8.0;
 const vec2  blurMultiplyVec      = vec2(0.0, 1.0);
 #elif defined(HORIZONTAL_BLUR_9)
-const float numBlurPixelsPerSide = 11.0;
+const float numBlurPixelsPerSide = 8.0;
 const vec2  blurMultiplyVec      = vec2(1.0, 0.0);
 #elif defined(VERTICAL_BLUR_7)
 const float numBlurPixelsPerSide = 3.0;
