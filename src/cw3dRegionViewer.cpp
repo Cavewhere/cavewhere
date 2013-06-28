@@ -75,14 +75,15 @@ void cw3dRegionViewer::paint(QPainter * painter) {
 
     painter->beginNativePainting();
 
+    glClearColor(1.0, 1.0, 1.0, 1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
     Plane->draw();
     Compass->draw();
-
     glDisable(GL_DEPTH_TEST);
 
     painter->endNativePainting();
