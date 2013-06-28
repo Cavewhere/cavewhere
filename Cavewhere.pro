@@ -165,7 +165,9 @@ SOURCES += src/main.cpp \
     src/cwImageValidator.cpp \
     src/cwGLResources.cpp \
     src/cwGLImageItemResources.cpp \
-    src/cwQMLReload.cpp
+    src/cwQMLReload.cpp \
+    src/cwQuaternionRotation3d.cpp \
+    src/cwGLCompass.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -323,7 +325,9 @@ HEADERS  += \
     src/cwImageValidator.h \
     src/cwGLResources.h \
     src/cwGLImageItemResources.h \
-    src/cwQMLReload.h
+    src/cwQMLReload.h \
+    src/cwQuaternionRotation3d.h \
+    src/cwGLCompass.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
@@ -446,7 +450,10 @@ OTHER_FILES += \
     src/qt.proto \
     docs/FileFormatDocumentation.txt \
     Cavewhere.rc \
-    qml/RemoveAskBox.qml
+    qml/RemoveAskBox.qml \
+    qml/Compass3d.qml \
+    shaders/compass.vsh \
+    shaders/Compass.fsh
 
 RESOURCES += \
     resources.qrc
@@ -488,6 +495,7 @@ macx {
 unix {
     LIBS += -lz -L/usr/lib -L/usr/local/lib -lsquish -lprotobuf
     QMAKE_LFLAGS += '-Wl,-rpath,\'/usr/local/lib\''
+    INCLUDEPATH += /usr/local/include
 
 #    INCLUDEPATH += \
 #    /home/blitz/Qt5.0.0beta1/Desktop/Qt/5.0.0-beta1/gcc_64/include/QtOpenGL \

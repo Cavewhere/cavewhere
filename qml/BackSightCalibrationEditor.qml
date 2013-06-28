@@ -1,6 +1,6 @@
 // import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
-import QtDesktop 1.0 as Desktop
+import QtQuick.Controls 1.0 as Controls
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
@@ -104,7 +104,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-            Desktop.CheckBox {
+            Controls.CheckBox {
                 id: compassCorrected
                 text: "Corrected <i>Compass</i>"
 
@@ -134,7 +134,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-            Desktop.CheckBox {
+            Controls.CheckBox {
                 id: clinoCorrected
                 text: "Corrected <i>Clino</i>"
 

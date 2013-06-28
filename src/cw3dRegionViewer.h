@@ -13,6 +13,7 @@ class cwGLLinePlot;
 class cwGLScraps;
 class cwGLGridPlane;
 class cwGeometryItersecter;
+class cwGLCompass;
 
 class cw3dRegionViewer : public cwGLRenderer
 {
@@ -20,6 +21,7 @@ class cw3dRegionViewer : public cwGLRenderer
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
     Q_PROPERTY(cwGLScraps* scraps READ scraps)
+    Q_PROPERTY(QQuaternion rotation READ rotation NOTIFY rotationChanged)
 
 public:
 
@@ -37,6 +39,7 @@ public:
     cwProjection orthoProjection() const;
     cwProjection perspectiveProjection() const;
 
+    QQuaternion rotation() const;
 
 public slots:
     cwGLLinePlot* linePlot();
@@ -56,6 +59,8 @@ public slots:
 signals:
     void cavingRegionChanged();
     void resized();
+
+    void rotationChanged();
 
 private slots:
     //Interaction events
@@ -82,11 +87,15 @@ private:
     float Pitch;
     float Azimuth;
 
+    const static float DefaultPitch;
+    const static float DefaultAzimuth;
+
     //The terrain that's rendered
     cwGLTerrain* Terrain;
     cwGLLinePlot* LinePlot;
     cwGLScraps* Scraps;
     cwGLGridPlane* Plane;
+    cwGLCompass* Compass;
 
     QTimer* RotationInteractionTimer;
     QPoint TimeoutRotationPosition;
@@ -112,6 +121,9 @@ private:
 //    cwProjection perspectiveProjection() const;
 
     void setupInteractionTimers();
+
+    void setCurrentRotation(QQuaternion rotation);
+    QQuaternion defaultRotation() const;
 
 };
 

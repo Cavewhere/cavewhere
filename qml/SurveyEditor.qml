@@ -1,6 +1,6 @@
 import QtQuick 2.0
 import Cavewhere 1.0
-import QtDesktop 1.0
+import QtQuick.Controls 1.0
 import "Utils.js" as Utils
 
 Rectangle {
@@ -52,7 +52,7 @@ Rectangle {
     //            surveyEditorScollbar.value = contentY
     //        }
 
-    ScrollArea {
+    ScrollView {
         id: scrollAreaId
 
         anchors.top: parent.top
@@ -100,8 +100,8 @@ Rectangle {
                 height: contentHeight
                 width: view.contentWidth
 
-                viewportX: scrollAreaId.contentX;
-                viewportY: scrollAreaId.contentY;
+//                viewportX: scrollAreaId.contentX;
+//                viewportY: scrollAreaId.contentY;
                 viewportWidth: scrollAreaId.width;
                 viewportHeight: scrollAreaId.height;
 

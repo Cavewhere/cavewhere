@@ -195,9 +195,9 @@ double cwGeometryItersecter::nearestNeighbor(const QRay3D &ray) const
 
         for(int i = 0; i < 8; i++) {
             const QVector3D& point = points.at(i);
-            double distance = ray.distanceTo(point);
+            double distance = ray.distance(point);
             if(distance < bestDistance) {
-                double t = ray.fromPoint(point);
+                double t = ray.projectedDistance(point);
                 if(t > 0.0) {
                     bestDistance = distance;
                     bestT = t;

@@ -19,6 +19,7 @@
 #include "cwGLGridPlane.h"
 #include "cwGeometryItersecter.h"
 #include "cwProjection.h"
+#include "cwGLCompass.h"
 
 //Qt includes
 #include <QPainter>
@@ -32,6 +33,9 @@
 #include <QFontMetrics>
 #include <QRay3D>
 #include <QGLFunctions>
+
+const float cw3dRegionViewer::DefaultPitch = 90.0f;
+const float cw3dRegionViewer::DefaultAzimuth = 0.0f;
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     cwGLRenderer(parent)
@@ -47,11 +51,13 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     LinePlot = new cwGLLinePlot();
     Scraps = new cwGLScraps();
     Plane = new cwGLGridPlane();
+    Compass = new cwGLCompass();
 
     Terrain->setScene(this);
     LinePlot->setScene(this);
     Scraps->setScene(this);
     Plane->setScene(this);
+    Compass->setScene(this);
 
 #ifndef Q_OS_WIN
     setAntialiasing(true);
@@ -75,6 +81,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     Scraps->draw();
     LinePlot->draw();
     Plane->draw();
+    Compass->draw();
 
     glDisable(GL_DEPTH_TEST);
 
@@ -92,6 +99,7 @@ void cw3dRegionViewer::initializeGL() {
     Scraps->initialize();
     LinePlot->initialize();
     Plane->initialize();
+    Compass->initialize();
 }
 
 
@@ -231,16 +239,13 @@ void cw3dRegionViewer::zoom(QPoint position, int delta) {
   \brief Resets the view
   */
 void cw3dRegionViewer::resetView() {
-    Pitch = 90.0;
-    Azimuth = 0.0;
+    Pitch = DefaultPitch;
+    Azimuth = DefaultAzimuth;
 
-    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
-    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
-
-    CurrentRotation =  pitchQuat * azimuthQuat;
+    setCurrentRotation(defaultRotation());
 
     QMatrix4x4 viewMatrix;
-    viewMatrix.translate(QVector3D(0.0, 0.0, -2));
+    viewMatrix.translate(QVector3D(0.0, 0.0, -50));
     Camera->setViewMatrix(viewMatrix);
 
     update();
@@ -270,9 +275,9 @@ void cw3dRegionViewer::rotateLastPosition()
 
     QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
     QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
-    QQuaternion newQuat =  pitchQuat * azimuthQuat;
+    QQuaternion newQuat = pitchQuat * azimuthQuat;
     QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
-    CurrentRotation = newQuat;
+    setCurrentRotation(newQuat);
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(LastMouseGlobalPosition);
@@ -385,6 +390,20 @@ void cw3dRegionViewer::setupInteractionTimers()
     connect(TranslateTimer, &QTimer::timeout, this, &cw3dRegionViewer::translateLastPosition);
 }
 
+void cw3dRegionViewer::setCurrentRotation(QQuaternion rotation)
+{
+    CurrentRotation = rotation;
+    Compass->setRotation(this->rotation());
+    emit rotationChanged();
+}
+
+QQuaternion cw3dRegionViewer::defaultRotation() const
+{
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, DefaultPitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, DefaultAzimuth);
+    return pitchQuat * azimuthQuat;
+}
+
 /**
  * @brief cw3dRegionViewer::zoomPerspective
  *
@@ -470,3 +489,9 @@ cwProjection cw3dRegionViewer::perspectiveProjection() const
     return projection;
 }
 
+/**
+Gets rotation current global rotation
+*/
+QQuaternion cw3dRegionViewer::rotation() const {
+    return defaultRotation().conjugate() * CurrentRotation;
+}

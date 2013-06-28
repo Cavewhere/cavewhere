@@ -1,5 +1,5 @@
 import QtQuick 2.0
-import QtDesktop 1.0 as Desktop
+import QtQuick.Controls 1.0 as Controls
 import Cavewhere 1.0
 
 DataBox {

@@ -1,5 +1,5 @@
 import QtQuick 2.0
-import QtDesktop 1.0 as Desktop
+import QtQuick.Controls 1.0 as Controls
 
 Item {
 
@@ -49,7 +49,7 @@ Item {
         visible: contentsVisible
     }
 
-    Desktop.CheckBox {
+    Controls.CheckBox {
         id: checkbox
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6

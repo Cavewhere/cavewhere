@@ -66,6 +66,7 @@
 #include "cwMatrix4x4Animation.h"
 #include "cwImageValidator.h"
 #include "cwQMLReload.h"
+#include "cwQuaternionRotation3d.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -139,6 +140,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwMatrix4x4Animation>("Cavewhere", 1, 0, "Matrix4x4Animation");
     qmlRegisterType<cwImageValidator>("Cavewhere", 1, 0, "ImageValidator");
     qmlRegisterType<cwQMLReload>("Cavewhere", 1, 0, "QMLReload");
+    qmlRegisterType<cwQuaternionRotation3d>("Cavewhere", 1, 0, "QuaternionRotation3d");
 
     qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
 }

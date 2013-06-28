@@ -1,5 +1,5 @@
 import QtQuick 2.0
-import QtDesktop 1.0 as Desktop
+import QtQuick.Controls 1.0 as Controls
 import Cavewhere 1.0
 
 Item {
@@ -74,7 +74,7 @@ Item {
         anchors.fill: autoTransformCheckBox
     }
 
-    Desktop.CheckBox {
+    Controls.CheckBox {
         id: autoTransformCheckBox
         text: "Auto Calculate"
         anchors.left: checkBoxGroup.left

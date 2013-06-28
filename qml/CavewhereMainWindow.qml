@@ -64,6 +64,12 @@ Rectangle {
                 viewer: terrainRendererId
             }
 
+            Compass3d {
+                id: compassId
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                rotation: terrainRendererId.rotation
+            }
 
         }
 
