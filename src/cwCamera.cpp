@@ -121,9 +121,6 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      float y = viewport.y() + (viewport.height() * (point.y() + 1.0)) / 2.0;
      float z = (point.z() + 1.0) / 2.0;
 
-     //Flip the y
-     y = viewport.y() + (viewport.height() - y);
-
      return QVector3D(x, y, z);
  }
 

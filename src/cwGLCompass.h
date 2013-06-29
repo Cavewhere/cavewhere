@@ -10,7 +10,7 @@ class QOpenGLShaderProgram;
 class QOpenGLFramebufferObject;
 #include <QOpenGLBuffer>
 #include <QQuaternion>
-
+#include <QPainter>
 
 /**
  * @brief The cwGLCompass class
@@ -105,6 +105,8 @@ private:
     void drawShadow();
     void drawCompass(QOpenGLFramebufferObject *framebuffer, bool withColors, QMatrix4x4 modelView = QMatrix4x4());
     void drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView = QMatrix4x4());
+    void labelCompass(QMatrix4x4 modelView);
+    void drawLabel(QVector3D pos, QString label, QFont font, QPainter* painter, cwCamera* camera);
 
 //    void drawStar(Direction top);
 

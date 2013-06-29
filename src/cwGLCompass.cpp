@@ -9,8 +9,9 @@
 #include <QColor>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFramebufferObject>
-
-
+#include <QOpenGLPaintDevice>
+#include <QPainterPath>
+#include <QPainter>
 
 cwGLCompass::cwGLCompass(QObject *parent) :
     cwGLObject(parent)
@@ -60,11 +61,17 @@ void cwGLCompass::draw()
     modelView.translate(-0.5, -0.5, 0.0);
     modelView.translate(0.0, 0.0, -0.25);
 
+    //Save the current framebuffer so we can rebind it
+    GLint previousFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
     //Draw to the framebuffers
     if(lookingDown) { drawShadow(); }
     drawCompass(CompassFramebuffer, true, rotationMatrix);
+    labelCompass(rotationMatrix);
 
     //Draw framebuffers to rendering buffer
+    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
     glEnable (GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
@@ -75,31 +82,6 @@ void cwGLCompass::draw()
 
     glDepthMask(true);
     glEnable(GL_DEPTH_TEST);
-
-//    //Draw the shadow
-//    QMatrix4x4 orthoMatrix;
-//    orthoMatrix.ortho(-1.0, 4.0, -1.0, 4.0, -1.0, 1.0);
-
-//    QMatrix4x4 rotationMatrix;
-//    rotationMatrix.translate(0.5, 0.5, 0.0);
-//    rotationMatrix.rotate(RotationQuaternion);
-//    rotationMatrix.translate(-0.5, -0.5, 0.0);
-
-//    glViewport(0, 0, camera()->viewport().width(), camera()->viewport().height());
-
-//    ShadowOutputProgram->bind();
-//    ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);
-//    ShadowOutputProgram->setUniformValue(ModelViewProjectionMatrixShadowOutputUniform, orthoMatrix * rotationMatrix);
-//    ShadowOutputProgram->setUniformValue(TextureUnitShadowOutputUniform, 0);
-//    ShadowOutputProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
-//    glBindTexture(GL_TEXTURE_2D, ShadowBufferFramebuffer->texture());
-//    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-//    glBindTexture(GL_TEXTURE_2D, 0);
-//    TextureGeometryBuffer.release();
-//    ShadowOutputProgram->disableAttributeArray(vVertexShadow);
-//    ShadowOutputProgram->release();
-
-
 
 
 }
@@ -376,11 +358,6 @@ void cwGLCompass::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints
  */
 void cwGLCompass::drawShadow()
 {
-
-    //Save the current framebuffer so we can rebind it
-    GLint previousFramebuffer;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
-
     drawCompass(ShadowBufferFramebuffer, false);
 
     QMatrix4x4 orthoMatrix;
@@ -417,7 +394,6 @@ void cwGLCompass::drawShadow()
     glBindTexture(GL_TEXTURE_2D, HorizonalShadowBufferFramebuffer->texture());
     glClear(GL_COLOR_BUFFER_BIT);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer); //Bind the original
 
     glBindTexture(GL_TEXTURE_2D, 0);
     YShadowProgram->disableAttributeArray(vVertexShadow);
@@ -431,10 +407,6 @@ void cwGLCompass::drawShadow()
  */
 void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withColors, QMatrix4x4 rotation)
 {
-    //Save the current framebuffer so we can rebind it
-    GLint previousFramebuffer;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
-
     framebuffer->bind();
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
@@ -442,7 +414,7 @@ void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withCo
     glViewport(0, 0, framebuffer->width(), framebuffer->height());
 
     QMatrix4x4 orthoMatrix;
-    orthoMatrix.ortho(-1.6, 1.6, -1.6, 1.6, -1.5, 1.5);
+    orthoMatrix.ortho(-2.0, 2.0, -2.0, 2.0, -1.5, 1.5);
 
     QMatrix4x4 shadowMatrix;
     shadowMatrix.translate(0.0, 0.0, -1.0);
@@ -469,10 +441,15 @@ void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withCo
     Program->disableAttributeArray(vVertex);
     Program->disableAttributeArray(vColor);
     Program->release();
-
-    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
 }
 
+/**
+ * @brief cwGLCompass::drawFramebuffer
+ * @param framebuffer
+ * @param modelView
+ *
+ * This rasterizes a framebuffer to a rectangle
+ */
 void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView)
 {
     //Draw the shadow
@@ -500,5 +477,68 @@ void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix
     ShadowOutputProgram->disableAttributeArray(vVertexShadow);
     ShadowOutputProgram->release();
 
+}
+
+/**
+ * @brief cwGLCompass::labelCompass
+ * @param modelView
+ *
+ * This function labels the compass framebuffer
+ */
+void cwGLCompass::labelCompass(QMatrix4x4 modelView)
+{
+    CompassFramebuffer->bind();
+
+    QOpenGLPaintDevice paintDevice(CompassFramebuffer->size());
+    QPainter painter(&paintDevice);
+
+    cwCamera camera;
+    camera.setViewport(QRect(QPoint(), CompassFramebuffer->size()));
+    camera.setViewMatrix(modelView);
+    float pos = 0.63;
+    float northScale = 1.40;
+
+    QFont font;
+    font.setPixelSize(50);
+    font.setBold(true);
+    painter.setPen(Qt::black);
+    drawLabel(QVector3D(0.0, pos * northScale, 0.0), "N", font, &painter, &camera);
+    font.setPixelSize(38);
+    font.setBold(false);
+    drawLabel(QVector3D(0.0, -pos, 0.0), "S", font, &painter, &camera);
+    drawLabel(QVector3D(pos, 0.0, 0.0), "E", font, &painter, &camera);
+    drawLabel(QVector3D(-pos, 0.0, 0.0), "W", font, &painter, &camera);
+
+    CompassFramebuffer->release();
+}
+
+/**
+ * @brief cwGLCompass::drawLabel
+ * @param pos
+ * @param label
+ * @param font
+ * @param painter
+ */
+void cwGLCompass::drawLabel(QVector3D pos, QString label, QFont font, QPainter *painter, cwCamera* camera)
+{
+    QFontMetrics metric(font);
+    QRectF northRect = metric.boundingRect(label);
+
+    QPointF northPosition = camera->project(pos);
+
+    painter->setFont(font);
+    QPainterPath textPath;
+    textPath.addText(northPosition - northRect.center(), font, label);
+
+    QPen pen;
+    pen.setWidth(10);
+    pen.setColor(Qt::white);
+
+//    painter->setBrush(Qt::black);
+    painter->setPen(pen);
+    painter->drawPath(textPath);
+
+    painter->setPen(Qt::black);
+    painter->drawText(northPosition.toPoint() - northRect.center(), label);
 }
 

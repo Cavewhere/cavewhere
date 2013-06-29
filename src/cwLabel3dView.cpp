@@ -197,5 +197,7 @@ void cwLabel3dView::updatePositions()
 void cwLabel3dView::TransformPoint::operator()(cwLabel3dItem& label) {
     QVector3D normalizeSceenCoordinate =  ModelViewProjection * label.position();
     QVector3D viewportCoord = cwCamera::mapNormalizeScreenToGLViewport(normalizeSceenCoordinate, Viewport);
+    float y = Viewport.y() + (Viewport.height() - viewportCoord.y());
+    viewportCoord.setY(y);
     label.setPosition(viewportCoord);
 }
