@@ -24,9 +24,6 @@ class cwGLCompass : public cwGLObject
 public:
     explicit cwGLCompass(QObject *parent = 0);
     
-//    void setCamera(cwCamera* camera);
-//    cwCamera* camera() const;
-
     void initialize();
     void draw();
 

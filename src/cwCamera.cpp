@@ -4,6 +4,7 @@ cwCamera::cwCamera(QObject *parent) :
     QObject(parent)
 {
     ViewProjectionMatrixIsDirty = true;
+    connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
 }
 
 /**
@@ -137,4 +138,21 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
       QVector3D projectedPoint = modelViewProjectionMatrix * point;
       QVector3D viewportQt = mapNormalizeScreenToGLViewport(projectedPoint);
       return mapToQtViewport(viewportQt.toPointF());
+ }
+
+ /**
+  * @brief cwCamera::pixelsPerMeter
+  * @return double - pixels per meter
+  *
+  * This is a utility function for the ScaleBar.  This shows the number of pixels per
+  * meter on the screen.  This function only make sense if the projection in an orthoganal
+  * one.
+  */
+ double cwCamera::pixelsPerMeter() const {
+     QVector3D meter(1.0, 0.0, 0.0);
+     QVector3D normalizeScreen = projectionMatrix().mapVector(meter);
+     QVector3D pixelVector = mapNormalizeScreenToGLViewport(normalizeScreen);
+     pixelVector = pixelVector - QVector3D(viewport().width() / 2.0, viewport().height() / 2.0, 0.0);
+     qDebug() << "Pixels per meter:" << pixelVector.x();
+     return pixelVector.x();
  }

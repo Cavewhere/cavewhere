@@ -64,11 +64,15 @@ Rectangle {
                 viewer: terrainRendererId
             }
 
-            Compass3d {
-                id: compassId
-                anchors.right: parent.right
+            ScaleBar {
+                id: scaleBar
                 anchors.bottom: parent.bottom
-                rotation: terrainRendererId.rotation
+                anchors.bottomMargin: 20
+                anchors.right: parent.right
+                anchors.rightMargin: 20
+                visible: cameraSettings.orthoProjection.enabled
+//                projection: cameraSettings.orthoProjection
+                camera: terrainRendererId.camera
             }
 
         }

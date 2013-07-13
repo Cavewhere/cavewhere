@@ -5,6 +5,8 @@ Item {
     id: cameraSettingsId
 
     property GLTerrainRenderer viewer
+    property alias orthoProjection: orthoProjectionId
+    property alias perspectiveProjection: perspectiveProjectionId
 
     ToggleSlider {
         id: sliderId

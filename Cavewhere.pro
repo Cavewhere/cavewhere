@@ -451,14 +451,14 @@ OTHER_FILES += \
     docs/FileFormatDocumentation.txt \
     Cavewhere.rc \
     qml/RemoveAskBox.qml \
-    qml/Compass3d.qml \
     shaders/compass/compass.vsh \
     shaders/compass/compass.fsh \
     shaders/compass/compassShadowX.vsh \
     shaders/compass/compassShadow.fsh \
     shaders/compass/compassShadowY.vsh \
     shaders/compass/compassShadowOutput.vsh \
-    shaders/compass/compassShadowOutput.fsh
+    shaders/compass/compassShadowOutput.fsh \
+    qml/ScaleBar.qml
 
 RESOURCES += \
     resources.qrc

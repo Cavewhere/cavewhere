@@ -12,6 +12,10 @@
 class cwCamera : public QObject
 {
     Q_OBJECT
+
+    //Only valid with ortho projection
+    Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
+
 public:
     explicit cwCamera(QObject *parent = 0);
 
@@ -21,6 +25,7 @@ public:
     Q_INVOKABLE void setCustomProjection(QMatrix4x4 matrix);
     void setProjection(cwProjection projection);
     cwProjection projection() const;
+    QMatrix4x4 projectionMatrix() const;
 
     void setViewMatrix(QMatrix4x4 matrix);
     QMatrix4x4 viewMatrix() const;
@@ -36,14 +41,18 @@ public:
     QPointF project(QVector3D point, QMatrix4x4 viewMatrix, QMatrix4x4 modelMatrix) const;
 
     static QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point, const QRect& viewport);
-    QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
+    Q_INVOKABLE QVector3D mapNormalizeScreenToGLViewport(const QVector3D& point) const;
     QPoint mapToGLViewport(QPoint qtViewportPoint) const;
     QPointF mapToQtViewport(QPointF glViewportPoint) const;
+
+    //Utility functions
+    double pixelsPerMeter() const; //Only valid with ortho projection
 
 signals:
     void viewportChanged();
     void projectionChanged();
     void viewChanged();
+    void pixelsPerMeterChanged();
 
 public slots:
 
@@ -91,6 +100,11 @@ inline QRect cwCamera::viewport() const {
   */
 inline cwProjection cwCamera::projection() const {
     return Projection;
+}
+
+inline QMatrix4x4 cwCamera::projectionMatrix() const
+{
+    return projection().matrix();
 }
 
 /**

@@ -371,7 +371,6 @@ void cwGLCompass::drawShadow()
     XShadowProgram->setUniformValue(TextureUnitShadow, 0);
     TextureGeometryBuffer.bind();
     XShadowProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
-    qDebug() << "XShadow texture:" << ShadowBufferFramebuffer->texture();
     glBindTexture(GL_TEXTURE_2D, ShadowBufferFramebuffer->texture());
 
     HorizonalShadowBufferFramebuffer->bind(); //Bind the horizontal framebuffer for blurring in the xDirection
@@ -388,7 +387,6 @@ void cwGLCompass::drawShadow()
     YShadowProgram->setUniformValue(ModelViewProjectionMatrixShadowUniform, orthoMatrix);
     YShadowProgram->setUniformValue(TextureUnitShadow, 0);
     YShadowProgram->setAttributeBuffer(vVertexShadow, GL_FLOAT, 0, 2, 0);
-    qDebug() << "YShadow texture:" << HorizonalShadowBufferFramebuffer->texture();
 
     ShadowBufferFramebuffer->bind(); //Reuse the shadowbufferframebuffer
     glBindTexture(GL_TEXTURE_2D, HorizonalShadowBufferFramebuffer->texture());
@@ -467,7 +465,6 @@ void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix
     glBindTexture(GL_TEXTURE_2D, framebuffer->texture());
 
     if(framebuffer->format().mipmap()) {
-        qDebug() << "Generating mipmap for " << framebuffer->texture();
         glGenerateMipmap(GL_TEXTURE_2D);
     }
 

@@ -72,6 +72,8 @@ void cwGLLinePlot::initializeBuffers() {
 }
 
 void cwGLLinePlot::draw() {
+    glLineWidth(1.0);
+
     ShaderProgram->bind();
 
     ShaderProgram->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
