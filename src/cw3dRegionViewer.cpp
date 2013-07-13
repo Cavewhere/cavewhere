@@ -19,7 +19,6 @@
 #include "cwGLGridPlane.h"
 #include "cwGeometryItersecter.h"
 #include "cwProjection.h"
-#include "cwGLCompass.h"
 
 //Qt includes
 #include <QPainter>
@@ -51,13 +50,11 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     LinePlot = new cwGLLinePlot();
     Scraps = new cwGLScraps();
     Plane = new cwGLGridPlane();
-    Compass = new cwGLCompass();
 
     Terrain->setScene(this);
     LinePlot->setScene(this);
     Scraps->setScene(this);
     Plane->setScene(this);
-    Compass->setScene(this);
 
 #ifndef Q_OS_WIN
     setAntialiasing(true);
@@ -75,15 +72,16 @@ void cw3dRegionViewer::paint(QPainter * painter) {
 
     painter->beginNativePainting();
 
-    glClearColor(1.0, 1.0, 1.0, 1.0);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+    glEnable (GL_BLEND);
+    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
     Plane->draw();
-    Compass->draw();
     glDisable(GL_DEPTH_TEST);
 
     painter->endNativePainting();
@@ -100,7 +98,6 @@ void cw3dRegionViewer::initializeGL() {
     Scraps->initialize();
     LinePlot->initialize();
     Plane->initialize();
-    Compass->initialize();
 }
 
 
@@ -394,7 +391,6 @@ void cw3dRegionViewer::setupInteractionTimers()
 void cw3dRegionViewer::setCurrentRotation(QQuaternion rotation)
 {
     CurrentRotation = rotation;
-    Compass->setRotation(this->rotation());
     emit rotationChanged();
 }
 

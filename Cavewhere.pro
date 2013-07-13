@@ -167,7 +167,7 @@ SOURCES += src/main.cpp \
     src/cwGLImageItemResources.cpp \
     src/cwQMLReload.cpp \
     src/cwQuaternionRotation3d.cpp \
-    src/cwGLCompass.cpp
+    src/cwCompassItem.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -327,7 +327,7 @@ HEADERS  += \
     src/cwGLImageItemResources.h \
     src/cwQMLReload.h \
     src/cwQuaternionRotation3d.h \
-    src/cwGLCompass.h
+    src/cwCompassItem.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \

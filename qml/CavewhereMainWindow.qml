@@ -1,5 +1,6 @@
 import QtQuick 2.0
 //import Cavewhere 1.0
+import QtGraphicalEffects 1.0
 
 Rectangle {
     id: rootQMLItem
@@ -43,6 +44,22 @@ Rectangle {
 
         property int currentPosition: height * mainSideBar.pageShownReal
 
+        Item {
+//            color: "#86CBFF"
+            anchors.fill: terrainRendererId
+
+            RadialGradient {
+                anchors.fill: parent
+                verticalOffset: parent.height * .6
+                verticalRadius: parent.height * 2
+                horizontalRadius: parent.width * 2.5
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "#F3F8FB" } //"#3986C1" }
+                    GradientStop { position: 0.5; color: "#92D7F8" }
+                }
+            }
+        }
+
 //       Replace with the view
         GLTerrainRenderer {
             id: terrainRendererId
@@ -58,23 +75,6 @@ Rectangle {
                 linePlotManager.setGLLinePlot(terrainRendererId.linePlot);
                 scrapManager.setGLScraps(terrainRendererId.scraps);
             }
-
-            CameraSettings {
-                id: cameraSettings
-                viewer: terrainRendererId
-            }
-
-            ScaleBar {
-                id: scaleBar
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 20
-                anchors.right: parent.right
-                anchors.rightMargin: 20
-                visible: cameraSettings.orthoProjection.enabled
-//                projection: cameraSettings.orthoProjection
-                camera: terrainRendererId.camera
-            }
-
         }
 
         DataMainPage {

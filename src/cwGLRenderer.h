@@ -29,6 +29,7 @@ class cwGLRenderer : public QQuickPaintedItem
 {
     Q_OBJECT
     Q_PROPERTY(cwCamera* camera READ camera NOTIFY cameraChanged)
+    Q_PROPERTY(cwShaderDebugger* shaderDebugger READ shaderDebugger NOTIFY shaderDebuggerChanged)
 
 public:
     explicit cwGLRenderer(QQuickItem *parent = 0);
@@ -41,6 +42,7 @@ public:
 signals:
     void glWidgetChanged();
     void cameraChanged();
+    void shaderDebuggerChanged();
 
 protected:
     virtual void initializeGL() {}

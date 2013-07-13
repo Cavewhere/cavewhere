@@ -119,7 +119,7 @@ void cwGLGridPlane::initializeShaders() {
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     UniformModelMatrix = Program->uniformLocation("ModelMatrix");
 
-    Program->setUniformValue("colorBG", Qt::gray);
+//    Program->setUniformValue("colorBG", Qt::gray);
 }
 
 /**

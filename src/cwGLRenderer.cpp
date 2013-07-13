@@ -32,7 +32,7 @@ cwGLRenderer::cwGLRenderer(QQuickItem *parent) :
 
     setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
     setAntialiasing(false);
-    setOpaquePainting(true);
+    setOpaquePainting(false);
 }
 
 cwGLRenderer::~cwGLRenderer() {

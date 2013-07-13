@@ -31,6 +31,38 @@ RegionViewer {
         region: renderer.cavingRegion
     }
 
+    CameraSettings {
+        id: cameraSettings
+        viewer: renderer
+    }
+
+    Row {
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 20
+        anchors.right: parent.right
+        anchors.rightMargin: 20
+        spacing: 10
+
+        ScaleBar {
+            id: scaleBar
+            visible: cameraSettings.orthoProjection.enabled
+            camera: terrainRendererId.camera
+            anchors.bottom: compassItemId.bottom
+            maxTotalWidth: renderer.width * 0.50
+            minTotalWidth: renderer.height * 0.2
+        }
+
+        CompassItem {
+            id: compassItemId
+            width: 175
+            height: width
+            camera: renderer.camera
+            rotation: renderer.rotation
+            shaderDebugger: renderer.shaderDebugger
+            antialiasing: false
+        }
+    }
+
     states: [
         State {
             name: "panState"

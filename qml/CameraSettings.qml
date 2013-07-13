@@ -4,7 +4,7 @@ import Cavewhere 1.0
 Item {
     id: cameraSettingsId
 
-    property GLTerrainRenderer viewer
+    property RegionViewer viewer
     property alias orthoProjection: orthoProjectionId
     property alias perspectiveProjection: perspectiveProjectionId
 

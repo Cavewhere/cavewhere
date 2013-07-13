@@ -67,6 +67,8 @@
 #include "cwImageValidator.h"
 #include "cwQMLReload.h"
 #include "cwQuaternionRotation3d.h"
+#include "cwCompassItem.h"
+#include "cwShaderDebugger.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -141,6 +143,8 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwImageValidator>("Cavewhere", 1, 0, "ImageValidator");
     qmlRegisterType<cwQMLReload>("Cavewhere", 1, 0, "QMLReload");
     qmlRegisterType<cwQuaternionRotation3d>("Cavewhere", 1, 0, "QuaternionRotation3d");
+    qmlRegisterType<cwCompassItem>("Cavewhere", 1, 0, "CompassItem");
+    qmlRegisterType<cwShaderDebugger>("Cavewhere", 1, 0, "ShaderDebugger");
 
     qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
 }

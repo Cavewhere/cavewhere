@@ -13,7 +13,6 @@ class cwGLLinePlot;
 class cwGLScraps;
 class cwGLGridPlane;
 class cwGeometryItersecter;
-class cwGLCompass;
 
 class cw3dRegionViewer : public cwGLRenderer
 {
@@ -95,7 +94,6 @@ private:
     cwGLLinePlot* LinePlot;
     cwGLScraps* Scraps;
     cwGLGridPlane* Plane;
-    cwGLCompass* Compass;
 
     QTimer* RotationInteractionTimer;
     QPoint TimeoutRotationPosition;

@@ -153,6 +153,5 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      QVector3D normalizeScreen = projectionMatrix().mapVector(meter);
      QVector3D pixelVector = mapNormalizeScreenToGLViewport(normalizeScreen);
      pixelVector = pixelVector - QVector3D(viewport().width() / 2.0, viewport().height() / 2.0, 0.0);
-     qDebug() << "Pixels per meter:" << pixelVector.x();
      return pixelVector.x();
  }
