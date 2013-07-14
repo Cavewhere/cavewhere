@@ -48,8 +48,7 @@ Window {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: {
-                var d = new Date;
-                return "© Philip Schuchardt, 2013"
+                return "Copyright 2013 Philip Schuchardt"
             }
         }
     }
