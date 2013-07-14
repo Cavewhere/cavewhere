@@ -8,6 +8,7 @@ class cwCamera;
 //Qt includes
 class QOpenGLShaderProgram;
 class QOpenGLFramebufferObject;
+#include <QQuickPaintedItem>
 #include <QOpenGLBuffer>
 #include <QQuaternion>
 #include <QPainter>
@@ -17,22 +18,37 @@ class QOpenGLFramebufferObject;
  *
  * This draws 3d compass on the screen.
  */
-class cwGLCompass : public cwGLObject
+class cwCompassItem : public QQuickPaintedItem
 {
     Q_OBJECT
 
+    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(QQuaternion rotation READ rotation WRITE setRotation NOTIFY rotationChanged)
+    Q_PROPERTY(cwShaderDebugger* shaderDebugger READ shaderDebugger WRITE setShaderDebugger NOTIFY shaderDebuggerChanged)
+
 public:
-    explicit cwGLCompass(QObject *parent = 0);
-    
+    explicit cwCompassItem(QQuickItem *parent = 0);
+
+    cwCamera* camera() const;
+    void setCamera(cwCamera* camera);
+
+    cwShaderDebugger* shaderDebugger() const;
+    void setShaderDebugger(cwShaderDebugger* shaderDebugger);
+
     void initialize();
     void draw();
 
+    QQuaternion rotation() const;
     void setRotation(QQuaternion quaternion);
     QQuaternion modelView() const;
 
+    void paint(QPainter *painter);
 
 signals:
-    
+    void cameraChanged();
+    void rotationChanged();
+    void shaderDebuggerChanged();
+
 public slots:
     
 private:
@@ -55,7 +71,8 @@ private:
         Bottom
     };
 
-//    cwCamera* Camera;
+    cwCamera* Camera;
+    cwShaderDebugger* ShaderDebugger; //!<
 
     QOpenGLShaderProgram* Program;
     QOpenGLShaderProgram* XShadowProgram;
@@ -69,6 +86,7 @@ private:
     QOpenGLFramebufferObject* HorizonalShadowBufferFramebuffer;
 
 //    QOpenGLBuffer CompassIndexes;
+    bool Initialized;
 
     //Shader attributes for the normal compass shader
     int vVertex;
@@ -88,7 +106,7 @@ private:
 
     int NumberOfPoints;
 
-    QQuaternion RotationQuaternion;
+    QQuaternion Rotation;
 
     void initializeGeometry();
     void initializeShaders();
@@ -113,5 +131,26 @@ private slots:
 
 
 };
+
+/**
+Gets camera
+*/
+inline cwCamera* cwCompassItem::camera() const {
+    return Camera;
+}
+
+/**
+Gets rotation
+*/
+inline QQuaternion cwCompassItem::rotation() const {
+    return Rotation;
+}
+
+/**
+Gets shaderDebugger
+*/
+inline cwShaderDebugger* cwCompassItem::shaderDebugger() const {
+    return ShaderDebugger;
+}
 
 #endif // CWGLCOMPASS_H

@@ -29,10 +29,10 @@ Rectangle {
             property string icon: "qrc:icons/caves-64x64.png"
         }
 
-        Text {
-            property string label: "Surface"
-            property string icon: "qrc:icons/surface.png"
-            text: "This is the Surface page"
-        }
+//        Text {
+//            property string label: "Surface"
+//            property string icon: "qrc:icons/surface.png"
+//            text: "This is the Surface page"
+//        }
     }
 }

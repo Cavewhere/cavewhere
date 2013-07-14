@@ -1,14 +1,20 @@
 import QtQuick 2.0
 //import Cavewhere 1.0
 import QtGraphicalEffects 1.0
+import QtQuick.Controls 1.0
 
-Rectangle {
-    id: rootQMLItem
+ApplicationWindow {
+    visible: true
     width: 1000
     height: 800
-//    anchors.fill: parent;
+    //    anchors.fill: parent;
 
-    FileButtonAndMenu {
+    Item {
+        id: rootQMLItem
+        anchors.fill: parent
+    }
+
+    menuBar: FileButtonAndMenu {
         id: fileMenuButton
 
         terrainRenderer: terrainRendererId
@@ -21,7 +27,7 @@ Rectangle {
         anchors.bottomMargin: -1
         anchors.left: parent.left
         anchors.leftMargin: 0
-        anchors.top: fileMenuButton.bottom
+        anchors.top: parent.top
         anchors.topMargin: -1
 
 
@@ -45,7 +51,7 @@ Rectangle {
         property int currentPosition: height * mainSideBar.pageShownReal
 
         Item {
-//            color: "#86CBFF"
+            //            color: "#86CBFF"
             anchors.fill: terrainRendererId
 
             RadialGradient {
@@ -60,11 +66,11 @@ Rectangle {
             }
         }
 
-//       Replace with the view
+        //       Replace with the view
         GLTerrainRenderer {
             id: terrainRendererId
-//            visible: mainSideBar.pageShown == "view"
-//            glWidget: mainGLWidget
+            //            visible: mainSideBar.pageShown == "view"
+            //            glWidget: mainGLWidget
             cavingRegion: region
             width:  parent.width
             height: parent.height
@@ -79,7 +85,7 @@ Rectangle {
 
         DataMainPage {
             id: dataMainPageId
-        //visible: mainSideBar.pageShown == "data"
+            //visible: mainSideBar.pageShown == "data"
             width:  parent.width
             height: parent.height
             x: 0;
@@ -110,3 +116,4 @@ Rectangle {
         id: globalMenuMouseHandler
     }
 }
+

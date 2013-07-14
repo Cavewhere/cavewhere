@@ -56,11 +56,11 @@ Rectangle {
             onButtonIsTroggled: parent.currentIndex = 1           
         }
 
-        SideBarButton {
-            id: draftButton
-            text: "Draft"
-            troggled: 2 == parent.currentIndex
-            onButtonIsTroggled: parent.currentIndex = 2
-        }
+//        SideBarButton {
+//            id: draftButton
+//            text: "Draft"
+//            troggled: 2 == parent.currentIndex
+//            onButtonIsTroggled: parent.currentIndex = 2
+//        }
     }
 }

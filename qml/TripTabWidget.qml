@@ -6,11 +6,11 @@ DataTabWidget {
     property Trip currentTrip:  null
 
 
-    Text {
-        property string label: "Overview"
-        property string icon:  "qrc:icons/dataOverview.png"
-        text: "This is the Trip overview page"
-    }
+//    Text {
+//        property string label: "Overview"
+//        property string icon:  "qrc:icons/dataOverview.png"
+//        text: "This is the Trip overview page"
+//    }
 
     //Comment this out, because it's slow
     SurveyEditor {
@@ -34,16 +34,16 @@ DataTabWidget {
     }
 
 
-    Text {
-        property string label: "Pictures"
-        property string icon: "qrc:icons/pictures.png"
-        text: "This is the Pictures page"
-    }
+//    Text {
+//        property string label: "Pictures"
+//        property string icon: "qrc:icons/pictures.png"
+//        text: "This is the Pictures page"
+//    }
 
-    Text {
-        property string label: "Log"
-        property string icon: "qrc:icons/log.png"
-        text: "This is the Log page"
-    }
+//    Text {
+//        property string label: "Log"
+//        property string icon: "qrc:icons/log.png"
+//        text: "This is the Log page"
+//    }
 
 }

@@ -10,7 +10,7 @@
 #include <QImageReader>
 #include <QOpenGLFunctions>
 #include <QMessageBox>
-
+#include <QQmlApplicationEngine>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -69,20 +69,24 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
-    QQuickView view;
-    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
+    QUrl mainWindowPath = mainWindowSourcePath();
+    QQmlApplicationEngine applicationEnigine;
+//    applicationEnigine.rootContext();
 
-    QSurfaceFormat format = view.format();
-    format.setSamples(4);
+//    QQuickView view;
+//    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
 
-    cwRootData* rootData = new cwRootData(&view);
-    rootData->setQuickView(&view);
+//    QSurfaceFormat format = view.format();
+//    format.setSamples(4);
+
+    cwRootData* rootData = new cwRootData(); //&view);
+//    rootData->setQuickView(&view);
 //    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
 //    rootData->project()->load(QDir::homePath() + "/test.cw");
-    QQmlContext* context = view.rootContext();
+    QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
 
     context->setContextObject(rootData);
-    context->setContextProperty("mainWindow", &view);
+//    context->setContextProperty("mainWindow", &view);
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();
@@ -93,13 +97,14 @@ int main(int argc, char *argv[])
     //Allow the engine to quit the application
     QObject::connect(context->engine(), SIGNAL(quit()), &a, SLOT(quit()));
 
-    QUrl mainWindowPath = mainWindowSourcePath();
+//    QUrl mainWindowPath = mainWindowSourcePath();
 
     if(!mainWindowPath.isEmpty()) {
-        view.setFormat(format);
-        view.setResizeMode(QQuickView::SizeRootObjectToView);
-        view.setSource(mainWindowPath);
-        view.show();
+        applicationEnigine.load(mainWindowPath);
+        //        view.setFormat(format);
+//        view.setResizeMode(QQuickView::SizeRootObjectToView);
+//        view.setSource(mainWindowPath);
+//        view.show();
     } else {
         QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
                                               "Cavewhere Failed to Load Main Window",

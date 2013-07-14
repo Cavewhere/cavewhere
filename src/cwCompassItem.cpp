@@ -1,5 +1,5 @@
 //Our includes
-#include "cwGLCompass.h"
+#include "cwCompassItem.h"
 #include "cwGLShader.h"
 #include "cwGlobalDirectory.h"
 #include "cwShaderDebugger.h"
@@ -13,53 +13,45 @@
 #include <QPainterPath>
 #include <QPainter>
 
-cwGLCompass::cwGLCompass(QObject *parent) :
-    cwGLObject(parent)
-//    Camera(NULL)
+cwCompassItem::cwCompassItem(QQuickItem* item) :
+    QQuickPaintedItem(item),
+    Camera(NULL),
+    ShaderDebugger(NULL),
+    Initialized(false)
 {
+    setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);
 }
-
-//void cwGLCompass::setCamera(cwCamera *camera)
-//{
-
-//}
-
-///**
-// * @brief cwGLCompass::camera
-// * @return
-// */
-//cwCamera *cwGLCompass::camera() const
-//{
-
-//}
 
 /**
  * @brief cwGLCompass::initialize
  */
-void cwGLCompass::initialize()
+void cwCompassItem::initialize()
 {
     initializeGeometry();
     initializeShaders();
     initializeFramebuffer();
+    Initialized = true;
 
 }
 
 /**
  * @brief cwGLCompass::draws
  */
-void cwGLCompass::draw()
+void cwCompassItem::draw()
 {
 
+    glEnable(GL_DEPTH_TEST);
+
     QMatrix4x4 rotationMatrix;
-    rotationMatrix.rotate(RotationQuaternion);
+    rotationMatrix.rotate(Rotation);
 
     bool lookingDown = rotationMatrix.map(QVector3D(0.0, 0.0, 1.0)).z() > 0.0;
 
     QMatrix4x4 modelView;
     modelView.translate(0.5, 0.5, 0.0);
-    modelView.rotate(RotationQuaternion);
+    modelView.rotate(Rotation);
     modelView.translate(-0.5, -0.5, 0.0);
-    modelView.translate(0.0, 0.0, -0.25);
+    modelView.translate(0.0, 0.0, -0.1);
 
     //Save the current framebuffer so we can rebind it
     GLint previousFramebuffer;
@@ -92,24 +84,42 @@ void cwGLCompass::draw()
  *
  * Set's the rotation quaterion
  */
-void cwGLCompass::setRotation(QQuaternion quaternion)
+void cwCompassItem::setRotation(QQuaternion rotation)
 {
-    RotationQuaternion = quaternion;
+    if(Rotation != rotation) {
+        Rotation = rotation;
+        update();
+        emit rotationChanged();
+    }
 }
 
 /**
  * @brief cwGLCompass::rotation
  * @return Get's the rotation quaterion
  */
-QQuaternion cwGLCompass::modelView() const
+QQuaternion cwCompassItem::modelView() const
 {
-    return RotationQuaternion;
+    return Rotation;
+}
+
+void cwCompassItem::paint(QPainter *painter)
+{
+    painter->beginNativePainting();
+
+    if(!Initialized) {
+        initialize();
+        Initialized = true;
+    }
+
+    draw();
+
+    painter->endNativePainting();
 }
 
 /**
  * @brief cwGLCompass::initializeGeometry
  */
-void cwGLCompass::initializeGeometry()
+void cwCompassItem::initializeGeometry()
 {
     QVector<CompassGeometry> allPoints;
 
@@ -140,7 +150,7 @@ void cwGLCompass::initializeGeometry()
 /**
  * @brief cwGLCompass::initializeShaders
  */
-void cwGLCompass::initializeShaders()
+void cwCompassItem::initializeShaders()
 {
     initializeCompassShader();
     initializeShadowShader();
@@ -150,7 +160,7 @@ void cwGLCompass::initializeShaders()
 /**
  * @brief cwGLCompass::initializeShadowShader
  */
-void cwGLCompass::initializeShadowShader()
+void cwCompassItem::initializeShadowShader()
 {
     //Setup the shadow X direction shader
     cwGLShader* vertexXShader = new cwGLShader(QOpenGLShader::Vertex);
@@ -205,7 +215,7 @@ void cwGLCompass::initializeShadowShader()
 /**
  * @brief cwGLCompass::initializeShodowOutputShader
  */
-void cwGLCompass::initializeShadowOutputShader()
+void cwCompassItem::initializeShadowOutputShader()
 {
     //Setup the normal shader
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
@@ -232,7 +242,7 @@ void cwGLCompass::initializeShadowOutputShader()
     ModelViewProjectionMatrixShadowOutputUniform = ShadowOutputProgram->uniformLocation("qt_ModelViewProjectionMatrix");
 }
 
-void cwGLCompass::initializeCompassShader()
+void cwCompassItem::initializeCompassShader()
 {
     //Setup the normal shader
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
@@ -261,7 +271,7 @@ void cwGLCompass::initializeCompassShader()
 /**
  * @brief cwGLCompass::initializeFramebuffer
  */
-void cwGLCompass::initializeFramebuffer()
+void cwCompassItem::initializeFramebuffer()
 {
     //If it support multi-sampling
     QOpenGLFramebufferObjectFormat formatCompass;
@@ -291,8 +301,8 @@ void cwGLCompass::initializeFramebuffer()
  * @param triangles
  * @param colors
  */
-void cwGLCompass::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints,
-                                       cwGLCompass::Direction direction)
+void cwCompassItem::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints,
+                                       cwCompassItem::Direction direction)
 {
     QVector<QVector3D> defaultPoints; //Draw with line strip
     defaultPoints.append(QVector3D(0.0, 0.0, 0.15));
@@ -356,7 +366,7 @@ void cwGLCompass::generateStarGeometry(QVector<CompassGeometry> &trianglesPoints
  *
  * This creates the shadow for the compass
  */
-void cwGLCompass::drawShadow()
+void cwCompassItem::drawShadow()
 {
     drawCompass(ShadowBufferFramebuffer, false);
 
@@ -403,7 +413,7 @@ void cwGLCompass::drawShadow()
  *
  * Draw the compass
  */
-void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withColors, QMatrix4x4 rotation)
+void cwCompassItem::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withColors, QMatrix4x4 rotation)
 {
     framebuffer->bind();
 
@@ -448,13 +458,13 @@ void cwGLCompass::drawCompass(QOpenGLFramebufferObject* framebuffer, bool withCo
  *
  * This rasterizes a framebuffer to a rectangle
  */
-void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView)
+void cwCompassItem::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix4x4 modelView)
 {
     //Draw the shadow
     QMatrix4x4 orthoMatrix;
-    orthoMatrix.ortho(-1.0, 4.0, -1.0, 4.0, -1.0, 1.0);
+    orthoMatrix.ortho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
 
-    glViewport(0, 0, camera()->viewport().width(), camera()->viewport().height());
+    glViewport(0, 0, width(), height()); //camera()->viewport().width(), camera()->viewport().height());
 
     ShadowOutputProgram->bind();
     ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);
@@ -482,7 +492,7 @@ void cwGLCompass::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatrix
  *
  * This function labels the compass framebuffer
  */
-void cwGLCompass::labelCompass(QMatrix4x4 modelView)
+void cwCompassItem::labelCompass(QMatrix4x4 modelView)
 {
     CompassFramebuffer->bind();
 
@@ -516,7 +526,7 @@ void cwGLCompass::labelCompass(QMatrix4x4 modelView)
  * @param font
  * @param painter
  */
-void cwGLCompass::drawLabel(QVector3D pos, QString label, QFont font, QPainter *painter, cwCamera* camera)
+void cwCompassItem::drawLabel(QVector3D pos, QString label, QFont font, QPainter *painter, cwCamera* camera)
 {
     QFontMetrics metric(font);
     QRectF northRect = metric.boundingRect(label);
@@ -539,3 +549,22 @@ void cwGLCompass::drawLabel(QVector3D pos, QString label, QFont font, QPainter *
     painter->drawText(northPosition.toPoint() - northRect.center(), label);
 }
 
+/**
+Sets camera
+*/
+void cwCompassItem::setCamera(cwCamera* camera) {
+    if(Camera != camera) {
+        Camera = camera;
+        emit cameraChanged();
+    }
+}
+
+/**
+Sets shaderDebugger
+*/
+void cwCompassItem::setShaderDebugger(cwShaderDebugger* shaderDebugger) {
+    if(ShaderDebugger != shaderDebugger) {
+        ShaderDebugger = shaderDebugger;
+        emit shaderDebuggerChanged();
+    }
+}

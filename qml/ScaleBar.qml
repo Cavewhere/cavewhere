@@ -59,14 +59,18 @@ Item {
     Repeater {
         model: 2
         Rectangle {
-            width: childrenRect.width
-            height: childrenRect.height
+            id: rect2Id
             y: -height
             x: -width / 2 + index * privateData.smallCellWidth * 2
             radius: 3
             Text {
                 text: index * privateData.meterPerCell / 2
                 anchors.centerIn: parent
+
+                onTextChanged:  {
+                    rect2Id.width = width;
+                    rect2Id.height = height;
+                }
             }
         }
     }
@@ -75,8 +79,7 @@ Item {
         model: 5
 
         Rectangle {
-            width: childrenRect.width
-            height: childrenRect.height
+            id: rect1Id
             y: -height
             x: -width / 2 + (index + 1) * privateData.cellWidth
             radius: 3
@@ -88,6 +91,11 @@ Item {
                     }
                     return text
                 }
+                onTextChanged:  {
+                    rect1Id.width = width;
+                    rect1Id.height = height;
+                }
+
                 anchors.centerIn: parent
             }
         }

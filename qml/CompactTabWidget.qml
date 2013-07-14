@@ -44,7 +44,7 @@ Rectangle {
                 model: pageArea.children.length
 
                 delegate: Rectangle {
-                    width:  header.width / pageArea.children.length;
+                    width:  Math.min(header.width / pageArea.children.length, 150);
                     height: header.height
 
                     color: "#00000000"
