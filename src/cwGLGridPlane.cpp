@@ -22,7 +22,7 @@
 cwGLGridPlane::cwGLGridPlane(QObject* parent) :
     cwGLObject(parent),
     Plane(QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0))),
-    Extent(10000.0),
+    Extent(3000.0), //3km in the negitive and positive direction from origin
     Program(NULL)
 {
     updateModelMatrix();
