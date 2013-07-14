@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #include "cwSurvexGlobalData.h"
 #include "cwSurvexBlockData.h"
 #include "cwCave.h"

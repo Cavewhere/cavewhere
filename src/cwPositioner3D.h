@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWPOSITIONER3D_H
 #define CWPOSITIONER3D_H
 

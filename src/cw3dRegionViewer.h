@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CW3DREGIONVIEWER_H
 #define CW3DREGIONVIEWER_H
 

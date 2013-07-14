@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 attribute highp vec3 qt_Vertex;
 attribute highp vec3 qt_Color;
 

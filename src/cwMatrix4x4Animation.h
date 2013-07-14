@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWMATRIX4X4ANIMATION_H
 #define CWMATRIX4X4ANIMATION_H
 

@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #include "cwGlobalIcons.h"
 
 QPixmapCache::Key cwGlobalIcons::Cave;

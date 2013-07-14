@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWSURVEYCHUNKGROUPVIEW_H
 #define CWSURVEYCHUNKGROUPVIEW_H
 

@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 //Our includes
 #include "cwSurveyChunkGroupView.h"
 #include "cwTrip.h"

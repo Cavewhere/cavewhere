@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #include "cwScrapPointView.h"
 #include "cwScrap.h"
 #include "cwScrapItem.h"

@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWQUATERNIONROTATION3D_H
 #define CWQUATERNIONROTATION3D_H
 

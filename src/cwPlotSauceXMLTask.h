@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWPLOTSAUCEXMLTASK_H
 #define CWPLOTSAUCEXMLTASK_H
 

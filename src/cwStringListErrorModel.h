@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWSTRINGLISTERRORMODEL_H
 #define CWSTRINGLISTERRORMODEL_H
 

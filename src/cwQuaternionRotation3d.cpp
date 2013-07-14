@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #include "cwQuaternionRotation3d.h"
 
 cwQuaternionRotation3d::cwQuaternionRotation3d(QObject *parent) :

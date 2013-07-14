@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWABSRTACTPOINTMANAGER_H
 #define CWABSRTACTPOINTMANAGER_H
 

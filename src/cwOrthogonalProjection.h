@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWORTHOGONALPROJECTION_H
 #define CWORTHOGONALPROJECTION_H
 

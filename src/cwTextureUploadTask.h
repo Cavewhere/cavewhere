@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWTEXTUREUPLOADTASK_H
 #define CWTEXTUREUPLOADTASK_H
 

@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWSTATIONPOSITIONMODEL_H
 #define CWSTATIONPOSITIONMODEL_H
 

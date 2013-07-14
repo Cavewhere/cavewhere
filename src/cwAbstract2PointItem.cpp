@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #include "cwAbstract2PointItem.h"
 
 cwAbstract2PointItem::cwAbstract2PointItem(QQuickItem *parent) :

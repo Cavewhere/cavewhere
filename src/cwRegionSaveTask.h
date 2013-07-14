@@ -1,3 +1,10 @@
+/**************************************************************************
+**
+**    Copyright (C) 2013 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
 #ifndef CWXMLPROJECTSAVETASK_H
 #define CWXMLPROJECTSAVETASK_H
 
