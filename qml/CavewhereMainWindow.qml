@@ -7,6 +7,7 @@ ApplicationWindow {
     visible: true
     width: 1000
     height: 800
+    title: "Cavewhere - " + version
     //    anchors.fill: parent;
 
     Item {
@@ -19,6 +20,14 @@ ApplicationWindow {
 
         terrainRenderer: terrainRendererId
         dataPage: dataMainPageId
+
+        onOpenAboutWindow:  {
+            loadAboutWindowId.setSource("AboutWindow.qml")
+        }
+    }
+
+    Loader {
+        id: loadAboutWindowId
     }
 
     MainSideBar {

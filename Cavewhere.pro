@@ -458,7 +458,8 @@ OTHER_FILES += \
     shaders/compass/compassShadowY.vsh \
     shaders/compass/compassShadowOutput.vsh \
     shaders/compass/compassShadowOutput.fsh \
-    qml/ScaleBar.qml
+    qml/ScaleBar.qml \
+    qml/AboutWindow.qml
 
 RESOURCES += \
     resources.qrc

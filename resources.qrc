@@ -68,5 +68,6 @@
         <file>src/cavewhere.proto</file>
         <file>icons/svg/red-cancel.svg</file>
         <file>3dModels/compass.3ds</file>
+        <file>icons/svg/cave.svg</file>
     </qresource>
 </RCC>

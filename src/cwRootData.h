@@ -21,6 +21,10 @@ class cwSurveyImportManager;
 class cwItemSelectionModel;
 class cwQMLReload;
 
+#ifndef CAVEWHERE_VERSION
+#define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
+#endif
+
 class cwRootData : public QObject
 {
     Q_OBJECT
@@ -38,6 +42,7 @@ class cwRootData : public QObject
     Q_PROPERTY(QUndoStack* undoStack READ undoStack NOTIFY undoStackChanged)
     Q_PROPERTY(QQuickView* quickView READ quickView WRITE setQuickView NOTIFY quickWindowChanged)
     Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
+    Q_PROPERTY(QString version READ version NOTIFY versionChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -52,6 +57,7 @@ public:
     QUndoStack* undoStack() const;
     QQuickView* quickView() const;
     cwQMLReload* qmlReloader() const;
+    QString version() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -72,7 +78,7 @@ signals:
     void qmlReloaderChanged();
     void defaultTripChanged();
     void defaultTripCalibrationChanged();
-
+    void versionChanged();
 public slots:
 
 private:
@@ -179,6 +185,16 @@ Gets qmlReloader
 
 inline cwQMLReload* cwRootData::qmlReloader() const {
     return QMLReloader;
+}
+
+/**
+ * @brief cwRootData::version
+ * @return
+ *
+ * Returns the current version of cavewhere
+ */
+inline QString cwRootData::version() const {
+    return CAVEWHERE_VERSION;
 }
 
 #endif // CWGLOBALQMLDATA_H

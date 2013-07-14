@@ -6,6 +6,8 @@ MenuBar {
     property var terrainRenderer; //For taking screenshots
     property DataMainPage dataPage;
 
+    signal openAboutWindow;
+
     Menu {
         title: "File"
 
@@ -36,6 +38,11 @@ MenuBar {
                 dataPage.resetSideBar() //Fixes a crash when a new project is loaded
                 project.load();
             }
+        }
+
+        MenuItem {
+            text: "About Cavewhere"
+            onTriggered: openAboutWindow();
         }
 
         MenuItem {
