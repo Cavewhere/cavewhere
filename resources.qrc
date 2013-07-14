@@ -69,5 +69,6 @@
         <file>icons/svg/red-cancel.svg</file>
         <file>3dModels/compass.3ds</file>
         <file>icons/svg/cave.svg</file>
+        <file>LICENSE.txt</file>
     </qresource>
 </RCC>

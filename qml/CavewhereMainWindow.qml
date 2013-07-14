@@ -9,13 +9,16 @@ import QtQuick 2.0
 //import Cavewhere 1.0
 import QtGraphicalEffects 1.0
 import QtQuick.Controls 1.0
+import QtQuick.Window 2.0
 
 ApplicationWindow {
-    visible: true
+    visible: license.hasReadLicenseAgreement
     width: 1000
     height: 800
     title: "Cavewhere - " + version
     //    anchors.fill: parent;
+
+    LicenseWindow { }
 
     Item {
         id: rootQMLItem

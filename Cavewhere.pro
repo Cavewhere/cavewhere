@@ -167,7 +167,8 @@ SOURCES += src/main.cpp \
     src/cwGLImageItemResources.cpp \
     src/cwQMLReload.cpp \
     src/cwQuaternionRotation3d.cpp \
-    src/cwCompassItem.cpp
+    src/cwCompassItem.cpp \
+    src/cwLicenseAgreement.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -327,7 +328,8 @@ HEADERS  += \
     src/cwGLImageItemResources.h \
     src/cwQMLReload.h \
     src/cwQuaternionRotation3d.h \
-    src/cwCompassItem.h
+    src/cwCompassItem.h \
+    src/cwLicenseAgreement.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
@@ -459,7 +461,10 @@ OTHER_FILES += \
     shaders/compass/compassShadowOutput.vsh \
     shaders/compass/compassShadowOutput.fsh \
     qml/ScaleBar.qml \
-    qml/AboutWindow.qml
+    qml/AboutWindow.qml \
+    LICENSE.txt \
+    qml/LicenseWindow.qml \
+    qml/CavewhereLogo.qml
 
 RESOURCES += \
     resources.qrc

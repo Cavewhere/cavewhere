@@ -13,13 +13,8 @@ Window {
     width: 350
     height: columnId.height + 20
     title: "About"
-
+    color: "#E8E8E8"
     visible: true
-
-    Rectangle {
-        anchors.fill: parent
-        color: "#E8E8E8"
-    }
 
     Column {
         id: columnId
@@ -30,21 +25,8 @@ Window {
 
         spacing: 10
 
-        Row {
+        CavewhereLogo {
             anchors.horizontalCenter: parent.horizontalCenter
-
-            spacing: 10
-
-            Image {
-                id: imageId
-                source: "qrc:/icons/svg/cave.svg"
-            }
-
-            Text {
-                text: "Cavewhere"
-                font.pointSize: 40
-                anchors.verticalCenter: imageId.verticalCenter
-            }
         }
 
         Text {

@@ -27,6 +27,7 @@ class cwSurveyExportManager;
 class cwSurveyImportManager;
 class cwItemSelectionModel;
 class cwQMLReload;
+class cwLicenseAgreement;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -50,6 +51,7 @@ class cwRootData : public QObject
     Q_PROPERTY(QQuickView* quickView READ quickView WRITE setQuickView NOTIFY quickWindowChanged)
     Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
+    Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -65,6 +67,7 @@ public:
     QQuickView* quickView() const;
     cwQMLReload* qmlReloader() const;
     QString version() const;
+    cwLicenseAgreement* license() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -86,6 +89,8 @@ signals:
     void defaultTripChanged();
     void defaultTripCalibrationChanged();
     void versionChanged();
+    void licenseChanged();
+
 public slots:
 
 private:
@@ -99,13 +104,12 @@ private:
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
     QQuickView* QuickView; //!< For exporting the 3d screen to a file
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
+    cwLicenseAgreement* License; //!<
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
 };
-
-
 
 /**
 Gets defaultTrip
@@ -202,6 +206,13 @@ inline cwQMLReload* cwRootData::qmlReloader() const {
  */
 inline QString cwRootData::version() const {
     return CAVEWHERE_VERSION;
+}
+
+/**
+Gets license
+*/
+inline cwLicenseAgreement* cwRootData::license() const {
+    return License;
 }
 
 #endif // CWGLOBALQMLDATA_H

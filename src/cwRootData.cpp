@@ -18,10 +18,12 @@
 #include "cwSurveyImportManager.h"
 #include "cwItemSelectionModel.h"
 #include "cwQMLReload.h"
+#include "cwLicenseAgreement.h"
 
 //Qt includes
 #include <QItemSelectionModel>
 #include <QUndoStack>
+
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
@@ -64,6 +66,9 @@ cwRootData::cwRootData(QObject *parent) :
     QuickView = NULL;
 
     QMLReloader = new cwQMLReload(this);
+
+    License = new cwLicenseAgreement(this);
+    License->setVersion(version());
 }
 
 /**
@@ -83,3 +88,4 @@ void cwRootData::setQuickView(QQuickView* quickView) {
         emit quickWindowChanged();
     }
 }
+
