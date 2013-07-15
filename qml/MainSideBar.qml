@@ -51,6 +51,7 @@ Rectangle {
         SideBarButton {
             id: viewButton
             text: "View"
+            image: "qrc:/icons/viewIcon.png"
             troggled: 0 == parent.currentIndex
             onButtonIsTroggled: parent.currentIndex = 0
         }
