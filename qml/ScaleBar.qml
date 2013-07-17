@@ -78,6 +78,11 @@ Item {
                     rect2Id.width = width;
                     rect2Id.height = height;
                 }
+
+                Component.onCompleted: {
+                    rect2Id.width = width;
+                    rect2Id.height = height;
+                }
             }
         }
     }
