@@ -24,7 +24,8 @@
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
     Project(NULL),
-    MaxScrapId(0)
+    MaxScrapId(0),
+    Visible(true)
 {
 }
 
@@ -34,6 +35,7 @@ void cwGLScraps::initialize() {
 
 void cwGLScraps::draw() {
     if(Scraps.isEmpty()) { return; }
+    if(!visible()) { return; }
 
     Program->bind();
 
@@ -293,5 +295,14 @@ void cwGLScraps::setProject(cwProject* project) {
     }
 }
 
+/**
+    Sets visible make scraps visible / invisible
+*/
+void cwGLScraps::setVisible(bool visible) {
+    if(Visible != visible) {
+        Visible = visible;
+        emit visibleChanged();
+    }
+}
 
 

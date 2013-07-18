@@ -26,11 +26,11 @@ class cwGLScraps : public cwGLObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
+    Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)
 
 public:
     explicit cwGLScraps(QObject *parent = 0);
-
-    Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
 
     cwProject* project() const;
     void setProject(cwProject* project);
@@ -44,8 +44,12 @@ public:
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 
+    bool visible() const;
+    void setVisible(bool visible);
+
 signals:
     void projectChanged();
+    void visibleChanged();
 
 private:
     class PendingScrapCommand {
@@ -115,9 +119,7 @@ private:
     QHash<cwScrap*, GLScrap> Scraps;
     int MaxScrapId;
 
-//    QList<GLScrap> Scraps;
-
-//    QList<cwTriangulatedData> updatedTriangulatedData() const;
+    bool Visible; //!< True if the scraps are visible and false if they're not
 
     void initializeShaders();
 
@@ -128,6 +130,13 @@ Gets project
 */
 inline cwProject* cwGLScraps::project() const {
     return Project;
+}
+
+/**
+Gets visible
+*/
+inline bool cwGLScraps::visible() const {
+    return Visible;
 }
 
 #endif // CWGLSCRAPS_H
