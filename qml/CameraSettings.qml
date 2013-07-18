@@ -48,7 +48,9 @@ Item {
         property real position: sliderId.sliderPos
 
         onPositionChanged: {
-            viewer.camera.setCustomProjection(currentValue)
+            if(position != 0.0 && position != 1.0) {
+                viewer.camera.setCustomProjection(currentValue)
+            }
         }
     }
 }

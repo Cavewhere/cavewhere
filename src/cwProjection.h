@@ -77,6 +77,8 @@ public:
 
 };
 
+Q_DECLARE_METATYPE(cwProjection)
+
 
 /**
  * @brief cwProjection::type
