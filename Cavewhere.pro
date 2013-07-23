@@ -8,7 +8,7 @@ TARGET = Cavewhere
 TEMPLATE = app
 
    #Extra modules
-QT += core sql concurrent xml qml quick 3d opengl
+QT += core sql concurrent xml qml quick 3d opengl svg
 
 OBJECTS_DIR = .obj
 UI_DIR = .ui
