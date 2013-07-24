@@ -12,6 +12,11 @@
 #include <QSharedData>
 #include <QMatrix4x4>
 
+#ifdef Q_OS_WIN32
+#undef far
+#undef near
+#endif
+
 /**
  * @brief The cwProjection class
  *

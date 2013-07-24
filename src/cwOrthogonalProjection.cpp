@@ -6,9 +6,9 @@
 **************************************************************************/
 
 //Our includes
+#include "cw3dRegionViewer.h"
 #include "cwOrthogonalProjection.h"
 #include "cwProjection.h"
-#include "cw3dRegionViewer.h"
 
 cwOrthogonalProjection::cwOrthogonalProjection(QObject *parent) :
     cwAbstractProjection(parent)

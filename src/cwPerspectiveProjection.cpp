@@ -6,8 +6,9 @@
 **************************************************************************/
 
 //Our includes
-#include "cwPerspectiveProjection.h"
 #include "cw3dRegionViewer.h"
+#include "cwPerspectiveProjection.h"
+
 
 cwPerspectiveProjection::cwPerspectiveProjection(QObject *parent) :
     cwAbstractProjection(parent)

@@ -14,69 +14,12 @@
   cwGLShader will automatically set the define for the orinetation of this shader.
  */
 
+#ifdef GL_ES
+precision highp float;
+#endif
+
 uniform sampler2D qt_Texture0;
 varying highp vec2 qt_TexCoord0;
-
-//vec4 horizontalBlur() {
-//    vec4 resultingColor = vec4(0.0);
-
-//    vec2 texturesCoords[3];
-//    texturesCoords[0] = qt_TexCoord0 + vec2(5.0/512.0, 0.0);
-//    texturesCoords[1] = qt_TexCoord0;
-//    texturesCoords[2] = qt_TexCoord0 + vec2(5.0/512.0, 0.0);
-
-//    resultingColor += texture2D(qt_Texture0, texturesCoords[0]) * 0.25;
-//    resultingColor += texture2D(qt_Texture0, texturesCoords[1]) * 0.5;
-//    resultingColor += texture2D(qt_Texture0, texturesCoords[2]) * 0.25;
-
-//    return resultingColor;
-//}
-
-//vec4 verticalBlur() {
-//    return vec4(0.0);
-//}
-
-
-//void main(void)
-//{
-//    gl_FragColor = horizontalBlur(); //+ vec4(1.0, 0.0, 0.0, 1.0);
-
-////    vec4 color = texture2D(qt_Texture0, qt_TexCoord0);
-////    gl_FragColor = texture2D(qt_Texture0, qt_TexCoord0);
-////    vec2 v_blurTexCoords[14];
-////    v_blurTexCoords[ 0] = qt_TexCoord0 + vec2(-0.028, 0.0);
-////    v_blurTexCoords[ 1] = qt_TexCoord0 + vec2(-0.024, 0.0);
-////    v_blurTexCoords[ 2] = qt_TexCoord0 + vec2(-0.020, 0.0);
-////    v_blurTexCoords[ 3] = qt_TexCoord0 + vec2(-0.016, 0.0);
-////    v_blurTexCoords[ 4] = qt_TexCoord0 + vec2(-0.012, 0.0);
-////    v_blurTexCoords[ 5] = qt_TexCoord0 + vec2(-0.008, 0.0);
-////    v_blurTexCoords[ 6] = qt_TexCoord0 + vec2(-0.004, 0.0);
-////    v_blurTexCoords[ 7] = qt_TexCoord0 + vec2( 0.004, 0.0);
-////    v_blurTexCoords[ 8] = qt_TexCoord0 + vec2( 0.008, 0.0);
-////    v_blurTexCoords[ 9] = qt_TexCoord0 + vec2( 0.012, 0.0);
-////    v_blurTexCoords[10] = qt_TexCoord0 + vec2( 0.016, 0.0);
-////    v_blurTexCoords[11] = qt_TexCoord0 + vec2( 0.020, 0.0);
-////    v_blurTexCoords[12] = qt_TexCoord0 + vec2( 0.024, 0.0);
-////    v_blurTexCoords[13] = qt_TexCoord0 + vec2( 0.028, 0.0);
-
-////    gl_FragColor = vec4(0.0);
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 0])*0.0044299121055113265;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 1])*0.00895781211794;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 2])*0.0215963866053;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 3])*0.0443683338718;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 4])*0.0776744219933;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 5])*0.115876621105;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 6])*0.147308056121;
-////    gl_FragColor += texture2D(qt_Texture0, qt_TexCoord0       )*0.159576912161;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 7])*0.147308056121;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 8])*0.115876621105;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[ 9])*0.0776744219933;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[10])*0.0443683338718;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[11])*0.0215963866053;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[12])*0.00895781211794;
-////    gl_FragColor += texture2D(qt_Texture0, v_blurTexCoords[13])*0.0044299121055113265;
-
-//}
 
 
 const float sigma = 5.0;     // The sigma value for the gaussian function: higher value means more blur
@@ -135,16 +78,6 @@ void main() {
   coefficientSum += incrementalGaussian.x;
   incrementalGaussian.xy *= incrementalGaussian.yz;
 
-//  for(float xi = 0; xi < 9.0; xi++) {
-//      for(float yi = 0; yi < 9.0; yi++) {
-//          avgValue += texture2D(qt_Texture0, qt_TexCoord0.xy - xi * blurSize *
-//                                blurMultiplyVec) * incrementalGaussian.x;
-//          avgValue += texture2D(qt_Texture0, qt_TexCoord0.xy + yi * blurSize *
-//                                blurMultiplyVec) * incrementalGaussian.x;
-//          coefficientSum += 2.0 * incrementalGaussian.x;
-//          incrementalGaussian.xy *= incrementalGaussian.yz;
-//      }
-//  }
 
   // Go through the remaining 8 vertical samples (4 on each side of the center)
   for (float i = 1.0; i <= numBlurPixelsPerSide; i++) {

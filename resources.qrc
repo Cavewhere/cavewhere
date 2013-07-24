@@ -67,7 +67,6 @@
         <file>src/qt.proto</file>
         <file>src/cavewhere.proto</file>
         <file>icons/svg/red-cancel.svg</file>
-        <file>3dModels/compass.3ds</file>
         <file>icons/svg/cave.svg</file>
         <file>LICENSE.txt</file>
         <file>icons/viewIcon.png</file>
