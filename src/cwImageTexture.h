@@ -103,6 +103,7 @@ inline cwImage cwImageTexture::image() const {
   This binds the texture to current texture unit
   */
 inline void cwImageTexture::bind() {
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, TextureId);
 }
 

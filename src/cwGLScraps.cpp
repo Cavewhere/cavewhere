@@ -43,7 +43,7 @@ void cwGLScraps::draw() {
     Program->enableAttributeArray(vVertex);
     Program->enableAttributeArray(vScrapTexCoords);
 
-    glEnable(GL_TEXTURE_2D);
+    
 
     foreach(GLScrap scrap, Scraps) {
         Program->setUniformValue(UniformScaleTexCoords, scrap.Texture->scaleTexCoords());

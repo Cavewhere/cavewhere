@@ -12,7 +12,7 @@
 #include <QSharedData>
 #include <QMatrix4x4>
 
-#ifdef Q_OS_WIN32
+#ifdef Q_OS_WIN
 #undef far
 #undef near
 #endif

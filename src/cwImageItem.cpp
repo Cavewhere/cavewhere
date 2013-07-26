@@ -35,7 +35,10 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
 
     ImageProperties->setImage(Image);
 
+#ifndef Q_OS_WIN
     setAntialiasing(true);
+#endif
+
     setOpaquePainting(false);
 }
 
@@ -264,7 +267,6 @@ void cwImageItem::paint(QPainter* painter) {
 
     painter->beginNativePainting();
 
-    glEnable(GL_TEXTURE_2D);
     GLResources->NoteTexture->bind();
     GLResources->GeometryVertexBuffer.bind();
 

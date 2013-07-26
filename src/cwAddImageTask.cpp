@@ -85,7 +85,7 @@ void cwAddImageTask::runTask() {
         return;
     }
 
-    glEnable(GL_TEXTURE_2D);
+    
 
     if(Texture == 0) {
         glGenTextures(1, &Texture);
