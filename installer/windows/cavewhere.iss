@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Cavewhere"
-#define MyAppVersion "0.018"
+#define MyAppVersion "0.03"
 #define MyAppPublisher "Vadose Solutions"
 #define MyAppURL "http://www.cavewhere.com"
 #define MyAppExeName "Cavewhere.exe"
@@ -39,8 +39,9 @@ Source: "..\..\release\cavern.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\release\en_US.msg"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\qml\*"; DestDir: "{app}\qml"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\release\imageformats\*"; DestDir: "{app}\imageformats"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\release\QtDesktop\*"; DestDir: "{app}\QtDesktop"; Excludes: "*d.dll,*.pdb,styleplugin.exp,styleplugin.lib,styleplugin.dll*manifest*,styleplugind*"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\release\QtQuick.2\*"; DestDir: "{app}\QtQuick.2"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\release\QtQuick\*"; DestDir: "{app}\QtQuick"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\release\QtGraphicalEffects\*"; DestDir: "{app}\QtGraphicalEffects"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\release\sqldrivers\*"; DestDir: "{app}\sqldrivers"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\release\platforms\*"; DestDir: "{app}\platforms"; Excludes: "*d.dll,*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
