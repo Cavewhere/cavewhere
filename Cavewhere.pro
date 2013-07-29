@@ -464,7 +464,9 @@ OTHER_FILES += \
     qml/AboutWindow.qml \
     LICENSE.txt \
     qml/LicenseWindow.qml \
-    qml/CavewhereLogo.qml
+    qml/CavewhereLogo.qml \
+    qml/LoadNotesWidget.qml \
+    qml/LoadNotesIconButton.qml
 
 RESOURCES += \
     resources.qrc

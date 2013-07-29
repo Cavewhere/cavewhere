@@ -19,6 +19,11 @@ Rectangle {
     anchors.fill: parent
     anchors.margins: 3
 
+    LoadNotesWidget {
+        id: loadNoteWidgetId
+        onFilesSelected: noteGallery.imagesAdded(images)
+        visible: false
+    }
 
     /**
       For displaying the note as icons in a gallery
@@ -142,6 +147,7 @@ Rectangle {
         anchors.topMargin: 3
         width: 210
         radius: 7
+        visible: true
 
         color: "#4A4F57"
 
@@ -238,14 +244,19 @@ Rectangle {
             }
 
             onCurrentIndexChanged: updateCurrentNote()
-            onCountChanged: updateCurrentNote()
+            onCountChanged: {
+                updateCurrentNote()
+                if(count == 0) {
+                    noteGallery.state = "NO_NOTES"
+                }
+            }
 
         }
     }
 
     ShadowRectangle {
         id: mainButtonArea
-
+        visible: true
         z: 1
 
         anchors.right: parent.right
@@ -295,29 +306,9 @@ Rectangle {
                 }
             }
 
-            IconButton {
-                iconSource: "qrc:icons/addNotes.png"
-                sourceSize: mainToolBar.iconSize
-                text: "Load"
-
-                onClicked: {
-                    fileDialog.open();
-                }
-
-                FileDialogHelper {
-                    id: fileDialog;
-                    filter: "Images (*.png *.jpg *.jpeg *.tiff)"
-                    multipleFiles: true
-                    settingKey: "lastNoteGalleryImageLocation"
-                    caption: "Load Images"
-                    onFilesSelected: {
-                        var validImages = imageValidator.validateImages(selected);
-                        noteGallery.imagesAdded(validImages)
-                    }
-                }
-
-                ImageValidator {
-                    id: imageValidator
+            LoadNotesIconButton {
+                onFilesSelected: {
+                    noteGallery.imagesAdded(images)
                 }
             }
         }
@@ -406,6 +397,7 @@ Rectangle {
         anchors.right: galleryContainer.left
         anchors.bottom: parent.bottom
 
+        visible: true
         scrapsVisible: false
         note: currentNote
     }
@@ -428,12 +420,62 @@ Rectangle {
         }
     }
 
-
+    onStateChanged: {
+        console.log("Current State:" + state)
+    }
 
     states: [
 
         State {
+            name: "NO_NOTES"
+
+            PropertyChanges {
+                target: loadNoteWidgetId
+                visible: true
+            }
+
+            PropertyChanges {
+                target: galleryContainer
+                visible: false
+            }
+
+            PropertyChanges {
+                target: mainButtonArea
+                visible: false
+            }
+
+            PropertyChanges {
+                target: noteArea
+                visible: false
+            }
+
+            PropertyChanges {
+                target: carpetButtonArea
+                visible: false
+            }
+
+            PropertyChanges {
+                target: galleryView
+                onCountChanged: {
+                    if(count > 0) {
+                        console.log("Changing state to the default state")
+                        noteGallery.state = ""
+                        galleryContainer.visible = true
+                        mainButtonArea.visible = true
+                        noteArea.visible = true
+                    }
+                    updateCurrentNote()
+                }
+            }
+        },
+
+        State {
             name: "CARPET"
+
+            PropertyChanges {
+                target: loadNoteWidgetId
+                visible: false
+            }
 
             PropertyChanges {
                 target: mainButtonArea
@@ -448,6 +490,7 @@ Rectangle {
             PropertyChanges {
                 target: galleryContainer
                 anchors.top:  carpetButtonArea.bottom
+                visible: true
             }
 
             PropertyChanges {
