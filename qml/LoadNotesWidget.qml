@@ -36,7 +36,7 @@ Item {
 
             anchors.centerIn: parent
 
-            width: columnId.width + 40
+            width: columnId.width + 20
             height: columnId.height + 20
 
             radius: style.floatingWidgetRadius
@@ -50,7 +50,6 @@ Item {
             Column {
                 id: columnId
 
-                width: noteTextId.width + 20
                 spacing: 10
 
                 anchors.centerIn: parent
@@ -76,13 +75,13 @@ Item {
                         anchors.verticalCenter: loadNoteButtonId.verticalCenter
                         rotation: 180
                         source: "qrc:/icons/back.png"
-                        width: 30
-                        height: width
+                        sourceSize: Qt.size(30, 30)
                     }
 
                     LoadNotesIconButton {
                         id: loadNoteButtonId
                         onFilesSelected: widgetId.filesSelected(images)
+                        sourceSize: Qt.size(48, 48)
                     }
 
                 }

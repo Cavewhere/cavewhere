@@ -23,41 +23,6 @@ Rectangle {
         trip: currentTrip
     }
 
-    //    ScrollBar {
-    //        id: surveyEditorScollbar
-    //        anchors.top: flickArea.top
-    //        anchors.bottom: flickArea.bottom
-    //        anchors.left: flickArea.right
-    //        orientation: Qt.Vertical
-    //        minimumValue: 0
-    //        maximumValue: flickArea.contentHeight - height < 0 ? 0 : flickArea.contentHeight - height
-    //        visible: maximumValue > 0
-    //        singleStep: 1
-    //        onValueChanged: flickArea.contentY = value
-    //    }
-
-
-    //    Flickable {
-    //        id: flickArea
-
-    //        contentHeight: column.height
-    //        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2)
-
-    //        anchors.top: parent.top
-    //        anchors.bottom: parent.bottom
-    //        anchors.left: parent.left
-    //        anchors.margins: 1;
-
-    //        clip: true;
-
-    /**
-              Moves the flickable such that r is always shown
-              */
-
-
-    //        onContentYChanged: {
-    //            surveyEditorScollbar.value = contentY
-    //        }
 
     ScrollView {
         id: scrollAreaId
@@ -183,6 +148,10 @@ Rectangle {
         anchors.top: area.top
         anchors.bottom: area.bottom
         clip: true
+
+        onImagesAdded: {
+            currentTrip.notes.addFromFiles(images, project)
+        }
     }
 }
 

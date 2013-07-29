@@ -18,7 +18,6 @@ ImageItem {
     signal nextImage()
     signal previousImage()
 
-//    glWidget: mainGLWidget
     projectFilename: project.filename
 
     PanZoomInteraction {
@@ -34,11 +33,4 @@ ImageItem {
         ]
         defaultInteraction: panZoomInteraction
     }
-
-    //FIXME: Implement wheelArea using a MouseArea
-//    WheelArea {
-//        id: wheelArea
-//        anchors.fill: parent
-//        onVerticalScroll: panZoomInteraction.zoom(delta, position)
-//    }
 }

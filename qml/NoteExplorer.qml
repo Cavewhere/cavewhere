@@ -13,6 +13,13 @@ Item {
 
     property alias noteModel: view.model
 
+    signal imagesAdded(var images)
+
+    LoadNotesWidget {
+        visible: view.count == 0
+        onFilesSelected: imagesAdded(images)
+    }
+
     ListView {
         id: view
 
@@ -22,6 +29,7 @@ Item {
         orientation: ListView.Horizontal
         spacing: 10
         interactive: false
+        highlightMoveDuration: 200
 
         delegate: ImageExplorer {
             width: view.width
