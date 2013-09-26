@@ -31,6 +31,7 @@
 #include "cwRootData.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
+#include "cwOpenFileEventHandler.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -52,6 +53,13 @@ QUrl mainWindowSourcePath() {
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
+    cwRootData* rootData = new cwRootData();
+
+    //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
+    cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
+    openFileHandler->setProject(rootData->project());
+    a.installEventFilter(openFileHandler);
 
 //    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
 //        qDebug() << "Image formats:" << imageFormats;
@@ -86,7 +94,8 @@ int main(int argc, char *argv[])
 //    QSurfaceFormat format = view.format();
 //    format.setSamples(4);
 
-    cwRootData* rootData = new cwRootData(); //&view);
+     //&view);
+
 //    rootData->setQuickView(&view);
 //    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
 //    rootData->project()->load(QDir::homePath() + "/test.cw");

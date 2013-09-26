@@ -167,7 +167,8 @@ SOURCES += src/main.cpp \
     src/cwGLImageItemResources.cpp \
     src/cwQMLReload.cpp \
     src/cwCompassItem.cpp \
-    src/cwLicenseAgreement.cpp
+    src/cwLicenseAgreement.cpp \
+    src/cwOpenFileEventHandler.cpp
 
 HEADERS  += \
     src/cwSurveyChunk.h \
@@ -327,7 +328,8 @@ HEADERS  += \
     src/cwGLImageItemResources.h \
     src/cwQMLReload.h \
     src/cwCompassItem.h \
-    src/cwLicenseAgreement.h
+    src/cwLicenseAgreement.h \
+    src/cwOpenFileEventHandler.h
 
 FORMS    += \ #src/cwMainWindow.ui \
     src/cwImportSurvexDialog.ui \
@@ -465,7 +467,8 @@ OTHER_FILES += \
     qml/CavewhereLogo.qml \
     qml/LoadNotesWidget.qml \
     qml/LoadNotesIconButton.qml \
-    IncludeQMath3d.pri
+    IncludeQMath3d.pri \
+    Info.plist
 
 RESOURCES += \
     resources.qrc
@@ -504,6 +507,7 @@ macx {
     LIBS += -L/usr/local/lib -lboost_serialization-mt -lboost_wserialization-mt
     ICON = cavewhereIcon.icns
     INCLUDES += /usr/local/include
+    QMAKE_INFO_PLIST = Info.plist
 }
 
 unix {
