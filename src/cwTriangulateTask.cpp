@@ -855,7 +855,7 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
         QVector3D stationPos = station.position(); //In world coordianets
 
         QMatrix4x4 offsetToFirstStation;
-        offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0);
+        offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0); //Assumtion in plan mode only
         offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
 
         QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords; //outputs in world coordinates

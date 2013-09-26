@@ -8,7 +8,7 @@ TARGET = Cavewhere
 TEMPLATE = app
 
    #Extra modules
-QT += core sql concurrent xml qml quick 3d opengl svg
+QT += core sql concurrent xml qml quick opengl svg
 
 OBJECTS_DIR = .obj
 UI_DIR = .ui
@@ -166,7 +166,6 @@ SOURCES += src/main.cpp \
     src/cwGLResources.cpp \
     src/cwGLImageItemResources.cpp \
     src/cwQMLReload.cpp \
-    src/cwQuaternionRotation3d.cpp \
     src/cwCompassItem.cpp \
     src/cwLicenseAgreement.cpp
 
@@ -327,7 +326,6 @@ HEADERS  += \
     src/cwGLResources.h \
     src/cwGLImageItemResources.h \
     src/cwQMLReload.h \
-    src/cwQuaternionRotation3d.h \
     src/cwCompassItem.h \
     src/cwLicenseAgreement.h
 
@@ -466,13 +464,16 @@ OTHER_FILES += \
     qml/LicenseWindow.qml \
     qml/CavewhereLogo.qml \
     qml/LoadNotesWidget.qml \
-    qml/LoadNotesIconButton.qml
+    qml/LoadNotesIconButton.qml \
+    IncludeQMath3d.pri
 
 RESOURCES += \
     resources.qrc
 
 INCLUDEPATH += src src/utils src/serialization . .ui
 DEPENDPATH += INCLUDEPATH
+
+include(IncludeQMath3d.pri)
 
 #For compiling Google ProtoBuffer
 PROTO_FILES += \
@@ -632,3 +633,5 @@ win32 {
         system($$quote(cmd /c xcopy /y /E /I $${QT_BIN_WIN}\\..\\qml\\QtGraphicalEffects $${DESTDIR_WIN}\\QtGraphicalEffects$$escape_expand(\\n\\t)))
      }
 }
+
+cache()

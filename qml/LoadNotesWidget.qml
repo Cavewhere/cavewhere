@@ -56,7 +56,7 @@ Item {
 
                 Text {
                     id: noteTextId
-                    text: "This trip has no Notes..."
+                    text: "No notes found..."
                     font.pointSize: 14
                     font.bold: true
                     anchors.horizontalCenter: parent.horizontalCenter

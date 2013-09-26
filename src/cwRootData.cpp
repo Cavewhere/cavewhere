@@ -84,7 +84,7 @@ Sets quickWindow
 void cwRootData::setQuickView(QQuickView* quickView) {
     if(QuickView != quickView) {
         QuickView = quickView;
-        QMLReloader->setQuickView(QuickView);
+//        QMLReloader->setQuickView(QuickView);
         emit quickWindowChanged();
     }
 }

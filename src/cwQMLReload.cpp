@@ -10,25 +10,16 @@
 #include "cwDebug.h"
 
 //Qt includes
-#include <QQuickView>
+//#include <QQuickView>
+#include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QDebug>
 
 cwQMLReload::cwQMLReload(QObject *parent) :
     QObject(parent),
-    QuickView(NULL)
+    ApplicationEngine(NULL)
 {
-}
-
-/**
-Sets quickView
-*/
-void cwQMLReload::setQuickView(QQuickView* quickView) {
-    if(QuickView != quickView) {
-        QuickView = quickView;
-        emit quickViewChanged();
-    }
 }
 
 /**
@@ -38,14 +29,33 @@ void cwQMLReload::setQuickView(QQuickView* quickView) {
  */
 void cwQMLReload::reload()
 {
-    if(QuickView == NULL) {
-        qDebug() << "Can't reload QML because the view is NULL, this is a BUG!" << LOCATION;
+    if(ApplicationEngine == NULL) {
+        qDebug() << "Can't reload QML because the ApplicationEngine is NULL, this is a BUG!" << LOCATION;
         return;
     }
 
-    QUrl source = QuickView->source();
+    ApplicationEngine->clearComponentCache();
 
-    QuickView->rootContext()->engine()->clearComponentCache();
+//    QMetaObject::invokeMethod(ApplicationEngine, "load", Qt::QueuedConnection, Q_ARG(QString, source));
+}
 
-    QMetaObject::invokeMethod(QuickView, "setSource", Qt::QueuedConnection, Q_ARG(QUrl, source));
+/**
+Sets applicationEngine
+*/
+void cwQMLReload::setApplicationEngine(QQmlApplicationEngine* applicationEngine) {
+    if(ApplicationEngine != applicationEngine) {
+        ApplicationEngine = applicationEngine;
+        emit applicationEngineChanged();
+    }
+}
+
+/**
+ * @brief cwQMLReload::setRootUrl
+ * @param rootUrl - The root url, usually CavewhereMainWindow.qml
+ */
+void cwQMLReload::setRootUrl(QString rootUrl) {
+    if(RootUrl != rootUrl) {
+        RootUrl = rootUrl;
+        emit rootUrlChanged();
+    }
 }

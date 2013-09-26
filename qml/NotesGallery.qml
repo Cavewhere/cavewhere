@@ -420,10 +420,6 @@ Rectangle {
         }
     }
 
-    onStateChanged: {
-        console.log("Current State:" + state)
-    }
-
     states: [
 
         State {

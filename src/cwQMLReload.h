@@ -11,35 +11,58 @@
 //Qt includes
 #include <QObject>
 class QQuickView;
+class QQmlApplicationEngine;
 
 class cwQMLReload : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QQuickView* quickView READ quickView WRITE setQuickView NOTIFY quickViewChanged)
+    Q_PROPERTY(QQmlApplicationEngine* applicationEngine READ applicationEngine WRITE setApplicationEngine NOTIFY applicationEngineChanged)
+    Q_PROPERTY(QString rootUrl READ rootUrl WRITE setRootUrl NOTIFY rootUrlChanged)
 
 public:
     explicit cwQMLReload(QObject *parent = 0);
 
-    QQuickView* quickView() const;
-    void setQuickView(QQuickView* quickView);
+    QQmlApplicationEngine* applicationEngine() const;
+    void setApplicationEngine(QQmlApplicationEngine* applicationEngine);
+
+    QString rootUrl() const;
+    void setRootUrl(QString rootUrl);
 
     Q_INVOKABLE void reload();
 
 signals:
-    void quickViewChanged();
+    void applicationEngineChanged();
+    void rootUrlChanged();
 
 public slots:
 
 private:
-    QQuickView* QuickView; //!<
+    QQmlApplicationEngine* ApplicationEngine; //!<
+    QString RootUrl; //!<
     
 };
 
+///**
+//Gets quickView
+//*/
+//inline QQuickView* cwQMLReload::quickView() const {
+//    return QuickView;
+//}
+
 /**
-Gets quickView
+Gets applicationEngine
 */
-inline QQuickView* cwQMLReload::quickView() const {
-    return QuickView;
+inline QQmlApplicationEngine* cwQMLReload::applicationEngine() const {
+    return ApplicationEngine;
 }
+
+/**
+Gets rootUrl
+*/
+inline QString cwQMLReload::rootUrl() const {
+    return RootUrl;
+}
+
+
 #endif // CWQMLRELOAD_H
