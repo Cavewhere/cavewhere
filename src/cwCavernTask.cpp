@@ -124,6 +124,7 @@ void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus)
 //    qDebug() << CavernProcess->readAllStandardOutput();
     if(exitStatus == QProcess::CrashExit || exitCode > 0) {
         //Errors in cavern
+        qDebug() << "Cavern has crashed!" << CavernProcess->readAllStandardOutput();
         stop();
     }
     done();
