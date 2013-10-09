@@ -468,7 +468,9 @@ OTHER_FILES += \
     qml/LoadNotesWidget.qml \
     qml/LoadNotesIconButton.qml \
     IncludeQMath3d.pri \
-    Info.plist
+    Info.plist \
+    cavewhere.qbs \
+    ProtoBuffer.qbs
 
 RESOURCES += \
     resources.qrc

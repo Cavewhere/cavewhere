@@ -224,15 +224,6 @@ inline cwQMLReload* cwRootData::qmlReloader() const {
     return QMLReloader;
 }
 
-/**
- * @brief cwRootData::version
- * @return
- *
- * Returns the current version of cavewhere
- */
-inline QString cwRootData::version() const {
-    return CAVEWHERE_VERSION;
-}
 
 /**
 Gets license

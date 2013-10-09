@@ -24,6 +24,8 @@
 #include <QItemSelectionModel>
 #include <QUndoStack>
 
+//Generated files from qbs
+#include "cavewhereVersion.h"
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
@@ -87,5 +89,15 @@ void cwRootData::setQuickView(QQuickView* quickView) {
 //        QMLReloader->setQuickView(QuickView);
         emit quickWindowChanged();
     }
+}
+
+/**
+ * @brief cwRootData::version
+ * @return
+ *
+ * Returns the current version of cavewhere
+ */
+QString cwRootData::version() const {
+    return CavewhereVersion; //Automatically generated from qbs in cavewhereVersion.h
 }
 
