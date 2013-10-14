@@ -4,29 +4,6 @@ import qbs.TextFile
 import qbs.Process
 
 Project {
-
-    DynamicLibrary {
-        name: "QMath3d"
-        Depends { name: "cpp" }
-        Depends { name: "Qt";
-            submodules: [ "core", "gui" ]
-            frameworkBuild: true
-        }
-        files: [
-            "QMath3d/qbox3d.h",
-            "QMath3d/qplane3d.h",
-            "QMath3d/qray3d.h",
-            "QMath3d/qsphere3d.h",
-            "QMath3d/qtriangle3d.h",
-            "QMath3d/qbox3d.cpp",
-            "QMath3d/qplane3d.cpp",
-            "QMath3d/qray3d.cpp",
-            "QMath3d/qsphere3d.cpp",
-            "QMath3d/qtriangle3d.cpp"
-        ]
-
-    }
-
     Application {
         name: "Cavewhere"
 
@@ -638,8 +615,27 @@ Project {
                 }
                 return cmd;
             }
-
         }
+    }
 
+    DynamicLibrary {
+        name: "QMath3d"
+        Depends { name: "cpp" }
+        Depends { name: "Qt";
+            submodules: [ "core", "gui" ]
+            frameworkBuild: true
+        }
+        files: [
+            "QMath3d/qbox3d.h",
+            "QMath3d/qplane3d.h",
+            "QMath3d/qray3d.h",
+            "QMath3d/qsphere3d.h",
+            "QMath3d/qtriangle3d.h",
+            "QMath3d/qbox3d.cpp",
+            "QMath3d/qplane3d.cpp",
+            "QMath3d/qray3d.cpp",
+            "QMath3d/qsphere3d.cpp",
+            "QMath3d/qtriangle3d.cpp"
+        ]
     }
 }
