@@ -20,6 +20,7 @@ class cwPlotSauceXMLTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
+class cwLoopCloserTask;
 
 //Qt includes
 #include <QTemporaryFile>
@@ -192,6 +193,9 @@ private:
     cwPlotSauceTask* PlotSauceTask;
     cwPlotSauceXMLTask* PlotSauceParseTask;
     cwLinePlotGeometryTask* CenterlineGeometryTask;
+
+    //The loop closure task
+    cwLoopCloserTask* LoopCloserTask;
 
     //What's returned
     LinePlotResultData Result;

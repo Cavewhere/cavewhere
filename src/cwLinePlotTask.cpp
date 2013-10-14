@@ -21,6 +21,7 @@
 #include "cwSurveyChunk.h"
 #include "cwDebug.h"
 #include "cwLength.h"
+#include "cwLoopCloserTask.h"
 
 //Qt includes
 #include <QDebug>
@@ -46,6 +47,10 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
     Region = new cwCavingRegion(this);
+
+    LoopCloserTask = new cwLoopCloserTask();
+    LoopCloserTask->setParentTask(this);
+    LoopCloserTask->setRegion(Region);
 
     SurvexFile = new QTemporaryFile(this);
     SurvexFile->open();
@@ -125,14 +130,19 @@ void cwLinePlotTask::runTask() {
     //Clear the previous results
     Result.clear();
 
+    //Run the loop closure task
+    LoopCloserTask->start();
+
     //Change all the cave names, such that survex can handle them correctly
-    encodeCaveNames();
+//    encodeCaveNames();
 
     //Initilize the cave station lookup, from previous run
     initializeCaveStationLookups();
 
-    Time.start();
-    exportData();
+//    Time.start();
+//    exportData();
+
+    done();
 }
 
 /**

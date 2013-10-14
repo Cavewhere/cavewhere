@@ -1,4 +1,8 @@
 .DS_Store
+QMath3d-build/*
+installer/mac/Cavewhere.app.old/*
+qt-5-1-1-debug/*
+qtc_Desktop_Qt_5_1_1_clang_64bit-release/*
 .moc/moc_cw3dRegionViewer.cpp
 .moc/moc_cwAbstract2PointItem.cpp
 .moc/moc_cwAddImageTask.cpp
@@ -825,3 +829,4 @@ src/serialization/*
 installer/windows/output/*
 installer/mac/Cavewhere.app/*
 qrc_resources.cpp
+qtc_Desktop_Qt_5_1_1_clang_64bit-release/GeneratedFiles/Cavewhere/moc_cwSurveyChunkViewComponents.cpp

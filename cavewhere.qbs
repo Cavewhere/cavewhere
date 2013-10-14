@@ -375,6 +375,8 @@ Project {
                 "src/cwCompassItem.h",
                 "src/cwLicenseAgreement.h",
                 "src/cwOpenFileEventHandler.h",
+                "src/cwLoopCloserTask.h",
+                "src/cwLoopCloserTask.cpp"
             ]
         }
 

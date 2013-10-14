@@ -90,19 +90,12 @@ int main(int argc, char *argv[])
 
     rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
 
-//    applicationEnigine.rootContext();
 
-//    QQuickView view;
-//    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
+    if(argc >= 2) {
+        QByteArray filenameByteArray(argv[1]);
+        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
+    }
 
-//    QSurfaceFormat format = view.format();
-//    format.setSamples(4);
-
-     //&view);
-
-//    rootData->setQuickView(&view);
-//    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
-//    rootData->project()->load(QDir::homePath() + "/test.cw");
     QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
 
     context->setContextObject(rootData);
