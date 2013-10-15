@@ -45,6 +45,7 @@ Project {
         ]
 
         cpp.infoPlistFile: "Info.plist"
+        cpp.minimumOsxVersion: "10.6"
 
         Group {
             name: "ProtoFiles"
