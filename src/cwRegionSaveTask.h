@@ -95,9 +95,9 @@ private:
     void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);
     void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
 
-    //TODO: Remove old boost serialization
-    void xmlSerialization();
-    void writeXMLToDatabase(QString xml);
+//    //TODO: Remove old boost serialization
+//    void xmlSerialization();
+//    void writeXMLToDatabase(QString xml);
 };
 
 #endif // CWXMLPROJECTSAVETASK_H

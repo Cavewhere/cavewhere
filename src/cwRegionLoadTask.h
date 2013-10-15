@@ -93,8 +93,8 @@ private:
     QStringList loadStringList(const QtProto::QStringList& protoStringList);
 
 
-    QString readXMLFromDatabase();
-    bool loadFromBoostSerialization();
+//    QString readXMLFromDatabase();
+//    bool loadFromBoostSerialization();
 
     void insureVacuuming();
 

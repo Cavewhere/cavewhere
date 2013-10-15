@@ -26,10 +26,12 @@
 #include "cwStation.h"
 #include "cwProject.h"
 #include "cwStationPositionLookup.h"
+#include "cwLength.h"
+#include "cwImageResolution.h"
 
-//Serielization includes
-#include "cwSerialization.h"
-#include "cwQtSerialization.h"
+////Serielization includes
+//#include "cwSerialization.h"
+//#include "cwQtSerialization.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -54,7 +56,7 @@ void cwRegionSaveTask::runTask() {
 
         saveToProtoBuffer();
 
-        xmlSerialization();
+//        xmlSerialization();
 
         Database.close();
     }
@@ -498,42 +500,42 @@ void cwRegionSaveTask::saveStationLookup(CavewhereProto::StationPositionLookup *
     }
 }
 
-/**
- * @brief cwRegionSaveTask::xmlSerialization
- *
- * TODO: Remove this once Proto Buffers are Stable
- */
-void cwRegionSaveTask::xmlSerialization()
-{
-    //Serielize the Region to XML data
-    std::stringstream stream;
-    boost::archive::xml_oarchive xmlSaveArchive(stream);
-    xmlSaveArchive << BOOST_SERIALIZATION_NVP(Region);
+///**
+// * @brief cwRegionSaveTask::xmlSerialization
+// *
+// * TODO: Remove this once Proto Buffers are Stable
+// */
+//void cwRegionSaveTask::xmlSerialization()
+//{
+//    //Serielize the Region to XML data
+//    std::stringstream stream;
+//    boost::archive::xml_oarchive xmlSaveArchive(stream);
+//    xmlSaveArchive << BOOST_SERIALIZATION_NVP(Region);
 
-    //Write the data to the database
-    writeXMLToDatabase(QString::fromStdString(stream.str()));
-}
+//    //Write the data to the database
+//    writeXMLToDatabase(QString::fromStdString(stream.str()));
+//}
 
-/**
-  Writes the xml data to the database
+///**
+//  Writes the xml data to the database
 
-  TODO: Remove this once Proto Buffers are Stable
-  */
-void cwRegionSaveTask::writeXMLToDatabase(QString xml) {
+//  TODO: Remove this once Proto Buffers are Stable
+//  */
+//void cwRegionSaveTask::writeXMLToDatabase(QString xml) {
 
-    QSqlQuery insertCavingRegion(Database);
-    QString queryStr =
-            QString("INSERT OR REPLACE INTO CavingRegion ") +
-            QString("(id, qCompress_XML) ") +
-            QString("VALUES (1, ?)");
+//    QSqlQuery insertCavingRegion(Database);
+//    QString queryStr =
+//            QString("INSERT OR REPLACE INTO CavingRegion ") +
+//            QString("(id, qCompress_XML) ") +
+//            QString("VALUES (1, ?)");
 
-    bool successful = insertCavingRegion.prepare(queryStr);
-    if(!successful) {
-        qDebug() << "Couldn't create query to insert region xml data:" << insertCavingRegion.lastError();
-        stop();
-    }
+//    bool successful = insertCavingRegion.prepare(queryStr);
+//    if(!successful) {
+//        qDebug() << "Couldn't create query to insert region xml data:" << insertCavingRegion.lastError();
+//        stop();
+//    }
 
-    insertCavingRegion.bindValue(0, xml);
-    insertCavingRegion.exec();
-}
+//    insertCavingRegion.bindValue(0, xml);
+//    insertCavingRegion.exec();
+//}
 

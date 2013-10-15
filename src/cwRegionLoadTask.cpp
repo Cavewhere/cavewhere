@@ -8,14 +8,26 @@
 //Our includes
 #include "cwRegionLoadTask.h"
 #include "cwImageCleanupTask.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwUnits.h"
+#include "cwLength.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwNote.h"
+#include "cwTripCalibration.h"
+#include "cwTeam.h"
+#include "cwScrap.h"
+#include "cwSurveyNoteModel.h"
+#include "cwImageResolution.h"
 #include "cwDebug.h"
 
-//Serielization includes
-#include "cwSerialization.h"
-#include "cwQtSerialization.h"
+////Serielization includes
+//#include "cwSerialization.h"
+//#include "cwQtSerialization.h"
 
 //Boost includes
-#include <boost/archive/xml_archive_exception.hpp>
+//#include <boost/archive/xml_archive_exception.hpp>
 
 //Qt includes
 #include <QSqlQuery>
@@ -45,10 +57,10 @@ void cwRegionLoadTask::runTask() {
         //Try loading Proto Buffer
         bool success = loadFromProtoBuffer();
 
-        if(!success) {
-            qDebug() << "Warning loading from XML serialization!" << LOCATION;
-            success = loadFromBoostSerialization();
-        }
+//        if(!success) {
+//            qDebug() << "Warning loading from XML serialization!" << LOCATION;
+//            success = loadFromBoostSerialization();
+//        }
 
         if(!success) {
             qDebug() << "Couldn't load from any format!";
@@ -631,64 +643,64 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
 
   This return a QString filed with XML data
   */
-QString cwRegionLoadTask::readXMLFromDatabase() {
-    QSqlQuery selectCavingRegion(Database);
-    QString queryStr =
-            QString("SELECT qCompress_XML FROM CavingRegion where id = 1");
+//QString cwRegionLoadTask::readXMLFromDatabase() {
+//    QSqlQuery selectCavingRegion(Database);
+//    QString queryStr =
+//            QString("SELECT qCompress_XML FROM CavingRegion where id = 1");
 
-    bool couldPrepare = selectCavingRegion.prepare(queryStr);
-    if(!couldPrepare) {
-        qDebug() << "Couldn't prepare select Caving Region:" << selectCavingRegion.lastError().databaseText() << queryStr;
-    }
+//    bool couldPrepare = selectCavingRegion.prepare(queryStr);
+//    if(!couldPrepare) {
+//        qDebug() << "Couldn't prepare select Caving Region:" << selectCavingRegion.lastError().databaseText() << queryStr;
+//    }
 
-    //Extract the data
-    selectCavingRegion.exec();
-    QSqlRecord record = selectCavingRegion.record();
+//    //Extract the data
+//    selectCavingRegion.exec();
+//    QSqlRecord record = selectCavingRegion.record();
 
-    if(record.isEmpty()) {
-        qDebug() << "Hmmmm, no caving regions to load";
-        return QString();
-    }
+//    if(record.isEmpty()) {
+//        qDebug() << "Hmmmm, no caving regions to load";
+//        return QString();
+//    }
 
-    //Get the first row
-    selectCavingRegion.next();
+//    //Get the first row
+//    selectCavingRegion.next();
 
-    QString xmlData = selectCavingRegion.value(0).toString();
-    return xmlData;
-}
+//    QString xmlData = selectCavingRegion.value(0).toString();
+//    return xmlData;
+//}
 
 /**
  * @brief cwRegionLoadTask::loadFromBoostSerialization
  * @return
  */
-bool cwRegionLoadTask::loadFromBoostSerialization()
-{        //Get the xmlData from the database
-    QString xmlData = readXMLFromDatabase();
-    Database.close();
+//bool cwRegionLoadTask::loadFromBoostSerialization()
+//{        //Get the xmlData from the database
+//    QString xmlData = readXMLFromDatabase();
+//    Database.close();
 
-    //Add the string data to the stream
-    std::stringstream stream(xmlData.toStdString());
+//    //Add the string data to the stream
+//    std::stringstream stream(xmlData.toStdString());
 
-    //Parse xml the string data
-    try {
-        boost::archive::xml_iarchive xmlLoadArchive(stream);
+//    //Parse xml the string data
+//    try {
+//        boost::archive::xml_iarchive xmlLoadArchive(stream);
 
-        cwCavingRegion region;
-        xmlLoadArchive >> BOOST_SERIALIZATION_NVP(region);
-        *Region = region;
+//        cwCavingRegion region;
+//        xmlLoadArchive >> BOOST_SERIALIZATION_NVP(region);
+//        *Region = region;
 
-        //Clean up old images
-        cwImageCleanupTask imageCleanupTask;
-        imageCleanupTask.setDatabaseFilename(databaseFilename());
-        imageCleanupTask.setRegion(Region);
-        imageCleanupTask.start();
-        return true;
+//        //Clean up old images
+//        cwImageCleanupTask imageCleanupTask;
+//        imageCleanupTask.setDatabaseFilename(databaseFilename());
+//        imageCleanupTask.setRegion(Region);
+//        imageCleanupTask.start();
+//        return true;
 
-    } catch(boost::archive::archive_exception exception) {
-        qDebug() << "Couldn't load data from XML!" << exception.what();
-        return false;
-    }
-}
+//    } catch(boost::archive::archive_exception exception) {
+//        qDebug() << "Couldn't load data from XML!" << exception.what();
+//        return false;
+//    }
+//}
 
 
 
