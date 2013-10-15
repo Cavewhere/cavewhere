@@ -5,7 +5,7 @@ Row {
 
     Image {
         id: imageId
-        source: "qrc:/icons/svg/cave.svg"
+        source: "qrc:/icons/cave-64x64.png"
     }
 
     Text {

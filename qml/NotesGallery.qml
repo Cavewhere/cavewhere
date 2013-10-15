@@ -87,7 +87,7 @@ Rectangle {
             Image {
                 id: removeImageId
 
-                source: "qrc:/icons/svg/red-cancel.svg"
+                source: "qrc:/icons/red-cancel.png"
 
                 width: 24
                 height: 24
