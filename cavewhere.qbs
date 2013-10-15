@@ -5,6 +5,7 @@ import qbs.Process
 
 Project {
     Application {
+        id: applicationId
         name: "Cavewhere"
 
         Depends { name: "cpp" }
@@ -13,6 +14,8 @@ Project {
             frameworkBuild: true
         }
         Depends { name: "QMath3d" }
+//        Depends { name: "icns-out" }
+
 
         cpp.includePaths: [
             "src",
@@ -29,8 +32,6 @@ Project {
         cpp.dynamicLibraries: [
             "squish",
             "protobuf",
-            "boost_serialization-mt",
-            "boost_wserialization-mt",
             "z"
         ]
 
@@ -42,6 +43,8 @@ Project {
             "TRILIBRARY",
             "ANSI_DECLARATORS"
         ]
+
+        cpp.infoPlistFile: "Info.plist"
 
         Group {
             name: "ProtoFiles"
@@ -546,13 +549,75 @@ Project {
         }
 
         Group {
-            name: "macInfo"
+            name: "macIcons"
             files: [
-                "Info.plist"
+                "cavewhereIcon.icns"
             ]
+            fileTags: ["icns-in"]
         }
 
+        Group {
+            name: "survexDepends"
+            files: [
+                "plotsauce",
+                "cavern",
+                "share"
+            ]
+            fileTags: ["survex"]
+        }
 
+//        Group {
+//            name: "macInfo"
+//            files: [
+//                "Info.plist"
+//            ]
+//        }
+
+        Rule {
+            id: macIconCopier
+            inputs: ["icns-in"]
+            auxiliaryInputs: ["application"]
+
+            Artifact {
+                fileTags: ["resourcerules"]
+                fileName: product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+            }
+
+            prepare: {
+                print("Preparing" + input.fileName + " to " + output.fileName)
+                var cp = "/bin/cp"
+                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+                var cmd = new Command(cp,
+                                      [input.fileName, realOutputFile])
+                cmd.description = "Copying icons to resources " + input.fileName + "to" + output.fileName
+                cmd.highlight = 'codegen'
+                return cmd
+            }
+        }
+
+        Rule {
+            id: survexCopier
+            inputs: ["survex"]
+            auxiliaryInputs: ["application"]
+
+            Artifact {
+                fileTags: ["resourcerules"]
+                fileName: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.fileName)
+//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+            }
+
+            prepare: {
+                print("Preparing" + input.fileName + " to " + output.fileName)
+                var cp = "/bin/cp"
+                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.fileName)
+                var cmd = new Command(cp,
+                                      ["-r", input.fileName, realOutputFile])
+                cmd.description = "Copying survex " + input.fileName + "to" + output.fileName
+                cmd.highlight = 'codegen'
+                return cmd
+            }
+        }
 
         Rule {
             id: protoCompiler
@@ -605,7 +670,7 @@ Project {
 //                gitProcess.exec(git, ["describe"] ,true);
 //                var gitDescribe = gitProcess.readStdOut();
 //                gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
-                cmd.cavewhereVersion = "0.3"//gitDescribe
+                cmd.cavewhereVersion = "0.04"//gitDescribe
 
                 cmd.sourceCode = function() {
                     var all = "#ifndef cavewherVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
@@ -616,7 +681,10 @@ Project {
                 return cmd;
             }
         }
+
+
     }
+
 
     DynamicLibrary {
         name: "QMath3d"

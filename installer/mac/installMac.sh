@@ -1,14 +1,15 @@
 #!/bin/bash
 
-qtDir=~/Qt-5.10/5.1.0/clang_64
+qtDir=~/Qt5.1.1/5.1.1/clang_64
+buildDirectory=/Users/vpicaver/Documents/Projects/cavewhere/qtc_Desktop_Qt_5_1_1_clang_64bit-release
 
 echo "Cavewhere Mac Installer"
 
 echo "Delete rm Cavewhere"
 rm -r Cavewhere.app
 
-echo "Copying bundle"
-cp -r ../../Cavewhere.app .
+echo "Copying bundle from $buildDirectory/Cavewhere.app"
+cp -r $buildDirectory/Cavewhere.app .
 
 echo "Running macdeployqt"
 $qtDir/bin/macdeployqt Cavewhere.app
@@ -27,6 +28,12 @@ cp -r ../../qml Cavewhere.app/Contents/MacOS
 
 echo "Coping Shaders"
 cp -r ../../shaders Cavewhere.app/Contents/MacOS
+
+echo "Installing name tool on libQMath3d"
+cp $buildDirectory/libQMath3d.dylib Cavewhere.app/Contents/Frameworks
+install_name_tool -change $buildDirectory/libQMath3d.dylib @executable_path/../Frameworks/libQMath3d.dylib Cavewhere.app/Contents/MacOS/Cavewhere
+install_name_tool -change $qtDir/lib/QtCore.framework/Versions/5/QtCore @executable_path/../Frameworks/QtCore.framework/Versions/5/QtCore Cavewhere.app/Contents/Frameworks/libQMath3d.dylib
+install_name_tool -change $qtDir/lib/QtGui.framework/Versions/5/QtGui @executable_path/../Frameworks/QtGui.framework/Versions/5/QtGui Cavewhere.app/Contents/Frameworks/libQMath3d.dylib
 
 echo "Installing name tool on plotSauce"
 install_name_tool -change $qtDir/lib/QtXml.framework/Versions/5/QtXml @executable_path/../Frameworks/QtXml.framework/Versions/5/QtXml Cavewhere.app/Contents/MacOS/plotsauce
