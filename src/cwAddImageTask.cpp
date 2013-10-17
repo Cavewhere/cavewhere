@@ -421,12 +421,14 @@ int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
 int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
     //Convert and compress using dxt1
     //20 times slower on my computer
-#ifdef Q_OS_WIN
+//#ifdef Q_OS_WIN
+    //FIXME: Need to have settings to use opengl dxt1 compression!
     //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
     QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
-#else
-    QByteArray outputData = openglDxt1Compression(image);
-#endif
+//#else
+    //FIXME: This is commented out because this breaks hard on old intel graphics cards
+//    QByteArray outputData = openglDxt1Compression(image);
+//#endif
 
     if(outputData.isEmpty()) {
         return -1;
