@@ -469,6 +469,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
         if(dataStrings.size() >= 9) {
             QString fromStationName = dataStrings.at(0);
             QString toStationName = dataStrings.at(1);
+
+            if(fromStationName == toStationName) {
+                continue;
+            }
+
             QString lengthString = dataStrings.at(2);
             QString bearingString = dataStrings.at(3);
             QString inclinationString = dataStrings.at(4);
