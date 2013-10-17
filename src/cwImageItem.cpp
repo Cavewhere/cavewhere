@@ -35,9 +35,11 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
 
     ImageProperties->setImage(Image);
 
-#ifndef Q_OS_WIN
-    setAntialiasing(true);
-#endif
+//TODO: Need a setting for antialiasing uses need to specify it
+//For windows using angles we need to disable it
+//#ifndef Q_OS_WIN
+//    setAntialiasing(true);
+//#endif
 
     setOpaquePainting(false);
 }

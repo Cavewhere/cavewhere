@@ -63,9 +63,10 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Scraps->setScene(this);
     Plane->setScene(this);
 
-#ifndef Q_OS_WIN
-    setAntialiasing(true);
-#endif
+    //TODO: Not all Mac and Windows support multi-sampling
+//#ifndef Q_OS_WIN
+//    setAntialiasing(true);
+//#endif
 
     setupInteractionTimers();
 }
