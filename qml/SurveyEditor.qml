@@ -27,6 +27,9 @@ Rectangle {
     ScrollView {
         id: scrollAreaId
 
+        property real contentY: typeof(scrollAreaId.__verticalScrollBar.value) != "undefined" ? scrollAreaId.__verticalScrollBar.value : 0
+        property real contentX: typeof(scrollAreaId.__horizontalScrollBar.value) != "undefined" ? scrollAreaId.__horizontalScrollBar.value : 0
+
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
@@ -35,11 +38,13 @@ Rectangle {
         width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
         function ensureVisible(r){
-            if (contentY >= r.y) {
+            var contentY = scrollAreaId.contentY;
+            if (scrollAreaId.contentY >= r.y) {
                 contentY = r.y;
-            } else if (contentY+height <= r.y+r.height) {
+            } else if (scrollAreaId.contentY+height <= r.y+r.height) {
                 contentY = r.y+r.height-height;
             }
+            scrollAreaId.__verticalScrollBar.value = contentY
         }
 
         Column {
@@ -72,10 +77,10 @@ Rectangle {
                 height: contentHeight
                 width: view.contentWidth
 
-//                viewportX: scrollAreaId.contentX;
-//                viewportY: scrollAreaId.contentY;
-                viewportWidth: scrollAreaId.width;
-                viewportHeight: scrollAreaId.height;
+                viewportX: scrollAreaId.contentX;
+                viewportY: scrollAreaId.contentY;
+                viewportWidth: scrollAreaId.viewport.width;
+                viewportHeight: scrollAreaId.viewport.height;
 
                 onEnsureVisibleRectChanged: scrollAreaId.ensureVisible(ensureVisibleRect);
             }
