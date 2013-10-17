@@ -671,7 +671,7 @@ Project {
 //                gitProcess.exec(git, ["describe"] ,true);
 //                var gitDescribe = gitProcess.readStdOut();
 //                gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
-                cmd.cavewhereVersion = "0.04"//gitDescribe
+                cmd.cavewhereVersion = "0.05" //gitDescribe
 
                 cmd.sourceCode = function() {
                     var all = "#ifndef cavewherVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
