@@ -83,18 +83,18 @@ Rectangle {
 
         AllCavesTabWidget {
             anchors.fill: parent
-            opacity: currentIndexIsType(RegionTreeModel.RegionType) ? 1.0 : 0.0
+            visible: currentIndexIsType(RegionTreeModel.CaveType)
         }
 
         CaveTabWidget {
             anchors.fill: parent
-            opacity: currentIndexIsType(RegionTreeModel.CaveType) ? 1.0 : 0.0
+            visible: currentIndexIsType(RegionTreeModel.CaveType)
             currentCave: getObject(RegionTreeModel.CaveType)
         }
 
         TripTabWidget {
             anchors.fill: parent
-            opacity: currentIndexIsType(RegionTreeModel.TripType) ? 1.0 : 0.0
+            visible: currentIndexIsType(RegionTreeModel.TripType)
             currentTrip: getObject(RegionTreeModel.TripType)
 
         }
