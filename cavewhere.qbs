@@ -22,7 +22,8 @@ Project {
             "QMath3d",
             "src/utils",
             product.buildDirectory + "/serialization",
-            product.buildDirectory + "/versionInfo"
+            product.buildDirectory + "/versionInfo",
+            "/usr/local/include"
         ]
 
         cpp.libraryPaths: [
@@ -31,12 +32,18 @@ Project {
 
         cpp.dynamicLibraries: [
             "squish",
+            "z",
             "protobuf",
-            "z"
+            "c++"
         ]
 
         cpp.frameworks: [
             "OpenGL"
+        ]
+
+        cpp.cxxFlags: [
+//            "-std=c++11", //Needed for protoc
+            "-stdlib=libc++" //Needed for protoc
         ]
 
         cpp.defines: [
@@ -45,7 +52,7 @@ Project {
         ]
 
         cpp.infoPlistFile: "Info.plist"
-        cpp.minimumOsxVersion: "10.6"
+        cpp.minimumOsxVersion: "10.7"
 
         Group {
             name: "ProtoFiles"
@@ -644,7 +651,7 @@ Project {
 
                 var cmd = new Command(protoc,
                                       [protoPathArg, cppOutArg, input.fileName])
-                cmd.description = "Running protoc on " + input.fileName
+                cmd.description = "Running protoc on " + input.fileName + "with args " + protoPathArg + " " + cppOutArg
                 cmd.highlight = 'codegen'
                 return cmd;
             }
