@@ -59,6 +59,7 @@ void cwLoopCloserTask::runTask()
  */
 void cwLoopCloserTask::processCave(cwCave *cave)
 {
+    //--------------------------- Split all chunks at intersections ------------------
     //Find all main edges, (main edge only store intersection at the first and last station
     cwMainEdgeProcessor mainEdgeProcessor;
     QList<cwEdgeSurveyChunk*> edges = mainEdgeProcessor.mainEdges(cave);
@@ -69,9 +70,26 @@ void cwLoopCloserTask::processCave(cwCave *cave)
     //For Debugging, this makes sure that station don't exist in the middle of the edge
     checkBasicEdges(edges);
 
-    //
+    //---------------------------- Detect loops and legs -----------------------------
 
-    //Find all loops
+    //Split loops out from survey legs
+    cwLoopDetector loopDetector;
+    loopDetector.process(edges);
+
+    printLoops(loopDetector.loops());
+
+
+    //---------------------------- Process all Legs ----------------------------------
+
+    //---------------------------- Find standard devation for all loops ---------------
+
+    //---------------------------- Sort loops by stand devation ----------------------
+
+    //---------------------------- Close loops in order of best fit to worst fit -----
+
+    //---------------------------- Offset all loops and legs -------------------------
+
+    //---------------------------- Return results ------------------------------------
 
 }
 
@@ -115,9 +133,40 @@ void cwLoopCloserTask::checkBasicEdges(QList<cwEdgeSurveyChunk*> edges) const {
                         }
                     }
                 }
+            } else {
+                if(!edge->stations().isEmpty()) {
+                    QString firstStation = edge->stations().first().name();
+                    QString lastStation = edge->stations().last().name();
+
+                    for(int i = 1; i < edge->stations().size() - 1; i++) {
+                        QString station = edge->stations().at(i).name();
+                        if(firstStation.compare(station, Qt::CaseInsensitive) == 0) {
+                            qDebug() << "This is a bug!, a mid station is being repeated, chunk should be broken into bits" << firstStation << station << LOCATION;
+                        }
+
+                        if(lastStation.compare(station, Qt::CaseInsensitive) == 0) {
+                            qDebug() << "This is a bug!, a mid station is being repeated, chunk should be broken into bits" << lastStation << station << LOCATION;
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/**
+ * @brief cwLoopCloserTask::printLoops
+ * @param loops
+ */
+void cwLoopCloserTask::printLoops(QList<cwLoopCloserTask::cwLoop> loops) const
+{
+   int count = 0;
+   foreach(cwLoop loop, loops) {
+       qDebug() << "-----***-----Loop" << count << "-------***----------";
+       printEdges(loop.edges());
+       qDebug() << "-----***-----End of Loop--------***------------";
+       count++;
+   }
 }
 
 /**
@@ -178,49 +227,54 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk*> cwLoopCloserTask::cwMainEdgeProcesso
  */
 void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdgeSurveyChunk* newChunk)
 {
-    QList<cwStation> stations = newChunk->stations();
+    //This removes internal loops inside of newChunk
+    QList<cwLoopCloserTask::cwEdgeSurveyChunk*> newChunks = splitChunkLocally(newChunk);
 
-    for(int i = 0; i < stations.size(); i++) {
-        cwStation station = stations.at(i);
+    foreach(cwLoopCloserTask::cwEdgeSurveyChunk* chunk, newChunks) {
+        QList<cwStation> stations = chunk->stations();
 
-        qDebug() << "Lookup contains station:" << station.name() << Lookup.contains(station.name());
+        for(int i = 0; i < stations.size(); i++) {
+            cwStation station = stations.at(i);
 
-        if(Lookup.contains(station.name())) {
-            //Station is an intersection
+            qDebug() << "Lookup contains station:" << station.name() << Lookup.contains(station.name());
 
-            if(i == 0 || i == stations.size() - 1) {
-                //This is the first or last station in the edgeChunk
-                splitOnStation(station);
-//                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
-//                Q_ASSERT(!ResultingEdges.contains(newChunk));
-                ResultingEdges.insert(newChunk);
+            if(Lookup.contains(station.name())) {
+                //Station is an intersection
 
-            } else {
-                //This is a middle station in the newChunk, split it and potentially another chunk
-                //Split new chunk
-                cwEdgeSurveyChunk* otherNewHalf = newChunk->split(station.name());
+                if(i == 0 || i == stations.size() - 1) {
+                    //This is the first or last station in the edgeChunk
+                    splitOnStation(station);
+                    //                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
+                    //                Q_ASSERT(!ResultingEdges.contains(newChunk));
+                    ResultingEdges.insert(chunk);
 
-                //Split the other station alread in the lookup on station.name(), if it can
-                splitOnStation(station.name());
-//                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
-//                Q_ASSERT(!ResultingEdges.contains(newChunk));
-                ResultingEdges.insert(newChunk);
-                addStationInEdgeChunk(newChunk);
+                } else {
+                    //This is a middle station in the newChunk, split it and potentially another chunk
+                    //Split new chunk
+                    cwEdgeSurveyChunk* otherNewHalf = chunk->split(station.name());
 
-                //Update the station, and restart the search with the other half
-                stations = otherNewHalf->stations();
-                newChunk = otherNewHalf;
-                i = -1;
+                    //Split the other station alread in the lookup on station.name(), if it can
+                    splitOnStation(station.name());
+                    //                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
+                    //                Q_ASSERT(!ResultingEdges.contains(newChunk));
+                    ResultingEdges.insert(chunk);
+                    addStationInEdgeChunk(chunk);
+
+                    //Update the station, and restart the search with the other half
+                    stations = otherNewHalf->stations();
+                    chunk = otherNewHalf;
+                    i = -1;
+                }
             }
         }
-    }
 
-//    if(Lookup.isEmpty()) {
-//        qDebug() << "Appending newChunk:" << newChunk << LOCATION;
-//        Q_ASSERT(!ResultingEdges.contains(newChunk));
-        ResultingEdges.insert(newChunk);
-        addStationInEdgeChunk(newChunk);
-//    }
+        //    if(Lookup.isEmpty()) {
+        //        qDebug() << "Appending newChunk:" << newChunk << LOCATION;
+        //        Q_ASSERT(!ResultingEdges.contains(newChunk));
+        ResultingEdges.insert(chunk);
+        addStationInEdgeChunk(chunk);
+        //    }
+    }
 }
 
 /**
@@ -258,6 +312,52 @@ void cwLoopCloserTask::cwMainEdgeProcessor::splitOnStation(cwStation station)
 }
 
 /**
+ * @brief cwLoopCloserTask::cwMainEdgeProcessor::splitChunkLocally
+ * @param chunk
+ * @return
+ *
+ * This splits the chunk if the chunk has a loop inside of it. It will split chunk at local loop in the chunk. Usually this will
+ * return a list with just one element, because chunk usually doesn't have any internal loops, but if it does, it will return multiple chunks.
+ */
+QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwMainEdgeProcessor::splitChunkLocally(cwLoopCloserTask::cwEdgeSurveyChunk *chunk)
+{
+    QList<cwLoopCloserTask::cwEdgeSurveyChunk *> splitChunks;
+
+    //Split on first station
+    QString firstStation = chunk->stations().first().name();
+    QString lastStation = chunk->stations().last().name();
+    for(int i = 1; i < chunk->stations().size() - 1; i++) {
+        QString currentStationName = chunk->stations().at(i).name();
+
+        bool stationEqualsFirstStation = firstStation.compare(currentStationName, Qt::CaseInsensitive) == 0;
+        bool stationEqualsLastStation = lastStation.compare(currentStationName, Qt::CaseInsensitive) == 0;
+
+        if(stationEqualsFirstStation || stationEqualsLastStation) {
+            //Split on station
+            cwEdgeSurveyChunk* otherHalf;
+            if(stationEqualsFirstStation) {
+                otherHalf = chunk->split(firstStation);
+            } else if(stationEqualsLastStation) {
+                otherHalf = chunk->split(lastStation);
+            } else {
+                otherHalf = NULL;
+                Q_ASSERT(false);
+            }
+
+            splitChunks.append(chunk);
+
+            //Restart the for-loop
+            chunk = otherHalf;
+            i = 1;
+        }
+    }
+
+    splitChunks.append(chunk);
+
+    return splitChunks;
+}
+
+/**
  * @brief cwLoopCloserTask::cwChunkLookup::addStationInEdgeChunk
  * @param chunk
  *
@@ -285,8 +385,8 @@ cwLoopCloserTask::cwEdgeSurveyChunk *cwLoopCloserTask::cwEdgeSurveyChunk::split(
 {
     //Make sure the station isn't the beginning or the last station
     Q_ASSERT(!Stations.isEmpty());
-    Q_ASSERT(Stations.first().name().compare(stationName, Qt::CaseInsensitive) != 0);
-    Q_ASSERT(Stations.last().name().compare(stationName, Qt::CaseInsensitive) != 0);
+//    Q_ASSERT(Stations.first().name().compare(stationName, Qt::CaseInsensitive) != 0);
+//    Q_ASSERT(Stations.last().name().compare(stationName, Qt::CaseInsensitive) != 0);
 
     for(int i = 1; i < Stations.size() - 1; i++) {
         if(Stations.at(i).name().compare(stationName, Qt::CaseInsensitive) == 0) {
@@ -316,21 +416,116 @@ cwLoopCloserTask::cwEdgeSurveyChunk *cwLoopCloserTask::cwEdgeSurveyChunk::split(
  */
 void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges)
 {
+    if(edges.isEmpty()) { return; }
 
+    Edges = edges;
 
+    //Create the lookup for all the edges
+    createEdgeLookup();
 
-}
+    //Find all the loops from the edges, Start with the first station
+    QString firstStation = edges.first()->stations().first().name();
+    findLoops(firstStation);
 
-QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwLoopDetector::loopEdges() const
-{
-    return LoopEdges;
 }
 
 /**
- * @brief cwLoopCloserTask::cwLoopDetector::legEdges
- * @return Returns all the edges that make up legs, edges that aren't part of a loop
+ * @brief cwLoopCloserTask::cwLoopDetector::createEdgeLookup
+ *
+ * This goes through all the edges and maps the first and last station to the multi hash.  This will allow use
+ * to lookup all the edges quickly
  */
-QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwLoopDetector::legEdges() const
+void cwLoopCloserTask::cwLoopDetector::createEdgeLookup()
 {
-    return LegEdges;
+    foreach(cwEdgeSurveyChunk* edge, Edges) {
+        QString firstStation = edge->stations().first().name();
+        QString lastStation = edge->stations().last().name();
+        EdgeLookup.insert(firstStation, edge);
+        EdgeLookup.insert(lastStation, edge);
+    }
 }
+
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::findLoops
+ * @param station
+ *
+ * This does a depth first search to find all the loops in the graph. This will populate Loops data.
+ */
+void cwLoopCloserTask::cwLoopDetector::findLoops(QString station, QList<cwEdgeSurveyChunk *> path)
+{
+    qDebug() << "Finding loop for station:" << station;
+
+    printEdges(path);
+
+    if(VisitedStations.contains(station)) {
+        qDebug() << "Station alread vistied:" << station;
+
+        //Already visited this station, created a loop
+        cwLoop loop;
+
+        QList<cwEdgeSurveyChunk *> loopPath;
+
+        //Go up the path until we find the station
+        for(int i = path.size() - 2; i >= 0; i--) {
+            cwEdgeSurveyChunk* edge = path.at(i);
+            QString firstStation = edge->stations().first().name();
+            QString lastStation = edge->stations().last().name();
+            if(firstStation.compare(station, Qt::CaseInsensitive) == 0 ||
+                    lastStation.compare(station, Qt::CaseInsensitive) == 0) {
+                qDebug() << "Middle is =" << i << path.size();
+                loopPath = path.mid(i);
+                break;
+            }
+        }
+
+        Q_ASSERT(!loopPath.isEmpty()); //The loop shouldn't be empty!  You should have found a path for the loop
+
+        loop.setEdges(loopPath);
+        Loops.append(loop);
+
+        qDebug() << "Added loop--";
+        printEdges(loopPath);
+
+        return;
+    }
+
+    VisitedStations.insert(station);
+
+    QList<cwEdgeSurveyChunk*> edges = EdgeLookup.values(station);
+
+    foreach(cwEdgeSurveyChunk* edge, edges) {
+        if(!VisitedEdges.contains(edge)) {
+
+            VisitedEdges.insert(edge);
+
+            qDebug() << "VisitedEdge:" << edge << "for station" << station;
+            printEdges(QList<cwEdgeSurveyChunk*>() << edge);
+
+            QList<cwEdgeSurveyChunk*> newPath = path;
+            newPath.append(edge);
+
+            QString firstStation = edge->stations().first().name();
+            QString secondStation = edge->stations().last().name();
+
+            if(station.compare(firstStation, Qt::CaseInsensitive) != 0) {
+                findLoops(firstStation, newPath); //Recursive Calls
+            } else {
+                findLoops(secondStation, newPath); //Recursive Calls
+            }
+        }
+    }
+}
+
+void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges)
+{
+    //Debugging for the resulting edges
+    foreach(cwEdgeSurveyChunk* edge, edges) {
+        qDebug() << "\t--Edge:" << edge;
+        foreach(cwStation station, edge->stations()) {
+            qDebug() << "\t\t" << station.name();
+        }
+    }
+    qDebug() << "\t*********** end of edges ***********";
+}
+
+
