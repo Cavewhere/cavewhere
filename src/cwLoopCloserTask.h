@@ -79,11 +79,14 @@ private:
 
     class cwLoop {
     public:
-        void setEdges(QList<cwEdgeSurveyChunk*> edges) { Edges = edges; }
-        QList<cwEdgeSurveyChunk*> edges() const { return Edges; }
+        void setEdges(QSet<cwEdgeSurveyChunk*> edges) { Edges = edges; }
+        QSet<cwEdgeSurveyChunk*> edges() const { return Edges; }
+
+        bool operator ==(const cwLoop& other) const;
+        bool operator !=(const cwLoop& other) const;
 
     private:
-        QList<cwEdgeSurveyChunk*> Edges;
+        QSet<cwEdgeSurveyChunk*> Edges;
     };
 
     class cwLoopDetector {
@@ -107,8 +110,18 @@ private:
         QList<cwEdgeSurveyChunk*> LegEdges;
 
         void createEdgeLookup();
-        void findLoops(QString station, QList<cwEdgeSurveyChunk*> path = QList<cwEdgeSurveyChunk*>()); //Recusive function, depth first search
-        void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges);
+        QList<cwLoop> findLoops(QString station);
+        void findLoopsHelper(QString station, QList<cwLoop> &resultLoops, QList<cwEdgeSurveyChunk*> path); //Recusive function, depth first search
+        void minimizeLoops();
+
+        void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges) const;
+        void printLoops(QList<cwLoop> loops) const;
+    };
+
+    class EdgeMatrixRow : public QVector<bool> {
+
+//        static EdgeMatrixRow xor(const EdgeMatrixRow& r1, const EdgeMatrixRow& r2);
+
     };
 
     cwCavingRegion* Region;

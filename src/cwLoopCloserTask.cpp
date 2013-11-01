@@ -163,7 +163,7 @@ void cwLoopCloserTask::printLoops(QList<cwLoopCloserTask::cwLoop> loops) const
    int count = 0;
    foreach(cwLoop loop, loops) {
        qDebug() << "-----***-----Loop" << count << "-------***----------";
-       printEdges(loop.edges());
+       printEdges(loop.edges().toList());
        qDebug() << "-----***-----End of Loop--------***------------";
        count++;
    }
@@ -236,7 +236,7 @@ void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdg
         for(int i = 0; i < stations.size(); i++) {
             cwStation station = stations.at(i);
 
-            qDebug() << "Lookup contains station:" << station.name() << Lookup.contains(station.name());
+//            qDebug() << "Lookup contains station:" << station.name() << Lookup.contains(station.name());
 
             if(Lookup.contains(station.name())) {
                 //Station is an intersection
@@ -286,7 +286,7 @@ void cwLoopCloserTask::cwMainEdgeProcessor::splitOnStation(cwStation station)
 {
     QList<cwEdgeSurveyChunk*> edgeChunks = Lookup.values(station.name());
 
-    qDebug() << "Split on station:" << station.name();
+//    qDebug() << "Split on station:" << station.name();
 
     foreach(cwEdgeSurveyChunk* chunk, edgeChunks) {
         if(chunk->stations().first().name() != station.name() &&
@@ -366,7 +366,7 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwMainEdgeProcess
 void cwLoopCloserTask::cwMainEdgeProcessor::addStationInEdgeChunk(cwLoopCloserTask::cwEdgeSurveyChunk *chunk)
 {
     foreach(cwStation station, chunk->stations()) {
-        qDebug() << "Inserting station name into lookup:" << station.name() << "chunk:" << chunk;
+//        qDebug() << "Inserting station name into lookup:" << station.name() << "chunk:" << chunk;
         Lookup.insert(station.name(), chunk);
     }
 }
@@ -413,6 +413,8 @@ cwLoopCloserTask::cwEdgeSurveyChunk *cwLoopCloserTask::cwEdgeSurveyChunk::split(
 /**
  * @brief cwLoopCloserTask::cwLoopDetector::loopEdges
  * @return Returns all the edges that belong to at least one loop
+ *
+ * This uses Holton method for minimal cycle basis
  */
 void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges)
 {
@@ -420,13 +422,43 @@ void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSur
 
     Edges = edges;
 
-    //Create the lookup for all the edges
-    createEdgeLookup();
-
     //Find all the loops from the edges, Start with the first station
     QString firstStation = edges.first()->stations().first().name();
-    findLoops(firstStation);
+    QList<cwLoop> initialLoops = findLoops(firstStation);
 
+    QList<cwLoop> uniqueLoops; //All the loops from each station in the initialLoops
+    QSet<QString> stationsInLoops;
+    QSet<cwEdgeSurveyChunk*> edgesInLoops;
+
+    //Find stations that exist in the loops
+    foreach(cwLoop loop, initialLoops) {
+        foreach(cwEdgeSurveyChunk* edge, loop.edges()) {
+            stationsInLoops.insert(edge->stations().first().name());
+            stationsInLoops.insert(edge->stations().last().name());
+            edgesInLoops.insert(edge);
+        }
+    }
+
+    foreach(QString station, stationsInLoops) {
+        //Create a new loop detector and find all the new loops, using a different station
+        //This section could be threaded
+        cwLoopDetector loopDetector;
+        loopDetector.Edges = edgesInLoops.toList();
+        QList<cwLoop> loops = loopDetector.findLoops(station);
+
+        //Add the loops that we just found, but make sure they're are unqiue
+        //To thread this this must be moved out of this foreach loop, this is combind part of the threading
+        foreach(cwLoop loop, loops) {
+            if(!uniqueLoops.contains(loop)) {
+                uniqueLoops.append(loop);
+            }
+        }
+    }
+
+    printLoops(uniqueLoops);
+
+    //Do gassiumn elimanation on loops to find basic loops
+    minimizeLoops();
 }
 
 /**
@@ -438,11 +470,34 @@ void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSur
 void cwLoopCloserTask::cwLoopDetector::createEdgeLookup()
 {
     foreach(cwEdgeSurveyChunk* edge, Edges) {
-        QString firstStation = edge->stations().first().name();
-        QString lastStation = edge->stations().last().name();
-        EdgeLookup.insert(firstStation, edge);
-        EdgeLookup.insert(lastStation, edge);
+        if(edge->stations().size() >= 2) {
+            QString firstStation = edge->stations().first().name();
+            QString lastStation = edge->stations().last().name();
+            EdgeLookup.insert(firstStation, edge);
+            EdgeLookup.insert(lastStation, edge);
+        }
     }
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::findLoops
+ * @param station
+ * @return
+ */
+QList<cwLoopCloserTask::cwLoop> cwLoopCloserTask::cwLoopDetector::findLoops(QString station)
+{
+    QList<cwEdgeSurveyChunk*> path;
+    QList<cwLoop> resultLoops;
+
+    //Create the lookup for all the edges
+    createEdgeLookup();
+
+    findLoopsHelper(station, resultLoops, path);
+
+    VisitedEdges.clear();
+    VisitedStations.clear();
+
+    return resultLoops;
 }
 
 /**
@@ -451,11 +506,11 @@ void cwLoopCloserTask::cwLoopDetector::createEdgeLookup()
  *
  * This does a depth first search to find all the loops in the graph. This will populate Loops data.
  */
-void cwLoopCloserTask::cwLoopDetector::findLoops(QString station, QList<cwEdgeSurveyChunk *> path)
+void cwLoopCloserTask::cwLoopDetector::findLoopsHelper(QString station, QList<cwLoop>& resultLoops, QList<cwEdgeSurveyChunk *> path)
 {
-    qDebug() << "Finding loop for station:" << station;
+//    qDebug() << "Finding loop for station:" << station;
 
-    printEdges(path);
+//    printEdges(path);
 
     if(VisitedStations.contains(station)) {
         qDebug() << "Station alread vistied:" << station;
@@ -463,28 +518,41 @@ void cwLoopCloserTask::cwLoopDetector::findLoops(QString station, QList<cwEdgeSu
         //Already visited this station, created a loop
         cwLoop loop;
 
-        QList<cwEdgeSurveyChunk *> loopPath;
+        QSet<cwEdgeSurveyChunk *> loopPath;
 
-        //Go up the path until we find the station
-        for(int i = path.size() - 2; i >= 0; i--) {
-            cwEdgeSurveyChunk* edge = path.at(i);
+        if(path.size() == 1) {
+            //Handles the case where path 1 and first and last stations are equal to each other.
+            //The edge forms a loop on itself
+            cwEdgeSurveyChunk* edge = path.first();
             QString firstStation = edge->stations().first().name();
             QString lastStation = edge->stations().last().name();
-            if(firstStation.compare(station, Qt::CaseInsensitive) == 0 ||
-                    lastStation.compare(station, Qt::CaseInsensitive) == 0) {
-                qDebug() << "Middle is =" << i << path.size();
-                loopPath = path.mid(i);
-                break;
+
+            if(firstStation.compare(lastStation, Qt::CaseInsensitive) == 0) {
+                loopPath.insert(edge);
+            }
+        } else {
+            //Go up the path until we find the station
+            for(int i = path.size() - 2; i >= 0; i--) {
+                cwEdgeSurveyChunk* edge = path.at(i);
+                QString firstStation = edge->stations().first().name();
+                QString lastStation = edge->stations().last().name();
+                if(firstStation.compare(station, Qt::CaseInsensitive) == 0 ||
+                        lastStation.compare(station, Qt::CaseInsensitive) == 0) {
+                    //                qDebug() << "Middle is =" << i << path.size();
+                    loopPath = QSet<cwEdgeSurveyChunk*>::fromList(path.mid(i));
+                    break;
+                }
             }
         }
 
+        qDebug() << "Path size:" << path.size();
         Q_ASSERT(!loopPath.isEmpty()); //The loop shouldn't be empty!  You should have found a path for the loop
 
         loop.setEdges(loopPath);
-        Loops.append(loop);
+        resultLoops.append(loop);
 
-        qDebug() << "Added loop--";
-        printEdges(loopPath);
+//        qDebug() << "Added loop--";
+//        printEdges(loopPath);
 
         return;
     }
@@ -498,8 +566,8 @@ void cwLoopCloserTask::cwLoopDetector::findLoops(QString station, QList<cwEdgeSu
 
             VisitedEdges.insert(edge);
 
-            qDebug() << "VisitedEdge:" << edge << "for station" << station;
-            printEdges(QList<cwEdgeSurveyChunk*>() << edge);
+//            qDebug() << "VisitedEdge:" << edge << "for station" << station;
+//            printEdges(QList<cwEdgeSurveyChunk*>() << edge);
 
             QList<cwEdgeSurveyChunk*> newPath = path;
             newPath.append(edge);
@@ -508,15 +576,50 @@ void cwLoopCloserTask::cwLoopDetector::findLoops(QString station, QList<cwEdgeSu
             QString secondStation = edge->stations().last().name();
 
             if(station.compare(firstStation, Qt::CaseInsensitive) != 0) {
-                findLoops(firstStation, newPath); //Recursive Calls
+                findLoopsHelper(firstStation, resultLoops, newPath); //Recursive Calls
             } else {
-                findLoops(secondStation, newPath); //Recursive Calls
+                findLoopsHelper(secondStation, resultLoops, newPath); //Recursive Calls
             }
         }
     }
 }
 
-void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges)
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::minimizeLoops
+ *
+ * This uses gaussian elimination to find all the minimal loops
+ */
+void cwLoopCloserTask::cwLoopDetector::minimizeLoops() {
+    //Find all the loop edges
+    QHash<cwEdgeSurveyChunk*, int> loopEdges;
+    int index = 0;
+    foreach(cwLoop loop, Loops) {
+        foreach(cwEdgeSurveyChunk* edge, loop.edges()) {
+            if(!loopEdges.contains(edge)) {
+                loopEdges.insert(edge, index);
+                ++index;
+            }
+        }
+    }
+
+//    //Populate the matrix
+//    QList< cwLoopCloserTask::EdgeMatrixRow > matrix;
+//    foreach(cwLoop loop, Loops) {
+//        cwLoopCloserTask::EdgeMatrixRow row;
+//        row.fill(false, loopEdges.size());
+
+//        foreach(cwEdgeSurveyChunk* edge, loop.edges()) {
+//            int index = loopEdges.value(edge);
+//            row[index] = true;
+//        }
+
+//        matrix.row
+//    }
+
+
+}
+
+void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges) const
 {
     //Debugging for the resulting edges
     foreach(cwEdgeSurveyChunk* edge, edges) {
@@ -528,4 +631,28 @@ void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdge
     qDebug() << "\t*********** end of edges ***********";
 }
 
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::printLoops
+ * @param loops
+ */
+void cwLoopCloserTask::cwLoopDetector::printLoops(QList<cwLoopCloserTask::cwLoop> loops) const
+{
+    int count = 0;
+    foreach(cwLoop loop, loops) {
+        qDebug() << "-----***-----Loop" << count << "-------***----------";
+        printEdges(loop.edges().toList());
+        qDebug() << "-----***-----End of Loop--------***------------";
+        count++;
+    }
+}
 
+
+bool cwLoopCloserTask::cwLoop::operator ==(const cwLoopCloserTask::cwLoop &other) const
+{
+    return other.edges() == edges();
+}
+
+bool cwLoopCloserTask::cwLoop::operator !=(const cwLoopCloserTask::cwLoop &other) const
+{
+    return other.edges() != edges();
+}
