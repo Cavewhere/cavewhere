@@ -84,6 +84,7 @@ private:
 
         bool operator ==(const cwLoop& other) const;
         bool operator !=(const cwLoop& other) const;
+        bool operator <(const cwLoop& other) const;
 
     private:
         QSet<cwEdgeSurveyChunk*> Edges;
@@ -112,7 +113,8 @@ private:
         void createEdgeLookup();
         QList<cwLoop> findLoops(QString station);
         void findLoopsHelper(QString station, QList<cwLoop> &resultLoops, QList<cwEdgeSurveyChunk*> path); //Recusive function, depth first search
-        void minimizeLoops();
+        QList<cwLoop> findUniqueLoops(QList<cwLoop> initialLoops);
+        QList<cwLoop> minimizeLoops(QList<cwLoop> loops);
 
         void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges) const;
         void printLoops(QList<cwLoop> loops) const;
