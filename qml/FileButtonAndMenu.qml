@@ -12,6 +12,7 @@ import QtQuick.Controls 1.0
 MenuBar {
     property var terrainRenderer; //For taking screenshots
     property DataMainPage dataPage;
+    property Loader mainContentLoader;
 
     signal openAboutWindow;
 
@@ -95,7 +96,12 @@ MenuBar {
         MenuItem {
             text: "Reload"
             shortcut: "Ctrl+R"
-            onTriggered: qmlReloader.reload();
+            onTriggered: {
+                var currentSource = mainContentLoader.source;
+                mainContentLoader.source = ""
+                qmlReloader.reload();
+                mainContentLoader.source = currentSource;
+            }
         }
 
         MenuItem {

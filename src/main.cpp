@@ -32,6 +32,7 @@
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "cwOpenFileEventHandler.h"
+#include "cwQMLReload.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -86,6 +87,9 @@ int main(int argc, char *argv[])
 
     QUrl mainWindowPath = mainWindowSourcePath();
     QQmlApplicationEngine applicationEnigine;
+
+    rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
+
 //    applicationEnigine.rootContext();
 
 //    QQuickView view;
