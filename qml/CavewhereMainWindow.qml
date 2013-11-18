@@ -29,7 +29,7 @@ ApplicationWindow {
         id: fileMenuButton
 
         terrainRenderer: terrainRendererId
-        dataPage: dataMainPageId
+//        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
         mainContentLoader: loadMainContentsId
 
         onOpenAboutWindow:  {
@@ -47,6 +47,11 @@ ApplicationWindow {
         anchors.fill: parent
         asynchronous: true
         visible: status == Loader.Ready
+
+        onLoaded: {
+            console.log("Data Page:" + item + " " + item.dataPage)
+            fileMenuButton.dataPage = item.dataPage
+        }
     }
 
     Column {

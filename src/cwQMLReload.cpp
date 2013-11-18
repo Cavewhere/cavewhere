@@ -36,7 +36,6 @@ void cwQMLReload::reload()
 
     ApplicationEngine->clearComponentCache();
 
-//    QMetaObject::invokeMethod(ApplicationEngine, "load", Qt::QueuedConnection, Q_ARG(QString, source));
 }
 
 /**

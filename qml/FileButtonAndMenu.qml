@@ -11,7 +11,7 @@ import QtQuick.Controls 1.0
 
 MenuBar {
     property var terrainRenderer; //For taking screenshots
-    property DataMainPage dataPage;
+    property var dataPage; //Should be a DataMainPage
     property Loader mainContentLoader;
 
     signal openAboutWindow;
