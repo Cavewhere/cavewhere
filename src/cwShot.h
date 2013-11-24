@@ -65,6 +65,8 @@ public:
 
     bool isValid() const;
 
+    static bool clinoValid(cwClinoStates::State state);
+
     bool sameIntervalPointer(const cwShot& other) const;
 
 private:
@@ -158,6 +160,19 @@ inline double cwShot::backClino() const {
 inline bool cwShot::isValid() const {
     return distanceState() == cwDistanceStates::Valid;
 }
+
+/**
+ * @brief cwShot::clinoValid
+ * @param state
+ * @return
+ *
+ * This is a convenance function for (state == cwClinoStates::Valid or cwClinoStates::Down or cwClinoStates::Up
+ */
+inline bool cwShot::clinoValid(cwClinoStates::State state)
+{
+    return (state == cwClinoStates::Valid || state == cwClinoStates::Down || state == cwClinoStates::Up);
+}
+
 
 /**
  * @brief cwShot::setDistanceIncluded

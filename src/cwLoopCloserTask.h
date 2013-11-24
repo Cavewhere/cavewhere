@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QMultiHash>
+#include <QVector3D>
 
 //Our includes
 #include "cwTask.h"
@@ -20,6 +21,8 @@ class cwCavingRegion;
 class cwCave;
 class cwSurveyChunk;
 
+//Armadillo
+#include <armadillo>
 
 class cwLoopCloserTask : public cwTask
 {
@@ -41,19 +44,59 @@ protected:
 
 private:
 
+    class cwShotVector {
+    public:
+
+        enum ShotDirection {
+            FrontSite,
+            BackSite
+        };
+
+        void setVector(arma::mat vector);
+        const arma::mat &vector() const;
+
+        void setCovarienceMatrix(arma::mat covarienceMatrix);
+        arma::mat covarienceMatrix() const;
+
+        void setDirection(ShotDirection direction);
+        ShotDirection direction() const;
+
+        QString fromStation() const;
+        void setFromStation(QString fromStation);
+
+        QString toStation() const;
+        void setToStation(QString toStation);
+
+    private:
+        arma::mat Vector; //3x1 matrix
+        arma::mat CovarianceMatrix; //3x3 matrix
+        ShotDirection Direction;
+
+        QString FromStation;
+        QString ToStation;
+    };
+
     class cwEdgeSurveyChunk {
     public:
         void setStations(QList<cwStation> stations) { Stations = stations; }
         QList<cwStation> stations() const { return Stations; }
 
         void setShots(QList<cwShot> shots) { Shots = shots; }
-        QList<cwShot> shot() const { return Shots; }
+        QList<cwShot> shots() const { return Shots; }
 
         cwEdgeSurveyChunk* split(QString stationName);
+
+        void addShotVector(cwShotVector direction);
+        QList<cwShotVector> shotVectors() const;
+
 
     private:
         QList<cwStation> Stations;
         QList<cwShot> Shots;
+
+        //Data that's calculated by the loop closure algorithm
+        QList<cwShotVector> ShotVectors;
+
     };
 
     /**
@@ -118,12 +161,25 @@ private:
 
         void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges) const;
         void printLoops(QList<cwLoop> loops) const;
+        void printMatrix(QVector<char> matrix, int columns, int rows, QHash<int, cwEdgeSurveyChunk*> columnIndexToLoopEdges);
     };
 
     class EdgeMatrixRow : public QVector<bool> {
+    };
 
-//        static EdgeMatrixRow xor(const EdgeMatrixRow& r1, const EdgeMatrixRow& r2);
+    class cwShotProcessor {
+    public:
+        void process(QList<cwEdgeSurveyChunk*> edges);
 
+    private:
+
+        void processShot(cwEdgeSurveyChunk *chunk, int shotIndex);
+        cwShotVector shotTransform(double distance, double azimith, double clino);
+    };
+
+    class cwLeastSquares {
+    public:
+        void process(QList<cwEdgeSurveyChunk*> edges);
     };
 
     cwCavingRegion* Region;
@@ -145,5 +201,27 @@ private:
 //                        QMultiHash<QString, cwEdgeSurveyChunk*> &chunkLoopup);
 
 };
+
+inline QDebug operator<<(QDebug dbg, const arma::mat &c)
+{
+    dbg.nospace() << "mat[" << c.n_rows << ", " << c.n_cols << "] = \n[";
+    for(unsigned int i = 0; i < c.n_rows; i++) {
+        for(unsigned int j = 0; j < c.n_cols; j++) {
+            dbg.nospace() << c(i, j);
+
+            if(j < c.n_cols - 1) {
+                dbg.nospace() << ", ";
+            }
+        }
+
+        if(i < c.n_rows - 1) {
+            dbg.nospace() << ";\n";
+        } else {
+            dbg.nospace() << ']';
+        }
+    }
+
+    return dbg.space();
+}
 
 #endif // CWLOOPCLOSERTASK_H

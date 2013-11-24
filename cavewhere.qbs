@@ -34,7 +34,8 @@ Project {
             "squish",
             "z",
             "protobuf",
-            "c++"
+            "c++",
+            "armadillo"
         ]
 
         cpp.frameworks: [

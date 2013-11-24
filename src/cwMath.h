@@ -26,4 +26,12 @@ inline double log2(double value) {
 
 #endif
 
+inline double degreeToRadians() {
+    return 0.01745329251;
+}
+
+inline double radianToDegrees() {
+    return 57.2957795131;
+}
+
 #endif // CWMATH_H
