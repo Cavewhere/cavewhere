@@ -230,6 +230,23 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk*> cwLoopCloserTask::cwMainEdgeProcesso
                 shots.removeLast();
             }
 
+            if(shots.isEmpty()) {
+                continue;
+            }
+
+            //Make sure all the shots are valid
+            bool foundInvalidShot = false;
+            foreach(cwShot shot, shots) {
+                if(!shot.isValid()) {
+                    qDebug() << "Shot is invalid!";
+                    //TODO We need to emit an error the the user
+                    foundInvalidShot = true;
+                    continue;
+                }
+            }
+
+            if(foundInvalidShot) { continue; }
+
             //Add survey chunk, split if nessarcy
             cwEdgeSurveyChunk* edgeChunk = new cwEdgeSurveyChunk();
             edgeChunk->setShots(shots);
@@ -853,13 +870,15 @@ void cwLoopCloserTask::cwShotProcessor::process(QList<cwEdgeSurveyChunk*> edges)
  */
 void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, int shotIndex)  {
     const cwShot& shot = chunk->shots().at(shotIndex);
+    QString fromStationName = chunk->stations().at(shotIndex).name();
+    QString toStationName = chunk->stations().at(shotIndex + 1).name();
 
     if(shot.distanceState() == cwDistanceStates::Valid) {
 
         bool hasClino = cwShot::clinoValid(shot.clinoState());
-        bool hasCompass = shot.compassState() == cwCompassStates::Valid;
+        bool hasCompass = cwShot::compassValid(shot.compassState());
         bool hasBackClino = cwShot::clinoValid(shot.backClinoState());
-        bool hasBackCompass = shot.backCompassState() == cwCompassStates::Valid;
+        bool hasBackCompass = cwShot::compassValid(shot.backCompassState());
 
         bool hasValidFrontSite = hasClino && hasCompass;
         bool hasValidBackSite = hasBackClino && hasBackCompass;
@@ -878,6 +897,8 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
             }
 
             shotVector.setDirection(cwShotVector::FrontSite);
+            shotVector.setFromStation(fromStationName);
+            shotVector.setToStation(toStationName);
             chunk->addShotVector(shotVector);
             return;
         }
@@ -885,6 +906,8 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         if(hasValidFrontSite) {
             shotVector = shotTransform(shot.distance(), shot.compass(), shot.clino());
             shotVector.setDirection(cwShotVector::FrontSite);
+            shotVector.setFromStation(fromStationName);
+            shotVector.setToStation(toStationName);
             chunk->addShotVector(shotVector);
 
         } else if(!hasValidBackSite) {
@@ -904,6 +927,8 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         if(hasValidBackSite) {
             shotVector = shotTransform(shot.distance(), shot.backCompass(), shot.backClino());
             shotVector.setDirection(cwShotVector::BackSite);
+            shotVector.setFromStation(fromStationName);
+            shotVector.setToStation(toStationName);
             chunk->addShotVector(shotVector);
 
         } else if(!hasValidFrontSite) {
@@ -1013,8 +1038,8 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
  * @param vector a 1x3 matrix, that stores the direction of the shot
  */
 void cwLoopCloserTask::cwShotVector::setVector(arma::mat vector) {
-    Q_ASSERT(vector.n_cols == 3);
-    Q_ASSERT(vector.n_rows == 1);
+    Q_ASSERT(vector.n_cols == 1);
+    Q_ASSERT(vector.n_rows == 3);
     Vector = vector;
 }
 
@@ -1096,7 +1121,7 @@ cwLoopCloserTask::cwShotVector::ShotDirection cwLoopCloserTask::cwShotVector::di
  * @brief cwLoopCloserTask::cwLeastSquares::process
  * @param edges
  *
- * This is a proto-type of the least squares algorith
+ * Wahoo! Least Squares
  */
 void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) {
 
@@ -1109,10 +1134,27 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
     //The list of shots the list of edges
     QList<cwShotVector> shots;
 
+
+
+    //FIXME: We should probably check if there's previously fixed stations, for now we just fixed the first station
+    arma::mat zeroMat = arma::mat::fixed<3,1>(); //The fixed position
+    zeroMat.zeros();
+    arma::mat fixedWeight = arma::mat::fixed<3,3>(); //Fixed weight
+    fixedWeight.eye(); //Identity
+
+    cwStation firstStation = edges.first()->stations().first();
+    cwShotVector fixShotVector;
+    fixShotVector.setToStation(firstStation.name());
+    fixShotVector.setVector(zeroMat);
+    fixShotVector.setCovarienceMatrix(fixedWeight);
+    shots.append(fixShotVector);
+
     foreach(cwEdgeSurveyChunk* edge, edges) {
         foreach(cwStation station, edge->stations()) {
-            stationToIndex.insert(station.name(), stationCount);
-            ++stationCount; //Increase the station count
+            if(!stationToIndex.contains(station.name())) {
+                stationToIndex.insert(station.name(), stationCount);
+                ++stationCount; //Increase the station count
+            }
         }
 
         //Append all the shot vectors from the shots
@@ -1124,56 +1166,100 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
     arma::mat observationMatrix = arma::mat(shots.size() * 3, stationToIndex.size() * 3);
     arma::mat weightsMatrix = arma::mat(shots.size() * 3, shots.size() * 3);
 
+    //Fill the fromStationMatrix with -1 and toStationMatrix to 1
     arma::mat fromStationMatrix = arma::mat::fixed<3,3>();
     arma::mat toStationMatrix = arma::mat::fixed<3,3>();
+    fromStationMatrix.zeros();
+    toStationMatrix.zeros();
+    for(int i = 0; i < 3; i++) {
+        fromStationMatrix(i,i) = -1;
+        toStationMatrix(i,i) = 1;
+    }
 
     //Set the observation and weightsMatrix to all zeros
     observationMatrix.zeros();
     weightsMatrix.zeros();
 
-    //Go through all the shots and populate all the matrixes
+    //Go through all the shots and populate all the observational and weights matrix
     for(int i = 0; i < shots.size(); i++) {
         const cwShotVector& shot = shots.at(i);
 
+        int ii = 3 * i; //Matrix index
+
         //Add the shot to the shot matrix
-        shotMatrix.submat(arma::span(i,i+2), arma::span(0,0)) = shot.vector();
+        qDebug() << "ShotMatrix:" << shotMatrix;
+        qDebug() << "Submatrix:" << shotMatrix.submat(arma::span(ii,ii+2), arma::span(0,0));
+        qDebug() << "Shot vector:" << shot.vector();
+        shotMatrix.submat(arma::span(ii,ii+2), arma::span(0,0)) = shot.vector();
 
         //Add the shot to the observation matrix
-        if(!shot.fromStation().isEmpty()) {
-            int fromStationIndex = stationToIndex.value(shot.fromStation(), -1);
-            observationMatrix.submat(arma::span(i, i+2),
+        if(!shot.fromStation().isEmpty()) { //We need to test this because of fixed shots, that only have fromStations
+            int fromStationIndex = 3 * stationToIndex.value(shot.fromStation(), -1);
+            Q_ASSERT(fromStationIndex >= 0);
+            observationMatrix.submat(arma::span(ii, ii+2),
                                      arma::span(fromStationIndex, fromStationIndex+2)) = fromStationMatrix;
         }
 
         if(!shot.toStation().isEmpty()) {
-            int toStationIndex = stationToIndex.value(shot.fromStation(), -1);
-            observationMatrix.submat(arma::span(i, i+2),
+            int toStationIndex = 3 * stationToIndex.value(shot.toStation(), -1);
+            Q_ASSERT(toStationIndex >= 0);
+            observationMatrix.submat(arma::span(ii, ii+2),
                                      arma::span(toStationIndex, toStationIndex+2)) = toStationMatrix;
-
         }
 
         //Add the shot to the weights matrix
         arma::mat shotWeightMatrix = arma::inv(shot.covarienceMatrix());
-        weightsMatrix.submat(arma::span(i, i+2),
-                             arma::span(i, i+2)) = shotWeightMatrix;
+
+        qDebug() << "WeightMatrix sub:" <<         weightsMatrix.submat(arma::span(ii, ii+2),
+                                                                        arma::span(ii, ii+2));
+        qDebug() << "ShotWeightMatrix:" << shotWeightMatrix;
+
+        weightsMatrix.submat(arma::span(ii, ii+2),
+                             arma::span(ii, ii+2)) = shotWeightMatrix;
     }
 
-    //Calculate the station positions with giant matrixes (this is the least square aka weighting)
+    arma::mat four = arma::mat::fixed<2,2>();
+    four(0,0) = 104.176;
+    four(0,1) = -101.176;
+    four(1,0) = -101.176;
+    four(1,1) = 101.176;
+    qDebug() << "Four:" << four;
+    qDebug() << "Inverse of four:" << arma::inv(four);
+
+    qDebug() << "Weight matrix: " << weightsMatrix;
+    qDebug() << "Observation matrix:" << observationMatrix;
+    qDebug() << "Observation t matrix:" << observationMatrix.t();
+    qDebug() << "multi:" << observationMatrix.t() * weightsMatrix;
+    qDebug() << "Everything together:" << (observationMatrix.t() * weightsMatrix * observationMatrix);
+    qDebug() << "ShotMatrix:" << shotMatrix;
+    qDebug() << "Determinate:" << arma::det(observationMatrix.t() * weightsMatrix * observationMatrix);
+
     arma::mat observationMatrixTranspose = observationMatrix.t();
-    arma::mat stationPositions =
-            arma::inv(observationMatrixTranspose * weightsMatrix * observationMatrix) *
-            observationMatrixTranspose * weightsMatrix * shotMatrix;
+    arma::mat everything = observationMatrixTranspose * weightsMatrix * observationMatrix;
 
-    //For each station get the data for it    
-    QHashIterator<QString, int> iter(stationToIndex);
-    while(iter.hasNext()) {
-        iter.next();
-        QString stationName = iter.key();
-        int stationIndex = iter.value();
+    if(arma::det(everything) != 0.0) {
+        //Calculate the station positions with giant matrixes (this is the least square aka weighting)
 
-        arma::mat stationMat = stationPositions.submat(arma::span(stationIndex, stationIndex+2),
-                                                       arma::span(0, 0));
+        arma::mat stationPositions =
+                arma::inv(everything) *
+                observationMatrixTranspose * weightsMatrix * shotMatrix;
 
-        qDebug() << "Station:" << stationName << stationMat(0, 0) << stationMat(1, 0) << stationMat(2, 0);
+
+        qDebug() << "StationPositions:" << stationPositions;
+
+        //For each station get the data for it
+        QHashIterator<QString, int> iter(stationToIndex);
+        while(iter.hasNext()) {
+            iter.next();
+            QString stationName = iter.key();
+            int stationIndex = 3 * iter.value();
+
+            arma::mat stationMat = stationPositions.submat(arma::span(stationIndex, stationIndex+2),
+                                                           arma::span(0, 0));
+
+            qDebug() << "Station:" << stationName << stationMat(0, 0) << stationMat(1, 0) << stationMat(2, 0);
+        }
+    } else {
+        qDebug() << "No solution!";
     }
 }

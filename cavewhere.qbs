@@ -11,7 +11,7 @@ Project {
         Depends { name: "cpp" }
         Depends { name: "Qt";
             submodules: [ "core", "gui", "widgets", "script", "quick", "sql", "opengl", "xml", "concurrent" ]
-            frameworkBuild: true
+//            frameworkBuild: true
         }
         Depends { name: "QMath3d" }
 //        Depends { name: "icns-out" }
@@ -702,7 +702,7 @@ Project {
         Depends { name: "cpp" }
         Depends { name: "Qt";
             submodules: [ "core", "gui" ]
-            frameworkBuild: true
+//            frameworkBuild: true
         }
         files: [
             "QMath3d/qbox3d.h",

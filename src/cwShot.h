@@ -66,6 +66,7 @@ public:
     bool isValid() const;
 
     static bool clinoValid(cwClinoStates::State state);
+    static bool compassValid(cwCompassStates::State state);
 
     bool sameIntervalPointer(const cwShot& other) const;
 
@@ -158,7 +159,10 @@ inline double cwShot::backClino() const {
 }
 
 inline bool cwShot::isValid() const {
-    return distanceState() == cwDistanceStates::Valid;
+    return (distanceState() == cwDistanceStates::Valid) &&
+            ((clinoState() == cwClinoStates::Down || clinoState() == cwClinoStates::Up) ||
+             (clinoState() == cwClinoStates::Valid && compassState() == cwCompassStates::Valid))
+            ;
 }
 
 /**
@@ -166,11 +170,21 @@ inline bool cwShot::isValid() const {
  * @param state
  * @return
  *
- * This is a convenance function for (state == cwClinoStates::Valid or cwClinoStates::Down or cwClinoStates::Up
+ * This is a convinance function for (state == cwClinoStates::Valid or cwClinoStates::Down or cwClinoStates::Up
  */
 inline bool cwShot::clinoValid(cwClinoStates::State state)
 {
     return (state == cwClinoStates::Valid || state == cwClinoStates::Down || state == cwClinoStates::Up);
+}
+
+/**
+ * @brief cwShot::compassValid
+ * @param state
+ * @return
+ */
+inline bool cwShot::compassValid(cwCompassStates::State state)
+{
+   return (state == cwCompassStates::Valid);
 }
 
 
