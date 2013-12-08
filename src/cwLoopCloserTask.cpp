@@ -879,9 +879,11 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         bool hasCompass = cwShot::compassValid(shot.compassState());
         bool hasBackClino = cwShot::clinoValid(shot.backClinoState());
         bool hasBackCompass = cwShot::compassValid(shot.backCompassState());
+        bool clinoUpDown = shot.clinoState() == cwClinoStates::Up || shot.clinoState() == cwClinoStates::Down;
+        bool backClinoUpDown = shot.backClinoState() == cwClinoStates::Up || shot.backClinoState() == cwClinoStates::Down;
 
-        bool hasValidFrontSite = hasClino && hasCompass;
-        bool hasValidBackSite = hasBackClino && hasBackCompass;
+        bool hasValidFrontSite = (hasClino && hasCompass) || clinoUpDown;
+        bool hasValidBackSite = (hasBackClino && hasBackCompass) || backClinoUpDown;
 
         cwShotVector shotVector; //The shot direction and xyz covarience for the shot
 
@@ -890,10 +892,12 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
 
             if(hasClino && hasBackCompass) {
                 //Reverse the back compass so it's a front site
-                shotVector = shotTransform(shot.distance(), shot.backCompass() - 180.0, shot.clino());
+                shotVector = shotTransform(shot.distance(), shot.backCompass() - 180.0, shot.clino(), shot.clinoState());
             } else if(hasBackClino && hasCompass) {
                 //Reverse the back clino so it's a front site
-                shotVector = shotTransform(shot.distance(), shot.compass(), -shot.clino());
+                shotVector = shotTransform(shot.distance(), shot.compass(), -shot.backClino(), shot.backClinoState());
+            } else {
+                Q_ASSERT(false); //This should never get here
             }
 
             shotVector.setDirection(cwShotVector::FrontSite);
@@ -904,7 +908,7 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         }
 
         if(hasValidFrontSite) {
-            shotVector = shotTransform(shot.distance(), shot.compass(), shot.clino());
+            shotVector = shotTransform(shot.distance(), shot.compass(), shot.clino(), shot.clinoState());
             shotVector.setDirection(cwShotVector::FrontSite);
             shotVector.setFromStation(fromStationName);
             shotVector.setToStation(toStationName);
@@ -915,20 +919,23 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
 
             if(hasCompass) {
                 //TODO: Send error to the user that there's no clino
+                qDebug() << "There's no clino";
             } else if(hasClino) {
                 //TODO: Send error to the user that there's no compass
+                qDebug() << "There's no compass";
             } else {
                 //TODO: Send error to the user that there's not back clino and compass
+                qDebug() << "There's no back clino or compass";
             }
 
             return;
         }
 
         if(hasValidBackSite) {
-            shotVector = shotTransform(shot.distance(), shot.backCompass(), shot.backClino());
+            shotVector = shotTransform(shot.distance(), shot.backCompass(), shot.backClino(), shot.backClinoState());
             shotVector.setDirection(cwShotVector::BackSite);
-            shotVector.setFromStation(fromStationName);
-            shotVector.setToStation(toStationName);
+            shotVector.setFromStation(toStationName); //Reverse the station because, this is a backsite
+            shotVector.setToStation(fromStationName);
             chunk->addShotVector(shotVector);
 
         } else if(!hasValidFrontSite) {
@@ -936,10 +943,13 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
 
             if(hasBackCompass) {
                 //TODO: Send error to the user that there's no back clino
+                qDebug() << "There's no back clino";
             } else if(hasBackClino) {
                 //TODO: Send error to the user that there's no back compass
+                qDebug() << "There's no back compass";
             } else {
                 //TODO: Send error to the user that there's not back clino and compass
+                qDebug() << "There's no back clino or compass";
             }
 
             return;
@@ -981,11 +991,41 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
  */
 cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(double distance,
                                                                                 double azimith,
-                                                                                double clino)
+                                                                                double clino,
+                                                                                cwClinoStates::State clinoState)
 {
+    //Variance for distance, compass (azimith), clino
+    double distanceStd = 0.05; //FIXME: use shot std for each shot, assume the units are what ever in shot?
+    double azimithStd; //= 0.017; //1 Degree std in radians
+    double clinoStd; //= 0.017; //1 degree std in radians
+
+    Q_ASSERT(clinoState != cwClinoStates::Empty);
+    switch(clinoState) {
+        case cwClinoStates::Valid:
+        azimithStd = degreeToRadians() * 1.25; //1.25 Degree std in radians
+        clinoStd = degreeToRadians() * 1.25; //1.25 Degree std in radians
+        break;
+    case cwClinoStates::Down:
+        azimithStd = 0.0001;
+        clinoStd = 0.0001;
+        azimith = 0.0;
+        clino = -90.0;
+        break;
+    case cwClinoStates::Up:
+        azimithStd = 0.0001;
+        clinoStd = 0.0001;
+        azimith = 0.0;
+        clino = 90.0;
+        break;
+    default:
+        return cwLoopCloserTask::cwShotVector();
+    }
+
     //Convert from degrees to radians
     azimith = degreeToRadians() * azimith;
     clino = degreeToRadians() * clino;
+
+    double maxClino = degreeToRadians() * 89.9;
 
     //Calculate the vector
     arma::mat vector = arma::mat::fixed<3, 1>();
@@ -995,22 +1035,22 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
 
     //Calculate the convarience for the shot
     arma::mat jacobian = arma::mat::fixed<3, 3>();
-    jacobian(0, 0) = sin(azimith) * cos(clino);
-    jacobian(0, 1) = cos(azimith) * cos(clino) * distance;
-    jacobian(0, 2) = -sin(azimith) * sin(clino) * distance;
 
-    jacobian(1, 0) = cos(azimith) * cos(clino);
-    jacobian(1, 1) = -sin(azimith) * cos(clino) * distance;
-    jacobian(1, 2) = -cos(azimith) * sin(clino) * distance;
+    if(fabs(clino) < maxClino) {
+        jacobian(0, 0) = sin(azimith) * cos(clino);
+        jacobian(0, 1) = cos(azimith) * cos(clino) * distance;
+        jacobian(0, 2) = -sin(azimith) * sin(clino) * distance;
 
-    jacobian(2, 0) = sin(azimith);
-    jacobian(2, 1) = 0;
-    jacobian(2, 2) = cos(clino) * distance;
+        jacobian(1, 0) = cos(azimith) * cos(clino);
+        jacobian(1, 1) = -sin(azimith) * cos(clino) * distance;
+        jacobian(1, 2) = -cos(azimith) * sin(clino) * distance;
 
-    //Variance for distance, compass (azimith), clino
-    double distanceStd = 0.01; //FIXME: use shot std for each shot, assume the units are what ever in shot?
-    double azimithStd = 0.017; //1 Degree std in radians
-    double clinoStd = 0.017; //1 degree std in radians
+        jacobian(2, 0) = sin(azimith);
+        jacobian(2, 1) = 0;
+        jacobian(2, 2) = cos(clino) * distance;
+    } else {
+        jacobian.eye();
+    }
 
     arma::mat dacCovariance = arma::mat::fixed<3, 3>();
     dacCovariance.zeros();
@@ -1020,15 +1060,13 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
 
     arma::mat xyzCovariance = jacobian * dacCovariance * jacobian.t();
 
-//    qDebug() << "jacobian:" << jacobian;
-//    qDebug() << "dacConvariance:" << dacCovariance;
-//    qDebug() << "jacobian.t():" << jacobian.t();
-//    qDebug() << "Maginuted: " << arma::det(xyzCovariance);
-//    qDebug() << "Inverse:" << arma::inv(xyzCovariance);
-//    qDebug() << "Mag inverse" << arma::det(arma::inv(xyzCovariance));
-
     cwLoopCloserTask::cwShotVector shotVector;
-    shotVector.setVector(vector);
+    shotVector.setVector(vector);qDebug() << "jacobian:" << jacobian;
+    qDebug() << "dacConvariance:" << dacCovariance;
+    qDebug() << "jacobian.t():" << jacobian.t();
+    qDebug() << "Maginuted: " << arma::det(xyzCovariance);
+    qDebug() << "Inverse:" << arma::inv(xyzCovariance);
+    qDebug() << "Mag inverse" << arma::det(arma::inv(xyzCovariance));
     shotVector.setCovarienceMatrix(xyzCovariance);
     return shotVector;
 }
@@ -1134,8 +1172,6 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
     //The list of shots the list of edges
     QList<cwShotVector> shots;
 
-
-
     //FIXME: We should probably check if there's previously fixed stations, for now we just fixed the first station
     arma::mat zeroMat = arma::mat::fixed<3,1>(); //The fixed position
     zeroMat.zeros();
@@ -1217,14 +1253,6 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
         weightsMatrix.submat(arma::span(ii, ii+2),
                              arma::span(ii, ii+2)) = shotWeightMatrix;
     }
-
-    arma::mat four = arma::mat::fixed<2,2>();
-    four(0,0) = 104.176;
-    four(0,1) = -101.176;
-    four(1,0) = -101.176;
-    four(1,1) = 101.176;
-    qDebug() << "Four:" << four;
-    qDebug() << "Inverse of four:" << arma::inv(four);
 
     qDebug() << "Weight matrix: " << weightsMatrix;
     qDebug() << "Observation matrix:" << observationMatrix;

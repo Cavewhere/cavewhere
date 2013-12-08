@@ -159,9 +159,15 @@ inline double cwShot::backClino() const {
 }
 
 inline bool cwShot::isValid() const {
-    return (distanceState() == cwDistanceStates::Valid) &&
-            ((clinoState() == cwClinoStates::Down || clinoState() == cwClinoStates::Up) ||
-             (clinoState() == cwClinoStates::Valid && compassState() == cwCompassStates::Valid))
+    bool compassValid = (backCompassState() == cwCompassStates::Valid || compassState() == cwCompassStates::Valid);
+
+    return (distanceState() == cwDistanceStates::Valid)
+            &&
+            (((clinoState() == cwClinoStates::Down || clinoState() == cwClinoStates::Up) ||
+             (clinoState() == cwClinoStates::Valid && compassValid))
+            ||
+            ((backClinoState() == cwClinoStates::Down || backClinoState() == cwClinoStates::Up) ||
+             (backClinoState() == cwClinoStates::Valid && compassValid)))
             ;
 }
 

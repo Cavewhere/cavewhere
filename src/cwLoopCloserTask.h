@@ -174,7 +174,7 @@ private:
     private:
 
         void processShot(cwEdgeSurveyChunk *chunk, int shotIndex);
-        cwShotVector shotTransform(double distance, double azimith, double clino);
+        cwShotVector shotTransform(double distance, double azimith, double clino, cwClinoStates::State clinoState);
     };
 
     class cwLeastSquares {
