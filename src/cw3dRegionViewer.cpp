@@ -54,12 +54,17 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     Terrain->setNumberOfLevels(10);
     //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
 
+    //For testing survex vs cavewhere
+    LinePlotCavewhereMethod = new cwGLLinePlot();
+    LinePlotCavewhereMethod->setColor(Qt::blue);
+
     LinePlot = new cwGLLinePlot();
     Scraps = new cwGLScraps();
     Plane = new cwGLGridPlane();
 
     Terrain->setScene(this);
     LinePlot->setScene(this);
+    LinePlotCavewhereMethod->setScene(this);
     Scraps->setScene(this);
     Plane->setScene(this);
 
@@ -89,6 +94,7 @@ void cw3dRegionViewer::paint(QPainter * painter) {
     //    Terrain->draw();
     Scraps->draw();
     LinePlot->draw();
+    LinePlotCavewhereMethod->draw();
     Plane->draw();
     glDisable(GL_DEPTH_TEST);
 
@@ -105,6 +111,7 @@ void cw3dRegionViewer::initializeGL() {
     Terrain->initialize();
     Scraps->initialize();
     LinePlot->initialize();
+    LinePlotCavewhereMethod->initialize();
     Plane->initialize();
 }
 
@@ -163,6 +170,10 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
 QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
     if(LinePlot->isDirty()) {
         LinePlot->updateData();
+    }
+
+    if(LinePlotCavewhereMethod->isDirty()) {
+        LinePlotCavewhereMethod->updateData();
     }
 
     if(Scraps->isDirty()) {

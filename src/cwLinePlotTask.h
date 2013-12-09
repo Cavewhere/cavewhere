@@ -85,12 +85,23 @@ public:
         QVector<QVector3D> stationPositions() const;
         QVector<unsigned int> linePlotIndexData() const;
 
+
+        //For testing
+        void setPositionsNewMethod(QVector<QVector3D> positions);
+        void setPlotIndexDataNewMethode(QVector<unsigned int> indexData);
+        QVector<QVector3D> stationPositionsNewMethod() const;
+        QVector<unsigned int> linePlotIndexDataNewMethod() const;
+
     private:
         QMap<cwCave*, LinePlotCaveData> Caves;
         QSet<cwTrip*> Trips;
         QSet<cwScrap*> Scraps;
         QVector<QVector3D> StationPositions;
         QVector<unsigned int> LinePlotIndexData;
+
+        //For testing
+        QVector<QVector3D> StationPositionsNewMethod;
+        QVector<unsigned int> LinePlotIndexDataNewMethod;
 
         friend class cwLinePlotTask;
     };
@@ -180,6 +191,7 @@ private:
 
     //The region data
     cwCavingRegion* Region; //Local copy of the region, we can modify this
+
     RegionDataPtrs RegionOriginalPointers; //Allows use to notify the which of the original data has changed
     QVector<cwStationPositionLookup> CaveStationLookups; //Copies of all the cave station lookups that are going to be modified
     QVector<StationTripScrapLookup> TripLookups; //Generated in indexStations()
@@ -201,7 +213,10 @@ private:
     LinePlotResultData Result;
 
     //For performance testing
-    QTime Time;
+    QTime TimeSurvex; //Survex loop closure
+    int TimeCavewhere; //Cavewhere loop closure
+    cwCavingRegion* RegionNewMethod; //Local copy for testing cavewhere's new loopclosure method
+    cwLinePlotGeometryTask* CenterlineGeometryTaskNewMethod; //For test cavewhere's new loopclosure method
 
     void encodeCaveNames();
     void initializeCaveStationLookups();
@@ -267,6 +282,49 @@ inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositions()
 inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexData() const
 {
     return LinePlotIndexData;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setPositionsNewMethod
+ * @param positions
+ *
+ *  For testing between survex and cavewhere
+ */
+inline void cwLinePlotTask::LinePlotResultData::setPositionsNewMethod(QVector<QVector3D> positions)
+{
+    StationPositionsNewMethod = positions;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::setPlotIndexDataNewMethode
+ * @param indexData
+ *
+ *  For testing between survex and cavewhere
+ */
+inline void cwLinePlotTask::LinePlotResultData::setPlotIndexDataNewMethode(QVector<unsigned int> indexData)
+{
+    LinePlotIndexDataNewMethod = indexData;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::stationPositionsNewMethod
+ * @return
+ *
+ *  For testing between survex and cavewhere
+ */
+inline QVector<QVector3D> cwLinePlotTask::LinePlotResultData::stationPositionsNewMethod() const
+{
+    return StationPositionsNewMethod;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotResultData::linePlotIndexDataNewMethod
+ * @return
+ *  For testing between survex and cavewhere
+ */
+inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexDataNewMethod() const
+{
+    return LinePlotIndexDataNewMethod;
 }
 
 

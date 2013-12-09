@@ -87,6 +87,9 @@ void cwLoopCloserTask::processCave(cwCave *cave)
     cwLeastSquares leastSquares;
     leastSquares.process(edges);
 
+    //Set the cave's station postions
+    cave->setStationPositionLookup(leastSquares.stationPositionLookup());
+
 //    printEdges(edges);
 
     //---------------------------- Process all Legs ----------------------------------
@@ -1002,8 +1005,8 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
     Q_ASSERT(clinoState != cwClinoStates::Empty);
     switch(clinoState) {
         case cwClinoStates::Valid:
-        azimithStd = degreeToRadians() * 1.25; //1.25 Degree std in radians
-        clinoStd = degreeToRadians() * 1.25; //1.25 Degree std in radians
+        azimithStd = degreeToRadians() * 1.0; //1.25 Degree std in radians
+        clinoStd = degreeToRadians() * 1.0; //1.25 Degree std in radians
         break;
     case cwClinoStates::Down:
         azimithStd = 0.0001;
@@ -1022,8 +1025,8 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
     }
 
     //Convert from degrees to radians
-    azimith = degreeToRadians() * azimith;
-    clino = degreeToRadians() * clino;
+    azimith = azimith * acos(-1) / 180.0;
+    clino = clino * acos(-1) / 180.0;
 
     double maxClino = degreeToRadians() * 89.9;
 
@@ -1045,7 +1048,7 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
         jacobian(1, 1) = -sin(azimith) * cos(clino) * distance;
         jacobian(1, 2) = -cos(azimith) * sin(clino) * distance;
 
-        jacobian(2, 0) = sin(azimith);
+        jacobian(2, 0) = sin(clino);
         jacobian(2, 1) = 0;
         jacobian(2, 2) = cos(clino) * distance;
     } else {
@@ -1058,15 +1061,19 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
     dacCovariance(1, 1) = azimithStd;
     dacCovariance(2, 2) = clinoStd;
 
-    arma::mat xyzCovariance = jacobian * dacCovariance * jacobian.t();
+    arma::mat xyzCovariance = jacobian * dacCovariance * jacobian;
 
     cwLoopCloserTask::cwShotVector shotVector;
-    shotVector.setVector(vector);qDebug() << "jacobian:" << jacobian;
-    qDebug() << "dacConvariance:" << dacCovariance;
-    qDebug() << "jacobian.t():" << jacobian.t();
-    qDebug() << "Maginuted: " << arma::det(xyzCovariance);
-    qDebug() << "Inverse:" << arma::inv(xyzCovariance);
-    qDebug() << "Mag inverse" << arma::det(arma::inv(xyzCovariance));
+    shotVector.setVector(vector);
+
+//    qDebug() << "jacobian:" << jacobian;
+//    qDebug() << "dacConvariance:" << dacCovariance;
+//    qDebug() << "jacobian.t():" << jacobian.t();
+//    qDebug() << "Maginuted: " << arma::det(xyzCovariance);
+//    qDebug() << "Inverse:" << arma::inv(xyzCovariance);
+//    qDebug() << "Mag inverse" << arma::det(arma::inv(xyzCovariance));
+    qDebug() << "Converiance Matrix:" << xyzCovariance;
+
     shotVector.setCovarienceMatrix(xyzCovariance);
     return shotVector;
 }
@@ -1285,9 +1292,25 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
             arma::mat stationMat = stationPositions.submat(arma::span(stationIndex, stationIndex+2),
                                                            arma::span(0, 0));
 
+            double x = roundToDecimal(stationMat(0,0), 2);
+            double y = roundToDecimal(stationMat(1,0), 2);
+            double z = roundToDecimal(stationMat(2,0), 2);
+
+            QVector3D stationPosition(x, y, z);
+            PositionLookup.setPosition(stationName, stationPosition);
+
             qDebug() << "Station:" << stationName << stationMat(0, 0) << stationMat(1, 0) << stationMat(2, 0);
         }
     } else {
         qDebug() << "No solution!";
     }
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLeastSquares::stationPositionLookup
+ * @return The output of the least squares algorithm
+ */
+cwStationPositionLookup cwLoopCloserTask::cwLeastSquares::stationPositionLookup() const
+{
+    return PositionLookup;
 }

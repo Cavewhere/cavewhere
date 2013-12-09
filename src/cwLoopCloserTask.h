@@ -17,6 +17,7 @@
 #include "cwTask.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwStationPositionLookup.h"
 class cwCavingRegion;
 class cwCave;
 class cwSurveyChunk;
@@ -179,7 +180,14 @@ private:
 
     class cwLeastSquares {
     public:
+        //Input
         void process(QList<cwEdgeSurveyChunk*> edges);
+
+        //Output
+        cwStationPositionLookup stationPositionLookup() const;
+
+    private:
+        cwStationPositionLookup PositionLookup;
     };
 
     cwCavingRegion* Region;

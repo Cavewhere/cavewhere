@@ -67,6 +67,9 @@ Item {
                 //Setup the linePlotManager with the glLinePlot
                 linePlotManager.setGLLinePlot(terrainRendererId.linePlot);
                 scrapManager.setGLScraps(terrainRendererId.scraps);
+
+                //For testing
+                linePlotManager.setGLLinePlotNewMethod(terrainRendererId.linePlotCavewhereMethod)
             }
         }
 

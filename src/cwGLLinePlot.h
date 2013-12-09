@@ -16,6 +16,7 @@
 #include <QVector>
 #include <QOpenGLBuffer>
 #include <QOpenGLShaderProgram>
+#include <QColor>
 
 class cwGLLinePlot : public cwGLObject
 {
@@ -31,6 +32,9 @@ public:
 
     void updateData();
 
+    void setColor(QColor color);
+    QColor color() const;
+
 signals:
 
 public slots:
@@ -43,6 +47,8 @@ private:
     float MaxZValue;
     float MinZValue;
 
+    QColor Color;
+
     QOpenGLBuffer LinePlotVertexBuffer;
     QOpenGLBuffer LinePlotIndexBuffer;
     int IndexBufferSize;
@@ -51,6 +57,7 @@ private:
     int UniformModelViewProjectionMatrix; //in shader uniform location
     int UniformMaxZValue; //in shader uniform location
     int UniformMinZValue; //in shader uniform location
+    int UniformColor; //color uniform location
 
     QVector<QVector3D> Points;
     QVector<unsigned int> Indexes;

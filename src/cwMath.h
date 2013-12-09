@@ -34,4 +34,20 @@ inline double radianToDegrees() {
     return 57.2957795131;
 }
 
+/**
+ * @brief roundToDecimal
+ * @param value
+ * @param decimal
+ * @return
+ *
+ *  This rounds value to the nearest decimal.
+ *
+ *  For example roundToDecimal(23.42362, 3) will return 23.424
+ */
+inline double roundToDecimal(double value, int decimal = 0) {
+    double multiple = decimal * 10.0;
+    return qRound(value * multiple) / multiple;
+}
+
+
 #endif // CWMATH_H

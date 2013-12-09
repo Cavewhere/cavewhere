@@ -47,10 +47,11 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
     Region = new cwCavingRegion(this);
+    RegionNewMethod = new cwCavingRegion(this);
 
     LoopCloserTask = new cwLoopCloserTask();
     LoopCloserTask->setParentTask(this);
-    LoopCloserTask->setRegion(Region);
+    LoopCloserTask->setRegion(RegionNewMethod);
 
     SurvexFile = new QTemporaryFile(this);
     SurvexFile->open();
@@ -89,6 +90,8 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     connect(CenterlineGeometryTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
     connect(CenterlineGeometryTask, SIGNAL(stopped()), SLOT(done()));
 
+    CenterlineGeometryTaskNewMethod = new cwLinePlotGeometryTask();
+    CenterlineGeometryTaskNewMethod->setParentTask(this);
 }
 
 
@@ -104,6 +107,7 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
 
     //Copy over all region data
     *Region = region;
+    *RegionNewMethod =  region; //For testing
 
     //Populate the original pointers
     RegionOriginalPointers = RegionDataPtrs(region);
@@ -131,18 +135,21 @@ void cwLinePlotTask::runTask() {
     Result.clear();
 
     //Run the loop closure task
+    QTime cavewhereTime;
+    cavewhereTime.start();
     LoopCloserTask->start();
+    TimeCavewhere = cavewhereTime.elapsed();
 
     //Change all the cave names, such that survex can handle them correctly
-//    encodeCaveNames();
+    encodeCaveNames();
 
     //Initilize the cave station lookup, from previous run
     initializeCaveStationLookups();
 
-//    Time.start();
-//    exportData();
+    TimeSurvex.start();
+    exportData();
 
-    done();
+//    done();
 }
 
 /**
@@ -154,7 +161,7 @@ void cwLinePlotTask::exportData() {
         return;
     }
 
-//    qDebug() << "Running export data status:" << status();
+    qDebug() << "Running export data status:" << status();
     SurvexExporter->setData(*Region);
     SurvexExporter->start();
 }
@@ -169,7 +176,7 @@ void cwLinePlotTask::runCavern() {
         return;
     }
 
-//    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
+    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
     CavernTask->start();
 }
 
@@ -178,12 +185,13 @@ void cwLinePlotTask::runCavern() {
   into compress xml file
   */
 void cwLinePlotTask::convertToXML() {
+    qDebug() << "Is running xml:" << isRunning();
     if(!isRunning()) {
         done();
         return;
     }
 
-//    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
+    qDebug() << "Covert 3d to xml" << "Status" << status() << CavernTask->output3dFileName();
     PlotSauceTask->setSurvex3DFile(CavernTask->output3dFileName());
     PlotSauceTask->start();
 }
@@ -194,7 +202,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-//    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
+    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
@@ -217,6 +225,9 @@ void cwLinePlotTask::generateCenterlineGeometry() {
     //Clear all the stations from the parser
     PlotSauceParseTask->clearStationPositions();
 
+    CenterlineGeometryTaskNewMethod->setRegion(RegionNewMethod);
+    CenterlineGeometryTaskNewMethod->start();
+
 //    qDebug() << "Generating centerline geometry" << status();
     CenterlineGeometryTask->setRegion(Region);
     CenterlineGeometryTask->start();
@@ -231,10 +242,14 @@ void cwLinePlotTask::linePlotTaskComplete() {
     Result.StationPositions = CenterlineGeometryTask->pointData();
     Result.LinePlotIndexData = CenterlineGeometryTask->indexData();
 
+    //For testing the new methode
+    Result.StationPositionsNewMethod = CenterlineGeometryTaskNewMethod->pointData();
+    Result.LinePlotIndexDataNewMethod = CenterlineGeometryTaskNewMethod->indexData();
+
     //Update the depth and length of the cave
     updateDepthLength();
 
-//    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
+    qDebug() << "Finished running linePlotTask: survex:" << TimeSurvex.elapsed() << "ms" << " cavewhere:" << TimeCavewhere << "ms";
     done();
 }
 

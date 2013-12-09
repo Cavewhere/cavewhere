@@ -26,6 +26,7 @@ class cw3dRegionViewer : public cwGLRenderer
     Q_OBJECT
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
+    Q_PROPERTY(cwGLLinePlot* linePlotCavewhereMethod READ linePlotCavewhereMethod NOTIFY linePlotCavewhereMethodChanged)
     Q_PROPERTY(cwGLScraps* scraps READ scraps)
     Q_PROPERTY(QQuaternion rotation READ rotation NOTIFY rotationChanged)
 
@@ -51,6 +52,9 @@ public slots:
     cwGLLinePlot* linePlot();
     cwGLScraps* scraps() const;
 
+    //For testing
+    cwGLLinePlot* linePlotCavewhereMethod() const;
+
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
 
@@ -68,6 +72,7 @@ signals:
 
     void rotationChanged();
 
+    void linePlotCavewhereMethodChanged();
 private slots:
     //Interaction events
     void resetView();
@@ -101,6 +106,9 @@ private:
     cwGLLinePlot* LinePlot;
     cwGLScraps* Scraps;
     cwGLGridPlane* Plane;
+
+    //For testing two line plot, comparing cavewhere and survex
+    cwGLLinePlot* LinePlotCavewhereMethod;
 
     QTimer* RotationInteractionTimer;
     QPoint TimeoutRotationPosition;
@@ -151,6 +159,13 @@ inline cwCavingRegion* cw3dRegionViewer::cavingRegion() const {
     return Region;
 }
 
+/**
+Gets linePlotCavewhereMethod
+*/
+
+inline cwGLLinePlot* cw3dRegionViewer::linePlotCavewhereMethod() const {
+    return LinePlotCavewhereMethod;
+}
 
 
 #endif // CW3DREGIONVIEWER_H

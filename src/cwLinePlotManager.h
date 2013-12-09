@@ -33,6 +33,9 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
+    //For testing the difference between cavewhere and survex
+    Q_INVOKABLE void setGLLinePlotNewMethod(cwGLLinePlot* linePlot);
+
 signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
@@ -47,6 +50,9 @@ private:
     QThread* LinePlotThread;
 
     cwGLLinePlot* GLLinePlot;
+
+    //For testing, the survex and cavewhere loop closure (compare the two)
+    cwGLLinePlot* GLLinePlotNewMethod;
 
     void connectCaves(cwCavingRegion* region);
     void connectCave(cwCave* cave);

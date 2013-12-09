@@ -120,8 +120,8 @@ void cwCavernTask::privateSetSurvexFile(QString survexFile) {
   \brief Called when cavern has finished
   */
 void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus) {
-    //qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
-//    qDebug() << CavernProcess->readAllStandardOutput();
+    qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
+    qDebug() << CavernProcess->readAllStandardOutput();
     if(exitStatus == QProcess::CrashExit || exitCode > 0) {
         //Errors in cavern
         qDebug() << "Cavern has crashed!" << CavernProcess->readAllStandardOutput();

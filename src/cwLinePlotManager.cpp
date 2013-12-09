@@ -25,6 +25,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 {
     Region = NULL;
     GLLinePlot = NULL;
+    GLLinePlotNewMethod = NULL;
 
     LinePlotThread = new QThread(this);
     LinePlotThread->start();
@@ -63,6 +64,12 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
 void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
     GLLinePlot = linePlot;
+    updateLinePlot();
+}
+
+void cwLinePlotManager::setGLLinePlotNewMethod(cwGLLinePlot *linePlot)
+{
+    GLLinePlotNewMethod = linePlot;
     updateLinePlot();
 }
 
@@ -243,7 +250,10 @@ void cwLinePlotManager::runSurvex() {
   line region
   */
 void cwLinePlotManager::updateLinePlot() {
+    qDebug() << "Updating line plot:" << GLLinePlot << GLLinePlotNewMethod;
+
     if(GLLinePlot == NULL) { return; }
+    if(GLLinePlotNewMethod == NULL) { return; }
     if(!LinePlotTask->isReady()) { return; }
     if(Region == NULL) { return; }
 
@@ -277,6 +287,20 @@ void cwLinePlotManager::updateLinePlot() {
     //Update the 3D plot
     GLLinePlot->setPoints(resultData.stationPositions());
     GLLinePlot->setIndexes(resultData.linePlotIndexData());
+
+    GLLinePlotNewMethod->setPoints(resultData.stationPositionsNewMethod());
+    GLLinePlotNewMethod->setIndexes(resultData.linePlotIndexDataNewMethod());
+
+    //For loop closure testing
+    if(resultData.stationPositions().size() == resultData.stationPositionsNewMethod().size()) {
+        for(int i = 0; i < resultData.stationPositions().size(); i++) {
+            QVector3D point = resultData.stationPositions().at(i);
+            QVector3D newMethodPoint = resultData.stationPositionsNewMethod().at(i);
+            QVector3D diff = newMethodPoint - point;
+            double mag = diff.length();
+            qDebug() << "i:" << i << "point:" << point << "vs" << newMethodPoint << "Diff:" << diff << "Mag:" << mag;
+        }
+    }
 
     emit stationPositionInCavesChanged(resultData.caveData().keys());
     emit stationPositionInTripsChanged(resultData.trips().toList());

@@ -15,6 +15,9 @@
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
 
+//Qt includes
+#include <QColor>
+
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
     cwGLObject(parent),
@@ -23,6 +26,7 @@ cwGLLinePlot::cwGLLinePlot(QObject *parent) :
     MaxZValue = 0.0;
     MinZValue = 0.0;
     IndexBufferSize = 0;
+    Color = Qt::red;
 }
 
 void cwGLLinePlot::initialize() {
@@ -55,6 +59,7 @@ void cwGLLinePlot::initializeShaders() {
     UniformModelViewProjectionMatrix = ShaderProgram->uniformLocation("ModelViewProjectionMatrix");
     UniformMaxZValue = ShaderProgram->uniformLocation("MaxZValue");
     UniformMinZValue = ShaderProgram->uniformLocation("MinZValue");
+    UniformColor = ShaderProgram->uniformLocation("Color");
 
 }
 
@@ -83,6 +88,7 @@ void cwGLLinePlot::draw() {
 
     ShaderProgram->bind();
 
+    ShaderProgram->setUniformValue(UniformColor, color());
     ShaderProgram->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
     ShaderProgram->enableAttributeArray(vVertex);
 
@@ -166,4 +172,24 @@ void cwGLLinePlot::updateData() {
     }
 
     setDirty(false);
+}
+
+/**
+ * @brief cwGLLinePlot::setColor
+ * @param color
+ *
+ *  Sets the color of the line plot
+ */
+void cwGLLinePlot::setColor(QColor color)
+{
+    Color = color;
+}
+
+/**
+ * @brief cwGLLinePlot::color
+ * @return
+ */
+QColor cwGLLinePlot::color() const
+{
+    return Color;
 }
