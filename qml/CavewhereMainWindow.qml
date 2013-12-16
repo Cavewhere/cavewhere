@@ -28,7 +28,7 @@ ApplicationWindow {
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
 
-        terrainRenderer: terrainRendererId
+//        terrainRenderer: terrainRendererId
 //        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
         mainContentLoader: loadMainContentsId
 
@@ -49,8 +49,8 @@ ApplicationWindow {
         visible: status == Loader.Ready
 
         onLoaded: {
-            console.log("Data Page:" + item + " " + item.dataPage)
             fileMenuButton.dataPage = item.dataPage
+            fileMenuButton.terrainRenderer = item.terrainRenderer
         }
     }
 

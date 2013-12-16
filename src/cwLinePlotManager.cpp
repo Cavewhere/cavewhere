@@ -20,6 +20,9 @@
 #include "cwDebug.h"
 #include "cwLength.h"
 
+//For testing
+#include "cwGlobalShotStdev.h"
+
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
 {
@@ -57,6 +60,11 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
     connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
+
+    //For testing
+    connect(Region->shotStd(), SIGNAL(distanceStdChanged()), SLOT(runSurvex()));
+    connect(Region->shotStd(), SIGNAL(clinoStdChanged()), SLOT(runSurvex()));
+    connect(Region->shotStd(), SIGNAL(compassStdChanged()), SLOT(runSurvex()));
 
     //Connect all sub data
     connectCaves(Region);
@@ -298,7 +306,8 @@ void cwLinePlotManager::updateLinePlot() {
             QVector3D newMethodPoint = resultData.stationPositionsNewMethod().at(i);
             QVector3D diff = newMethodPoint - point;
             double mag = diff.length();
-            qDebug() << "i:" << i << "point:" << point << "vs" << newMethodPoint << "Diff:" << diff << "Mag:" << mag;
+            qDebug() << newMethodPoint.x() << newMethodPoint.y() << newMethodPoint.z() << point.x() << point.y() << point.z();
+//            qDebug() << "i:" << i << "point:" << point << "vs" << newMethodPoint << "Diff:" << diff << "Mag:" << mag;
         }
     }
 

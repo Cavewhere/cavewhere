@@ -6,6 +6,8 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.1
+import QtQuick.Controls 1.1
 import Cavewhere 1.0
 
 RegionViewer {
@@ -38,9 +40,18 @@ RegionViewer {
         region: renderer.cavingRegion
     }
 
-    CameraSettings {
-        id: cameraSettings
-        viewer: renderer
+    ColumnLayout {
+
+        spacing: 10
+
+        CameraSettings {
+            id: cameraSettings
+            viewer: renderer
+        }
+
+        GlobalShotStdevWidget {
+            id: shotStdevId
+        }
     }
 
     Row {

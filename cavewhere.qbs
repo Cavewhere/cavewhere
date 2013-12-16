@@ -377,7 +377,9 @@ Project {
                 "src/cwLicenseAgreement.h",
                 "src/cwOpenFileEventHandler.h",
                 "src/cwLoopCloserTask.h",
-                "src/cwLoopCloserTask.cpp"
+                "src/cwLoopCloserTask.cpp",
+                "src/cwGlobalShotStdev.cpp",
+                "src/cwGlobalShotStdev.h"
             ]
         }
 
@@ -487,7 +489,8 @@ Project {
                 "qml/LicenseWindow.qml",
                 "qml/CavewhereLogo.qml",
                 "qml/LoadNotesWidget.qml",
-                "qml/LoadNotesIconButton.qml"
+                "qml/LoadNotesIconButton.qml",
+                "qml/GlobalShotStdevWidget.qml"
             ]
 
         }

@@ -15,6 +15,9 @@ Item {
     property alias orthoProjection: orthoProjectionId
     property alias perspectiveProjection: perspectiveProjectionId
 
+    width: sliderId.width
+    height: sliderId.height
+
     ToggleSlider {
         id: sliderId
         anchors.left: parent.left

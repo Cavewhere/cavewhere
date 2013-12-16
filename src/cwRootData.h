@@ -53,31 +53,6 @@ class cwRootData : public QObject
     Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
-//    Q_PROPERTY(QQmlApplicationEngine* applicationEngine READ applicationEngine WRITE setApplicationEngine NOTIFY applicationEngineChanged)
-
-//    QQmlApplicationEngine* applicationEngine() const;
-//    void setApplicationEngine(QQmlApplicationEngine* applicationEngine);
-
-//    void applicationEngineChanged();
-
-//    QQmlApplicationEngine* ApplicationEngine; //!<
-
-//    /**
-//  Gets applicationEngine
-//  */
-//    inline QQmlApplicationEngine* cwRootData::applicationEngine() const {
-//        return ApplicationEngine;
-//    }
-
-//    /**
-//  Sets applicationEngine
-//  */
-//    void cwRootData::setApplicationEngine(QQmlApplicationEngine* applicationEngine) {
-//        if(ApplicationEngine != applicationEngine) {
-//            ApplicationEngine = applicationEngine;
-//            emit applicationEngineChanged();
-//        }
-//    }
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -135,6 +110,8 @@ private:
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
+
+
 };
 
 /**
@@ -231,5 +208,6 @@ Gets license
 inline cwLicenseAgreement* cwRootData::license() const {
     return License;
 }
+
 
 #endif // CWGLOBALQMLDATA_H

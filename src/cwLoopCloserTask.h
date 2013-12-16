@@ -12,15 +12,18 @@
 //Qt includes
 #include <QMultiHash>
 #include <QVector3D>
+#include <QSharedData>
 
 //Our includes
 #include "cwTask.h"
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwStationPositionLookup.h"
+#include "cwGlobalShotStdev.h"
 class cwCavingRegion;
 class cwCave;
 class cwSurveyChunk;
+class cwTripCalibration;
 
 //Armadillo
 #include <armadillo>
@@ -44,6 +47,16 @@ protected:
     void runTask();
 
 private:
+
+    class cwShotVectorData : QSharedData {
+    public:
+        arma::mat Vector; //3x1 matrix
+        arma::mat CovarianceMatrix; //3x3 matrix
+        cwShotVector::ShotDirection Direction;
+
+        QString FromStation;
+        QString ToStation;
+    };
 
     class cwShotVector {
     public:
@@ -69,21 +82,21 @@ private:
         void setToStation(QString toStation);
 
     private:
-        arma::mat Vector; //3x1 matrix
-        arma::mat CovarianceMatrix; //3x3 matrix
-        ShotDirection Direction;
-
-        QString FromStation;
-        QString ToStation;
+        QSharedDataPointer<cwShotVectorData> d;
     };
 
     class cwEdgeSurveyChunk {
     public:
+        cwEdgeSurveyChunk();
+
         void setStations(QList<cwStation> stations) { Stations = stations; }
         QList<cwStation> stations() const { return Stations; }
 
         void setShots(QList<cwShot> shots) { Shots = shots; }
         QList<cwShot> shots() const { return Shots; }
+
+        void setCalibration(cwTripCalibration* calibration);
+        cwTripCalibration* calibration() const;
 
         cwEdgeSurveyChunk* split(QString stationName);
 
@@ -94,6 +107,9 @@ private:
     private:
         QList<cwStation> Stations;
         QList<cwShot> Shots;
+
+        //For calibration of shots in the EdgeSurveyChunk
+        cwTripCalibration* Calibration;
 
         //Data that's calculated by the loop closure algorithm
         QList<cwShotVector> ShotVectors;
@@ -117,7 +133,7 @@ private:
         void splitOnStation(cwStation station);
         QList<cwEdgeSurveyChunk*> splitChunkLocally(cwEdgeSurveyChunk* chunk);
 
-        QSet<cwEdgeSurveyChunk *> ResultingEdges;
+        QList<cwEdgeSurveyChunk *> ResultingEdges;
         QMultiHash<QString, cwEdgeSurveyChunk*> Lookup;
     };
 
@@ -159,6 +175,7 @@ private:
         void findLoopsHelper(QString station, QList<cwLoop> &resultLoops, QList<cwEdgeSurveyChunk*> path); //Recusive function, depth first search
         QList<cwLoop> findUniqueLoops(QList<cwLoop> initialLoops);
         QList<cwLoop> minimizeLoops(QList<cwLoop> loops);
+        QList<cwEdgeSurveyChunk*> findLegEdges(QList<cwEdgeSurveyChunk*> edges, QList<cwLoop> uniqueLoops) const;
 
         void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges) const;
         void printLoops(QList<cwLoop> loops) const;
@@ -171,8 +188,12 @@ private:
     class cwShotProcessor {
     public:
         void process(QList<cwEdgeSurveyChunk*> edges);
+        void setShotStd(cwShotStdev shotStdev);
+
+        cwShot applyCalibration(cwTripCalibration* calibration, const cwShot& shot) const;
 
     private:
+        cwShotStdev ShotStdev;
 
         void processShot(cwEdgeSurveyChunk *chunk, int shotIndex);
         cwShotVector shotTransform(double distance, double azimith, double clino, cwClinoStates::State clinoState);
@@ -188,6 +209,34 @@ private:
 
     private:
         cwStationPositionLookup PositionLookup;
+
+    };
+
+    class cwNetworkSolver {
+    public:
+        //Input
+        void process();
+        void setEdgeLegs(QList<cwEdgeSurveyChunk*> edgeLegs);
+        void setLoops(QList<cwLoop> Loops);
+        void setInitialFixedStations(cwStationPositionLookup fixedPositions);
+
+        //Output
+        cwStationPositionLookup stationPositionLookup() const;
+
+    private:
+        //Input
+        QList<cwEdgeSurveyChunk*> EdgeLegs;
+        QList<cwLoop> Loops;
+
+        //Output
+        cwStationPositionLookup PositionLookup;
+
+        //For processing
+        QMultiHash<QString, cwShotVector> StationsToLegs; //A lookup of all the fromStations to edges. These edge's aren't in loops, they are legs
+        QHash<QString, bool> Processed;
+
+        void indexEdgeLegs();
+
     };
 
     cwCavingRegion* Region;

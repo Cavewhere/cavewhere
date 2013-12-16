@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwCave.h"
 #include "cwMath.h"
 #include "cwDebug.h"
@@ -76,12 +77,15 @@ void cwLoopCloserTask::processCave(cwCave *cave)
     //Split loops out from survey legs
     cwLoopDetector loopDetector;
     loopDetector.process(edges);
-
     //    printLoops(loopDetector.loops());
 
     //---------------------------- Process all the shot directions -------------------
     cwShotProcessor shotProcessor;
+    shotProcessor.setShotStd(Region->shotStd()->data());
     shotProcessor.process(edges);
+
+
+
 
     //---------------------------- Process least squares -----------------------------
     cwLeastSquares leastSquares;
@@ -254,12 +258,13 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk*> cwLoopCloserTask::cwMainEdgeProcesso
             cwEdgeSurveyChunk* edgeChunk = new cwEdgeSurveyChunk();
             edgeChunk->setShots(shots);
             edgeChunk->setStations(stations);
+            edgeChunk->setCalibration(trip->calibrations());
 
             addEdgeChunk(edgeChunk);
         }
     }
 
-    return ResultingEdges.toList();
+    return ResultingEdges; //.toList();
 }
 
 /**
@@ -274,6 +279,8 @@ void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdg
     foreach(cwLoopCloserTask::cwEdgeSurveyChunk* chunk, newChunks) {
         QList<cwStation> stations = chunk->stations();
 
+        bool newChunk = true;
+
         for(int i = 0; i < stations.size(); i++) {
             cwStation station = stations.at(i);
 
@@ -287,8 +294,7 @@ void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdg
                     splitOnStation(station);
                     //                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
                     //                Q_ASSERT(!ResultingEdges.contains(newChunk));
-                    ResultingEdges.insert(chunk);
-
+                    ResultingEdges.append(chunk);
                 } else {
                     //This is a middle station in the newChunk, split it and potentially another chunk
                     //Split new chunk
@@ -298,7 +304,7 @@ void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdg
                     splitOnStation(station.name());
                     //                qDebug() << "Appending newChunk:" << newChunk << LOCATION;
                     //                Q_ASSERT(!ResultingEdges.contains(newChunk));
-                    ResultingEdges.insert(chunk);
+                    ResultingEdges.append(chunk);
                     addStationInEdgeChunk(chunk);
 
                     //Update the station, and restart the search with the other half
@@ -306,14 +312,17 @@ void cwLoopCloserTask::cwMainEdgeProcessor::addEdgeChunk(cwLoopCloserTask::cwEdg
                     chunk = otherNewHalf;
                     i = -1;
                 }
+                newChunk = false;
             }
         }
 
         //    if(Lookup.isEmpty()) {
         //        qDebug() << "Appending newChunk:" << newChunk << LOCATION;
         //        Q_ASSERT(!ResultingEdges.contains(newChunk));
-        ResultingEdges.insert(chunk);
-        addStationInEdgeChunk(chunk);
+        if(newChunk) {
+            ResultingEdges.append(chunk);
+            addStationInEdgeChunk(chunk);
+        }
         //    }
     }
 }
@@ -347,7 +356,7 @@ void cwLoopCloserTask::cwMainEdgeProcessor::splitOnStation(cwStation station)
             addStationInEdgeChunk(otherHalf);
             //            qDebug() << "Appending newChunk:" << otherHalf << LOCATION;
             //            Q_ASSERT(!ResultingEdges.contains(otherHalf));
-            ResultingEdges.insert(otherHalf);
+            ResultingEdges.append(otherHalf);
         }
     }
 }
@@ -399,6 +408,33 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwMainEdgeProcess
 }
 
 /**
+ * @brief cwLoopCloserTask::cwEdgeSurveyChunk::cwEdgeSurveyChunk
+ */
+cwLoopCloserTask::cwEdgeSurveyChunk::cwEdgeSurveyChunk() :
+    Calibration(NULL)
+{
+
+}
+
+/**
+ * @brief cwLoopCloserTask::cwEdgeSurveyChunk::setCalibration
+ * @param calibration
+ */
+void cwLoopCloserTask::cwEdgeSurveyChunk::setCalibration(cwTripCalibration *calibration)
+{
+    Calibration = calibration;
+}
+
+/**
+ * @brief cwLoopCloserTask::cwEdgeSurveyChunk::calibration
+ * @return
+ */
+cwTripCalibration *cwLoopCloserTask::cwEdgeSurveyChunk::calibration() const
+{
+    return Calibration;
+}
+
+/**
  * @brief cwLoopCloserTask::cwChunkLookup::addStationInEdgeChunk
  * @param chunk
  *
@@ -441,6 +477,7 @@ cwLoopCloserTask::cwEdgeSurveyChunk *cwLoopCloserTask::cwEdgeSurveyChunk::split(
             cwEdgeSurveyChunk* newChunk = new cwEdgeSurveyChunk();
             newChunk->setStations(newChunkStations);
             newChunk->setShots(newChunkShots);
+            newChunk->setCalibration(calibration());
             return newChunk;
         }
     }
@@ -493,6 +530,9 @@ void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSur
 
     //Do gassiumn elimanation on loops to find basic loops
     Loops = minimizeLoops(uniqueLoops);
+
+    //Find leg edges
+    LegEdges = findLegEdges(edges, uniqueLoops);
 }
 
 /**
@@ -769,6 +809,35 @@ QList<cwLoopCloserTask::cwLoop> cwLoopCloserTask::cwLoopDetector::minimizeLoops(
     return minimumLoops;
 }
 
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::findLegEdges
+ * @param edges
+ * @param uniqueLoops
+ * @return
+ *
+ * This takes all the edges and all the uniqueLoops and compares the to.  All edges, that don't exist
+ * in the loops, are the leg Edges.  This function return the leg edges.
+ */
+QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwLoopDetector::findLegEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges,
+                                                                                            QList<cwLoopCloserTask::cwLoop> loops) const
+{
+    //Create a total loopEdge loopup
+    QSet<cwEdgeSurveyChunk> loopEdges;
+    foreach(cwLoop loop, loops) {
+        loopEdges.unite(loop.edges());
+    }
+
+    //Find all the legLeges
+    QList<cwEdgeSurveyChunk> legEdges;
+    foreach(cwEdgeSurveyChunk* edge, edges) {
+        if(!loopEdges.contains(edge)) {
+            legEdges.append(edge);
+        }
+    }
+
+    return legEdges;
+}
+
 void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges) const
 {
     //Debugging for the resulting edges
@@ -890,15 +959,24 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
 
         cwShotVector shotVector; //The shot direction and xyz covarience for the shot
 
+        //Apply calibrations
+        cwShot calibratedShot = applyCalibration(chunk->calibration(), shot);
+
         if(!hasValidFrontSite && !hasValidBackSite) {
             //Special case, where shot is a mix of front and back sites
 
             if(hasClino && hasBackCompass) {
                 //Reverse the back compass so it's a front site
-                shotVector = shotTransform(shot.distance(), shot.backCompass() - 180.0, shot.clino(), shot.clinoState());
+                shotVector = shotTransform(calibratedShot.distance(),
+                                           calibratedShot.backCompass() - 180.0,
+                                           calibratedShot.clino(),
+                                           calibratedShot.clinoState());
             } else if(hasBackClino && hasCompass) {
                 //Reverse the back clino so it's a front site
-                shotVector = shotTransform(shot.distance(), shot.compass(), -shot.backClino(), shot.backClinoState());
+                shotVector = shotTransform(calibratedShot.distance(),
+                                           calibratedShot.compass(),
+                                           -calibratedShot.backClino(),
+                                           calibratedShot.backClinoState());
             } else {
                 Q_ASSERT(false); //This should never get here
             }
@@ -911,7 +989,10 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         }
 
         if(hasValidFrontSite) {
-            shotVector = shotTransform(shot.distance(), shot.compass(), shot.clino(), shot.clinoState());
+            shotVector = shotTransform(calibratedShot.distance(),
+                                       calibratedShot.compass(),
+                                       calibratedShot.clino(),
+                                       calibratedShot.clinoState());
             shotVector.setDirection(cwShotVector::FrontSite);
             shotVector.setFromStation(fromStationName);
             shotVector.setToStation(toStationName);
@@ -935,7 +1016,10 @@ void cwLoopCloserTask::cwShotProcessor::processShot(cwEdgeSurveyChunk* chunk, in
         }
 
         if(hasValidBackSite) {
-            shotVector = shotTransform(shot.distance(), shot.backCompass(), shot.backClino(), shot.backClinoState());
+            shotVector = shotTransform(calibratedShot.distance(),
+                                       calibratedShot.backCompass(),
+                                       calibratedShot.backClino(),
+                                       calibratedShot.backClinoState());
             shotVector.setDirection(cwShotVector::BackSite);
             shotVector.setFromStation(toStationName); //Reverse the station because, this is a backsite
             shotVector.setToStation(fromStationName);
@@ -998,15 +1082,15 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
                                                                                 cwClinoStates::State clinoState)
 {
     //Variance for distance, compass (azimith), clino
-    double distanceStd = 0.05; //FIXME: use shot std for each shot, assume the units are what ever in shot?
+    double distanceStd = ShotStdev.DistanceStd; //0.086 FIXME: use shot std for each shot, assume the units are what ever in shot?
     double azimithStd; //= 0.017; //1 Degree std in radians
     double clinoStd; //= 0.017; //1 degree std in radians
 
     Q_ASSERT(clinoState != cwClinoStates::Empty);
     switch(clinoState) {
         case cwClinoStates::Valid:
-        azimithStd = degreeToRadians() * 1.0; //1.25 Degree std in radians
-        clinoStd = degreeToRadians() * 1.0; //1.25 Degree std in radians
+        azimithStd = degreeToRadians() * ShotStdev.CompassStd; //1.25; //1.25 Degree std in radians
+        clinoStd = degreeToRadians() * ShotStdev.ClinoStd; //1.25; //1.25 Degree std in radians
         break;
     case cwClinoStates::Down:
         azimithStd = 0.0001;
@@ -1024,9 +1108,11 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
         return cwLoopCloserTask::cwShotVector();
     }
 
+    qDebug() << "Radians:" << degreeToRadians() * ShotStdev.CompassStd << degreeToRadians() * ShotStdev.ClinoStd;
+
     //Convert from degrees to radians
-    azimith = azimith * acos(-1) / 180.0;
-    clino = clino * acos(-1) / 180.0;
+    azimith = azimith * degreeToRadians();
+    clino = clino * degreeToRadians();
 
     double maxClino = degreeToRadians() * 89.9;
 
@@ -1039,7 +1125,7 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
     //Calculate the convarience for the shot
     arma::mat jacobian = arma::mat::fixed<3, 3>();
 
-    if(fabs(clino) < maxClino) {
+    if(fabs(clino) < maxClino && distance > 0.0) {
         jacobian(0, 0) = sin(azimith) * cos(clino);
         jacobian(0, 1) = cos(azimith) * cos(clino) * distance;
         jacobian(0, 2) = -sin(azimith) * sin(clino) * distance;
@@ -1057,11 +1143,11 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
 
     arma::mat dacCovariance = arma::mat::fixed<3, 3>();
     dacCovariance.zeros();
-    dacCovariance(0, 0) = distanceStd;
-    dacCovariance(1, 1) = azimithStd;
-    dacCovariance(2, 2) = clinoStd;
+    dacCovariance(0, 0) = distanceStd * distanceStd;
+    dacCovariance(1, 1) = azimithStd * azimithStd;
+    dacCovariance(2, 2) = clinoStd * clinoStd;
 
-    arma::mat xyzCovariance = jacobian * dacCovariance * jacobian;
+    arma::mat xyzCovariance = jacobian * dacCovariance * jacobian.t();
 
     cwLoopCloserTask::cwShotVector shotVector;
     shotVector.setVector(vector);
@@ -1074,6 +1160,8 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
 //    qDebug() << "Mag inverse" << arma::det(arma::inv(xyzCovariance));
     qDebug() << "Converiance Matrix:" << xyzCovariance;
 
+    qDebug() << "std xyz: " << sqrt(xyzCovariance(0,0) + xyzCovariance(0, 1) + xyzCovariance(0, 2)) << sqrt(xyzCovariance(1,1)) << sqrt(xyzCovariance(2,2));
+
     shotVector.setCovarienceMatrix(xyzCovariance);
     return shotVector;
 }
@@ -1085,7 +1173,7 @@ cwLoopCloserTask::cwShotVector cwLoopCloserTask::cwShotProcessor::shotTransform(
 void cwLoopCloserTask::cwShotVector::setVector(arma::mat vector) {
     Q_ASSERT(vector.n_cols == 1);
     Q_ASSERT(vector.n_rows == 3);
-    Vector = vector;
+    d->Vector = vector;
 }
 
 /**
@@ -1093,7 +1181,7 @@ void cwLoopCloserTask::cwShotVector::setVector(arma::mat vector) {
  * @return The shot's direction a 1x3 matrix
  */
 const arma::mat& cwLoopCloserTask::cwShotVector::vector() const {
-    return Vector;
+    return d->Vector;
 }
 
 /**
@@ -1103,7 +1191,7 @@ const arma::mat& cwLoopCloserTask::cwShotVector::vector() const {
 void cwLoopCloserTask::cwShotVector::setCovarienceMatrix(arma::mat convarienceMatrix) {
     Q_ASSERT(convarienceMatrix.n_cols == 3);
     Q_ASSERT(convarienceMatrix.n_rows == 3);
-    CovarianceMatrix = convarienceMatrix;
+    d->CovarianceMatrix = convarienceMatrix;
 }
 
 /**
@@ -1111,7 +1199,7 @@ void cwLoopCloserTask::cwShotVector::setCovarienceMatrix(arma::mat convarienceMa
  * @return Returns the CovarianceMatrix for the shot
  */
 arma::mat cwLoopCloserTask::cwShotVector::covarienceMatrix() const {
-    return CovarianceMatrix;
+    return d->CovarianceMatrix;
 }
 
 /**
@@ -1119,7 +1207,7 @@ arma::mat cwLoopCloserTask::cwShotVector::covarienceMatrix() const {
  * @return
  */
 QString cwLoopCloserTask::cwShotVector::fromStation() const {
-    return FromStation;
+    return d->FromStation;
 }
 
 /**
@@ -1127,7 +1215,7 @@ QString cwLoopCloserTask::cwShotVector::fromStation() const {
  * @param fromStation
  */
 void cwLoopCloserTask::cwShotVector::setFromStation(QString fromStation) {
-    FromStation = fromStation;
+    d->FromStation = fromStation;
 }
 
 /**
@@ -1135,7 +1223,7 @@ void cwLoopCloserTask::cwShotVector::setFromStation(QString fromStation) {
  * @return
  */
 QString cwLoopCloserTask::cwShotVector::toStation() const {
-    return ToStation;
+    return d->ToStation;
 }
 
 /**
@@ -1143,7 +1231,7 @@ QString cwLoopCloserTask::cwShotVector::toStation() const {
  * @param toStation
  */
 void cwLoopCloserTask::cwShotVector::setToStation(QString toStation) {
-    ToStation = toStation;
+    d->ToStation = toStation;
 }
 
 /**
@@ -1151,7 +1239,7 @@ void cwLoopCloserTask::cwShotVector::setToStation(QString toStation) {
  * @param direction - The direction of this shot vector.
  */
 void cwLoopCloserTask::cwShotVector::setDirection(ShotDirection direction) {
-    Direction = direction;
+    d->Direction = direction;
 }
 
 /**
@@ -1159,7 +1247,7 @@ void cwLoopCloserTask::cwShotVector::setDirection(ShotDirection direction) {
  * @return Returns the direction of this shot vector
  */
 cwLoopCloserTask::cwShotVector::ShotDirection cwLoopCloserTask::cwShotVector::direction() const {
-    return Direction;
+    return d->Direction;
 }
 
 /**
@@ -1230,9 +1318,9 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
         int ii = 3 * i; //Matrix index
 
         //Add the shot to the shot matrix
-        qDebug() << "ShotMatrix:" << shotMatrix;
-        qDebug() << "Submatrix:" << shotMatrix.submat(arma::span(ii,ii+2), arma::span(0,0));
-        qDebug() << "Shot vector:" << shot.vector();
+//        qDebug() << "ShotMatrix:" << shotMatrix;
+//        qDebug() << "Submatrix:" << shotMatrix.submat(arma::span(ii,ii+2), arma::span(0,0));
+//        qDebug() << "Shot vector:" << shot.vector();
         shotMatrix.submat(arma::span(ii,ii+2), arma::span(0,0)) = shot.vector();
 
         //Add the shot to the observation matrix
@@ -1251,23 +1339,24 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
         }
 
         //Add the shot to the weights matrix
+//        qDebug() << "fromStation:" << shot.fromStation() << "To:" << shot.toStation() << "CovarienceMatrix:" << shot.covarienceMatrix();
         arma::mat shotWeightMatrix = arma::inv(shot.covarienceMatrix());
 
-        qDebug() << "WeightMatrix sub:" <<         weightsMatrix.submat(arma::span(ii, ii+2),
-                                                                        arma::span(ii, ii+2));
-        qDebug() << "ShotWeightMatrix:" << shotWeightMatrix;
+//        qDebug() << "WeightMatrix sub:" <<         weightsMatrix.submat(arma::span(ii, ii+2),
+//                                                                        arma::span(ii, ii+2));
+//        qDebug() << "ShotWeightMatrix:" << shotWeightMatrix;
 
         weightsMatrix.submat(arma::span(ii, ii+2),
                              arma::span(ii, ii+2)) = shotWeightMatrix;
     }
 
-    qDebug() << "Weight matrix: " << weightsMatrix;
-    qDebug() << "Observation matrix:" << observationMatrix;
-    qDebug() << "Observation t matrix:" << observationMatrix.t();
-    qDebug() << "multi:" << observationMatrix.t() * weightsMatrix;
-    qDebug() << "Everything together:" << (observationMatrix.t() * weightsMatrix * observationMatrix);
-    qDebug() << "ShotMatrix:" << shotMatrix;
-    qDebug() << "Determinate:" << arma::det(observationMatrix.t() * weightsMatrix * observationMatrix);
+//    qDebug() << "Weight matrix: " << weightsMatrix;
+//    qDebug() << "Observation matrix:" << observationMatrix;
+//    qDebug() << "Observation t matrix:" << observationMatrix.t();
+//    qDebug() << "multi:" << observationMatrix.t() * weightsMatrix;
+//    qDebug() << "Everything together:" << (observationMatrix.t() * weightsMatrix * observationMatrix);
+//    qDebug() << "ShotMatrix:" << shotMatrix;
+//    qDebug() << "Determinate:" << arma::det(observationMatrix.t() * weightsMatrix * observationMatrix);
 
     arma::mat observationMatrixTranspose = observationMatrix.t();
     arma::mat everything = observationMatrixTranspose * weightsMatrix * observationMatrix;
@@ -1275,12 +1364,15 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
     if(arma::det(everything) != 0.0) {
         //Calculate the station positions with giant matrixes (this is the least square aka weighting)
 
-        arma::mat stationPositions =
-                arma::inv(everything) *
-                observationMatrixTranspose * weightsMatrix * shotMatrix;
+        arma::mat stationPositions = arma::solve(everything,
+                                                 observationMatrixTranspose * weightsMatrix * shotMatrix);
 
 
-        qDebug() << "StationPositions:" << stationPositions;
+//                arma::inv(everything) *
+//                observationMatrixTranspose * weightsMatrix * shotMatrix;
+
+
+//        qDebug() << "StationPositions:" << stationPositions;
 
         //For each station get the data for it
         QHashIterator<QString, int> iter(stationToIndex);
@@ -1299,11 +1391,103 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
             QVector3D stationPosition(x, y, z);
             PositionLookup.setPosition(stationName, stationPosition);
 
-            qDebug() << "Station:" << stationName << stationMat(0, 0) << stationMat(1, 0) << stationMat(2, 0);
+//            qDebug() << "Station:" << stationName << stationMat(0, 0) << stationMat(1, 0) << stationMat(2, 0);
         }
     } else {
         qDebug() << "No solution!";
     }
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLeastSquares::setShotStd
+ * @param shotStdev
+ */
+void cwLoopCloserTask::cwShotProcessor::setShotStd(cwShotStdev shotStdev)
+{
+    ShotStdev = shotStdev;
+}
+
+/**
+ * @brief cwLoopCloserTask::cwShotProcessor::applyCalibration
+ * @param calibration
+ * @param shot
+ * @return
+ *
+ *  This applys the calibration to the shot.  This will create a copy of the original shot.
+ */
+cwShot cwLoopCloserTask::cwShotProcessor::applyCalibration(cwTripCalibration *calibration, const cwShot &shot) const
+{
+    cwShot calibratedShot = shot;
+
+    bool hasClino = cwShot::clinoValid(shot.clinoState());
+    bool hasCompass = cwShot::compassValid(shot.compassState());
+    bool hasBackClino = cwShot::clinoValid(shot.backClinoState());
+    bool hasBackCompass = cwShot::compassValid(shot.backCompassState());
+    bool clinoUpDown = shot.clinoState() == cwClinoStates::Up || shot.clinoState() == cwClinoStates::Down;
+//    bool backClinoUpDown = shot.backClinoState() == cwClinoStates::Up || shot.backClinoState() == cwClinoStates::Down;
+
+    //Calibrate the distance and convert it to meters
+    double calibratedDistance = shot.distance() + calibration->tapeCalibration();
+    calibratedDistance = cwUnits::convert(calibratedDistance, calibration->distanceUnit(), cwUnits::Meters);
+    calibratedShot.setDistance(calibratedDistance);
+
+    //Calibrate the front compass
+    if(hasCompass) {
+        double compass = shot.compass();
+        compass += calibration->frontCompassCalibration() + calibration->declination();
+        calibratedShot.setCompass(compass);
+    }
+
+    //Calibrate the back compass
+    if(hasBackCompass) {
+        double backCompass = shot.backCompass();
+        if(calibration->hasCorrectedCompassBacksight()) {
+            backCompass += 180.0;
+        }
+
+        backCompass += calibration->backCompassCalibration() + calibration->declination();
+        backCompass = fmod(backCompass, 360.0); //Make sure the shot is greater that -360.0 and less than 360.0
+        calibratedShot.setBackCompass(backCompass);
+    }
+
+    //Calibrate the front clino
+    if(hasClino && !clinoUpDown) {
+        //All clino shot's that aren't measured with up and down
+        double clino = shot.clino();
+        clino += calibration->frontClinoCalibration();
+        clino = qMin(90.0, qMax(-90.0, clino)); //clamp the clino to -90 and 90
+        calibratedShot.setClino(clino);
+    }
+
+    //Calibrate the back clino
+    if(hasBackClino) {
+        double backClino = shot.backClino();
+        backClino += calibration->backClinoCalibration();
+
+        if(calibration->hasCorrectedClinoBacksight()) {
+            switch (shot.backClinoState()) {
+            case cwClinoStates::Up:
+                //Swap the back for the front
+                calibratedShot.setBackClinoState(cwClinoStates::Down);
+                break;
+            case cwClinoStates::Down:
+                //Swap the back for the front
+                calibratedShot.setBackClinoState(cwClinoStates::Up);
+                break;
+            case cwClinoStates::Valid:
+                calibratedShot.setBackClino(-backClino);
+                break;
+            default:
+                Q_ASSERT(false); //We shouldn't get here
+                break;
+            }
+        } else {
+            calibratedShot.setBackClino(backClino);
+        }
+    }
+
+    //Return shot
+    return calibratedShot;
 }
 
 /**
@@ -1313,4 +1497,72 @@ void cwLoopCloserTask::cwLeastSquares::process(QList<cwEdgeSurveyChunk*> edges) 
 cwStationPositionLookup cwLoopCloserTask::cwLeastSquares::stationPositionLookup() const
 {
     return PositionLookup;
+}
+
+
+/**
+ * @brief cwLoopCloserTask::cwNetworkSolver::process
+ *
+ * This will process all the loops and legs, to generate the final station positions.
+ *
+ * The final station potions will be placed in PositionLookup.
+ */
+void cwLoopCloserTask::cwNetworkSolver::process()
+{
+    PositionLookup.clearStations();
+
+    //Create an loopup for all the leg edges (edges that aren't in a loop)
+    indexEdgeLegs();
+
+    Q_ASSERT(!PositionLookup.positions().isEmpty()); //You need to have at least 1 fixed station
+
+    //Start at the first fix position
+    QString firstStationName = PositionLookup.positions().firstKey();
+    QVector3D firstStationPosition = PositionLookup.positions().first();
+
+    ///////// START WRITING CODE HERE!!!! ////////////
+
+
+}
+
+void cwLoopCloserTask::cwNetworkSolver::setEdgeLegs(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edgeLegs)
+{
+    EdgeLegs = edgeLegs;
+}
+
+void cwLoopCloserTask::cwNetworkSolver::setLoops(QList<cwLoopCloserTask::cwLoop> Loops)
+{
+    Loops = loops;
+}
+
+/**
+ * @brief cwLoopCloserTask::cwNetworkSolver::setInitialFixedStations
+ * @param fixedPositions
+ *
+ * This sets the initial fixed position. You can have multiple stations that are already fixed
+ */
+void cwLoopCloserTask::cwNetworkSolver::setInitialFixedStations(cwStationPositionLookup fixedPositions)
+{
+    PositionLookup = fixedPositions;
+}
+
+cwStationPositionLookup cwLoopCloserTask::cwNetworkSolver::stationPositionLookup() const
+{
+    return PositionLookup;
+}
+
+/**
+ * @brief cwLoopCloserTask::cwNetworkSolver::indexEdgeLegs
+ *
+ * This will go through all the edge legs, and index them based on the from station name.
+ */
+void cwLoopCloserTask::cwNetworkSolver::indexEdgeLegs()
+{
+    StationsToLegs.clear();
+
+    foreach(cwEdgeSurveyChunk* chunk, EdgeLegs) {
+        foreach(cwShotVector vector, chunk->shotVectors()) {
+            StationsToLegs.insertMulti(vector.fromStation(), vector);
+        }
+    }
 }

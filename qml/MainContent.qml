@@ -5,6 +5,7 @@ import QtQuick.Controls 1.0
 Item {
 
     property alias dataPage: dataMainPageId
+    property alias terrainRenderer: terrainRendererId
 
     anchors.fill: parent
 

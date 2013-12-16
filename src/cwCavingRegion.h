@@ -19,11 +19,17 @@
 class cwCave;
 #include "cwUndoer.h"
 
+//For testing
+class cwGlobalShotStdev;
+
 class cwCavingRegion : public QObject, public cwUndoer
 {
     Q_OBJECT
 
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
+
+    //For testing
+    Q_PROPERTY(cwGlobalShotStdev* shotStd READ shotStd NOTIFY shotStdChanged)
 
 public:
     explicit cwCavingRegion(QObject *parent = NULL);
@@ -45,6 +51,8 @@ public:
 
     int indexOf(cwCave* cave);
 
+    //For testing
+    cwGlobalShotStdev* shotStd() const;
 
 signals:
     void beginInsertCaves(int begin, int end);
@@ -55,10 +63,14 @@ signals:
 
     void caveCountChanged();
 
+    void shotStdChanged();
 public slots:
 
 protected:
     QList<cwCave*> Caves;
+
+    //For testing
+    cwGlobalShotStdev* ShotStd; //!<
 
     virtual void setUndoStackForChildren();
 
@@ -102,8 +114,6 @@ private:
         virtual void undo();
     };
 
-
-
 };
 
 /**
@@ -135,4 +145,10 @@ inline QList<cwCave*> cwCavingRegion::caves() const {
     return Caves;
 }
 
+/**
+Gets shotStd
+*/
+inline cwGlobalShotStdev* cwCavingRegion::shotStd() const {
+    return ShotStd;
+}
 #endif // CWCAVINGREGION_H

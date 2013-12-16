@@ -8,12 +8,14 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwGlobalShotStdev.h"
 
 //Qt includes
 #include <QDebug>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    ShotStd(new cwGlobalShotStdev(this))
 {
 }
 
@@ -22,7 +24,8 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
   */
 cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
     QObject(NULL),
-    cwUndoer(object.undoStack())
+    cwUndoer(object.undoStack()),
+    ShotStd(new cwGlobalShotStdev(this))
 {
     copy(object);
 }
@@ -72,6 +75,9 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         emit insertedCaves(0, Caves.size() -1);
         emit caveCountChanged();
     }
+
+    //For testing, copying over all the global shot data
+    ShotStd->setData(object.ShotStd->data());
 
     return *this;
 }

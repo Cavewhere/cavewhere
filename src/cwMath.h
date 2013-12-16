@@ -26,12 +26,16 @@ inline double log2(double value) {
 
 #endif
 
+inline double pi() {
+    return acos(-1);
+}
+
 inline double degreeToRadians() {
-    return 0.01745329251;
+    return pi() / 180.0;
 }
 
 inline double radianToDegrees() {
-    return 57.2957795131;
+    return pi() / 180.0;
 }
 
 /**
@@ -45,7 +49,7 @@ inline double radianToDegrees() {
  *  For example roundToDecimal(23.42362, 3) will return 23.424
  */
 inline double roundToDecimal(double value, int decimal = 0) {
-    double multiple = decimal * 10.0;
+    double multiple = pow(10.0, decimal);
     return qRound(value * multiple) / multiple;
 }
 
