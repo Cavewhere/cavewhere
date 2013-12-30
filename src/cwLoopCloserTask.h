@@ -48,11 +48,10 @@ protected:
 
 private:
 
-    class cwShotVectorData : QSharedData {
+    class cwShotVectorData : public QSharedData {
     public:
         arma::mat Vector; //3x1 matrix
-        arma::mat CovarianceMatrix; //3x3 matrix
-        cwShotVector::ShotDirection Direction;
+        arma::mat CovarianceMatrix; //3x3 matrix 
 
         QString FromStation;
         QString ToStation;
@@ -60,20 +59,13 @@ private:
 
     class cwShotVector {
     public:
-
-        enum ShotDirection {
-            FrontSite,
-            BackSite
-        };
+        cwShotVector();
 
         void setVector(arma::mat vector);
         const arma::mat &vector() const;
 
         void setCovarienceMatrix(arma::mat covarienceMatrix);
         arma::mat covarienceMatrix() const;
-
-        void setDirection(ShotDirection direction);
-        ShotDirection direction() const;
 
         QString fromStation() const;
         void setFromStation(QString fromStation);
@@ -155,7 +147,7 @@ private:
         void process(QList<cwEdgeSurveyChunk*> edges);
 
         QList<cwLoop> loops() const { return Loops; }
-        QList<cwEdgeSurveyChunk*> legEdges() const;
+        QList<cwEdgeSurveyChunk*> legEdges() const { return LegEdges; }
 
     private:
         //Input
@@ -217,7 +209,7 @@ private:
         //Input
         void process();
         void setEdgeLegs(QList<cwEdgeSurveyChunk*> edgeLegs);
-        void setLoops(QList<cwLoop> Loops);
+        void setLoops(QList<cwLoop> loops);
         void setInitialFixedStations(cwStationPositionLookup fixedPositions);
 
         //Output
@@ -236,6 +228,8 @@ private:
         QHash<QString, bool> Processed;
 
         void indexEdgeLegs();
+        QList<QString> calcNeigboringStations(QList<QString> fixedStations);
+        QVector3D average(QList<QVector3D> positions) const;
 
     };
 
