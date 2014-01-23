@@ -123,25 +123,75 @@ private:
         void addEdgeChunk(cwEdgeSurveyChunk *chunk);
         void addStationInEdgeChunk(cwEdgeSurveyChunk* chunk);
         void splitOnStation(cwStation station);
+
         QList<cwEdgeSurveyChunk*> splitChunkLocally(cwEdgeSurveyChunk* chunk);
 
         QList<cwEdgeSurveyChunk *> ResultingEdges;
         QMultiHash<QString, cwEdgeSurveyChunk*> Lookup;
     };
 
+    /**
+     * @brief The cwLoop class
+     *
+     * The loop holds a list of stations and shots that create a loop.
+     * The loop detector stores basic loops in this data-structure. Loops
+     * that share stations, will be put together using a loopGroup
+     */
     class cwLoop {
     public:
         void setEdges(QSet<cwEdgeSurveyChunk*> edges) { Edges = edges; }
         QSet<cwEdgeSurveyChunk*> edges() const { return Edges; }
 
+        void calculateStd();
+        QVector3D loopLength() const;
+        QVector3D absoluteError() const;
+        QVector3D stdError() const;
+
         bool operator ==(const cwLoop& other) const;
         bool operator !=(const cwLoop& other) const;
         bool operator <(const cwLoop& other) const;
 
+        void printEdges();
+
     private:
         QSet<cwEdgeSurveyChunk*> Edges;
+        QVector3D LoopLength; //Calculated from calculateStd()
+        QVector3D AbsoluteError; //Calculated from calculateStd()
+        QVector3D StdError; //Calculated from calculateStd()
     };
 
+    /**
+     * @brief The cwLoopGroup class
+     *
+     * This is a group of loops that share at least one station.  A loop group
+     * is important, because loops are processed in order, based on thier std.
+     *
+     * Loop groups are solver in the cwNetworkSolver
+     */
+    class cwLoopGroup {
+    public:
+        void setLoops(QList<cwLoop> loops);
+        QList<cwLoop> loops() const { return Loops; }
+
+        void appendLoop(cwLoop loop);
+
+        //Sort the loops by standard devation
+        void sortLoops();
+
+        bool canAddLoop(const cwLoop& loop) const;
+
+        void printLoops() const;
+
+    private:
+        QList<cwLoop> Loops;
+    };
+
+    /**
+     * @brief The cwLoopDetector class
+     *
+     * Based on the survey chunks, this class will find all the loops.  This class
+     * will return loops as loopGroups and legEdges (edges that aren't in a loop)
+     */
     class cwLoopDetector {
     public:
         void process(QList<cwEdgeSurveyChunk*> edges);
@@ -166,6 +216,7 @@ private:
         QList<cwLoop> findLoops(QString station);
         void findLoopsHelper(QString station, QList<cwLoop> &resultLoops, QList<cwEdgeSurveyChunk*> path); //Recusive function, depth first search
         QList<cwLoop> findUniqueLoops(QList<cwLoop> initialLoops);
+        QList<cwLoopGroup> groupUniqueLoops(QList<cwLoop> uniqueLoops);
         QList<cwLoop> minimizeLoops(QList<cwLoop> loops);
         QList<cwEdgeSurveyChunk*> findLegEdges(QList<cwEdgeSurveyChunk*> edges, QList<cwLoop> uniqueLoops) const;
 
@@ -225,9 +276,11 @@ private:
 
         //For processing
         QMultiHash<QString, cwShotVector> StationsToLegs; //A lookup of all the fromStations to edges. These edge's aren't in loops, they are legs
+        QHash<QString, cwLoop> StationsToLoop; //A lookup of all the stations to cwLoops
         QHash<QString, bool> Processed;
 
-        void indexEdgeLegs();
+        void indexLegStations();
+        void indexLoopStations();
         QList<QString> calcNeigboringStations(QList<QString> fixedStations);
         QVector3D average(QList<QVector3D> positions) const;
 
