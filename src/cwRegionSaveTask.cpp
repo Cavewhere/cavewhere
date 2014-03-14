@@ -407,6 +407,26 @@ void cwRegionSaveTask::saveStringList(QtProto::QStringList *protoStringList, QSt
 }
 
 /**
+ * @brief cwRegionSaveTask::saveMatrix3x3
+ * @param protoMatrix4x4
+ * @param matrix
+ *
+ * This saves a 3x3 QMatrix
+ */
+void cwRegionSaveTask::saveMatrix3x3(QtProto::QMatrix3x3 *protoMatrix4x4, QMatrix3x3 matrix)
+{
+    protoMatrix4x4->set_m00(matrix(0, 0));
+    protoMatrix4x4->set_m10(matrix(1, 0));
+    protoMatrix4x4->set_m20(matrix(2, 0));
+    protoMatrix4x4->set_m01(matrix(0, 1));
+    protoMatrix4x4->set_m11(matrix(1, 1));
+    protoMatrix4x4->set_m21(matrix(2, 1));
+    protoMatrix4x4->set_m02(matrix(0, 2));
+    protoMatrix4x4->set_m12(matrix(1, 2));
+    protoMatrix4x4->set_m22(matrix(2, 2));
+}
+
+/**
  * @brief cwRegionSaveTask::saveLength
  * @param protoLength
  * @param length
@@ -489,14 +509,15 @@ void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
 void cwRegionSaveTask::saveStationLookup(CavewhereProto::StationPositionLookup *positionLookup,
                                          const cwStationPositionLookup &stationLookup)
 {
-    QMap<QString, QVector3D> positions = stationLookup.positions();
-    QMapIterator<QString, QVector3D> iter(positions);
+    QMap<QString, cwStationPosition> positions = stationLookup.positions();
+    QMapIterator<QString, cwStationPosition> iter(positions);
     while(iter.hasNext()) {
         iter.next();
 
         CavewhereProto::StationPositionLookup_NamePosition* namePosition = positionLookup->add_stationpositions();
         saveString(namePosition->mutable_stationname(), iter.key());
-        saveVector3D(namePosition->mutable_position(), iter.value());
+        saveVector3D(namePosition->mutable_position(), iter.value().position());
+        saveMatrix3x3(namePosition->mutable_covariance(), iter.value().convariance());
     }
 }
 

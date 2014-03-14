@@ -111,7 +111,7 @@ void cwScrapStationView::updateShotLines() {
     //Clear all the lines
     ShotLines.clear();
 
-    if(noteStation.isValid() && stationPositionLookup.hasPosition(noteStation.name())) {
+    if(noteStation.isValid() && stationPositionLookup.hasStation(noteStation.name())) {
         QString stationName = noteStation.name();
         QSet<cwStation> neighboringStations = trip->neighboringStations(stationName);
 

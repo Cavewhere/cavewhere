@@ -39,3 +39,15 @@ message QSizeF {
 message QStringList {
     repeated QString strings = 1;
 }
+
+message QMatrix3x3 {
+    required float m00 = 1;
+    required float m10 = 2;
+    required float m20 = 3;
+    required float m01 = 4;
+    required float m11 = 5;
+    required float m21 = 6;
+    required float m02 = 7;
+    required float m12 = 8;
+    required float m22 = 9;
+}

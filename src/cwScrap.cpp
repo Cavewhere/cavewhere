@@ -385,7 +385,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     cwStationPositionLookup positionLookup = parentCave()->stationPositionLookup();
 
     //Make sure station1 and station2 exist in the lookup
-    if(!positionLookup.hasPosition(station1.name()) || !positionLookup.hasPosition(station2.name())) {
+    if(!positionLookup.hasStation(station1.name()) || !positionLookup.hasStation(station2.name())) {
         return ScrapShotTransform();
     }
 
@@ -532,7 +532,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     double bestNormalizeError = 1.0;
 
     foreach(cwStation station, neigborStations) {
-        if(stationLookup.hasPosition(station.name())) {
+        if(stationLookup.hasStation(station.name())) {
             QVector3D stationPosition = stationLookup.position(station.name());
 
             //Figure out the predicited position of the station on the notes

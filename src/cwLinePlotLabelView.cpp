@@ -135,10 +135,10 @@ QList<cwLabel3dItem> cwLinePlotLabelView::labels(cwCave *cave) const
     font.setPointSize(14);
 
     //Populate the vector of unique stations, this is so we can thread the transformation
-    QMapIterator<QString, QVector3D> mapIter(stations.positions());
+    QMapIterator<QString, cwStationPosition> mapIter(stations.positions());
     while(mapIter.hasNext()) {
         mapIter.next();
-        uniqueStations.append(cwLabel3dItem(mapIter.key(), mapIter.value(), font));
+        uniqueStations.append(cwLabel3dItem(mapIter.key(), mapIter.value().position(), font));
     }
 
     return uniqueStations;

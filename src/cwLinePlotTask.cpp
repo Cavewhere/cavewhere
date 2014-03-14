@@ -409,12 +409,12 @@ QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStati
      QVector<cwStationPositionLookup> caveStations;
      caveStations.resize(CaveStationLookups.size());
 
-     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
+     QMapIterator<QString, cwStationPosition> iter(stationPostions.positions());
      while( iter.hasNext() ) {
          iter.next();
 
          QString name = iter.key();
-         QVector3D position = iter.value();
+         QVector3D position = iter.value().position();
 
          //Cut off positions to 3 digits
          position.setX(qRound(position.x() * positionFactor) / positionFactor);
@@ -475,14 +475,14 @@ void cwLinePlotTask::updateInteralCaveStationLookups(QVector<cwStationPositionLo
         cwStationPositionLookup& newLookup = caveStations[i];
         cwStationPositionLookup& oldLookup = CaveStationLookups[i];
 
-        QMap<QString, QVector3D> newPositions = newLookup.positions();
-        QMap<QString, QVector3D> oldPositions = oldLookup.positions();
+        QMap<QString, cwStationPosition> newPositions = newLookup.positions();
+        QMap<QString, cwStationPosition> oldPositions = oldLookup.positions();
 
         foreach(QString stationName, newPositions.keys()) {
             if(oldPositions.contains(stationName)) {
                 //Compare new point with old point
-                QVector3D newPoint = newPositions.value(stationName);
-                QVector3D oldPoint = oldPositions.value(stationName);
+                QVector3D newPoint = newPositions.value(stationName).position();
+                QVector3D oldPoint = oldPositions.value(stationName).position();
                 if(newPoint != oldPoint) {
                     setStationAsChanged(i, stationName);
                 }

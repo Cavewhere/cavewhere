@@ -15,10 +15,12 @@
 #include "cwCave.h"
 #include "cwMath.h"
 #include "cwDebug.h"
+#include "cwStationPosition.h"
 
 //Qt includes
 #include <QElapsedTimer>
 #include <QLinkedList>
+#include <QMatrix3x3>
 
 cwLoopCloserTask::cwLoopCloserTask(QObject *parent) :
     cwTask(parent)
@@ -34,6 +36,21 @@ cwLoopCloserTask::cwLoopCloserTask(QObject *parent) :
 void cwLoopCloserTask::setRegion(cwCavingRegion *region)
 {
     Region = region;
+}
+
+QMatrix3x3 cwLoopCloserTask::toQMatrix3x3(const arma::mat& matrix)
+{
+    Q_ASSERT(matrix.n_rows == 3);
+    Q_ASSERT(matrix.n_cols == 3);
+
+    QMatrix3x3 newMatrix;
+    for(int r = 0; r < 3; r++) {
+        for(int c = 0; c < 3; c++) {
+            newMatrix(r, c) = matrix(r, c);
+        }
+    }
+
+    return newMatrix;
 }
 
 /**
@@ -75,17 +92,16 @@ void cwLoopCloserTask::processCave(cwCave *cave)
     //For Debugging, this makes sure that station don't exist in the middle of the edge
     checkBasicEdges(edges);
 
-    //---------------------------- Detect loops and legs -----------------------------
-
-    //Split loops out from survey legs
-    cwLoopDetector loopDetector;
-    loopDetector.process(edges);
-    //    printLoops(loopDetector.loops());
-
     //---------------------------- Process all the shot directions -------------------
     cwShotProcessor shotProcessor;
     shotProcessor.setShotStd(Region->shotStd()->data());
     shotProcessor.process(edges);
+
+    //---------------------------- Detect loops and legs -----------------------------
+    //Split loops out from survey legs
+    cwLoopDetector loopDetector;
+    loopDetector.process(edges);
+    //    printLoops(loopDetector.loops());
 
     //--------------------------- Setup fixed position ------------------------------
     //This is currently a hack, but this should be replaced with fixed position
@@ -280,6 +296,8 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk*> cwLoopCloserTask::cwMainEdgeProcesso
         }
     }
 
+    splitOnRepeatingEdges();
+
     return ResultingEdges; //.toList();
 }
 
@@ -366,6 +384,70 @@ void cwLoopCloserTask::cwMainEdgeProcessor::splitOnStation(cwStation station)
             //            qDebug() << "Appending newChunk:" << otherHalf << LOCATION;
             //            Q_ASSERT(!ResultingEdges.contains(otherHalf));
             ResultingEdges.append(otherHalf);
+        }
+    }
+}
+
+/**
+ * @brief cwLoopCloserTask::cwMainEdgeProcessor::splitOnRepeatingEdges
+ *
+ * This splits the loop on repeating edge.
+ *
+ * For example two end points could have two edges connecting them:
+ *    _
+ *  /   \
+ * A  -  B
+ * |     |
+ *  \ C /
+ *
+ * A and B have two edges connecting them (top one, and the middle one). This can
+ * cause problems with loop detector algorithm, because it can't detect basic loops
+ * from this.  This function will split at least one of them so that it works:
+ *
+ *    D
+ *  /   \
+ * A  -  B
+ * |     |
+ *  \ C /
+ *
+ * You can see that after running this function station D split one of the paths
+ * between A and B.
+ */
+void cwLoopCloserTask::cwMainEdgeProcessor::splitOnRepeatingEdges()
+{
+    QMultiHash<QString, cwEdgeSurveyChunk*> endStations;
+
+    //Add all the edge to the resulting edges
+    foreach(cwEdgeSurveyChunk* edge, ResultingEdges) {
+        QString key1 = edge->stations().first().name() + edge->stations().last().name();
+        QString key2 = edge->stations().last().name() + edge->stations().first().name();
+        endStations.insertMulti(key1, edge);
+        endStations.insertMulti(key2, edge);
+    }
+
+    QSet<cwEdgeSurveyChunk*> processed;
+
+    //Go through all the end stations
+    foreach(QString firstLastStationKey, endStations.keys()) {
+        QList<cwEdgeSurveyChunk*> edges = endStations.values(firstLastStationKey);
+        if(edges.size() >= 2) {
+            foreach(cwEdgeSurveyChunk* edge, edges) {
+
+                if(processed.contains(edge)) {
+                    //Already processed these edges
+                    break;
+                }
+
+                //Break the edge into pieces
+                if(edge->stations().size() > 2) {
+                    //Break the edge on the second station
+                    QString secondStation = edge->stations().at(1).name();
+                    cwEdgeSurveyChunk* newEdge = edge->split(secondStation);
+                    ResultingEdges.append(newEdge);
+                }
+
+                processed.insert(edge);
+            }
         }
     }
 }
@@ -475,6 +557,11 @@ cwLoopCloserTask::cwEdgeSurveyChunk::cwEdgeSurveyChunk() :
 
 }
 
+cwStation &cwLoopCloserTask::cwEdgeSurveyChunk::firstStation()
+{
+    return Stations.first();
+}
+
 /**
  * @brief cwLoopCloserTask::cwEdgeSurveyChunk::setCalibration
  * @param calibration
@@ -567,6 +654,11 @@ QList<cwLoopCloserTask::cwShotVector> cwLoopCloserTask::cwEdgeSurveyChunk::shotV
     return ShotVectors;
 }
 
+cwLoopCloserTask::cwShotVector &cwLoopCloserTask::cwEdgeSurveyChunk::firstShotVector()
+{
+    return ShotVectors.first();
+}
+
 
 /**
  * @brief cwLoopCloserTask::cwLoopDetector::loopEdges
@@ -593,23 +685,25 @@ void cwLoopCloserTask::cwLoopDetector::process(QList<cwLoopCloserTask::cwEdgeSur
 
     qDebug() << "UniqueLoops:" << uniqueLoops.size();
 
+    //Do gassiumn elimanation on loops to find basic loops
+//    QList<cwLoop> basicLoops = minimizeLoops(uniqueLoops);
+
     //Group uniqueLoops
-    QList<cwLoopGroup> loopGroups = groupUniqueLoops(uniqueLoops);
+    QList<cwLoopGroup> loopGroups = groupLoops(uniqueLoops);
+
+//    maximizeLoops(loopGroups);
 
     //Debugging print out all the loopGroups
-    int count = 0;
-    qDebug() << "There are " << loopGroups.size() << "loop groups.";
-    foreach(cwLoopGroup group, loopGroups) {
-        qDebug() << "########## Loop group" << count << "########";
-        group.printLoops();
-        count++;
-    }
+//    int count = 0;
+//    qDebug() << "There are " << loopGroups.size() << "loop groups.";
+//    foreach(cwLoopGroup group, loopGroups) {
+//        qDebug() << "########## Loop group" << count << "########";
+//        group.printLoops();
+//        count++;
+//    }
 
-    //Process the groups by stdev and uniqueness
-
-
-    //Do gassiumn elimanation on loops to find basic loops
-    Loops = minimizeLoops(uniqueLoops);
+    //Sort the groups by stdev
+    sortLoopGroups(loopGroups);
 
     //Find leg edges
     LegEdges = findLegEdges(edges, uniqueLoops);
@@ -705,8 +799,8 @@ void cwLoopCloserTask::cwLoopDetector::findLoopsHelper(QString station, QList<cw
         loop.setEdges(loopPath);
         resultLoops.append(loop);
 
-        //        qDebug() << "Added loop--";
-        //        printEdges(loopPath);
+        qDebug() << "Added loop--";
+        printEdges(loopPath.toList());
 
         return;
     }
@@ -762,6 +856,10 @@ QList<cwLoopCloserTask::cwLoop> cwLoopCloserTask::cwLoopDetector::findUniqueLoop
         loopDetector.Edges = edgesInLoops.toList();
         QList<cwLoop> loops = loopDetector.findLoops(station);
 
+        qDebug() << "Found loops for: " << station;
+        printLoops(loops);
+        qDebug() << "------------------------------ ##########";
+
         //Add the loops that we just found, but make sure they're are unqiue
         //To thread this this must be moved out of this foreach loop, this is combind part of the threading
         foreach(cwLoop loop, loops) {
@@ -784,7 +882,7 @@ QList<cwLoopCloserTask::cwLoop> cwLoopCloserTask::cwLoopDetector::findUniqueLoop
  *
  * A loop can't be in two seperate loop groups. A loop is own by one and only one loop group
  */
-QList<cwLoopCloserTask::cwLoopGroup> cwLoopCloserTask::cwLoopDetector::groupUniqueLoops(QList<cwLoopCloserTask::cwLoop> uniqueLoops)
+QList<cwLoopCloserTask::cwLoopGroup> cwLoopCloserTask::cwLoopDetector::groupLoops(QList<cwLoopCloserTask::cwLoop> uniqueLoops)
 {
 
     //Copy unique loops to a linked list
@@ -944,6 +1042,20 @@ QList<cwLoopCloserTask::cwLoop> cwLoopCloserTask::cwLoopDetector::minimizeLoops(
 }
 
 /**
+ * @brief cwLoopCloserTask::cwLoopDetector::maximizeLoops
+ * @param loopGroups
+ *
+ * This will maximize the all the loops in a loop group.  This assumes that the loop group only contains
+ * basic cycles.
+ */
+void cwLoopCloserTask::cwLoopDetector::maximizeLoops(QList<cwLoopCloserTask::cwLoopGroup> &loopGroups)
+{
+    for(int i = 0; i < loopGroups.size(); i++) {
+        loopGroups[i].maximize();
+    }
+}
+
+/**
  * @brief cwLoopCloserTask::cwLoopDetector::findLegEdges
  * @param edges
  * @param uniqueLoops
@@ -972,6 +1084,20 @@ QList<cwLoopCloserTask::cwEdgeSurveyChunk *> cwLoopCloserTask::cwLoopDetector::f
     qDebug() << "LegEdges:" << legEdges.size();
 
     return legEdges;
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoopDetector::sortLoopGroups
+ * @param groups
+ *
+ * This sorts all the loop groups in the loop closure task
+ */
+void cwLoopCloserTask::cwLoopDetector::sortLoopGroups(QList<cwLoopCloserTask::cwLoopGroup> &groups)
+{
+    for(int i = 0; i < groups.size(); i++) {
+        cwLoopGroup& group = groups[i];
+        group.sortLoops();
+    }
 }
 
 void cwLoopCloserTask::cwLoopDetector::printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk *> edges) const
@@ -1036,6 +1162,77 @@ void cwLoopCloserTask::cwLoopDetector::printMatrix(QVector<char> matrix,
 }
 
 
+/**
+ * @brief cwLoopCloserTask::cwLoop::calculateStd
+ *
+ * This calculates the std devation of the loop
+ */
+void cwLoopCloserTask::cwLoop::calculateStd()
+{
+    Q_ASSERT(!Edges.empty());
+
+    //This will break the loop, as see how far apart stations are
+    QSet<cwEdgeSurveyChunk*>::iterator iter = Edges.begin();
+    cwEdgeSurveyChunk* firstEdge = *iter;
+    QString firstStation = firstEdge->stations().first().name();
+    QString newStationName = firstStation + "_";
+
+    //Rename the first station to break the loop
+    qDebug() << "Shot vectors:" << firstEdge->shotVectors().first().fromStation() << newStationName;
+
+    firstEdge->firstShotVector().setFromStation(newStationName);
+    firstEdge->firstStation().setName(newStationName);
+
+    //Create fix the first station to (0, 0, 0)
+    cwStationPositionLookup fixedStationLookup;
+    fixedStationLookup.setPosition(newStationName, QVector3D());
+
+    //Create a network solver
+    cwNetworkSolver networkSolver;
+    networkSolver.setEdgeLegs(Edges.toList()); //Set the network solver edges, there are no loops in this
+    networkSolver.setInitialFixedStations(fixedStationLookup);
+    networkSolver.process();
+
+    //Get the locations
+    cwStationPositionLookup locations = networkSolver.stationPositionLookup();
+    QMatrix3x3 loopConvariance = locations.covariance(firstStation); //The is the original position, aka at the end of the loop
+
+    //Calculate the absolute error
+    QVector3D p1 = locations.position(firstStation);
+    QVector3D p2 = locations.position(newStationName);
+
+    qDebug() << "Loop convariance:" << loopConvariance;
+    qDebug() << "p1:" << p1 << "p2:" << p2 << (p2-p1);
+
+    QVector3D std(sqrt(loopConvariance(0,0)), sqrt(loopConvariance(1,1)), sqrt(loopConvariance(2,2)));
+    QVector3D absoluteError = p2 - p1;
+    QVector3D loopStd = QVector3D(absoluteError.x() / std.x(), absoluteError.y() / std.y(), absoluteError.z() / std.z());
+    qDebug() << "Loop std:" <<  absoluteError.length() / std.length() << std.lengthSquared() << absoluteError.length();
+
+    AbsoluteError = absoluteError;
+    StdError = loopStd;
+
+    //Reset the first station the first and last station
+    firstEdge->firstShotVector().setFromStation(firstStation);
+    firstEdge->firstStation().setName(firstStation);
+
+}
+
+QVector3D cwLoopCloserTask::cwLoop::loopLength() const
+{
+    return QVector3D();
+}
+
+QVector3D cwLoopCloserTask::cwLoop::absoluteError() const
+{
+    return AbsoluteError;
+}
+
+QVector3D cwLoopCloserTask::cwLoop::stdError() const
+{
+    return StdError;
+}
+
 bool cwLoopCloserTask::cwLoop::operator ==(const cwLoopCloserTask::cwLoop &other) const
 {
     return other.edges() == edges();
@@ -1082,6 +1279,55 @@ void cwLoopCloserTask::cwLoop::printEdges()
         }
     }
     qDebug() << "*********** end of edges ***********";
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoop::canCombine
+ * @param l1
+ * @param l2
+ * @return True if l1 can be combined with l2, and false if it can't be combined
+ */
+bool cwLoopCloserTask::cwLoop::canCombine(const cwLoopCloserTask::cwLoop &l1, const cwLoopCloserTask::cwLoop &l2)
+{
+    cwLoop smallerLoop;
+    cwLoop largerLoop;
+
+    if(l1.edges().size() < l2.edges().size()) {
+        smallerLoop = l1;
+        largerLoop = l2;
+    } else {
+        smallerLoop = l2;
+        largerLoop = l1;
+    }
+
+    int matchCount = 0;
+    foreach(cwEdgeSurveyChunk* edgeChunk, smallerLoop.edges()) {
+        if(largerLoop.edges().contains(edgeChunk)) {
+            matchCount++;
+        }
+    }
+
+    return matchCount != 0 && matchCount != smallerLoop.edges().size();
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoop::combine
+ * @param l1
+ * @param l2
+ * @return Returns a combine loop that contains l1 and l2
+ */
+cwLoopCloserTask::cwLoop cwLoopCloserTask::cwLoop::combine(const cwLoopCloserTask::cwLoop &l1, const cwLoopCloserTask::cwLoop &l2)
+{
+    Q_ASSERT(canCombine(l1, l2));
+
+    QSet<cwEdgeSurveyChunk*> allEdges = l1.edges().unite(l2.edges());
+    QSet<cwEdgeSurveyChunk*> sharedEdges = l1.edges().intersect(l2.edges());
+    QSet<cwEdgeSurveyChunk*> combineLoopEdges = allEdges.subtract(sharedEdges);
+
+    cwLoop combineLoop;
+    combineLoop.setEdges(combineLoopEdges);
+
+    return combineLoop;
 }
 
 /**
@@ -1769,12 +2015,14 @@ QList<QString> cwLoopCloserTask::cwNetworkSolver::calcNeigboringStations(QList<Q
         QList<cwShotVector> shots = StationsToLegs.values(station);
 
         //Have a local list off all the station positions - for averaging backsites
-        QMultiHash<QString, QVector3D> localStationPosition;
+        QMultiHash<QString, cwStationPosition> localStationPosition;
 
         foreach(cwShotVector shot, shots) {
 
-            bool calcFrontSite = (station == shot.fromStation() && !PositionLookup.hasPosition(shot.toStation()));
-            bool calcBackSite = (station == shot.toStation() && !PositionLookup.hasPosition(shot.fromStation()));
+            bool calcFrontSite = (station == shot.fromStation() && !PositionLookup.hasStation(shot.toStation()));
+            bool calcBackSite = (station == shot.toStation() && !PositionLookup.hasStation(shot.fromStation()));
+
+            cwStationPosition stationPosition;
 
             //Shots between to and from station hasn't been processed
             if(calcFrontSite) {
@@ -1786,7 +2034,13 @@ QList<QString> cwLoopCloserTask::cwNetworkSolver::calcNeigboringStations(QList<Q
                 QVector3D fromPosition = PositionLookup.position(shot.fromStation());
                 QVector3D toPosition = fromPosition + shotDirection;
 
-                localStationPosition.insertMulti(shot.toStation(), toPosition);
+                QMatrix3x3 fromConvariance = PositionLookup.covariance(shot.fromStation());
+                QMatrix3x3 toConvariance = fromConvariance + cwLoopCloserTask::toQMatrix3x3(shot.covarienceMatrix());
+
+                stationPosition.setPosition(toPosition);
+                stationPosition.setConvariance(toConvariance);
+
+                localStationPosition.insertMulti(shot.toStation(), stationPosition);
 
             } else if(calcBackSite) {
                 //This is a backsite
@@ -1796,23 +2050,28 @@ QList<QString> cwLoopCloserTask::cwNetworkSolver::calcNeigboringStations(QList<Q
                 QVector3D fromPosition = PositionLookup.position(shot.toStation());
                 QVector3D toPosition = fromPosition + shotDirection;
 
-                localStationPosition.insertMulti(shot.fromStation(), toPosition);
+                QMatrix3x3 fromConvariance = PositionLookup.covariance(shot.toStation());
+                QMatrix3x3 toConvariance = fromConvariance + cwLoopCloserTask::toQMatrix3x3(shot.covarienceMatrix());
+
+                stationPosition.setPosition(toPosition);
+                stationPosition.setConvariance(toConvariance);
+
+                localStationPosition.insertMulti(shot.fromStation(), stationPosition);
             }
         }
 
         //Average the localStationPositions
         foreach(QString key, localStationPosition.keys()) {
-            QList<QVector3D> positions = localStationPosition.values(key);
-            QVector3D averagePosition = average(positions);
+            QList<cwStationPosition> positions = localStationPosition.values(key);
+            cwStationPosition averagePosition = average(positions);
 
-            PositionLookup.setPosition(key, averagePosition);
+            PositionLookup.insertStation(key, averagePosition);
             newFixedStations.append(key);
         }
     }
 
     QList<QString> possibleLoopStations = fixedStations + newFixedStations;
 
-    //Process loops
     foreach(QString station, possibleLoopStations) {
 
 
@@ -1826,22 +2085,27 @@ QList<QString> cwLoopCloserTask::cwNetworkSolver::calcNeigboringStations(QList<Q
  * @param positions
  * @return The average position of the positions
  */
-QVector3D cwLoopCloserTask::cwNetworkSolver::average(QList<QVector3D> positions) const
+cwStationPosition cwLoopCloserTask::cwNetworkSolver::average(QList<cwStationPosition> stations) const
 {
-    if(positions.size() == 1) {
-        return positions.first();
+    if(stations.size() == 1) {
+        return stations.first();
     }
 
     QVector3D averagePosition;
-    foreach(QVector3D position, positions) {
-        averagePosition += position;
+    foreach(cwStationPosition station, stations) {
+        averagePosition += station.position();
     }
-    double size = positions.size();
+    double size = stations.size();
     averagePosition = QVector3D(averagePosition.x() / size,
                                 averagePosition.y() / size,
                                 averagePosition.z() / size);
 
-    return averagePosition;
+
+    cwStationPosition averageStation;
+    averageStation.setPosition(averagePosition);
+    averageStation.setConvariance(stations.first().convariance());
+
+    return averageStation;
 }
 
 /**
@@ -1863,6 +2127,92 @@ void cwLoopCloserTask::cwLoopGroup::appendLoop(cwLoopCloserTask::cwLoop loop)
 {
     Q_ASSERT(canAddLoop(loop));
     Loops.append(loop);
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoopGroup::maximize
+ *
+ * This function assumes that all the loops in the loop group are basic cycles.
+ *
+ * This function will take all the basic loops add them together to all the loop
+ * combinations. Finding all the loop combinations can find bad legs in a survey
+ * loop.
+ */
+void cwLoopCloserTask::cwLoopGroup::maximize()
+{
+    QList<cwLoop> allCombinedLoops;
+
+    typedef QPair<QSet<int>, cwLoop> LoopBuildup;
+
+    QList<LoopBuildup> lastCombinedLoops;
+    QList<LoopBuildup> currentCombinedLoops;
+
+    while(!lastCombinedLoops.isEmpty()) {
+        for(int ii = 0; ii < lastCombinedLoops.size(); ii++) {
+            const LoopBuildup& l = lastCombinedLoops.at(ii);
+            QSet<int> basicLoops = l.first;
+
+            for(int i = 0; i < Loops.size(); i++) {
+                if(basicLoops.contains(i)) {
+                    //This loop already contains Loop.at(i)
+                    continue;
+                }
+
+                cwLoop l1 = l.second;
+                cwLoop l2 = Loops.at(i);
+
+
+                if(cwLoop::canCombine(l1, l2)) {
+                    cwLoop combineLoop = cwLoop::combine(l1, l2);
+                    basicLoops.insert(i);
+
+                    LoopBuildup newCombineLoop(basicLoops, combineLoop);
+
+                    //Add the new loop to
+                    currentCombinedLoops.append(newCombineLoop);
+                }
+            }
+        }
+
+        //Add currentCombineLoops to allLoops
+        foreach(LoopBuildup b, currentCombinedLoops) {
+            allCombinedLoops.append(b.second);
+        }
+
+        lastCombinedLoops = currentCombinedLoops;
+    }
+
+    //Add all of the together
+    Loops += allCombinedLoops;
+
+}
+
+/**
+ * @brief lessThanStd
+ * @param loop1
+ * @param loop2
+ * @return Returns true if loop1's std is less than loop2 std
+ */
+bool cwLoopCloserTask::cwLoopGroup::lessThanStd(const cwLoopCloserTask::cwLoop& loop1, const cwLoopCloserTask::cwLoop& loop2) {
+    qDebug() << "Less than:" << loop1.stdError().lengthSquared() << loop2.stdError().lengthSquared();
+    qDebug() << "Less than2:" << loop1.stdError().length() << loop2.stdError().length();
+    return loop1.stdError().lengthSquared() < loop2.stdError().lengthSquared();
+}
+
+/**
+ * @brief cwLoopCloserTask::cwLoopGroup::sortLoops
+ *
+ * This goes through all the loops in the loop group an calculate the loop's
+ * std-dev and sorts the loops by theier total std-dev
+ */
+void cwLoopCloserTask::cwLoopGroup::sortLoops()
+{
+    //Find std-dev
+    for(int i = 0; i < Loops.size(); i++) {
+        Loops[i].calculateStd();
+    }
+
+    qSort(Loops.begin(), Loops.end(), &cwLoopGroup::lessThanStd);
 }
 
 /**

@@ -91,6 +91,7 @@ private:
     QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
     QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
     QStringList loadStringList(const QtProto::QStringList& protoStringList);
+    QMatrix3x3 loadMatrix3x3(const QtProto::QMatrix3x3& matrix);
 
 
 //    QString readXMLFromDatabase();

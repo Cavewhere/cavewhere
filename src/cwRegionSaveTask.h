@@ -29,6 +29,9 @@ class cwStation;
 class cwShot;
 class cwStationPositionLookup;
 
+//Qt includes
+#include <QMatrix3x3>
+
 //Google protobuffer
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
@@ -94,6 +97,7 @@ private:
     void saveVector3D(QtProto::QVector3D* protoVector3D, QVector3D vector3D);
     void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);
     void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
+    void saveMatrix3x3(QtProto::QMatrix3x3* protoMatrix3x3, QMatrix3x3 matrix);
 
 //    //TODO: Remove old boost serialization
 //    void xmlSerialization();

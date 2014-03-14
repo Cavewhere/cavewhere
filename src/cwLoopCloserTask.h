@@ -39,6 +39,9 @@ public:
     //Inputs
     void setRegion(cwCavingRegion* region);
 
+    //Helper functions
+    static QMatrix3x3 toQMatrix3x3(const arma::mat &matrix);
+
 signals:
 
 public slots:
@@ -83,6 +86,7 @@ private:
 
         void setStations(QList<cwStation> stations) { Stations = stations; }
         QList<cwStation> stations() const { return Stations; }
+        cwStation& firstStation();
 
         void setShots(QList<cwShot> shots) { Shots = shots; }
         QList<cwShot> shots() const { return Shots; }
@@ -94,6 +98,7 @@ private:
 
         void addShotVector(cwShotVector direction);
         QList<cwShotVector> shotVectors() const;
+        cwShotVector& firstShotVector();
 
 
     private:
@@ -123,6 +128,7 @@ private:
         void addEdgeChunk(cwEdgeSurveyChunk *chunk);
         void addStationInEdgeChunk(cwEdgeSurveyChunk* chunk);
         void splitOnStation(cwStation station);
+        void splitOnRepeatingEdges();
 
         QList<cwEdgeSurveyChunk*> splitChunkLocally(cwEdgeSurveyChunk* chunk);
 
@@ -153,6 +159,9 @@ private:
 
         void printEdges();
 
+        static bool canCombine(const cwLoop& l1, const cwLoop& l2);
+        static cwLoop combine(const cwLoop& l1, const cwLoop& l2);
+
     private:
         QSet<cwEdgeSurveyChunk*> Edges;
         QVector3D LoopLength; //Calculated from calculateStd()
@@ -164,9 +173,9 @@ private:
      * @brief The cwLoopGroup class
      *
      * This is a group of loops that share at least one station.  A loop group
-     * is important, because loops are processed in order, based on thier std.
+     * is important, because loops are processed in order, based on thier stdev.
      *
-     * Loop groups are solver in the cwNetworkSolver
+     * Loop groups are used the solver in the cwNetworkSolver
      */
     class cwLoopGroup {
     public:
@@ -174,6 +183,8 @@ private:
         QList<cwLoop> loops() const { return Loops; }
 
         void appendLoop(cwLoop loop);
+
+        void maximize();
 
         //Sort the loops by standard devation
         void sortLoops();
@@ -184,6 +195,8 @@ private:
 
     private:
         QList<cwLoop> Loops;
+
+        static bool lessThanStd(const cwLoopCloserTask::cwLoop &loop1, const cwLoopCloserTask::cwLoop &loop2);
     };
 
     /**
@@ -216,9 +229,11 @@ private:
         QList<cwLoop> findLoops(QString station);
         void findLoopsHelper(QString station, QList<cwLoop> &resultLoops, QList<cwEdgeSurveyChunk*> path); //Recusive function, depth first search
         QList<cwLoop> findUniqueLoops(QList<cwLoop> initialLoops);
-        QList<cwLoopGroup> groupUniqueLoops(QList<cwLoop> uniqueLoops);
+        QList<cwLoopGroup> groupLoops(QList<cwLoop> uniqueLoops);
         QList<cwLoop> minimizeLoops(QList<cwLoop> loops);
+        void maximizeLoops(QList<cwLoopGroup>& loopGroups);
         QList<cwEdgeSurveyChunk*> findLegEdges(QList<cwEdgeSurveyChunk*> edges, QList<cwLoop> uniqueLoops) const;
+        void sortLoopGroups(QList<cwLoopGroup>& groups);
 
         void printEdges(QList<cwLoopCloserTask::cwEdgeSurveyChunk*> edges) const;
         void printLoops(QList<cwLoop> loops) const;
@@ -282,7 +297,7 @@ private:
         void indexLegStations();
         void indexLoopStations();
         QList<QString> calcNeigboringStations(QList<QString> fixedStations);
-        QVector3D average(QList<QVector3D> positions) const;
+        cwStationPosition average(QList<cwStationPosition> positions) const;
 
     };
 

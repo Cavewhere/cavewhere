@@ -33,6 +33,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QMatrix3x3>
 
 //Std includes
 #include <sstream>
@@ -540,7 +541,13 @@ cwStationPositionLookup cwRegionLoadTask::loadStationPositionLookup(const Cavewh
         const CavewhereProto::StationPositionLookup_NamePosition& namePosition = protoStationLookup.stationpositions(i);
         QString name = loadString(namePosition.stationname());
         QVector3D position = loadVector3D(namePosition.position());
-        stationLookup.setPosition(name, position);
+        QMatrix3x3 covariance = loadMatrix3x3(namePosition.covariance());
+
+        cwStationPosition stationPosition;
+        stationPosition.setPosition(position);
+        stationPosition.setConvariance(covariance);
+
+        stationLookup.insertStation(name, stationPosition);
     }
     return stationLookup;
 }
@@ -635,6 +642,21 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
         list.append(loadString(protoStringList.strings(i)));
     }
     return list;
+}
+
+QMatrix3x3 cwRegionLoadTask::loadMatrix3x3(const QtProto::QMatrix3x3 &matrix)
+{
+    QMatrix3x3 returnMatrix;
+    returnMatrix(0,0) = matrix.m00();
+    returnMatrix(0,1) = matrix.m01();
+    returnMatrix(0,2) = matrix.m02();
+    returnMatrix(1,0) = matrix.m10();
+    returnMatrix(1,1) = matrix.m11();
+    returnMatrix(1,2) = matrix.m12();
+    returnMatrix(2,0) = matrix.m20();
+    returnMatrix(2,1) = matrix.m21();
+    returnMatrix(2,2) = matrix.m22();
+    return returnMatrix;
 }
 
 

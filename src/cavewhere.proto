@@ -182,5 +182,6 @@ message StationPositionLookup {
     message NamePosition {
         required QtProto.QString stationName = 1;
         required QtProto.QVector3D position = 2;
+        optional QtProto.QMatrix3x3 covariance = 3;
     }
 }

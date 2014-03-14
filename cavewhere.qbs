@@ -379,7 +379,10 @@ Project {
                 "src/cwLoopCloserTask.h",
                 "src/cwLoopCloserTask.cpp",
                 "src/cwGlobalShotStdev.cpp",
-                "src/cwGlobalShotStdev.h"
+                "src/cwGlobalShotStdev.h",
+                "src/cwStation.h",
+                "src/cwStationPosition.cpp",
+                "src/cwStationPosition.h"
             ]
         }
 

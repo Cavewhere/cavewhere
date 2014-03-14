@@ -373,7 +373,7 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
                                                                                 const cwStationPositionLookup& positionLookup) const {
     QList<cwTriangulateStation> stations;
     foreach(cwNoteStation noteStation, noteStations) {
-        if(positionLookup.hasPosition(noteStation.name())) {
+        if(positionLookup.hasStation(noteStation.name())) {
             cwTriangulateStation station;
             station.setName(noteStation.name());
             station.setNotePosition(noteStation.positionOnNote());
