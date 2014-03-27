@@ -41,8 +41,9 @@ Project {
         ]
 
         cpp.cxxFlags: [
-//            "-std=c++11", //Needed for protoc
-            "-stdlib=libc++" //Needed for protoc
+            "-stdlib=libc++", //Needed for protoc
+            "-Werror",
+            "-std=c++11" //For c++11 support
         ]
 
         cpp.defines: [
@@ -117,7 +118,7 @@ Project {
                 "src/cwGlobalUndoStack.cpp",
                 "src/cwUndoer.cpp",
                 "src/cwSurveyChunkView.cpp",
-                "src/cwGLRenderer.cpp",
+                "src/cwGLViewer.cpp",
                 "src/cwCamera.cpp",
                 "src/cwPlane.cpp",
                 "src/cwLine3D.cpp",
@@ -266,7 +267,7 @@ Project {
                 "src/cwGlobalUndoStack.h",
                 "src/cwUndoer.h",
                 "src/cwSurveyChunkView.h",
-                "src/cwGLRenderer.h",
+                "src/cwGLViewer.h",
                 "src/cwCamera.h",
                 "src/cwPlane.h",
                 "src/cwLine3D.h",
@@ -374,6 +375,18 @@ Project {
                 "src/cwCompassItem.h",
                 "src/cwLicenseAgreement.h",
                 "src/cwOpenFileEventHandler.h",
+                "src/cwInitCommand.h",
+                "src/cwInitCommand.cpp",
+                "src/cwUpdateDataCommand.h",
+                "src/cwUpdateDataCommand.cpp",
+                "src/cwScene.h",
+                "src/cwScene.cpp",
+                "src/cwInitializeOpenGLFunctionsCommand.h",
+                "src/cwInitializeOpenGLFunctionsCommand.cpp",
+                "src/cwSceneCommand.h",
+                "src/cwSceneCommand.cpp",
+                "src/cwRegionSceneManager.h",
+                "src/cwRegionSceneManager.cpp"
             ]
         }
 

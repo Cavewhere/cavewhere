@@ -26,7 +26,7 @@ int cwImageItem::ModelViewProjectionMatrix = -1;
 int cwImageItem::CropAreaUniform = -1;
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
-    cwGLRenderer(parent),
+    cwGLViewer(parent),
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
@@ -310,7 +310,7 @@ QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
     if(GLResources != NULL) {
         GLResources->NoteTexture->updateData();
     }
-    QSGNode* node = cwGLRenderer::updatePaintNode(oldNode, data);
+    QSGNode* node = cwGLViewer::updatePaintNode(oldNode, data);
     return node;
 }
 

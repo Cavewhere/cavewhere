@@ -56,18 +56,10 @@ Item {
         //       Replace with the view
         GLTerrainRenderer {
             id: terrainRendererId
-            //            visible: mainSideBar.pageShown == "view"
-            //            glWidget: mainGLWidget
-            cavingRegion: region
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
-
-            Component.onCompleted: {
-                //Setup the linePlotManager with the glLinePlot
-                linePlotManager.setGLLinePlot(terrainRendererId.linePlot);
-                scrapManager.setGLScraps(terrainRendererId.scraps);
-            }
+            scene: regionSceneManager.scene
         }
 
         DataMainPage {
@@ -89,17 +81,6 @@ Item {
         }
     }
 
-    //There's only one shadow input text editor for the cavewhere program
-    //This make the input creation much faster for any thing that needs an editor
-    //Only one editor can be open at a time
-    GlobalShadowTextInput {
-        id: globalShadowTextInput
-    }
 
-    //All menus in cavewhere us this mouse handler as a parent
-    //The mouse handle is visible when the menu is visible. I hides
-    //the current menu selection, if the user selects out of the window
-    GlobalMenuMouseHandler {
-        id: globalMenuMouseHandler
-    }
+
 }

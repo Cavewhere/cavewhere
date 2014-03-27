@@ -29,6 +29,7 @@ class cwSurveyImportManager;
 class cwItemSelectionModel;
 class cwQMLReload;
 class cwLicenseAgreement;
+class cwRegionSceneManager;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -53,31 +54,7 @@ class cwRootData : public QObject
     Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
-//    Q_PROPERTY(QQmlApplicationEngine* applicationEngine READ applicationEngine WRITE setApplicationEngine NOTIFY applicationEngineChanged)
-
-//    QQmlApplicationEngine* applicationEngine() const;
-//    void setApplicationEngine(QQmlApplicationEngine* applicationEngine);
-
-//    void applicationEngineChanged();
-
-//    QQmlApplicationEngine* ApplicationEngine; //!<
-
-//    /**
-//  Gets applicationEngine
-//  */
-//    inline QQmlApplicationEngine* cwRootData::applicationEngine() const {
-//        return ApplicationEngine;
-//    }
-
-//    /**
-//  Sets applicationEngine
-//  */
-//    void cwRootData::setApplicationEngine(QQmlApplicationEngine* applicationEngine) {
-//        if(ApplicationEngine != applicationEngine) {
-//            ApplicationEngine = applicationEngine;
-//            emit applicationEngineChanged();
-//        }
-//    }
+    Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -94,6 +71,7 @@ public:
     cwQMLReload* qmlReloader() const;
     QString version() const;
     cwLicenseAgreement* license() const;
+    cwRegionSceneManager* regionSceneManager() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -116,6 +94,7 @@ signals:
     void defaultTripCalibrationChanged();
     void versionChanged();
     void licenseChanged();
+    void regionSceneManagerChanged();
 
 public slots:
 
@@ -131,6 +110,7 @@ private:
     QQuickView* QuickView; //!< For exporting the 3d screen to a file
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
     cwLicenseAgreement* License; //!<
+    cwRegionSceneManager* RegionSceneManager; //!<
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -231,5 +211,14 @@ Gets license
 inline cwLicenseAgreement* cwRootData::license() const {
     return License;
 }
+
+/**
+* @brief cwRootData::regionSceneManager
+* @return
+*/
+inline cwRegionSceneManager* cwRootData::regionSceneManager() const {
+    return RegionSceneManager;
+}
+
 
 #endif // CWGLOBALQMLDATA_H

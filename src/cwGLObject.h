@@ -14,39 +14,50 @@
 //Our includes
 class cwCamera;
 class cwShaderDebugger;
-class cwGLRenderer;
+class cwGLViewer;
+class cwScene;
+class cwUpdateDataCommand;
 #include "cwGeometryItersecter.h"
 
 class cwGLObject : public QObject
 {
 public:
     cwGLObject(QObject* parent = NULL);
+    ~cwGLObject();
 
+    //These methods should only be called in the rendering thread
     virtual void initialize() = 0;
     virtual void draw() = 0;
-    virtual void updateData() {}
+    virtual void updateData();
 
-    void setScene(cwGLRenderer* renderer);
-    cwGLRenderer* scene() const;
+    void setScene(cwScene *scene);
+    cwScene *scene() const;
 
     cwGeometryItersecter* geometryItersecter() const;
     cwCamera* camera() const;
     cwShaderDebugger* shaderDebugger() const;
 
-    bool isDirty() const;
+    void markDataAsDirty();
 
-protected:
-    void setDirty(bool isDirty);
+//    bool isDirty() const;
+
+//protected:
+//    void setDirty(bool isDirty);
 
 private:
-    cwGLRenderer* Scene;
-    bool Dirty;
+    cwScene* Scene;
+
+    //This is the last QueuedDataCommand, if this isn't NULL
+    //Then this command
+    cwUpdateDataCommand* QueuedDataCommand;
+
+//    bool Dirty;
 };
 
-inline bool cwGLObject::isDirty() const
-{
-    return Dirty;
-}
+//inline bool cwGLObject::isDirty() const
+//{
+//    return Dirty;
+//}
 
 
 
@@ -54,7 +65,7 @@ inline bool cwGLObject::isDirty() const
  * @brief cwGLObject::scene
  * @returns The scene that is resposible for this object
  */
-inline cwGLRenderer *cwGLObject::scene() const
+inline cwScene *cwGLObject::scene() const
 {
     return Scene;
 }

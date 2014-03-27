@@ -31,12 +31,20 @@ RegionViewer {
         onPositionChanged: {}
     }
 
+    ChoosePaperSizeInteraction {
+        viewer: renderer
+        z: 1
+    }
+
     LinePlotLabelView {
         id: labelView
         anchors.fill: parent
         camera: renderer.camera
-        region: renderer.cavingRegion
+        region: rootData.region
     }
+
+
+
 
     CameraSettings {
         id: cameraSettings
@@ -65,7 +73,7 @@ RegionViewer {
             height: width
             camera: renderer.camera
             rotation: renderer.rotation
-            shaderDebugger: renderer.shaderDebugger
+            shaderDebugger: renderer.scene.shaderDebugger
             antialiasing: false
         }
     }

@@ -19,6 +19,7 @@
 #include "cwItemSelectionModel.h"
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
+#include "cwRegionSceneManager.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -71,6 +72,12 @@ cwRootData::cwRootData(QObject *parent) :
 
     License = new cwLicenseAgreement(this);
     License->setVersion(version());
+
+    RegionSceneManager = new cwRegionSceneManager(this);
+    RegionSceneManager->setCavingRegion(Region);
+
+    ScrapManager->setGLScraps(RegionSceneManager->scraps());
+    LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 }
 
 /**

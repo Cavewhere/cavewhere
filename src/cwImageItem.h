@@ -13,14 +13,14 @@
 #include <QFutureWatcher>
 
 //Our includes
-#include "cwGLRenderer.h"
+#include "cwGLViewer.h"
 #include "cwImage.h"
 #include "cwImageData.h"
 class cwGLImageItemResources;
 class cwImageTexture;
 class cwImageProperties;
 
-class cwImageItem : public cwGLRenderer
+class cwImageItem : public cwGLViewer
 {
     Q_OBJECT
 

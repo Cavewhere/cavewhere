@@ -28,7 +28,7 @@ ApplicationWindow {
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
 
-        terrainRenderer: terrainRendererId
+//        terrainRenderer: terrainRendererId
 //        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
         mainContentLoader: loadMainContentsId
 
@@ -49,7 +49,6 @@ ApplicationWindow {
         visible: status == Loader.Ready
 
         onLoaded: {
-            console.log("Data Page:" + item + " " + item.dataPage)
             fileMenuButton.dataPage = item.dataPage
         }
     }
@@ -76,6 +75,25 @@ ApplicationWindow {
             value: loadMainContentsId.progress * 100.
             visible: loadMainContentsId.status == Loader.Loading
         }
+    }
+
+    //There's only one shadow input text editor for the cavewhere program
+    //This make the input creation much faster for any thing that needs an editor
+    //Only one editor can be open at a time
+    GlobalShadowTextInput {
+        id: globalShadowTextInput
+    }
+
+    //All menus in cavewhere us this mouse handler as a parent
+    //The mouse handle is visible when the menu is visible. I hides
+    //the current menu selection, if the user selects out of the window
+    GlobalMenuMouseHandler {
+        id: globalMenuMouseHandler
+    }
+
+    //All the dialogs in cavewher are parented under this item.
+    GlobalDialogHandler {
+        id: globalDialogHandler
     }
 }
 

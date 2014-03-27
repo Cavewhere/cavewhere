@@ -114,7 +114,7 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
     }
 
     Points = pointData;
-    setDirty(true);
+    markDataAsDirty();
 }
 
 /**
@@ -122,7 +122,7 @@ void cwGLLinePlot::setPoints(QVector<QVector3D> pointData) {
   */
 void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
     Indexes = indexData;
-    setDirty(true);
+    markDataAsDirty();
 }
 
 /**
@@ -133,6 +133,8 @@ void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
  * This is called in updateScene and is thread safe
  */
 void cwGLLinePlot::updateData() {
+    cwGLObject::updateData();
+
     if(ShaderProgram == NULL) { return; }
 
     LinePlotVertexBuffer.bind();
@@ -164,6 +166,4 @@ void cwGLLinePlot::updateData() {
         //FIXME: This could potentially slow down the rendering.
         geometryItersecter()->addObject(geometryObject);
     }
-
-    setDirty(false);
 }

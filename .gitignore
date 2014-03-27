@@ -1,3 +1,7 @@
+cavewhere-build/*
+qt-5-1-1-debug/*
+qtc_Desktop-debug/*
+qtc_*/*
 .DS_Store
 .moc/moc_cw3dRegionViewer.cpp
 .moc/moc_cwAbstract2PointItem.cpp
@@ -825,3 +829,17 @@ src/serialization/*
 installer/windows/output/*
 installer/mac/Cavewhere.app/*
 qrc_resources.cpp
+.qmake.cache
+3dModels/AutoSave_compass rose.skp
+3dModels/compass rose.dae
+3dModels/compass rose.skp
+3dModels/compass.3ds
+Cavewhere.pro.user.2.7pre1
+Cavewhere.pro.user.bd0103a
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/.obj/QMath3d/qbox3d.cpp.o
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/.obj/QMath3d/qplane3d.cpp.o
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/.obj/QMath3d/qray3d.cpp.o
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/.obj/QMath3d/qsphere3d.cpp.o
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/.obj/QMath3d/qtriangle3d.cpp.o
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/libQMath3d.dylib
+QMath3d-build/qtc_Desktop_Qt_5_1_1_clang_64bit-debug/qtc_Desktop_Qt_5_1_1_clang_64bit-debug.bg

@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Our includes
-#include "cwGLRenderer.h"
+#include "cwGLViewer.h"
 #include "cwCamera.h"
 #include "cwCamera.h"
 #include "cwLine3D.h"
@@ -26,6 +26,7 @@
 #include "cwGLGridPlane.h"
 #include "cwGeometryItersecter.h"
 #include "cwProjection.h"
+#include "cwScene.h"
 
 //Qt includes
 #include <QPainter>
@@ -44,24 +45,9 @@ const float cw3dRegionViewer::DefaultPitch = 90.0f;
 const float cw3dRegionViewer::DefaultAzimuth = 0.0f;
 
 cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
-    cwGLRenderer(parent)
+    cwGLViewer(parent)
 {
-    Region = NULL;
-
     ZoomLevel = 1.0; //1 pixel = 1 meter
-
-    Terrain = new cwGLTerrain();
-    Terrain->setNumberOfLevels(10);
-    //    connect(Terrain, SIGNAL(redraw()), SLOT(updateGL()));
-
-    LinePlot = new cwGLLinePlot();
-    Scraps = new cwGLScraps();
-    Plane = new cwGLGridPlane();
-
-    Terrain->setScene(this);
-    LinePlot->setScene(this);
-    Scraps->setScene(this);
-    Plane->setScene(this);
 
     //TODO: Not all Mac and Windows support multi-sampling
 //#ifndef Q_OS_WIN
@@ -69,44 +55,34 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 //#endif
 
     setupInteractionTimers();
-}
 
-/**
-  \brief This paints the cwGLRender and the linePlot labels
-  */
-void cw3dRegionViewer::paint(QPainter * painter) {
-    //Run paint Framebuffer
-    //cwGLRenderer::paint(painter, item, widget);
-
-    painter->beginNativePainting();
-
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glEnable (GL_BLEND);
-    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    //    Terrain->draw();
-    Scraps->draw();
-    LinePlot->draw();
-    Plane->draw();
-    glDisable(GL_DEPTH_TEST);
-
-    painter->endNativePainting();
-}
-
-/**
-  \brief Initilizes the viwer
-  */
-void cw3dRegionViewer::initializeGL() {
-    //Initilizes the cameras
     resetView();
-
-    Terrain->initialize();
-    Scraps->initialize();
-    LinePlot->initialize();
-    Plane->initialize();
 }
+
+/**
+ * @brief cw3dRegionViewer::setGridPlane
+ * @param plan
+ *
+ * This is for interaction. If the mouse can intersect with any
+ * other geometry, this will intesect with this plane so rotation work correctly.
+ */
+void cw3dRegionViewer::setGridPlane(const QPlane3D &plan)
+{
+    LastDitchRotationPlane = plan;
+}
+
+///**
+//  \brief Initilizes the viwer
+//  */
+//void cw3dRegionViewer::initializeGL() {
+//    //Initilizes the cameras
+//    resetView();
+
+//    Terrain->initialize();
+//    Scraps->initialize();
+//    LinePlot->initialize();
+//    Plane->initialize();
+//}
 
 
 /**
@@ -136,12 +112,12 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
     QRay3D ray(frontPoint, direction);
 
     //See if it hits any of the scraps
-    double t = GeometryItersecter->intersects(ray);
+    double t = scene()->geometryItersecter()->intersects(ray);
 
     if(qIsNaN(t)) {
 
         //See where it intersects ground plane geometry
-        t = Plane->plane().intersection(ray);
+        t = LastDitchRotationPlane.intersection(ray);
         if(qIsNaN(t)) {
             return QVector3D();
         }
@@ -160,17 +136,17 @@ QVector3D cw3dRegionViewer::unProject(QPoint point) {
  * @param data
  * @return
  */
-QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
-    if(LinePlot->isDirty()) {
-        LinePlot->updateData();
-    }
+//QSGNode *cw3dRegionViewer::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data) {
+//    if(LinePlot->isDirty()) {
+//        LinePlot->updateData();
+//    }
 
-    if(Scraps->isDirty()) {
-        Scraps->updateData();
-    }
+//    if(Scraps->isDirty()) {
+//        Scraps->updateData();
+//    }
 
-    return cwGLRenderer::updatePaintNode(oldNode, data);
-}
+//    return cwGLViewer::updatePaintNode(oldNode, data);
+//}
 
 
 /**
@@ -355,15 +331,15 @@ void cw3dRegionViewer::translateLastPosition()
     update();
 }
 
-/**
-  \brief Sets the caving region for the renderer
-  */
-void cw3dRegionViewer::setCavingRegion(cwCavingRegion* region) {
-    if(Region != region) {
-        Region = region;
-        emit cavingRegionChanged();
-    }
-}
+///**
+//  \brief Sets the caving region for the renderer
+//  */
+//void cw3dRegionViewer::setCavingRegion(cwCavingRegion* region) {
+//    if(Region != region) {
+//        Region = region;
+//        emit cavingRegionChanged();
+//    }
+//}
 
 /**
  * @brief cw3dRegionViewer::setupInteractionTimers

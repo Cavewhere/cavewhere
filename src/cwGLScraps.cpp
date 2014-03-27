@@ -43,8 +43,6 @@ void cwGLScraps::draw() {
     Program->enableAttributeArray(vVertex);
     Program->enableAttributeArray(vScrapTexCoords);
 
-    
-
     foreach(GLScrap scrap, Scraps) {
         Program->setUniformValue(UniformScaleTexCoords, scrap.Texture->scaleTexCoords());
 
@@ -83,6 +81,8 @@ void cwGLScraps::draw() {
  */
 void cwGLScraps::updateData()
 {
+    cwGLObject::updateData();
+
     if(geometryItersecter() == NULL) { return; }
 
     foreach(PendingScrapCommand command, PendingChanges.values()) {
@@ -130,7 +130,6 @@ void cwGLScraps::updateData()
     }
 
     PendingChanges.clear();
-    setDirty(false);
 }
 
 /**
@@ -151,11 +150,11 @@ void cwGLScraps::addScrapToUpdate(cwScrap *scrap)
         if(command.type() == PendingScrapCommand::RemoveScrap) {
             //Replace with a add command
             PendingChanges.insert(scrap, command);
-            setDirty(true);
+            markDataAsDirty();
         }
     } else {
         PendingChanges.insert(scrap, command);
-        setDirty(true);
+        markDataAsDirty();
     }
 }
 
@@ -174,11 +173,11 @@ void cwGLScraps::removeScrap(cwScrap *scrap)
         if(command.type() == PendingScrapCommand::AddScrap) {
             //Scrap has been removed
             PendingChanges.insert(scrap, command);
-            setDirty(true);
+            markDataAsDirty();
         }
     } else {
         PendingChanges.insert(scrap, command);
-        setDirty(true);
+        markDataAsDirty();
     }
 }
 

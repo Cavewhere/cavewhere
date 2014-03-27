@@ -188,6 +188,11 @@ Rectangle {
                     }
                 }
             }
+
+        }
+
+        ImageValidator {
+            id: imageValidator
         }
 
         ListView {

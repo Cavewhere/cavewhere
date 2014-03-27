@@ -106,7 +106,8 @@ int main(int argc, char *argv[])
     QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
 
     context->setContextObject(rootData);
-//    context->setContextProperty("mainWindow", &view);
+    context->setContextProperty("rootData", rootData);
+    //    context->setContextProperty("mainWindow", &view);
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();

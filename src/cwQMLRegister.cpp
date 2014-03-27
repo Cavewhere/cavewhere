@@ -76,6 +76,8 @@
 #include "cwCompassItem.h"
 #include "cwShaderDebugger.h"
 #include "cwLicenseAgreement.h"
+#include "cwRegionSceneManager.h"
+#include "cwScene.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -143,7 +145,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSelectionManager>("Cavewhere", 1, 0, "SelectionManager");
     qmlRegisterType<cwUnitValue>();
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
-    qmlRegisterType<cwExportRegionViewerToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
+    qmlRegisterType<cwSceneToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
     qmlRegisterType<cwOrthogonalProjection>("Cavewhere", 1, 0, "OrthogonalProjection");
     qmlRegisterType<cwPerspectiveProjection>("Cavewhere", 1, 0, "PerspectiveProjection");
     qmlRegisterType<cwMatrix4x4Animation>("Cavewhere", 1, 0, "Matrix4x4Animation");
@@ -152,6 +154,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwCompassItem>("Cavewhere", 1, 0, "CompassItem");
     qmlRegisterType<cwShaderDebugger>("Cavewhere", 1, 0, "ShaderDebugger");
     qmlRegisterType<cwLicenseAgreement>("Cavewhere", 1, 0, "LicenseAgreement");
+    qmlRegisterType<cwRegionSceneManager>("Cavewhere", 1, 0, "RegionSceneManager");
+    qmlRegisterType<cwScene>("Cavewhere", 1, 0, "Scene");
+    qmlRegisterType<cwGLViewer>("Cavewhere", 1, 0, "GLViewer");
 
     qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
 }

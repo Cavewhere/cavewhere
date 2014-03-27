@@ -189,7 +189,8 @@ void cwLabel3dView::updatePositions()
 
     QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
     while(iter.hasNext()) {
-        updateGroupPositions(iter.next());
+        cwLabel3dGroup* group = iter.next();
+        updateGroupPositions(group);
     }
 
     LabelKdTree.clear();

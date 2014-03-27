@@ -9,6 +9,7 @@
 import QtQuick 2.0
 import QtQuick.Controls 1.0
 
+
 MenuBar {
     property var terrainRenderer; //For taking screenshots
     property var dataPage; //Should be a DataMainPage
@@ -29,6 +30,17 @@ MenuBar {
         }
 
         MenuItem {
+            text: "Open"
+            shortcut: "Ctrl+O"
+            onTriggered: {
+                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
+                project.load();
+            }
+        }
+
+        MenuSeparator {}
+
+        MenuItem {
             text: "Save"
             shortcut: "Ctrl+S"
             onTriggered: project.save();
@@ -40,13 +52,14 @@ MenuBar {
         }
 
         MenuItem {
-            text: "Open"
-            shortcut: "Ctrl+O"
+            text: "Export View"
             onTriggered: {
-                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                project.load();
+                var dialogComponent = Qt.createComponent("ExportMapDialog.qml")
+                var dialog = dialogComponent.createObject(globalDialogHandler)
             }
         }
+
+        MenuSeparator {}
 
         MenuItem {
             text: "About Cavewhere"
@@ -106,10 +119,10 @@ MenuBar {
 
         MenuItem {
             text: "Scraps Visible"
-            checked: terrainRenderer.scraps.visible
+            checked: regionSceneManager.scraps.visible
             checkable: true
             onTriggered: {
-                terrainRenderer.scraps.visible = !terrainRenderer.scraps.visible
+                regionSceneManager.scraps.visible = !regionSceneManager.scraps.visible
                 terrainRenderer.update()
             }
         }
