@@ -1,7 +1,7 @@
 import qbs 1.0
-import qbs.fileinfo
 import qbs.TextFile
 import qbs.Process
+import qbs.FileInfo
 
 Project {
     Application {
@@ -11,7 +11,6 @@ Project {
         Depends { name: "cpp" }
         Depends { name: "Qt";
             submodules: [ "core", "gui", "widgets", "script", "quick", "sql", "opengl", "xml", "concurrent" ]
-            frameworkBuild: true
         }
         Depends { name: "QMath3d" }
 //        Depends { name: "icns-out" }
@@ -588,17 +587,17 @@ Project {
 
             Artifact {
                 fileTags: ["resourcerules"]
-                fileName: product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
-//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+                fileName: product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
+//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
             }
 
             prepare: {
-                print("Preparing" + input.fileName + " to " + output.fileName)
+                print("Preparing" + input.filePath + " to " + output.filePath)
                 var cp = "/bin/cp"
-                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
                 var cmd = new Command(cp,
-                                      [input.fileName, realOutputFile])
-                cmd.description = "Copying icons to resources " + input.fileName + "to" + output.fileName
+                                      [input.filePath, realOutputFile])
+                cmd.description = "Copying icons to resources " + input.filePath + "to" + output.filePath
                 cmd.highlight = 'codegen'
                 return cmd
             }
@@ -611,17 +610,17 @@ Project {
 
             Artifact {
                 fileTags: ["resourcerules"]
-                fileName: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.fileName)
-//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.fileName) + ".icns"
+                fileName: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.filePath)
+//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
             }
 
             prepare: {
-                print("Preparing" + input.fileName + " to " + output.fileName)
+                print("Preparing" + input.filePath + " to " + output.filePath)
                 var cp = "/bin/cp"
-                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.fileName)
+                var realOutputFile = product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.filePath)
                 var cmd = new Command(cp,
-                                      ["-r", input.fileName, realOutputFile])
-                cmd.description = "Copying survex " + input.fileName + "to" + output.fileName
+                                      ["-r", input.filePath, realOutputFile])
+                cmd.description = "Copying survex " + input.filePath + "to" + output.filePath
                 cmd.highlight = 'codegen'
                 return cmd
             }
@@ -633,25 +632,25 @@ Project {
 
             Artifact {
                 fileTags: ["hpp"]
-                fileName: "serialization/" + FileInfo.baseName(input.fileName) + ".pb.h"
+                fileName: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.h"
             }
 
             Artifact {
                 fileTags: ["cpp"]
-                fileName: "serialization/" + FileInfo.baseName(input.fileName) + ".pb.cc"
+                fileName: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.cc"
             }
 
             prepare: {
                 var protoc = "/usr/local/bin/protoc"
-                var proto_path = FileInfo.path(input.fileName)
+                var proto_path = FileInfo.path(input.filePath)
                 var cpp_out = product.buildDirectory + "/serialization"
 
                 var protoPathArg = "--proto_path=" + proto_path
                 var cppOutArg = "--cpp_out=" + cpp_out
 
                 var cmd = new Command(protoc,
-                                      [protoPathArg, cppOutArg, input.fileName])
-                cmd.description = "Running protoc on " + input.fileName + "with args " + protoPathArg + " " + cppOutArg
+                                      [protoPathArg, cppOutArg, input.filePath])
+                cmd.description = "Running protoc on " + input.filePath + "with args " + protoPathArg + " " + cppOutArg
                 cmd.highlight = 'codegen'
                 return cmd;
             }
@@ -667,7 +666,7 @@ Project {
 
             prepare: {
                 var cmd = new JavaScriptCommand();
-                cmd.description = "generating version info in" + output.fileName;
+                cmd.description = "generating version info in" + output.filePath;
 
                 //Broken for now, but once next version of qbs comes out, this should work.
                 //See https://bugreports.qt-project.org/browse/QBS-385
@@ -682,7 +681,7 @@ Project {
 
                 cmd.sourceCode = function() {
                     var all = "#ifndef cavewherVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
-                    var file = new TextFile(output.fileName, TextFile.WriteOnly);
+                    var file = new TextFile(output.filePath, TextFile.WriteOnly);
                     file.write(all);
                     file.close();
                 }
@@ -699,7 +698,6 @@ Project {
         Depends { name: "cpp" }
         Depends { name: "Qt";
             submodules: [ "core", "gui" ]
-            frameworkBuild: true
         }
         files: [
             "QMath3d/qbox3d.h",
