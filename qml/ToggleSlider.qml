@@ -53,6 +53,7 @@ Item {
         source: "qrc:icons/toggleSlider/graySliderBackGround.png"
         anchors.left: parent.left
         anchors.right: parent.right
+        height: 20
 
 
     }
@@ -105,6 +106,8 @@ Item {
     Image {
         id: sliderButtonId
         source: "qrc:icons/toggleSlider/buttonSlider.png"
+        height: greenBackgroundId.height
+        width: 20
 
         Behavior on x {
             id: behaviorId

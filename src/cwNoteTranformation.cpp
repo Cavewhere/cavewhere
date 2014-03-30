@@ -7,9 +7,10 @@
 
 //Our includes
 #include "cwNoteTranformation.h"
-#include "cwLength.h"
 #include "cwGlobals.h"
 #include "cwImageResolution.h"
+#include "cwScale.h"
+#include "cwLength.h"
 
 //Qt includes
 #include <QVector2D>
@@ -21,27 +22,23 @@
 cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     QObject(parent),
     North(0.0),
-    ScaleNumerator(new cwLength(1, cwUnits::LengthUnitless, this)),
-    ScaleDenominator(new cwLength(1, cwUnits::LengthUnitless, this))
+    Scale(new cwScale(this))
 {
-    connectLengthObjects();
 }
 
 
 cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
     QObject(NULL),
     North(other.North),
-    ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
-    ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
+    Scale(new cwScale(*(other.Scale)))
 {
-    connectLengthObjects();
+    Scale->setParent(this);
 }
 
 const cwNoteTranformation& cwNoteTranformation::operator =(const cwNoteTranformation& other) {
     if(this != &other) {
         setNorthUp(other.northUp());
-        *ScaleNumerator = *(other.ScaleNumerator);
-        *ScaleDenominator = *(other.ScaleDenominator);
+        *Scale = *(other.Scale);
     }
     return *this;
 }
@@ -54,19 +51,6 @@ void cwNoteTranformation::setNorthUp(double degrees) {
         North = degrees;
         emit northUpChanged();
     }
-}
-
-/**
-  \brief Sets the scale of the notes
-
-  This should be 1:500 where 1 unit on the page of notes equals to 500 units in cave.
-
-  For example, 1cm on the page of notes equals to 5m in the cave.
-  */
-double cwNoteTranformation::scale() const {
-    double numerator = scaleNumerator()->convertTo(cwUnits::Meters).value();
-    double denominator = scaleDenominator()->convertTo(cwUnits::Meters).value();
-    return   numerator / denominator;
 }
 
 /**
@@ -138,46 +122,33 @@ QMatrix4x4 cwNoteTranformation::matrix() const {
 }
 
 /**
-  This connects the length objects when the scale has changed.
-  */
-void cwNoteTranformation::connectLengthObjects() {
-    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleNumerator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
+Gets scaleDenominator
+*/
+cwLength* cwNoteTranformation::scaleDenominator() const {
+    return Scale->scaleDenominator();
 }
 
 /**
-  \brief This sets the scale for the tranformation
-
-  This will always set the numerator to 1, but keep the numerator and denominator's
-  units the same.
-
-  */
-void cwNoteTranformation::setScale(double newScale)
+ * @brief cwNoteTranformation::setScale
+ * @param scale
+ */
+void cwNoteTranformation::setScale(double scale)
 {
-    if(newScale == scale()) { return; }
+    Scale->setScale(scale);
+}
 
-    disconnect(ScaleNumerator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
-    disconnect(ScaleDenominator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
+/**
+ * @brief cwNoteTranformation::scale
+ * @return
+ */
+double cwNoteTranformation::scale() const
+{
+    return Scale->scale();
+}
 
-    scaleNumerator()->setValue(1.0);
-
-    //Figure out the unit scaling
-    double unitScale = 1.0; //scales the length for the units
-    if(scaleNumerator()->unit() != cwUnits::LengthUnitless ||
-            scaleDenominator()->unit() != cwUnits::LengthUnitless ) {
-
-        unitScale = cwUnits::convert(1.0,
-                                     (cwUnits::LengthUnit)scaleNumerator()->unit(),
-                                     (cwUnits::LengthUnit)scaleDenominator()->unit());
-    }
-
-    double denominator = 1.0 / newScale * unitScale;
-    scaleDenominator()->setValue(denominator);
-
-    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-
-    emit scaleChanged();
+/**
+Gets scaleNumerator
+*/
+cwLength* cwNoteTranformation::scaleNumerator() const {
+    return Scale->scaleNumerator();
 }

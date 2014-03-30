@@ -20,6 +20,8 @@
 //class cwGLScraps;
 //class cwGLGridPlane;
 class cwGeometryItersecter;
+class cwOrthogonalProjection;
+class cwPerspectiveProjection;
 
 class cw3dRegionViewer : public cwGLViewer
 {
@@ -28,6 +30,10 @@ class cw3dRegionViewer : public cwGLViewer
 //    Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot)
 //    Q_PROPERTY(cwGLScraps* scraps READ scraps)
     Q_PROPERTY(QQuaternion rotation READ rotation NOTIFY rotationChanged)
+    Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
+    Q_PROPERTY(double pitch READ pitch WRITE setPitch NOTIFY pitchChanged)
+    Q_PROPERTY(cwOrthogonalProjection* orthoProjection READ orthoProjection CONSTANT)
+    Q_PROPERTY(cwPerspectiveProjection* perspectiveProjection READ perspectiveProjection CONSTANT)
 
 public:
 
@@ -44,10 +50,19 @@ public:
 
     void setGridPlane(const QPlane3D& plan);
 
-    cwProjection orthoProjection() const;
-    cwProjection perspectiveProjection() const;
+    cwProjection orthoProjectionDefault() const;
+    cwProjection perspectiveProjectionDefault() const;
 
     QQuaternion rotation() const;
+
+    cwOrthogonalProjection* orthoProjection() const;
+    cwPerspectiveProjection* perspectiveProjection() const;
+
+    double azimuth() const;
+    void setAzimuth(double azimuth);
+
+    double pitch() const;
+    void setPitch(double pitch);
 
 public slots:
 //    cwGLLinePlot* linePlot();
@@ -62,6 +77,7 @@ public slots:
     void startRotating(QPoint currentMousePos);
     void rotate(QPoint currentMousePos);
 
+
     void zoom(QPoint position, int delta);
 
 signals:
@@ -69,6 +85,8 @@ signals:
     void resized();
 
     void rotationChanged();
+    void azimuthChanged();
+    void pitchChanged();
 
 private slots:
     //Interaction events
@@ -117,6 +135,9 @@ private:
     QTimer* TranslateTimer;
     QPoint TranslatePosition;
 
+    cwOrthogonalProjection* OrthognalProjection; //!<
+    cwPerspectiveProjection* PerspectiveProjection; //!<
+
 //    //For rendering label
 //    cwCavingRegion* Region;
 
@@ -127,6 +148,11 @@ private:
 
     void setCurrentRotation(QQuaternion rotation);
     QQuaternion defaultRotation() const;
+
+    void updateRotationMatrix();
+
+    double clampAzimuth(double azimuth) const;
+    double clampPitch(double pitch) const;
 
 };
 
@@ -149,6 +175,39 @@ Q_DECLARE_METATYPE(cw3dRegionViewer*)
 //    return Region;
 //}
 
+/**
+* @brief cw3dRegionViewer::azimuth
+* @return
+*/
+inline double cw3dRegionViewer::azimuth() const {
+    return Azimuth;
+}
+
+/**
+* @brief cw3dRegionViewer::pitch
+* @return
+*/
+inline double cw3dRegionViewer::pitch() const {
+    return Pitch;
+}
+
+
+
+/**
+* @brief cw3dRegionViewer::orthoProjectionObject
+* @return
+*/
+inline cwOrthogonalProjection* cw3dRegionViewer::orthoProjection() const {
+    return OrthognalProjection;
+}
+
+/**
+* @brief cw3dRegionViewer::perspectiveProjectionObject
+* @return
+*/
+inline cwPerspectiveProjection* cw3dRegionViewer::perspectiveProjection() const {
+    return PerspectiveProjection;
+}
 
 
 #endif // CW3DREGIONVIEWER_H

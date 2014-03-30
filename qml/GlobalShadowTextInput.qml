@@ -24,9 +24,11 @@ MouseArea {
     enabled: false
 
     onPressed: {
-        var commited = coreClickInput.commitChanges()
-        if(!commited) {
-            coreClickInput.closeEditor()
+        if(coreClickInput !== null) {
+            var commited = coreClickInput.commitChanges()
+            if(!commited) {
+                coreClickInput.closeEditor()
+            }
         }
 
         mouse.accepted = false
@@ -72,7 +74,12 @@ MouseArea {
             function defaultKeyHandling() {
                 if(pressKeyEvent === Qt.Key_Return || pressKeyEvent === Qt.Key_Enter) {
                     enterPressed()
-                    var commited = coreClickInput.commitChanges()
+                    if(coreClickInput !== null) {
+                        coreClickInput.commitChanges()
+                    } else {
+                        escapePressed()
+                    }
+
 //                    event.accepted = commited
                 } else if(pressKeyEvent === Qt.Key_Escape) {
                     escapePressed()

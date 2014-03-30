@@ -25,8 +25,8 @@ Item {
     signal startedEditting()
     signal finishedEditting(string newText)
 
-    height: textArea.height
-    width: textArea.width
+    implicitWidth: textArea.width
+    implicitHeight: textArea.height
 
     function commitChanges() {
         //Emit the finishedEditting signal
@@ -92,6 +92,7 @@ Item {
         globalShadowTextInput.minHeight = clickTextInput.height + 6
 
         //Connect to commitChanges()
+//        console.log("ClickTextInput:" + clickTextInput)
         globalShadowTextInput.coreClickInput = clickTextInput
     }
 

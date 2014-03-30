@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.1
 
 Rectangle {
     id: helpArea
@@ -16,8 +17,8 @@ Rectangle {
     property bool animationToVisible: true
     property bool animationToInvisible: true
 
-    color: "lightgray"
-    height: 0
+    color: "#BBBBBB"
+    implicitHeight: helpText.height
     radius: 5
     clip: true
 
@@ -47,15 +48,12 @@ Rectangle {
     Text {
         id: helpText
 
-        //anchors.top: parent.top
-        anchors.left: icon.right
-        anchors.right: parent.right
-        anchors.margins: 5
-        anchors.verticalCenter: parent.verticalCenter
+        width: helpArea.width - 10
+        anchors.horizontalCenter: parent.horizontalCenter
 
         textFormat: Text.RichText
         wrapMode: Text.WordWrap
-        font.pointSize: 9
+        font.pointSize: 10
 
         text: "No documentation"
     }
@@ -71,7 +69,7 @@ Rectangle {
 
             PropertyChanges {
                 target: helpArea
-                height: helpText.height + 10
+                implicitHeight: helpText.height + 10
             }
         }
     ]
@@ -86,9 +84,9 @@ Rectangle {
                 PropertyAction { target: privateData; property: "inTransition"; value: true }
                 PropertyAnimation {
                     target: helpArea
-                    property: "height"
+                    property: "implicitHeight"
                     from: 0
-                    to: helpText.height + 10
+                    to: helpText.height
                     duration: animationToVisible ? 200 : 0
                 }
                 PropertyAction { target: privateData; property: "inTransition"; value: false }
@@ -106,7 +104,7 @@ Rectangle {
 
                 NumberAnimation {
                     target: helpArea
-                    property: "height"
+                    property: "implicitHeight"
                     to: 0
                     duration: animationToInvisible ? 200 : 0
                 }

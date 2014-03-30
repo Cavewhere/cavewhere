@@ -27,6 +27,8 @@
 #include "cwGeometryItersecter.h"
 #include "cwProjection.h"
 #include "cwScene.h"
+#include "cwOrthogonalProjection.h"
+#include "cwPerspectiveProjection.h"
 
 //Qt includes
 #include <QPainter>
@@ -57,6 +59,14 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
     setupInteractionTimers();
 
     resetView();
+
+    OrthognalProjection = new cwOrthogonalProjection(this);
+    OrthognalProjection->setViewer(this);
+    OrthognalProjection->setEnabled(true);
+
+    PerspectiveProjection = new cwPerspectiveProjection(this);
+    PerspectiveProjection->setViewer(this);
+    PerspectiveProjection->setEnabled(false);
 }
 
 /**
@@ -250,24 +260,14 @@ void cw3dRegionViewer::rotateLastPosition()
     delta /= 2.0;
 
     //Calculate the new pitch
-    Pitch = qMin(90.0f, qMax(-90.0f, Pitch + (float)delta.y()));
+    Pitch = clampPitch(Pitch + delta.y());
+    emit pitchChanged();
 
     //Calculate the new azimuth
-    Azimuth = fmod(Azimuth - delta.x(), 360);
+    Azimuth = clampAzimuth(Azimuth - delta.x());
+    emit azimuthChanged();
 
-    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
-    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
-    QQuaternion newQuat = pitchQuat * azimuthQuat;
-    QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
-    setCurrentRotation(newQuat);
-
-    QMatrix4x4 viewMatrix = Camera->viewMatrix();
-    viewMatrix.translate(LastMouseGlobalPosition);
-    viewMatrix.rotate(rotationDifferance);
-    viewMatrix.translate(-LastMouseGlobalPosition);
-    Camera->setViewMatrix(viewMatrix);
-
-    update();
+    updateRotationMatrix();
 }
 
 /**
@@ -385,6 +385,47 @@ QQuaternion cw3dRegionViewer::defaultRotation() const
     return pitchQuat * azimuthQuat;
 }
 
+void cw3dRegionViewer::updateRotationMatrix()
+{
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
+    QQuaternion newQuat = pitchQuat * azimuthQuat;
+    QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
+    setCurrentRotation(newQuat);
+
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(LastMouseGlobalPosition);
+    viewMatrix.rotate(rotationDifferance);
+    viewMatrix.translate(-LastMouseGlobalPosition);
+    Camera->setViewMatrix(viewMatrix);
+
+    update();
+}
+
+/**
+ * @brief cw3dRegionViewer::clampAzimuth
+ * @param azimuth
+ * @return This clamps the azimuth between 0.0 and 360.0
+ */
+double cw3dRegionViewer::clampAzimuth(double azimuth) const
+{
+    azimuth = fmod(azimuth, 360.0);
+    if(azimuth < 0) {
+        azimuth += 360.0;
+    }
+    return azimuth;
+}
+
+/**
+ * @brief cw3dRegionViewer::clampPitch
+ * @param pitch
+ * @return This clamps the pitch from -90 to 90
+ */
+double cw3dRegionViewer::clampPitch(double pitch) const
+{
+    return qMin(90.0, qMax(-90.0, pitch));
+}
+
 /**
  * @brief cw3dRegionViewer::zoomPerspective
  *
@@ -437,8 +478,7 @@ void cw3dRegionViewer::zoomOrtho()
 
     QVector3D before = Camera->unProject(mappedPos, 1.0);
 
-    cwProjection projection = orthoProjection();
-    Camera->setProjection(orthoProjection());
+    Camera->setProjection(orthoProjectionDefault());
 
     QVector3D after = Camera->unProject(mappedPos, 1.0);
 
@@ -452,7 +492,7 @@ void cw3dRegionViewer::zoomOrtho()
  * @brief cw3dRegionViewer::orthoProjection
  * @return This get the current ortho projection at the current zoom level
  */
-cwProjection cw3dRegionViewer::orthoProjection() const
+cwProjection cw3dRegionViewer::orthoProjectionDefault() const
 {
     cwProjection projection;
     projection.setOrtho(-width() / 2.0 * ZoomLevel, width() / 2.0 * ZoomLevel, -height() / 2.0 * ZoomLevel, height() / 2.0 * ZoomLevel, -10000, 10000);
@@ -463,7 +503,7 @@ cwProjection cw3dRegionViewer::orthoProjection() const
  * @brief cw3dRegionViewer::perspectiveProjection
  * @return The current prespective projection for the viewer
  */
-cwProjection cw3dRegionViewer::perspectiveProjection() const
+cwProjection cw3dRegionViewer::perspectiveProjectionDefault() const
 {
     cwProjection projection;
     projection.setPerspective(55, width() / (float)height(), 1, 10000);
@@ -475,4 +515,34 @@ Gets rotation current global rotation
 */
 QQuaternion cw3dRegionViewer::rotation() const {
     return defaultRotation().conjugate() * CurrentRotation;
+}
+
+/**
+* @brief cw3dRegionViewer::setAzimuth
+* @param azimuth
+*/
+void cw3dRegionViewer::setAzimuth(double azimuth) {
+    azimuth = clampAzimuth(azimuth);
+    if(Azimuth != azimuth) {
+        Azimuth = azimuth;
+        emit azimuthChanged();
+
+        updateRotationMatrix();
+    }
+}
+
+
+/**
+* @brief cw3dRegionViewer::setPitch
+* @param pitch
+*/
+void cw3dRegionViewer::setPitch(double pitch) {
+    pitch = clampPitch(pitch);
+
+    if(Pitch != pitch) {
+        Pitch = pitch;
+        emit pitchChanged();
+
+        updateRotationMatrix();
+    }
 }

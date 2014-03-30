@@ -31,24 +31,16 @@ RegionViewer {
         onPositionChanged: {}
     }
 
-    ChoosePaperSizeInteraction {
-        viewer: renderer
-        z: 1
-    }
+//    ChoosePaperSizeInteraction {
+//        viewer: renderer
+//        z: 1
+//    }
 
     LinePlotLabelView {
         id: labelView
         anchors.fill: parent
         camera: renderer.camera
         region: rootData.region
-    }
-
-
-
-
-    CameraSettings {
-        id: cameraSettings
-        viewer: renderer
     }
 
     Row {
@@ -60,8 +52,8 @@ RegionViewer {
 
         ScaleBar {
             id: scaleBar
-            visible: cameraSettings.orthoProjection.enabled
-            camera: terrainRendererId.camera
+            visible: renderer.orthoProjection.enabled
+            camera: renderer.camera
             anchors.bottom: compassItemId.bottom
             maxTotalWidth: renderer.width * 0.50
             minTotalWidth: renderer.height * 0.2
@@ -111,3 +103,4 @@ RegionViewer {
 
     ]
 }
+

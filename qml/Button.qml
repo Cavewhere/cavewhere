@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.1
 
 Rectangle {
     id: button
@@ -18,80 +19,52 @@ Rectangle {
     property bool hasText:  text.length > 0
     property int buttonMargin:  container.anchors.margins
     property bool mousePressed: false
+    property bool enabled: true
 
     signal clicked();
 
-    width: buttonText.width + icon.width + (2 * container.anchors.margins) + icon.anchors.rightMargin + buttonText.anchors.rightMargin
-    height: buttonText.height + (2 * container.anchors.margins)
+    width: buttonLayoutId.width + 6
+    height: buttonLayoutId.height + 6
 
-    radius: 3
+    radius: 4
 
     border.width: 1
-    border.color: "black"
+    border.color: "#7A7A7A"
 
     gradient: Gradient {
-        GradientStop {id: stop1; position:0.0; color:"#B7BDC5" }
-        GradientStop {id: stop2; position:1.0; color:"#7F838C" }
+        GradientStop {id: stop1; position:0.0; color:"#FAFAFA" }
+        GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
     }
 
-    Item {
-        id: container
+    RowLayout {
+        id: buttonLayoutId
 
-        anchors.fill: parent
-        anchors.margins: 4
+        anchors.centerIn: parent
 
         Image {
             id: icon
-
-            height: status == Image.Ready > 0 ? iconSize.height : 0
-            width: status == Image.Ready > 0 ? iconSize.width : 0
-
-            //anchors.left: iconOnTheLeft ? parent.left : buttonText.right
-            anchors.right: iconOnTheLeft && hasText ? buttonText.left : parent.right
-            anchors.rightMargin: status == Image.Ready && iconOnTheLeft ? 3 : 0
-            anchors.verticalCenter: parent.verticalCenter
-
-            visible: status == Image.Ready
+            visible: status === Image.Ready && iconOnTheLeft
         }
 
         Text {
             id: buttonText
-            //anchors.left: iconOnTheLeft ? buttonText.right : parent.left
-            anchors.right: iconOnTheLeft ? parent.right : icon.left
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: {
-                if(text.length > 0) {
-                    return icon.status == Image.Ready && !iconOnTheLeft ? 3 : 0
-                } else {
-//                    console.log("text: margin is zero")
-                    return 0;
-                }
-            }
-
             visible: hasText
-
-
+            color: "black"
         }
 
-        states: [
-            State {
-                when: !hasText
-
-                AnchorChanges {
-                    target: icon
-                    anchors.right: undefined
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-            }
-        ]
-
+        Image {
+            id: iconRightId
+            source: icon.source
+            sourceSize: icon.sourceSize
+            visible: status === Image.Ready && !iconOnTheLeft
+        }
     }
 
     MouseArea {
         id: mouseArea
         anchors.fill: parent
 
+        enabled: true
         hoverEnabled: true
 
         onClicked: {
@@ -110,16 +83,32 @@ Rectangle {
 
     states: [
         State {
-            name: "hover"; when: mouseArea.containsMouse && !mousePressed
-            PropertyChanges { target: stop1; color: "#B7BDC5" }
-            PropertyChanges { target: stop2; color: "#29335B" }
+            name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled
+            PropertyChanges { target: stop1; color: "#E6E6E6" }
+            PropertyChanges { target: stop2; color: "#B3B3B3" }
         },
 
         State {
             name: "mousePressedState";
-            when: mouseArea.containsMouse && mousePressed
-            PropertyChanges { target: stop1; color: "#B7BDC5" }
-            PropertyChanges { target: stop2; color: "#8DB7F1" }
+            when: mouseArea.containsMouse && mousePressed && enabled
+            PropertyChanges { target: stop1; color: "#B3B3B3" }
+            PropertyChanges { target: stop2; color: "#B3B3B3" }
+        },
+
+        State {
+            name: "disabledState"
+            when: !enabled
+            PropertyChanges {target: stop1; color:"#FAFAFA" }
+            PropertyChanges {target: stop2; color:"#D3D3D3" }
+            PropertyChanges {
+                target: mouseArea
+                enabled: false
+            }
+
+            PropertyChanges {
+                target: buttonText
+                color: "#717171"
+            }
         }
 
     ]

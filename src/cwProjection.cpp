@@ -91,7 +91,9 @@ cwProjection::PrivateData::PrivateData() :
     Bottom(0.0),
     Top(0.0),
     Far(0.0),
-    Near(0.0)
+    Near(0.0),
+    FieldOfView(55.0),
+    AspectRatio(1.0)
 {
 
 }

@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwAbstractProjection.h"
+class cwLength;
 
 class cwOrthogonalProjection : public cwAbstractProjection
 {
@@ -24,7 +25,10 @@ protected:
 signals:
     
 public slots:
-    
+
+private:
 };
+
+
 
 #endif // CWORTHOGONALPROJECTION_H

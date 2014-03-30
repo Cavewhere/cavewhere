@@ -35,16 +35,17 @@ cwProjection cwPerspectiveProjection::calculateProjection()
 {
     cwProjection proj;
     if(projection().isNull()) {
-        proj = viewer()->perspectiveProjection();
+        proj = viewer()->perspectiveProjectionDefault();
         setPrivateFarPlane(proj.far());
         setPrivateNearPlane(proj.near());
         FieldOfView = proj.fieldOfView();
+        emit fieldOfViewChanged();
     } else {
         proj = projection();
     }
 
 
-    cwProjection viewProj = viewer()->perspectiveProjection();
+    cwProjection viewProj = viewer()->perspectiveProjectionDefault();
     proj.setPerspective(FieldOfView, viewProj.aspectRatio(),
                         nearPlane(), farPlane());
 

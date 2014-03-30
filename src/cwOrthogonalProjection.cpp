@@ -9,6 +9,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwOrthogonalProjection.h"
 #include "cwProjection.h"
+#include "cwLength.h"
 
 cwOrthogonalProjection::cwOrthogonalProjection(QObject *parent) :
     cwAbstractProjection(parent)
@@ -24,7 +25,7 @@ cwProjection cwOrthogonalProjection::calculateProjection()
 {
     cwProjection proj;
     if(projection().isNull()) {
-        proj = viewer()->orthoProjection();
+        proj = viewer()->orthoProjectionDefault();
         setPrivateFarPlane(proj.far());
         setPrivateNearPlane(proj.near());
     } else {
@@ -32,7 +33,7 @@ cwProjection cwOrthogonalProjection::calculateProjection()
     }
 
 
-    cwProjection viewProj = viewer()->orthoProjection();
+    cwProjection viewProj = viewer()->orthoProjectionDefault();
     proj.setOrtho(viewProj.left(), viewProj.right(),
                   viewProj.bottom(), viewProj.top(),
                   nearPlane(), farPlane());

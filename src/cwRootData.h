@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QGuiApplication>
 class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
@@ -30,6 +31,7 @@ class cwItemSelectionModel;
 class cwQMLReload;
 class cwLicenseAgreement;
 class cwRegionSceneManager;
+class cwScreen;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -55,6 +57,9 @@ class cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
+    Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
+
+
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -72,6 +77,7 @@ public:
     QString version() const;
     cwLicenseAgreement* license() const;
     cwRegionSceneManager* regionSceneManager() const;
+    QScreen* primaryScreen() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -218,6 +224,15 @@ inline cwLicenseAgreement* cwRootData::license() const {
 */
 inline cwRegionSceneManager* cwRootData::regionSceneManager() const {
     return RegionSceneManager;
+}
+
+
+/**
+* @brief class::primaryScreen
+* @return
+*/
+inline QScreen* cwRootData::primaryScreen() const {
+    return QGuiApplication::primaryScreen();
 }
 
 

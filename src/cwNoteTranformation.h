@@ -19,6 +19,7 @@
 //Our includes
 class cwLength;
 class cwImageResolution;
+class cwScale;
 
 /**
   This class is useful for allowing automatic station referencing.  This holds the page of note's
@@ -33,8 +34,8 @@ class cwNoteTranformation : public QObject
 
     Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY scaleChanged)
     Q_PROPERTY(double northUp READ northUp WRITE setNorthUp NOTIFY northUpChanged)
-    Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator NOTIFY scaleNumeratorChanged)
-    Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator NOTIFY scaleDenominatorChanged)
+    Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)
+    Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
 
 public:
     cwNoteTranformation(QObject* parent = 0);
@@ -61,15 +62,10 @@ public:
 signals:
     void scaleChanged();
     void northUpChanged();
-    void scaleNumeratorChanged();
-    void scaleDenominatorChanged();
 
 private:
     double North;
-    cwLength* ScaleNumerator; //!< This is the numerator of the scale, usually 1
-    cwLength* ScaleDenominator; //!< The scale denominator
-
-    void connectLengthObjects();
+    cwScale* Scale;
 };
 //Q_DECLARE_METATYPE(cwNoteTranformation*)
 
@@ -80,18 +76,6 @@ inline double cwNoteTranformation::northUp() const {
     return North;
 }
 
-/**
-Gets scaleDenominator
-*/
-inline cwLength* cwNoteTranformation::scaleDenominator() const {
-    return ScaleDenominator;
-}
 
-/**
-Gets scaleNumerator
-*/
-inline cwLength* cwNoteTranformation::scaleNumerator() const {
-    return ScaleNumerator;
-}
 
 #endif // CWNOTETRANFORMATION_H

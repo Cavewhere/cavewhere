@@ -15,6 +15,7 @@ Project {
         Depends { name: "QMath3d" }
 //        Depends { name: "icns-out" }
 
+        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
         cpp.includePaths: [
             "src",
@@ -386,7 +387,9 @@ Project {
                 "src/cwSceneCommand.h",
                 "src/cwSceneCommand.cpp",
                 "src/cwRegionSceneManager.h",
-                "src/cwRegionSceneManager.cpp"
+                "src/cwRegionSceneManager.cpp",
+                "src/cwScale.h",
+                "src/cwScale.cpp"
             ]
         }
 
@@ -487,7 +490,7 @@ Project {
                 "qml/CaveLengthAndDepth.qml",
                 "qml/ContextMenuButton.qml",
                 "qml/RemoveDataRectangle.qml",
-                "qml/CameraSettings.qml",
+                "qml/ProjectionSlider.qml",
                 "qml/ToggleSlider.qml",
                 "qml/RemoveAskBox.qml",
                 "qml/ScaleBar.qml",
@@ -495,7 +498,15 @@ Project {
                 "qml/LicenseWindow.qml",
                 "qml/CavewhereLogo.qml",
                 "qml/LoadNotesWidget.qml",
-                "qml/LoadNotesIconButton.qml"
+                "qml/LoadNotesIconButton.qml",
+                "qml/CameraOptionsTab.qml",
+                "qml/RenderingSideBar.qml",
+                "qml/RenderingView.qml",
+                "qml/CameraAzimuthSettings.qml",
+                "qml/CameraVerticalAngleSettings.qml",
+                "qml/CameraProjectionSettings.qml",
+                "qml/ChoosePaperSizeInteraction.qml",
+                "qml/ExportViewTab.qml"
             ]
 
         }
@@ -683,17 +694,17 @@ Project {
 
                 //Broken for now, but once next version of qbs comes out, this should work.
                 //See https://bugreports.qt-project.org/browse/QBS-385
-//                //Use git to query the version
-//                var git = "/usr/bin/git"
-//                var gitProcess = new Process();
-//                gitProcess.setWorkingDirectory(product.sourceDirectory)
-//                gitProcess.exec(git, ["describe"] ,true);
-//                var gitDescribe = gitProcess.readStdOut();
-//                gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
-                cmd.cavewhereVersion = "0.05" //gitDescribe
+                //Use git to query the version
+                var git = "/usr/bin/git"
+                var gitProcess = new Process();
+                gitProcess.setWorkingDirectory(product.sourceDirectory)
+                gitProcess.exec(git, ["describe"] ,true);
+                var gitDescribe = gitProcess.readStdOut();
+                gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
+                cmd.cavewhereVersion = gitDescribe
 
                 cmd.sourceCode = function() {
-                    var all = "#ifndef cavewherVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
+                    var all = "#ifndef cavewhereVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
                     var file = new TextFile(output.filePath, TextFile.WriteOnly);
                     file.write(all);
                     file.close();
