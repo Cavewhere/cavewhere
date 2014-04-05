@@ -486,7 +486,7 @@ PROTO_FILES += \
     src/qt.proto
 
 unix {
-    PROTOC = /usr/local/bin/protoc
+    PROTOC = protoc
 }
 
 win32 {
