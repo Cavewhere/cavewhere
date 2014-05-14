@@ -389,7 +389,13 @@ Project {
                 "src/cwRegionSceneManager.h",
                 "src/cwRegionSceneManager.cpp",
                 "src/cwScale.h",
-                "src/cwScale.cpp"
+                "src/cwScale.cpp",
+                "src/cwScreenCaptureManager.cpp",
+                "src/cwScreenCaptureManager.h",
+                "src/cwScreenCaptureCommand.cpp",
+                "src/cwScreenCaptureCommand.h",
+                "src/cwGraphicsImageItem.cpp",
+                "src/cwGraphicsImageItem.h"
             ]
         }
 

@@ -21,7 +21,7 @@ TabView {
     Component {
         id: exportTabComponentId
         ExportViewTab {
-
+            view: viewer
         }
     }
 
