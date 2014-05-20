@@ -12,6 +12,7 @@
 #include "cwScreenCaptureCommand.h"
 #include "cwScene.h"
 #include "cwGraphicsImageItem.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QLabel>
@@ -175,15 +176,22 @@ void cwScreenCaptureManager::capture()
     double pixelPerInchWidth = viewport.width() / paperSize().width();
     double pixelPerInchHeight = viewport.height() / paperSize().height();
 
-//    QSizeF screenDPI(pixelPerInchWidth, pixelPerInchHeight);
+    //Create the scale need to convert the viewport into the correct rendering resolution
     QPointF scale(resolution() / pixelPerInchWidth, resolution() / pixelPerInchHeight);
 
-    QSize tileSize = viewport.size();
-    QSize imageSize = QSize(tileSize.width() * scale.x(), tileSize.height() * scale.y());
-    int border = 0;
+    QSize tileSize = QSize(1024, 1024); //viewport.size();
+    QSize imageSize = QSize(viewport.width() * scale.x(), viewport.height() * scale.y());
+    ImageSize = imageSize;
+//    int border = 0;
 
-    int columns = (imageSize.width() + tileSize.width() - 1) / tileSize.width();
-    int rows = (imageSize.height() + tileSize.height() - 1) / tileSize.height();
+//    int columns = (imageSize.width() + tileSize.width() - 1) / tileSize.width();
+//    int rows = (imageSize.height() + tileSize.height() - 1) / tileSize.height();
+
+    int columns = imageSize.width() / tileSize.width();
+    int rows = imageSize.height() / tileSize.height();
+
+    if(imageSize.width() % tileSize.width() > 0) { columns++; }
+    if(imageSize.height() % tileSize.height() > 0) { rows++; }
 
     NumberOfImagesProcessed = 0;
     Columns = columns;
@@ -197,31 +205,17 @@ void cwScreenCaptureManager::capture()
     for(int column = 0; column < columns; column++) {
         for(int row = 0; row < rows; row++) {
 
-            double left = originalProj.left() + (originalProj.right() - originalProj.left())
-                    * (column * tileSize.width() - border) / imageSize.width();
-            double right = left + (originalProj.right() - originalProj.left()) * tileSize.width() / imageSize.width();
-            double bottom = originalProj.bottom() + (originalProj.top() - originalProj.bottom())
-                    * (row * tileSize.height() - border) / imageSize.height();
-            double top = bottom + (originalProj.top() - originalProj.bottom()) * tileSize.height() / imageSize.height();
+            int x = tileSize.width() * column;
+            int y = tileSize.height() * row;
 
-            cwProjection projection;
-            switch(originalProj.type()) {
-            case cwProjection::Perspective:
-            case cwProjection::PerspectiveFrustum:
-                projection.setFrustum(left, right, bottom, top, originalProj.near(), originalProj.far());
-                break;
-            case cwProjection::Ortho:
-                projection.setOrtho(left, right, bottom, top, originalProj.near(), originalProj.far());
-                break;
-            default:
-                break;
-            }
+            QRect tileViewport(QPoint(x, y), tileSize);
+            cwProjection tileProj = tileProjection(tileViewport, imageSize, originalProj);
 
             cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
 
             cwCamera* croppedCamera = new cwCamera(command);
-            croppedCamera->setViewport(QRect(QPoint(), viewport.size()));
-            croppedCamera->setProjection(projection);
+            croppedCamera->setViewport(QRect(QPoint(), tileSize));
+            croppedCamera->setProjection(tileProj);
             croppedCamera->setViewMatrix(camera->viewMatrix());
 
             command->setCamera(croppedCamera);
@@ -260,6 +254,13 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
 
     Scene->addItem(graphicsImage);
 
+    //For debugging tiles
+    //    QRectF tileRect = QRectF(QPointF(x, y), image.size());
+    //    Scene->addRect(tileRect, QPen(Qt::red));
+    //    QGraphicsSimpleTextItem* textItem = Scene->addSimpleText(QString("Id:%1").arg(id));
+    //    textItem->setPen(QPen(Qt::red));
+    //    textItem->setPos(tileRect.center());
+
     NumberOfImagesProcessed++;
     if(NumberOfImagesProcessed == Columns * Rows) {
         //We've added all the tiles to the scene, now we're ready to
@@ -275,9 +276,13 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
 void cwScreenCaptureManager::saveScene()
 {
     QRectF sceneRect = Scene->sceneRect();
-    QImage outputImage(sceneRect.size().toSize(), QImage::Format_ARGB32);
+    sceneRect.setRight(sceneRect.x() + ImageSize.width());
+    sceneRect.setTop(sceneRect.y() + (sceneRect.height() - ImageSize.height()));
+    QImage outputImage(ImageSize, QImage::Format_ARGB32);
+    outputImage.fill(Qt::transparent);
+
     QPainter painter(&outputImage);
-    Scene->render(&painter);
+    Scene->render(&painter, QRectF(QPointF(), ImageSize), sceneRect);
 
     outputImage.save(filename().toLocalFile(), "png");
 
@@ -285,8 +290,50 @@ void cwScreenCaptureManager::saveScene()
     Scene = NULL;
 
     emit finishedCapture();
+}
 
-//    QLabel* label = new QLabel();
-//    label->setPixmap(QPixmap::fromImage(outputImage));
-//    label->show();
+/**
+ * @brief cwScreenCaptureManager::tileProjection
+ * @param viewport
+ * @param originalProjection
+ * @return
+ *
+ * This will take original viewport and original projection and find the
+ * tile projection matrix using the tileViewport. The tileViewport
+ * should be a sub rectangle of the original viewport. This function
+ * will work with orthognal and perspective projections
+ */
+cwProjection cwScreenCaptureManager::tileProjection(QRectF tileViewport,
+                                                    QSizeF imageSize,
+                                                    const cwProjection &originalProjection) const
+{
+
+    double originalProjectionWidth = originalProjection.right() - originalProjection.left();
+    double originalProjectionHeight = originalProjection.top() - originalProjection.bottom();
+
+    double left = originalProjection.left() + originalProjectionWidth
+            * (tileViewport.left() / imageSize.width());
+    double right = left + originalProjectionWidth * tileViewport.width() / imageSize.width();
+    double bottom = originalProjection.bottom() + originalProjectionHeight
+            * (tileViewport.top() / imageSize.height());
+    double top = bottom + originalProjectionHeight * tileViewport.height() / imageSize.height();
+
+    cwProjection projection;
+    switch(originalProjection.type()) {
+    case cwProjection::Perspective:
+    case cwProjection::PerspectiveFrustum:
+        projection.setFrustum(left, right,
+                              bottom, top,
+                              originalProjection.near(), originalProjection.far());
+        return projection;
+    case cwProjection::Ortho:
+        projection.setOrtho(left, right,
+                            bottom, top,
+                            originalProjection.near(), originalProjection.far());
+        return projection;
+    default:
+        qWarning() << "Can't return tile matrix because original matrix isn't a orth or perspectiveMatrix" << LOCATION;
+        break;
+    }
+    return projection;
 }

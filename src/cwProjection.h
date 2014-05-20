@@ -11,6 +11,7 @@
 //Qt includes
 #include <QSharedData>
 #include <QMatrix4x4>
+#include <QDebug>
 
 #ifdef Q_OS_WIN
 #undef far
@@ -192,6 +193,11 @@ inline double cwProjection::aspectRatio() const
 inline bool cwProjection::isNull() const
 {
     return Data->Matrix.isIdentity();
+}
+
+inline QDebug operator<<(QDebug dbg, const cwProjection &c) {
+    dbg.space() << "Type:" << c.type() << "L:" << c.left() << "R:" << c.right() << "B:" << c.bottom() << "T:" << c.top();
+    return dbg.space();
 }
 
 

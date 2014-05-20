@@ -108,10 +108,14 @@ private:
     int NumberOfImagesProcessed;
     int Columns;
     int Rows;
+    QSize ImageSize;
     QGraphicsScene* Scene;
 
     void saveScene();
 
+    cwProjection tileProjection(QRectF tileViewport,
+                                QSizeF imageSize,
+                                const cwProjection& originalProjection) const;
 
 
 };

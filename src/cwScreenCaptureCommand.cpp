@@ -68,9 +68,14 @@ void cwScreenCaptureCommand::excute()
     GLint previousFramebuffer;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
+    GLint previousViewport[4];
+    glGetIntegerv(GL_VIEWPORT, previousViewport);
+
     //Paint the scene to a framebuffer object
     QOpenGLFramebufferObject framebuffer(size, format);
     framebuffer.bind();
+
+    glViewport(0, 0, size.width(), size.height());
 
     Scene->setCamera(Camera);
     Scene->paint();
@@ -80,6 +85,8 @@ void cwScreenCaptureCommand::excute()
 
     Scene->setCamera(oldCamera);
     glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
+
+    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
 
     //Emit the created image
     emit createdImage(image, Id);
