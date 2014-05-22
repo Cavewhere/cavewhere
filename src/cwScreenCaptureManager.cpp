@@ -13,6 +13,7 @@
 #include "cwScene.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
+#include "cwImageResolution.h"
 
 //Qt includes
 #include <QLabel>
@@ -171,7 +172,10 @@ void cwScreenCaptureManager::capture()
     cwCamera* camera = view()->camera();
     cwProjection originalProj = camera->projection();
 
-    QRect viewport = camera->viewport();
+    QRect viewport = this->viewport(); //camera->viewport();
+
+    qDebug() << "Viewport:" << viewport.width() << viewport.height();
+
 
     double pixelPerInchWidth = viewport.width() / paperSize().width();
     double pixelPerInchHeight = viewport.height() / paperSize().height();
@@ -202,6 +206,10 @@ void cwScreenCaptureManager::capture()
     }
     Scene = new QGraphicsScene(this);
 
+    cwProjection croppedProjection = tileProjection(QRectF(QPointF(), viewport.size()),
+                                                    camera->viewport().size(),
+                                                    originalProj);
+
     for(int column = 0; column < columns; column++) {
         for(int row = 0; row < rows; row++) {
 
@@ -209,7 +217,7 @@ void cwScreenCaptureManager::capture()
             int y = tileSize.height() * row;
 
             QRect tileViewport(QPoint(x, y), tileSize);
-            cwProjection tileProj = tileProjection(tileViewport, imageSize, originalProj);
+            cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
 
             cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
 
@@ -280,6 +288,12 @@ void cwScreenCaptureManager::saveScene()
     sceneRect.setTop(sceneRect.y() + (sceneRect.height() - ImageSize.height()));
     QImage outputImage(ImageSize, QImage::Format_ARGB32);
     outputImage.fill(Qt::transparent);
+
+    cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
+    cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
+
+    outputImage.setDotsPerMeterX(resolutionDPM.value());
+    outputImage.setDotsPerMeterY(resolutionDPM.value());
 
     QPainter painter(&outputImage);
     Scene->render(&painter, QRectF(QPointF(), ImageSize), sceneRect);
