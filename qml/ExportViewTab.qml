@@ -52,8 +52,8 @@ Item {
                         var item = paperSizeModel.get(currentIndex);
 
                         if(item) {
-                            paperRectangle.paperWidth = item.width
-                            paperRectangle.paperHeight = item.height
+                            paperRectangle.paperWidth = paperRectangle.landScape ? item.height : item.width
+                            paperRectangle.paperHeight = paperRectangle.landScape ? item.width : item.height
                             paperMarginGroupBoxId.unit = item.units
 
                             var paperAspect = item.width / item.height;
@@ -136,6 +136,10 @@ Item {
 
                 Switch {
                     id: orientationSwitchId
+                    onCheckedChanged: {
+                        paperComboBoxId.paperRectangle.landScape = checked
+                        paperComboBoxId.updatePaperRectangle()
+                    }
                 }
 
                 Text {

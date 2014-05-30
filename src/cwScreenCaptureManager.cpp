@@ -32,7 +32,7 @@ cwScreenCaptureManager::cwScreenCaptureManager(QObject *parent) :
     NumberOfImagesProcessed(0),
     Columns(0),
     Rows(0),
-    Scene(NULL)
+    Scene(new QGraphicsScene(this))
 {
 }
 
@@ -201,10 +201,7 @@ void cwScreenCaptureManager::capture()
     Columns = columns;
     Rows = rows;
 
-    if(Scene != NULL) {
-        Scene->deleteLater();
-    }
-    Scene = new QGraphicsScene(this);
+    Scene->clear();
 
     cwProjection croppedProjection = tileProjection(QRectF(QPointF(), viewport.size()),
                                                     camera->viewport().size(),
@@ -275,7 +272,6 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
         //save the scene
         saveScene();
     }
-
 }
 
 /**
@@ -300,8 +296,7 @@ void cwScreenCaptureManager::saveScene()
 
     outputImage.save(filename().toLocalFile(), "png");
 
-    Scene->deleteLater();
-    Scene = NULL;
+    Scene->clear();
 
     emit finishedCapture();
 }
