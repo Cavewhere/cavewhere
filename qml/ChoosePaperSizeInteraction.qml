@@ -11,7 +11,7 @@ Item {
     anchors.fill: parent
 
     property alias paperRectangle: paperRectangleId
-
+    property alias captureRectangle: captureRectangleId
 
     Rectangle {
         id: leftMargin
@@ -45,6 +45,14 @@ Item {
         anchors.bottom: paperRectangleId.bottom
         height: paperMarginGroupBoxId.bottomMargin / paperRectangleId.paperHeight * paperRectangleId.height
         color: paperRectangleId.marginColor
+    }
+
+    Item {
+        id: captureRectangleId
+        anchors.left: leftMargin.right
+        anchors.right: rightMargin.left
+        anchors.top: topMargin.bottom
+        anchors.bottom: bottomMargin.top
     }
 
     Rectangle {

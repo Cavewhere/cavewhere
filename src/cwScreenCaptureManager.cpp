@@ -173,9 +173,10 @@ void cwScreenCaptureManager::capture()
     cwProjection originalProj = camera->projection();
 
     QRect viewport = this->viewport(); //camera->viewport();
+    QRect cameraViewport = camera->viewport();
 
-    qDebug() << "Viewport:" << viewport.width() << viewport.height();
-
+    //Flip the viewport so it's in opengl coordinate system instead of qt
+    viewport.moveTop(cameraViewport.height() - viewport.bottom());
 
     double pixelPerInchWidth = viewport.width() / paperSize().width();
     double pixelPerInchHeight = viewport.height() / paperSize().height();
@@ -186,10 +187,6 @@ void cwScreenCaptureManager::capture()
     QSize tileSize = QSize(1024, 1024); //viewport.size();
     QSize imageSize = QSize(viewport.width() * scale.x(), viewport.height() * scale.y());
     ImageSize = imageSize;
-//    int border = 0;
-
-//    int columns = (imageSize.width() + tileSize.width() - 1) / tileSize.width();
-//    int rows = (imageSize.height() + tileSize.height() - 1) / tileSize.height();
 
     int columns = imageSize.width() / tileSize.width();
     int rows = imageSize.height() / tileSize.height();
@@ -203,7 +200,7 @@ void cwScreenCaptureManager::capture()
 
     Scene->clear();
 
-    cwProjection croppedProjection = tileProjection(QRectF(QPointF(), viewport.size()),
+    cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
                                                     originalProj);
 
@@ -260,11 +257,11 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
     Scene->addItem(graphicsImage);
 
     //For debugging tiles
-    //    QRectF tileRect = QRectF(QPointF(x, y), image.size());
-    //    Scene->addRect(tileRect, QPen(Qt::red));
-    //    QGraphicsSimpleTextItem* textItem = Scene->addSimpleText(QString("Id:%1").arg(id));
-    //    textItem->setPen(QPen(Qt::red));
-    //    textItem->setPos(tileRect.center());
+//    QRectF tileRect = QRectF(QPointF(x, y), image.size());
+//    Scene->addRect(tileRect, QPen(Qt::red));
+//    QGraphicsSimpleTextItem* textItem = Scene->addSimpleText(QString("Id:%1").arg(id));
+//    textItem->setPen(QPen(Qt::red));
+//    textItem->setPos(tileRect.center());
 
     NumberOfImagesProcessed++;
     if(NumberOfImagesProcessed == Columns * Rows) {
@@ -279,7 +276,7 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
  */
 void cwScreenCaptureManager::saveScene()
 {
-    QRectF sceneRect = Scene->sceneRect();
+    QRectF sceneRect = Scene->itemsBoundingRect();
     sceneRect.setRight(sceneRect.x() + ImageSize.width());
     sceneRect.setTop(sceneRect.y() + (sceneRect.height() - ImageSize.height()));
     QImage outputImage(ImageSize, QImage::Format_ARGB32);
@@ -316,7 +313,6 @@ cwProjection cwScreenCaptureManager::tileProjection(QRectF tileViewport,
                                                     QSizeF imageSize,
                                                     const cwProjection &originalProjection) const
 {
-
     double originalProjectionWidth = originalProjection.right() - originalProjection.left();
     double originalProjectionHeight = originalProjection.top() - originalProjection.bottom();
 

@@ -24,10 +24,10 @@ Item {
     ScreenCaptureManager {
         id: screenCaptureManagerId
         view: exportViewTabId.view
-        viewport: Qt.rect(paperSizeInteraction.paperRectangle.x,
-                          paperSizeInteraction.paperRectangle.y,
-                          paperSizeInteraction.paperRectangle.width,
-                          paperSizeInteraction.paperRectangle.height)
+        viewport: Qt.rect(paperSizeInteraction.captureRectangle.x,
+                          paperSizeInteraction.captureRectangle.y,
+                          paperSizeInteraction.captureRectangle.width,
+                          paperSizeInteraction.captureRectangle.height)
         paperSize: Qt.size(paperSizeInteraction.paperRectangle.paperWidth,
                            paperSizeInteraction.paperRectangle.paperHeight)
         onFinishedCapture: Qt.openUrlExternally(filename)
