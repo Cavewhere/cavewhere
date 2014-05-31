@@ -57,6 +57,11 @@ int main(int argc, char *argv[])
 
     cwRootData* rootData = new cwRootData();
 
+    if(argc >= 2) {
+        QByteArray filenameByteArray(argv[1]);
+        rootData->project()->loadFile(QString::fromLocal8Bit(filenameByteArray));
+    }
+
     //Handles when the user clicks on a file in Finder(Mac OS X) or Explorer (Windows)
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
