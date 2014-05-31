@@ -32,7 +32,9 @@ cwScreenCaptureManager::cwScreenCaptureManager(QObject *parent) :
     NumberOfImagesProcessed(0),
     Columns(0),
     Rows(0),
-    Scene(new QGraphicsScene(this))
+    TileSize(1024, 1024),
+    Scene(new QGraphicsScene(this)),
+    Scale(1.0)
 {
 }
 
@@ -172,21 +174,16 @@ void cwScreenCaptureManager::capture()
     cwCamera* camera = view()->camera();
     cwProjection originalProj = camera->projection();
 
-    QRect viewport = this->viewport(); //camera->viewport();
+    QRect viewport = this->viewport();
     QRect cameraViewport = camera->viewport();
 
     //Flip the viewport so it's in opengl coordinate system instead of qt
     viewport.moveTop(cameraViewport.height() - viewport.bottom());
 
-    double pixelPerInchWidth = viewport.width() / paperSize().width();
-    double pixelPerInchHeight = viewport.height() / paperSize().height();
+    calcScale();
 
-    //Create the scale need to convert the viewport into the correct rendering resolution
-    QPointF scale(resolution() / pixelPerInchWidth, resolution() / pixelPerInchHeight);
-
-    QSize tileSize = QSize(1024, 1024); //viewport.size();
-    QSize imageSize = QSize(viewport.width() * scale.x(), viewport.height() * scale.y());
-    ImageSize = imageSize;
+    QSize tileSize = TileSize;
+    QSize imageSize = QSize(viewport.width() * Scale, viewport.height() * Scale);
 
     int columns = imageSize.width() / tileSize.width();
     int rows = imageSize.height() / tileSize.height();
@@ -200,6 +197,8 @@ void cwScreenCaptureManager::capture()
 
     Scene->clear();
 
+    addBorderItem();
+
     cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
                                                     originalProj);
@@ -210,13 +209,15 @@ void cwScreenCaptureManager::capture()
             int x = tileSize.width() * column;
             int y = tileSize.height() * row;
 
-            QRect tileViewport(QPoint(x, y), tileSize);
+            QSize croppedTileSize = calcCroppedTileSize(tileSize, imageSize, row, column);
+
+            QRect tileViewport(QPoint(x, y), croppedTileSize);
             cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
 
             cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
 
             cwCamera* croppedCamera = new cwCamera(command);
-            croppedCamera->setViewport(QRect(QPoint(), tileSize));
+            croppedCamera->setViewport(QRect(QPoint(), croppedTileSize));
             croppedCamera->setProjection(tileProj);
             croppedCamera->setViewMatrix(camera->viewMatrix());
 
@@ -242,13 +243,18 @@ void cwScreenCaptureManager::capture()
  */
 void cwScreenCaptureManager::capturedImage(QImage image, int id)
 {
-    QSize tileSize = image.size();
+    QSize tileSize = TileSize;
 
-    int row = Rows - (id / Columns);
+    int row = Rows - (id / Columns) - 1;
     int column = id % Columns;
 
-    double x = column * tileSize.width();
+    double x = (viewport().x() * Scale) + column * tileSize.width();
     double y = row * tileSize.height();
+
+    double bottom = (paperSize().height() - bottomMargin()) * resolution();
+    double yDiff = bottom - Rows * tileSize.height();
+    double yEdgeDiff = TileSize.height() - image.height();
+    y += yDiff + yEdgeDiff;
 
     cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem();
     graphicsImage->setImage(image);
@@ -256,7 +262,7 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
 
     Scene->addItem(graphicsImage);
 
-    //For debugging tiles
+//    //For debugging tiles
 //    QRectF tileRect = QRectF(QPointF(x, y), image.size());
 //    Scene->addRect(tileRect, QPen(Qt::red));
 //    QGraphicsSimpleTextItem* textItem = Scene->addSimpleText(QString("Id:%1").arg(id));
@@ -276,11 +282,11 @@ void cwScreenCaptureManager::capturedImage(QImage image, int id)
  */
 void cwScreenCaptureManager::saveScene()
 {
-    QRectF sceneRect = Scene->itemsBoundingRect();
-    sceneRect.setRight(sceneRect.x() + ImageSize.width());
-    sceneRect.setTop(sceneRect.y() + (sceneRect.height() - ImageSize.height()));
-    QImage outputImage(ImageSize, QImage::Format_ARGB32);
-    outputImage.fill(Qt::transparent);
+    QSizeF imageSize = paperSize() * resolution();
+
+    QRectF sceneRect = QRectF(QPointF(), imageSize); //Scene->itemsBoundingRect();
+    QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
+    outputImage.fill(Qt::white); //transparent);
 
     cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
     cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -289,7 +295,7 @@ void cwScreenCaptureManager::saveScene()
     outputImage.setDotsPerMeterY(resolutionDPM.value());
 
     QPainter painter(&outputImage);
-    Scene->render(&painter, QRectF(QPointF(), ImageSize), sceneRect);
+    Scene->render(&painter, sceneRect, sceneRect);
 
     outputImage.save(filename().toLocalFile(), "png");
 
@@ -341,4 +347,100 @@ cwProjection cwScreenCaptureManager::tileProjection(QRectF tileViewport,
         break;
     }
     return projection;
+}
+
+/**
+ * @brief cwScreenCaptureManager::addBorderItem
+ *
+ * This function will add a new border item to the scene
+ */
+void cwScreenCaptureManager::addBorderItem()
+{
+    QPen pen;
+    pen.setWidthF(4.0);
+    pen.setColor(Qt::black);
+
+    QGraphicsRectItem* rectItem = new QGraphicsRectItem();
+    rectItem->setPen(QPen());
+    rectItem->setBrush(Qt::NoBrush);
+    rectItem->setRect(viewport());
+    rectItem->setScale(Scale);
+    rectItem->setZValue(1.0);
+
+    Scene->addItem(rectItem);
+}
+
+/**
+ * @brief cwScreenCaptureManager::calcScale
+ *
+ * This caluclates the scale
+ */
+void cwScreenCaptureManager::calcScale()
+{
+    double pixelPerInchWidth = screenPaperSize().width() / paperSize().width();
+    double pixelPerInchHeight = screenPaperSize().height() / paperSize().height();
+
+    //Create the scale need to convert the viewport into the correct rendering resolution
+    QPointF scale(resolution() / pixelPerInchWidth, resolution() / pixelPerInchHeight);
+
+    if(scale.x() != scale.y()) {
+        qWarning() << "Scale isn't equal in x " << scale.x() << "y" << scale.y() << "using X" << LOCATION;
+    }
+
+    Scale = scale.x();
+}
+
+/**
+ * @brief cwScreenCaptureManager::croppedTile
+ * @param tileSize
+ * @param imageSize
+ * @param row
+ * @param column
+ * @return Return the tile size of row and column
+ *
+ * This may crop the tile, if the it goes beyond the imageSize
+ */
+QSize cwScreenCaptureManager::calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const
+{
+    QSize croppedTileSize = tileSize;
+
+    bool exactEdgeX = imageSize.width() % tileSize.width() == 0;
+    bool exactEdgeY = imageSize.height() % tileSize.height() == 0;
+    int lastColumnIndex = imageSize.width() / tileSize.width();
+    int lastRowIndex = imageSize.height() / tileSize.height();
+
+
+    Q_ASSERT(column <= lastColumnIndex);
+    Q_ASSERT(row <= lastRowIndex);
+
+    if(column == lastColumnIndex && !exactEdgeX)
+    {
+        //Edge tile, crop it
+        double tilesInImageX = imageSize.width() / (double)tileSize.width();
+        double extraX = tilesInImageX - floor(tilesInImageX);
+        double imageWidthCrop = ceil(tileSize.width() * extraX);
+        croppedTileSize.setWidth(imageWidthCrop);
+    }
+
+    if(row == lastRowIndex && !exactEdgeY)
+    {
+        //Edge tile, crop it
+        double tilesInImageY = imageSize.height() / (double)tileSize.height();
+        double extraY = tilesInImageY - floor(tilesInImageY);
+        double imageHeightCrop = ceil(tileSize.height() * extraY);
+        croppedTileSize.setHeight(imageHeightCrop);
+    }
+
+    return croppedTileSize;
+}
+
+/**
+* @brief cwScreenCaptureManager::setScreenPaperSize
+* @param screenPaperSize - The paperSize in pixel, this is what shown on the screen
+*/
+void cwScreenCaptureManager::setScreenPaperSize(QSizeF screenPaperSize) {
+    if(ScreenPaperSize != screenPaperSize) {
+        ScreenPaperSize = screenPaperSize;
+        emit screenPaperSizeChanged();
+    }
 }

@@ -23,6 +23,7 @@ class cwScreenCaptureManager : public QObject
 
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QSizeF paperSize READ paperSize WRITE setPaperSize NOTIFY paperSizeChanged)
+    Q_PROPERTY(QSizeF screenPaperSize READ screenPaperSize WRITE setScreenPaperSize NOTIFY screenPaperSizeChanged)
     Q_PROPERTY(double resolution READ resolution WRITE setResolution NOTIFY resolutionChanged)
     Q_PROPERTY(double leftMargin READ leftMargin WRITE setLeftMargin NOTIFY leftMarginChanged)
     Q_PROPERTY(double rightMargin READ rightMargin WRITE setRightMargin NOTIFY rightMarginChanged)
@@ -47,6 +48,9 @@ public:
 
     QSizeF paperSize() const;
     void setPaperSize(QSizeF paperSize);
+
+    QSizeF screenPaperSize() const;
+    void setScreenPaperSize(QSizeF screenPaperSize);
 
     double resolution() const;
     void setResolution(double resolution);
@@ -77,6 +81,7 @@ public:
 signals:
     void viewChanged();
     void paperSizeChanged();
+    void screenPaperSizeChanged();
     void resolutionChanged();
     void bottomMarginChanged();
     void topMarginChanged();
@@ -95,6 +100,7 @@ private slots:
 private:
     QPointer<cw3dRegionViewer> View; //!<
     QSizeF PaperSize; //!<
+    QSizeF ScreenPaperSize; //!<
     double Resolution; //!<
     double BottomMargin; //!<
     double TopMargin; //!<
@@ -108,8 +114,10 @@ private:
     int NumberOfImagesProcessed;
     int Columns;
     int Rows;
-    QSize ImageSize;
+    QSize TileSize;
+//    QSize ImageSize;
     QGraphicsScene* Scene;
+    double Scale;
 
     void saveScene();
 
@@ -117,6 +125,10 @@ private:
                                 QSizeF imageSize,
                                 const cwProjection& originalProjection) const;
 
+
+    void addBorderItem();
+    void calcScale();
+    QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
 };
 
@@ -129,11 +141,19 @@ inline cw3dRegionViewer* cwScreenCaptureManager::view() const {
 }
 
 /**
-* @brief cwScreenCaptureManager::paperSize
+* @brief cwScreenCaptureManager::paperSize in paper units (in or mm)
 * @return
 */
 inline QSizeF cwScreenCaptureManager::paperSize() const {
     return PaperSize;
+}
+
+/**
+* @brief cwScreenCaptureManager::screenPaperSize in pixels
+* @return
+*/
+inline QSizeF cwScreenCaptureManager::screenPaperSize() const {
+    return ScreenPaperSize;
 }
 
 /**

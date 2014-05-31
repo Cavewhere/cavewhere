@@ -30,6 +30,8 @@ Item {
                           paperSizeInteraction.captureRectangle.height)
         paperSize: Qt.size(paperSizeInteraction.paperRectangle.paperWidth,
                            paperSizeInteraction.paperRectangle.paperHeight)
+        screenPaperSize: Qt.size(paperSizeInteraction.paperRectangle.width,
+                                 paperSizeInteraction.paperRectangle.height)
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
 
@@ -61,15 +63,15 @@ Item {
                                 paperAspect = 1.0 / paperAspect;
                             }
 
-                            var viewerAspect = viewer.width / viewer.height;
+                            var viewerAspect = view.width / view.height;
                             var aspect = paperAspect / viewerAspect
                             if(aspect < 1.0) {
-                                paperRectangle.width = viewer.width * aspect
-                                paperRectangle.height = viewer.height
+                                paperRectangle.width = view.width * aspect
+                                paperRectangle.height = view.height
                             } else {
                                 var aspect = viewerAspect / paperAspect
-                                paperRectangle.width = viewer.width
-                                paperRectangle.height = viewer.height * aspect
+                                paperRectangle.width = view.width
+                                paperRectangle.height = view.height * aspect
                             }
                         }
                     }
@@ -123,6 +125,11 @@ Item {
 
         PaperMarginGroupBox {
             id: paperMarginGroupBoxId
+
+            onLeftMarginChanged: screenCaptureManagerId.leftMargin = leftMargin
+            onRightMarginChanged: screenCaptureManagerId.rightMargin = rightMargin
+            onTopMarginChanged: screenCaptureManagerId.topMargin = topMargin
+            onBottomMarginChanged: screenCaptureManagerId.bottomMargin = bottomMargin
         }
 
         GroupBox {
@@ -162,8 +169,9 @@ Item {
             text: "Export"
 
             onClicked: {
-                exportDialogId.open();
-//                screenCaptureManagerId.capture()
+//                exportDialogId.open();
+                screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/loopCloser/test.png"
+                screenCaptureManagerId.capture()
             }
         }
     }
