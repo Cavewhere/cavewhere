@@ -266,6 +266,7 @@ void cwImageItem::resizeGL() {
   */
 void cwImageItem::paint(QPainter* painter) {
     if(!Image.isValid()) { return; }
+    if(GLResources == NULL) { initializeGL(); }
 
     painter->beginNativePainting();
 
