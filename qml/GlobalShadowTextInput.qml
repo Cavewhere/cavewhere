@@ -15,7 +15,7 @@ MouseArea {
     property int minWidth: 0
     property int minHeight: 0
     property alias errorHelpBox: errorHelpBoxItem
-    property CoreClickTextInput coreClickInput
+    property var coreClickInput //Should be a CoreClickTextInput, but isn't for QML reloading to work
 
     signal enterPressed()
     signal escapePressed()

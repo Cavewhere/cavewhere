@@ -92,7 +92,6 @@ Item {
         globalShadowTextInput.minHeight = clickTextInput.height + 6
 
         //Connect to commitChanges()
-//        console.log("ClickTextInput:" + clickTextInput)
         globalShadowTextInput.coreClickInput = clickTextInput
     }
 
