@@ -74,6 +74,7 @@ private:
 
     //All the Queued scene command
     QQueue<cwSceneCommand*> CommandQueue;
+    bool ExcutingCommands;
 
     void excuteSceneCommands();
 

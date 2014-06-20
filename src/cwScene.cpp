@@ -16,7 +16,9 @@
 cwScene::cwScene(QObject *parent) :
     QObject(parent),
     GeometryItersecter(new cwGeometryItersecter()),
-    ShaderDebugger(new cwShaderDebugger(this))
+    ShaderDebugger(new cwShaderDebugger(this)),
+    Camera(NULL),
+    ExcutingCommands(false)
 {
     cwInitializeOpenGLFunctionsCommand* initOpenGLFunctionCommand = new cwInitializeOpenGLFunctionsCommand();
     initOpenGLFunctionCommand->setOpenGLFunctionsObject(this);
@@ -132,9 +134,13 @@ cwGeometryItersecter *cwScene::geometryItersecter() const
  */
 void cwScene::excuteSceneCommands()
 {
-    while(!CommandQueue.isEmpty()) {
-        cwSceneCommand* command = CommandQueue.dequeue();
-        command->excute();
-        delete command;
+    if(!ExcutingCommands) {
+        ExcutingCommands = true;
+        while(!CommandQueue.isEmpty()) {
+            cwSceneCommand* command = CommandQueue.dequeue();
+            command->excute();
+            delete command;
+        }
+        ExcutingCommands = false;
     }
 }
