@@ -466,6 +466,7 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
     double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
 
     transformation.setNorthUp(angle);
+    transformation.scaleNumerator()->setValue(1);
     transformation.scaleDenominator()->setValue(scaleAverage);
 
     return transformation;

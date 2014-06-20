@@ -14,6 +14,8 @@ cwScale::cwScale(QObject *parent) :
     ScaleNumerator(new cwLength(this)),
     ScaleDenominator(new cwLength(this))
 {
+    ScaleNumerator->setValue(1.0);
+    ScaleDenominator->setValue(1.0);
     connectLengthObjects();
 }
 
