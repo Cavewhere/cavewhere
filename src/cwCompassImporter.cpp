@@ -24,7 +24,6 @@ cwCompassImporter::cwCompassImporter(QObject *parent) :
     DateRegExp("SURVEY DATE:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)"),
     CalibrationRegExp("DECLINATION:\\s*(\\S+)\\s+FORMAT:\\s*(\\w+)(?:\\s+CORRECTIONS:\\s*(\\S+)\\s+(\\S+)\\s+(\\S+)\\s*)?")
 {
-
 }
 
 /**
@@ -388,7 +387,7 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
             }
         }
 
-        if(fileFormatString.size() == 11 || fileFormatString.size() == 12) {
+        if(fileFormatString.size() == 11 || fileFormatString.size() == 12 || fileFormatString.size() == 13) {
             if(fileFormatString.at(0) != 'D') {
                 emit statusMessage(QString("I can only understand Degrees for the Bearing Units. Converting all Bearing units to Degrees. In %1 on line %2")
                                    .arg(CurrentFilename)
@@ -412,7 +411,7 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
                                    .arg(LineCount));
             }
 
-            if(fileFormatString.size() == 12) {
+            if(fileFormatString.size() >= 12) {
                 if(fileFormatString.at(11) == 'B') {
                     CurrentTrip->calibrations()->setBackSights(true);
                 } else {

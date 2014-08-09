@@ -39,7 +39,7 @@ protected:
 signals:
     
 public slots:
-    
+
 private:
     //Input
     QStringList CompassDataFiles;
