@@ -30,11 +30,9 @@ cwGlobalDirectory::cwGlobalDirectory()
   It will first check the working directory, and the check the executable path.
   */
 void cwGlobalDirectory::setupBaseDirectory() {
-    QString findFile = "qml/CavewhereMainWindow.qml";
+    QString findFile = qmlMainFilePath();
 
-    //  QApplication::
-
-    QString currentDirectory = QDir::currentPath();
+    QString currentDirectory = QString(CAVEWHERE_SOURCE_DIR);
     QString execDirectory = QApplication::applicationDirPath();
 
     bool currentExists = QFileInfo(currentDirectory + "/" + findFile).exists();
@@ -55,6 +53,5 @@ void cwGlobalDirectory::setupBaseDirectory() {
                               QMessageBox::Close
                               );
 
-        exit(1);
     }
 }

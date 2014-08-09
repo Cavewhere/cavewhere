@@ -18,6 +18,7 @@ public:
 
     static void setupBaseDirectory();
     static QString baseDirectory();
+    static QString qmlMainFilePath() { return "qml/CavewhereMainWindow.qml"; }
 
 private:
     static QString BaseDirectory;

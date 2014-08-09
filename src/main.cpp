@@ -33,22 +33,14 @@
 #include "cwImageProvider.h"
 #include "cwOpenFileEventHandler.h"
 #include "cwQMLReload.h"
+#include "cwDebug.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
 QUrl mainWindowSourcePath() {
-    QString mainWindowPath = "/qml/CavewhereMainWindow.qml";
-    QString workingDirectory = QDir::currentPath() + mainWindowPath;
-    QString applicationDirectory = QApplication::applicationDirPath() + mainWindowPath;
-    if(QFileInfo(workingDirectory).isFile()) {
-        return QUrl::fromLocalFile(workingDirectory);
-    } else if(QFileInfo(applicationDirectory).isFile()){
-        return QUrl::fromLocalFile(applicationDirectory);
-    }
-    qDebug() << "Couldn't find Main Window searched:" << workingDirectory << "and" << applicationDirectory;
-    return QUrl();
+    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
 }
 
 int main(int argc, char *argv[])
