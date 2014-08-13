@@ -18,7 +18,7 @@
 
 cwQMLReload::cwQMLReload(QObject *parent) :
     QObject(parent),
-    ApplicationEngine(NULL)
+    ApplicationEngine(nullptr)
 {
 }
 
@@ -29,8 +29,8 @@ cwQMLReload::cwQMLReload(QObject *parent) :
  */
 void cwQMLReload::reload()
 {
-    if(ApplicationEngine == NULL) {
-        qDebug() << "Can't reload QML because the ApplicationEngine is NULL, this is a BUG!" << LOCATION;
+    if(ApplicationEngine == nullptr) {
+        qDebug() << "Can't reload QML because the ApplicationEngine is nullptr, this is a BUG!" << LOCATION;
         return;
     }
 

@@ -19,8 +19,8 @@
 
 cwScrapView::cwScrapView(QQuickItem *parent) :
     QQuickItem(parent),
-    Note(NULL),
-    TransformUpdater(NULL),
+    Note(nullptr),
+    TransformUpdater(nullptr),
     SelectionManager(new cwSelectionManager(this))
 {
 }
@@ -31,13 +31,13 @@ cwScrapView::cwScrapView(QQuickItem *parent) :
 void cwScrapView::setNote(cwNote* note) {
     if(Note != note) {
 
-        if(Note != NULL) {
-            disconnect(Note, NULL, this, NULL);
+        if(Note != nullptr) {
+            disconnect(Note, nullptr, this, nullptr);
         }
 
         Note = note;
 
-        if(Note != NULL) {
+        if(Note != nullptr) {
             connect(Note, &cwNote::insertedScraps, this, &cwScrapView::insertScrapItem);
             connect(Note, &cwNote::removedScraps, this, &cwScrapView::updateRemovedScraps);
         }
@@ -53,7 +53,7 @@ void cwScrapView::setNote(cwNote* note) {
   \brief Updates all the scrap items that are in the view
   */
 void cwScrapView:: insertScrapItem(int begin, int end) {
-    if(Note == NULL) {
+    if(Note == nullptr) {
         return;
     }
 
@@ -95,7 +95,7 @@ void cwScrapView:: insertScrapItem(int begin, int end) {
 /**
     Gets the scrapItem at notePoint
 
-    If no scrap is defined at this point NULL is returned.
+    If no scrap is defined at this point nullptr is returned.
 
     \param notePoint - Normalized note coordinate
   */
@@ -114,13 +114,13 @@ QList<cwScrapItem*> cwScrapView::scrapItemsAt(QPointF notePoint) {
 /**
   \brief Gets the scrap item at the index
 
-  If the inde is out of bounds this return NULL
+  If the inde is out of bounds this return nullptr
   */
 cwScrapItem *cwScrapView::scrapItemAt(int index) {
     if(index >= 0 && index < ScrapItems.size()) {
         return ScrapItems[index];
     }
-    return NULL;
+    return nullptr;
 }
 
 
@@ -158,7 +158,7 @@ void cwScrapView::setTransformUpdater(cwTransformUpdater* updater) {
   */
 void cwScrapView::updateAllScraps() {
     int numberOfScraps;
-    if(note() != NULL) {
+    if(note() != nullptr) {
         numberOfScraps = note()->scraps().size();
     } else {
         numberOfScraps = 0;
@@ -168,7 +168,7 @@ void cwScrapView::updateAllScraps() {
         //Delete unused polygons
         for(int i = ScrapItems.size() - 1; i >= numberOfScraps; i--) {
             if(ScrapItems[i] == selectedScrapItem()) {
-                setSelectedScrapItem(NULL);
+                setSelectedScrapItem(nullptr);
             }
 
             ScrapItems[i]->deleteLater();
@@ -213,7 +213,7 @@ void cwScrapView::setSelectScrapIndex(int selectScrapIndex) {
 
         //Remove the selection from the previous
         cwScrapItem* oldScrapItem = selectedScrapItem();
-        if(oldScrapItem != NULL) {
+        if(oldScrapItem != nullptr) {
             oldScrapItem->setSelected(false);
         }
 
@@ -238,7 +238,7 @@ cwScrapItem* cwScrapView::selectedScrapItem() const {
         //        Q_ASSERT(ScrapItems[selectScrapIndex()]->isSelected());
         return ScrapItems.at(selectScrapIndex());
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -257,7 +257,7 @@ void cwScrapView::setSelectedScrapItem(cwScrapItem* scrapItem) {
   */
 void cwScrapView::updateSelection() {
     cwScrapItem* scrapItem = qobject_cast<cwScrapItem*>(sender());
-    if(scrapItem != NULL) {
+    if(scrapItem != nullptr) {
         setSelectedScrapItem(scrapItem);
     }
 }

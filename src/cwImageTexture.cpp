@@ -17,7 +17,7 @@
 #include <QVector2D>
 #include <QWindow>
 
-QThread* cwImageTexture::TextureLoadingThread = NULL;
+QThread* cwImageTexture::TextureLoadingThread = nullptr;
 
 /**
 
@@ -27,9 +27,9 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     TextureDirty(false),
     DeleteTexture(false),
     TextureId(0),
-    TextureUploadTask(NULL)
+    TextureUploadTask(nullptr)
 {
-    if(TextureLoadingThread == NULL) {
+    if(TextureLoadingThread == nullptr) {
         TextureLoadingThread = new QThread();
         TextureLoadingThread->start(QThread::LowPriority);
     }
@@ -119,7 +119,7 @@ void cwImageTexture::updateData() {
         return;
     }
 
-    if(TextureUploadTask == NULL) {
+    if(TextureUploadTask == nullptr) {
         TextureDirty = false;
         return;
     }
@@ -184,7 +184,7 @@ void cwImageTexture::startLoadingImage()
 {
     if(Image.isValid() && !project().isEmpty()) {
 
-        if(TextureUploadTask == NULL) {
+        if(TextureUploadTask == nullptr) {
             TextureUploadTask = new cwTextureUploadTask();
             TextureUploadTask->setThread(TextureLoadingThread);
 
@@ -206,10 +206,10 @@ void cwImageTexture::startLoadingImage()
  */
 void cwImageTexture::deleteLoadNoteTask()
 {
-    if(TextureUploadTask != NULL) {
+    if(TextureUploadTask != nullptr) {
         TextureUploadTask->stop();
         TextureUploadTask->deleteLater();
-        TextureUploadTask = NULL;
+        TextureUploadTask = nullptr;
     }
 }
 

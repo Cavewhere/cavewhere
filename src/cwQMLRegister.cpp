@@ -81,10 +81,13 @@
 #include "cwCaptureManager.h"
 #include "cwScale.h"
 #include "cwBaseTurnTableInteraction.h"
+#include "cwViewportCapture.h"
+#include "cwQuickSceneView.h"
 
 //Qt registeration
 #include <QQuickView>
 #include <QScreen>
+#include <QGraphicsScene>
 #include <QDebug>
 
 cwQMLRegister::cwQMLRegister()
@@ -166,4 +169,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<QScreen>();
     qmlRegisterType<cwScale>("Cavewhere", 1, 0, "Scale");
     qmlRegisterType<cwBaseTurnTableInteraction>("Cavewhere", 1, 0, "BaseTurnTableInteraction");
+    qmlRegisterType<cwViewportCapture>("Cavewhere", 1, 0, "ViewportCapture");
+    qmlRegisterType<cwQuickSceneView>("Cavewhere", 1, 0, "QuickSceneView");
+    qmlRegisterType<QGraphicsScene>("Cavewhere", 1, 0, "GraphicsScene");
 }

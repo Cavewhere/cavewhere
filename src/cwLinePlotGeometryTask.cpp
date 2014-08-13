@@ -25,7 +25,7 @@
 cwLinePlotGeometryTask::cwLinePlotGeometryTask(QObject *parent) :
     cwTask(parent)
 {
-    Region = NULL;
+    Region = nullptr;
 }
 
 /**

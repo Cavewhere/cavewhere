@@ -11,7 +11,7 @@
 
 cwAbstractProjection::cwAbstractProjection(QObject *parent) :
     QObject(parent),
-    Viewer(NULL),
+    Viewer(nullptr),
     NearPlane(0.0),
     FarPlane(0.0),
     Enabled(false)
@@ -26,13 +26,13 @@ cwAbstractProjection::cwAbstractProjection(QObject *parent) :
 void cwAbstractProjection::setViewer(cw3dRegionViewer* viewer) {
     if(viewer != Viewer) {
 
-        if(Viewer != NULL) {
+        if(Viewer != nullptr) {
             disconnect(Viewer, &cw3dRegionViewer::resized, this, &cwAbstractProjection::updateProjection);
         }
 
         Viewer = viewer;
 
-        if(Viewer != NULL) {
+        if(Viewer != nullptr) {
             connect(Viewer, &cw3dRegionViewer::resized, this, &cwAbstractProjection::updateProjection);
         }
 
@@ -71,7 +71,7 @@ void cwAbstractProjection::setFarPlane(double farPlane) {
  */
 void cwAbstractProjection::updateProjection()
 {
-    if(Viewer != NULL) {
+    if(Viewer != nullptr) {
         Projection = calculateProjection();
         if(enabled()) {
             Viewer->camera()->setProjection(Projection);

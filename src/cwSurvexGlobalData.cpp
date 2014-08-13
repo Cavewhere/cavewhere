@@ -23,7 +23,7 @@ cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
 void cwSurvexGlobalData::setBlocks(QList<cwSurvexBlockData*> blocks) {
     foreach(cwSurvexBlockData* block, blocks) {
         block->setParent(this);
-        block->setParentBlock(NULL);
+        block->setParentBlock(nullptr);
     }
 
     RootBlocks = blocks;
@@ -35,7 +35,7 @@ void cwSurvexGlobalData::setBlocks(QList<cwSurvexBlockData*> blocks) {
 QList<cwCave*> cwSurvexGlobalData::caves() {
     QList<cwCave*> caves;
     foreach(cwSurvexBlockData* block, blocks()) {
-        cavesHelper(&caves, block, NULL, NULL);
+        cavesHelper(&caves, block, nullptr, nullptr);
     }
 
     return caves;
@@ -64,7 +64,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         currentCave = new cwCave(this);
 
         currentCave->setName(currentBlock->name());
-        currentTrip = NULL;
+        currentTrip = nullptr;
         caves->append(currentCave);
 
         //Add all equate stations to EquateMap
@@ -85,7 +85,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         currentTrip->setCalibration(new cwTripCalibration(*(currentBlock->calibration())));
 
         //Creates a cave for the trip if there isn't one
-        if(currentCave == NULL) {
+        if(currentCave == nullptr) {
             currentCave = new cwCave(this);
             currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
             caves->append(currentCave);
@@ -109,10 +109,10 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
     if(currentBlock->importType() != cwSurvexBlockData::NoImport) {
 
         //Make sure we have trip if there's chunks
-        if(currentBlock->chunkCount() > 0 && currentTrip == NULL) {
+        if(currentBlock->chunkCount() > 0 && currentTrip == nullptr) {
 
             //Make sure we have a cave
-            if(currentCave == NULL) {
+            if(currentCave == nullptr) {
                 currentCave = new cwCave(this);
                 currentCave->setName(QString("Cave %1").arg(caves->size() + 1));
                 caves->append(currentCave);
@@ -153,14 +153,14 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData
     cwSurvexBlockData* current = chunkBlock;
 
     //Move to block that has a name
-    while(current != NULL &&
+    while(current != nullptr &&
           current->name().isEmpty() &&
           current->importType() != cwSurvexBlockData::Cave)
     {
         current = current->parentBlock();
     }
 
-    if(current != NULL) {
+    if(current != nullptr) {
         chunkBlock = current;
     }
 
@@ -168,7 +168,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData
 
     //Find the parent cave chuck block
     cwSurvexBlockData* caveSurvexBlock = chunkBlock;
-    while(caveSurvexBlock != NULL) {
+    while(caveSurvexBlock != nullptr) {
         if(caveSurvexBlock->importType() == cwSurvexBlockData::Cave) {
             break;
         } else {
@@ -181,7 +181,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData
     }
 
     //No cave block, just use the chunkblock, there's really only one trip
-    if(caveSurvexBlock == NULL) {
+    if(caveSurvexBlock == nullptr) {
         stationPrefix.clear();
         caveSurvexBlock = chunkBlock;
     }

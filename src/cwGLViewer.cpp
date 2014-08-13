@@ -26,7 +26,7 @@ cwGLViewer::cwGLViewer(QQuickItem *parent) :
     QQuickPaintedItem(parent)
 //    Initialized(false)
 {
-//    GLWidget = NULL;
+//    GLWidget = nullptr;
     setFlag(QQuickItem::ItemHasContents, true);
 
 //    GeometryItersecter = new cwGeometryItersecter();
@@ -49,7 +49,7 @@ cwGLViewer::~cwGLViewer() {
 }
 
 void cwGLViewer::privateResizeGL() {
-//    if(GLWidget == NULL) { return; }
+//    if(GLWidget == nullptr) { return; }
     if(width() == 0.0 || height() == 0.0) { return; }
     QSize framebufferSize(width(), height());
 

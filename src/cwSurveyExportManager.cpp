@@ -28,8 +28,8 @@
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent),
-    Model(NULL),
-    SelectionModel(NULL),
+    Model(nullptr),
+    SelectionModel(nullptr),
     ExportThread(new QThread(this))
 {
 
@@ -58,7 +58,7 @@ void cwSurveyExportManager::setCavingRegionTreeModel(cwRegionTreeModel *model) {
   \brief Opens the survex exporter
   */
 void cwSurveyExportManager::openExportSurvexTripFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(NULL, "Export trip to Survex", "", "Survex *.svx");
+    QString filename = QFileDialog::getSaveFileName(nullptr, "Export trip to Survex", "", "Survex *.svx");
     filename = cwGlobals::addExtension(filename, "svx");
     exportSurvexTrip(filename);
 }
@@ -67,7 +67,7 @@ void cwSurveyExportManager::openExportSurvexTripFileDialog() {
   \brief Asks the user to choose a file to export the currently selected file
   */
 void cwSurveyExportManager::openExportSurvexCaveFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(NULL, "Export cave to Survex", "", "Survex *.svx");
+    QString filename = QFileDialog::getSaveFileName(nullptr, "Export cave to Survex", "", "Survex *.svx");
     filename = cwGlobals::addExtension(filename, "svx");
     exportSurvexCave(filename);
 }
@@ -78,7 +78,7 @@ void cwSurveyExportManager::openExportSurvexCaveFileDialog() {
   all the data to survex file
   */
 void cwSurveyExportManager::openExportSurvexRegionFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(NULL, "Export region to Survex", "", "Survex *.svx");
+    QString filename = QFileDialog::getSaveFileName(nullptr, "Export region to Survex", "", "Survex *.svx");
     filename = cwGlobals::addExtension(filename, "svx");
     exportSurvexRegion(filename);
 }
@@ -95,7 +95,7 @@ void cwSurveyExportManager::openExportCompassTripFileDialog()
   Opens the compass file export dialog
   */
 void cwSurveyExportManager::openExportCompassCaveFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(NULL, "Export cave to Compass", "", "Compass *.dat");
+    QString filename = QFileDialog::getSaveFileName(nullptr, "Export cave to Compass", "", "Compass *.dat");
     filename = cwGlobals::addExtension(filename, "dat");
     exportCaveToCompass(filename);
 }
@@ -131,7 +131,7 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
 
     cwCave* cave = currentCave();
 
-    if(cave != NULL) {
+    if(cave != nullptr) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(*cave);
@@ -148,7 +148,7 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
 void cwSurveyExportManager::exportSurvexTrip(QString filename) {
     if(filename.isEmpty()) { return; }
     cwTrip* trip = currentTrip();
-    if(trip != NULL) {
+    if(trip != nullptr) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(*trip);
@@ -167,7 +167,7 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
     if(filename.isEmpty()) { return; }
 
     cwCave* cave = currentCave();
-    if(cave != NULL) {
+    if(cave != nullptr) {
         cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(*cave);
@@ -210,13 +210,13 @@ void cwSurveyExportManager::setRegionSelectionModel(QItemSelectionModel *selecti
     }
 
     if(selectionModel != SelectionModel) {
-        if(SelectionModel != NULL) {
-            disconnect(SelectionModel, NULL, this, NULL);
+        if(SelectionModel != nullptr) {
+            disconnect(SelectionModel, nullptr, this, nullptr);
         }
 
         SelectionModel = selectionModel;
 
-        if(SelectionModel != NULL) {
+        if(SelectionModel != nullptr) {
             connect(SelectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)), SLOT(updateActions()));
 
             updateActions();
@@ -255,7 +255,7 @@ QString cwSurveyExportManager::currentTripName() const {
   */
 cwCave *cwSurveyExportManager::currentCave() const
 {
-    cwCave* cave = NULL;
+    cwCave* cave = nullptr;
     QModelIndex currentSelected = SelectionModel->currentIndex();
     if(Model->isTrip(currentSelected)) {
         cave = Model->trip(currentSelected)->parentCave();

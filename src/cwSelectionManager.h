@@ -63,7 +63,7 @@ inline bool cwSelectionManager::isSelected(QQuickItem *item) const
  */
 inline void cwSelectionManager::clear()
 {
-    setSelectedItem(NULL);
+    setSelectedItem(nullptr);
 }
 
 

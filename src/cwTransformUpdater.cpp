@@ -15,7 +15,7 @@
 
 cwTransformUpdater::cwTransformUpdater(QObject *parent) :
     QObject(parent),
-    Camera(NULL)
+    Camera(nullptr)
 {
 
 }
@@ -24,13 +24,13 @@ cwTransformUpdater::cwTransformUpdater(QObject *parent) :
   Sets the camera for the updater
   */
 void cwTransformUpdater::setCamera(cwCamera* camera) {
-    if(Camera != NULL) {
+    if(Camera != nullptr) {
         disconnect(Camera, 0, this, 0);
     }
 
     Camera = camera;
 
-    if(Camera != NULL) {
+    if(Camera != nullptr) {
         connect(Camera, SIGNAL(projectionChanged()), SLOT(update()));
         connect(Camera, SIGNAL(viewChanged()), SLOT(update()));
         connect(Camera, SIGNAL(viewportChanged()), SLOT(update()));
@@ -55,7 +55,7 @@ void cwTransformUpdater::setModelMatrix(QMatrix4x4 matrix) {
   property for this to work.
   */
 void cwTransformUpdater::addPointItem(QQuickItem *object) {
-    if(object == NULL) { return; }
+    if(object == nullptr) { return; }
 
     if(PointItems.contains(object)) {
         qDebug() << "Adding object twice in cwTransformUpdater " << LOCATION;
@@ -72,7 +72,7 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
   Removes a object from the transform updater
   */
 void cwTransformUpdater::removePointItem(QQuickItem *object) {
-    if(object == NULL) { return; }
+    if(object == nullptr) { return; }
 
     if(!PointItems.contains(object)) {
         qDebug() << (void*)object << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
@@ -115,7 +115,7 @@ void cwTransformUpdater::updatePoint(QQuickItem *object) {
   the objects to qt cooridantes
   */
 void cwTransformUpdater::updateTransformMatrix() {
-    if(Camera == NULL) { return; }
+    if(Camera == nullptr) { return; }
     float width = Camera->viewport().width();
     float height = Camera->viewport().height();
 

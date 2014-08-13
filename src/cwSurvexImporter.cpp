@@ -29,7 +29,7 @@
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     cwTask(parent),
     RootBlock(new cwSurvexBlockData(this)),
-    CurrentBlock(NULL),
+    CurrentBlock(nullptr),
     GlobalData(new cwSurvexGlobalData(this)),
     CurrentState(FirstBegin)
 {
@@ -269,7 +269,7 @@ void cwSurvexImporter::parseLine(QString line) {
                 updateLRUDForCurrentBlock();
 
                 cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
-                if(parentBlock != NULL) {
+                if(parentBlock != nullptr) {
                     CurrentBlock = parentBlock;
                 }
 
@@ -618,7 +618,7 @@ QString cwSurvexImporter::fullStationName(QString name) {
     QLinkedList<QString> fullNameList;
 
     //While not the root element of the importer
-    while(current->parentBlock() != NULL) {
+    while(current->parentBlock() != nullptr) {
         QString blockName = current->name();
         if(!blockName.isEmpty()) {
             fullNameList.prepend(blockName);

@@ -9,13 +9,13 @@
 
 cwGLImageItemResources::cwGLImageItemResources() :
     cwGLResources(),
-    NoteTexture(NULL)
+    NoteTexture(nullptr)
 {
 }
 
 cwGLImageItemResources::~cwGLImageItemResources()
 {
-    if(context() != NULL) {
+    if(context() != nullptr) {
         context()->makeCurrent(context()->surface());
         GeometryVertexBuffer.destroy();
         delete NoteTexture;

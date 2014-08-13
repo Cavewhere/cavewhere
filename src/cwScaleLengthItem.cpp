@@ -15,7 +15,7 @@
 
 cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent),
-    LinesNode(NULL)
+    LinesNode(nullptr)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 }

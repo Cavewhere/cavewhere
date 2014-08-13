@@ -16,7 +16,7 @@ class cwSurvexExporterRegionTask : public cwExporterTask {
     Q_OBJECT
 
 public:
-    cwSurvexExporterRegionTask(QObject* parent = NULL);
+    cwSurvexExporterRegionTask(QObject* parent = nullptr);
 
     void setData(const cwCavingRegion& region);
 

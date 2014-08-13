@@ -11,8 +11,8 @@
 
 cwScrapPointView::cwScrapPointView(QQuickItem *parent) :
     cwAbstractPointManager(parent),
-    Scrap(NULL),
-    ScrapItem(NULL)
+    Scrap(nullptr),
+    ScrapItem(nullptr)
 {
 }
 

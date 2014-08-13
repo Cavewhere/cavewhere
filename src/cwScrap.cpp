@@ -26,18 +26,18 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    ParentNote(NULL),
-    ParentCave(NULL)
+    ParentNote(nullptr),
+    ParentCave(nullptr)
 {
     setCalculateNoteTransform(true);
 }
 
 cwScrap::cwScrap(const cwScrap& other)
-    : QObject(NULL),
+    : QObject(nullptr),
       NoteTransformation(new cwNoteTranformation(this)),
       CalculateNoteTransform(false),
-      ParentNote(NULL),
-      ParentCave(NULL)
+      ParentNote(nullptr),
+      ParentCave(nullptr)
 {
     setCalculateNoteTransform(true);
     copy(other);
@@ -286,7 +286,7 @@ cwNoteStation cwScrap::station(int stationId) {
  This find the average scale and rotatation to north, based on the station locations on the page.
   */
 void cwScrap::updateNoteTransformation() {
-    if(parentNote() == NULL) {
+    if(parentNote() == nullptr) {
         return;
     }
 
@@ -314,14 +314,14 @@ void cwScrap::updateNoteTransformation() {
 QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
 
     if(Stations.size() <= 1) { return QList< QPair<cwNoteStation, cwNoteStation> >(); } //Need more than 1 station to update.
-    if(parentNote() == NULL || parentNote()->parentTrip() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
-    if(parentCave() == NULL) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+    if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
+    if(parentCave() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
 //    //Find the valid stations
 //    QSet<cwNoteStation> validStationsSet;
 //    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
 //    foreach(cwNoteStation noteStation, Stations) {
-//        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != NULL) {
+//        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
 //            validStationsSet.insert(noteStation);
 //        }
 //    }
@@ -377,7 +377,7 @@ QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList
   This will caluclate the transfromation between station1 and station2
   */
 cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
-    if(parentCave() == NULL) {
+    if(parentCave() == nullptr) {
         qDebug() << "Can't calculate shot transformation because parentCave is null" << LOCATION;
         return ScrapShotTransform();
     }
@@ -487,8 +487,8 @@ void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
             connect(noteTransformation()->scaleNumerator(), SIGNAL(unitChanged()), SLOT(updateNoteTransformation()));
             updateNoteTransformation();
         } else {
-            disconnect(noteTransformation()->scaleDenominator(), NULL, this, NULL);
-            disconnect(noteTransformation()->scaleNumerator(), NULL, this, NULL);
+            disconnect(noteTransformation()->scaleDenominator(), nullptr, this, nullptr);
+            disconnect(noteTransformation()->scaleNumerator(), nullptr, this, nullptr);
         }
 
         emit calculateNoteTransformChanged();
@@ -510,9 +510,9 @@ void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
   \return An empty string if no station is within 5% of the guess
   */
 QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition) {
-    if(parentNote() == NULL) { return QString(); }
-    if(parentNote()->parentTrip() == NULL) { return QString(); }
-    if(parentNote()->parentTrip()->parentCave() == NULL) { return QString(); }
+    if(parentNote() == nullptr) { return QString(); }
+    if(parentNote()->parentTrip() == nullptr) { return QString(); }
+    if(parentNote()->parentTrip()->parentCave() == nullptr) { return QString(); }
 
     cwTrip* parentTrip = parentNote()->parentTrip();
     cwCave* parentCave = parentNote()->parentTrip()->parentCave();
@@ -559,9 +559,9 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
   3D to normalize note coordinates
   */
 QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
-    if(parentNote() == NULL) { return QMatrix4x4(); }
-    if(parentNote()->parentTrip() == NULL) { return QMatrix4x4(); }
-    if(parentNote()->parentTrip()->parentCave() == NULL) { return QMatrix4x4(); }
+    if(parentNote() == nullptr) { return QMatrix4x4(); }
+    if(parentNote()->parentTrip() == nullptr) { return QMatrix4x4(); }
+    if(parentNote()->parentTrip()->parentCave() == nullptr) { return QMatrix4x4(); }
 
     cwCave* parentCave = parentNote()->parentTrip()->parentCave();
     cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
@@ -597,13 +597,13 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
   */
 void cwScrap::setParentNote(cwNote* note) {
     if(ParentNote != note) {
-        if(ParentNote != NULL) {
-            disconnect(ParentNote, NULL, this, NULL);
+        if(ParentNote != nullptr) {
+            disconnect(ParentNote, nullptr, this, nullptr);
         }
 
         ParentNote = note;
 
-        if(ParentNote != NULL) {
+        if(ParentNote != nullptr) {
             ParentCave = parentNote()->parentCave();
 //            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }

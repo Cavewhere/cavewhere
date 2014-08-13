@@ -9,7 +9,7 @@
 
 cwGLResources::cwGLResources(QObject *parent) :
     QObject(parent),
-    Context(NULL)
+    Context(nullptr)
 {
 }
 
@@ -17,13 +17,13 @@ void cwGLResources::setContext( QOpenGLContext *context)
 {
     if(Context != context) {
 
-        if(Context != NULL) {
+        if(Context != nullptr) {
             disconnect(Context, SIGNAL(destroyed()), this, SLOT(contextDestroyed()));
         }
 
         Context = context;
 
-        if(Context != NULL) {
+        if(Context != nullptr) {
             connect(Context, SIGNAL(destroyed()), this, SLOT(contextDestroyed()));
         }
     }
@@ -36,5 +36,5 @@ void cwGLResources::setContext( QOpenGLContext *context)
 
  void cwGLResources::contextDestroyed()
  {
-     Context = NULL;
+     Context = nullptr;
  }

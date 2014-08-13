@@ -18,7 +18,7 @@
 
 cwRegionTreeModel::cwRegionTreeModel(QObject *parent) :
     QAbstractItemModel(parent),
-    Region(NULL)
+    Region(nullptr)
 {
 
 }
@@ -53,7 +53,7 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
 
 QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & parent) const {
     if(column != 0) { return QModelIndex(); }
-    if(Region == NULL) { return QModelIndex(); }
+    if(Region == nullptr) { return QModelIndex(); }
     if(row < 0) { return QModelIndex(); }
 
     if(!parent.isValid()) {
@@ -65,7 +65,7 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
     }
 
     cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-    if(parentCave != NULL) {
+    if(parentCave != nullptr) {
         if(row >= parentCave->tripCount()) {
             return QModelIndex();
         }
@@ -82,8 +82,8 @@ QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & 
   If the cave doesn't exist in the model this return QModelIndex()
   */
 QModelIndex cwRegionTreeModel::index (cwCave* cave) const {
-    if(Region == NULL) { return QModelIndex(); }
-    if(cave == NULL) { return QModelIndex(); }
+    if(Region == nullptr) { return QModelIndex(); }
+    if(cave == nullptr) { return QModelIndex(); }
     int caveIndex = Region->indexOf(cave);
     if(caveIndex < 0) { QModelIndex(); }
     return index(caveIndex, 0, QModelIndex());
@@ -96,7 +96,7 @@ QModelIndex cwRegionTreeModel::index (cwCave* cave) const {
   */
 QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
     cwCave* parentCave = trip->parentCave();
-    if(parentCave == NULL) { return QModelIndex(); }
+    if(parentCave == nullptr) { return QModelIndex(); }
     int tripIndex = parentCave->indexOf(trip);
 
     QModelIndex parentIndex = index(parentCave);
@@ -110,12 +110,12 @@ QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
 
 QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
     cwCave* cave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(cave != NULL) {
+    if(cave != nullptr) {
         return QModelIndex(); //Caves don't have parents
     }
 
     cwTrip* trip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(trip != NULL) {
+    if(trip != nullptr) {
         cwCave* parentCave = qobject_cast<cwCave*>(((QObject*)trip)->parent());
         int row = Region->indexOf(parentCave);
         Q_ASSERT(row >= 0); //This should always return with a valid index
@@ -127,14 +127,14 @@ QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
 }
 
 int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
-    if(Region == NULL) { return 0; }
+    if(Region == nullptr) { return 0; }
 
     if(!parent.isValid()) {
         return Region->caveCount();
     }
 
     cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-    if(parentCave != NULL) {
+    if(parentCave != nullptr) {
         return parentCave->tripCount();
     }
 
@@ -142,7 +142,7 @@ int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
 }
 
 int cwRegionTreeModel::columnCount ( const QModelIndex & /*parent*/) const {
-    if(Region == NULL) { return 0; }
+    if(Region == nullptr) { return 0; }
 
     return 1; //Always one column
 }
@@ -157,7 +157,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
     }
 
     cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(currentCave != NULL) {
+    if(currentCave != nullptr) {
         switch(role) {
         case NameRole:
         case Qt::DisplayRole:
@@ -184,7 +184,7 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
     }
 
     cwTrip* currentTrip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(currentTrip != NULL) {
+    if(currentTrip != nullptr) {
         switch(role) {
         case NameRole:
         case Qt::DisplayRole:
@@ -222,7 +222,7 @@ bool cwRegionTreeModel::setData(const QModelIndex &index, const QVariant &value,
     if(!index.isValid()) { return false; }
 
     cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(currentCave != NULL) {
+    if(currentCave != nullptr) {
         switch(role) {
         case NameRole:
         case Qt::DisplayRole:
@@ -235,7 +235,7 @@ bool cwRegionTreeModel::setData(const QModelIndex &index, const QVariant &value,
     }
 
     cwTrip* currentTrip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(currentTrip != NULL) {
+    if(currentTrip != nullptr) {
         switch(role) {
         case NameRole:
         case Qt::DisplayRole:
@@ -270,7 +270,7 @@ void cwRegionTreeModel::removeIndex(QModelIndex item) {
     } else if(item.data(TypeRole) == TripType) {
         //item is a trip remove it from the parent cave
         cwCave* parentCave = cave(parentItem);
-        Q_ASSERT(parentCave != NULL);
+        Q_ASSERT(parentCave != nullptr);
 
         parentCave->removeTrip(item.row());
     }
@@ -292,7 +292,7 @@ cwTrip* cwRegionTreeModel::trip(const QModelIndex& index) const {
         cwTrip* trip = tripVariant.value<cwTrip*>();
         return trip;
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -304,7 +304,7 @@ cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
         cwCave* cave = caveVariant.value<cwCave*>();
         return cave;
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -346,7 +346,7 @@ void cwRegionTreeModel::beginInsertTrip(int beginIndex, int endIndex) {
   */
 void cwRegionTreeModel::endInsertTrip(int beginIndex, int endIndex) {
     cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_ASSERT(cave != NULL);
+    Q_ASSERT(cave != nullptr);
 
     endInsertRows();
 
@@ -360,7 +360,7 @@ void cwRegionTreeModel::endInsertTrip(int beginIndex, int endIndex) {
   */
 void cwRegionTreeModel::beginRemoveTrip(int beginIndex, int endIndex) {
     cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_ASSERT(cave != NULL);
+    Q_ASSERT(cave != nullptr);
 
     QModelIndex caveIndex = index(cave);
     Q_ASSERT(caveIndex.isValid());
@@ -377,7 +377,7 @@ void cwRegionTreeModel::beginRemoveTrip(int beginIndex, int endIndex) {
   */
 void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
     cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_ASSERT(cave != NULL);
+    Q_ASSERT(cave != nullptr);
 
     endRemoveRows();
 }
@@ -387,7 +387,7 @@ void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
   \brief calls dataChanged() when the cave data has changed
   */
  void cwRegionTreeModel::caveDataChanged() {
-     Q_ASSERT(qobject_cast<cwCave*>(sender()) != NULL);
+     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
      cwCave* cave = static_cast<cwCave*>(sender());
      QModelIndex modelIndex = index(cave);
      emit dataChanged(modelIndex, modelIndex);
@@ -397,7 +397,7 @@ void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
    \brief calls dataChanged() when the trip data has changed
    */
  void cwRegionTreeModel::tripDataChanged() {
-     Q_ASSERT(qobject_cast<cwTrip*>(sender()) != NULL);
+     Q_ASSERT(qobject_cast<cwTrip*>(sender()) != nullptr);
      cwTrip* trip = static_cast<cwTrip*>(sender());
      QModelIndex modelIndexOfTrip = index(trip);
      emit dataChanged(modelIndexOfTrip, modelIndexOfTrip);

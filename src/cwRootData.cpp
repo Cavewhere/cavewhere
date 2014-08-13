@@ -66,7 +66,7 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
 
-    QuickView = NULL;
+    QuickView = nullptr;
 
     QMLReloader = new cwQMLReload(this);
 

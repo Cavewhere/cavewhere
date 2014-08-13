@@ -17,9 +17,9 @@
 
 cwBaseScrapInteraction::cwBaseScrapInteraction(QQuickItem *parent) :
     cwNoteInteraction(parent),
-    Scrap(NULL),
-    ImageItem(NULL),
-    OutlinePointView(NULL)
+    Scrap(nullptr),
+    ImageItem(nullptr),
+    OutlinePointView(nullptr)
 {
     connect(this, SIGNAL(noteChanged()), SLOT(startNewScrap()));
     connect(this, SIGNAL(visibleChanged()), SLOT(deactivating()));
@@ -35,7 +35,7 @@ void cwBaseScrapInteraction::addScrap() {
 
     setScrap(new cwScrap());
 
-    if(transform != NULL) {
+    if(transform != nullptr) {
         //Used the previous note transform
         scrap()->setCalculateNoteTransform(false);
         *(scrap()->noteTransformation()) = *transform; //Copy the note transform data to the scrap
@@ -50,22 +50,22 @@ void cwBaseScrapInteraction::addScrap() {
  * Closes the current scrap geometry
  */
 void cwBaseScrapInteraction::closeCurrentScrap() {
-    if(Scrap != NULL) {
+    if(Scrap != nullptr) {
         Scrap->close();
     }
 }
 
 cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(QPoint qtViewportPosition) const
 {
-    if(note() == NULL) {
+    if(note() == nullptr) {
         return cwClosestPoint();
     }
 
-    if(imageItem() == NULL) {
+    if(imageItem() == nullptr) {
         return cwClosestPoint();
     }
 
-    if(Scrap == NULL) {
+    if(Scrap == nullptr) {
         return cwClosestPoint();
     }
 
@@ -110,12 +110,12 @@ cwBaseScrapInteraction::cwClosestPoint cwBaseScrapInteraction::calcClosestPoint(
 
 /**
  * @brief cwBaseScrapInteraction::lastNoteTransformation
- * @return Will return the last note tranformation.  This will return NULL
+ * @return Will return the last note tranformation.  This will return nullptr
  * if the wasn't a previous note transformation from this trip
  */
 cwNoteTranformation *cwBaseScrapInteraction::lastNoteTransformation() const
 {
-    cwNote* lastScrapNote = NULL;
+    cwNote* lastScrapNote = nullptr;
     if(note()->hasScraps()) {
         lastScrapNote = note();
     } else {
@@ -131,7 +131,7 @@ cwNoteTranformation *cwBaseScrapInteraction::lastNoteTransformation() const
         }
     }
 
-    if(lastScrapNote != NULL) {
+    if(lastScrapNote != nullptr) {
         if(lastScrapNote->hasScraps()) {
             cwScrap* lastScrap = lastScrapNote->scraps().last();
             if(!lastScrap->calculateNoteTransform()) {
@@ -140,7 +140,7 @@ cwNoteTranformation *cwBaseScrapInteraction::lastNoteTransformation() const
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -189,13 +189,13 @@ void cwBaseScrapInteraction::setScrap(cwScrap *scrap)
 {
     if(Scrap == scrap) { return; }
 
-    if(Scrap != NULL) {
+    if(Scrap != nullptr) {
         disconnect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
     Scrap = scrap;
 
-    if(Scrap != NULL) {
+    if(Scrap != nullptr) {
         connect(Scrap, &cwScrap::destroyed, this, &cwBaseScrapInteraction::scrapDeleted);
     }
 
@@ -234,7 +234,7 @@ QVariantMap cwBaseScrapInteraction::snapToScrapLine(QPoint qtViewportPosition) c
         map.insert("IsSnapped", false);
         map.insert("NoteCoordsPoint", imageItem()->mapQtViewportToNote(qtViewportPosition));
         map.insert("qtViewportPoint", qtViewportPosition);
-        if(Scrap == NULL) {
+        if(Scrap == nullptr) {
             map.insert("InsertIndex", 0);
         } else {
             map.insert("InsertIndex", Scrap->numberOfPoints());

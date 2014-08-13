@@ -1,15 +1,14 @@
 /**************************************************************************
 **
-**    Copyright (C) 2013 by Philip Schuchardt
+**    Copyright (C) 2014 by Philip Schuchardt
 **    www.cavewhere.com
 **
 **************************************************************************/
 
-#include "cwGlobalUndoStack.h"
 
-QUndoStack* cwGlobalUndoStack::UndoStack = nullptr;
+#include "cwQuickSceneView.h"
 
-cwGlobalUndoStack::cwGlobalUndoStack()
+cwQuickSceneView::cwQuickSceneView(QQuickItem *parent) :
+    QQuickItem(parent)
 {
 }
-

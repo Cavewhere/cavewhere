@@ -13,10 +13,10 @@
 
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent),
-    Scene(NULL)
+    Scene(nullptr)
 {
 //    Dirty = false;
-    //    Scene = NULL;
+    //    Scene = nullptr;
 }
 
 cwGLObject::~cwGLObject()
@@ -32,19 +32,19 @@ cwGLObject::~cwGLObject()
  */
 void cwGLObject::updateData()
 {
-    QueuedDataCommand = NULL;
+    QueuedDataCommand = nullptr;
 }
 
 void cwGLObject::setScene(cwScene *scene)
 {
     if(Scene != scene) {
-        if(Scene != NULL) {
+        if(Scene != nullptr) {
             Scene->removeItem(this);
         }
 
         Scene = scene;
 
-        if(Scene != NULL) {
+        if(Scene != nullptr) {
             Scene->addItem(this);
 
             cwInitCommand* initCommand = new cwInitCommand();
@@ -57,11 +57,11 @@ void cwGLObject::setScene(cwScene *scene)
 }
 
  cwCamera* cwGLObject::camera() const {
-    return Scene == NULL ? NULL : Scene->camera();
+    return Scene == nullptr ? nullptr : Scene->camera();
 }
 
  cwShaderDebugger* cwGLObject::shaderDebugger() const {
-     return Scene == NULL ? NULL : Scene->shaderDebugger();
+     return Scene == nullptr ? nullptr : Scene->shaderDebugger();
  }
 
  /**
@@ -77,8 +77,8 @@ void cwGLObject::setScene(cwScene *scene)
   */
  void cwGLObject::markDataAsDirty()
  {
-     if(QueuedDataCommand != NULL) { return; }
-     if(Scene == NULL) { return; }
+     if(QueuedDataCommand != nullptr) { return; }
+     if(Scene == nullptr) { return; }
 
      QueuedDataCommand = new cwUpdateDataCommand();
      QueuedDataCommand->setGLObject(this);
@@ -91,7 +91,7 @@ void cwGLObject::setScene(cwScene *scene)
  */
  cwGeometryItersecter *cwGLObject::geometryItersecter() const
 {
-    return Scene == NULL ? NULL : Scene->geometryItersecter();
+    return Scene == nullptr ? nullptr : Scene->geometryItersecter();
 }
 
 // /**
@@ -101,7 +101,7 @@ void cwGLObject::setScene(cwScene *scene)
 // void cwGLObject::setDirty(bool isDirty)
 // {
 //     Dirty = isDirty;
-//     if(Scene != NULL) {
+//     if(Scene != nullptr) {
 //         Scene->update();
 //     }
 // }

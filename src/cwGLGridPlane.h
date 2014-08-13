@@ -24,7 +24,7 @@ class cwGLGridPlane : public cwGLObject {
 
 
 public:
-    cwGLGridPlane(QObject *parent = NULL);
+    cwGLGridPlane(QObject *parent = nullptr);
 
     virtual void initialize();
     virtual void draw();

@@ -125,14 +125,14 @@ inline cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
   \brief Checks if index is a trip, returns true if it is, false if it isn't
   */
 inline bool cwRegionTreeModel::isTrip(const QModelIndex &index) const {
-    return trip(index) != NULL;
+    return trip(index) != nullptr;
 }
 
 /**
   \brief Checks if index is a cave, returns true if it is, false if it isn't
   */
 inline bool cwRegionTreeModel::isCave(const QModelIndex &index) const {
-    return cave(index) != NULL;
+    return cave(index) != nullptr;
 }
 
 /**

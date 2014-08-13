@@ -75,7 +75,7 @@ void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
 void cwSGLinesNode::setLineWidth(float lineWidth) {
     if(LineWidth != lineWidth) {
         LineWidth = lineWidth;
-        if(geometry() != NULL) {
+        if(geometry() != nullptr) {
             geometry()->setLineWidth(LineWidth);
             markDirty(DirtyGeometry);
         }

@@ -28,9 +28,9 @@ cwWheelEventTransition::cwWheelEventTransition(QObject * object,
 void cwWheelEventTransition::onTransition( QEvent * event ) {
     QEventTransition::onTransition(event);
     QStateMachine::WrappedEvent* wrappedEvent = dynamic_cast<QStateMachine::WrappedEvent*>(event);
-    if(wrappedEvent != NULL) {
+    if(wrappedEvent != nullptr) {
         QWheelEvent* wheelEvent = dynamic_cast<QWheelEvent*>(wrappedEvent->event());
-        if(wheelEvent != NULL) {
+        if(wheelEvent != nullptr) {
             emit onWheelEvent(wheelEvent);
         }
     }

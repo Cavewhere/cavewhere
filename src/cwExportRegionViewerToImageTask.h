@@ -45,7 +45,7 @@ public:
         Landscape
     };
 
-    cwSceneToImageTask(QObject* parent = NULL);
+    cwSceneToImageTask(QObject* parent = nullptr);
 
 //    QQuickView* window() const;
 //    void setWindow(QQuickView* window);

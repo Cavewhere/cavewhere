@@ -22,7 +22,7 @@
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
-    ParentTrip(NULL)
+    ParentTrip(nullptr)
 {
 
 }
@@ -34,7 +34,7 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
   */
 cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
     QObject(),
-    ParentTrip(NULL)
+    ParentTrip(nullptr)
 {
 
     //Copy all the stations
@@ -55,7 +55,7 @@ bool cwSurveyChunk::isValid() const {
   \brief Gets the parent cave for this chunk
   */
 cwCave* cwSurveyChunk::parentCave() const {
-    return parentTrip() != NULL ? parentTrip()->parentCave() : NULL;
+    return parentTrip() != nullptr ? parentTrip()->parentCave() : nullptr;
 }
 
 int cwSurveyChunk::stationCount() const {
@@ -167,7 +167,7 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
   This will create a new chunk, that the caller is responsible for deleting
   */
 cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
-    if(stationIndex < 1 || stationIndex >= Stations.size()) { return NULL; }
+    if(stationIndex < 1 || stationIndex >= Stations.size()) { return nullptr; }
 
     cwSurveyChunk* newChunk = new cwSurveyChunk(this);
     newChunk->Stations.append(cwStation()); //Add an empty station to the front
@@ -279,7 +279,7 @@ bool cwSurveyChunk::canAddShot(const cwStation& fromStation, const cwStation& to
 //  */
 //QPair<cwStationReference, cwStationReference> cwSurveyChunk::toFromStations(const cwShot &shot) const {
 //    if(!isValid()) { return QPair<cwStationReference, cwStationReference>(); }
-//    //if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(NULL, NULL); }
+//    //if(shot->parent() != this) { return QPair<cwStationReference*, cwStationReference*>(nullptr, nullptr); }
 
 //    for(int i = 0; i < Shots.size(); i++) {
 //        if(Shots[i].sameIntervalPointer(shot)) {
@@ -428,7 +428,7 @@ QString cwSurveyChunk::guessLastStationName() const {
             QList<cwSurveyChunk*> chunks = parentTrip()->chunks();
             int index = chunks.indexOf(const_cast<cwSurveyChunk*>(this)) - 1;
             cwSurveyChunk* previousChunk = parentTrip()->chunk(index);
-            if(previousChunk != NULL) {
+            if(previousChunk != nullptr) {
                 stationName = previousChunk->stations().last().name();
             }
         }
@@ -767,7 +767,7 @@ int cwSurveyChunk::index(int index, Direction direction) {
 //  does nothing
 //  */
 //void cwSurveyChunk::updateStationsWithNewCave() {
-//    if(ParentTrip == NULL || ParentTrip->parentCave() == NULL) { return; }
+//    if(ParentTrip == nullptr || ParentTrip->parentCave() == nullptr) { return; }
 
 //    for(int i = 0; i < Stations.size(); i++) {
 //        cwCave* cave = ParentTrip->parentCave();

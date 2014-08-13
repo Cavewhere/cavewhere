@@ -90,7 +90,7 @@ QByteArray cwImageProvider::requestImageData(int id, QSize* size, QByteArray* ty
     *size = QSize(0, 0);
 
     QByteArray tempTypeArray;
-    if(type == NULL) {
+    if(type == nullptr) {
         type = &tempTypeArray;
     }
 
@@ -104,7 +104,7 @@ QByteArray cwImageProvider::requestImageData(int id, QSize* size, QByteArray* ty
 
     //Set up all the data to be returned
     *size = imageData.size();
-    if(type != NULL) { *type = imageData.format(); }
+    if(type != nullptr) { *type = imageData.format(); }
     return imageData.data();
 }
 

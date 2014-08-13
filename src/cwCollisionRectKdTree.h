@@ -33,8 +33,8 @@ private:
         Node();
         Node(QRect rectangle);
         ~Node() {
-            if(LeftChild != NULL) { delete LeftChild; }
-            if(RightChild != NULL) { delete RightChild; }
+            if(LeftChild != nullptr) { delete LeftChild; }
+            if(RightChild != nullptr) { delete RightChild; }
         }
 
         Node* LeftChild;
@@ -44,7 +44,7 @@ private:
         float value(int axis) const { return cwCollisionRectKdTree::value(Rectangle, axis); }
        // float oppositeValue(int axis) const { return cwCollisionRectKdTree::oppositeValue(Rectangle, axis); }
 
-        bool isLeaf() const { return LeftChild == NULL && RightChild == NULL; }
+        bool isLeaf() const { return LeftChild == nullptr && RightChild == nullptr; }
     };
 
     Node* Root;

@@ -22,7 +22,7 @@ class cwUpdateDataCommand;
 class cwGLObject : public QObject
 {
 public:
-    cwGLObject(QObject* parent = NULL);
+    cwGLObject(QObject* parent = nullptr);
     ~cwGLObject();
 
     //These methods should only be called in the rendering thread
@@ -47,7 +47,7 @@ public:
 private:
     cwScene* Scene;
 
-    //This is the last QueuedDataCommand, if this isn't NULL
+    //This is the last QueuedDataCommand, if this isn't nullptr
     //Then this command
     cwUpdateDataCommand* QueuedDataCommand;
 

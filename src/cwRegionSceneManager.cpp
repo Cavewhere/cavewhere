@@ -17,7 +17,7 @@
 cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     QObject(parent),
     Scene(new cwScene(this)),
-    Region(NULL)
+    Region(nullptr)
 {
 
 //    Terrain = new cwGLTerrain();

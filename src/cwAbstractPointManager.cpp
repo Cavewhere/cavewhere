@@ -17,9 +17,9 @@
 
 cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
     QQuickItem(parent),
-    TransformUpdater(NULL),
-    ItemComponent(NULL),
-    SelectionManager(NULL),
+    TransformUpdater(nullptr),
+    ItemComponent(nullptr),
+    SelectionManager(nullptr),
     SelectedItemIndex(-1)
 {
 
@@ -32,7 +32,7 @@ cwAbstractPointManager::cwAbstractPointManager(QQuickItem *parent) :
   */
 void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
     if(TransformUpdater != updater) {
-        if(TransformUpdater != NULL) {
+        if(TransformUpdater != nullptr) {
             //Remove all previous stations
             foreach(QQuickItem* item, Items) {
                 TransformUpdater->removePointItem(item);
@@ -41,7 +41,7 @@ void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
 
         TransformUpdater = updater;
 
-        if(TransformUpdater != NULL) {
+        if(TransformUpdater != nullptr) {
             //Add station to the new transformUpdater
 
             foreach(QQuickItem* item, Items) {
@@ -58,10 +58,10 @@ void cwAbstractPointManager::setTransformUpdater(cwTransformUpdater* updater) {
   */
 void cwAbstractPointManager::createComponent() {
     //Make sure we have a note component so we can create it
-    if(ItemComponent == NULL) {
+    if(ItemComponent == nullptr) {
         QQmlContext* context = QQmlEngine::contextForObject(this);
-        if(context == NULL) {
-            qDebug() << "Context is NULL, did you forget to set the context? THIS IS A BUG" << LOCATION;
+        if(context == nullptr) {
+            qDebug() << "Context is nullptr, did you forget to set the context? THIS IS A BUG" << LOCATION;
             return;
         }
 
@@ -75,25 +75,25 @@ void cwAbstractPointManager::createComponent() {
 /**
   This is a private method, that adds a new station the end of the station list
 
-    Returns a valid item if the item was create okay, and NULL if it failed to be created
+    Returns a valid item if the item was create okay, and nullptr if it failed to be created
 */
 QQuickItem* cwAbstractPointManager::createItem() {
 
-    if(ItemComponent == NULL) {
+    if(ItemComponent == nullptr) {
         qDebug() << "ItemComponent hasn't been created, call createComponent(). THIS IS A BUG" << LOCATION;
-        return NULL;
+        return nullptr;
     }
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQuickItem* item = qobject_cast<QQuickItem*>(ItemComponent->create(context));
-    if(item == NULL) {
+    if(item == nullptr) {
         qDebug() << "Problem creating new point item ... " << qmlSource() << "Didn't compile. THIS IS A BUG!" << LOCATION;
         qDebug() << "Compiling errors:" << ItemComponent->errorString();
-        return NULL;
+        return nullptr;
     }
 
     //Add the point to the transform updater
-    if(TransformUpdater != NULL) {
+    if(TransformUpdater != nullptr) {
         TransformUpdater->addPointItem(item);
     }
 
@@ -129,11 +129,11 @@ void cwAbstractPointManager::pointsInserted(int begin, int end)
     for(int i = begin; i <= end; i++) {
         QQuickItem* item = createItem();
 
-        if(item != NULL) {
+        if(item != nullptr) {
             Items.insert(i, item);
             privateUpdateItemData(item, i);
         } else {
-            qDebug() << "Can't insert. Item is NULL. THIS IS A BUG" << LOCATION;
+            qDebug() << "Can't insert. Item is nullptr. THIS IS A BUG" << LOCATION;
             break;
         }
     }
@@ -192,7 +192,7 @@ void cwAbstractPointManager::updateItemsPositions(int begin, int end)
 void cwAbstractPointManager::updateSelection()
 {
     //SelectedItem test if the item is
-    if(selectedItem() == NULL) {
+    if(selectedItem() == nullptr) {
         setSelectedItemIndex(-1);
     }
 }
@@ -259,7 +259,7 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
         //Select the new station item
         if(selectedIndex >= 0) {
             QQuickItem* newItem = Items.at(selectedIndex);
-            if(selectionManager() != NULL) {
+            if(selectionManager() != nullptr) {
                 selectionManager()->setSelectedItem(newItem);
             }
         }
@@ -276,13 +276,13 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
 QQuickItem* cwAbstractPointManager::selectedItem() const {
     if(SelectedItemIndex >= 0 && SelectedItemIndex < Items.size()) {
         QQuickItem* item = Items.at(SelectedItemIndex);
-        if(selectionManager() != NULL) {
+        if(selectionManager() != nullptr) {
             if(selectionManager()->isSelected(item)) {
                 return item;
             }
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -314,7 +314,7 @@ void cwAbstractPointManager::privateUpdateItemPosition(int index) {
  */
 void cwAbstractPointManager::privateUpdateItemData(QQuickItem* item, int index)
 {
-    if(item == NULL) { return; }
+    if(item == nullptr) { return; }
 
     //Update assumed stuff
     item->setProperty("pointIndex", index);
@@ -335,13 +335,13 @@ Sets selectionManager
 void cwAbstractPointManager::setSelectionManager(cwSelectionManager* selectionManager) {
     if(SelectionManager != selectionManager) {
 
-        if(SelectionManager != NULL) {
+        if(SelectionManager != nullptr) {
             disconnect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
         }
 
         SelectionManager = selectionManager;
 
-        if(SelectionManager != NULL) {
+        if(SelectionManager != nullptr) {
             connect(SelectionManager, &cwSelectionManager::selectedItemChanged, this, &cwAbstractPointManager::updateSelection);
         }
 

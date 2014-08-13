@@ -21,7 +21,7 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
   \brief Copy constructor
   */
 cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
-    QObject(NULL),
+    QObject(nullptr),
     cwUndoer(object.undoStack())
 {
     copy(object);
@@ -96,7 +96,7 @@ void cwCavingRegion::addCaveHelper() {
   \brief Adds a cave to the region
   */
 void cwCavingRegion::addCave(cwCave* cave) {
-    if(cave == NULL) {
+    if(cave == nullptr) {
         addCaveHelper();
         return;
     };
@@ -185,7 +185,7 @@ void cwCavingRegion::setUndoStackForChildren() {
 void cwCavingRegion::unparentCave(cwCave* cave) {
     //Reparent the trip, if already in another cave
     cwCavingRegion* parentRegion = dynamic_cast<cwCavingRegion*>(((QObject*)cave)->parent());
-    if(parentRegion != NULL) {
+    if(parentRegion != nullptr) {
         int index = parentRegion->Caves.indexOf(cave);
         parentRegion->removeCave(index);
     }
@@ -243,7 +243,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
         regionPtr->Caves.removeAt(index);
-        Caves[i]->setParent(NULL);
+        Caves[i]->setParent(nullptr);
     }
 
     OwnsCaves = true;

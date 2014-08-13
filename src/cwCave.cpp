@@ -27,7 +27,7 @@ cwCave::cwCave(QObject* parent) :
   \brief Copy constructor
   */
 cwCave::cwCave(const cwCave& object) :
-    QObject(NULL),
+    QObject(nullptr),
     cwUndoer(),
     Length(new cwLength(this)),
     Depth(new cwLength(this))
@@ -120,7 +120,7 @@ void cwCave::addTripNullHelper() {
   Once the trip is added to the cave, the cave ownes the trip
   */
 void cwCave::addTrip(cwTrip* trip) {
-    if(trip == NULL) {
+    if(trip == nullptr) {
         addTripNullHelper();
         return;
     }
@@ -137,7 +137,7 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
 
     //Reparent the trip, if already in another cave
     cwCave* parentCave = dynamic_cast<cwCave*>(((QObject*)trip)->parent());
-    if(parentCave != NULL) {
+    if(parentCave != nullptr) {
         int index = parentCave->Trips.indexOf(trip);
         parentCave->removeTrip(index);
     }
@@ -222,7 +222,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
     for(int i = Trips.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
         cave->Trips.removeAt(index);
-        Trips[i]->setParentCave(NULL);
+        Trips[i]->setParentCave(nullptr);
     }
 
     OwnsTrips = true;

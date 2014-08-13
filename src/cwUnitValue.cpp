@@ -24,7 +24,7 @@ cwUnitValue::cwUnitValue(double value, int unit, QObject* parent) :
   Copy constructor
   */
 cwUnitValue::cwUnitValue(const cwUnitValue& other) :
-    QObject(NULL),
+    QObject(nullptr),
     Data(other.Data)
 {
 

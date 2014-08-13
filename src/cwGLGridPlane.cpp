@@ -23,7 +23,7 @@ cwGLGridPlane::cwGLGridPlane(QObject* parent) :
     cwGLObject(parent),
     Plane(QPlane3D(QVector3D(0.0, 0.0, -75.0), QVector3D(0.0, 0.0, 1.0))),
     Extent(3000.0), //3km in the negitive and positive direction from origin
-    Program(NULL)
+    Program(nullptr)
 {
     updateModelMatrix();
 }
@@ -45,7 +45,7 @@ void cwGLGridPlane::draw() {
 
     TriangleVertexBuffer.bind();
 
-    Program->setAttributeArray(vVertex, GL_FLOAT, NULL, 3);
+    Program->setAttributeArray(vVertex, GL_FLOAT, nullptr, 3);
     Program->enableAttributeArray(vVertex);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);

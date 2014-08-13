@@ -23,7 +23,7 @@ class cwRemoveImageTask : public cwProjectIOTask
     Q_OBJECT
 
 public:
-    cwRemoveImageTask(QObject* parent = NULL);
+    cwRemoveImageTask(QObject* parent = nullptr);
 
     void setImagesToRemove(QList<cwImage> images);
 

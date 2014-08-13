@@ -13,7 +13,7 @@
 
 cwSelectionManager::cwSelectionManager(QObject *parent) :
     QObject(parent),
-    SelectedItem(NULL)
+    SelectedItem(nullptr)
 {
 
 }
@@ -24,14 +24,14 @@ Sets selectedItem
 void cwSelectionManager::setSelectedItem(QQuickItem* selectedItem) {
     if(SelectedItem != selectedItem) {
 
-        if(SelectedItem != NULL) {
+        if(SelectedItem != nullptr) {
             disconnect(SelectedItem, SIGNAL(destroyed()), this, SLOT(selectedItemDestroyed()));
             SelectedItem->setProperty("selected", false);
         }
 
         SelectedItem = selectedItem;
 
-        if(SelectedItem != NULL) {
+        if(SelectedItem != nullptr) {
 
             connect(SelectedItem, SIGNAL(destroyed()), this, SLOT(selectedItemDestroyed()));
 
@@ -51,7 +51,7 @@ void cwSelectionManager::setSelectedItem(QQuickItem* selectedItem) {
  */
 void cwSelectionManager::selectedItemDestroyed()
 {
-    SelectedItem = NULL;
+    SelectedItem = nullptr;
     emit selectedItemChanged();
 }
 

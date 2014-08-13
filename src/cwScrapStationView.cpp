@@ -30,7 +30,7 @@ cwScrapStationView::cwScrapStationView(QQuickItem *parent) :
     cwScrapPointView(parent),
     LineDataDirty(false),
     ScaleAnimation(new QVariantAnimation(this)),
-    OldTransformUpdater(NULL)
+    OldTransformUpdater(nullptr)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 
@@ -54,15 +54,15 @@ Sets scrap that this class renders all the stations of
 void cwScrapStationView::setScrap(cwScrap* scrap) {
     if(Scrap != scrap) {
 
-        if(Scrap != NULL) {
+        if(Scrap != nullptr) {
             //disconnect
-            disconnect(Scrap, NULL, this, NULL);
-            disconnect(Scrap->noteTransformation(), NULL, this, NULL);
+            disconnect(Scrap, nullptr, this, nullptr);
+            disconnect(Scrap->noteTransformation(), nullptr, this, nullptr);
         }
 
         Scrap = scrap;
 
-        if(Scrap != NULL) {
+        if(Scrap != nullptr) {
             connect(Scrap, SIGNAL(stationAdded()), SLOT(pointAdded()));
             connect(Scrap, SIGNAL(stationRemoved(int)), SLOT(pointRemoved(int)));
             connect(Scrap, SIGNAL(stationPositionChanged(int, int)), SLOT(updateItemsPositions(int, int)));
@@ -96,10 +96,10 @@ void cwScrapStationView::updateShotLinesWithAnimation()
   currently selected, this will hide the lines
   */
 void cwScrapStationView::updateShotLines() {
-    if(scrap() == NULL) { return; }
-    if(scrap()->parentNote() == NULL) { return; }
-    if(scrap()->parentNote()->parentTrip() == NULL) { return; }
-    if(transformUpdater() == NULL) { return; }
+    if(scrap() == nullptr) { return; }
+    if(scrap()->parentNote() == nullptr) { return; }
+    if(scrap()->parentNote()->parentTrip() == nullptr) { return; }
+    if(transformUpdater() == nullptr) { return; }
 
     cwNoteStation noteStation = scrap()->station(selectedItemIndex());
     //Get the current trip
@@ -165,13 +165,13 @@ void cwScrapStationView::updateTransformUpdate() {
 
     if(OldTransformUpdater != transformUpdater()) {
 
-        if(OldTransformUpdater != NULL) {
+        if(OldTransformUpdater != nullptr) {
             disconnect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
         }
 
         OldTransformUpdater = transformUpdater();
 
-        if(OldTransformUpdater != NULL) {
+        if(OldTransformUpdater != nullptr) {
             connect(OldTransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapStationView::update);
         }
 
@@ -257,7 +257,7 @@ void cwScrapStationView::updateItemPosition(QQuickItem* item, int index) {
 If no station is select, this returns an empty note station
   */
 cwNoteStation cwScrapStationView::selectedNoteStation() const {
-    if(selectedItem() != NULL) {
+    if(selectedItem() != nullptr) {
         int stationIndex = selectedItemIndex();
         return scrap()->station(stationIndex);
     }

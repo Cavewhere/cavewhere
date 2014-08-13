@@ -10,7 +10,7 @@
 cwAbstract2PointItem::cwAbstract2PointItem(QQuickItem *parent) :
     QQuickItem(parent)
 {
-    TransformUpdater = NULL;
+    TransformUpdater = nullptr;
     connect(this, SIGNAL(visibleChanged()), SLOT(updateTransformUpdater()));
 
     QPen pen;
@@ -24,7 +24,7 @@ Sets transformUpdater, This will transform the north area objects so they're cor
 */
 void cwAbstract2PointItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
     if(TransformUpdater != transformUpdater) {
-        if(TransformUpdater != NULL) {
+        if(TransformUpdater != nullptr) {
             disconnectTransformer();
         }
 
@@ -40,7 +40,7 @@ void cwAbstract2PointItem::setTransformUpdater(cwTransformUpdater* transformUpda
   Updates the transformUpdater
   */
 void cwAbstract2PointItem::updateTransformUpdater() {
-    if(TransformUpdater != NULL) {
+    if(TransformUpdater != nullptr) {
         if(isVisible()) {
             connectTransformer();
         } else {

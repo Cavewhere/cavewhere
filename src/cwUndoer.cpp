@@ -8,7 +8,7 @@
 #include "cwUndoer.h"
 
 cwUndoer::cwUndoer(QUndoStack* stack) :
-    UndoStack(NULL)
+    UndoStack(nullptr)
 {
     setUndoStack(stack);
 }
@@ -20,7 +20,7 @@ cwUndoer::cwUndoer(QUndoStack* stack) :
 
   */
 void cwUndoer::pushUndo(QUndoCommand* command) {
-    if(UndoStack == NULL) {
+    if(UndoStack == nullptr) {
         command->redo();
         delete command;
         return;
@@ -34,7 +34,7 @@ void cwUndoer::pushUndo(QUndoCommand* command) {
   If the undo stack hasn't been set, this does nothing
   */
 void cwUndoer::beginUndoMacro(const QString& text) {
-    if(UndoStack == NULL) { return; }
+    if(UndoStack == nullptr) { return; }
     UndoStack->beginMacro(text);
 }
 
@@ -44,7 +44,7 @@ void cwUndoer::beginUndoMacro(const QString& text) {
   If the undo stack hasn't been set, this does nothing
   */
 void cwUndoer::endUndoMacro() {
-    if(UndoStack == NULL) { return; }
+    if(UndoStack == nullptr) { return; }
     UndoStack->endMacro();
 }
 

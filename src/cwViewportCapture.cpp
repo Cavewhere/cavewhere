@@ -20,14 +20,21 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     QObject(parent),
     ScaleOrtho(new cwScale(this)),
     TileSize(1024, 1024),
-    CaptureCamera(new cwCamera(this))
+    CaptureCamera(new cwCamera(this)),
+    PreviewItem(nullptr),
+    Item(nullptr)
 {
 }
 
 cwViewportCapture::~cwViewportCapture()
 {
-    delete PreviewItem;
-    delete Item;
+    if(PreviewItem != nullptr) {
+        delete PreviewItem;
+    }
+
+    if(Item != nullptr) {
+        delete Item;
+    }
 }
 
 /**

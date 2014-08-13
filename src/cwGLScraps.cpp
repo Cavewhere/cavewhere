@@ -23,7 +23,7 @@
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
-    Project(NULL),
+    Project(nullptr),
     MaxScrapId(0),
     Visible(true)
 {
@@ -58,7 +58,7 @@ void cwGLScraps::draw() {
         scrap.TexCoords.bind();
         Program->setAttributeBuffer(vScrapTexCoords, GL_FLOAT, 0, 2);
 
-        glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, NULL);
+        glDrawElements(GL_TRIANGLES, scrap.NumberOfIndices, GL_UNSIGNED_INT, nullptr);
 
         scrap.IndexBuffer.release();
         scrap.PointBuffer.release();
@@ -77,13 +77,13 @@ void cwGLScraps::draw() {
 /**
  * @brief cwGLScraps::updateData
  *
- * Updates the scrap geometry.  Make sure geometryItersecter isn't NULL
+ * Updates the scrap geometry.  Make sure geometryItersecter isn't nullptr
  */
 void cwGLScraps::updateData()
 {
     cwGLObject::updateData();
 
-    if(geometryItersecter() == NULL) { return; }
+    if(geometryItersecter() == nullptr) { return; }
 
     foreach(PendingScrapCommand command, PendingChanges.values()) {
         switch(command.type()) {
@@ -224,7 +224,7 @@ void cwGLScraps::initializeShaders() {
 cwGLScraps::GLScrap::GLScrap() :
     NumberOfIndices(0),
     ScrapId(-1),
-    Texture(NULL)
+    Texture(nullptr)
 
 {
 

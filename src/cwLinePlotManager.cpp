@@ -23,8 +23,8 @@
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
 {
-    Region = NULL;
-    GLLinePlot = NULL;
+    Region = nullptr;
+    GLLinePlot = nullptr;
 
     LinePlotThread = new QThread(this);
     LinePlotThread->start();
@@ -49,7 +49,7 @@ cwLinePlotManager::~cwLinePlotManager() {
   */
 void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     Region = region;
-    if(Region == NULL) { return; }
+    if(Region == nullptr) { return; }
 
     //Connect all signal from the region
     connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
@@ -188,7 +188,7 @@ void cwLinePlotManager::connectAddedCaves(int beginIndex, int endIndex) {
   \brief Called when the cave adds more trips
   */
 void cwLinePlotManager::connectAddedTrips(int beginIndex, int endIndex) {
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != NULL);
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* cave = static_cast<cwCave*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = cave->trip(i);
@@ -200,7 +200,7 @@ void cwLinePlotManager::connectAddedTrips(int beginIndex, int endIndex) {
   \brief Called when the trip adds more chunks
   */
 void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
-    Q_ASSERT(qobject_cast<cwTrip*>(sender()) != NULL);
+    Q_ASSERT(qobject_cast<cwTrip*>(sender()) != nullptr);
     cwTrip* trip = static_cast<cwTrip*>(sender());
     for(int i = beginIndex; i <= endIndex; i++) {
         cwSurveyChunk* chunk = trip->chunk(i);
@@ -215,7 +215,7 @@ void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
   */
 void cwLinePlotManager::regionDestroyed(QObject* region) {
     if(region == Region) {
-        Region = NULL;
+        Region = nullptr;
     }
 }
 
@@ -223,7 +223,7 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   \brief Run the line plot task
   */
 void cwLinePlotManager::runSurvex() {
-    if(Region != NULL) {
+    if(Region != nullptr) {
 //        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
 //            qDebug() << "Running the task";
@@ -243,9 +243,9 @@ void cwLinePlotManager::runSurvex() {
   line region
   */
 void cwLinePlotManager::updateLinePlot() {
-    if(GLLinePlot == NULL) { return; }
+    if(GLLinePlot == nullptr) { return; }
     if(!LinePlotTask->isReady()) { return; }
-    if(Region == NULL) { return; }
+    if(Region == nullptr) { return; }
 
     cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
 

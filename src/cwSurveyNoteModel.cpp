@@ -19,8 +19,8 @@ QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProject
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent),
-    ParentTrip(NULL),
-    ParentCave(NULL)
+    ParentTrip(nullptr),
+    ParentCave(nullptr)
 {
     ImagePathString = QString("image://") + cwImageProvider::Name + QString("/%1");
 }
@@ -36,9 +36,9 @@ QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
 }
 
 cwSurveyNoteModel::cwSurveyNoteModel(const cwSurveyNoteModel& object) :
-    QAbstractListModel(NULL),
-    ParentTrip(NULL),
-    ParentCave(NULL)
+    QAbstractListModel(nullptr),
+    ParentTrip(nullptr),
+    ParentCave(nullptr)
 {
     copy(object);
 }
@@ -76,14 +76,14 @@ void cwSurveyNoteModel::copy(const cwSurveyNoteModel& object) {
  * @param notes
  * @return A list of notes that are valid.  Valid notes are ones with valid original images.
  *
- * If it's note a valid note. The note will be deleted. NULL notes aren't added to the the valid note
+ * If it's note a valid note. The note will be deleted. nullptr notes aren't added to the the valid note
  * list
  */
 QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) const
 {
     QList<cwNote*> validNotes;
     foreach(cwNote* note, notes) {
-        if(note != NULL) {
+        if(note != nullptr) {
             if(note->image().isValid() && note->image().iconIsValid()) {
                 validNotes.append(note);
             } else {

@@ -9,21 +9,21 @@
 
 cwSurveyChunkTrimmer::cwSurveyChunkTrimmer(QObject *parent) :
     QObject(parent),
-    Chunk(NULL)
+    Chunk(nullptr)
 {
 }
 
 void cwSurveyChunkTrimmer::setChunk(cwSurveyChunk *chunk) {
     if(Chunk == chunk) { return; }
 
-    if(Chunk != NULL) {
+    if(Chunk != nullptr) {
         trim(FullTrim);
-        disconnect(Chunk, NULL, this, NULL);
+        disconnect(Chunk, nullptr, this, nullptr);
     }
 
     Chunk = chunk;
 
-    if(Chunk != NULL) {
+    if(Chunk != nullptr) {
         connect(Chunk, SIGNAL(stationsAdded(int,int)), SLOT(addLastEmptyStation()));
         connect(Chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(addLastEmptyStation()));
         connect(Chunk, SIGNAL(destroyed()), SLOT(chunkDestroyed()));
@@ -128,7 +128,7 @@ void cwSurveyChunkTrimmer::addLastEmptyStation() {
  */
 void cwSurveyChunkTrimmer::chunkDestroyed()
 {
-    Chunk = NULL;
+    Chunk = nullptr;
 }
 
 /**

@@ -32,14 +32,14 @@
 
 cwSurveyChunkView::cwSurveyChunkView(QQuickItem* parent) :
     QQuickItem(parent),
-    SurveyChunk(NULL),
-    ChunkTrimmer(NULL),
-    QMLComponents(NULL),
-    FocusedItem(NULL),
+    SurveyChunk(nullptr),
+    ChunkTrimmer(nullptr),
+    QMLComponents(nullptr),
+    FocusedItem(nullptr),
     HasFrontSights(true),
     HasBackSights(true),
-    ChunkBelow(NULL),
-    ChunkAbove(NULL)
+    ChunkBelow(nullptr),
+    ChunkAbove(nullptr)
 
 
 {
@@ -105,7 +105,7 @@ void cwSurveyChunkView::setQMLComponents(cwSurveyChunkViewComponents* components
   cell. This function might get evil...
   */
 void cwSurveyChunkView::tab(int rowIndex, int role) {
-    QQuickItem* nextItem = NULL;
+    QQuickItem* nextItem = nullptr;
 
     ShotRow shotRow = getNavigationShotRow(rowIndex);
     StationRow stationRow = getNavigationStationRow(rowIndex);
@@ -164,7 +164,7 @@ void cwSurveyChunkView::tab(int rowIndex, int role) {
   This tabs to the next databox
   */
 void cwSurveyChunkView::previousTab(int rowIndex, int role) {
-    QQuickItem* previousItem = NULL;
+    QQuickItem* previousItem = nullptr;
 
     ShotRow shotRow = getNavigationShotRow(rowIndex);
     StationRow stationRow = getNavigationStationRow(rowIndex);
@@ -226,7 +226,7 @@ void cwSurveyChunkView::previousTab(int rowIndex, int role) {
 
   */
 void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
-    QQuickItem* navItem = NULL;
+    QQuickItem* navItem = nullptr;
 
     switch((Qt::Key)key) {
     case Qt::Key_Left:
@@ -251,7 +251,7 @@ void cwSurveyChunkView::navigationArrow(int rowIndex, int role, int key) {
 
 void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
     QQuickItem* dataBox = databox(rowIndex, role);
-    if(dataBox != NULL) {
+    if(dataBox != nullptr) {
         QRectF localRect = dataBox->mapRectToItem(this, dataBox->childrenRect());
 
         if(rowIndex == ShotRows.size() - 2 ||
@@ -273,11 +273,11 @@ void cwSurveyChunkView::ensureDataBoxVisible(int rowIndex, int role) {
 QQuickItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
     switch((cwSurveyChunk::DataRole)role) {
     case cwSurveyChunk::StationNameRole:
-        return NULL;
+        return nullptr;
     case cwSurveyChunk::ShotDistanceRole:
         return getNavigationStationRow(rowIndex + 1).stationName();
     case cwSurveyChunk::ShotDistanceIncludedRole:
-        return NULL;
+        return nullptr;
     case cwSurveyChunk::ShotCompassRole:
         return getNavigationShotRow(rowIndex).distance();
     case cwSurveyChunk::ShotBackCompassRole:
@@ -307,7 +307,7 @@ QQuickItem* cwSurveyChunkView::navArrowLeft(int rowIndex, int role) {
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex).up();
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -346,11 +346,11 @@ QQuickItem* cwSurveyChunkView::navArrowRight(int rowIndex, int role)  {
     case cwSurveyChunk::StationUpRole:
         return getNavigationStationRow(rowIndex).down();
     case cwSurveyChunk::StationDownRole:
-        return NULL;
+        return nullptr;
     default:
-        return NULL;
+        return nullptr;
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -395,9 +395,9 @@ QQuickItem* cwSurveyChunkView::navArrowUp(int rowIndex, int role)  {
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex - 1).down();
     default:
-        return NULL;
+        return nullptr;
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -442,9 +442,9 @@ QQuickItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex + 1).down();
     default:
-        return NULL;
+        return nullptr;
     }
-    return NULL;
+    return nullptr;
 }
 
 
@@ -452,7 +452,7 @@ QQuickItem* cwSurveyChunkView::navArrowDown(int rowIndex, int role)  {
   Sets the focus for the item
   */
 void cwSurveyChunkView::setItemFocus(QQuickItem *item) {
-    if(item != NULL) {
+    if(item != nullptr) {
         item->setFocus(true);
     }
 }
@@ -484,9 +484,9 @@ QQuickItem *cwSurveyChunkView::databox(int rowIndex, int role)
     case cwSurveyChunk::StationDownRole:
         return getNavigationStationRow(rowIndex).down();
     default:
-        return NULL;
+        return nullptr;
     }
-    return NULL;
+    return nullptr;
 }
 
 
@@ -524,13 +524,13 @@ cwSurveyChunk* cwSurveyChunkView::model() const {
   \brief Set's the model for the view
   */
 void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
-    if(QMLComponents == NULL) {
+    if(QMLComponents == nullptr) {
         qDebug() << "QML components need to be set before setting the model";
     }
 
     if(SurveyChunk != chunk) {
-        if(SurveyChunk != NULL) {
-            disconnect(SurveyChunk, NULL, this, NULL);
+        if(SurveyChunk != nullptr) {
+            disconnect(SurveyChunk, nullptr, this, nullptr);
         }
 
         SurveyChunk = chunk;
@@ -955,7 +955,7 @@ cwSurveyChunkView::Row::Row(int rowIndex, int numberOfItems) {
     Items.reserve(numberOfItems);
     Items.resize(numberOfItems);
     for(int i = 0; i < Items.size(); i++) {
-        Items[i] = NULL;
+        Items[i] = nullptr;
     }
 }
 
@@ -968,7 +968,7 @@ QQuickItem* cwSurveyChunkView::Row::setupItem(QQmlComponent* component,
                                                     cwValidator *validator) {
     if(component->isError()) {
         qWarning() << component->errorString();
-        return NULL;
+        return nullptr;
     }
 
     QQuickItem* item = qobject_cast<QQuickItem*>(component->create(context));
@@ -1113,13 +1113,13 @@ void cwSurveyChunkView::setFocusForFirstStation(bool focus) {
 void cwSurveyChunkView::setChildActiveFocus(bool focus) {
     if(sender() == FocusedItem && !focus) {
         //Losted focus
-        FocusedItem = NULL;
+        FocusedItem = nullptr;
     } else if (sender() != FocusedItem) {
         //Gained focus
         FocusedItem = qobject_cast<QQuickItem*>(sender());
     }
 
-    if(FocusedItem != NULL) {
+    if(FocusedItem != nullptr) {
         QRectF localRect = FocusedItem->mapRectToItem(FocusedItem->parentItem(), FocusedItem->childrenRect());
         QRectF parentRect = mapRectToItem(parentItem(), localRect);
         emit ensureVisibleChanged(parentRect);
@@ -1137,7 +1137,7 @@ void cwSurveyChunkView::stationValueHasChanged() {
     StationRow lastStation = getStationRow(stationCount - 1);
     StationRow secondLastStation = getStationRow(stationCount - 2);
 
-    if(lastStation.stationName() == NULL || secondLastStation.stationName() == NULL) { return; }
+    if(lastStation.stationName() == nullptr || secondLastStation.stationName() == nullptr) { return; }
 
     QString lastStationName = lastStation.stationName()->property("dataValue").toString();
     QString secondLastStationName = secondLastStation.stationName()->property("dataValue").toString();
@@ -1176,20 +1176,20 @@ void cwSurveyChunkView::stationValueHasChanged() {
   */
 cwSurveyChunkView::ShotRow cwSurveyChunkView::getNavigationShotRow(int index) {
     if(index == -1) {
-        if(ChunkAbove == NULL) {
+        if(ChunkAbove == nullptr) {
             //This will try to get the parent to set the chunk above, if there is one
             emit needChunkAbove();
         }
 
-        if(ChunkAbove != NULL && !ChunkAbove->ShotRows.isEmpty()) {
+        if(ChunkAbove != nullptr && !ChunkAbove->ShotRows.isEmpty()) {
             return ChunkAbove->ShotRows.last();
         }
     } else if(index == ShotRows.size()) {
-        if(ChunkBelow == NULL) {
+        if(ChunkBelow == nullptr) {
             emit needChunkBelow();
         }
 
-        if(ChunkBelow != NULL && !ChunkBelow->ShotRows.isEmpty()) {
+        if(ChunkBelow != nullptr && !ChunkBelow->ShotRows.isEmpty()) {
             return ChunkBelow->ShotRows.first();
         }
     }
@@ -1215,20 +1215,20 @@ cwSurveyChunkView::ShotRow cwSurveyChunkView::getShotRow(int index) {
   */
 cwSurveyChunkView::StationRow cwSurveyChunkView::getNavigationStationRow(int index) {
     if(index == -1) {
-        if(ChunkAbove == NULL) {
+        if(ChunkAbove == nullptr) {
             //This will try to get the parent to set the chunk above, if there is one
             emit needChunkAbove();
         }
 
-        if(ChunkAbove != NULL && !ChunkAbove->StationRows.isEmpty()) {
+        if(ChunkAbove != nullptr && !ChunkAbove->StationRows.isEmpty()) {
             return ChunkAbove->StationRows.last();
         }
     } else if(index == StationRows.size()) {
-        if(ChunkBelow == NULL) {
+        if(ChunkBelow == nullptr) {
             emit needChunkBelow();
         }
 
-        if(ChunkBelow != NULL && !ChunkBelow->StationRows.isEmpty()) {
+        if(ChunkBelow != nullptr && !ChunkBelow->StationRows.isEmpty()) {
             return ChunkBelow->StationRows.first();
         }
     }
@@ -1259,11 +1259,11 @@ cwSurveyChunkView::StationRow cwSurveyChunkView::getStationRow(int index) {
 //    StationRow lastRow = getStationRow(lastIndex);
 //    StationRow secondLastRow = getStationRow(secondToLastIndex);
 
-//    if(lastRow.stationName() != NULL) {
+//    if(lastRow.stationName() != nullptr) {
 //        connect(lastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
 //    }
 
-//    if(secondLastRow.stationName() != NULL) {
+//    if(secondLastRow.stationName() != nullptr) {
 //        connect(secondLastRow.stationName(), SIGNAL(dataValueChanged()), SLOT(stationValueHasChanged()));
 //    }
 //}
@@ -1396,7 +1396,7 @@ QQuickItem *cwSurveyChunkView::tabFromDown(int rowIndex) {
     if(nextRowIndex >= SurveyChunk->stationCount()) {
         QQuickItem* nextStation = getNavigationStationRow(nextRowIndex).stationName();
 
-        if(nextStation == NULL) {
+        if(nextStation == nullptr) {
             //Check to make sure the current row has a station name
             QString currentStationName = currentSurveyChunk->data(cwSurveyChunk::StationNameRole, rowIndex).toString();
             if(currentStationName.isEmpty()) {

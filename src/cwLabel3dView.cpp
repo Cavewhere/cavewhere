@@ -20,8 +20,8 @@
 
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     QQuickItem(parent),
-    Component(NULL),
-    Camera(NULL)
+    Component(nullptr),
+    Camera(nullptr)
 {
 
 }
@@ -38,7 +38,7 @@ cwLabel3dView::~cwLabel3dView()
     while(iter.hasNext()) {
         cwLabel3dGroup* group = iter.next();
         group->Labels.clear();
-        group->setParentView(NULL);
+        group->setParentView(nullptr);
         group->deleteLater();
     }
 }
@@ -54,7 +54,7 @@ void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
 void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
     if(LabelGroups.contains(group)) {
         LabelGroups.remove(group);
-        group->setParentView(NULL);
+        group->setParentView(nullptr);
     }
 }
 
@@ -66,13 +66,13 @@ void cwLabel3dView::removeGroup(cwLabel3dGroup *group) {
   * update the text and font properties.
   */
 void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
-    if(Component == NULL) {
+    if(Component == nullptr) {
         //Create the component that will generate all the labels
         QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
         Component = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/Label3d.qml", this);
 
-        if(Component == NULL) {
-            qDebug() << "Component is NULL" << LOCATION;
+        if(Component == nullptr) {
+            qDebug() << "Component is nullptr" << LOCATION;
         }
 
         if(!Component->errors().isEmpty()) {
@@ -185,7 +185,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
  */
 void cwLabel3dView::updatePositions()
 {
-    if(Camera == NULL) { return; }
+    if(Camera == nullptr) { return; }
 
     QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
     while(iter.hasNext()) {

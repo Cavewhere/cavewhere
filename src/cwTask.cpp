@@ -23,7 +23,7 @@ cwTask::cwTask(QObject *parent) :
 {
     NumberOfSteps = 0;
     CurrentStatus = Ready;
-    ParentTask = NULL;
+    ParentTask = nullptr;
 }
 
 /**
@@ -43,7 +43,7 @@ void cwTask::setParentTask(cwTask* parentTask) {
     if(parentTask == ParentTask) { return; }
 
     //See if we had a parent task
-    if(ParentTask != NULL) {
+    if(ParentTask != nullptr) {
         //Remove this task from the parent task
         ParentTask->ChildTasks.removeOne(this);
     }
@@ -266,7 +266,7 @@ void cwTask::privateStop() {
   */
 bool cwTask::isParentsRunning() {
     cwTask* currentParentTask = ParentTask;
-    while(currentParentTask != NULL) {
+    while(currentParentTask != nullptr) {
         if(!currentParentTask->isRunning()) {
             return false;
         }

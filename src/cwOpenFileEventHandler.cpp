@@ -32,10 +32,10 @@ cwProject *cwOpenFileEventHandler::project() const
 bool cwOpenFileEventHandler::eventFilter(QObject *obj, QEvent *event)
 {
     if(event->type() == QEvent::FileOpen) {
-        Q_ASSERT(dynamic_cast<QApplication*>(obj) != NULL);
-        Q_ASSERT(dynamic_cast<QFileOpenEvent*>(event) != NULL);
+        Q_ASSERT(dynamic_cast<QApplication*>(obj) != nullptr);
+        Q_ASSERT(dynamic_cast<QFileOpenEvent*>(event) != nullptr);
         QFileOpenEvent* fileOpenEvent = static_cast<QFileOpenEvent*>(event);
-        if(project() != NULL) {
+        if(project() != nullptr) {
             project()->loadFile(fileOpenEvent->file());\
             event->accept();
             return true;

@@ -21,7 +21,7 @@ cwTeam::cwTeam(QObject *parent) :
   Copy constructor for the team
   */
 cwTeam::cwTeam(const cwTeam& team) :
-    QAbstractListModel(NULL)
+    QAbstractListModel(nullptr)
 {
     //Copy the data
     Team = team.Team;

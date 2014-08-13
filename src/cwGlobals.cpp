@@ -58,7 +58,7 @@ QString cwGlobals::openFile(QString caption, QString filter, QString qSettingsKe
         qDebug() << "Getting lastDirectory:" << lastDirectory;
     }
 
-    QString openedFile = QFileDialog::getOpenFileName(NULL, caption, lastDirectory, filter, 0, options);
+    QString openedFile = QFileDialog::getOpenFileName(nullptr, caption, lastDirectory, filter, 0, options);
 
     QFileInfo fileInfo(openedFile);
     if(!qSettingsKey.isEmpty() && fileInfo.exists())
@@ -87,7 +87,7 @@ QStringList cwGlobals::openFiles(QString caption, QString filter, QString qSetti
         lastDirectory = settings.value(qSettingsKey).toString();
     }
 
-    QStringList openedFiles = QFileDialog::getOpenFileNames(NULL, caption, lastDirectory, filter, 0, options);
+    QStringList openedFiles = QFileDialog::getOpenFileNames(nullptr, caption, lastDirectory, filter, 0, options);
 
 
     if(!openedFiles.isEmpty() && !qSettingsKey.isEmpty())

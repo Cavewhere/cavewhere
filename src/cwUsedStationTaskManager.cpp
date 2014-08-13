@@ -15,7 +15,7 @@
 
 cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
     QObject(parent),
-    Cave(NULL)
+    Cave(nullptr)
 {
     Thread = new QThread(this);
     Thread->start();
@@ -55,13 +55,13 @@ void cwUsedStationTaskManager::setListenToCaveChanges(bool listen) {
   */
 void cwUsedStationTaskManager::setCave(cwCave* cave) {
     if(Cave != cave) {
-        if(Cave != NULL) {
+        if(Cave != nullptr) {
             disconnect(Cave, SIGNAL(destroyed()), this, SLOT(caveDestroyed()));
         }
 
         Cave = cave;
 
-        if(Cave != NULL) {
+        if(Cave != nullptr) {
             connect(Cave, SIGNAL(destroyed()), this, SLOT(caveDestroyed()));
             calculateUsedStations();
         }
@@ -73,7 +73,7 @@ void cwUsedStationTaskManager::setCave(cwCave* cave) {
   */
 void cwUsedStationTaskManager::calculateUsedStations() {
     if(Task->isReady()) {
-        if(Cave != NULL) {
+        if(Cave != nullptr) {
             QList<cwStation> stations = Cave->stations();
 
             QMetaObject::invokeMethod(Task, //Object
@@ -104,7 +104,7 @@ void cwUsedStationTaskManager::setUsedStations(QList<QString> stations) {
 void cwUsedStationTaskManager::caveDestroyed()
 {
     disconnect(Cave, 0, this, 0);
-    Cave = NULL;
+    Cave = nullptr;
 }
 
 
@@ -119,7 +119,7 @@ void cwUsedStationTaskManager::caveDestroyed()
   If Cave is null this function does nothing
   */
 void cwUsedStationTaskManager::hookupCaveToTask() {
-    if(Cave == NULL) { return; }
+    if(Cave == nullptr) { return; }
     if(ListenToCaveChanges) {
         connect(Cave, SIGNAL(stationAddedToCave(QString)), SLOT(calculateUsedStations()));
         connect(Cave, SIGNAL(stationRemovedFromCave(QString)), SLOT(calculateUsedStations()));

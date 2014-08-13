@@ -29,7 +29,7 @@ class cwSurvexImporter : public cwTask
 Q_OBJECT
 
 public:
-    cwSurvexImporter(QObject* parent = NULL);
+    cwSurvexImporter(QObject* parent = nullptr);
 
     bool hasErrors();
     QStringList errors();

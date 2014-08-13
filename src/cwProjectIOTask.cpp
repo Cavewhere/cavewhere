@@ -64,7 +64,7 @@ bool cwProjectIOTask::beginTransation(const char* restartSlot) {
     //Check if there's error
     if(error.isValid()) {
         if(error.number() == SQLITE_BUSY) {
-            if(restartSlot != NULL) {
+            if(restartSlot != nullptr) {
                 //The database is busy, try to get a lock in 500ms
                 QTimer::singleShot(500, this, restartSlot);
             } else {

@@ -40,7 +40,7 @@ void cwCompassImporter::runTask()
         Caves.append(cwCave());
         CurrentCave = &Caves.last();
         CurrentFileGood = true;
-        CurrentTrip = NULL;
+        CurrentTrip = nullptr;
         LineCount = 0;
 
         //Make sure file is good

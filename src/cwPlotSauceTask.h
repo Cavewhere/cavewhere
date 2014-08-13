@@ -20,7 +20,7 @@ class cwPlotSauceTask : public cwTask
     Q_OBJECT
 
 public:
-    cwPlotSauceTask(QObject* parent = NULL);
+    cwPlotSauceTask(QObject* parent = nullptr);
 
     void setSurvex3DFile(QString inputFile);
     QString outputXMLFile() const;

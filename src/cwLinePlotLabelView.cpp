@@ -13,7 +13,7 @@
 
 cwLinePlotLabelView::cwLinePlotLabelView(QQuickItem *parent) :
     cwLabel3dView(parent),
-    Region(NULL)
+    Region(nullptr)
 {
 }
 
@@ -22,7 +22,7 @@ Sets region
 */
 void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
     if(Region != region) {
-        if(Region != NULL) {
+        if(Region != nullptr) {
             disconnect(Region, &cwCavingRegion::insertedCaves, this, &cwLinePlotLabelView::addCaves);
             disconnect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwLinePlotLabelView::removeCaves);
         }
@@ -30,7 +30,7 @@ void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
         Region = region;
         clear();
 
-        if(Region != NULL) {
+        if(Region != nullptr) {
             connect(Region, &cwCavingRegion::insertedCaves, this, &cwLinePlotLabelView::addCaves);
             connect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwLinePlotLabelView::removeCaves);
 

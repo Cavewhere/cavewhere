@@ -29,7 +29,7 @@ public:
 
     cwImageProvider();
     virtual QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
-    QByteArray requestImageData(int id, QSize* size, QByteArray* type = NULL);
+    QByteArray requestImageData(int id, QSize* size, QByteArray* type = nullptr);
 
     cwImageData originalMetadata(const cwImage& image) const;
     cwImageData data(int id, bool metaDataOnly = false) const;

@@ -23,7 +23,7 @@ class cwProjectIOTask : public cwTask
 {
     Q_OBJECT
 public:
-    cwProjectIOTask(QObject* parent = NULL);
+    cwProjectIOTask(QObject* parent = nullptr);
 
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
@@ -37,7 +37,7 @@ protected:
     static QAtomicInt DatabaseConnectionCounter;
 
     bool connectToDatabase(QString connectionName);
-    bool beginTransation(const char *restartSlot = NULL);
+    bool beginTransation(const char *restartSlot = nullptr);
     void endTransation();
 
 };

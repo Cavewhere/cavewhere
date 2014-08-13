@@ -16,7 +16,7 @@ class cwRegionIOTask : public cwProjectIOTask
 {
     Q_OBJECT
 public:
-    cwRegionIOTask(QObject* parent = NULL);
+    cwRegionIOTask(QObject* parent = nullptr);
 
     void setCavingRegion(const cwCavingRegion& region);
 

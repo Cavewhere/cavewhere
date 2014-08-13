@@ -32,7 +32,7 @@ class cwCave : public QObject, public cwUndoer
     Q_PROPERTY(cwLength* depth READ depth NOTIFY depthChanged)
 
 public:
-    explicit cwCave(QObject* parent = NULL);
+    explicit cwCave(QObject* parent = nullptr);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
     ~cwCave();
@@ -48,7 +48,7 @@ public:
     bool hasTrips() const { return tripCount() > 0; }
     QList<cwTrip*> trips() const;
 
-    Q_INVOKABLE void addTrip(cwTrip* trip = NULL);
+    Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
     void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
@@ -158,10 +158,10 @@ inline QList<cwTrip*> cwCave::trips() const {
 /**
   \brief Get's the trip at an index
 
-  If the index is out of bounds this return NULL
+  If the index is out of bounds this return nullptr
   */
 inline cwTrip* cwCave::trip(int index) const {
-    if(index < 0 || index >= Trips.size()) { return NULL; }
+    if(index < 0 || index >= Trips.size()) { return nullptr; }
     return Trips[index];
 }
 

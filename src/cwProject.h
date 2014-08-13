@@ -37,7 +37,7 @@ Q_OBJECT
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
 
 public:
-    cwProject(QObject* parent = NULL);
+    cwProject(QObject* parent = nullptr);
     ~cwProject();
 
     //! The project owns the region

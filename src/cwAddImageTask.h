@@ -35,7 +35,7 @@ class cwAddImageTask : public cwProjectIOTask
     Q_OBJECT
 
 public:
-    cwAddImageTask(QObject* parent = NULL);
+    cwAddImageTask(QObject* parent = nullptr);
 
     //////////////// Parameters //////////////////
 //    void setProjectPath(QString projectPath);

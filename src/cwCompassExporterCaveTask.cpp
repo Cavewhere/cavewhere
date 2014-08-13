@@ -81,7 +81,7 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     cwCave* cave = trip->parentCave();
 
-    Q_ASSERT(cave != NULL);
+    Q_ASSERT(cave != nullptr);
 
     writeData(stream, "Cave Name", -80, cave->name());
     stream << CompassNewLine;

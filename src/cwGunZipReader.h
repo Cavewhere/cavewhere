@@ -18,7 +18,7 @@
 class cwGunZipReader : public cwTask
 {
 public:
-    cwGunZipReader(QObject* parent = NULL);
+    cwGunZipReader(QObject* parent = nullptr);
 
     //Inputs
     void setFilename(QString filename);

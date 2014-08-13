@@ -32,9 +32,9 @@ cwMouseEventTransition::cwMouseEventTransition(QObject * object,
  void cwMouseEventTransition::onTransition( QEvent * event ) {
      QMouseEventTransition::onTransition(event);
      QStateMachine::WrappedEvent* wrappedEvent = dynamic_cast<QStateMachine::WrappedEvent*>(event);
-     if(wrappedEvent != NULL) {
+     if(wrappedEvent != nullptr) {
          QMouseEvent* mouseEvent = dynamic_cast<QMouseEvent*>(wrappedEvent->event());
-         if(mouseEvent != NULL) {
+         if(mouseEvent != nullptr) {
              emit onMouseEvent(mouseEvent);
          }
      }

@@ -21,8 +21,8 @@
 
 cwNote::cwNote(QObject *parent) :
     QObject(parent),
-    ParentTrip(NULL),
-    ParentCave(NULL),
+    ParentTrip(nullptr),
+    ParentCave(nullptr),
     ImageResolution(new cwImageResolution(this))
 {
     DisplayRotation = 0.0;
@@ -34,9 +34,9 @@ cwNote::cwNote(QObject *parent) :
 
 
 cwNote::cwNote(const cwNote& object) :
-    QObject(NULL),
-    ParentTrip(NULL),
-    ParentCave(NULL),
+    QObject(nullptr),
+    ParentTrip(nullptr),
+    ParentCave(nullptr),
     ImageResolution(new cwImageResolution(this))
 {
     copy(object);
@@ -158,7 +158,7 @@ QMatrix4x4 cwNote::metersOnPageMatrix() const {
   \Brief adds a scrap to the notes
   */
 void cwNote::addScrap(cwScrap* scrap) {
-    if(scrap == NULL) {
+    if(scrap == nullptr) {
         qDebug() << "This is a bug! scrap is null and shouldn't be" << LOCATION;
         return;
     }
@@ -217,13 +217,13 @@ void cwNote::removeScraps(int begin, int end)
 /**
   Gets the scrap form the note at a index
 
-  If the scrapIndex is out of bounds, this returns NULL
+  If the scrapIndex is out of bounds, this returns nullptr
   */
 cwScrap* cwNote::scrap(int scrapIndex) const {
     if(scrapIndex >= 0 && scrapIndex < Scraps.size()) {
         return Scraps[scrapIndex];
     }
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -288,7 +288,7 @@ void cwNote::resetImageResolution() {
  */
 void cwNote::propagateResolutionNotesInTrip()
 {
-    if(parentTrip() == NULL) { return; }
+    if(parentTrip() == nullptr) { return; }
 
     foreach(cwNote* note, parentTrip()->notes()->notes()) {
         *(note->imageResolution()) = *(imageResolution());

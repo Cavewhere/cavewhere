@@ -18,7 +18,7 @@
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
-    ParentCave(NULL)
+    ParentCave(nullptr)
 {
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
@@ -31,7 +31,7 @@ cwTrip::cwTrip(QObject *parent) :
 
 void cwTrip::Copy(const cwTrip& object)
 {
-    ParentCave = NULL;
+    ParentCave = nullptr;
 
     //Copy the name of the trip
     setName(object.Name);
@@ -71,7 +71,7 @@ void cwTrip::Copy(const cwTrip& object)
   \brief Copy constructor
   */
 cwTrip::cwTrip(const cwTrip& object)
-    : QObject(NULL), cwUndoer()
+    : QObject(nullptr), cwUndoer()
 {
     Copy(object);
 }
@@ -112,13 +112,13 @@ void cwTrip::setDate(QDate date) {
   */
 void cwTrip::setTeam(cwTeam* team) {
     if(team != Team) {
-        if(Team != NULL)  {
+        if(Team != nullptr)  {
             Team->deleteLater(); //Delete the old team
         }
 
         Team = team;
 
-        if(Team != NULL) {
+        if(Team != nullptr) {
             Team->setParent(this);
         }
 
@@ -205,7 +205,7 @@ void cwTrip::removeChunks(int begin, int end) {
   The chunk must be valid
   */
 void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
-    if(chunk == NULL) { return; }
+    if(chunk == nullptr) { return; }
     if(row < 0) { row = 0; }
     if(row > Chunks.size()) { row = Chunks.size(); }
 
@@ -281,7 +281,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
   */
 cwSurveyChunk* cwTrip::chunk(int i) const {
     if(i < 0 || i > numberOfChunks()) {
-        return NULL;
+        return nullptr;
     }
     return Chunks[i];
 }

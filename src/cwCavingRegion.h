@@ -26,7 +26,7 @@ class cwCavingRegion : public QObject, public cwUndoer
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
 
 public:
-    explicit cwCavingRegion(QObject *parent = NULL);
+    explicit cwCavingRegion(QObject *parent = nullptr);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
 //    ~cwCavingRegion() { qDebug() << "Deleted: " << this; }
@@ -36,7 +36,7 @@ public:
     Q_INVOKABLE cwCave* cave(int index) const;
     QList<cwCave*> caves() const;
 
-    Q_INVOKABLE void addCave(cwCave* cave = NULL);
+    Q_INVOKABLE void addCave(cwCave* cave = nullptr);
     void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     Q_INVOKABLE void removeCave(int index);
@@ -124,7 +124,7 @@ inline bool cwCavingRegion::hasCaves() const {
   \brief Get's a cave at index
   */
 inline cwCave* cwCavingRegion::cave(int index) const {
-    if(index < 0 || index >= Caves.size()) { return NULL; }
+    if(index < 0 || index >= Caves.size()) { return nullptr; }
     return Caves[index];
 }
 

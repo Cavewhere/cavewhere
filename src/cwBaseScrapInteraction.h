@@ -106,7 +106,7 @@ inline cwScrap *cwBaseScrapInteraction::scrap() const
  * Called when the current scrap is destroyed
  */
 inline void cwBaseScrapInteraction::scrapDeleted() {
-    Scrap = NULL;
+    Scrap = nullptr;
 }
 
 

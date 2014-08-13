@@ -103,7 +103,7 @@ private:
 
     QList<cwScrap*> Scraps;
 
-    cwImageResolution* ImageResolution; //!< NULL if the note should use image's resolution
+    cwImageResolution* ImageResolution; //!< nullptr if the note should use image's resolution
 
     void copy(const cwNote& object);
     void setupScrap(cwScrap* scrap);

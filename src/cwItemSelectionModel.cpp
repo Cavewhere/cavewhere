@@ -8,7 +8,7 @@
 #include "cwItemSelectionModel.h"
 
 cwItemSelectionModel::cwItemSelectionModel(QObject *parent) :
-    QItemSelectionModel(NULL, parent)
+    QItemSelectionModel(nullptr, parent)
 {
 }
 

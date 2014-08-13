@@ -27,7 +27,7 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
   Copy constructor!
   */
 cwTripCalibration::cwTripCalibration(const cwTripCalibration& object) :
-    QObject(NULL)
+    QObject(nullptr)
 {
     copy(object);
 }

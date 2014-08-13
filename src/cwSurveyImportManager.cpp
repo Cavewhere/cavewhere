@@ -19,7 +19,7 @@
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
     ImportThread(new QThread()),
-    CavingRegion(NULL),
+    CavingRegion(nullptr),
     CompassImporter(new cwCompassImporter())
 {
     CompassImporter->setThread(ImportThread);
@@ -64,7 +64,7 @@ void cwSurveyImportManager::importCompassDataFile()
 
     QSettings settings;
     QString lastFile = settings.value(compassImportKey).toString();
-    QStringList dataFiles = QFileDialog::getOpenFileNames(NULL, "Compass Data File", lastFile, "*.dat");
+    QStringList dataFiles = QFileDialog::getOpenFileNames(nullptr, "Compass Data File", lastFile, "*.dat");
 
     if(!dataFiles.isEmpty()) {
         settings.setValue(compassImportKey, dataFiles.first());

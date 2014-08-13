@@ -216,7 +216,7 @@ void cwProject::privateSave() {
  */
 void cwProject::saveAs()
 {
-    QString filename = QFileDialog::getSaveFileName(NULL, "Save Cavewhere Project As", "", "Cavewhere Project (*.cw)");
+    QString filename = QFileDialog::getSaveFileName(nullptr, "Save Cavewhere Project As", "", "Cavewhere Project (*.cw)");
     filename = cwGlobals::addExtension(filename, "cw");
     saveAs(filename);
 }
@@ -336,7 +336,7 @@ void cwProject::setFilename(QString newFilename) {
   This will also popup a dialog when the images are being loaded
   */
 void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const char* slot) {
-    if(receiver == NULL )  { return; }
+    if(receiver == nullptr )  { return; }
 
     //Create a new image task
     cwAddImageTask* addImageTask = new cwAddImageTask();

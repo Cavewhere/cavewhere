@@ -24,8 +24,8 @@
 
 cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
     QQuickItem(parent),
-    Trip(NULL),
-    ChunkQMLComponents(NULL),
+    Trip(nullptr),
+    ChunkQMLComponents(nullptr),
     NeedChunkAboveMapper(new QSignalMapper(this)),
     NeedChunkBelowMapper(new QSignalMapper(this)),
     ChunkTrimmer(new cwSurveyChunkTrimmer(this))
@@ -35,23 +35,23 @@ cwSurveyChunkGroupView::cwSurveyChunkGroupView(QQuickItem *parent) :
 }
 
 void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
-    if(ChunkQMLComponents == NULL) {
+    if(ChunkQMLComponents == nullptr) {
         QQmlContext* context = QQmlEngine::contextForObject(this);
         context->contextProperty("globalShadowTextInput");
         ChunkQMLComponents = new cwSurveyChunkViewComponents(context, this);
     }
 
     if(Trip != trip) {
-        if(Trip != NULL) {
-            disconnect(Trip, NULL, this, NULL);
+        if(Trip != nullptr) {
+            disconnect(Trip, nullptr, this, nullptr);
         }
 
         Trip = trip;
 
-        if(Trip != NULL) {
+        if(Trip != nullptr) {
             //Clear the current view
             foreach(cwSurveyChunkView* view, ChunkViews) {
-                if(view != NULL) {
+                if(view != nullptr) {
                     view->deleteLater();
                 }
             }
@@ -59,7 +59,7 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
             ChunkBoundingRects.clear();
 
 
-            if(Trip != NULL) {
+            if(Trip != nullptr) {
                 //Add chunks to the view
                 addChunks(0, Trip->numberOfChunks() - 1);
 
@@ -145,7 +145,7 @@ void cwSurveyChunkGroupView::keyPressEvent(QKeyEvent *event) {
   \brief The bounding rect for the view
   */
 //QRectF cwSurveyChunkGroupView::boundingRect() const {
-//    if(parentItem() != NULL) {
+//    if(parentItem() != nullptr) {
 //        return parentItem()->boundingRect();
 //    } else {
 //        return QRectF(0, 0, width(), height());
@@ -230,7 +230,7 @@ QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
   */
 void cwSurveyChunkGroupView::CreateChunkView(int index) {
     if(index < 0 || index >= ChunkViews.size()) { return; }
-    if(ChunkViews[index] == NULL) {
+    if(ChunkViews[index] == nullptr) {
 
          cwSurveyChunk* chunk = Trip->chunk(index);
 
@@ -274,13 +274,13 @@ void cwSurveyChunkGroupView::CreateChunkView(int index) {
   \brief Deletes the chunk from the view
 
   This doesn't remove a chunk view at the index, it simply deletes the view and
-  sets the index to NULL
+  sets the index to nullptr
   */
 void cwSurveyChunkGroupView::DeleteChunkView(int index) {
-    if(ChunkViews[index] != NULL && !ChunkViewsWhiteList.contains(index)) {
+    if(ChunkViews[index] != nullptr && !ChunkViewsWhiteList.contains(index)) {
 //        qDebug() << "Deleting" << ChunkViews[index];
         ChunkViews[index]->deleteLater();
-        ChunkViews[index] = NULL;
+        ChunkViews[index] = nullptr;
     }
 }
 
@@ -305,8 +305,8 @@ void cwSurveyChunkGroupView::updateAboveBelowAndPosition(int index) {
     ChunkViews[index]->setY(ChunkBoundingRects[index].top());
 
     //Update the navigation for the chunk
-    cwSurveyChunkView* aboveChunk = NULL;
-    cwSurveyChunkView* belowChunk = NULL;
+    cwSurveyChunkView* aboveChunk = nullptr;
+    cwSurveyChunkView* belowChunk = nullptr;
 
     int aboveIndex = index - 1;
     int belowIndex = index + 1;
@@ -333,15 +333,15 @@ void cwSurveyChunkGroupView::updateAboveBelowAndPosition(int index) {
   Adds new chunks to the view from beginIndex to endIndex
   */
 void cwSurveyChunkGroupView::addChunks(int beginIndex, int endIndex) {
-    if(Trip == NULL) { return; }
+    if(Trip == nullptr) { return; }
     ///qDebug() << "Adding chunks " << beginIndex << endIndex;
 
     for(int i = beginIndex; i <= endIndex; i++) {
         cwSurveyChunk* chunk = Trip->chunk(i);
 
-        if(chunk == NULL) { continue; }
+        if(chunk == nullptr) { continue; }
 
-        ChunkViews.insert(i, NULL);
+        ChunkViews.insert(i, nullptr);
         ChunkBoundingRects.insert(i, QRectF());
     }
 
@@ -363,7 +363,7 @@ void cwSurveyChunkGroupView::addChunks(int beginIndex, int endIndex) {
  */
 void cwSurveyChunkGroupView::removeChunks(int beginIndex, int endIndex)
 {
-    if(Trip == NULL) { return; }
+    if(Trip == nullptr) { return; }
 
     for(int i = beginIndex; i <= endIndex; i++) {
         ChunkViews.at(i)->deleteLater();
@@ -387,7 +387,7 @@ void cwSurveyChunkGroupView::removeChunks(int beginIndex, int endIndex)
   */
 void cwSurveyChunkGroupView::UpdateChunkHeight() {
     cwSurveyChunkView* chunkView = qobject_cast<cwSurveyChunkView*>(sender());
-    if(chunkView != NULL) {
+    if(chunkView != nullptr) {
         int index = ChunkViews.indexOf(chunkView);
         updateContentArea(index, ChunkViews.size() - 1);
         updateActiveChunkViews();
@@ -418,7 +418,7 @@ void cwSurveyChunkGroupView::SetEnsureVisibleRect(QRectF rect) {
 void cwSurveyChunkGroupView::HandleSplitChunk(cwSurveyChunk *newChunk) {
 
     cwSurveyChunkView* chunkView = qobject_cast<cwSurveyChunkView*>(sender());
-    if(chunkView == NULL) { return; }
+    if(chunkView == nullptr) { return; }
 
     //Find the chunk
     int firstIndex = VisableRange().first; //Only the visible range is valid
@@ -432,7 +432,7 @@ void cwSurveyChunkGroupView::HandleSplitChunk(cwSurveyChunk *newChunk) {
   */
 void cwSurveyChunkGroupView::updateChunksFrontSights() {
     foreach(cwSurveyChunkView* chunkView, ChunkViews) {
-        if(chunkView != NULL) {
+        if(chunkView != nullptr) {
             chunkView->setFrontSights(Trip->calibrations()->hasFrontSights());
         }
     }
@@ -443,7 +443,7 @@ void cwSurveyChunkGroupView::updateChunksFrontSights() {
   */
 void cwSurveyChunkGroupView::updateChunksBackSights() {
     foreach(cwSurveyChunkView* chunkView, ChunkViews) {
-        if(chunkView != NULL) {
+        if(chunkView != nullptr) {
             chunkView->setBackSights(Trip->calibrations()->hasBackSights());
         }
     }
@@ -493,7 +493,7 @@ void cwSurveyChunkGroupView::forceAllocateChunkBelow(int index) {
   from being delete when it's not being shown
   */
 void cwSurveyChunkGroupView::forceAllocateChunk(int chunkIndex, int allocatedChunkIndex) {
-    if(ChunkViews[allocatedChunkIndex] != NULL) {
+    if(ChunkViews[allocatedChunkIndex] != nullptr) {
         qDebug() << "Force allocated ChunkView alread exist at:" << allocatedChunkIndex << LOCATION;
         return;
     }
@@ -550,7 +550,7 @@ void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         cwSurveyChunk* chunk = Trip->chunk(i);;
-        if(chunk == NULL) { continue; }
+        if(chunk == nullptr) { continue; }
 
         float height = cwSurveyChunkView::heightHint(chunk->stationCount());
         ChunkBoundingRects[i].setHeight(height);
@@ -567,7 +567,7 @@ void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
 
     //Update the positions off all the visible elements
     for(int i = beginIndex; i < ChunkViews.size(); i++) {
-        if(ChunkViews[i] != NULL) {
+        if(ChunkViews[i] != nullptr) {
             ChunkViews[i]->setY(ChunkBoundingRects[i].top());
         }
     }

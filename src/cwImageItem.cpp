@@ -20,7 +20,7 @@
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 
-QOpenGLShaderProgram* cwImageItem::ImageProgram = NULL;
+QOpenGLShaderProgram* cwImageItem::ImageProgram = nullptr;
 int cwImageItem::vVertex = -1;
 int cwImageItem::ModelViewProjectionMatrix = -1;
 int cwImageItem::CropAreaUniform = -1;
@@ -30,7 +30,7 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     ImageProperties(new cwImageProperties(this)),
     Rotation(0.0),
     RotationCenter(0.5, 0.5),
-    GLResources(NULL)
+    GLResources(nullptr)
 {
 
     ImageProperties->setImage(Image);
@@ -66,7 +66,7 @@ void cwImageItem::setImage(const cwImage& image) {
     if(Image != image) {
         Image = image;
         ImageProperties->setImage(Image);
-        if(GLResources != NULL && GLResources->NoteTexture != NULL) {
+        if(GLResources != nullptr && GLResources->NoteTexture != nullptr) {
             GLResources->NoteTexture->setImage(Image);
         }
         resizeGL();
@@ -157,7 +157,7 @@ void cwImageItem::initializeGL() {
   Initilizes the shaders for this object
   */
 void cwImageItem::initializeShaders() {
-    if(ImageProgram == NULL) {
+    if(ImageProgram == nullptr) {
         cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
         imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
 
@@ -266,7 +266,7 @@ void cwImageItem::resizeGL() {
   */
 void cwImageItem::paint(QPainter* painter) {
     if(!Image.isValid()) { return; }
-    if(GLResources == NULL) { initializeGL(); }
+    if(GLResources == nullptr) { initializeGL(); }
 
     painter->beginNativePainting();
 
@@ -308,7 +308,7 @@ void cwImageItem::releaseResources()
  */
 QSGNode *cwImageItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintNodeData * data)
 {
-    if(GLResources != NULL) {
+    if(GLResources != nullptr) {
         GLResources->NoteTexture->updateData();
     }
     QSGNode* node = cwGLViewer::updatePaintNode(oldNode, data);
@@ -346,7 +346,7 @@ QPointF cwImageItem::mapNoteToQtViewport(QPointF mapNote) const
   */
 void cwImageItem::setProjectFilename(QString filename) {
     ProjectFilename = filename;
-    if(GLResources != NULL && GLResources->NoteTexture != NULL) {
+    if(GLResources != nullptr && GLResources->NoteTexture != nullptr) {
         GLResources->NoteTexture->setProject(ProjectFilename);
     }
 }

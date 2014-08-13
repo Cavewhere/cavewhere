@@ -51,7 +51,7 @@ void cwGeometryItersecter::addObject(const cwGeometryItersecter::Object &object)
  */
 void cwGeometryItersecter::clear(cwGLObject *parentObject)
 {
-    if(parentObject == NULL) {
+    if(parentObject == nullptr) {
         Nodes.clear();
         return;
     }

@@ -28,8 +28,8 @@ cwCollisionRectKdTree::~cwCollisionRectKdTree()
 void cwCollisionRectKdTree::clear() {
     delete Root;
     Root = new Node();
-    Root->LeftChild = NULL;
-    Root->RightChild = NULL;
+    Root->LeftChild = nullptr;
+    Root->RightChild = nullptr;
 }
 
 /**
@@ -57,16 +57,16 @@ bool cwCollisionRectKdTree::addRect(const QRect& rectangle) {
   \brief Creates an empty node
   */
 cwCollisionRectKdTree::Node::Node() {
-    LeftChild = NULL;
-    RightChild = NULL;
+    LeftChild = nullptr;
+    RightChild = nullptr;
 }
 
 /**
   \brief Creates a leaf node
   */
 cwCollisionRectKdTree::Node::Node(QRect rectangle) {
-    LeftChild = NULL;
-    RightChild = NULL;
+    LeftChild = nullptr;
+    RightChild = nullptr;
     Rectangle = rectangle;
 }
 
@@ -76,7 +76,7 @@ cwCollisionRectKdTree::Node::Node(QRect rectangle) {
   If the rectangle overlaps another rectangle, this return true, else this returns false
   */
 bool cwCollisionRectKdTree::rectIntersects(const QRect& rectangle, int depth, Node* root) {
-    if(root == NULL) { return false; } //No rectangles to test, rectangle doesn't intesect with this node
+    if(root == nullptr) { return false; } //No rectangles to test, rectangle doesn't intesect with this node
     if(root->isLeaf()) {
         //Do the intersection test
         return root->Rectangle.intersects(rectangle);
@@ -180,7 +180,7 @@ void cwCollisionRectKdTree::addRect(const QRect& rectangle, int depth, Node* roo
 //   //If the rectangle is to the left
 // // if(rectangleValue == root->Location) { return false; }
 //   if(leftValue < axisValue) {
-//       if(root->LeftChild != NULL) {
+//       if(root->LeftChild != nullptr) {
 //           //Search to the left
 //           return addRect(rectangle, depth + 1, root->LeftChild);
 //       } else {
@@ -193,7 +193,7 @@ void cwCollisionRectKdTree::addRect(const QRect& rectangle, int depth, Node* roo
 
 //   if(rightValue >= axisValue) {
 //       //The rectangle is on the right
-//       if(root->RightChild != NULL) {
+//       if(root->RightChild != nullptr) {
 //           //Search to the right
 //           return addRect(rectangle, depth + 1, root->RightChild);
 //       } else {
@@ -215,7 +215,7 @@ void cwCollisionRectKdTree::paintTree(QPainter* painter, const QRect& windowSize
 }
 
 void cwCollisionRectKdTree::paintTree(QPainter* painter, QRect windowSize, int depth, Node* root) {
-    if(root == NULL) { return; }
+    if(root == nullptr) { return; }
 
     if(root->isLeaf()) {
         painter->setPen(QPen(Qt::red));

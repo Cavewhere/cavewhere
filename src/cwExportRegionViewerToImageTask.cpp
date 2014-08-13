@@ -18,8 +18,8 @@
 
 cwSceneToImageTask::cwSceneToImageTask(QObject *parent) :
     QObject(parent),
-    Window(NULL),
-    RegionViewer(NULL),
+    Window(nullptr),
+    RegionViewer(nullptr),
     DPI(300)
 {
 }
@@ -38,7 +38,7 @@ void cwSceneToImageTask::setDPI(int dpi) {
 
 void cwSceneToImageTask::takeScreenshot() const
 {
-//    if(Window == NULL || RegionViewer == NULL) {
+//    if(Window == nullptr || RegionViewer == nullptr) {
 //        qDebug() << "Can't take screenshot because of a bug!" << LOCATION;
 //        return;
 //    }

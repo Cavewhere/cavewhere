@@ -28,7 +28,7 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
 
 
 cwNoteTranformation::cwNoteTranformation(const cwNoteTranformation& other) :
-    QObject(NULL),
+    QObject(nullptr),
     North(other.North),
     Scale(new cwScale(*(other.Scale)))
 {
@@ -89,8 +89,8 @@ double cwNoteTranformation::calculateScale(QPointF p1, QPointF p2,
                                            QSize imageSize,
                                            cwImageResolution* resolution)
 {
-    if(length == NULL) { return 0.0; }
-    if(resolution == NULL) { return 0.0; }
+    if(length == nullptr) { return 0.0; }
+    if(resolution == nullptr) { return 0.0; }
 
     QLineF line(p1, p2);
     double a = line.dx() * imageSize.width(); //a is in dots

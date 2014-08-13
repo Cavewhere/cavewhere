@@ -89,7 +89,7 @@ private:
     Gets the tree model that this survey export manager uses to update it's actions
   */
 inline cwRegionTreeModel *cwSurveyExportManager::cavingRegionTreeModel() const {
-    return NULL;
+    return nullptr;
 }
 
 

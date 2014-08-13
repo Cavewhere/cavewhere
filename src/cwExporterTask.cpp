@@ -10,7 +10,7 @@
 cwExporterTask::cwExporterTask(QObject* object) :
 cwTask(object)
 {
-    ParentExportTask = NULL;
+    ParentExportTask = nullptr;
 }
 
 /**
@@ -46,7 +46,7 @@ void cwExporterTask::setParentSurvexExporter(cwExporterTask* parent) {
   */
 bool cwExporterTask::parentIsRunning() {
     cwExporterTask* parentTask = ParentExportTask;
-    while(parentTask != NULL) {
+    while(parentTask != nullptr) {
         if(parentTask->isRunning()) {
             return true;
         }

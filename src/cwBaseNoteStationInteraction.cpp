@@ -16,8 +16,8 @@
 
 cwBaseNoteStationInteraction::cwBaseNoteStationInteraction(QQuickItem *parent) :
     cwInteraction(parent),
-//    NoteStationView(NULL),
-    ScrapView(NULL)
+//    NoteStationView(nullptr),
+    ScrapView(nullptr)
 {
 }
 
@@ -36,7 +36,7 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
 //    qDebug() << "Add station!" << notePosition;
 
     //Make sure we have a scrap view
-    if(ScrapView == NULL) {
+    if(ScrapView == nullptr) {
         return;
     }
 
@@ -47,7 +47,7 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
     cwScrapItem* scrapItem = selectScrapForAdding(scrapItems);
 
     //Make sure we have a scrap to add to
-    if(scrapItem == NULL) {
+    if(scrapItem == nullptr) {
         //Do something to notify the user that they've clicked outside the bounds
         return;
     }
@@ -55,7 +55,7 @@ void  cwBaseNoteStationInteraction::addStation(QPointF notePosition) {
     cwScrap* scrap = scrapItem->scrap();
 
     //Make sure we have a scrap to add to
-    if(scrap == NULL) {
+    if(scrap == nullptr) {
         //Do something to notify the user that they've clicked outside the bounds
         return;
     }
@@ -99,15 +99,15 @@ void cwBaseNoteStationInteraction::setScrapView(cwScrapView* scrapView) {
 
     It will also select the scrap item of where the stations will be added to
 
-    This will return NULL, if station can't be added
+    This will return nullptr, if station can't be added
   */
 cwScrapItem *cwBaseNoteStationInteraction::selectScrapForAdding(QList<cwScrapItem *> scrapItems) {
     //Station isn't on a scrap
     if(scrapItems.isEmpty()) {
-        return NULL;
+        return nullptr;
     }
 
-    cwScrapItem* scrapItem = NULL;
+    cwScrapItem* scrapItem = nullptr;
     if(scrapItems.size() == 1) {
         //Select the only scrap item
         scrapItem = scrapItems.first();

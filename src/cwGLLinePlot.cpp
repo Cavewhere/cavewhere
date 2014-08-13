@@ -18,7 +18,7 @@
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
     cwGLObject(parent),
-    ShaderProgram(NULL)
+    ShaderProgram(nullptr)
 {
     MaxZValue = 0.0;
     MinZValue = 0.0;
@@ -91,7 +91,7 @@ void cwGLLinePlot::draw() {
 
     ShaderProgram->setAttributeBuffer(vVertex, GL_FLOAT, 0, 3);
 
-    glDrawElements(GL_LINES, IndexBufferSize, GL_UNSIGNED_INT, NULL);
+    glDrawElements(GL_LINES, IndexBufferSize, GL_UNSIGNED_INT, nullptr);
 
     LinePlotVertexBuffer.release();
     LinePlotIndexBuffer.release();
@@ -135,7 +135,7 @@ void cwGLLinePlot::setIndexes(QVector<unsigned int> indexData) {
 void cwGLLinePlot::updateData() {
     cwGLObject::updateData();
 
-    if(ShaderProgram == NULL) { return; }
+    if(ShaderProgram == nullptr) { return; }
 
     LinePlotVertexBuffer.bind();
     LinePlotVertexBuffer.allocate(Points.data(), Points.size() * sizeof(QVector3D));
@@ -152,7 +152,7 @@ void cwGLLinePlot::updateData() {
 
     IndexBufferSize = Indexes.size();
 
-    if(geometryItersecter() != NULL) {
+    if(geometryItersecter() != nullptr) {
         geometryItersecter()->clear(this);
 
         //For geometry intersection

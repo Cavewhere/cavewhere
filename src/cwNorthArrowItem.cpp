@@ -17,7 +17,7 @@
 
 cwNorthArrowItem::cwNorthArrowItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent),
-    NorthArrowLinesNode(NULL)
+    NorthArrowLinesNode(nullptr)
 {
     setFlag(QQuickItem::ItemHasContents, true);
 }

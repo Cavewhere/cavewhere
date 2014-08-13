@@ -709,7 +709,7 @@ void cwAddImageTask::regenerateMipmaps()
  */
 QImage cwAddImageTask::ensureImageDivisibleBy4(QImage originalImage, QSizeF *clipArea)
 {
-    Q_ASSERT(clipArea != NULL);
+    Q_ASSERT(clipArea != nullptr);
 
     QSize imageSize = originalImage.size();
     int widthRemainder = imageSize.width() % 4;

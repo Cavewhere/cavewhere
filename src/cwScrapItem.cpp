@@ -22,14 +22,14 @@
 
 cwScrapItem::cwScrapItem(QQuickItem *parent) :
     QQuickItem(parent),
-    Scrap(NULL),
-    TransformUpdater(NULL),
+    Scrap(nullptr),
+    TransformUpdater(nullptr),
     TransformNodeDirty(false),
-    PolygonNode(NULL),
-    OutlineNode(NULL),
+    PolygonNode(nullptr),
+    OutlineNode(nullptr),
     StationView(new cwScrapStationView(this)),
     OutlinePointView(new cwScrapOutlinePointView(this)),
-    SelectionManager(NULL),
+    SelectionManager(nullptr),
     Selected(false)
 {
     StationView->setScrapItem(this);
@@ -45,11 +45,11 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
 
 cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     QQuickItem(parent),
-    Scrap(NULL),
-    TransformUpdater(NULL),
+    Scrap(nullptr),
+    TransformUpdater(nullptr),
     TransformNodeDirty(false),
-    PolygonNode(NULL),
-    OutlineNode(NULL),
+    PolygonNode(nullptr),
+    OutlineNode(nullptr),
     StationView(new cwScrapStationView(this)),
     OutlinePointView(new cwScrapOutlinePointView(this)),
     Selected(false)
@@ -74,15 +74,15 @@ cwScrapItem::~cwScrapItem()
   */
 void cwScrapItem::setScrap(cwScrap* scrap) {
     if(Scrap != scrap) {
-        if(Scrap != NULL) {
-            disconnect(Scrap, NULL, this, NULL);
+        if(Scrap != nullptr) {
+            disconnect(Scrap, nullptr, this, nullptr);
         }
 
         Scrap = scrap;
         StationView->setScrap(Scrap);
         OutlinePointView->setScrap(Scrap);
 
-        if(Scrap != NULL) {
+        if(Scrap != nullptr) {
             connect(Scrap, SIGNAL(insertedPoints(int,int)), SLOT(updatePoints()));
             connect(Scrap, SIGNAL(removedPoints(int,int)), SLOT(updatePoints()));
             connect(Scrap, SIGNAL(pointChanged(int,int)), SLOT(updatePoints()));
@@ -138,7 +138,7 @@ QSGNode *cwScrapItem::updatePaintNode(QSGNode *oldNode, QQuickItem::UpdatePaintN
  */
 void cwScrapItem::updatePoints()
 {
-    if(Scrap != NULL) {
+    if(Scrap != nullptr) {
         ScrapPoints = Scrap->points();
         update();
     }
@@ -162,13 +162,13 @@ Sets transformUpdater
 void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
     if(TransformUpdater != transformUpdater) {
 
-        if(TransformUpdater != NULL) {
+        if(TransformUpdater != nullptr) {
             disconnect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
         }
 
         TransformUpdater = transformUpdater;
 
-        if(TransformUpdater != NULL) {
+        if(TransformUpdater != nullptr) {
             connect(TransformUpdater, &cwTransformUpdater::matrixChanged, this, &cwScrapItem::update);
         }
 

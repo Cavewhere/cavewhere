@@ -403,7 +403,9 @@ Project {
                 "src/cwGraphicsImageItem.cpp",
                 "src/cwGraphicsImageItem.h",
                 "src/cwBaseTurnTableInteraction.h",
-                "src/cwBaseTurnTableInteraction.cpp"
+                "src/cwBaseTurnTableInteraction.cpp",
+                "src/cwQuickSceneView.h",
+                "src/cwQuickSceneView.cpp"
             ]
         }
 

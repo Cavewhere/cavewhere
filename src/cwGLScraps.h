@@ -62,7 +62,7 @@ private:
 
         PendingScrapCommand() :
             CommandType(Unknown),
-            Scrap(NULL)
+            Scrap(nullptr)
         {
 
         }

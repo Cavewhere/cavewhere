@@ -8,7 +8,7 @@
 #include "cwNoteInteraction.h"
 
 cwNoteInteraction::cwNoteInteraction(QQuickItem *parent) :
-    cwInteraction(parent), Note(NULL)
+    cwInteraction(parent), Note(nullptr)
 {
 }
 

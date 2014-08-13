@@ -27,13 +27,13 @@
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
-    Region(NULL),
-    LinePlotManager(NULL),
+    Region(nullptr),
+    LinePlotManager(nullptr),
     TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
-    Project(NULL),
-    GLScraps(NULL),
+    Project(nullptr),
+    GLScraps(nullptr),
     AutomaticUpdate(true)
 {
     TriangulateTask->setThread(TriangulateThread);
@@ -54,13 +54,13 @@ cwScrapManager::~cwScrapManager()
   \brief Set the region for the scrap manager
   */
 void cwScrapManager::setRegion(cwCavingRegion* region) {
-    if(Region != NULL) {
-        disconnect(Region, NULL, this, NULL);
+    if(Region != nullptr) {
+        disconnect(Region, nullptr, this, nullptr);
     }
 
     Region = region;
 
-    if(Region != NULL) {
+    if(Region != nullptr) {
 //        connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
 //        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
         connect(Region, &cwCavingRegion::insertedCaves, this, &cwScrapManager::cavesInserted);
@@ -89,14 +89,14 @@ void cwScrapManager::setProject(cwProject *project) {
 void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
 {
     if(LinePlotManager != linePlotManager) {
-        if(LinePlotManager != NULL) {
+        if(LinePlotManager != nullptr) {
             disconnect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
                     this, &cwScrapManager::updateStationPositionChangedForScraps);
         }
 
         LinePlotManager = linePlotManager;
 
-        if(LinePlotManager != NULL) {
+        if(LinePlotManager != nullptr) {
             connect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
                     this, &cwScrapManager::updateStationPositionChangedForScraps);
         }
@@ -687,7 +687,7 @@ void cwScrapManager::updateScrapsWithNewNoteResolution()
     cwImageResolution* resolution = static_cast<cwImageResolution*>(sender());
     cwNote* note = dynamic_cast<cwNote*>(resolution->parent());
 
-    if(note == NULL) {
+    if(note == nullptr) {
         qDebug() << "Resolution doesn't have a note parent" << LOCATION;
         return;
     }
@@ -701,7 +701,7 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
 {
     cwNoteTranformation* noteTransform = static_cast<cwNoteTranformation*>(sender());
     cwScrap* parentScrap = dynamic_cast<cwScrap*>(noteTransform->parent());
-    if(parentScrap == NULL) {
+    if(parentScrap == nullptr) {
         qDebug() << "Notetransform's parent isn't a cwScrap" << LOCATION;
         return;
     }

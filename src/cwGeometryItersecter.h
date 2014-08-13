@@ -29,7 +29,7 @@ public:
 
     class Object {
     public:
-        Object() : Parent(NULL), Id(-1), Type(None) { }
+        Object() : Parent(nullptr), Id(-1), Type(None) { }
         Object(cwGLObject* parent, uint id, QVector<QVector3D> points, QVector<uint> indexes, PrimitiveType type) :
             Parent(parent),
             Id(id),
@@ -56,7 +56,7 @@ public:
     cwGeometryItersecter();
 
     void addObject(const cwGeometryItersecter::Object& object);
-    void clear(cwGLObject* parentObject = NULL);
+    void clear(cwGLObject* parentObject = nullptr);
     void removeObject(cwGLObject* parentObject, uint id);
 
     double intersects(const QRay3D& ray) const;

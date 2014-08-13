@@ -10,7 +10,7 @@
 cwTile::cwTile() :
     TileSize(0)
 {
-    Program = NULL;
+    Program = nullptr;
 }
 
 /**
@@ -38,7 +38,7 @@ void cwTile::draw() {
     Program->setAttributeBuffer(vVertex, GL_FLOAT, 0, 2);
     Program->enableAttributeArray(vVertex);
 
-    glDrawElements(GL_TRIANGLES, indexes().size(), GL_UNSIGNED_INT, NULL);
+    glDrawElements(GL_TRIANGLES, indexes().size(), GL_UNSIGNED_INT, nullptr);
 
     TriangleVertexBuffer.release();
     TriangleIndexBuffer.release();

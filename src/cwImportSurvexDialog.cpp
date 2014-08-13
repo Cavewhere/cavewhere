@@ -79,7 +79,7 @@ cwImportSurvexDialog::~cwImportSurvexDialog() {
   \brief Start to the dialog to import
   */
 void cwImportSurvexDialog::open() {
-    if(Region == NULL) {
+    if(Region == nullptr) {
         QMessageBox box(QMessageBox::Critical, "Broke Sauce!", "Oops, the programer has made a mistake and Cavewhere can't open Survex Import Dialog.");
         box.exec();
         return;
@@ -88,7 +88,7 @@ void cwImportSurvexDialog::open() {
     QSettings settings;
     QString lastFile = settings.value(ImportSurvexKey).toString();
 
-    QString filename = QFileDialog::getOpenFileName(NULL, "Import Survex", lastFile, "Survex *.svx");
+    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Survex", lastFile, "Survex *.svx");
     if(QFileInfo(filename).exists()) {
         setSurvexFile(filename);
     }
@@ -221,7 +221,7 @@ void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelec
         //Only one item selected
         QModelIndex index = selectedIndexes.first();
         cwSurvexBlockData* block = Model->toBlockData(index);
-        if(block != NULL) {
+        if(block != nullptr) {
 
             //Set the index of the combo box
             TypeItem item = importTypeToTypeItem(block->importType());
@@ -257,7 +257,7 @@ void cwImportSurvexDialog::setType(int index) {
     foreach(QModelIndex currentIndex, selectedIndexes) {
         cwSurvexBlockData* block = Model->toBlockData(currentIndex);
 
-        if(block != NULL) {
+        if(block != nullptr) {
             cwSurvexBlockData::ImportType importType = (cwSurvexBlockData::ImportType)typeItemToImportType((TypeItem)index);
             block->setImportType(importType);
         }

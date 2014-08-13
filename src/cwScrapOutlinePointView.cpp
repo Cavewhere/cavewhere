@@ -18,7 +18,7 @@ cwScrapOutlinePointView::cwScrapOutlinePointView(QQuickItem *parent) :
 void cwScrapOutlinePointView::setScrap(cwScrap *scrap)
 {
     if(Scrap != scrap) {
-        if(Scrap != NULL) {
+        if(Scrap != nullptr) {
             disconnect(Scrap, &cwScrap::insertedPoints, this, &cwScrapOutlinePointView::pointsInserted);
             disconnect(Scrap, &cwScrap::removedPoints, this, &cwScrapOutlinePointView::pointsRemoved);
             disconnect(Scrap, &cwScrap::pointsReset, this, &cwScrapOutlinePointView::reset);
@@ -27,7 +27,7 @@ void cwScrapOutlinePointView::setScrap(cwScrap *scrap)
 
         Scrap = scrap;
 
-        if(Scrap != NULL) {
+        if(Scrap != nullptr) {
             connect(Scrap, &cwScrap::insertedPoints, this, &cwScrapOutlinePointView::pointsInserted);
             connect(Scrap, &cwScrap::removedPoints, this, &cwScrapOutlinePointView::pointsRemoved);
             connect(Scrap, &cwScrap::pointsReset, this, &cwScrapOutlinePointView::reset);

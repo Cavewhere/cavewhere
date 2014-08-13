@@ -22,8 +22,8 @@
 
 cwCompassItem::cwCompassItem(QQuickItem* item) :
     QQuickPaintedItem(item),
-    Camera(NULL),
-    ShaderDebugger(NULL),
+    Camera(nullptr),
+    ShaderDebugger(nullptr),
     Initialized(false)
 {
     setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);

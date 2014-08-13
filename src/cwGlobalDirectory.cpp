@@ -47,7 +47,7 @@ void cwGlobalDirectory::setupBaseDirectory() {
         qDebug() << "ExecDirectory:" << (execDirectory + "/" + findFile) << "exists:" << execExists;
         qDebug() << "Couldn't find qml/CavewhereMainWindow.qml, installed wrong!?";
 
-        QMessageBox::critical(NULL,
+        QMessageBox::critical(nullptr,
                               "Installation is Broke Sauce",
                               QString("<b>Installation is broken!!!</b><br><br>Cavewhere couldn't find <i>%1</i>").arg(findFile),
                               QMessageBox::Close

@@ -17,7 +17,7 @@ cwScene::cwScene(QObject *parent) :
     QObject(parent),
     GeometryItersecter(new cwGeometryItersecter()),
     ShaderDebugger(new cwShaderDebugger(this)),
-    Camera(NULL),
+    Camera(nullptr),
     ExcutingCommands(false)
 {
     cwInitializeOpenGLFunctionsCommand* initOpenGLFunctionCommand = new cwInitializeOpenGLFunctionsCommand();
@@ -78,7 +78,7 @@ void cwScene::removeItem(cwGLObject *item)
 {
     if(!RenderingObjects.contains(item)) {
         RenderingObjects.removeOne(item);
-        item->setScene(NULL);
+        item->setScene(nullptr);
     }
 }
 

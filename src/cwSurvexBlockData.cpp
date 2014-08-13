@@ -14,7 +14,7 @@
 
 cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
     QObject(parent),
-    ParentBlock(NULL),
+    ParentBlock(nullptr),
     Type(NoImport),
     Team(new cwTeam(this)),
     Calibration(new cwTripCalibration(this)),
@@ -74,7 +74,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    */
  bool cwSurvexBlockData::isTrip() const {
      cwSurvexBlockData* parent = parentBlock();
-     while(parent != NULL) {
+     while(parent != nullptr) {
          if(parent->importType() == Trip) {
              return false;
          }
@@ -184,7 +184,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
          }
          shotIndex -= chunk->shotCount();
      }
-     return NULL;
+     return nullptr;
  }
 
  int cwSurvexBlockData::chunkShotIndex(int shotIndex) const

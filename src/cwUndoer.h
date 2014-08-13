@@ -32,7 +32,7 @@ public:
 protected:
     QUndoStack* UndoStack;
 
-    cwUndoer(QUndoStack* undoStack = NULL);
+    cwUndoer(QUndoStack* undoStack = nullptr);
     void pushUndo(QUndoCommand* command);
     void beginUndoMacro(const QString& text);
     void endUndoMacro();
