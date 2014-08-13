@@ -124,6 +124,8 @@ void cwImageTexture::updateData() {
         return;
     }
 
+    if(TextureUploadTask->isRunning()) { return; }
+
     QList<QPair<QByteArray, QSize> > mipmaps = TextureUploadTask->mipmaps();
     ScaleTexCoords = TextureUploadTask->scaleTexCoords();
 

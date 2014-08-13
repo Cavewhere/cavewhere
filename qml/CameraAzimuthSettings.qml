@@ -4,7 +4,7 @@ import Cavewhere 1.0
 
 ColumnLayout {
 
-    property RegionViewer viewer
+    property TurnTableInteraction turnTableInteraction
 
     GridLayout {
         rows: 3
@@ -22,7 +22,7 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(0.0)
             }
-            enabled: viewer.azimuth !== 0.0
+            enabled: turnTableInteraction.azimuth !== 0.0
         }
 
         Item { width:1; height:1 }
@@ -34,7 +34,7 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(270.0)
             }
-            enabled: viewer.azimuth !== 270.0
+            enabled: turnTableInteraction.azimuth !== 270.0
         }
 
         RowLayout {
@@ -43,7 +43,7 @@ ColumnLayout {
             width: northButton.width
 
             ClickTextInput {
-                text: Number(viewer.azimuth).toFixed(1)
+                text: Number(turnTableInteraction.azimuth).toFixed(1)
                 validator: doubleValidatorId
                 onFinishedEditting: {
                     azimuthAnimationId.to = newText
@@ -67,7 +67,7 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(90.0)
             }
-            enabled: viewer.azimuth !== 90.0
+            enabled: turnTableInteraction.azimuth !== 90.0
         }
 
         Item { width:1; height:1 }
@@ -78,7 +78,7 @@ ColumnLayout {
             onClicked: {
                 azimuthAnimationId.restartRotation(180.0)
             }
-            enabled: viewer.azimuth !== 180.0
+            enabled: turnTableInteraction.azimuth !== 180.0
         }
         Item { width:1; height:1 }
 
@@ -86,7 +86,7 @@ ColumnLayout {
 
     NumberAnimation {
         id: azimuthAnimationId
-        target: viewer;
+        target: turnTableInteraction;
         property: "azimuth";
         duration: 200;
         easing.type: Easing.InOutQuad
@@ -97,12 +97,12 @@ ColumnLayout {
                 toRotation = toRotation - 360;
             }
 
-            var from = viewer.azimuth;
+            var from = turnTableInteraction.azimuth;
             if(from > 180) {
                 from = from - 360.0;
             }
 
-            var angle = Math.abs((toRotation - viewer.azimuth) % 360.0);
+            var angle = Math.abs((toRotation - turnTableInteraction.azimuth) % 360.0);
             if(angle > 180) {
                 angle = 360.0 - angle;
             }

@@ -78,10 +78,13 @@
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
-#include "cwScreenCaptureManager.h"
+#include "cwCaptureManager.h"
+#include "cwScale.h"
+#include "cwBaseTurnTableInteraction.h"
 
 //Qt registeration
 #include <QQuickView>
+#include <QScreen>
 #include <QDebug>
 
 cwQMLRegister::cwQMLRegister()
@@ -90,9 +93,6 @@ cwQMLRegister::cwQMLRegister()
 
 void cwQMLRegister::registerQML()
 {
-////    const char* uri = "Cavewhere";
-///
-
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
     qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
@@ -159,8 +159,11 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwShaderDebugger>("Cavewhere", 1, 0, "ShaderDebugger");
     qmlRegisterType<cwLicenseAgreement>("Cavewhere", 1, 0, "LicenseAgreement");
     qmlRegisterType<cwRegionSceneManager>("Cavewhere", 1, 0, "RegionSceneManager");
-    qmlRegisterType<cwScreenCaptureManager>("Cavewhere", 1, 0, "ScreenCaptureManager");
+    qmlRegisterType<cwCaptureManager>("Cavewhere", 1, 0, "CaptureManager");
     qmlRegisterType<cwScene>("Cavewhere", 1, 0, "Scene");
     qmlRegisterType<cwGLViewer>("Cavewhere", 1, 0, "GLViewer");
     qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
+    qmlRegisterType<QScreen>();
+    qmlRegisterType<cwScale>("Cavewhere", 1, 0, "Scale");
+    qmlRegisterType<cwBaseTurnTableInteraction>("Cavewhere", 1, 0, "BaseTurnTableInteraction");
 }

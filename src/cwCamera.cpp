@@ -6,9 +6,11 @@
 **************************************************************************/
 
 #include "cwCamera.h"
+#include "cwDebug.h"
 
 cwCamera::cwCamera(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    ZoomScale(1.0)
 {
     ViewProjectionMatrixIsDirty = true;
     connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
@@ -161,4 +163,48 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      QVector3D pixelVector = mapNormalizeScreenToGLViewport(normalizeScreen);
      pixelVector = pixelVector - QVector3D(viewport().width() / 2.0, viewport().height() / 2.0, 0.0);
      return pixelVector.x();
+ }
+
+ /**
+* @brief cwCamera::setZoomScale
+* @param zoomScale
+*/
+ void cwCamera::setZoomScale(double zoomScale) {
+     if(projection().type() != cwProjection::Ortho) {
+         qWarning() << "Can't set zoom scale because the current projection isn't Ortho" << LOCATION;
+        return;
+     }
+
+     if(ZoomScale != zoomScale) {
+         ZoomScale = zoomScale;
+         setProjection(orthoProjectionDefault());
+         emit zoomScaleChanged();
+     }
+ }
+
+ /**
+  * @brief cw3dRegionViewer::orthoProjection
+  * @return This get the current ortho projection at the current zoom level
+  */
+ cwProjection cwCamera::orthoProjectionDefault() const
+ {
+     cwProjection projection;
+     QRectF viewport = this->viewport();
+     projection.setOrtho(-viewport.width() / 2.0 * ZoomScale,
+                         viewport.width() / 2.0 * ZoomScale,
+                         -viewport.height() / 2.0 * ZoomScale,
+                         viewport.height() / 2.0 * ZoomScale, -10000, 10000);
+     return projection;
+ }
+
+ /**
+  * @brief cw3dRegionViewer::perspectiveProjection
+  * @return The current prespective projection for the viewer
+  */
+ cwProjection cwCamera::perspectiveProjectionDefault() const
+ {
+     cwProjection projection;
+     QRectF viewport = this->viewport();
+     projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
+     return projection;
  }

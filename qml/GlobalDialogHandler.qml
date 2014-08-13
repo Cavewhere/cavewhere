@@ -8,5 +8,6 @@ Item {
         onPressed: mouse.accepted = true
         onWheel: wheel.accepted = true
         enabled: false
+        visible: enabled
     }
 }

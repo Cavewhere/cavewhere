@@ -47,10 +47,17 @@ Project {
             "-std=c++11" //For c++11 support
         ]
 
-        cpp.defines: [
+        cpp.defines:[
             "TRILIBRARY",
             "ANSI_DECLARATORS"
         ]
+
+        Properties {
+            //This property is set so we can debug QML will in the application in
+            //debug mode.
+            condition: qbs.buildVariant == "debug"
+            cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "\"")
+        }
 
         cpp.infoPlistFile: "Info.plist"
         cpp.minimumOsxVersion: "10.7"
@@ -316,7 +323,6 @@ Project {
                 "src/cwGlobals.h",
                 "src/cwInteraction.h",
                 "src/cwQMLRegister.h",
-                "src/cwQMLRegister.h",
                 "src/cwNorthArrowItem.h",
                 "src/cwPositioner3D.h",
                 "src/cwScaleLengthItem.h",
@@ -390,12 +396,14 @@ Project {
                 "src/cwRegionSceneManager.cpp",
                 "src/cwScale.h",
                 "src/cwScale.cpp",
-                "src/cwScreenCaptureManager.cpp",
-                "src/cwScreenCaptureManager.h",
+                "src/cwCaptureManager.cpp",
+                "src/cwCaptureManager.h",
                 "src/cwScreenCaptureCommand.cpp",
                 "src/cwScreenCaptureCommand.h",
                 "src/cwGraphicsImageItem.cpp",
-                "src/cwGraphicsImageItem.h"
+                "src/cwGraphicsImageItem.h",
+                "src/cwBaseTurnTableInteraction.h",
+                "src/cwBaseTurnTableInteraction.cpp"
             ]
         }
 
@@ -437,7 +445,7 @@ Project {
                 "qml/DoubleClickTextInput.qml",
                 "qml/Style.qml",
                 "qml/CoreClickTextInput.qml",
-                "qml/NoteScaleInput.qml",
+                "qml/PaperScaleInput.qml",
                 "qml/Pallete.qml",
                 "qml/UnitInput.qml",
                 "qml/NoteNorthUpInput.qml",
@@ -512,7 +520,12 @@ Project {
                 "qml/CameraVerticalAngleSettings.qml",
                 "qml/CameraProjectionSettings.qml",
                 "qml/ChoosePaperSizeInteraction.qml",
-                "qml/ExportViewTab.qml"
+                "qml/ExportViewTab.qml",
+                "qml/TurnTableInteraction.qml",
+                "qml/SelectExportAreaInteraction.qml",
+                "qml/SelectExportAreaTool.qml",
+                "src/cwViewportCapture.h",
+                "src/cwViewportCapture.cpp"
             ]
 
         }
@@ -617,7 +630,7 @@ Project {
 
             Artifact {
                 fileTags: ["resourcerules"]
-                fileName: product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
+                filePath: product.buildDirectory + "/Cavewhere.app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
 //                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
             }
 
@@ -640,7 +653,7 @@ Project {
 
             Artifact {
                 fileTags: ["resourcerules"]
-                fileName: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.filePath)
+                filePath: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.filePath)
 //                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
             }
 
@@ -662,12 +675,12 @@ Project {
 
             Artifact {
                 fileTags: ["hpp"]
-                fileName: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.h"
+                filePath: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.h"
             }
 
             Artifact {
                 fileTags: ["cpp"]
-                fileName: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.cc"
+                filePath: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.cc"
             }
 
             prepare: {
@@ -691,7 +704,7 @@ Project {
 
             Artifact {
                 fileTags: ["hpp"]
-                fileName: "versionInfo/cavewhereVersion.h"
+                filePath: "versionInfo/cavewhereVersion.h"
             }
 
             prepare: {
@@ -739,7 +752,7 @@ Project {
             "QMath3d/qplane3d.cpp",
             "QMath3d/qray3d.cpp",
             "QMath3d/qsphere3d.cpp",
-            "QMath3d/qtriangle3d.cpp"
+            "QMath3d/qtriangle3d.cpp",
         ]
     }
 }

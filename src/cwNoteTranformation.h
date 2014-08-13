@@ -36,6 +36,7 @@ class cwNoteTranformation : public QObject
     Q_PROPERTY(double northUp READ northUp WRITE setNorthUp NOTIFY northUpChanged)
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
+    Q_PROPERTY(cwScale* scaleObject READ scaleObject NOTIFY scaleObjectChanged)
 
 public:
     cwNoteTranformation(QObject* parent = 0);
@@ -44,6 +45,8 @@ public:
 
     cwLength* scaleNumerator() const;
     cwLength* scaleDenominator() const;
+
+    cwScale* scaleObject() const;
 
     void setScale(double scale);
     double scale() const;
@@ -62,11 +65,13 @@ public:
 signals:
     void scaleChanged();
     void northUpChanged();
+    void scaleObjectChanged();
 
 private:
     double North;
     cwScale* Scale;
 };
+
 //Q_DECLARE_METATYPE(cwNoteTranformation*)
 
 /**
@@ -76,6 +81,13 @@ inline double cwNoteTranformation::northUp() const {
     return North;
 }
 
+/**
+* @brief class::scaleObject
+* @return
+*/
+inline cwScale* cwNoteTranformation::scaleObject() const {
+    return Scale;
+}
 
 
 #endif // CWNOTETRANFORMATION_H

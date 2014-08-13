@@ -6,7 +6,7 @@ import Cavewhere 1.0
 Item {
     id: itemId
 
-    property RegionViewer viewer
+    property GLTerrainRenderer viewer
 
     ScrollView {
         anchors.fill: parent
@@ -24,7 +24,7 @@ Item {
                     width: columnLayoutId.width - 15
                     height: childrenRect.height
                     CameraAzimuthSettings {
-                        viewer: itemId.viewer
+                        turnTableInteraction: itemId.viewer.turnTableInteraction
                         anchors.left: parent.left
                         anchors.right: parent.right
                     }
@@ -38,7 +38,7 @@ Item {
                     width: columnLayoutId.width - 15
                     height: childrenRect.height
                     CameraVerticalAngleSettings {
-                        viewer: itemId.viewer
+                        turnTableInteraction: itemId.viewer.turnTableInteraction
                         anchors.left: parent.left
                         anchors.right: parent.right
                     }

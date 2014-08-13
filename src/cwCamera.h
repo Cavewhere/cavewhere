@@ -22,9 +22,13 @@ class cwCamera : public QObject
 
     //Only valid with ortho projection
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
+    Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
 
 public:
     explicit cwCamera(QObject *parent = 0);
+
+    double zoomScale() const;
+    void setZoomScale(double zoomScale);
 
     void setViewport(QRect viewport);
     QRect viewport() const;
@@ -54,12 +58,15 @@ public:
 
     //Utility functions
     double pixelsPerMeter() const; //Only valid with ortho projection
+    cwProjection orthoProjectionDefault() const;
+    cwProjection perspectiveProjectionDefault() const;
 
 signals:
     void viewportChanged();
     void projectionChanged();
     void viewChanged();
     void pixelsPerMeterChanged();
+    void zoomScaleChanged();
 
 public slots:
 
@@ -69,16 +76,7 @@ private:
     QMatrix4x4 ViewProjectionMatrix;
     cwProjection Projection;
 
-
-    //Projection matrix
-    bool Perspective; //This camera is using a perspective projection
-    double Left;
-    double Right;
-    double Bottom;
-    double Top;
-    double Near;
-    double Far;
-
+    double ZoomScale; //!<
 
     bool ViewProjectionMatrixIsDirty;
 };
@@ -151,4 +149,11 @@ inline QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 m
     return unProject(point, viewDepth, viewMatrix(), modelMatrix);
 }
 
+/**
+* @brief cwCamera::zoomScale
+* @return
+*/
+inline double cwCamera::zoomScale() const {
+    return ZoomScale;
+}
 #endif // CWCAMERA_H

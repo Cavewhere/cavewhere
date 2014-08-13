@@ -3,7 +3,7 @@ import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
 ColumnLayout {
-    property RegionViewer viewer
+    property TurnTableInteraction turnTableInteraction;
 
     RowLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -12,7 +12,7 @@ ColumnLayout {
         }
 
         ClickTextInput {
-            text: Number(viewer.pitch).toFixed(1)
+            text: Number(turnTableInteraction.pitch).toFixed(1)
             validator: doubleValidatorId
             onFinishedEditting: {
                 pitchAnimation.to = newText
@@ -37,7 +37,7 @@ ColumnLayout {
                     pitchAnimation.to = 90
                     pitchAnimation.restart()
                 }
-                enabled: viewer.pitch !== 90.0
+                enabled: turnTableInteraction.pitch !== 90.0
             }
 
             Button {
@@ -47,14 +47,14 @@ ColumnLayout {
                     pitchAnimation.to = 0.0
                     pitchAnimation.restart()
                 }
-                enabled: viewer.pitch !== 0.0
+                enabled: turnTableInteraction.pitch !== 0.0
             }
         }
     }
 
     NumberAnimation {
         id: pitchAnimation
-        target: viewer;
+        target: turnTableInteraction;
         property: "pitch";
         duration: 200;
         easing.type: Easing.InOutQuad

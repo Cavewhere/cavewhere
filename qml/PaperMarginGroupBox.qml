@@ -10,7 +10,7 @@ GroupBox {
     property alias topMargin: topId.value
     property alias bottomMargin: bottomId.value
 
-    title: "Margins"
+    title: "Margins - inches"
 
     property string unit: ""
 

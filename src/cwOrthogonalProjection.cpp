@@ -25,7 +25,7 @@ cwProjection cwOrthogonalProjection::calculateProjection()
 {
     cwProjection proj;
     if(projection().isNull()) {
-        proj = viewer()->orthoProjectionDefault();
+        proj = viewer()->camera()->orthoProjectionDefault();
         setPrivateFarPlane(proj.far());
         setPrivateNearPlane(proj.near());
     } else {
@@ -33,7 +33,7 @@ cwProjection cwOrthogonalProjection::calculateProjection()
     }
 
 
-    cwProjection viewProj = viewer()->orthoProjectionDefault();
+    cwProjection viewProj = viewer()->camera()->orthoProjectionDefault();
     proj.setOrtho(viewProj.left(), viewProj.right(),
                   viewProj.bottom(), viewProj.top(),
                   nearPlane(), farPlane());

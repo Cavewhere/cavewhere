@@ -12,16 +12,52 @@ Item {
 
     property GLTerrainRenderer view
 
+    function updatePaperRectangle(paperWidth, paperHeight) {
+        var i = paperSizeInteraction
+
+        i.paperRectangle.paperWidth = i.paperRectangle.landScape ? paperHeight : paperWidth
+        i.paperRectangle.paperHeight = i.paperRectangle.landScape ? paperWidth : paperHeight
+//        paperMarginGroupBoxId.unit = paperunits
+
+
+        //Stretch the paper to the max width or height of the screen
+        var paperAspect = paperWidth / paperHeight;
+        if(i.paperRectangle.landScape) {
+            paperAspect = 1.0 / paperAspect;
+        }
+
+        var viewerAspect = view.width / view.height;
+        var aspect = paperAspect / viewerAspect
+        if(aspect < 1.0) {
+            i.paperRectangle.width = view.width * aspect
+            i.paperRectangle.height = view.height
+        } else {
+            var aspect = viewerAspect / paperAspect
+            i.paperRectangle.width = view.width
+            i.paperRectangle.height = view.height * aspect
+        }
+    }
+
+    SelectExportAreaTool {
+        parent: exportViewTabId.view
+        view: exportViewTabId.view
+
+        onCapturedRectangle: {
+            //Add rectangle
+            console.log("Rectangle to add:" + rectangle)
+        }
+    }
+
     ChoosePaperSizeInteraction {
         id: paperSizeInteraction
         parent: view
-        visible: view !== null
+        visible: false; //view !== null
 
-        onWidthChanged: paperComboBoxId.updatePaperRectangle()
-        onHeightChanged: paperComboBoxId.updatePaperRectangle()
+        onWidthChanged: paperComboBoxId.updatePaperRectangleFromModel()
+        onHeightChanged: paperComboBoxId.updatePaperRectangleFromModel()
     }
 
-    ScreenCaptureManager {
+    CaptureManager {
         id: screenCaptureManagerId
         view: exportViewTabId.view
         viewport: Qt.rect(paperSizeInteraction.captureRectangle.x,
@@ -30,10 +66,11 @@ Item {
                           paperSizeInteraction.captureRectangle.height)
         paperSize: Qt.size(paperSizeInteraction.paperRectangle.paperWidth,
                            paperSizeInteraction.paperRectangle.paperHeight)
-        screenPaperSize: Qt.size(paperSizeInteraction.paperRectangle.width,
-                                 paperSizeInteraction.paperRectangle.height)
+//        screenPaperSize: Qt.size(paperSizeInteraction.paperRectangle.width,
+//                                 paperSizeInteraction.paperRectangle.height)
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
+
 
     ColumnLayout {
         id: columnLayoutId
@@ -48,31 +85,13 @@ Item {
                     model: paperSizeModel
                     textRole: "name"
 
-                    property alias paperRectangle: paperSizeInteraction.paperRectangle
+//                    property alias paperRectangle: paperSizeInteraction.paperRectangle
 
-                    function updatePaperRectangle() {
+                    function updatePaperRectangleFromModel() {
                         var item = paperSizeModel.get(currentIndex);
 
                         if(item) {
-                            paperRectangle.paperWidth = paperRectangle.landScape ? item.height : item.width
-                            paperRectangle.paperHeight = paperRectangle.landScape ? item.width : item.height
-                            paperMarginGroupBoxId.unit = item.units
-
-                            var paperAspect = item.width / item.height;
-                            if(paperRectangle.landScape) {
-                                paperAspect = 1.0 / paperAspect;
-                            }
-
-                            var viewerAspect = view.width / view.height;
-                            var aspect = paperAspect / viewerAspect
-                            if(aspect < 1.0) {
-                                paperRectangle.width = view.width * aspect
-                                paperRectangle.height = view.height
-                            } else {
-                                var aspect = viewerAspect / paperAspect
-                                paperRectangle.width = view.width
-                                paperRectangle.height = view.height * aspect
-                            }
+                            exportViewTabId.updatePaperRectangle(item.width, item.height)
                         }
                     }
 
@@ -85,13 +104,52 @@ Item {
                     }
 
                     onCurrentIndexChanged: {
-                        updatePaperRectangle()
+                        updatePaperRectangleFromModel()
                         updateDefaultMargins()
                     }
 
                     Component.onCompleted: {
-                        updatePaperRectangle()
+                        updatePaperRectangleFromModel()
                         updateDefaultMargins()
+                    }
+                }
+
+                RowLayout {
+                    Text {
+                        text: "Width"
+                    }
+
+                    ClickTextInput {
+                        id: paperSizeWidthInputId
+                        text: screenCaptureManagerId.paperSize.width
+                        readOnly: paperComboBoxId.currentIndex != 3
+                        onFinishedEditting: {
+                            paperSizeModel.setProperty(paperComboBoxId.currentIndex, "width", newText)
+                            paperComboBoxId.updatePaperRectangleFromModel();
+                        }
+                    }
+
+                    Text {
+                        text: "in"
+                        font.italic: true
+                    }
+
+                    Text {
+                        text: "Height"
+                    }
+
+                    ClickTextInput {
+                        text: screenCaptureManagerId.paperSize.height
+                        readOnly: paperSizeWidthInputId.readOnly
+                        onFinishedEditting: {
+                            paperSizeModel.setProperty(paperComboBoxId.currentIndex, "height", newText)
+                            paperComboBoxId.updatePaperRectangleFromModel();
+                        }
+                    }
+
+                    Text {
+                        text: "in"
+                        font.italic: true
                     }
                 }
 
@@ -118,6 +176,7 @@ Item {
 
                     Text {
                         text: "DPI"
+                        font.italic: true
                     }
                 }
             }
@@ -144,8 +203,8 @@ Item {
                 Switch {
                     id: orientationSwitchId
                     onCheckedChanged: {
-                        paperComboBoxId.paperRectangle.landScape = checked
-                        paperComboBoxId.updatePaperRectangle()
+                        paperSizeInteraction.paperRectangle.landScape = checked
+                        paperComboBoxId.updatePaperRectangleFromModel()
                     }
                 }
 
@@ -153,6 +212,111 @@ Item {
                     text: "Landscrape"
                 }
             }
+        }
+
+        GroupBox {
+            id: projectionScaleGroupBoxId
+            title: "Scale"
+
+            Scale {
+                id: projectionScaleId
+
+                property double oldScale: 0.0
+                property bool scaleChangeEnabled: false
+
+                //On paper
+                scaleNumerator.value: 1
+                scaleNumerator.unit: Units.LengthUnitless
+                scaleDenominator.unit: Units.LengthUnitless
+
+                onScaleChanged: {
+                    //Update the ortho projection matrix
+                    console.log("1. oldScale:" + oldScale + " " + scale)
+
+                    if(!isFinite(scale)) {
+                        return;
+                    }
+
+                    if(oldScale == 0.0) {
+                        oldScale = scale;
+                        return;
+                    }
+
+                    if(scaleChangeEnabled) {
+
+                        console.log("2. oldScale:" + oldScale + " " + scale + "\n")
+
+                        var scaleFactor = oldScale / scale
+
+                        var newZoomScale = view.camera.zoomScale * scaleFactor;
+                        console.log("scalefactor:" + scaleFactor + "newZomeScale:" + newZoomScale)
+                        view.camera.zoomScale = newZoomScale
+
+                        constantScaleCheckboxId.checked = true
+                    }
+
+                    oldScale = scale
+                }
+
+            }
+
+            function updateScaleDenominator() {
+                var inchToMeter = 0.0254;
+                if(constantScaleCheckboxId.checked) {
+                    //Update the paper size such that the scale stays the same
+                    var paperSize = (screenCaptureManagerId.screenPaperSize.width * projectionScaleId.scale) /
+                                    (inchToMeter * view.camera.pixelsPerMeter);
+
+                    var paperAspect = screenCaptureManagerId.paperSize.height / screenCaptureManagerId.paperSize.width;
+                    var paperHeight = paperSize * paperAspect;
+                    var paperWidth = paperSize;
+
+                    paperSizeInteraction.paperRectangle.paperWidth = paperWidth
+                    paperSizeInteraction.paperRectangle.paperHeight = paperHeight
+
+//                    screenCaptureManagerId.paperSize = Qt.size(paperWidth, paperHeight)
+                    paperSizeModel.set(3, {"width":paperWidth})
+                    paperSizeModel.set(3, {"height":paperHeight})
+
+                    console.log("Paper size:" + paperSize)
+
+                } else {
+                    //Update the scale
+                    var logicalDotPerMeter = screenCaptureManagerId.screenPaperSize.width /
+                            (screenCaptureManagerId.paperSize.width * inchToMeter)
+                    projectionScaleId.scaleChangeEnabled = false;
+                    projectionScaleId.scale = view.camera.pixelsPerMeter / logicalDotPerMeter;
+                    projectionScaleId.scaleChangeEnabled = true;
+                }
+            }
+
+            Connections {
+                target: screenCaptureManagerId
+                onScreenPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+                onPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+            }
+
+            Connections {
+                target: view.camera
+                onPixelsPerMeterChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+            }
+
+            Column {
+                PaperScaleInput {
+                    usingInteraction: false
+                    scaleObject: projectionScaleId
+                }
+
+                CheckBox {
+                    id: constantScaleCheckboxId
+                    text: "Constant Scale"
+                    checked: false
+                    onCheckedChanged: {
+                        paperComboBoxId.currentIndex = 3
+                    }
+                }
+            }
+
         }
 
         GroupBox {
@@ -169,9 +333,9 @@ Item {
             text: "Export"
 
             onClicked: {
-//                exportDialogId.open();
-                screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/loopCloser/test.png"
-                screenCaptureManagerId.capture()
+                exportDialogId.open();
+//                screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/loopCloser/test.png"
+//                screenCaptureManagerId.capture()
             }
         }
     }
@@ -213,19 +377,8 @@ Item {
 
         ListElement {
             name: "A4"
-            width: 210
-            height: 297
-            units: "mm"
-            defaultLeftMargin: 10
-            defaultRightMargin: 10
-            defaultTopMargin: 10
-            defaultBottomMargin: 10
-        }
-
-        ListElement {
-            name: "Custom Size"
-            width: 0
-            height: 0
+            width: 8.26772
+            height: 11.6929
             units: "in"
             defaultLeftMargin: 1.0
             defaultRightMargin: 1.0
@@ -234,10 +387,14 @@ Item {
         }
 
         ListElement {
-            name: "Screen Size"
-            width: 300 //viewer.width / 100
-            height: 400 //viewer.height / 100
+            name: "Custom Size"
+            width: 8.5
+            height: 11
             units: "in"
+            defaultLeftMargin: 1.0
+            defaultRightMargin: 1.0
+            defaultTopMargin: 1.0
+            defaultBottomMargin: 1.0
         }
     }
 }

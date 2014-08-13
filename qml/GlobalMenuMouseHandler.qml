@@ -16,7 +16,7 @@ MouseArea {
 
     property var currentRootContextMenu: null
 
-    visible: true;
+    visible: currentRootContextMenu !== null;
 
     function closeOpenMenu() {
         if(currentRootContextMenu !== null) {

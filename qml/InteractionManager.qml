@@ -10,7 +10,7 @@ import Cavewhere 1.0
 
 Item {
 
-    property list<Interaction> interactions
+    property var interactions: []
     property Interaction defaultInteraction
     property Interaction activeInteraction: null
 
@@ -32,15 +32,44 @@ Item {
         active(defaultInteraction)
     }
 
+    function add(interaction) {
+        if(interactions.indexOf(interaction) >= 0) {
+            console.warn("Can't add interaction because it has already been added");
+            return;
+        }
+
+        interactions.push(interaction);
+        connectInteraction(interaction);
+    }
+
+    function remove(interaction) {
+        var indexToRemove = interactions.indexOf(iteraction);
+        if(indexToRemove >= 0) {
+            if(activeInteraction === interaction) {
+                activeDefaultInteraction();
+            }
+
+            interaction.activated.disconnect(active);
+            interaction.deactivated.disconnect(activeDefaultInteraction)
+
+        }
+    }
+
+    function connectInteraction(interaction) {
+        interaction.visible = false
+        interaction.activated.connect(active);
+        interaction.deactivated.connect(activeDefaultInteraction);
+    }
+
     Component.onCompleted: {
         for(var i = 0; i < interactions.length; i++) {
             var interaction = interactions[i];
-            interaction.visible = false
-            interaction.activated.connect(active);
-            interaction.deactivated.connect(activeDefaultInteraction);
+            connectInteraction(interaction);
         }
 
-        active(defaultInteraction)
+        activeDefaultInteraction()
     }
+
+
 
 }

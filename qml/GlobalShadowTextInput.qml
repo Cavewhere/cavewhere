@@ -22,6 +22,7 @@ MouseArea {
 
     anchors.fill: parent
     enabled: false
+    visible: enabled
 
     onPressed: {
         if(coreClickInput !== null) {

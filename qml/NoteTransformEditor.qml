@@ -114,9 +114,9 @@ Item {
             Cavewhere only uses <b>north</b> to help you automatically label stations."
         }
 
-        NoteScaleInput {
+        PaperScaleInput {
             id: scaleInputId
-            noteTransform: editor.noteTransform
+            scaleObject: editor.noteTransform == null ? null : editor.noteTransform.scaleObject
             scaleHelp: scaleHelpAreaId
             onScaleInteractionActivated: interactionManager.active(scaleInteraction)
             autoScaling: autoTransformCheckBox.checked

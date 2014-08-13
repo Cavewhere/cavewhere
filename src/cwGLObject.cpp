@@ -83,7 +83,6 @@ void cwGLObject::setScene(cwScene *scene)
      QueuedDataCommand = new cwUpdateDataCommand();
      QueuedDataCommand->setGLObject(this);
      Scene->addSceneCommand(QueuedDataCommand);
-
  }
 
 /**

@@ -8,7 +8,7 @@ TabView {
 
     Layout.minimumWidth: 175
 
-    property RegionViewer viewer
+    property GLTerrainRenderer viewer
     property Tab viewTab
 
     Component {
