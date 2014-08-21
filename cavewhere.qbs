@@ -405,7 +405,9 @@ Project {
                 "src/cwBaseTurnTableInteraction.h",
                 "src/cwBaseTurnTableInteraction.cpp",
                 "src/cwQuickSceneView.h",
-                "src/cwQuickSceneView.cpp"
+                "src/cwQuickSceneView.cpp",
+                "src/cwViewportCapture.h",
+                "src/cwViewportCapture.cpp"
             ]
         }
 
@@ -526,8 +528,8 @@ Project {
                 "qml/TurnTableInteraction.qml",
                 "qml/SelectExportAreaInteraction.qml",
                 "qml/SelectExportAreaTool.qml",
-                "src/cwViewportCapture.h",
-                "src/cwViewportCapture.cpp"
+                "qml/SelectionRectangle.qml"
+
             ]
 
         }
@@ -603,7 +605,7 @@ Project {
         Group {
             name: "macIcons"
             files: [
-                "cavewhereIcon.icns"
+                "cavewhereIcon.icns",
             ]
             fileTags: ["icns-in"]
         }

@@ -41,18 +41,7 @@ Item {
     SelectExportAreaTool {
         parent: exportViewTabId.view
         view: exportViewTabId.view
-
-        onCapturedRectangle: {
-            //Add rectangle
-            console.log("Rectangle to add:" + rectangle)
-            var viewObject = captureViewComponentId.createObject()
-            console.log("Created view:" + viewObject)
-        }
-
-        Component {
-            id: captureViewComponentId
-            ViewportCapture { }
-        }
+        manager: screenCaptureManagerId
     }
 
     ChoosePaperSizeInteraction {

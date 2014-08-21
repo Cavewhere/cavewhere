@@ -28,6 +28,8 @@ class cwViewportCapture : public QObject
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
     Q_PROPERTY(cwScale* scaleOrtho READ scaleOrtho CONSTANT) //For ortho projections
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
+    Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
+    Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
 
 public:
     explicit cwViewportCapture(QObject *parent = 0);
@@ -47,11 +49,17 @@ public:
     bool previewCapture() const;
     void setPreviewCapture(bool preview);
 
-    void capture(); //This should be called by the
+    QGraphicsItem* previewItem() const;
+    QGraphicsItem* fullResolutionItem() const;
+
+    Q_INVOKABLE void capture(); //This should be called by the
 signals:
     void resolutionChanged();
     void viewportChanged();
     void viewChanged();
+    void finishedCapture();
+    void previewItemChanged();
+    void fullResolutionItemChanged();
 
 public slots:
 
@@ -63,6 +71,7 @@ private:
     QRect Viewport;
     bool PreviewCapture;
 
+    bool CapturingImages;
     int NumberOfImagesProcessed;
     int Columns;
     int Rows;
@@ -128,6 +137,22 @@ inline bool cwViewportCapture::previewCapture() const {
 inline void cwViewportCapture::setPreviewCapture(bool preview)
 {
     PreviewCapture = preview;
+}
+
+/**
+* @brief cwViewportCapt::previewItem
+* @return
+*/
+inline QGraphicsItem* cwViewportCapture::previewItem() const {
+    return PreviewItem;
+}
+
+/**
+* @brief cwViewportCapture::fullResolutionItem
+* @return
+*/
+inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
+    return Item;
 }
 
 #endif // CWVIEWPORTCAPTURE_H

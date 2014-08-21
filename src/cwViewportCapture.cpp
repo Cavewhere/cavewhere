@@ -19,6 +19,11 @@
 cwViewportCapture::cwViewportCapture(QObject *parent) :
     QObject(parent),
     ScaleOrtho(new cwScale(this)),
+    PreviewCapture(true),
+    CapturingImages(false),
+    NumberOfImagesProcessed(0),
+    Columns(0),
+    Rows(0),
     TileSize(1024, 1024),
     CaptureCamera(new cwCamera(this)),
     PreviewItem(nullptr),
@@ -85,6 +90,9 @@ void cwViewportCapture::setViewport(QRect viewport) {
  */
 void cwViewportCapture::capture()
 {
+    if(CapturingImages) { return; }
+    CapturingImages = true;
+
     if(!viewport().size().isValid()) {
         qWarning() << "Viewport isn't valid for export:" << viewport();
         return;
@@ -105,24 +113,27 @@ void cwViewportCapture::capture()
     //Flip the viewport so it's in opengl coordinate system instead of qt
     viewport.moveTop(cameraViewport.height() - viewport.bottom());
 
+    double imageScale;
     if(previewCapture()) {
-        delete PreviewItem;
+        if(PreviewItem != NULL) {
+            delete PreviewItem;
+        }
         PreviewItem = new QGraphicsItemGroup();
+        previewItemChanged();
+
+        imageScale = 1.0;
     } else {
-        delete Item;
+        if(Item != NULL) {
+            delete Item;
+        }
         Item = new QGraphicsItemGroup();
+
+
+        imageScale = PreviewItem->scale();
     }
 
     //Updates the scale for the preview item
     updateScalePreviewItem();
-
-    //Calculate the scale
-    double imageScale;
-    if(previewCapture()) {
-        imageScale = 1.0;
-    } else {
-        imageScale = PreviewItem->scale();
-    }
 
     QSize tileSize = TileSize;
     QSize imageSize = QSize(viewport.width() * imageScale, viewport.height() * imageScale);
@@ -273,13 +284,16 @@ QSize cwViewportCapture::calcCroppedTileSize(QSize tileSize, QSize imageSize, in
 void cwViewportCapture::capturedImage(QImage image, int id)
 {
     Q_UNUSED(id)
-//    QSize tileSize = TileSize;
 
-//    int row = Rows - (id / Columns) - 1;
-//    int column = id % Columns;
+    Q_ASSERT(CapturingImages);
 
-//    double x = (viewport().x() * Scale) + column * tileSize.width();
-//    double y = row * tileSize.height();
+    QSize tileSize = TileSize;
+
+    int row = Rows - (id / Columns) - 1;
+    int column = id % Columns;
+
+    double x = column * tileSize.width();
+    double y = row * tileSize.height();
 
 //    double bottom = (paperSize().height() - bottomMargin()) * resolution();
 //    double yDiff = bottom - Rows * tileSize.height();
@@ -290,17 +304,27 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 
     cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
     graphicsImage->setImage(image);
-//    graphicsImage->setPos(QPointF(x, y));
+    graphicsImage->setPos(QPointF(x, y));
+
+    if(NumberOfImagesProcessed == Rows * Columns) {
+        //Finished capturing images
+        NumberOfImagesProcessed = 0;
+        Rows = 0;
+        Columns = 0;
+        CapturingImages = false;
+        emit finishedCapture();
+    }
 }
 
 /**
  * @brief cwViewportCapture::updateScalePreviewItem
  *
- * This updates the preview item's scale
+ * This updates the preview item's scale. This will stretch the images, so they
+ * are scaled properly
  */
 void cwViewportCapture::updateScalePreviewItem()
 {
-
+    PreviewItem->setScale(ScaleOrtho->scale());
 }
 
 /**

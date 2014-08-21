@@ -1,17 +1,29 @@
 import QtQuick 2.0
 import QtQuick.Controls 1.2
+import Cavewhere 1.0
 
 Item {
     id: toolId
 
     property GLTerrainRenderer view
-
-    signal capturedRectangle(var rectangle)
+    property CaptureManager manager;
 
     anchors.fill: parent
     visible: parent !== null
 
+    function addRectangle(rectangle) {
+        console.log("I get here:" + rectangle)
+        var viewObject = captureViewComponentId.createObject()
+        viewObject.view = view
+        viewObject.viewport = rectangle
+        viewObject.capture();
+        manager.addViewportCapture(viewObject);
+    }
 
+    Component {
+        id: captureViewComponentId
+        ViewportCapture { }
+    }
 
     SelectExportAreaInteraction {
         id: interactionId
@@ -59,125 +71,117 @@ Item {
 
                       state = ""
 
-                      capturedRectangle(caputerRect)
+                      toolId.addRectangle(caputerRect)
+                      expantionAreaId.state = "EXPAND_RIGHT"
                   }
               }
           }
        ]
     }
 
-    Rectangle {
+    SelectionRectangle {
         id: selectionRectangleId
-
-        property int mouseBuffer: 5
-
-        opacity: 0.30
-        color: "#11B0FF"
-        border.width: 1
-        border.color: "#676767"
-
-        onVisibleChanged: {
-            console.log("Visible changed:" + visible)
-        }
-
-        MouseArea {
-            id: leftSide
-            width: selectionRectangleId.mouseBuffer
-            anchors.horizontalCenter: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: selectionRectangleId.mouseBuffer
-            anchors.bottomMargin: selectionRectangleId.mouseBuffer
-            hoverEnabled: true
-            cursorShape: Qt.SplitHCursor
-            onPressed: { }
-            onPositionChanged: {
-                if(pressed) {
-                    var leftSide = mapToItem(toolId, mouse.x, 0).x
-                    var rightSide = selectionRectangleId.x + selectionRectangleId.width;
-                    var width = rightSide - leftSide
-                    if(width >= selectionRectangleId.mouseBuffer) {
-                        selectionRectangleId.x = leftSide
-                        selectionRectangleId.width = width
-                    }
-                }
-            }
-        }
-
-        MouseArea {
-            id: rightSide
-            width: selectionRectangleId.mouseBuffer
-            anchors.horizontalCenter: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: selectionRectangleId.mouseBuffer
-            anchors.bottomMargin: selectionRectangleId.mouseBuffer
-            hoverEnabled: true
-            cursorShape: Qt.SplitHCursor
-            onPressed: { }
-            onPositionChanged: {
-                if(pressed) {
-                    var leftSide = selectionRectangleId.x;
-                    var rightSide = mapToItem(toolId, mouse.x, 0).x
-                    var width = rightSide - leftSide
-                    if(width >= selectionRectangleId.mouseBuffer) {
-                        selectionRectangleId.width = width
-                    }
-                }
-            }
-        }
-
-        MouseArea {
-            id: topSide
-            height: selectionRectangleId.mouseBuffer
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.top
-            anchors.leftMargin: selectionRectangleId.mouseBuffer
-            anchors.rightMargin: selectionRectangleId.mouseBuffer
-            hoverEnabled: true
-            cursorShape: Qt.SplitVCursor
-            onPressed: { }
-            onPositionChanged: {
-                if(pressed) {
-                    var topSide = mapToItem(toolId, 0, mouse.y).y
-                    var bottomSide = selectionRectangleId.y + selectionRectangleId.height
-                    var height = bottomSide - topSide
-                    if(height >= selectionRectangleId.mouseBuffer) {
-                        selectionRectangleId.y = topSide
-                        selectionRectangleId.height = height
-                    }
-                }
-            }
-        }
-
-        MouseArea {
-            id: bottomSide
-            height: selectionRectangleId.mouseBuffer
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.bottom
-            anchors.leftMargin: selectionRectangleId.mouseBuffer
-            anchors.rightMargin: selectionRectangleId.mouseBuffer
-            hoverEnabled: true
-            cursorShape: Qt.SplitVCursor
-            onPressed: { }
-            onPositionChanged: {
-                if(pressed) {
-                    var topSide = selectionRectangleId.y
-                    var bottomSide = mapToItem(toolId, 0, mouse.y).y
-                    var height = bottomSide - topSide
-                    if(height >= selectionRectangleId.mouseBuffer) {
-                        selectionRectangleId.height = height
-                    }
-                }
-            }
-        }
-
     }
 
+    Item {
+        id: expantionAreaId
+
+        property int hiddenWidth: 100
+
+        anchors.fill: parent
+
+        visible: manager.numberOfCaptures
+
+        Rectangle {
+            color: "blue"
+            opacity: .4
+            anchors.fill: parent
+        }
+
+        MouseArea {
+            id: renderingSelectionArea
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            hoverEnabled: true
+            onClicked: {
+                expantionAreaId.state = "EXPAND_LEFT"
+            }
+
+            Behavior on width {
+                   NumberAnimation { duration: 100 }
+               }
+
+            Rectangle {
+                id: selectionRectangle1
+                anchors.fill: parent
+                color: "#6574FF"
+                opacity: .25
+                visible: renderingSelectionArea.containsMouse
+            }
+        }
+
+        Rectangle {
+            anchors.left: renderingSelectionArea.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+
+            color: "red"
+
+            MouseArea {
+                id: selectExportViewId
+                anchors.fill: parent
+
+                onEnabledChanged: {
+                    console.log("Enabled change:" + enabled)
+                }
+
+                onClicked: {
+                    expantionAreaId.state = "EXPAND_RIGHT"
+                }
+            }
+        }
+
+        states: [
+            State {
+                name: "EXPAND_LEFT"
+                PropertyChanges {
+                    target: renderingSelectionArea
+                    width: expantionAreaId.width - expantionAreaId.hiddenWidth
+                    enabled: false
+                }
+
+                PropertyChanges {
+                    target: selectExportViewId
+                    enabled: true
+                }
+
+            },
+
+            State {
+                name: "EXPAND_RIGHT"
+
+                PropertyChanges {
+                    target: renderingSelectionArea
+                    width: expantionAreaId.hiddenWidth
+                    enabled: true
+                }
+
+                PropertyChanges {
+                    target: selectExportViewId
+                    enabled: false
+                }
+            },
+
+            State {
+                name: "CUSTOM"
+            }
+        ]
+    }
+
+
     onViewChanged: {
-        console.log("Added! " + view)
         view.interactionManager.add(interactionId)
     }
 
