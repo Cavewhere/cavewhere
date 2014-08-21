@@ -18,7 +18,7 @@
 class cwScale;
 class cw3dRegionViewer;
 class cwCamera;
-#include <cwProjection.h>
+#include "cwProjection.h"
 
 class cwViewportCapture : public QObject
 {

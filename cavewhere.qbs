@@ -2,50 +2,125 @@ import qbs 1.0
 import qbs.TextFile
 import qbs.Process
 import qbs.FileInfo
+import qbs.File
+import "cavewhereBuildFunctions.js" as utils
 
 Project {
     Application {
         id: applicationId
         name: "Cavewhere"
 
+        property string git: utils.findIfExisting(["C:/Program Files/Git/cmd/git.cmd",
+                                             "/usr/bin/git",
+                                             "/usr/local/bin/git"])
+
+        property string protoc: utils.findIfExisting(["/usr/local/bin/protoc",
+                                                     windowsProtoPath + "/Release/protoc.exe",
+                                                     windowsProtoPath + "/protoc.exe"])
+
+        property string windowsSquishPath: "C:/windowsBuild/libs/win32/squish-1.11/squish-1.11"
+        property string windowsProtoPath: "C:/windowsBuild/libs/win32/protobuf-2.5.0rc1/vsprojects"
+        property string windowsZlibPath: "C:/windowsBuild/libs/win32/zlib-1.2.5"
+        property var sharedIncludes: [
+            "src",
+            "QMath3d",
+            "src/utils",
+            product.buildDirectory + "/serialization",
+            product.buildDirectory + "/versionInfo"
+        ]
+
         Depends { name: "cpp" }
         Depends { name: "Qt";
-            submodules: [ "core", "gui", "widgets", "script", "quick", "sql", "opengl", "xml", "concurrent" ]
+            submodules: [ "core",
+                "gui",
+                "widgets",
+                "script",
+                "quick",
+                "sql",
+                "opengl",
+                "xml",
+                "concurrent" ]
         }
         Depends { name: "QMath3d" }
 //        Depends { name: "icns-out" }
 
         Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
-        cpp.includePaths: [
-            "src",
-            "QMath3d",
-            "src/utils",
-            product.buildDirectory + "/serialization",
-            product.buildDirectory + "/versionInfo",
-            "/usr/local/include"
-        ]
 
-        cpp.libraryPaths: [
-            "/usr/local/lib"
-        ]
+        Properties {
+            condition: qbs.targetOS.contains("osx")
 
-        cpp.dynamicLibraries: [
-            "squish",
-            "z",
-            "protobuf",
-            "c++"
-        ]
+            cpp.includePaths: sharedIncludes.concat("/usr/local/include")
 
-        cpp.frameworks: [
-            "OpenGL"
-        ]
+            cpp.libraryPaths: [
+                "/usr/local/lib"
+            ]
 
-        cpp.cxxFlags: [
-            "-stdlib=libc++", //Needed for protoc
-            "-Werror",
-            "-std=c++11" //For c++11 support
-        ]
+            cpp.dynamicLibraries: [
+                "squish",
+                "z",
+                "protobuf",
+                "c++"
+            ]
+
+            cpp.frameworks: [
+                "OpenGL"
+            ]
+
+            cpp.cxxFlags: [
+                "-stdlib=libc++", //Needed for protoc
+                "-Werror", //Treat warnings as errors
+                "-std=c++11" //For c++11 support
+            ]
+        }
+
+        Properties {
+            condition: qbs.targetOS.contains("windows")
+
+            cpp.includePaths: sharedIncludes.concat([windowsProtoPath + "/include",
+                                                   windowsSquishPath,
+                                                   windowsZlibPath])
+            cpp.cxxFlags: [
+                "/WX", //Treat warnings as errors
+                "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
+            ]
+        }
+
+        Properties {
+            condition: qbs.targetOS.contains("windows") &&
+                       qbs.buildVariant.contains("debug")
+
+            cpp.libraryPaths: [
+                windowsSquishPath + "/lib/vs9",
+                windowsZlibPath,
+                windowsProtoPath + "/Debug"
+            ]
+
+            cpp.dynamicLibraries: [
+                "squishd",
+                "zlibd",
+                "libprotobuf",
+                "OpenGL32"
+            ]
+        }
+
+        Properties {
+            condition: qbs.targetOS.contains("windows") &&
+                       qbs.buildVariant.contains("release")
+
+            cpp.libraryPaths: [
+                windowsSquishPath + "/lib/vs9",
+                windowsZlibPath,
+                windowsProtoPath + "Release"
+            ]
+
+            cpp.dynamicLibraries: [
+                "squish",
+                "zlib",
+                "libprotobuf",
+                "OpengGL32"
+            ]
+        }
 
         cpp.defines:[
             "TRILIBRARY",
@@ -61,6 +136,11 @@ Project {
 
         cpp.infoPlistFile: "Info.plist"
         cpp.minimumOsxVersion: "10.7"
+
+        Group {
+            fileTagsFilter: ["application", "applicationbundle"]
+            qbs.install: true
+        }
 
         Group {
             name: "ProtoFiles"
@@ -612,12 +692,26 @@ Project {
 
         Group {
             name: "survexDepends"
+            condition: qbs.targetOS == "osx"
             files: [
                 "plotsauce",
                 "cavern",
                 "share"
             ]
             fileTags: ["survex"]
+        }
+
+        Group {
+            name: "windowsDLLs"
+            condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
+            qbs.install: true
+            files:[
+                Qt.core.binPath + "/*d.dll",
+                Qt.core.binPath + "/icuin*.dll",
+                Qt.core.binPath + "/icuuc*.dll",
+                Qt.core.binPath + "/icudt*.dll",
+                windowsZlibPath + "/zlibd1.dll"
+            ]
         }
 
 //        Group {
@@ -688,7 +782,7 @@ Project {
             }
 
             prepare: {
-                var protoc = "/usr/local/bin/protoc"
+                var protoc = product.protoc
                 var proto_path = FileInfo.path(input.filePath)
                 var cpp_out = product.buildDirectory + "/serialization"
 
@@ -715,15 +809,18 @@ Project {
                 var cmd = new JavaScriptCommand();
                 cmd.description = "generating version info in" + output.filePath;
 
-                //Broken for now, but once next version of qbs comes out, this should work.
-                //See https://bugreports.qt-project.org/browse/QBS-385
                 //Use git to query the version
-                var git = "/usr/bin/git"
-                var gitProcess = new Process();
-                gitProcess.setWorkingDirectory(product.sourceDirectory)
-                gitProcess.exec(git, ["describe"] ,true);
-                var gitDescribe = gitProcess.readStdOut();
-                gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
+                var git = product.git
+                var gitDescribe = "Unknown Version"
+
+                if(File.exists(git)) {
+                    var gitProcess = new Process();
+                    gitProcess.setWorkingDirectory(product.sourceDirectory)
+                    gitProcess.exec(git, ["describe"] ,true);
+                    gitDescribe = gitProcess.readStdOut();
+                    gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
+                }
+
                 cmd.cavewhereVersion = gitDescribe
 
                 cmd.sourceCode = function() {
@@ -746,7 +843,16 @@ Project {
         Depends { name: "Qt";
             submodules: [ "core", "gui" ]
         }
+
+        cpp.defines: ["Q_MATH_3D"]
+
+        Group {
+            fileTagsFilter: ["dynamiclibrary"]
+            qbs.install: true
+        }
+
         files: [
+            "QMath3d/smallqt3d_global.h",
             "QMath3d/qbox3d.h",
             "QMath3d/qplane3d.h",
             "QMath3d/qray3d.h",

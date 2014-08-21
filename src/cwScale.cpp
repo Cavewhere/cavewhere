@@ -28,7 +28,7 @@ cwScale::cwScale(const cwScale &other) :
     connectLengthObjects();
 }
 
-const cwScale &cwScale::cwScale::operator =(const cwScale &other)
+const cwScale& cwScale::operator =(const cwScale &other)
 {
     if(this != &other) {
         *ScaleNumerator = *(other.ScaleNumerator);

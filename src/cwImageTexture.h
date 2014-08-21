@@ -22,7 +22,7 @@
 #include "cwImage.h"
 class cwTextureUploadTask;
 
-class cwImageTexture : public QObject
+class cwImageTexture : public QObject, private QOpenGLFunctions
 {
     Q_OBJECT
 public:
@@ -99,19 +99,19 @@ inline cwImage cwImageTexture::image() const {
     return Image;
 }
 
-/**
-  This binds the texture to current texture unit
-  */
-inline void cwImageTexture::bind() {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, TextureId);
-}
+///**
+//  This binds the texture to current texture unit
+//  */
+//inline void cwImageTexture::bind() {
+//    glActiveTexture(GL_TEXTURE0);
+//    glBindTexture(GL_TEXTURE_2D, TextureId);
+//}
 
-/**
-    Releases the texture
-  */
-inline void cwImageTexture::release() {
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
+///**
+//    Releases the texture
+//  */
+//inline void cwImageTexture::release() {
+//    glBindTexture(GL_TEXTURE_2D, 0);
+//}
 
 #endif // CWIMAGETEXTURE_H

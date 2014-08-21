@@ -51,6 +51,8 @@ cwImageTexture::~cwImageTexture()
   */
 void cwImageTexture::initialize()
 {
+    initializeOpenGLFunctions();
+
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
 
@@ -232,5 +234,17 @@ void cwImageTexture::markAsDirty()
     TextureDirty = true;
 }
 
+/**
+  This binds the texture to current texture unit
+  */
+void cwImageTexture::bind() {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, TextureId);
+}
 
-
+/**
+    Releases the texture
+  */
+void cwImageTexture::release() {
+    glBindTexture(GL_TEXTURE_2D, 0);
+}

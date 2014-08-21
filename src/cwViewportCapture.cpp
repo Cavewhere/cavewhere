@@ -16,6 +16,12 @@
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 
+//undef these because micrsoft is fucking retarded...
+#ifdef Q_OS_WIN
+#undef far
+#undef near
+#endif
+
 cwViewportCapture::cwViewportCapture(QObject *parent) :
     QObject(parent),
     ScaleOrtho(new cwScale(this)),

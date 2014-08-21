@@ -19,13 +19,14 @@ class QOpenGLFramebufferObject;
 #include <QOpenGLBuffer>
 #include <QQuaternion>
 #include <QPainter>
+#include <QOpenGLFunctions>
 
 /**
  * @brief The cwGLCompass class
  *
  * This draws 3d compass on the screen.
  */
-class cwCompassItem : public QQuickPaintedItem
+class cwCompassItem : public QQuickPaintedItem, private QOpenGLFunctions
 {
     Q_OBJECT
 

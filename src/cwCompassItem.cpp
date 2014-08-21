@@ -34,6 +34,7 @@ cwCompassItem::cwCompassItem(QQuickItem* item) :
  */
 void cwCompassItem::initialize()
 {
+    initializeOpenGLFunctions();
     initializeGeometry();
     initializeShaders();
     initializeFramebuffer();

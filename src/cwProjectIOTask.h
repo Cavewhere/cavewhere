@@ -9,7 +9,7 @@
 #define CXMLPROJECTLOADTASK_H
 
 //Our includes
-#include <cwTask.h>
+#include "cwTask.h"
 class cwCavingRegion;
 
 //Qt includes
