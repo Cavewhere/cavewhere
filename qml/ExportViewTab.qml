@@ -66,13 +66,8 @@ Item {
         //                                 paperSizeInteraction.paperRectangle.height)
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
-    RowLayout {
 
-        QuickSceneView {
-            width: 500
-            height: 500
-            scene: screenCaptureManagerId.scene
-        }
+    RowLayout {
 
         ColumnLayout {
             id: columnLayoutId

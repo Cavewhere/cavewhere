@@ -92,12 +92,6 @@ Item {
 
         visible: manager.numberOfCaptures
 
-        Rectangle {
-            color: "blue"
-            opacity: .4
-            anchors.fill: parent
-        }
-
         MouseArea {
             id: renderingSelectionArea
             anchors.left: parent.left
@@ -126,19 +120,29 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
+            clip: true
 
-            color: "red"
+            QuickSceneView {
+                width: 500
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                scene: manager.scene
+            }
 
             MouseArea {
                 id: selectExportViewId
                 anchors.fill: parent
-
-                onEnabledChanged: {
-                    console.log("Enabled change:" + enabled)
-                }
+                hoverEnabled: true
 
                 onClicked: {
                     expantionAreaId.state = "EXPAND_RIGHT"
+                }
+
+                Rectangle {
+                    id: selectionRectangle2
+                    anchors.fill: parent
+                    color: "#6574FF"
+                    opacity: .25
                 }
             }
         }
@@ -149,12 +153,12 @@ Item {
                 PropertyChanges {
                     target: renderingSelectionArea
                     width: expantionAreaId.width - expantionAreaId.hiddenWidth
-                    enabled: false
+                    visible: false
                 }
 
                 PropertyChanges {
                     target: selectExportViewId
-                    enabled: true
+                    visible: true
                 }
 
             },
@@ -165,12 +169,12 @@ Item {
                 PropertyChanges {
                     target: renderingSelectionArea
                     width: expantionAreaId.hiddenWidth
-                    enabled: true
+                    visible: true
                 }
 
                 PropertyChanges {
                     target: selectExportViewId
-                    enabled: false
+                    visible: false
                 }
             },
 
