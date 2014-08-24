@@ -1,3 +1,6 @@
 [submodule "QMath3d"]
 	path = QMath3d
 	url = git@github.com:vpicaver/QMath3d.git
+[submodule "survex"]
+	path = survex
+	url = git@github.com:Cavewhere/survex.git
