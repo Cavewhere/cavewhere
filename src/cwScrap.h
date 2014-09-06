@@ -15,9 +15,9 @@
 #include <QPolygonF>
 
 //Our includes
-#include <cwNoteTranformation.h>
-#include <cwNoteStation.h>
-#include <cwTriangulatedData.h>
+#include "cwNoteTranformation.h"
+#include "cwNoteStation.h"
+#include "cwTriangulatedData.h"
 class cwNote;
 class cwCave;
 

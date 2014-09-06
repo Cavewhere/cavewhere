@@ -9,7 +9,7 @@
 #define CWXMLPROJECTSAVETASK_H
 
 //Our includes
-#include <cwRegionIOTask.h>
+#include "cwRegionIOTask.h"
 class cwCave;
 class cwTrip;
 class cwSurveyNoteModel;

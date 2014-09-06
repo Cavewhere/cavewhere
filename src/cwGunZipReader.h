@@ -13,7 +13,7 @@
 #include <QStringList>
 
 //Our includes
-#include <cwTask.h>
+#include "cwTask.h"
 
 class cwGunZipReader : public cwTask
 {

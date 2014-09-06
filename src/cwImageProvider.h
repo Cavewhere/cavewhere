@@ -16,8 +16,8 @@
 #include <QVector2D>
 
 //Our includes
-#include <cwImage.h>
-#include <cwImageData.h>
+#include "cwImage.h"
+#include "cwImageData.h"
 
 class cwImageProvider : public QObject, public QQuickImageProvider
 {

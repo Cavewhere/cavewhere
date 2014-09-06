@@ -9,7 +9,7 @@
 #define CWEDGETILE_H
 
 //Our includes
-#include <cwTile.h>
+#include "cwTile.h"
 
 class cwEdgeTile : public cwTile {
 public:

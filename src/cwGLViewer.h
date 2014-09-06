@@ -28,10 +28,10 @@ class cwShaderDebugger;
 class cwCavingRegion;
 class cwCave;
 class cwScene;
-#include <cwStation.h>
-#include <cwRegularTile.h>
-#include <cwEdgeTile.h>
-#include <cwCollisionRectKdTree.h>
+#include "cwStation.h"
+#include "cwRegularTile.h"
+#include "cwEdgeTile.h"
+#include "cwCollisionRectKdTree.h"
 
 
 class cwGLViewer : public QQuickPaintedItem

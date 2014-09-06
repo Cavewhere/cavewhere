@@ -12,7 +12,7 @@
 #include <QObject>
 
 //Our includes
-#include <cwProjection.h>
+#include "cwProjection.h"
 class cw3dRegionViewer;
 
 class cwAbstractProjection : public QObject

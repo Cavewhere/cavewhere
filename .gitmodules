@@ -4,3 +4,12 @@
 [submodule "survex"]
 	path = survex
 	url = git@github.com:Cavewhere/survex.git
+[submodule "plotsauce"]
+	path = plotsauce
+        url = git@github.com:Cavewhere/plotsauce.git
+[submodule "protobuf"]
+	path = protobuf
+	url = git@github.com:Cavewhere/protobuf.git
+[submodule "zlib"]
+	path = zlib
+	url = git@github.com:Cavewhere/zlib.git

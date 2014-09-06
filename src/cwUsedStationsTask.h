@@ -9,7 +9,7 @@
 #define CWUSEDSTATIONSTASK_H
 
 //Our includes
-#include <cwTask.h>
+#include "cwTask.h"
 #include "cwStation.h"
 
 //Qt includes

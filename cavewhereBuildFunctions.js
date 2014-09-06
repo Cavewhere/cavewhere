@@ -1,9 +1,9 @@
-function findIfExisting(paths) {
+function findIfExisting(paths, programName) {
     for(i in paths) {
         if(File.exists(paths[i])) {
             return paths[i]
         }
     }
 
-    return "cant-find-git"
+    return "cant-find-" + programName
 }

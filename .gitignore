@@ -305,6 +305,8 @@ docs/*
 .ui/ui_cwTaskProgressDialog.h
 Cavewhere.app/Contents/Info.plist
 Cavewhere.app/Contents/MacOS/Cavewhere
+qt5_3_1-debug/*
+qt5_3_1-release/*
 Cavewhere.app/Contents/MacOS/cavern
 Cavewhere.app/Contents/MacOS/plotsauce
 Cavewhere.app/Contents/MacOS/share/applications/survex-aven.desktop
@@ -364,8 +366,6 @@ Cavewhere.app/Contents/Resources/empty.lproj
 Cavewhere.pro.user
 Makefile
 bcc.cw
-cavern
-plotsauce
 qrc_icons.cpp
 trunk/.moc/moc_cw3dRegionViewer.cpp
 trunk/.moc/moc_cwAbstract2PointItem.cpp
@@ -925,3 +925,5 @@ src/main.cpp.REMOTE.32911.cpp
 src/main.cpp.REMOTE.33027.cpp
 src/main.cpp.REMOTE.33091.cpp
 src/qbs/protoBuffer/ProtoBuffer.qbs.user
+plotsauce
+cavern

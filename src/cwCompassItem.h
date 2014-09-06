@@ -9,7 +9,7 @@
 #define CWGLCOMPASS_H
 
 //Our includes
-#include <cwGLObject.h>
+#include "cwGLObject.h"
 class cwCamera;
 
 //Qt includes

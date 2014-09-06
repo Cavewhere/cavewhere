@@ -12,7 +12,7 @@
 #include <QAbstractListModel>
 
 //Our includes
-#include <cwTeamMember.h>
+#include "cwTeamMember.h"
 
 class cwTeam : public QAbstractListModel
 {

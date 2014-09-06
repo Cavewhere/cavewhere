@@ -10,7 +10,7 @@
 #define CWUPDATEDATACOMMAND_H
 
 //Our includes
-#include <cwSceneCommand.h>
+#include "cwSceneCommand.h"
 class cwGLObject;
 
 //Qt includes

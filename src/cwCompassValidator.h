@@ -8,7 +8,7 @@
 #ifndef CWCOMPASSVALIDATOR_H
 #define CWCOMPASSVALIDATOR_H
 
-#include <cwValidator.h>
+#include "cwValidator.h"
 
 class cwCompassValidator : public cwValidator
 {

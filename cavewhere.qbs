@@ -6,27 +6,47 @@ import qbs.File
 import "cavewhereBuildFunctions.js" as utils
 
 Project {
+
+    property string installDir: {
+        if(qbs.targetOS.contains("osx")) {
+            return "Cavewhere.app/Contents/MacOS"
+        }
+        return ""
+    }
+
+    references: [
+        "survex/survex.qbs",
+        "squish/squish.qbs",
+        "plotsauce/plotsauce.qbs",
+        "QMath3d/QMath3d.qbs",
+        "protobuf/protobuf.qbs",
+        "zlib/zlib.qbs"
+    ]
+
     Application {
         id: applicationId
         name: "Cavewhere"
 
         property string git: utils.findIfExisting(["C:/Program Files/Git/cmd/git.cmd",
                                              "/usr/bin/git",
-                                             "/usr/local/bin/git"])
+                                             "/usr/local/bin/git"],
+                                                  "git")
 
-        property string protoc: utils.findIfExisting(["/usr/local/bin/protoc",
-                                                     windowsProtoPath + "/Release/protoc.exe",
-                                                     windowsProtoPath + "/protoc.exe"])
+        property string protoc_compiler: buildDirectory + "/../protoc." + profile + "/protoc"
+
+//            utils.findIfExisting(["/usr/local/bin/protoc",
+//                                                     windowsProtoPath + "/Release/protoc.exe",
+//                                                     windowsProtoPath + "/protoc.exe"],
+//                                                     "protoc")
 
         property string windowsSquishPath: "C:/windowsBuild/libs/win32/squish-1.11/squish-1.11"
         property string windowsProtoPath: "C:/windowsBuild/libs/win32/protobuf-2.5.0rc1/vsprojects"
         property string windowsZlibPath: "C:/windowsBuild/libs/win32/zlib-1.2.5"
         property var sharedIncludes: [
             "src",
-            "QMath3d",
             "src/utils",
-            product.buildDirectory + "/serialization",
-            product.buildDirectory + "/versionInfo"
+            buildDirectory + "/serialization",
+            buildDirectory + "/versionInfo"
         ]
 
         Depends { name: "cpp" }
@@ -42,6 +62,12 @@ Project {
                 "concurrent" ]
         }
         Depends { name: "QMath3d" }
+        Depends { name: "squish" }
+        Depends { name: "plotsauce" }
+        Depends { name: "protoc" }
+        Depends { name: "protobuf" }
+        Depends { name: "z" }
+
 //        Depends { name: "icns-out" }
 
         Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
@@ -50,16 +76,13 @@ Project {
         Properties {
             condition: qbs.targetOS.contains("osx")
 
-            cpp.includePaths: sharedIncludes.concat("/usr/local/include")
+            cpp.includePaths: sharedIncludes
 
-            cpp.libraryPaths: [
-                "/usr/local/lib"
-            ]
+//            cpp.libraryPaths: [
+//                "/usr/local/lib"
+//            ]
 
             cpp.dynamicLibraries: [
-                "squish",
-                "z",
-                "protobuf",
                 "c++"
             ]
 
@@ -69,7 +92,7 @@ Project {
 
             cpp.cxxFlags: [
                 "-stdlib=libc++", //Needed for protoc
-                "-Werror", //Treat warnings as errors
+//                "-Werror", //Treat warnings as errors
                 "-std=c++11" //For c++11 support
             ]
         }
@@ -91,13 +114,11 @@ Project {
                        qbs.buildVariant.contains("debug")
 
             cpp.libraryPaths: [
-                windowsSquishPath + "/lib/vs9",
                 windowsZlibPath,
                 windowsProtoPath + "/Debug"
             ]
 
             cpp.dynamicLibraries: [
-                "squishd",
                 "zlibd",
                 "libprotobuf",
                 "OpenGL32"
@@ -109,13 +130,11 @@ Project {
                        qbs.buildVariant.contains("release")
 
             cpp.libraryPaths: [
-                windowsSquishPath + "/lib/vs9",
                 windowsZlibPath,
                 windowsProtoPath + "/Release"
             ]
 
             cpp.dynamicLibraries: [
-                "squish",
                 "zlib",
                 "libprotobuf",
                 "OpenGL32"
@@ -252,17 +271,6 @@ Project {
         }
 
         Group {
-            name: "survexDepends"
-            condition: qbs.targetOS == "osx"
-            files: [
-                "plotsauce",
-                "cavern",
-                "share"
-            ]
-            fileTags: ["survex"]
-        }
-
-        Group {
             name: "windowsDLLs-debug"
             condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
             qbs.install: true
@@ -302,7 +310,8 @@ Project {
                 Qt.core.binPath + "/icuin*.dll",
                 Qt.core.binPath + "/icuuc*.dll",
                 Qt.core.binPath + "/icudt*.dll",
-                windowsZlibPath + "/zlib1.dll"
+                windowsZlibPath + "/zlib1.dll",
+                "survex/survex.qbs"
             ]
 
         }
@@ -390,30 +399,56 @@ Project {
         Rule {
             id: protoCompiler
             inputs: ["proto"]
+            usings: ["application"]
+            multiplex: true
 
-            Artifact {
-                fileTags: ["hpp"]
-                filePath: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.h"
+            outputArtifacts: {
+                var artifacts = [];
+
+                for(var i in inputs.proto) {
+                    var baseName = FileInfo.baseName(inputs.proto[i].filePath)
+                    var fullPath = "serialization/" + baseName
+                    var headerPath = fullPath + ".pb.h"
+                    var srcPath = fullPath + ".pb.cc"
+
+                    var headerArtifact = { filePath: headerPath, fileTags: ["hpp"] }
+                    var srcArtifact = { filePath: srcPath, fileTags: ["cpp"] }
+
+                    artifacts.push(headerArtifact)
+                    artifacts.push(srcArtifact)
+                }
+
+                return artifacts
             }
 
-            Artifact {
-                fileTags: ["cpp"]
-                filePath: "serialization/" + FileInfo.baseName(input.filePath) + ".pb.cc"
-            }
+            outputFileTags: ["hpp", "cpp"]
 
             prepare: {
-                var protoc = product.protoc
-                var proto_path = FileInfo.path(input.filePath)
-                var cpp_out = product.buildDirectory + "/serialization"
+                var protoc = "protoc-not-found"
 
-                var protoPathArg = "--proto_path=" + proto_path
-                var cppOutArg = "--cpp_out=" + cpp_out
+                for(var i in inputs.application) {
+                    if(inputs.application[i].filePath.contains("protoc")) {
+                        protoc = inputs.application[i].filePath
+                    }
+                }
 
-                var cmd = new Command(protoc,
-                                      [protoPathArg, cppOutArg, input.filePath])
-                cmd.description = "Running protoc on " + input.filePath + "with args " + protoPathArg + " " + cppOutArg
-                cmd.highlight = 'codegen'
-                return cmd;
+                var commands = [];
+                for(var i in inputs.proto) {
+                    var proto_path = FileInfo.path(inputs.proto[i].filePath)
+                    var cpp_out = product.buildDirectory + "/serialization"
+
+                    var protoPathArg = "--proto_path=" + proto_path
+                    var cppOutArg = "--cpp_out=" + cpp_out
+                    var inputFile = inputs.proto[i].filePath
+
+                    var cmd = new Command(protoc,
+                                          [protoPathArg, cppOutArg, inputFile])
+                    cmd.description = "Running protoc on " + inputFile + "with args " + protoc + " " + protoPathArg + " " + cppOutArg
+                    cmd.highlight = 'codegen'
+
+                    commands.push(cmd)
+                }
+                return commands;
             }
         }
 
@@ -454,35 +489,5 @@ Project {
         }
 
 
-    }
-
-
-    DynamicLibrary {
-        name: "QMath3d"
-        Depends { name: "cpp" }
-        Depends { name: "Qt";
-            submodules: [ "core", "gui" ]
-        }
-
-        cpp.defines: ["Q_MATH_3D"]
-
-        Group {
-            fileTagsFilter: ["dynamiclibrary"]
-            qbs.install: true
-        }
-
-        files: [
-            "QMath3d/smallqt3d_global.h",
-            "QMath3d/qbox3d.h",
-            "QMath3d/qplane3d.h",
-            "QMath3d/qray3d.h",
-            "QMath3d/qsphere3d.h",
-            "QMath3d/qtriangle3d.h",
-            "QMath3d/qbox3d.cpp",
-            "QMath3d/qplane3d.cpp",
-            "QMath3d/qray3d.cpp",
-            "QMath3d/qsphere3d.cpp",
-            "QMath3d/qtriangle3d.cpp",
-        ]
     }
 }

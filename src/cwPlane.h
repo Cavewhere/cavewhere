@@ -12,7 +12,7 @@
 #include <QVector3D>
 
 //Our includes
-#include <cwLine3D.h>
+#include "cwLine3D.h"
 
 class cwPlane
 {

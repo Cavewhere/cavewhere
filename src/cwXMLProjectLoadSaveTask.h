@@ -9,9 +9,9 @@
 #define CWXMLPROJECTLOADSAVETASK_H
 
 //Our includes
-#include <cwTask.h>
-#include <cwCavingRegion.h>
-#include <cwCave.h>
+#include "cwTask.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
 
 //Qt includes
 #include <QList>

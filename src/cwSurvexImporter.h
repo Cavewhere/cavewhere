@@ -14,7 +14,7 @@
 #include <QList>
 #include <QStringList>
 #include <QMap>
-#include <cwTask.h>
+#include "cwTask.h"
 #include <QFile>
 
 //Our includes

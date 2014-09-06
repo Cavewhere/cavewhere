@@ -8,7 +8,7 @@
 #ifndef CWSTATIONVALIDATOR_H
 #define CWSTATIONVALIDATOR_H
 
-#include <cwValidator.h>
+#include "cwValidator.h"
 
 class cwStationValidator : public cwValidator
 {
