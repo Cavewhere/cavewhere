@@ -305,8 +305,8 @@ docs/*
 .ui/ui_cwTaskProgressDialog.h
 Cavewhere.app/Contents/Info.plist
 Cavewhere.app/Contents/MacOS/Cavewhere
-qt5_3_1-debug/*
-qt5_3_1-release/*
+qt5-3-1-debug/*
+qt5-3-1-release/*
 Cavewhere.app/Contents/MacOS/cavern
 Cavewhere.app/Contents/MacOS/plotsauce
 Cavewhere.app/Contents/MacOS/share/applications/survex-aven.desktop
