@@ -32,23 +32,6 @@ Project {
                                              "/usr/local/bin/git"],
                                                   "git")
 
-        property string protoc_compiler: buildDirectory + "/../protoc." + profile + "/protoc"
-
-//            utils.findIfExisting(["/usr/local/bin/protoc",
-//                                                     windowsProtoPath + "/Release/protoc.exe",
-//                                                     windowsProtoPath + "/protoc.exe"],
-//                                                     "protoc")
-
-        property string windowsSquishPath: "C:/windowsBuild/libs/win32/squish-1.11/squish-1.11"
-        property string windowsProtoPath: "C:/windowsBuild/libs/win32/protobuf-2.5.0rc1/vsprojects"
-        property string windowsZlibPath: "C:/windowsBuild/libs/win32/zlib-1.2.5"
-        property var sharedIncludes: [
-            "src",
-            "src/utils",
-            buildDirectory + "/serialization",
-            buildDirectory + "/versionInfo"
-        ]
-
         Depends { name: "cpp" }
         Depends { name: "Qt";
             submodules: [ "core",
@@ -72,15 +55,15 @@ Project {
 
         Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
+        cpp.includePaths: [
+            "src",
+            "src/utils",
+            buildDirectory + "/serialization",
+            buildDirectory + "/versionInfo"
+        ]
 
         Properties {
             condition: qbs.targetOS.contains("osx")
-
-            cpp.includePaths: sharedIncludes
-
-//            cpp.libraryPaths: [
-//                "/usr/local/lib"
-//            ]
 
             cpp.dynamicLibraries: [
                 "c++"
@@ -100,43 +83,12 @@ Project {
         Properties {
             condition: qbs.targetOS.contains("windows")
 
-            cpp.includePaths: sharedIncludes.concat([windowsProtoPath + "/include",
-                                                   windowsSquishPath,
-                                                   windowsZlibPath])
             cpp.cxxFlags: [
                 "/WX", //Treat warnings as errors
                 "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
             ]
-        }
-
-        Properties {
-            condition: qbs.targetOS.contains("windows") &&
-                       qbs.buildVariant.contains("debug")
-
-            cpp.libraryPaths: [
-                windowsZlibPath,
-                windowsProtoPath + "/Debug"
-            ]
 
             cpp.dynamicLibraries: [
-                "zlibd",
-                "libprotobuf",
-                "OpenGL32"
-            ]
-        }
-
-        Properties {
-            condition: qbs.targetOS.contains("windows") &&
-                       qbs.buildVariant.contains("release")
-
-            cpp.libraryPaths: [
-                windowsZlibPath,
-                windowsProtoPath + "/Release"
-            ]
-
-            cpp.dynamicLibraries: [
-                "zlib",
-                "libprotobuf",
                 "OpenGL32"
             ]
         }
@@ -287,8 +239,7 @@ Project {
                 Qt.core.binPath + "/Qt5Xmld.dll",
                 Qt.core.binPath + "/icuin*.dll",
                 Qt.core.binPath + "/icuuc*.dll",
-                Qt.core.binPath + "/icudt*.dll",
-                windowsZlibPath + "/zlibd1.dll"
+                Qt.core.binPath + "/icudt*.dll"
             ]
         }
 
@@ -309,46 +260,11 @@ Project {
                 Qt.core.binPath + "/Qt5Xml.dll",
                 Qt.core.binPath + "/icuin*.dll",
                 Qt.core.binPath + "/icuuc*.dll",
-                Qt.core.binPath + "/icudt*.dll",
-                windowsZlibPath + "/zlib1.dll",
-                "survex/survex.qbs"
+                Qt.core.binPath + "/icudt*.dll"
             ]
 
         }
 
-//        Group {
-//            name: "windowsPlatform"
-//            condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-//            qbs.install: true
-//            qbs.installDir: "platforms"
-//            files: [Qt.core.pluginPath + "/platforms/qwindows.dll"]
-//        }
-
-//        Group {
-//            name: "windowsImageFormats"
-//            condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-//            qbs.install: true
-//            qbs.installDir: "imageformats"
-//            files: [Qt.core.pluginPath + "/imageformats/*.dll"]
-//            excludeFiles: [
-//                Qt.core.pluginPath + "/imageformats/*d.dll" //Exclude all debug dlls for images
-//            ]
-//        }
-
-//        Group {
-//            name: "windowsSQLDrivers"
-//            condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-//            qbs.install: true
-//            qbs.installDir: "sqldrivers"
-//            files: [Qt.core.pluginPath + "/sqldrivers/qsqlite.dll"]
-//        }
-
-//        Group {
-//            name: "macInfo"
-//            files: [
-//                "Info.plist"
-//            ]
-//        }
 
         Rule {
             id: macIconCopier
