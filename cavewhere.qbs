@@ -72,11 +72,24 @@ Project {
             cpp.frameworks: [
                 "OpenGL"
             ]
+        }
 
+        Properties {
+            condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
             cpp.cxxFlags: [
                 "-stdlib=libc++", //Needed for protoc
 //                "-Werror", //Treat warnings as errors
                 "-std=c++11" //For c++11 support
+            ]
+        }
+
+        Properties {
+            condition: qbs.targetOS.contains("linux")
+            cpp.dynamicLibraries: [
+                "GL"
+            ]
+            cpp.libraryPaths: [
+                "/usr/lib/x86_64-linux-gnu/mesa/"
             ]
         }
 

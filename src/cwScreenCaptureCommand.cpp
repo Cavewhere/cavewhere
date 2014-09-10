@@ -12,7 +12,7 @@
 
 //Qt includes
 #include <QOpenGLFramebufferObject>
-#include <QOPenGLFramebufferObjectFormat>
+#include <QOpenGLFramebufferObjectFormat>
 
 
 cwScreenCaptureCommand::cwScreenCaptureCommand() :
