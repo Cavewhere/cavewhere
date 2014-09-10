@@ -172,11 +172,11 @@ void cwCompassItem::initializeShadowShader()
 {
     //Setup the shadow X direction shader
     cwGLShader* vertexXShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexXShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/CompassShadowX.vsh");
+    vertexXShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowX.vsh");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     fragmentShader->addDefine("HORIZONTAL_BLUR_9");
-    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/CompassShadow.fsh");
+    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadow.fsh");
 
     XShadowProgram = new QOpenGLShaderProgram();
     XShadowProgram->addShader(vertexXShader);
@@ -195,11 +195,11 @@ void cwCompassItem::initializeShadowShader()
 
     //Setup the shadow Y direction shader
     cwGLShader* vertexYShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/CompassShadowX.vsh");
+    vertexYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowX.vsh");
 
     cwGLShader* fragmentYShader = new cwGLShader(QOpenGLShader::Fragment);
     fragmentYShader->addDefine("VERTICAL_BLUR_9");
-    fragmentYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/CompassShadow.fsh");
+    fragmentYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadow.fsh");
 
     YShadowProgram = new QOpenGLShaderProgram();
     YShadowProgram->addShader(vertexYShader);
