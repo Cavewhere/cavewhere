@@ -150,8 +150,6 @@ void cwBaseTurnTableInteraction::resetView() {
     QMatrix4x4 viewMatrix;
     viewMatrix.translate(QVector3D(0.0, 0.0, -50));
     Camera->setViewMatrix(viewMatrix);
-
-    update();
 }
 
 /**
@@ -243,9 +241,6 @@ void cwBaseTurnTableInteraction::translateLastPosition()
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
     viewMatrix.translate(translateAmount);
     Camera->setViewMatrix(viewMatrix);
-
-    //Update the gl window
-    update();
 }
 
 ///**
@@ -317,8 +312,6 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
     viewMatrix.rotate(rotationDifferance);
     viewMatrix.translate(-LastMouseGlobalPosition);
     Camera->setViewMatrix(viewMatrix);
-
-    update();
 }
 
 /**

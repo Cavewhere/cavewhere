@@ -201,6 +201,8 @@ void cwSurveyNoteModel::addNotes(QList<cwNote*> notes) {
     //Remove all invalid notes
     QList<cwNote*> validNotes = validateNoteImages(notes);
 
+    if(validNotes.isEmpty()) { return; }
+
     beginInsertRows(QModelIndex(), lastIndex, lastIndex + validNotes.size() - 1);
 
     Notes.append(validNotes);
