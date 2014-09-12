@@ -13,7 +13,8 @@
 
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent),
-    Scene(nullptr)
+    Scene(nullptr),
+    QueuedDataCommand(nullptr)
 {
 //    Dirty = false;
     //    Scene = nullptr;
@@ -50,9 +51,9 @@ void cwGLObject::setScene(cwScene *scene)
             cwInitCommand* initCommand = new cwInitCommand();
             initCommand->setGLObject(this);
             Scene->addSceneCommand(initCommand);
-        }
 
-//        setDirty(true);
+            markDataAsDirty();
+        }
     }
 }
 
