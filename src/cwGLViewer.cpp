@@ -92,7 +92,17 @@ void cwGLViewer::paint(QPainter * painter) {
  */
 void cwGLViewer::setScene(cwScene* scene) {
     if(Scene != scene) {
+
+        if(Scene != nullptr) {
+            disconnect(Scene, &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
+        }
+
         Scene = scene;
+
+        if(Scene != nullptr) {
+            connect(Scene, &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
+        }
+
         emit sceneChanged();
     }
 }

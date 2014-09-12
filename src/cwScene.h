@@ -53,6 +53,8 @@ public:
 
     cwShaderDebugger* shaderDebugger() const;
 
+    void update();
+
 signals:
     void shaderDebuggerChanged();
     void needsRendering();

@@ -65,6 +65,7 @@ void cwScene::addItem(cwGLObject *item)
     if(!RenderingObjects.contains(item)) {
         RenderingObjects.append(item);
         item->setScene(this);
+        update();
     }
 }
 
@@ -79,6 +80,7 @@ void cwScene::removeItem(cwGLObject *item)
     if(!RenderingObjects.contains(item)) {
         RenderingObjects.removeOne(item);
         item->setScene(nullptr);
+        update();
     }
 }
 
@@ -98,6 +100,7 @@ void cwScene::addSceneCommand(cwSceneCommand *command)
 {
     Q_ASSERT(!CommandQueue.contains(command));
     CommandQueue.append(command);
+    update();
 }
 
 /**
@@ -125,6 +128,16 @@ cwCamera *cwScene::camera() const
 cwGeometryItersecter *cwScene::geometryItersecter() const
 {
     return GeometryItersecter;
+}
+
+/**
+ * @brief cwScene::update
+ *
+ * This will schedule the scene for rendering
+ */
+void cwScene::update()
+{
+    emit needsRendering();
 }
 
 /**
