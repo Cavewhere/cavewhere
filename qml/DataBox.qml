@@ -24,6 +24,8 @@ Item {
     property int dataRole
 
     signal rightClick(var mouse);
+    signal enteredPressed();
+    signal deletePressed();
 
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
@@ -38,7 +40,7 @@ Item {
     //        dataTextInput.validator = dataValidator;
     //    }
 
-    function deletePressed() {
+    function deletePressedHandler() {
         dataValue = '';
         editor.openEditor();
         state = 'MiddleTyping';
@@ -53,6 +55,14 @@ Item {
             surveyChunkView.previousTab(rowIndex, dataRole)
 //            event.accepted = true
         }
+    }
+
+    onEnteredPressed: {
+        editor.openEditor()
+    }
+
+    onDeletePressed: {
+        deletePressedHandler()
     }
 
     onRightClick: {
@@ -171,7 +181,7 @@ Item {
         surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
         if(event.key === Qt.Key_Backspace) {
-            deletePressed();
+            deletePressedHandler();
             return;
         }
 
@@ -198,15 +208,15 @@ Item {
     }
 
     Keys.onEnterPressed: {
-        editor.openEditor()
+        enteredPressed()
     }
 
     Keys.onReturnPressed: {
-        editor.openEditor()
+        enteredPressed();
     }
 
     Keys.onDeletePressed: {
-        deletePressed()
+        deletePressed();
     }
 
     onFocusChanged: {

@@ -90,18 +90,13 @@ DataBox {
             PropertyChanges {
                 target: stationBox
 
-
-                Keys.onEnterPressed: {
-                    commitAutoStation();
-                }
-
-                Keys.onReturnPressed: {
+                onEnteredPressed: {
                     commitAutoStation()
                 }
 
-                Keys.onDeletePressed: {
+                onDeletePressed: {
                     state = ""
-                    deletePressed()
+                    deletePressedHandler()
                 }
 
                 onFocusChanged: {
