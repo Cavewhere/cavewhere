@@ -38,7 +38,6 @@ void cwGLScraps::draw() {
     if(!visible()) { return; }
 
     Program->bind();
-
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix());
     Program->enableAttributeArray(vVertex);
     Program->enableAttributeArray(vScrapTexCoords);
@@ -216,7 +215,9 @@ void cwGLScraps::initializeShaders() {
     vScrapTexCoords = Program->attributeLocation("vScrapTexCoords");
 
 //    Program->setUniformValue("colorBG", Qt::green);
+    Program->bind();
     Program->setUniformValue("Texture", 0);
+    Program->release();
 
 //    UniformModelMatrix = Program->uniformLocation("ModelMatrix");
 }

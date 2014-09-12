@@ -79,6 +79,8 @@ void cwGLLinePlot::initializeBuffers() {
 }
 
 void cwGLLinePlot::draw() {
+    if(Points.size() <= 0) { return; }
+
     glLineWidth(1.0);
 
     ShaderProgram->bind();
