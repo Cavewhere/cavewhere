@@ -47,13 +47,13 @@ Item {
     }
 
     function handleTab(eventKey) {
-        if(eventKey === Qt.Key_Tab) {
+        if(eventKey.key === Qt.Key_Tab) {
             surveyChunkView.tab(rowIndex, dataRole)
-//            event.accepted = true
-        } else if(eventKey === 1 + Qt.Key_Tab) {
+            eventKey.accepted = true
+        } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
             surveyChunkView.previousTab(rowIndex, dataRole)
-//            event.accepted = true
+            eventKey.accepted = true
         }
     }
 
@@ -177,7 +177,7 @@ Item {
     }
 
     Keys.onPressed: {
-        handleTab(event.key);
+        handleTab(event);
         surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
         if(event.key === Qt.Key_Backspace) {
@@ -236,26 +236,27 @@ Item {
                 target: globalShadowTextInput.textInput
 
                 onPressKeyPressed: {
-                    if(pressKeyEvent === Qt.Key_Tab ||
-                            pressKeyEvent === 1 + Qt.Key_Tab ||
-                            pressKeyEvent === Qt.Key_Space)
+                    if(pressKeyEvent.key === Qt.Key_Tab ||
+                            pressKeyEvent.key === 1 + Qt.Key_Tab ||
+                            pressKeyEvent.key === Qt.Key_Space)
                     {
                         var commited = editor.commitChanges()
                         if(!commited) { return; }
                     }
 
-                    if(pressKeyEvent === Qt.Key_Space) {
+                    if(pressKeyEvent.key === Qt.Key_Space) {
                         surveyChunk.parentTrip.addNewChunk();
                     }
 
                     //Tab to the next entry on enter
-                    if(pressKeyEvent === Qt.Key_Enter ||
-                            pressKeyEvent === Qt.Key_Return) {
+                    if(pressKeyEvent.key === Qt.Key_Enter ||
+                            pressKeyEvent.key === Qt.Key_Return) {
                         surveyChunkView.tab(rowIndex, dataRole)
+                        pressKeyEvent.accepted = true;
                     }
 
-                    //Use teh default keyhanding that the GlobalShadowTextInput has
-                    defaultKeyHandling();
+                    //Use the default keyhanding that the GlobalShadowTextInput has
+                    globalShadowTextInput.textInput.defaultKeyHandling();
 
                     //Handle the tabbing
                     dataBox.handleTab(pressKeyEvent);
@@ -263,39 +264,9 @@ Item {
                     if(pressKeyEvent.accepted) {
                         //Have the editor commit changes
                         dataBox.state = ''; //Default state
+
                     }
                 }
-
-//                Keys.onPressed: {
-//                    if(event.key === Qt.Key_Tab ||
-//                            event.key === 1 + Qt.Key_Tab ||
-//                            event.key === Qt.Key_Space)
-//                    {
-//                        var commited = editor.commitChanges()
-//                        if(!commited) { return; }
-//                    }
-
-//                    if(event.key === Qt.Key_Space) {
-//                        surveyChunk.parentTrip.addNewChunk();
-//                    }
-
-//                    //Tab to the next entry on enter
-//                    if(event.key === Qt.Key_Enter ||
-//                            event.key === Qt.Key_Return) {
-//                        surveyChunkView.tab(rowIndex, dataRole)
-//                    }
-
-//                    //Use teh default keyhanding that the GlobalShadowTextInput has
-//                    defaultKeyHandling(event);
-
-//                    //Handle the tabbing
-//                    dataBox.handleTab(event);
-
-//                    if(event.accepted) {
-//                        //Have the editor commit changes
-//                        dataBox.state = ''; //Default state
-//                    }
-//                }
 
                 onFocusChanged: {
                     if(!focus) {
@@ -308,8 +279,8 @@ Item {
                 target: globalShadowTextInput
 
                 onEscapePressed: {
-                    dataBox.focus = true;
                     dataBox.state = ''; //Default state
+                    dataBox.forceActiveFocus()
                 }
 
                 onEnterPressed: {

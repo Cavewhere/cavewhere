@@ -69,11 +69,11 @@ MouseArea {
 
             //FIXME: Revert back to orinial code
             //This is a work around to QTBUG-27300
-            property int pressKeyEvent
+            property var pressKeyEvent
             signal pressKeyPressed; //This is emitted every time key is pressed
 
             function defaultKeyHandling() {
-                if(pressKeyEvent === Qt.Key_Return || pressKeyEvent === Qt.Key_Enter) {
+                if(pressKeyEvent.key === Qt.Key_Return || pressKeyEvent.key === Qt.Key_Enter) {
                     enterPressed()
                     if(coreClickInput !== null) {
                         coreClickInput.commitChanges()
@@ -81,18 +81,16 @@ MouseArea {
                         escapePressed()
                     }
 
-//                    event.accepted = commited
-                } else if(pressKeyEvent === Qt.Key_Escape) {
+                } else if(pressKeyEvent.key === Qt.Key_Escape) {
                     escapePressed()
                     coreClickInput.closeEditor();
-//                    event.accepted = true
+                    pressKeyEvent.accepted = true
                 }
             }
 
             Keys.onPressed: {
-                pressKeyEvent = event.key;
+                pressKeyEvent = event;
                 pressKeyPressed();
-//                defaultKeyHandling(event)
             }
 
             onPressKeyPressed: {
