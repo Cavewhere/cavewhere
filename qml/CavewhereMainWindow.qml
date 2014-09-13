@@ -84,13 +84,6 @@ ApplicationWindow {
         id: globalShadowTextInput
     }
 
-    //All menus in cavewhere us this mouse handler as a parent
-    //The mouse handle is visible when the menu is visible. I hides
-    //the current menu selection, if the user selects out of the window
-    GlobalMenuMouseHandler {
-        id: globalMenuMouseHandler
-    }
-
     //All the dialogs in cavewher are parented under this item.
     GlobalDialogHandler {
         id: globalDialogHandler
