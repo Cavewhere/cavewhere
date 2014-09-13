@@ -5,14 +5,12 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
-//import QtDesktop 1.0 as Desktop
 import Cavewhere 1.0
+import QtQuick.Controls 1.2 as Controls;
 
 Item {
     id: iconBar
-
 
     Row {
 
@@ -27,14 +25,14 @@ Item {
             text: "Export"
 
             onClicked: {
-                exportContextMenu.popupOnTopOf(exportButton, 0, exportButton.height)
+                exportContextMenu.popup();
             }
 
-            ContextMenu {
+            Controls.Menu {
                 id: exportContextMenu
 
-                Menu {
-                    text: "Survex"
+                Controls.Menu {
+                    title: "Survex"
 
                     ExportSurveyMenuItem {
                         prefixText: "Current trip"
@@ -48,14 +46,14 @@ Item {
                         onTriggered: surveyExportManager.openExportSurvexCaveFileDialog()
                     }
 
-                    MenuItem {
+                    Controls.MenuItem {
                         text: "Region (all caves)"
                         onTriggered: surveyExportManager.openExportSurvexRegionFileDialog()
                     }
                 }
 
-                Menu {
-                    text: "Compass"
+                Controls.Menu {
+                    title: "Compass"
 
                     ExportSurveyMenuItem {
                         prefixText: "Current cave"
@@ -72,18 +70,18 @@ Item {
             text: "Import"
 
             onClicked: {
-                importContextMenu.popupOnTopOf(importButton, 0, importButton.height)
+                importContextMenu.popup()
             }
 
-            ContextMenu {
+            Controls.Menu {
                 id: importContextMenu
 
-                MenuItem {
+                Controls.MenuItem {
                     text: "Survex (.svx)"
                     onTriggered: surveyImportManager.importSurvex()
                 }
 
-                MenuItem {
+                Controls.MenuItem {
                     text: "Compass (.dat)"
                     onTriggered: surveyImportManager.importCompassDataFile();
                 }

@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import QtQuick.Controls 1.2 as Controls;
 import "Navigation.js" as NavigationHandler
 
 Item {
@@ -17,7 +18,6 @@ Item {
     property SurveyChunk surveyChunk; //For hooking up signals and slots in subclasses
     property SurveyChunkView surveyChunkView;
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
-    property alias contextMenuItems: rightClickMenu.children
     property alias aboutToDelete: removeBoxId.visible
 
     property int rowIndex: -1
@@ -67,29 +67,29 @@ Item {
 
     onRightClick: {
         //Show menu
-        rightClickMenu.popupOnTopOf(dataBox, mouse.x, mouse.y)
+        rightClickMenu.popup();
     }
 
-    ContextMenu {
+    Controls.Menu {
         id: rightClickMenu
 
-        MenuItem {
+        Controls.MenuItem {
             text: "Remove Chunk"
             onTriggered: {
                 surveyChunk.parentTrip.removeChunk(surveyChunk)
             }
 
-            onContainsMouseChanged: {
-                var lastStationIndex = surveyChunk.stationCount() - 1;
-                var lastShotIndex = surveyChunk.shotCount() - 1;
+//            onContainsMouseChanged: {
+//                var lastStationIndex = surveyChunk.stationCount() - 1;
+//                var lastShotIndex = surveyChunk.shotCount() - 1;
 
-                if(containsMouse) {
-                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
-                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
-                } else {
-                    surveyChunkView.hideRemoveBoxs();
-                }
-            }
+//                if(containsMouse) {
+//                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
+//                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
+//                } else {
+//                    surveyChunkView.hideRemoveBoxs();
+//                }
+//            }
         }
     }
 

@@ -5,7 +5,8 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.2
+import QtQuick.Controls 1.2 as Controls
 
 Item {
     id: unitInput
@@ -18,7 +19,7 @@ Item {
     height: textArea.height
 
     onUnitChanged: {
-        numeratorMenu.selectedIndex = unitInput.unit
+        menuId.selectedIndex = unitInput.unit
     }
 
     Pallete {
@@ -28,28 +29,31 @@ Item {
     Text {
         id: textArea
         color: pallete.inputTextColor
-        text: unitModel !== null ? " " + unitModel[numeratorMenu.selectedIndex] : "";
+        text: unitModel !== null ? " " + unitModel[menuId.selectedIndex] : "";
 
         MouseArea {
             anchors.fill: parent
 
             onClicked: {
-                numeratorMenu.popupOnTopOf(textArea, 0, textArea.height)
+                menuId.popup()
             }
         }
 
-        ContextMenu {
-            id: numeratorMenu
+        Controls.Menu {
+            id: menuId
+
             property int selectedIndex: unitInput.unit
 
-            Repeater {
+            Instantiator {
                 model: unitModel
-
-                delegate: MenuItem {
-                    text: modelData
+                Controls.MenuItem {
+                    text: modelData; //unitModel[index]
                     onTriggered: unitInput.newUnit(index)
                 }
+                onObjectAdded: menuId.insertItem(index, object)
+                onObjectRemoved: menuId.removeItem(object)
             }
+
         }
     }
 }

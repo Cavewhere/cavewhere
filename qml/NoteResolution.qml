@@ -8,6 +8,7 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
 import Cavewhere 1.0
+import QtQuick.Controls 1.2 as Controls;
 
 FloatingGroupBox {
     id: floatingGroup
@@ -49,21 +50,24 @@ FloatingGroupBox {
         ContextMenuButton {
             anchors.verticalCenter: parent.verticalCenter
 
-            MenuItem {
-                text: {
-                    var tripName = ""
-                    if(note !== null && note.parentTrip() !== null) {
-                        tripName = note.parentTrip().name
+            Controls.Menu {
+                Controls.MenuItem {
+                    text: {
+                        var tripName = ""
+                        if(note !== null && note.parentTrip() !== null) {
+                            tripName = note.parentTrip().name
+                        }
+                        return "<b>Propagate resolution</b> for each note in " + tripName
                     }
-                    return "<b>Propagate resolution</b> for each note in " + tripName
+                    onTriggered: note.propagateResolutionNotesInTrip();
                 }
-                onTriggered: note.propagateResolutionNotesInTrip();
+
+                Controls.MenuItem {
+                    text: "<b>Reset</b> to original"
+                    onTriggered: note.resetImageResolution()
+                }
             }
 
-            MenuItem {
-                text: "<b>Reset</b> to original"
-                onTriggered: note.resetImageResolution()
-            }
         }
     }
 }

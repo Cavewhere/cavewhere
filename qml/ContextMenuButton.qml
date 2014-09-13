@@ -11,7 +11,7 @@ import Cavewhere 1.0
 Button {
     id: moreButton
 
-    default property alias menuChildren: popupMenuId.children
+    default property var menu
 
     iconSource: "qrc:/icons/moreArrowDown.png"
     iconSize: Qt.size(8, 8)
@@ -20,11 +20,6 @@ Button {
     radius: 0
 
     onClicked: {
-        popupMenuId.popupOnTopOf(moreButton, 0, moreButton.height)
+        menu.popup()
     }
-
-    ContextMenu {
-        id: popupMenuId
-    }
-
 }

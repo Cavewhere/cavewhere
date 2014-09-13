@@ -49,10 +49,12 @@ DataBox {
 
         opacity: state == "" ? .75 : 1.0
 
-        MenuItem {
-            text: distanceIncluded ? "Exclude Distance" : "Include Distance"
-            onTriggered: {
-                surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole, rowIndex, !distanceIncluded)
+        Controls.Menu {
+            Controls.MenuItem {
+                text: distanceIncluded ? "Exclude Distance" : "Include Distance"
+                onTriggered: {
+                    surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole, rowIndex, !distanceIncluded)
+                }
             }
         }
     }

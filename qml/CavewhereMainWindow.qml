@@ -45,7 +45,7 @@ ApplicationWindow {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
-        asynchronous: true
+        asynchronous: false //FIXME: Once https://bugreports.qt-project.org/browse/QTBUG-36410 is fixed turn this to true
         visible: status == Loader.Ready
 
         onLoaded: {
