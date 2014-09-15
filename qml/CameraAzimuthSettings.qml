@@ -6,7 +6,11 @@ ColumnLayout {
 
     property TurnTableInteraction turnTableInteraction
 
+    implicitWidth: gridId.width
+//    height: 200
+
     GridLayout {
+        id: gridId
         rows: 3
         columns: 3
 

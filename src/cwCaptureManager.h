@@ -128,6 +128,8 @@ private:
     QUrl Filename; //!<
     FileType Filetype; //!<
 
+    //For internal drawing
+
     //For processing
     int NumberOfImagesProcessed;
     int Columns;
@@ -135,6 +137,8 @@ private:
     QSize TileSize;
 //    QSize ImageSize;
     QGraphicsScene* Scene;
+    QGraphicsRectItem* PaperRectangle;
+    QGraphicsRectItem* BorderRectangle;
     double Scale;
 
     QSet<cwViewportCapture*> Captures;

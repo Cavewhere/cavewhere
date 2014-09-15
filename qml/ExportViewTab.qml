@@ -7,10 +7,10 @@ import QtQuick.Dialogs 1.0 as Dialogs
 Item {
     id: exportViewTabId
 
-    implicitHeight: columnLayoutId.height
-    implicitWidth: columnLayoutId.width
+    implicitWidth: rowLayoutId.width
 
     property GLTerrainRenderer view
+    property alias hideExternalTools: selectionTool.visible
 
     function updatePaperRectangle(paperWidth, paperHeight) {
         var i = paperSizeInteraction
@@ -39,9 +39,11 @@ Item {
     }
 
     SelectExportAreaTool {
+        id: selectionTool
         parent: exportViewTabId.view
         view: exportViewTabId.view
         manager: screenCaptureManagerId
+        visible: exportViewTabId.visible
     }
 
     ChoosePaperSizeInteraction {
@@ -68,6 +70,13 @@ Item {
     }
 
     RowLayout {
+        id: rowLayoutId
+
+        QuickSceneView {
+            width: 500
+            Layout.fillHeight: true
+            scene: screenCaptureManagerId.scene
+        }
 
         ColumnLayout {
             id: columnLayoutId

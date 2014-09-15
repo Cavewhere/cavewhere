@@ -8,10 +8,12 @@ ColumnLayout {
     property RegionViewer viewer;
     spacing: 5
 
+    implicitWidth: Math.max(projectionSlider.width, fieldOfViewRowLayout.width)
+
     ProjectionSlider {
         id: projectionSlider
-        anchors.left: parent.left
-        anchors.right: parent.right
+//        anchors.left: parent.left
+//        anchors.right: parent.right
         viewer: itemId.viewer
     }
 

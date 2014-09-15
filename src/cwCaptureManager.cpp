@@ -21,6 +21,7 @@
 #include <QScopedPointer>
 #include <QGraphicsScene>
 #include <QPainter>
+#include <QGraphicsRectItem>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QObject(parent),
@@ -34,9 +35,24 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     Rows(0),
     TileSize(1024, 1024),
     Scene(new QGraphicsScene(this)),
+    PaperRectangle(new QGraphicsRectItem()),
+    BorderRectangle(new QGraphicsRectItem()),
     Scale(1.0)
 {
-    Scene->addRect(QRectF(10, 10, 100, 100));
+    Scene->addItem(PaperRectangle);
+    Scene->addItem(BorderRectangle);
+
+    QPen pen;
+    pen.setCosmetic(true);
+    pen.setWidthF(1.0);
+
+    QBrush brush;
+    brush.setColor(Qt::white);
+    brush.setStyle(Qt::SolidPattern);
+
+    PaperRectangle->setPen(pen);
+    PaperRectangle->setBrush(brush);
+
 }
 
 /**
@@ -53,10 +69,15 @@ void cwCaptureManager::setView(cw3dRegionViewer* view) {
 /**
 * @brief cwCaptureManager::setPaperSize
 * @param paperSize
+*
+* Sets the paper size, currently inches
 */
 void cwCaptureManager::setPaperSize(QSizeF paperSize) {
     if(PaperSize != paperSize) {
         PaperSize = paperSize;
+
+        PaperRectangle->setRect(QRectF(QPointF(0, 0), PaperSize));
+
         emit paperSizeChanged();
     }
 }

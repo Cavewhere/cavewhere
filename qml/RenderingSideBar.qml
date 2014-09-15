@@ -6,7 +6,7 @@ import Cavewhere 1.0
 TabView {
     id: tabViewId
 
-    Layout.minimumWidth: 175
+//    Layout.minimumWidth: 175
 
     property GLTerrainRenderer viewer
     property Tab viewTab
@@ -25,14 +25,35 @@ TabView {
         }
     }
 
+    function resizeCurrentTab() {
+        tabViewId.Layout.maximumWidth = getTab(currentIndex).implicitWidth
+        tabViewId.Layout.minimumWidth = getTab(currentIndex).implicitWidth
+        tabViewId.Layout.maximumWidth = Number.MAX_VALUE
+    }
+
+    onCurrentIndexChanged: {
+        resizeCurrentTab()
+    }
+
+    Connections {
+        target: {
+            var tab = getTab(currentIndex)
+            if(!tab) {
+                return null
+            }
+            return getTab(currentIndex)
+        }
+        ignoreUnknownSignals: true
+        onImplicitWidthChanged: {
+            resizeCurrentTab()
+        }
+    }
+
     Component.onCompleted: {
         addTab("View", cameraOptionsTabComponentId);
         addTab("Export", exportTabComponentId);
 
         viewTab = getTab(0)
-
-//        console.log(getTab(0).item + " " + viewer)
-
     }
 
     Connections {

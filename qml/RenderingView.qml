@@ -13,6 +13,8 @@ Item {
             Layout.fillHeight: true
             Layout.fillWidth: true
 
+            Layout.preferredWidth: parent.width * .75
+
             Item {
                 anchors.fill: rendererId
 

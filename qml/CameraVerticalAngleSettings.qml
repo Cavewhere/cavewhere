@@ -5,7 +5,10 @@ import Cavewhere 1.0
 ColumnLayout {
     property TurnTableInteraction turnTableInteraction;
 
+    implicitWidth: rowLayout.width
+
     RowLayout {
+        id: rowLayout
         anchors.horizontalCenter: parent.horizontalCenter
         InformationButton {
             showItemOnClick: helpAreaId
