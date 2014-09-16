@@ -3,7 +3,6 @@ import qbs.TextFile
 import qbs.Process
 import qbs.FileInfo
 import qbs.File
-import "cavewhereBuildFunctions.js" as utils
 
 Project {
 
@@ -23,14 +22,13 @@ Project {
         "zlib/zlib.qbs"
     ]
 
+    qbsSearchPaths: ["qbsModules"]
+
     Application {
         id: applicationId
         name: "Cavewhere"
 
-        property string git: utils.findIfExisting(["C:/Program Files/Git/cmd/git.cmd",
-                                             "/usr/bin/git",
-                                             "/usr/local/bin/git"],
-                                                  "git")
+        readonly property string version: Git.productVersion
 
         Depends { name: "cpp" }
         Depends { name: "Qt";
@@ -50,6 +48,7 @@ Project {
         Depends { name: "protoc" }
         Depends { name: "protobuf" }
         Depends { name: "z" }
+        Depends { name: "Git" }
 
 //        Depends { name: "icns-out" }
 
@@ -273,7 +272,11 @@ Project {
                 Qt.core.binPath + "/Qt5Xml.dll",
                 Qt.core.binPath + "/icuin*.dll",
                 Qt.core.binPath + "/icuuc*.dll",
-                Qt.core.binPath + "/icudt*.dll"
+                Qt.core.binPath + "/icudt*.dll",
+
+                //Redistrobution libraries for vs2010 32bit
+                "c:/windows/system32/MSVCR100.DLL",
+                "c:/windows/system32/MSVCP100.DLL"
             ]
 
         }
@@ -394,18 +397,7 @@ Project {
                 cmd.description = "generating version info in" + output.filePath;
 
                 //Use git to query the version
-                var git = product.git
-                var gitDescribe = "Unknown Version"
-
-                if(File.exists(git)) {
-                    var gitProcess = new Process();
-                    gitProcess.setWorkingDirectory(product.sourceDirectory)
-                    gitProcess.exec(git, ["describe"] ,true);
-                    gitDescribe = gitProcess.readStdOut();
-                    gitDescribe = gitDescribe.replace(/(\r\n|\n|\r)/gm,""); //Remove newlines
-                }
-
-                cmd.cavewhereVersion = gitDescribe
+                cmd.cavewhereVersion = product.version
 
                 cmd.sourceCode = function() {
                     var all = "#ifndef cavewhereVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
