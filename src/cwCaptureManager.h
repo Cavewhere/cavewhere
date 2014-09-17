@@ -13,12 +13,17 @@
 #include <QObject>
 #include <QImage>
 #include <QGraphicsScene>
+#include <QAbstractListModel>
+#include <QPointer>
+#include <QUrl>
 
 //Our includes
 #include "cw3dRegionViewer.h"
-#include "cwViewportCapture.h"
+class cwViewportCapture;
+class cwCaptureItem;
+#include "cwProjection.h"
 
-class cwCaptureManager : public QObject
+class cwCaptureManager : public QAbstractListModel
 {
     Q_OBJECT
 
@@ -38,15 +43,17 @@ class cwCaptureManager : public QObject
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
 
 
-
-
-
-    Q_ENUMS(FileType)
+    Q_ENUMS(FileType Roles)
 public:   
     enum FileType {
         PNG, // Raster export
         SVG, // Raster/Vector export
         PDF  // Raster/Vector export
+    };
+
+    enum Roles {
+        LayerObjectRole,
+        LayerNameRole
     };
 
     explicit cwCaptureManager(QObject *parent = 0);
@@ -91,6 +98,13 @@ public:
     Q_INVOKABLE void removeViewportCapture(cwViewportCapture* capture);
 
     int numberOfCaptures() const;
+
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
+    Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex& parent = QModelIndex()) const;
+
+    QHash<int, QByteArray> roleNames() const;
 
 signals:
     void viewChanged();
@@ -141,7 +155,8 @@ private:
     QGraphicsRectItem* BorderRectangle;
     double Scale;
 
-    QSet<cwViewportCapture*> Captures;
+    QList<cwViewportCapture*> Captures;
+    QList<cwCaptureItem*> Layers;
 
     void saveScene();
 
@@ -153,6 +168,11 @@ private:
     void addBorderItem();
     void calcScale();
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
+
+    void scaleCaptureToFitPage(cwViewportCapture* item);
+
+    void addPreviewCaptureItemHelper(cwViewportCapture* capture);
+    void addFullResultionCaptureItemHelper(cwViewportCapture* capture);
 
 };
 

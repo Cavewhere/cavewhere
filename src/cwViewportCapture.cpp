@@ -23,7 +23,7 @@
 #endif
 
 cwViewportCapture::cwViewportCapture(QObject *parent) :
-    QObject(parent),
+    cwCaptureItem(parent),
     ScaleOrtho(new cwScale(this)),
     PreviewCapture(true),
     CapturingImages(false),
@@ -192,6 +192,28 @@ void cwViewportCapture::capture()
     }
 
     view()->update();
+}
+
+void cwViewportCapture::setPaperWidthOfItem(double width)
+{
+    double scale =  width / viewport().width();
+    double height = viewport().height() * scale;
+
+    PaperSizeOfItem = QSizeF(width, height);
+    PreviewItem->setScale(scale);
+
+    emit paperSizeOfItemChanged();
+}
+
+void cwViewportCapture::setPaperHeightOfItem(double height)
+{
+    double scale =  height / viewport().height();
+    double width = viewport().width() * scale;
+
+    PaperSizeOfItem = QSizeF(width, height);
+    PreviewItem->setScale(scale);
+
+    emit paperSizeOfItemChanged();
 }
 
 /**

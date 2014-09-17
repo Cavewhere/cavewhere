@@ -13,14 +13,16 @@
 #include <QObject>
 #include <QGraphicsItemGroup>
 #include <QPointer>
+#include <QSizeF>
 
 //Our includes
 class cwScale;
 class cw3dRegionViewer;
 class cwCamera;
 #include "cwProjection.h"
+#include "cwCaptureItem.h"
 
-class cwViewportCapture : public QObject
+class cwViewportCapture : public cwCaptureItem
 {
     Q_OBJECT
 
@@ -30,6 +32,11 @@ class cwViewportCapture : public QObject
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
+    Q_PROPERTY(QSizeF paperSizeOfItem READ paperSizeOfItem NOTIFY paperSizeOfItemChanged)
+
+
+
+
 
 public:
     explicit cwViewportCapture(QObject *parent = 0);
@@ -53,6 +60,11 @@ public:
     QGraphicsItem* fullResolutionItem() const;
 
     Q_INVOKABLE void capture(); //This should be called by the
+
+    void setPaperWidthOfItem(double width);
+    void setPaperHeightOfItem(double height);
+    QSizeF paperSizeOfItem() const;
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -60,6 +72,7 @@ signals:
     void finishedCapture();
     void previewItemChanged();
     void fullResolutionItemChanged();
+    void paperSizeOfItemChanged();
 
 public slots:
 
@@ -70,6 +83,7 @@ private:
     cwScale* ScaleOrtho; //!<
     QRect Viewport;
     bool PreviewCapture;
+    QSizeF PaperSizeOfItem; //!<
 
     bool CapturingImages;
     int NumberOfImagesProcessed;
@@ -153,6 +167,15 @@ inline QGraphicsItem* cwViewportCapture::previewItem() const {
 */
 inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
     return Item;
+}
+
+
+/**
+* @brief class::itemOnPaperSize
+* @return
+*/
+inline QSizeF cwViewportCapture::paperSizeOfItem() const {
+    return PaperSizeOfItem;
 }
 
 #endif // CWVIEWPORTCAPTURE_H

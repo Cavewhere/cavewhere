@@ -14,6 +14,8 @@
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwImageResolution.h"
+#include "cwCaptureItem.h"
+#include "cwViewportCapture.h"
 
 //Qt includes
 #include <QLabel>
@@ -24,7 +26,7 @@
 #include <QGraphicsRectItem>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
-    QObject(parent),
+    QAbstractListModel(parent),
     Resolution(300.0),
     BottomMargin(0.0),
     TopMargin(0.0),
@@ -273,17 +275,18 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     }
 
     if(capture == nullptr) { return; }
-    if(capture->previewItem() != nullptr) {
-        Scene->addItem(capture->previewItem());
-    }
-    if(capture->fullResolutionItem() != nullptr) {
-        Scene->addItem(capture->fullResolutionItem());
-    }
+    addPreviewCaptureItemHelper(capture);
+    addFullResultionCaptureItemHelper(capture);
 
     connect(capture, &cwViewportCapture::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
     connect(capture, &cwViewportCapture::fullResolutionItemChanged, this, &cwCaptureManager::addFullResultionCaptureItem);
 
-    Captures.insert(capture);
+    capture->setName(QString("Capture %1").arg(Captures.size() + 1));
+
+    beginInsertRows(QModelIndex(), rowCount(), rowCount());
+    Captures.append(capture);
+    Layers.append(capture);
+    endInsertRows();
     emit numberOfCapturesChanged();
 }
 
@@ -291,6 +294,66 @@ void cwCaptureManager::removeViewportCapture(cwViewportCapture *capture)
 {
     Q_UNUSED(capture)
 
+}
+
+/**
+ * @brief cwCaptureLayerModel::rowCount
+ * @param parent
+ * @return The number of rows in the model
+ */
+int cwCaptureManager::rowCount(const QModelIndex &parent) const
+{
+    Q_UNUSED(parent)
+    return Captures.size();
+}
+
+/**
+ * @brief cwCaptureManager::data
+ * @param index
+ * @param role
+ * @return
+ */
+QVariant cwCaptureManager::data(const QModelIndex &index, int role) const
+{
+    //Make sure the index is valid
+    if(!index.isValid()) {
+        return QVariant();
+    }
+
+    switch(role) {
+    case LayerObjectRole:
+        return QVariant::fromValue(Layers.at(index.row()));
+    case LayerNameRole:
+        return Layers.at(index.row())->name();
+    default:
+        return QVariant();
+    }
+
+    return QVariant();
+}
+
+/**
+ * @brief cwCaptureManager::index
+ * @param row
+ * @param column
+ * @param parent
+ * @return The model index, see Qt documentation QAbstractItemModel::index() for details
+ */
+QModelIndex cwCaptureManager::index(int row, int column, const QModelIndex &parent) const
+{
+    return QAbstractListModel::index(row, column, parent);
+}
+
+/**
+ * @brief cwCaptureManager::roleNames
+ * @return
+ */
+QHash<int, QByteArray> cwCaptureManager::roleNames() const
+{
+    QHash<int, QByteArray> roles;
+    roles[LayerObjectRole] = "layerObjectRole";
+    roles[LayerNameRole] = "layerNameRole";
+    return roles;
 }
 
 /**
@@ -344,10 +407,7 @@ void cwCaptureManager::addPreviewCaptureItem()
 {
     Q_ASSERT(dynamic_cast<cwViewportCapture*>(sender()) != nullptr);
     cwViewportCapture* viewportCapture = static_cast<cwViewportCapture*>(sender());
-
-    if(viewportCapture->previewItem() != nullptr) {
-        Scene->addItem(viewportCapture->previewItem());
-    }
+    addPreviewCaptureItemHelper(viewportCapture);
 }
 
 /**
@@ -361,10 +421,7 @@ void cwCaptureManager::addFullResultionCaptureItem()
 {
     Q_ASSERT(dynamic_cast<cwViewportCapture*>(sender()) != nullptr);
     cwViewportCapture* viewportCapture = static_cast<cwViewportCapture*>(sender());
-
-    if(viewportCapture->previewItem() != nullptr) {
-        Scene->addItem(viewportCapture->previewItem());
-    }
+    addFullResultionCaptureItemHelper(viewportCapture);
 }
 
 /**
@@ -524,6 +581,64 @@ QSize cwCaptureManager::calcCroppedTileSize(QSize tileSize, QSize imageSize, int
     }
 
     return croppedTileSize;
+}
+
+/**
+ * @brief cwCaptureManager::scaleCaptureToFitPage
+ * @param item
+ *
+ * This will try to fit the item to the page. By default it'll be added to the (0, 0) and
+ * by stretched to fit the page.
+ */
+void cwCaptureManager::scaleCaptureToFitPage(cwViewportCapture *item)
+{
+    Q_ASSERT(item->previewItem() != nullptr);
+
+    QGraphicsItem* graphicsItem = item->previewItem();
+    QSizeF paperSize = PaperSize;
+    double itemAspect = item->viewport().height() /
+            item->viewport().width();
+//    double paperAspect = paperSize.height() / paperSize.width();
+
+    if(itemAspect > 0) {
+        //Item's height is greater than it's width
+//        if(paperAspect > 0) {
+            //Height is greater than width
+            //Scale height of the catpure to match the height of the paperSize
+            item->setPaperHeightOfItem(paperSize.height());
+//        } else {
+            //Width is greater than height
+            //Scale height of the capture to match the height of the paperSize
+//            item->setPaperHeight(PaperSize.height());
+//        }
+    } else {
+        //Item's Width is greater than it's height
+        item->setPaperWidthOfItem(paperSize.width());
+    }
+
+}
+
+/**
+ * @brief cwCaptureManager::addPreviewCaptureItemHelper
+ * @param capture
+ */
+void cwCaptureManager::addPreviewCaptureItemHelper(cwViewportCapture *capture)
+{
+    if(capture->previewItem() != nullptr) {
+        Scene->addItem(capture->previewItem());
+        scaleCaptureToFitPage(capture);
+    }
+}
+
+/**
+ * @brief cwCaptureManager::addFullResultionCaptureItemHelper
+ * @param catpure
+ */
+void cwCaptureManager::addFullResultionCaptureItemHelper(cwViewportCapture *capture)
+{
+    if(capture->fullResolutionItem() != nullptr) {
+        Scene->addItem(capture->fullResolutionItem());
+    }
 }
 
 /**

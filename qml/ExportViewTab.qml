@@ -221,109 +221,190 @@ Item {
             }
 
             GroupBox {
-                id: projectionScaleGroupBoxId
-                title: "Scale"
+                id: layersGroupBoxId
+                title: "Layers"
 
-                Scale {
-                    id: projectionScaleId
+                ScrollView {
+                    ListView {
+                        id: layerListViewId
 
-                    property double oldScale: 0.0
-                    property bool scaleChangeEnabled: false
+                        model: screenCaptureManagerId
 
-                    //On paper
-                    scaleNumerator.value: 1
-                    scaleNumerator.unit: Units.LengthUnitless
-                    scaleDenominator.unit: Units.LengthUnitless
+                        anchors.left: parent.left
+                        anchors.right: parent.right
 
-                    onScaleChanged: {
-                        //Update the ortho projection matrix
-                        console.log("1. oldScale:" + oldScale + " " + scale)
+                        delegate: Text {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            text: layerNameRole
 
-                        if(!isFinite(scale)) {
-                            return;
+                            MouseArea{
+                                anchors.fill: parent
+                                onClicked: {
+                                    layerListViewId.currentIndex = index
+                                }
+                            }
                         }
 
-                        if(oldScale == 0.0) {
-                            oldScale = scale;
-                            return;
+                        highlight: Rectangle {
+                            color: "#8AC6FF"
                         }
 
-                        if(scaleChangeEnabled) {
-
-                            console.log("2. oldScale:" + oldScale + " " + scale + "\n")
-
-                            var scaleFactor = oldScale / scale
-
-                            var newZoomScale = view.camera.zoomScale * scaleFactor;
-                            console.log("scalefactor:" + scaleFactor + "newZomeScale:" + newZoomScale)
-                            view.camera.zoomScale = newZoomScale
-
-                            constantScaleCheckboxId.checked = true
+                        onCurrentIndexChanged: {
+                            if(currentIndex !== -1) {
+                                var modelIndex = screenCaptureManagerId.index(currentIndex);
+                                var layerObject = screenCaptureManagerId.data(modelIndex, CaptureManager.LayerObjectRole);
+                                layerProperties.layerObject = layerObject
+                            } else {
+                                layerProperties.layerObject = null;
+                            }
                         }
-
-                        oldScale = scale
-                    }
-
-                }
-
-                function updateScaleDenominator() {
-                    var inchToMeter = 0.0254;
-                    if(constantScaleCheckboxId.checked) {
-                        //Update the paper size such that the scale stays the same
-                        var paperSize = (screenCaptureManagerId.screenPaperSize.width * projectionScaleId.scale) /
-                                (inchToMeter * view.camera.pixelsPerMeter);
-
-                        var paperAspect = screenCaptureManagerId.paperSize.height / screenCaptureManagerId.paperSize.width;
-                        var paperHeight = paperSize * paperAspect;
-                        var paperWidth = paperSize;
-
-                        paperSizeInteraction.paperRectangle.paperWidth = paperWidth
-                        paperSizeInteraction.paperRectangle.paperHeight = paperHeight
-
-                        //                    screenCaptureManagerId.paperSize = Qt.size(paperWidth, paperHeight)
-                        paperSizeModel.set(3, {"width":paperWidth})
-                        paperSizeModel.set(3, {"height":paperHeight})
-
-                        console.log("Paper size:" + paperSize)
-
-                    } else {
-                        //Update the scale
-                        var logicalDotPerMeter = screenCaptureManagerId.screenPaperSize.width /
-                                (screenCaptureManagerId.paperSize.width * inchToMeter)
-                        projectionScaleId.scaleChangeEnabled = false;
-                        projectionScaleId.scale = view.camera.pixelsPerMeter / logicalDotPerMeter;
-                        projectionScaleId.scaleChangeEnabled = true;
                     }
                 }
+            }
 
-                Connections {
-                    target: screenCaptureManagerId
-                    onScreenPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
-                    onPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
-                }
+            GroupBox {
+                id: layerProperties
 
-                Connections {
-                    target: view.camera
-                    onPixelsPerMeterChanged: projectionScaleGroupBoxId.updateScaleDenominator()
-                }
+                property var layerObject: null
 
-                Column {
+                title: layerObject !== null ? "Properies of " + layerObject.name : ""
+                visible: layerObject !== null
+
+                ColumnLayout {
+
                     PaperScaleInput {
                         usingInteraction: false
-                        scaleObject: projectionScaleId
+                        scaleObject: layerProperties.layerObject !== null ? layerProperties.layerObject.scaleOrtho : null
                     }
 
-                    CheckBox {
-                        id: constantScaleCheckboxId
-                        text: "Constant Scale"
-                        checked: false
-                        onCheckedChanged: {
-                            paperComboBoxId.currentIndex = 3
+                    RowLayout {
+                        Text {
+                            text: "Size"
                         }
+
+                        ClickTextInput {
+                            text: layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
+                        }
+
+                        Text {
+                            text: "x"
+                        }
+
+                        ClickTextInput {
+                            text: layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.height : ""
+                        }
+
                     }
                 }
 
             }
+
+
+//            GroupBox {
+//                id: projectionScaleGroupBoxId
+//                title: "Scale"
+
+//                Scale {
+//                    id: projectionScaleId
+
+//                    property double oldScale: 0.0
+//                    property bool scaleChangeEnabled: false
+
+//                    //On paper
+//                    scaleNumerator.value: 1
+//                    scaleNumerator.unit: Units.LengthUnitless
+//                    scaleDenominator.unit: Units.LengthUnitless
+
+//                    onScaleChanged: {
+//                        //Update the ortho projection matrix
+//                        console.log("1. oldScale:" + oldScale + " " + scale)
+
+//                        if(!isFinite(scale)) {
+//                            return;
+//                        }
+
+//                        if(oldScale == 0.0) {
+//                            oldScale = scale;
+//                            return;
+//                        }
+
+//                        if(scaleChangeEnabled) {
+
+//                            console.log("2. oldScale:" + oldScale + " " + scale + "\n")
+
+//                            var scaleFactor = oldScale / scale
+
+//                            var newZoomScale = view.camera.zoomScale * scaleFactor;
+//                            console.log("scalefactor:" + scaleFactor + "newZomeScale:" + newZoomScale)
+//                            view.camera.zoomScale = newZoomScale
+
+//                            constantScaleCheckboxId.checked = true
+//                        }
+
+//                        oldScale = scale
+//                    }
+
+//                }
+
+//                function updateScaleDenominator() {
+//                    var inchToMeter = 0.0254;
+//                    if(constantScaleCheckboxId.checked) {
+//                        //Update the paper size such that the scale stays the same
+//                        var paperSize = (screenCaptureManagerId.screenPaperSize.width * projectionScaleId.scale) /
+//                                (inchToMeter * view.camera.pixelsPerMeter);
+
+//                        var paperAspect = screenCaptureManagerId.paperSize.height / screenCaptureManagerId.paperSize.width;
+//                        var paperHeight = paperSize * paperAspect;
+//                        var paperWidth = paperSize;
+
+//                        paperSizeInteraction.paperRectangle.paperWidth = paperWidth
+//                        paperSizeInteraction.paperRectangle.paperHeight = paperHeight
+
+//                        //                    screenCaptureManagerId.paperSize = Qt.size(paperWidth, paperHeight)
+//                        paperSizeModel.set(3, {"width":paperWidth})
+//                        paperSizeModel.set(3, {"height":paperHeight})
+
+//                        console.log("Paper size:" + paperSize)
+
+//                    } else {
+//                        //Update the scale
+//                        var logicalDotPerMeter = screenCaptureManagerId.screenPaperSize.width /
+//                                (screenCaptureManagerId.paperSize.width * inchToMeter)
+//                        projectionScaleId.scaleChangeEnabled = false;
+//                        projectionScaleId.scale = view.camera.pixelsPerMeter / logicalDotPerMeter;
+//                        projectionScaleId.scaleChangeEnabled = true;
+//                    }
+//                }
+
+//                Connections {
+//                    target: screenCaptureManagerId
+//                    onScreenPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+//                    onPaperSizeChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+//                }
+
+//                Connections {
+//                    target: view.camera
+//                    onPixelsPerMeterChanged: projectionScaleGroupBoxId.updateScaleDenominator()
+//                }
+
+//                Column {
+//                    PaperScaleInput {
+//                        usingInteraction: false
+//                        scaleObject: projectionScaleId
+//                    }
+
+//                    CheckBox {
+//                        id: constantScaleCheckboxId
+//                        text: "Constant Scale"
+//                        checked: false
+//                        onCheckedChanged: {
+//                            paperComboBoxId.currentIndex = 3
+//                        }
+//                    }
+//                }
+
+//            }
 
             GroupBox {
                 title: "File type"
