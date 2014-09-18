@@ -28,7 +28,7 @@ Project {
         id: applicationId
         name: "Cavewhere"
 
-        readonly property string version: Git.productVersion
+        readonly property string gitVersion: Git.productVersion
 
         Depends { name: "cpp" }
         Depends { name: "Qt";
@@ -397,7 +397,7 @@ Project {
                 cmd.description = "generating version info in" + output.filePath;
 
                 //Use git to query the version
-                cmd.cavewhereVersion = product.version
+                cmd.cavewhereVersion = product.gitVersion
 
                 cmd.sourceCode = function() {
                     var all = "#ifndef cavewhereVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
