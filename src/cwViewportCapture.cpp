@@ -109,11 +109,6 @@ void cwViewportCapture::capture()
         return;
     }
 
-//    if(!paperSize().isValid()) {
-//        qWarning() << "Paper size is invalid:" << paperSize();
-//        return;
-//    }
-
     cwScene* scene = view()->scene();
     cwCamera* camera = CaptureCamera;
     cwProjection originalProj = camera->projection();
@@ -331,32 +326,7 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 
     Q_ASSERT(CapturingImages);
 
-//    QSize tileSize = TileSize;
     QPointF origin = IdToOrigin.value(id);
-
-//    int row = Rows - (id / Columns) - 1;
-//    int column = id % Columns;
-
-//    double x = column * tileSize.width();
-//    double y = row * tileSize.height();
-
-//    int numberOfTilesY = HighResViewport.size() / (int)tileSize.height();
-
-
-//    QSize croppedTileSize = calcCroppedTileSize(tileSize, HighResViewport.size(), row, column);
-
-
-//    double top = HighResViewport.top();
-//    double yDiff = top - Rows * tileSize.height();
-//    double yEdgeDiff = tileSize.height() - image.height();
-//    y += yDiff + yEdgeDiff;
-
-//    double bottom = (paperSize().height() - bottomMargin()) * resolution();
-//    double yDiff = bottom - Rows * tileSize.height();
-//    double yEdgeDiff = TileSize.height() - image.height();
-//    y += yDiff + yEdgeDiff;
-
-//    qDebug() << "Id:" << id << "row:" << row << "column:" << column << "x,y" << x << y;
 
     QGraphicsItem* parent = previewCapture() ? PreviewItem : Item;
 
@@ -365,14 +335,14 @@ void cwViewportCapture::capturedImage(QImage image, int id)
     graphicsImage->setPos(origin);
 
     //For debugging tiles
-    QRectF tileRect = QRectF(origin, image.size());
-    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
-    rectItem->setPen(QPen(Qt::red));
-    rectItem->setRect(tileRect);
-    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
-    textItem->setText(QString("Id:%1").arg(id));
-    textItem->setPen(QPen(Qt::red));
-    textItem->setPos(tileRect.center());
+//    QRectF tileRect = QRectF(origin, image.size());
+//    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
+//    rectItem->setPen(QPen(Qt::red));
+//    rectItem->setRect(tileRect);
+//    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
+//    textItem->setText(QString("Id:%1").arg(id));
+//    textItem->setPen(QPen(Qt::red));
+//    textItem->setPos(tileRect.center());
 
     NumberOfImagesProcessed++;
 

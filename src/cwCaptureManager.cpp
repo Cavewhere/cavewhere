@@ -196,82 +196,6 @@ void cwCaptureManager::capture()
         capture->setPreviewCapture(false);
         capture->capture();
     }
-
-//    if(!viewport().size().isValid()) {
-//        qWarning() << "Viewport isn't valid for export:" << viewport();
-//        return;
-//    }
-
-//    if(!paperSize().isValid()) {
-//        qWarning() << "Paper size is invalid:" << paperSize();
-//        return;
-//    }
-
-//    cwScene* scene = view()->scene();
-//    cwCamera* camera = view()->camera();
-//    cwProjection originalProj = camera->projection();
-
-//    QRect viewport = this->viewport();
-//    QRect cameraViewport = camera->viewport();
-
-//    //Flip the viewport so it's in opengl coordinate system instead of qt
-//    viewport.moveTop(cameraViewport.height() - viewport.bottom());
-
-//    calcScale();
-
-//    QSize tileSize = TileSize;
-//    QSize imageSize = QSize(viewport.width() * Scale, viewport.height() * Scale);
-
-//    int columns = imageSize.width() / tileSize.width();
-//    int rows = imageSize.height() / tileSize.height();
-
-//    if(imageSize.width() % tileSize.width() > 0) { columns++; }
-//    if(imageSize.height() % tileSize.height() > 0) { rows++; }
-
-//    NumberOfImagesProcessed = 0;
-//    Columns = columns;
-//    Rows = rows;
-
-//    Scene->clear();
-
-//    addBorderItem();
-
-//    cwProjection croppedProjection = tileProjection(viewport,
-//                                                    camera->viewport().size(),
-//                                                    originalProj);
-
-//    for(int column = 0; column < columns; column++) {
-//        for(int row = 0; row < rows; row++) {
-
-//            int x = tileSize.width() * column;
-//            int y = tileSize.height() * row;
-
-//            QSize croppedTileSize = calcCroppedTileSize(tileSize, imageSize, row, column);
-
-//            QRect tileViewport(QPoint(x, y), croppedTileSize);
-//            cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
-
-//            cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
-
-//            cwCamera* croppedCamera = new cwCamera(command);
-//            croppedCamera->setViewport(QRect(QPoint(), croppedTileSize));
-//            croppedCamera->setProjection(tileProj);
-//            croppedCamera->setViewMatrix(camera->viewMatrix());
-
-//            command->setCamera(croppedCamera);
-//            command->setScene(scene);
-
-//            int id = row * columns + column;
-//            command->setId(id);
-
-//            connect(command, SIGNAL(createdImage(QImage,int)),
-//                    this, SLOT(capturedImage(QImage,int)),
-//                    Qt::QueuedConnection);
-//            scene->addSceneCommand(command);
-//        }
-//    }
-
-//    view()->update();
 }
 
 /**
@@ -292,7 +216,6 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     addFullResultionCaptureItemHelper(capture);
 
     connect(capture, &cwViewportCapture::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
-//    connect(capture, &cwViewportCapture::fullResolutionItemChanged, this, &cwCaptureManager::addFullResultionCaptureItem);
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
 
@@ -370,46 +293,6 @@ QHash<int, QByteArray> cwCaptureManager::roleNames() const
 }
 
 /**
- * @brief cwCaptureManager::capturedImage
- * @param image
- */
-//void cwCaptureManager::capturedImage(QImage image, int id)
-//{
-//    QSize tileSize = TileSize;
-
-//    int row = Rows - (id / Columns) - 1;
-//    int column = id % Columns;
-
-//    double x = (viewport().x() * Scale) + column * tileSize.width();
-//    double y = row * tileSize.height();
-
-//    double bottom = (paperSize().height() - bottomMargin()) * resolution();
-//    double yDiff = bottom - Rows * tileSize.height();
-//    double yEdgeDiff = TileSize.height() - image.height();
-//    y += yDiff + yEdgeDiff;
-
-//    cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem();
-//    graphicsImage->setImage(image);
-//    graphicsImage->setPos(QPointF(x, y));
-
-//    Scene->addItem(graphicsImage);
-
-////    //For debugging tiles
-////    QRectF tileRect = QRectF(QPointF(x, y), image.size());
-////    Scene->addRect(tileRect, QPen(Qt::red));
-////    QGraphicsSimpleTextItem* textItem = Scene->addSimpleText(QString("Id:%1").arg(id));
-////    textItem->setPen(QPen(Qt::red));
-////    textItem->setPos(tileRect.center());
-
-//    NumberOfImagesProcessed++;
-//    if(NumberOfImagesProcessed == Columns * Rows) {
-//        //We've added all the tiles to the scene, now we're ready to
-//        //save the scene
-//        saveScene();
-//    }
-//}
-
-/**
  * @brief cwCaptureManager::addPreviewCaptureItem
  *
  * This will add the preview item to the graphics scene of the preview item
@@ -451,8 +334,6 @@ void cwCaptureManager::saveCaptures()
     NumberOfImagesProcessed--;
 
     if(NumberOfImagesProcessed == 0) {
-//        qDebug() << "Save Captures!";
-
         //All the images have been captured, go through all the captures add the fullImages
         //to the scene.
 
@@ -468,7 +349,6 @@ void cwCaptureManager::saveCaptures()
         saveScene();
 
         foreach(cwViewportCapture* capture, Captures) {
-//            scene()->addItem(capture->fullResolutionItem());
             capture->previewItem()->setVisible(true);
             capture->fullResolutionItem()->setVisible(false);
             disconnect(capture, &cwViewportCapture::finishedCapture, this, &cwCaptureManager::saveCaptures);
@@ -498,8 +378,6 @@ void cwCaptureManager::saveScene()
     Scene->render(&painter, imageRect, sceneRect);
 
     outputImage.save(filename().toLocalFile(), "png");
-
-//    Scene->clear();
 
     emit finishedCapture();
 }
