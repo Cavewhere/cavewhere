@@ -33,10 +33,7 @@ class cwViewportCapture : public cwCaptureItem
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
     Q_PROPERTY(QSizeF paperSizeOfItem READ paperSizeOfItem NOTIFY paperSizeOfItemChanged)
-
-
-
-
+    Q_PROPERTY(QPointF postitionOnPaper READ postitionOnPaper WRITE setPositionOnPaper NOTIFY postitionOnPaperChanged)
 
 public:
     explicit cwViewportCapture(QObject *parent = 0);
@@ -65,6 +62,9 @@ public:
     void setPaperHeightOfItem(double height);
     QSizeF paperSizeOfItem() const;
 
+    QPointF postitionOnPaper() const;
+    void setPositionOnPaper(QPointF postitionOnPaper);
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -73,6 +73,7 @@ signals:
     void previewItemChanged();
     void fullResolutionItemChanged();
     void paperSizeOfItemChanged();
+    void postitionOnPaperChanged();
 
 public slots:
 
@@ -81,15 +82,18 @@ private:
     QPointer<cw3dRegionViewer> View; //!<
     int Resolution; //!<
     cwScale* ScaleOrtho; //!<
+    double ItemScale;
     QRect Viewport;
     bool PreviewCapture;
     QSizeF PaperSizeOfItem; //!<
+    QPointF PositionOnPaper; //!<
 
     bool CapturingImages;
     int NumberOfImagesProcessed;
     int Columns;
     int Rows;
     QSize TileSize;
+    QHash<int, QPointF> IdToOrigin;
 
     //Scene state information
     cwCamera* CaptureCamera;
@@ -97,7 +101,6 @@ private:
     QGraphicsItemGroup* PreviewItem; //This is the preview item
     QGraphicsItemGroup* Item; //This is the full resultion item
 
-    void updateScalePreviewItem();
     cwProjection tileProjection(QRectF tileViewport,
                                 QSizeF imageSize,
                                 const cwProjection& originalProjection) const;
@@ -106,6 +109,7 @@ private:
 
 private slots:
     void capturedImage(QImage image, int id);
+    void updateScaleForItems();
 };
 
 
@@ -176,6 +180,14 @@ inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
 */
 inline QSizeF cwViewportCapture::paperSizeOfItem() const {
     return PaperSizeOfItem;
+}
+
+/**
+* @brief cwViewportCapture::postitionOnPaper
+* @return
+*/
+inline QPointF cwViewportCapture::postitionOnPaper() const {
+    return PositionOnPaper;
 }
 
 #endif // CWVIEWPORTCAPTURE_H

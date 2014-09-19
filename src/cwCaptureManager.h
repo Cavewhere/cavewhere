@@ -124,10 +124,12 @@ signals:
 public slots:
 
 private slots:
-    void capturedImage(QImage image, int id);
+//    void capturedImage(QImage image, int id);
 
     void addPreviewCaptureItem();
     void addFullResultionCaptureItem();
+
+    void saveCaptures();
 
 private:
     QPointer<cw3dRegionViewer> View; //!<
@@ -146,9 +148,9 @@ private:
 
     //For processing
     int NumberOfImagesProcessed;
-    int Columns;
-    int Rows;
-    QSize TileSize;
+//    int Columns;
+//    int Rows;
+//    QSize TileSize;
 //    QSize ImageSize;
     QGraphicsScene* Scene;
     QGraphicsRectItem* PaperRectangle;

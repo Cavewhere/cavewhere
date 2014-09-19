@@ -5,6 +5,8 @@
 **
 **************************************************************************/
 
+//Qt includes
+#include <QPen>
 
 //Our includes
 #include "cwViewportCapture.h"
@@ -24,6 +26,7 @@
 
 cwViewportCapture::cwViewportCapture(QObject *parent) :
     cwCaptureItem(parent),
+    Resolution(300),
     ScaleOrtho(new cwScale(this)),
     PreviewCapture(true),
     CapturingImages(false),
@@ -35,6 +38,8 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     PreviewItem(nullptr),
     Item(nullptr)
 {
+    connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateScaleForItems);
+
 }
 
 cwViewportCapture::~cwViewportCapture()
@@ -133,16 +138,21 @@ void cwViewportCapture::capture()
             delete Item;
         }
         Item = new QGraphicsItemGroup();
+        fullResolutionItemChanged();
 
-
-        imageScale = PreviewItem->scale();
+        imageScale = PreviewItem->scale() * resolution();
     }
 
-    //Updates the scale for the preview item
-    updateScalePreviewItem();
+    //Updates the scale for the items
+    updateScaleForItems();
+
+    QPointF previewItemPosition = PreviewItem->pos();
+
+    QRectF onPaperViewport = QRectF(QPoint(previewItemPosition.x() * imageScale, previewItemPosition.y() * imageScale),
+                                  QSizeF(viewport.width() * imageScale, viewport.height() * imageScale));
 
     QSize tileSize = TileSize;
-    QSize imageSize = QSize(viewport.width() * imageScale, viewport.height() * imageScale);
+    QSize imageSize = onPaperViewport.size().toSize(); //QSize(viewport.width() * imageScale, viewport.height() * imageScale);
 
     int columns = imageSize.width() / tileSize.width();
     int rows = imageSize.height() / tileSize.height();
@@ -154,7 +164,7 @@ void cwViewportCapture::capture()
     Columns = columns;
     Rows = rows;
 
-//    addBorderItem();
+    IdToOrigin.clear(); //This is used to keep track the positions of the images
 
     cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
@@ -184,6 +194,12 @@ void cwViewportCapture::capture()
             int id = row * columns + column;
             command->setId(id);
 
+            double originX = column * tileSize.width();
+            double originY = onPaperViewport.bottom() - (row * tileSize.height() + croppedTileSize.height());
+            QPointF origin(originX, originY);
+
+            IdToOrigin[id] = origin;
+
             connect(command, SIGNAL(createdImage(QImage,int)),
                     this, SLOT(capturedImage(QImage,int)),
                     Qt::QueuedConnection);
@@ -200,7 +216,7 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
     double height = viewport().height() * scale;
 
     PaperSizeOfItem = QSizeF(width, height);
-    PreviewItem->setScale(scale);
+    ScaleOrtho->setScale(scale);
 
     emit paperSizeOfItemChanged();
 }
@@ -211,7 +227,7 @@ void cwViewportCapture::setPaperHeightOfItem(double height)
     double width = viewport().width() * scale;
 
     PaperSizeOfItem = QSizeF(width, height);
-    PreviewItem->setScale(scale);
+    ScaleOrtho->setScale(scale);
 
     emit paperSizeOfItemChanged();
 }
@@ -315,24 +331,50 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 
     Q_ASSERT(CapturingImages);
 
-    QSize tileSize = TileSize;
+//    QSize tileSize = TileSize;
+    QPointF origin = IdToOrigin.value(id);
 
-    int row = Rows - (id / Columns) - 1;
-    int column = id % Columns;
+//    int row = Rows - (id / Columns) - 1;
+//    int column = id % Columns;
 
-    double x = column * tileSize.width();
-    double y = row * tileSize.height();
+//    double x = column * tileSize.width();
+//    double y = row * tileSize.height();
+
+//    int numberOfTilesY = HighResViewport.size() / (int)tileSize.height();
+
+
+//    QSize croppedTileSize = calcCroppedTileSize(tileSize, HighResViewport.size(), row, column);
+
+
+//    double top = HighResViewport.top();
+//    double yDiff = top - Rows * tileSize.height();
+//    double yEdgeDiff = tileSize.height() - image.height();
+//    y += yDiff + yEdgeDiff;
 
 //    double bottom = (paperSize().height() - bottomMargin()) * resolution();
 //    double yDiff = bottom - Rows * tileSize.height();
 //    double yEdgeDiff = TileSize.height() - image.height();
 //    y += yDiff + yEdgeDiff;
 
+//    qDebug() << "Id:" << id << "row:" << row << "column:" << column << "x,y" << x << y;
+
     QGraphicsItem* parent = previewCapture() ? PreviewItem : Item;
 
     cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
     graphicsImage->setImage(image);
-    graphicsImage->setPos(QPointF(x, y));
+    graphicsImage->setPos(origin);
+
+    //For debugging tiles
+    QRectF tileRect = QRectF(origin, image.size());
+    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
+    rectItem->setPen(QPen(Qt::red));
+    rectItem->setRect(tileRect);
+    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
+    textItem->setText(QString("Id:%1").arg(id));
+    textItem->setPen(QPen(Qt::red));
+    textItem->setPos(tileRect.center());
+
+    NumberOfImagesProcessed++;
 
     if(NumberOfImagesProcessed == Rows * Columns) {
         //Finished capturing images
@@ -345,14 +387,20 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 }
 
 /**
- * @brief cwViewportCapture::updateScalePreviewItem
+ * @brief cwViewportCapture::updateScaleForItems
  *
- * This updates the preview item's scale. This will stretch the images, so they
- * are scaled properly
+ * This updates the scale for QGraphicsItems (Preview Item and the Full resolution item)
  */
-void cwViewportCapture::updateScalePreviewItem()
+void cwViewportCapture::updateScaleForItems()
 {
-    PreviewItem->setScale(ScaleOrtho->scale());
+    if(previewItem() != nullptr) {
+        previewItem()->setScale(ScaleOrtho->scale());
+    }
+
+    if(fullResolutionItem() != nullptr) {
+        double hiResScale = paperSizeOfItem().width() / (PreviewItem->scale() * resolution() * viewport().width());
+        fullResolutionItem()->setScale(hiResScale);
+    }
 }
 
 /**
@@ -361,4 +409,15 @@ void cwViewportCapture::updateScalePreviewItem()
 */
 cw3dRegionViewer* cwViewportCapture::view() const {
     return View;
+}
+
+/**
+* @brief cwViewportCapture::setPositionOnPaper
+* @param postitionOnPaper
+*/
+void cwViewportCapture::setPositionOnPaper(QPointF postitionOnPaper) {
+    if(PositionOnPaper != postitionOnPaper) {
+        PositionOnPaper = postitionOnPaper;
+        emit postitionOnPaperChanged();
+    }
 }
