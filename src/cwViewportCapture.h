@@ -21,6 +21,7 @@ class cw3dRegionViewer;
 class cwCamera;
 #include "cwProjection.h"
 #include "cwCaptureItem.h"
+#include "cwUnits.h"
 
 class cwViewportCapture : public cwCaptureItem
 {
@@ -87,6 +88,7 @@ private:
     bool PreviewCapture;
     QSizeF PaperSizeOfItem; //!<
     QPointF PositionOnPaper; //!<
+    cwUnits::LengthUnit PaperUnit;
 
     bool CapturingImages;
     int NumberOfImagesProcessed;
@@ -106,6 +108,8 @@ private:
                                 const cwProjection& originalProjection) const;
 
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
+
+    void setImageScale(double scale);
 
 private slots:
     void capturedImage(QImage image, int id);

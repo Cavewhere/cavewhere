@@ -17,6 +17,7 @@
 #include "cwScreenCaptureCommand.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
+#include "cwLength.h"
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -28,7 +29,9 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     cwCaptureItem(parent),
     Resolution(300),
     ScaleOrtho(new cwScale(this)),
+    ItemScale(1.0),
     PreviewCapture(true),
+    PaperUnit(cwUnits::Inches),
     CapturingImages(false),
     NumberOfImagesProcessed(0),
     Columns(0),
@@ -205,26 +208,45 @@ void cwViewportCapture::capture()
     view()->update();
 }
 
+/**
+ * @brief cwViewportCapture::setPaperWidthOfItem
+ * @param width
+ *
+ * This sets the width in the paper units of how big the catpure is. This will mantain the
+ * aspect of the catpure
+ */
 void cwViewportCapture::setPaperWidthOfItem(double width)
 {
-    double scale =  width / viewport().width();
-    double height = viewport().height() * scale;
+    if(PaperSizeOfItem.width() != width) {
 
-    PaperSizeOfItem = QSizeF(width, height);
-    ScaleOrtho->setScale(scale);
+        double scale =  width / viewport().width();
+        double height = viewport().height() * scale;
 
-    emit paperSizeOfItemChanged();
+        PaperSizeOfItem = QSizeF(width, height);
+        setImageScale(scale);
+
+        emit paperSizeOfItemChanged();
+    }
 }
 
+/**
+ * @brief cwViewportCapture::setPaperHeightOfItem
+ * @param height
+ *
+ * This sets the height in the paper units of how big the capture is. This will mantain the
+ * aspect of the catpure
+ */
 void cwViewportCapture::setPaperHeightOfItem(double height)
 {
-    double scale =  height / viewport().height();
-    double width = viewport().width() * scale;
+    if(PaperSizeOfItem.height() != height) {
+        double scale =  height / viewport().height();
+        double width = viewport().width() * scale;
 
-    PaperSizeOfItem = QSizeF(width, height);
-    ScaleOrtho->setScale(scale);
+        PaperSizeOfItem = QSizeF(width, height);
+        setImageScale(scale);
 
-    emit paperSizeOfItemChanged();
+        emit paperSizeOfItemChanged();
+    }
 }
 
 /**
@@ -317,6 +339,27 @@ QSize cwViewportCapture::calcCroppedTileSize(QSize tileSize, QSize imageSize, in
 }
 
 /**
+ * @brief cwViewportCapture::setImageScale
+ * @param scale
+ *
+ * This sets the scaling for the preview item and the full resolution image.
+ *
+ * If an orthognal projection is being used the scaleOrtho is also update.
+ */
+void cwViewportCapture::setImageScale(double scale)
+{
+    if(ItemScale != scale) {
+        if(CaptureCamera->projection().type() == cwProjection::Ortho) {
+            double meterToPaperUnit = cwUnits::convert(1.0, cwUnits::Meters, PaperUnit);
+            ScaleOrtho->setScale(scale * CaptureCamera->pixelsPerMeter() * 1.0 / meterToPaperUnit);
+        } else {
+            ItemScale = scale;
+            updateScaleForItems();
+        }
+    }
+}
+
+/**
  * @brief cwScreenCaptureManager::capturedImage
  * @param image
  */
@@ -363,8 +406,16 @@ void cwViewportCapture::capturedImage(QImage image, int id)
  */
 void cwViewportCapture::updateScaleForItems()
 {
+    double meterToPaperUnit = cwUnits::convert(1.0, cwUnits::Meters, PaperUnit);
+    if(CaptureCamera->projection().type() == cwProjection::Ortho) {
+        ItemScale = ScaleOrtho->scale() * (1.0 / CaptureCamera->pixelsPerMeter()) * (meterToPaperUnit);
+    }
+
+    double paperWidth = viewport().size().width() * ItemScale;
+    setPaperWidthOfItem(paperWidth);
+
     if(previewItem() != nullptr) {
-        previewItem()->setScale(ScaleOrtho->scale());
+        previewItem()->setScale(ItemScale);
     }
 
     if(fullResolutionItem() != nullptr) {
