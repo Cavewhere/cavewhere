@@ -20,8 +20,8 @@ Item {
 
     signal scaleInteractionActivated()
 
-    height: childrenRect.height
-    width: inputRow.width
+    implicitHeight: childrenRect.height
+    implicitWidth: inputRow.width
 
     Row {
         id: inputRow
