@@ -113,7 +113,7 @@ private:
 
 private slots:
     void capturedImage(QImage image, int id);
-    void updateScaleForItems();
+    void updateTransformForItems();
 };
 
 

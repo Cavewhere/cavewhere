@@ -41,7 +41,7 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     PreviewItem(nullptr),
     Item(nullptr)
 {
-    connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateScaleForItems);
+    connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateTransformForItems);
 
 }
 
@@ -142,7 +142,7 @@ void cwViewportCapture::capture()
     }
 
     //Updates the scale for the items
-    updateScaleForItems();
+    updateTransformForItems();
 
     QPointF previewItemPosition = PreviewItem->pos();
 
@@ -193,7 +193,7 @@ void cwViewportCapture::capture()
             command->setId(id);
 
             double originX = column * tileSize.width();
-            double originY = onPaperViewport.bottom() - (row * tileSize.height() + croppedTileSize.height());
+            double originY = onPaperViewport.height() - (row * tileSize.height() + croppedTileSize.height());
             QPointF origin(originX, originY);
 
             IdToOrigin[id] = origin;
@@ -219,7 +219,7 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
 {
     if(PaperSizeOfItem.width() != width) {
 
-        double scale =  width / viewport().width();
+        double scale =  width / (double)viewport().width();
         double height = viewport().height() * scale;
 
         PaperSizeOfItem = QSizeF(width, height);
@@ -239,7 +239,7 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
 void cwViewportCapture::setPaperHeightOfItem(double height)
 {
     if(PaperSizeOfItem.height() != height) {
-        double scale =  height / viewport().height();
+        double scale =  height / (double)viewport().height();
         double width = viewport().width() * scale;
 
         PaperSizeOfItem = QSizeF(width, height);
@@ -354,7 +354,7 @@ void cwViewportCapture::setImageScale(double scale)
             ScaleOrtho->setScale(scale * CaptureCamera->pixelsPerMeter() * 1.0 / meterToPaperUnit);
         } else {
             ItemScale = scale;
-            updateScaleForItems();
+            updateTransformForItems();
         }
     }
 }
@@ -404,7 +404,7 @@ void cwViewportCapture::capturedImage(QImage image, int id)
  *
  * This updates the scale for QGraphicsItems (Preview Item and the Full resolution item)
  */
-void cwViewportCapture::updateScaleForItems()
+void cwViewportCapture::updateTransformForItems()
 {
     double meterToPaperUnit = cwUnits::convert(1.0, cwUnits::Meters, PaperUnit);
     if(CaptureCamera->projection().type() == cwProjection::Ortho) {
@@ -419,8 +419,9 @@ void cwViewportCapture::updateScaleForItems()
     }
 
     if(fullResolutionItem() != nullptr) {
-        double hiResScale = paperSizeOfItem().width() / (PreviewItem->scale() * resolution() * viewport().width());
+        double hiResScale = paperSizeOfItem().width() / (previewItem()->scale() * resolution() * viewport().width());
         fullResolutionItem()->setScale(hiResScale);
+        fullResolutionItem()->setPos(previewItem()->pos());
     }
 }
 
@@ -435,10 +436,22 @@ cw3dRegionViewer* cwViewportCapture::view() const {
 /**
 * @brief cwViewportCapture::setPositionOnPaper
 * @param postitionOnPaper
+*
+* This sets the position of the viewport capture on the paper. This is
+* in paper units.
 */
 void cwViewportCapture::setPositionOnPaper(QPointF postitionOnPaper) {
     if(PositionOnPaper != postitionOnPaper) {
         PositionOnPaper = postitionOnPaper;
+        if(previewItem() != nullptr) {
+            previewItem()->setPos(postitionOnPaper);
+
+        }
+
+        if(fullResolutionItem() != nullptr) {
+            fullResolutionItem()->setPos(postitionOnPaper);
+        }
+
         emit postitionOnPaperChanged();
     }
 }

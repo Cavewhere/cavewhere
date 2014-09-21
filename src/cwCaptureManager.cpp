@@ -53,6 +53,11 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     PaperRectangle->setPen(pen);
     PaperRectangle->setBrush(brush);
 
+    QPen borderPen;
+    borderPen.setWidthF(.05);
+    borderPen.setJoinStyle(Qt::MiterJoin);
+    BorderRectangle->setPen(borderPen);
+
 }
 
 /**
@@ -76,7 +81,11 @@ void cwCaptureManager::setPaperSize(QSizeF paperSize) {
     if(PaperSize != paperSize) {
         PaperSize = paperSize;
 
+        //Update the paper rectangle
         PaperRectangle->setRect(QRectF(QPointF(0, 0), PaperSize));
+
+        //Update the border
+        updateBorderRectangle();
 
         emit paperSizeChanged();
     }
@@ -100,6 +109,7 @@ void cwCaptureManager::setResolution(double resolution) {
 void cwCaptureManager::setBottomMargin(double bottomMargin) {
     if(BottomMargin != bottomMargin) {
         BottomMargin = bottomMargin;
+        updateBorderRectangle();
         emit bottomMarginChanged();
     }
 }
@@ -111,6 +121,7 @@ void cwCaptureManager::setBottomMargin(double bottomMargin) {
 void cwCaptureManager::setTopMargin(double topMargin) {
     if(TopMargin != topMargin) {
         TopMargin = topMargin;
+        updateBorderRectangle();
         emit topMarginChanged();
     }
 }
@@ -122,6 +133,7 @@ void cwCaptureManager::setTopMargin(double topMargin) {
 void cwCaptureManager::setRightMargin(double rightMargin) {
     if(RightMargin != rightMargin) {
         RightMargin = rightMargin;
+        updateBorderRectangle();
         emit rightMarginChanged();
     }
 }
@@ -133,6 +145,7 @@ void cwCaptureManager::setRightMargin(double rightMargin) {
 void cwCaptureManager::setLeftMargin(double leftMargin) {
     if(LeftMargin != leftMargin) {
         LeftMargin = leftMargin;
+        updateBorderRectangle();
         emit leftMarginChanged();
     }
 }
@@ -449,28 +462,6 @@ void cwCaptureManager::addBorderItem()
 }
 
 /**
- * @brief cwCaptureManager::calcScale
- *
- * This caluclates the scale
- */
-void cwCaptureManager::calcScale()
-{
-    double pixelPerInchWidth = screenPaperSize().width() / paperSize().width();
-    double pixelPerInchHeight = screenPaperSize().height() / paperSize().height();
-
-    qDebug() << "Pixel per inch: " << pixelPerInchHeight << pixelPerInchWidth;
-
-    //Create the scale need to convert the viewport into the correct rendering resolution
-    QPointF scale(resolution() / pixelPerInchWidth, resolution() / pixelPerInchHeight);
-
-    if(scale.x() != scale.y()) {
-        qWarning() << "Scale isn't equal in x " << scale.x() << "y" << scale.y() << "using X" << LOCATION;
-    }
-
-    Scale = scale.x();
-}
-
-/**
  * @brief cwCaptureManager::croppedTile
  * @param tileSize
  * @param imageSize
@@ -525,17 +516,24 @@ void cwCaptureManager::scaleCaptureToFitPage(cwViewportCapture *item)
 {
     Q_ASSERT(item->previewItem() != nullptr);
 
-    QSizeF paperSize = PaperSize;
-    double itemAspect = item->viewport().height() /
-            item->viewport().width();
+    QRectF borderRectangle = BorderRectangle->rect();
+    QPen pen = BorderRectangle->pen();
+    double buffer = pen.widthF();
 
-    if(itemAspect > 0) {
+    QSizeF paperSize = borderRectangle.size() - QSizeF(buffer, buffer);
+    double itemAspect = item->viewport().height() /
+            (double)item->viewport().width();
+    double paperAspect = paperSize.height() / paperSize.width();
+
+    if(itemAspect > paperAspect) {
         //Item's height is greater than it's width
-            item->setPaperHeightOfItem(paperSize.height());
+        item->setPaperHeightOfItem(paperSize.height());
     } else {
         //Item's Width is greater than it's height
         item->setPaperWidthOfItem(paperSize.width());
     }
+
+    item->setPositionOnPaper(borderRectangle.topLeft() + QPointF(buffer, buffer) * 0.5);
 
 }
 
@@ -563,12 +561,16 @@ void cwCaptureManager::addFullResultionCaptureItemHelper(cwViewportCapture *capt
 }
 
 /**
-* @brief cwCaptureManager::setScreenPaperSize
-* @param screenPaperSize - The paperSize in pixel, this is what shown on the screen
-*/
-void cwCaptureManager::setScreenPaperSize(QSizeF screenPaperSize) {
-    if(ScreenPaperSize != screenPaperSize) {
-        ScreenPaperSize = screenPaperSize;
-        emit screenPaperSizeChanged();
-    }
+ * @brief cwCaptureManager::updateBorderRectangle
+ */
+void cwCaptureManager::updateBorderRectangle()
+{
+    QRectF borderRectangle = QRectF(QPointF(), paperSize());
+    borderRectangle.setLeft(leftMargin());
+    borderRectangle.setRight(paperSize().width() - rightMargin());
+    borderRectangle.setTop(topMargin());
+    borderRectangle.setBottom(paperSize().height() - bottomMargin());
+
+    BorderRectangle->setRect(borderRectangle);
 }
+
