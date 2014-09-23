@@ -42,7 +42,7 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     Item(nullptr)
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateTransformForItems);
-
+    connect(this, &cwViewportCapture::positionOnPaperChanged, this, &cwViewportCapture::updateItemsPosition);
 }
 
 cwViewportCapture::~cwViewportCapture()
@@ -217,15 +217,13 @@ void cwViewportCapture::capture()
  */
 void cwViewportCapture::setPaperWidthOfItem(double width)
 {
-    if(PaperSizeOfItem.width() != width) {
+    if(paperSizeOfItem().width() != width) {
 
         double scale =  width / (double)viewport().width();
         double height = viewport().height() * scale;
 
-        PaperSizeOfItem = QSizeF(width, height);
+        setPaperSizeOfItem(QSizeF(width, height));
         setImageScale(scale);
-
-        emit paperSizeOfItemChanged();
     }
 }
 
@@ -238,14 +236,12 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
  */
 void cwViewportCapture::setPaperHeightOfItem(double height)
 {
-    if(PaperSizeOfItem.height() != height) {
+    if(paperSizeOfItem().height() != height) {
         double scale =  height / (double)viewport().height();
         double width = viewport().width() * scale;
 
-        PaperSizeOfItem = QSizeF(width, height);
+        setPaperSizeOfItem(QSizeF(width, height));
         setImageScale(scale);
-
-        emit paperSizeOfItemChanged();
     }
 }
 
@@ -426,32 +422,27 @@ void cwViewportCapture::updateTransformForItems()
 }
 
 /**
+ * @brief cwViewportCapture::updateItemsPosition
+ * @param positionOnPaper
+ * This sets the position of the viewport capture on the paper. This is
+ * in paper units.
+ */
+void cwViewportCapture::updateItemsPosition()
+{
+    if(previewItem() != nullptr) {
+        previewItem()->setPos(positionOnPaper());
+    }
+
+    if(fullResolutionItem() != nullptr) {
+        fullResolutionItem()->setPos(positionOnPaper());
+    }
+
+}
+
+/**
 * @brief cwScreenCaptureManager::view
 * @return
 */
 cw3dRegionViewer* cwViewportCapture::view() const {
     return View;
-}
-
-/**
-* @brief cwViewportCapture::setPositionOnPaper
-* @param postitionOnPaper
-*
-* This sets the position of the viewport capture on the paper. This is
-* in paper units.
-*/
-void cwViewportCapture::setPositionOnPaper(QPointF postitionOnPaper) {
-    if(PositionOnPaper != postitionOnPaper) {
-        PositionOnPaper = postitionOnPaper;
-        if(previewItem() != nullptr) {
-            previewItem()->setPos(postitionOnPaper);
-
-        }
-
-        if(fullResolutionItem() != nullptr) {
-            fullResolutionItem()->setPos(postitionOnPaper);
-        }
-
-        emit positionOnPaperChanged();
-    }
 }

@@ -12,6 +12,7 @@
 #include "cwClinoValidator.h"
 #include "cwCompassValidator.h"
 #include "cwGlobalDirectory.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QQmlContext>
@@ -32,12 +33,12 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
     ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/ShotDistanceDataBox.qml", this);
 
     //Print error if there are any
-    printErrors(Delegate);
-    printErrors(StationDelegate);
-    printErrors(TitleDelegate);
-    printErrors(FrontSiteDelegate);
-    printErrors(BackSiteDelegate);
-    printErrors(ShotDistanceDelegate);
+    cwDebug::printErrors(Delegate);
+    cwDebug::printErrors(StationDelegate);
+    cwDebug::printErrors(TitleDelegate);
+    cwDebug::printErrors(FrontSiteDelegate);
+    cwDebug::printErrors(BackSiteDelegate);
+    cwDebug::printErrors(ShotDistanceDelegate);
 
     StationValidator = new cwStationValidator(this);
     DistanceValidator = new cwDistanceValidator(this);
@@ -46,11 +47,4 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
 
 }
 
-/**
-  \brief Prints errors for cwSurveyChunkViewComponents
- */
-void cwSurveyChunkViewComponents::printErrors(QQmlComponent* component) {
-    if(!component->errors().isEmpty()) {
-        qDebug() << component->errorString();
-    }
-}
+

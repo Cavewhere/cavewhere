@@ -7,6 +7,7 @@
 
 //Qt includes
 #include <QGraphicsScene>
+#include <QPainter>
 
 //Our includes
 #include "cwQuickSceneView.h"

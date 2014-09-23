@@ -76,6 +76,11 @@ Item {
             width: 500
             Layout.fillHeight: true
             scene: screenCaptureManagerId.scene
+
+            CaptureItemManiputalor {
+                anchors.fill: parent;
+                manager: screenCaptureManagerId
+            }
         }
 
         ColumnLayout {

@@ -33,8 +33,6 @@ class cwViewportCapture : public cwCaptureItem
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
-    Q_PROPERTY(QSizeF paperSizeOfItem READ paperSizeOfItem NOTIFY paperSizeOfItemChanged)
-    Q_PROPERTY(QPointF positionOnPaper READ positionOnPaper WRITE setPositionOnPaper NOTIFY positionOnPaperChanged)
 
 public:
     explicit cwViewportCapture(QObject *parent = 0);
@@ -61,10 +59,7 @@ public:
 
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
-    QSizeF paperSizeOfItem() const;
 
-    QPointF positionOnPaper() const;
-    void setPositionOnPaper(QPointF positionOnPaper);
 
 signals:
     void resolutionChanged();
@@ -73,8 +68,6 @@ signals:
     void finishedCapture();
     void previewItemChanged();
     void fullResolutionItemChanged();
-    void paperSizeOfItemChanged();
-    void positionOnPaperChanged();
 
 public slots:
 
@@ -86,8 +79,6 @@ private:
     double ItemScale;
     QRect Viewport;
     bool PreviewCapture;
-    QSizeF PaperSizeOfItem; //!<
-    QPointF PositionOnPaper; //!<
     cwUnits::LengthUnit PaperUnit;
 
     bool CapturingImages;
@@ -114,11 +105,8 @@ private:
 private slots:
     void capturedImage(QImage image, int id);
     void updateTransformForItems();
+    void updateItemsPosition();
 };
-
-
-
-
 
 /**
 * @brief cwViewportCapture::resolution
@@ -178,20 +166,7 @@ inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
 }
 
 
-/**
-* @brief class::itemOnPaperSize
-* @return
-*/
-inline QSizeF cwViewportCapture::paperSizeOfItem() const {
-    return PaperSizeOfItem;
-}
 
-/**
-* @brief cwViewportCapture::postitionOnPaper
-* @return
-*/
-inline QPointF cwViewportCapture::positionOnPaper() const {
-    return PositionOnPaper;
-}
+
 
 #endif // CWVIEWPORTCAPTURE_H

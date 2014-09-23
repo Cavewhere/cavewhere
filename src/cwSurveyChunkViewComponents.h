@@ -70,8 +70,6 @@ private:
     cwClinoValidator* ClinoValidator;
 
 
-    void printErrors(QQmlComponent* component);
-
 };
 
 inline QQmlComponent* cwSurveyChunkViewComponents::titleDelegate() const {
