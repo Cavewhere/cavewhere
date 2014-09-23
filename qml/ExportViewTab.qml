@@ -268,14 +268,15 @@ Item {
 
                 property var layerObject: null
 
-                title: layerObject !== null ? "Properies of " + layerObject.name : ""
-                visible: layerObject !== null
+                title: "" //layerObject !== null ? "Properies of " + layerObject.name : ""
+                visible: false //layerObject !== null
 
                 ColumnLayout {
 
                     PaperScaleInput {
+                        id: paperScaleInputId
                         usingInteraction: false
-                        scaleObject: layerProperties.layerObject !== null ? layerProperties.layerObject.scaleOrtho : null
+                        scaleObject: null
                     }
 
                     RowLayout {
@@ -284,7 +285,8 @@ Item {
                         }
 
                         ClickTextInput {
-                            text: layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
+                            id: sizeWidthInputId
+                            text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
                         }
 
                         Text {
@@ -292,12 +294,89 @@ Item {
                         }
 
                         ClickTextInput {
-                            text: layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.height : ""
+                            id: sizeHeightInputId
+                            text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.height : ""
                         }
 
                     }
+
+                    RowLayout {
+                        Text {
+                            text: "Position"
+                        }
+
+                        Text {
+                            text: "x:"
+                        }
+
+                        ClickTextInput {
+                            id: posXInputId
+                            text: ""
+                        }
+
+                        Text {
+                            text: "y:"
+                        }
+
+                        ClickTextInput {
+                            id: posYInputId
+                            text: ""
+                        }
+                    }
+
+
                 }
 
+                states: [
+                    State {
+                        when: layerProperties.layerObject !== null
+
+                        PropertyChanges {
+                            target: layerProperties
+                            title: "Properies of " + layerObject.name
+                            visible: true
+                        }
+
+                        PropertyChanges {
+                            target: paperScaleInputId
+                            scaleObject: layerProperties.layerObject.scaleOrtho
+                        }
+
+                        PropertyChanges {
+                            target: sizeWidthInputId
+                            text: layerProperties.layerObject.paperSizeOfItem.width
+                            onFinishedEditting: {
+                                layerProperties.layerObject.setPaperWidthOfItem(newText)
+                            }
+                        }
+
+                        PropertyChanges {
+                            target: sizeHeightInputId
+                            text: layerProperties.layerObject.paperSizeOfItem.height
+                            onFinishedEditting: {
+                                layerProperties.layerObject.setPaperHeightOfItem(newText)
+                            }
+                        }
+
+                        PropertyChanges {
+                            target: posXInputId
+                            text: layerProperties.layerObject.positionOnPaper.x
+                            onFinishedEditting: {
+                                var y = layerProperties.layerObject.positionOnPaper.y
+                                layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
+                            }
+                        }
+
+                        PropertyChanges {
+                            target: posYInputId
+                            text: layerProperties.layerObject.positionOnPaper.y
+                            onFinishedEditting: {
+                                var x = layerProperties.layerObject.positionOnPaper.x
+                                layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
+                            }
+                        }
+                    }
+                ]
             }
 
             GroupBox {
@@ -314,9 +393,9 @@ Item {
                 text: "Export"
 
                 onClicked: {
-                    exportDialogId.open();
-                    //                screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/loopCloser/test.png"
-                    //                screenCaptureManagerId.capture()
+//                    exportDialogId.open();
+                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
+                    screenCaptureManagerId.capture()
                 }
             }
         }

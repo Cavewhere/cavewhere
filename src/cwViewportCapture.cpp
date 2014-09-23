@@ -452,6 +452,6 @@ void cwViewportCapture::setPositionOnPaper(QPointF postitionOnPaper) {
             fullResolutionItem()->setPos(postitionOnPaper);
         }
 
-        emit postitionOnPaperChanged();
+        emit positionOnPaperChanged();
     }
 }

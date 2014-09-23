@@ -34,7 +34,7 @@ class cwViewportCapture : public cwCaptureItem
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
     Q_PROPERTY(QSizeF paperSizeOfItem READ paperSizeOfItem NOTIFY paperSizeOfItemChanged)
-    Q_PROPERTY(QPointF postitionOnPaper READ postitionOnPaper WRITE setPositionOnPaper NOTIFY postitionOnPaperChanged)
+    Q_PROPERTY(QPointF positionOnPaper READ positionOnPaper WRITE setPositionOnPaper NOTIFY positionOnPaperChanged)
 
 public:
     explicit cwViewportCapture(QObject *parent = 0);
@@ -59,12 +59,12 @@ public:
 
     Q_INVOKABLE void capture(); //This should be called by the
 
-    void setPaperWidthOfItem(double width);
-    void setPaperHeightOfItem(double height);
+    Q_INVOKABLE void setPaperWidthOfItem(double width);
+    Q_INVOKABLE void setPaperHeightOfItem(double height);
     QSizeF paperSizeOfItem() const;
 
-    QPointF postitionOnPaper() const;
-    void setPositionOnPaper(QPointF postitionOnPaper);
+    QPointF positionOnPaper() const;
+    void setPositionOnPaper(QPointF positionOnPaper);
 
 signals:
     void resolutionChanged();
@@ -74,7 +74,7 @@ signals:
     void previewItemChanged();
     void fullResolutionItemChanged();
     void paperSizeOfItemChanged();
-    void postitionOnPaperChanged();
+    void positionOnPaperChanged();
 
 public slots:
 
@@ -190,7 +190,7 @@ inline QSizeF cwViewportCapture::paperSizeOfItem() const {
 * @brief cwViewportCapture::postitionOnPaper
 * @return
 */
-inline QPointF cwViewportCapture::postitionOnPaper() const {
+inline QPointF cwViewportCapture::positionOnPaper() const {
     return PositionOnPaper;
 }
 
