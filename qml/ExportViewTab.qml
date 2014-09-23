@@ -236,6 +236,7 @@ Item {
                         delegate: Text {
                             anchors.left: parent.left
                             anchors.right: parent.right
+                            anchors.leftMargin: 5
                             text: layerNameRole
 
                             MouseArea{
@@ -248,6 +249,7 @@ Item {
 
                         highlight: Rectangle {
                             color: "#8AC6FF"
+                            radius: 3
                         }
 
                         onCurrentIndexChanged: {
