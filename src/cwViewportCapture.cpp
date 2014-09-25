@@ -217,7 +217,10 @@ void cwViewportCapture::capture()
  */
 void cwViewportCapture::setPaperWidthOfItem(double width)
 {
-    if(paperSizeOfItem().width() != width) {
+    //Using a fuzzy compare, to prevent recursive stack overflow
+    //Mathmatically using "!=" should work, but there's a little bit of a fuzzy
+    //to the scale values
+    if(!qFuzzyCompare(paperSizeOfItem().width(), width)) {
 
         double scale =  width / (double)viewport().width();
         double height = viewport().height() * scale;
@@ -236,7 +239,9 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
  */
 void cwViewportCapture::setPaperHeightOfItem(double height)
 {
-    if(paperSizeOfItem().height() != height) {
+    //Using a fuzzy compare, to prevent recursive stack overflow
+    //See comment in setPaperWidthOfItem for more details
+    if(!qFuzzyCompare(paperSizeOfItem().height(), height)) {
         double scale =  height / (double)viewport().height();
         double width = viewport().width() * scale;
 

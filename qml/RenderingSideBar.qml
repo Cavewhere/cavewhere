@@ -45,7 +45,7 @@ TabView {
         }
         ignoreUnknownSignals: true
         onImplicitWidthChanged: {
-            resizeCurrentTab()
+//            resizeCurrentTab()
         }
     }
 

@@ -3,6 +3,7 @@ import QtQuick.Layouts 1.1
 import QtQuick.Controls 1.1
 import Cavewhere 1.0
 import QtQuick.Dialogs 1.0 as Dialogs
+import "Utils.js" as Utils
 
 Item {
     id: exportViewTabId
@@ -351,7 +352,7 @@ Item {
 
                         PropertyChanges {
                             target: sizeWidthInputId
-                            text: layerProperties.layerObject.paperSizeOfItem.width
+                            text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
                             onFinishedEditting: {
                                 layerProperties.layerObject.setPaperWidthOfItem(newText)
                             }
@@ -359,7 +360,7 @@ Item {
 
                         PropertyChanges {
                             target: sizeHeightInputId
-                            text: layerProperties.layerObject.paperSizeOfItem.height
+                            text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
                             onFinishedEditting: {
                                 layerProperties.layerObject.setPaperHeightOfItem(newText)
                             }
@@ -367,7 +368,7 @@ Item {
 
                         PropertyChanges {
                             target: posXInputId
-                            text: layerProperties.layerObject.positionOnPaper.x
+                            text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
                             onFinishedEditting: {
                                 var y = layerProperties.layerObject.positionOnPaper.y
                                 layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
@@ -376,7 +377,7 @@ Item {
 
                         PropertyChanges {
                             target: posYInputId
-                            text: layerProperties.layerObject.positionOnPaper.y
+                            text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
                             onFinishedEditting: {
                                 var x = layerProperties.layerObject.positionOnPaper.x
                                 layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);

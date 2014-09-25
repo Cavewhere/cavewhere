@@ -70,5 +70,9 @@
         <file>icons/viewIcon.png</file>
         <file>icons/shadow.png</file>
         <file>icons/red-cancel.png</file>
+        <file>icons/dragArrow/arrowHighLeft.png</file>
+        <file>icons/dragArrow/arrowHighLeftBlack.png</file>
+        <file>icons/dragArrow/arrowHighRight.png</file>
+        <file>icons/dragArrow/arrowHighRightBlack.png</file>
     </qresource>
 </RCC>

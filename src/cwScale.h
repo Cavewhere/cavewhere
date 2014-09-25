@@ -23,7 +23,6 @@ class cwScale : public QObject
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
 
-
 public:
     explicit cwScale(QObject *parent = 0);
     cwScale(const cwScale& other);
