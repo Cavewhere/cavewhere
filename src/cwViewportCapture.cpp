@@ -452,19 +452,3 @@ void cwViewportCapture::updateItemsPosition()
 cw3dRegionViewer* cwViewportCapture::view() const {
     return View;
 }
-
-/**
-* @brief class::setTransformOrigin
-* @param transformOrigin
-*/
-void cwViewportCapture::setTransformOrigin(QQuickItem::TransformOrigin transformOrigin) {
-    if(TransformOrigin != transformOrigin) {
-        TransformOrigin = transformOrigin;
-
-        updateTransformForItems();
-
-        emit transformOriginChanged();
-    }
-}
-
-

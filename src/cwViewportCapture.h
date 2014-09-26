@@ -34,7 +34,6 @@ class cwViewportCapture : public cwCaptureItem
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
-    Q_PROPERTY(QQuickItem::TransformOrigin transformOrigin READ transformOrigin WRITE setTransformOrigin NOTIFY transformOriginChanged)
 
     public:
 
@@ -62,10 +61,6 @@ class cwViewportCapture : public cwCaptureItem
 
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
-
-    QQuickItem::TransformOrigin transformOrigin() const;
-    void setTransformOrigin(QQuickItem::TransformOrigin transformOrigin);
-
 
 signals:
     void resolutionChanged();
@@ -172,18 +167,6 @@ inline QGraphicsItem* cwViewportCapture::previewItem() const {
 inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
     return Item;
 }
-
-/**
-* @brief class::transformOrigin
-* @return
-*/
-inline QQuickItem::TransformOrigin cwViewportCapture::transformOrigin() const {
-    return TransformOrigin;
-}
-
-
-
-
 
 
 #endif // CWVIEWPORTCAPTURE_H
