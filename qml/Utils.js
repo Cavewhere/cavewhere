@@ -9,3 +9,14 @@
 function fixed(number, fixed) {
     return new Number(number.toFixed(fixed)).toString();
 }
+
+/**
+  This will map MouseArea mouseX and mouseY to global coordinates
+
+  @param mouseArea - The mouse area, that the mouse event came from
+  @param Qt.point() - Returns the mouse event in global coordinates
+  */
+function mousePositionToGlobal(mouseArea) {
+    var globalPoint = mouseArea.mapToItem(null, mouseArea.mouseX, mouseArea.mouseY)
+    return Qt.point(globalPoint.x, globalPoint.y)
+}

@@ -1,5 +1,6 @@
 import QtQuick 2.0
 import Cavewhere 1.0
+import "Utils.js" as Utils
 
 Rectangle {
     id: interactionId
@@ -78,6 +79,14 @@ Rectangle {
         }
     }
 
+    /**
+      This scales the numberOfPixels (in pixels) into paper units (usually in inches).
+      @param numberOfPixels - double in pixels
+      @return double - in paper Units
+      */
+    function pixelToPaper(numberOfPixels) {
+        return numberOfPixels / interactionId.captureScale
+    }
 
     /**
       This handles the drag Resize of the catpureItem
@@ -88,7 +97,7 @@ Rectangle {
     function dragResizeHandler(delta, fixedPoint) {
         var length = dragLength(delta, fixedPoint)
 
-        var deltaOnPaper = length / interactionId.captureScale; //Convert maxDelta from pixels to paper units
+        var deltaOnPaper = pixelToPaper(length); //Convert maxDelta from pixels to paper units
         var newWidth = Math.max(captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
 
         if(newWidth > 0.0) {
@@ -125,8 +134,20 @@ Rectangle {
 
     MouseArea {
         id: selectMouseAreaId
-        anchors.fill: parent
 
+        property point lastPoint;
+        property bool positionHasChange: false
+
+        /**
+          This should be called on the onReleased.
+
+          @return bool - True if the user has clicked and false if they haven't
+          */
+        function hasClicked() {
+            return !positionHasChange
+        }
+
+        anchors.fill: parent
     }
 
     RectangleHandle {
@@ -170,7 +191,25 @@ Rectangle {
             PropertyChanges {
                 target: selectMouseAreaId
 
-                onClicked: {
+                onPressed: {
+                    lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
+                    positionHasChange = false;
+                }
+
+                onPositionChanged: {
+                    //Translate the item
+                    var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
+                    var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
+                                         pixelToPaper(newPosition.y - lastPoint.y));
+                    var origin = captureItem.positionOnPaper;
+
+                    captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
+                                                           origin.y + delta.y)
+                    lastPoint = newPosition
+                    positionHasChange = true
+                }
+
+                onReleased: {
                     interactionId.selected = true
                 }
             }
@@ -183,8 +222,11 @@ Rectangle {
             PropertyChanges {
                 target: selectMouseAreaId
 
-                onClicked: {
-                    interactionId.state = "SELECTED_ROTATE_STATE"
+                onReleased: {
+                    if(hasClicked())
+                    {
+                        interactionId.state = "SELECTED_ROTATE_STATE"
+                    }
                 }
             }
 
@@ -234,8 +276,11 @@ Rectangle {
             PropertyChanges {
                 target: selectMouseAreaId
 
-                onClicked: {
-                    interactionId.state = "SELECTED_RESIZE_STATE"
+                onReleased: {
+                    if(hasClicked())
+                    {
+                        interactionId.state = "SELECTED_RESIZE_STATE"
+                    }
                 }
             }
         }
