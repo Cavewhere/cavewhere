@@ -32,6 +32,7 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     ItemScale(1.0),
     PreviewCapture(true),
     PaperUnit(cwUnits::Inches),
+    TransformOrigin(QQuickItem::TopLeft),
     CapturingImages(false),
     NumberOfImagesProcessed(0),
     Columns(0),
@@ -451,3 +452,19 @@ void cwViewportCapture::updateItemsPosition()
 cw3dRegionViewer* cwViewportCapture::view() const {
     return View;
 }
+
+/**
+* @brief class::setTransformOrigin
+* @param transformOrigin
+*/
+void cwViewportCapture::setTransformOrigin(QQuickItem::TransformOrigin transformOrigin) {
+    if(TransformOrigin != transformOrigin) {
+        TransformOrigin = transformOrigin;
+
+        updateTransformForItems();
+
+        emit transformOriginChanged();
+    }
+}
+
+
