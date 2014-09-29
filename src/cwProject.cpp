@@ -66,9 +66,10 @@ void cwProject::createTempProjectFile() {
     QDateTime seedTime = QDateTime::currentDateTime();
 
     //Create the with a hex number
-    ProjectFile = QString("%1/CavewhereTmpProject-%2.cw")
+    QString projectFile = QString("%1/CavewhereTmpProject-%2.cw")
             .arg(QDir::tempPath())
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+    setFilename(projectFile);
     TempProject = true;
 
     qDebug() << "Creating temp files:" << ProjectFile;
