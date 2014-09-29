@@ -182,10 +182,10 @@ Rectangle {
 
             PropertyChanges {
                 target: interactionId
-                width: captureItem.paperSizeOfItem.width * captureScale
-                height: captureItem.paperSizeOfItem.height * captureScale;
-                x: (captureItem.positionOnPaper.x - captureOffset.x) * captureScale;
-                y: (captureItem.positionOnPaper.y - captureOffset.y) * captureScale
+                width: captureItem.boundingBox.width * captureScale
+                height: captureItem.boundingBox.height * captureScale;
+                x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * captureScale;
+                y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * captureScale
             }
 
             PropertyChanges {
@@ -234,6 +234,7 @@ Rectangle {
                 target: topLeftHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
+                imageRotation: 0
                 onDragDelta: {
                     //Since we're moving to topleft, make the bottom right fixed
                     dragResizeHandler(delta, Item.BottomRight)
@@ -243,6 +244,7 @@ Rectangle {
                 target: topRightHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
+                imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the top right, make the bottom left fixed
                     dragResizeHandler(delta, Item.BottomLeft)
@@ -252,6 +254,7 @@ Rectangle {
                 target: bottomLeftHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
+                imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the bottom left, make the top right fixed
                     dragResizeHandler(delta, Item.TopRight)
@@ -261,6 +264,7 @@ Rectangle {
                 target: bottomRightHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
+                imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the bottom right, make the top left fixed
                     dragResizeHandler(delta, Item.TopLeft)
@@ -283,10 +287,40 @@ Rectangle {
                     }
                 }
             }
+
+            PropertyChanges {
+                target: topLeftHandle
+                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                imageRotation: 90
+                onDragDelta: {
+
+                }
+            }
+            PropertyChanges {
+                target: topRightHandle
+                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                imageRotation: 180
+                onDragDelta: {
+                }
+            }
+            PropertyChanges {
+                target: bottomLeftHandle
+                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                imageRotation: 0
+                onDragDelta: {
+                }
+            }
+            PropertyChanges {
+                target: bottomRightHandle
+                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                imageRotation: 270
+                onDragDelta: {
+                }
+            }
         }
-
     ]
-
-
-
 }

@@ -231,6 +231,7 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     connect(capture, &cwViewportCapture::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
+    capture->setParent(this);
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
     Captures.append(capture);

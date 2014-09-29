@@ -9,6 +9,7 @@ Item {
 
     property url imageSource
     property url selectedImageSource
+    property alias imageRotation: imageId.rotation
 
     signal dragDelta(var delta)
 
@@ -20,6 +21,7 @@ Item {
 
     Image {
         id: selectImageId
+        rotation: imageId.rotation
         visible: mouseArea.containsMouse
         source: selectedImageSource
     }

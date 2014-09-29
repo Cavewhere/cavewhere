@@ -9,7 +9,8 @@
 #include "cwCaptureItem.h"
 
 cwCaptureItem::cwCaptureItem(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    Rotation(0.0)
 {
 }
 
@@ -49,5 +50,34 @@ void cwCaptureItem::setPaperSizeOfItem(QSizeF paperSize)
     if(PaperSizeOfItem != paperSize) {
         PaperSizeOfItem = paperSize;
         emit paperSizeOfItemChanged();
+    }
+}
+
+/**
+ * @brief cwCaptureItem::setBoundingBox
+ * @param boundingbox
+ *
+ * This sets the new bounding box for the capture item. This bounding box is
+ * the local coordinate system in paper units.
+ *
+ * This is useful for displaying annotation, and interactions ontop of the item
+ * in qml.
+ */
+void cwCaptureItem::setBoundingBox(QRectF boundingbox)
+{
+    if(boundingbox != BoundingBox) {
+        BoundingBox = boundingbox;
+        emit boundingBoxChanged();
+    }
+}
+
+/**
+* @brief cwCaptureItem::setRotation
+* @param rotation
+*/
+void cwCaptureItem::setRotation(double rotation) {
+    if(Rotation != rotation) {
+        Rotation = rotation;
+        emit rotationChanged();
     }
 }

@@ -44,17 +44,18 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
 {
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateTransformForItems);
     connect(this, &cwViewportCapture::positionOnPaperChanged, this, &cwViewportCapture::updateItemsPosition);
+    connect(this, &cwViewportCapture::rotationChanged, this, &cwViewportCapture::updateTransformForItems);
 }
 
 cwViewportCapture::~cwViewportCapture()
 {
-    if(PreviewItem != nullptr) {
-        delete PreviewItem;
-    }
+//    if(PreviewItem != nullptr) {
+//        delete PreviewItem;
+//    }
 
-    if(Item != nullptr) {
-        delete Item;
-    }
+//    if(Item != nullptr) {
+//        delete Item;
+//    }
 }
 
 /**
@@ -139,7 +140,7 @@ void cwViewportCapture::capture()
         Item = new QGraphicsItemGroup();
         fullResolutionItemChanged();
 
-        imageScale = PreviewItem->scale() * resolution();
+        imageScale = ItemScale * resolution();
     }
 
     //Updates the scale for the items
@@ -362,6 +363,48 @@ void cwViewportCapture::setImageScale(double scale)
 }
 
 /**
+ * @brief cwViewportCapture::updateTransformForItem
+ * @param item - The item that needs it's transformation updated
+ * @param scale - The new scale of the item
+ *
+ * This update the scale and rotation for the item
+ */
+void cwViewportCapture::updateTransformForItem(QGraphicsItem *item, double scale) const
+{
+    QTransform transform;
+    transform.scale(scale, scale);
+
+    QSizeF size = paperSizeOfItem();
+    double centerX = size.width() / scale * 0.5;
+    double centerY = size.height() / scale * 0.5;
+
+    QPointF center = QPointF(centerX, centerY);
+
+    transform.translate(center.x(), center.y());
+    transform.rotate(rotation());
+    transform.translate(-center.x(), -center.y());
+
+    item->setTransform(transform);
+}
+
+/**
+ * @brief cwViewportCapture::updateBoundingBox
+ *
+ * This will update the bounding box for the viewport capture.
+ *
+ * This is useful for displaying annotation, and interactions ontop of the item
+ * in qml.
+ */
+void cwViewportCapture::updateBoundingBox()
+{
+    QTransform transform = previewItem()->transform();
+    QRectF paperRect = QRectF(QPointF(), paperSizeOfItem());
+    QRectF boundingBoxRect = transform.mapRect(paperRect);
+    setBoundingBox(boundingBoxRect);
+//    qDebug() << "PreviewItem rectangle:" << boundingBoxRect;
+}
+
+/**
  * @brief cwScreenCaptureManager::capturedImage
  * @param image
  */
@@ -373,11 +416,12 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 
     QPointF origin = IdToOrigin.value(id);
 
-    QGraphicsItem* parent = previewCapture() ? PreviewItem : Item;
+    QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
 
     cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
     graphicsImage->setImage(image);
     graphicsImage->setPos(origin);
+    parent->addToGroup(graphicsImage);
 
     //For debugging tiles
 //    QRectF tileRect = QRectF(origin, image.size());
@@ -417,12 +461,13 @@ void cwViewportCapture::updateTransformForItems()
     setPaperWidthOfItem(paperWidth);
 
     if(previewItem() != nullptr) {
-        previewItem()->setScale(ItemScale);
+        updateTransformForItem(previewItem(), ItemScale);
+        updateBoundingBox();
     }
 
     if(fullResolutionItem() != nullptr) {
-        double hiResScale = paperSizeOfItem().width() / (previewItem()->scale() * resolution() * viewport().width());
-        fullResolutionItem()->setScale(hiResScale);
+        double hiResScale = paperSizeOfItem().width() / (ItemScale * resolution() * viewport().width());
+        updateTransformForItem(fullResolutionItem(), hiResScale);
         fullResolutionItem()->setPos(previewItem()->pos());
     }
 }

@@ -104,6 +104,8 @@ private:
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
     void setImageScale(double scale);
+    void updateTransformForItem(QGraphicsItem* item, double scale) const;
+    void updateBoundingBox();
 
 private slots:
     void capturedImage(QImage image, int id);

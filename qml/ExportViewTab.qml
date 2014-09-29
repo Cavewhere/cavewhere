@@ -332,6 +332,17 @@ Item {
                         }
                     }
 
+                    RowLayout {
+                        Text {
+                            text: "Rotation"
+                        }
+
+                        ClickTextInput {
+                            id: rotationInput
+                            text: ""
+                        }
+                    }
+
 
                 }
 
@@ -381,6 +392,14 @@ Item {
                             onFinishedEditting: {
                                 var x = layerProperties.layerObject.positionOnPaper.x
                                 layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
+                            }
+                        }
+
+                        PropertyChanges {
+                            target: rotationInput
+                            text: Utils.fixed(layerProperties.layerObject.rotation, 2);
+                            onFinishedEditting: {
+                                layerProperties.layerObject.rotation = newText
                             }
                         }
                     }
