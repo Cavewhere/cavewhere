@@ -1,6 +1,7 @@
 import QtQuick 2.0
 import Cavewhere 1.0
 import "Utils.js" as Utils
+import "VectorMath.js" as VectorMath
 
 Rectangle {
     id: interactionId
@@ -9,6 +10,9 @@ Rectangle {
     property double captureScale: 1.0
     property point captureOffset
     property bool selected: false
+
+    //Private properties
+    property double originalRotation: 0
 
     /**
       This find the maxium delta from the x and y.
@@ -113,6 +117,28 @@ Rectangle {
             captureItem.positionOnPaper = Qt.point(position.x + (before.x - after.x),
                                                    position.y + (before.y - after.y));
         }
+    }
+
+    /**
+      This handles the drag Rotation of the catpureItem
+
+      @param delta - Qt.Point() with the delta of the mouse movement
+      @param oldPoint - Qt.Point() this is the old mouse position
+      */
+    function dragRotationHandler(delta, oldPoint) {
+        var xCenter = interactionId.x + interactionId.width * 0.5;
+        var yCenter = interactionId.y + interactionId.height * 0.5;
+        var center = interactionId.mapToItem(null, xCenter, yCenter);
+
+        var p1 = oldPoint
+        var p2 = Qt.point(delta.x + p1.x, delta.y + p1.y)
+        var v1 = Qt.point(p1.x - center.x, p1.y - center.y)
+        var v2 = Qt.point(p2.x - center.x, p2.y - center.y)
+
+        var angle = VectorMath.angleBetween(v1, v2);
+        var sign = VectorMath.crossProduct(v1, v2) > 0 ? -1 : 1;
+
+        captureItem.rotation += sign * angle;
     }
 
     width: 0
@@ -293,33 +319,28 @@ Rectangle {
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 90
-                onDragDelta: {
-
-                }
+                onDragDelta: dragRotationHandler(delta, oldPoint)
             }
             PropertyChanges {
                 target: topRightHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 180
-                onDragDelta: {
-                }
+                onDragDelta: dragRotationHandler(delta, oldPoint)
             }
             PropertyChanges {
                 target: bottomLeftHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 0
-                onDragDelta: {
-                }
+                onDragDelta: dragRotationHandler(delta, oldPoint)
             }
             PropertyChanges {
                 target: bottomRightHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 270
-                onDragDelta: {
-                }
+                onDragDelta: dragRotationHandler(delta, oldPoint)
             }
         }
     ]

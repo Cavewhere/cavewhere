@@ -5,8 +5,11 @@
 **
 **************************************************************************/
 
-
+//Our includes
 #include "cwCaptureItem.h"
+
+//Std includes
+#include "math.h"
 
 cwCaptureItem::cwCaptureItem(QObject *parent) :
     QObject(parent),
@@ -74,8 +77,15 @@ void cwCaptureItem::setBoundingBox(QRectF boundingbox)
 /**
 * @brief cwCaptureItem::setRotation
 * @param rotation
+*
+* This will automatically convert the rotation into a rotation between 0 to 360.0
 */
 void cwCaptureItem::setRotation(double rotation) {
+    rotation = fmod(rotation, 360.0);
+    if(rotation < 0) {
+        rotation = 360.0 + rotation;
+    }
+
     if(Rotation != rotation) {
         Rotation = rotation;
         emit rotationChanged();

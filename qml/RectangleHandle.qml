@@ -10,8 +10,10 @@ Item {
     property url imageSource
     property url selectedImageSource
     property alias imageRotation: imageId.rotation
+    property alias oldPoint: mouseArea.oldPoint
 
     signal dragDelta(var delta)
+//    signal mousePositionChanged(var position)
 
     Image {
         id: imageId
@@ -29,21 +31,21 @@ Item {
     MouseArea {
         id: mouseArea
 
-        property point firstPoint;
+        property point oldPoint;
 
         anchors.fill: parent
         hoverEnabled: true
 
         onPressed: {
             mouse.accepted = true
-            firstPoint = Utils.mousePositionToGlobal(mouseArea)
+            oldPoint = Utils.mousePositionToGlobal(mouseArea)
         }
 
         onPositionChanged: {
             if(pressed) {
                 var mouseToGlobal = Utils.mousePositionToGlobal(mouseArea);
-                var delta = Qt.point(firstPoint.x - mouseToGlobal.x, firstPoint.y - mouseToGlobal.y)
-                firstPoint = mouseToGlobal;
+                var delta = Qt.point(oldPoint.x - mouseToGlobal.x, oldPoint.y - mouseToGlobal.y)
+                oldPoint = mouseToGlobal;
                 dragDelta(delta)
             }
         }
