@@ -378,6 +378,7 @@ void cwViewportCapture::updateTransformForItem(QGraphicsItem *item, double scale
     double centerX = size.width() / scale * 0.5;
     double centerY = size.height() / scale * 0.5;
 
+    //The center in pixel coordinates
     QPointF center = QPointF(centerX, centerY);
 
     transform.translate(center.x(), center.y());
@@ -398,10 +399,9 @@ void cwViewportCapture::updateTransformForItem(QGraphicsItem *item, double scale
 void cwViewportCapture::updateBoundingBox()
 {
     QTransform transform = previewItem()->transform();
-    QRectF paperRect = QRectF(QPointF(), paperSizeOfItem());
+    QRectF paperRect = previewItem()->boundingRect();
     QRectF boundingBoxRect = transform.mapRect(paperRect);
     setBoundingBox(boundingBoxRect);
-//    qDebug() << "PreviewItem rectangle:" << boundingBoxRect;
 }
 
 /**
@@ -441,6 +441,11 @@ void cwViewportCapture::capturedImage(QImage image, int id)
         Rows = 0;
         Columns = 0;
         CapturingImages = false;
+
+        if(previewCapture()) {
+            updateBoundingBox();
+        }
+
         emit finishedCapture();
     }
 }
