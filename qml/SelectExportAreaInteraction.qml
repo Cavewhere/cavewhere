@@ -23,6 +23,7 @@ Interaction {
             selectionRectangle.y = initialPoint.y
             selectionRectangle.width = 0;
             selectionRectangle.height = 0;
+            hasDragged = false;
         }
 
         onPositionChanged: {

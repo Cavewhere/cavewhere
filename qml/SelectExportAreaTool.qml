@@ -18,6 +18,10 @@ Item {
     }
 
     function addRectangle(rectangle) {
+        if(rectangle.width === 0 || rectangle.height === 0) {
+            return;
+        }
+
         var viewObject = captureViewComponentId.createObject()
         viewObject.view = view
         viewObject.viewport = rectangle
@@ -64,11 +68,20 @@ Item {
                     target: toolButtonId
                     enabled: false
                 }
+
+                PropertyChanges {
+                    target: interactionId
+                    onHasDraggedChanged: {
+                        if(hasDragged) {
+                            toolButtonId.state = "CAN_DONE_STATE"
+                        }
+                    }
+                }
             },
 
             State {
                 name: "CAN_DONE_STATE"
-                when: interactionId.hasDragged
+//                when: interactionId.hasDragged
                 PropertyChanges {
                     target: toolButtonId
                     text: "Done"
@@ -82,7 +95,17 @@ Item {
                         resetTool()
 
                         toolId.addRectangle(caputerRect)
-                        expantionAreaId.state = "EXPAND_RIGHT"
+                    }
+                }
+
+                PropertyChanges {
+                    target: interactionId
+                    onHasDraggedChanged: {
+                        if(!hasDragged) {
+                            toolButtonId.state = "ACTIVE_STATE"
+                        } else {
+                            toolButtonId.state = ""
+                        }
                     }
                 }
             }
