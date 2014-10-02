@@ -33,7 +33,7 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
         if(!Manager.isNull()) {
             disconnect(manager, &cwCaptureManager::modelReset, this, &cwCaptureItemManiputalor::fullUpdate);
             disconnect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
-            disconnect(manager, &cwCaptureManager::rowsRemoved, this, &cwCaptureItemManiputalor::removeItems);
+            disconnect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
             disconnect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
         }
 
@@ -42,7 +42,7 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
         if(!Manager.isNull()) {
             connect(manager, &cwCaptureManager::modelReset, this, &cwCaptureItemManiputalor::fullUpdate);
             connect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
-            connect(manager, &cwCaptureManager::rowsRemoved, this, &cwCaptureItemManiputalor::removeItems);
+            connect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
             connect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
         }
 
@@ -85,12 +85,8 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
 {
     Q_UNUSED(parent);
 
-    if(end < start) { return; }
-
     for(int i = start; i <= end; i++) {
-        QModelIndex index = Manager->index(i);
-        QVariant itemObjectVariant = Manager->data(index, cwCaptureManager::LayerObjectRole);
-        cwCaptureItem* item = itemObjectVariant.value<cwCaptureItem*>();
+        cwCaptureItem* item = captureItem(i);
 
         Q_ASSERT(item != nullptr);
 
@@ -113,9 +109,17 @@ void cwCaptureItemManiputalor::insertItems(const QModelIndex &parent, int start,
 void cwCaptureItemManiputalor::removeItems(const QModelIndex &parent, int start, int end)
 {
     Q_UNUSED(parent);
-    Q_UNUSED(start);
-    Q_UNUSED(end);
 
+    for(int i = start; i <= end; i++) {
+        cwCaptureItem* item = captureItem(i);
+
+        if(CaptureToQuickItem.contains(item)) {
+            QQuickItem* quickItem = CaptureToQuickItem.value(item);
+            CaptureToQuickItem.remove(item);
+            QuickItemToCapture.remove(quickItem);
+            quickItem->deleteLater();
+        }
+    }
 }
 
 /**
@@ -172,6 +176,21 @@ void cwCaptureItemManiputalor::updateItemTransform(QQuickItem *item)
 {
    item->setProperty("captureScale", PaperToScreenScale);
    item->setProperty("captureOffset", SceneOffset);
+}
+
+/**
+ * @brief cwCaptureItemManiputalor::captureItem
+ * @param i
+ * @return Returns the catpure item at i from the model
+ *
+ * This uses the i as the index to the model and get's the catpureItem from it.
+ */
+cwCaptureItem *cwCaptureItemManiputalor::captureItem(int i) const
+{
+    QModelIndex index = Manager->index(i);
+    QVariant itemObjectVariant = Manager->data(index, cwCaptureManager::LayerObjectRole);
+    cwCaptureItem* item = itemObjectVariant.value<cwCaptureItem*>();
+    return item;
 }
 
 /**

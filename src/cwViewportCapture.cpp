@@ -49,13 +49,13 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
 
 cwViewportCapture::~cwViewportCapture()
 {
-//    if(PreviewItem != nullptr) {
-//        delete PreviewItem;
-//    }
+    if(PreviewItem != nullptr) {
+        delete PreviewItem;
+    }
 
-//    if(Item != nullptr) {
-//        delete Item;
-//    }
+    if(Item != nullptr) {
+        delete Item;
+    }
 }
 
 /**

@@ -81,7 +81,6 @@ Item {
 
             State {
                 name: "CAN_DONE_STATE"
-//                when: interactionId.hasDragged
                 PropertyChanges {
                     target: toolButtonId
                     text: "Done"

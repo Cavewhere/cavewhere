@@ -70,6 +70,23 @@ Item {
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
 
+    Menu {
+        id: layerRightClickMenu
+
+        property ViewportCapture capture: null
+
+        MenuItem {
+            text: "Remove"
+            onTriggered: {
+                if(layerRightClickMenu.capture == null) {
+                    console.warn("Capture is null")
+                    return;
+                }
+                screenCaptureManagerId.removeViewportCapture(layerRightClickMenu.capture);
+            }
+        }
+    }
+
     RowLayout {
         id: rowLayoutId
 
@@ -239,6 +256,16 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
 
+                        function updateLayerPropertyWidget() {
+                            if(currentIndex !== -1) {
+                                var modelIndex = screenCaptureManagerId.index(currentIndex);
+                                var layerObject = screenCaptureManagerId.data(modelIndex, CaptureManager.LayerObjectRole);
+                                layerProperties.layerObject = layerObject
+                            } else {
+                                layerProperties.layerObject = null;
+                            }
+                        }
+
                         delegate: Text {
                             anchors.left: parent.left
                             anchors.right: parent.right
@@ -247,8 +274,16 @@ Item {
 
                             MouseArea{
                                 anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+
                                 onClicked: {
                                     layerListViewId.currentIndex = index
+
+                                    if(mouse.button == Qt.RightButton) {
+                                        console.log("LayerProperties:" + layerProperties.layerObject)
+                                        layerRightClickMenu.capture = layerProperties.layerObject
+                                        layerRightClickMenu.popup()
+                                    }
                                 }
                             }
                         }
@@ -258,14 +293,12 @@ Item {
                             radius: 3
                         }
 
-                        onCurrentIndexChanged: {
-                            if(currentIndex !== -1) {
-                                var modelIndex = screenCaptureManagerId.index(currentIndex);
-                                var layerObject = screenCaptureManagerId.data(modelIndex, CaptureManager.LayerObjectRole);
-                                layerProperties.layerObject = layerObject
-                            } else {
-                                layerProperties.layerObject = null;
-                            }
+                        onCurrentIndexChanged: updateLayerPropertyWidget()
+
+                        Connections {
+                            target: screenCaptureManagerId
+                            onRowsInserted: layerListViewId.updateLayerPropertyWidget()
+                            onRowsRemoved: layerListViewId.updateLayerPropertyWidget()
                         }
                     }
                 }

@@ -240,10 +240,26 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     emit numberOfCapturesChanged();
 }
 
+/**
+ * @brief cwCaptureManager::removeViewportCapture
+ * @param capture
+ *
+ * This will remove the capture from the catpure manager. This will also delete the capture.
+ */
 void cwCaptureManager::removeViewportCapture(cwViewportCapture *capture)
 {
-    Q_UNUSED(capture)
+    if(!Captures.contains(capture)) {
+        qWarning() << "Can't remove. Capture manager doesn't contain" << capture << LOCATION;
+        return;
+    }
 
+    int rowIndex = Layers.indexOf(capture);
+    beginRemoveRows(QModelIndex(), rowIndex, rowIndex);
+    Captures.removeAt(rowIndex);
+    Layers.removeAt(rowIndex);
+    endRemoveRows();
+
+    capture->deleteLater();
 }
 
 /**

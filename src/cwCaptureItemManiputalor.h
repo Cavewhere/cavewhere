@@ -58,6 +58,8 @@ private:
 
     void updateItemTransform(QQuickItem* item);
 
+    cwCaptureItem* captureItem(int i) const;
+
 };
 
 #endif // CWCAPTURELAYERMANIPUTALOR_H
