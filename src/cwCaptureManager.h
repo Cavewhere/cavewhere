@@ -56,6 +56,8 @@ public:
     };
 
     explicit cwCaptureManager(QObject *parent = 0);
+    virtual ~cwCaptureManager();
+
     cw3dRegionViewer* view() const;
     void setView(cw3dRegionViewer* view);
 
@@ -116,6 +118,7 @@ signals:
     void fileTypeChanged();
     void finishedCapture();
     void numberOfCapturesChanged();
+    void aboutToDestoryManager();
 
 public slots:
 

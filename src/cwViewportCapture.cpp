@@ -49,13 +49,7 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
 
 cwViewportCapture::~cwViewportCapture()
 {
-    if(PreviewItem != nullptr) {
-        delete PreviewItem;
-    }
-
-    if(Item != nullptr) {
-        delete Item;
-    }
+    deleteSceneItems();
 }
 
 /**
@@ -249,6 +243,26 @@ void cwViewportCapture::setPaperHeightOfItem(double height)
 
         setPaperSizeOfItem(QSizeF(width, height));
         setImageScale(scale);
+    }
+}
+
+/**
+ * @brief cwViewportCapture::makeItemsNull
+ *
+ * This function is to prevent stall pointers of the Item and PreviewItem
+ *
+ * This function is called by the CaptureManager when scene is destroyed
+ */
+void cwViewportCapture::deleteSceneItems()
+{
+    if(PreviewItem != nullptr) {
+        delete PreviewItem;
+        PreviewItem = nullptr;
+    }
+
+    if(Item != nullptr) {
+        delete Item;
+        Item = nullptr;
     }
 }
 

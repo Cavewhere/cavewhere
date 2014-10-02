@@ -40,6 +40,7 @@ private slots:
     void insertItems(const QModelIndex& parent, int start, int end);
     void removeItems(const QModelIndex& parent, int start, int end);
     void updateTransform();
+    void managerDestroyed();
 
 private:
     QPointer<cwCaptureManager> Manager; //!<

@@ -35,6 +35,7 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
             disconnect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
             disconnect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
             disconnect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
+            disconnect(manager, &cwCaptureManager::aboutToDestoryManager, this, &cwCaptureItemManiputalor::managerDestroyed);
         }
 
         Manager = manager;
@@ -44,6 +45,7 @@ void cwCaptureItemManiputalor::setManager(cwCaptureManager* manager) {
             connect(manager, &cwCaptureManager::rowsInserted, this, &cwCaptureItemManiputalor::insertItems);
             connect(manager, &cwCaptureManager::rowsAboutToBeRemoved, this, &cwCaptureItemManiputalor::removeItems);
             connect(manager->scene(), SIGNAL(sceneRectChanged(QRectF)), this, SLOT(updateTransform()));
+            connect(manager, &cwCaptureManager::aboutToDestoryManager, this, &cwCaptureItemManiputalor::managerDestroyed);
         }
 
         emit managerChanged();
@@ -132,6 +134,19 @@ void cwCaptureItemManiputalor::updateTransform()
    foreach(QQuickItem* item, QuickItemToCapture.keys()) {
        updateItemTransform(item);
    }
+}
+
+/**
+ * @brief cwCaptureItemManiputalor::managerDestroyed
+ * @param object
+ */
+void cwCaptureItemManiputalor::managerDestroyed()
+{
+    foreach(QQuickItem* item, QuickItemToCapture.keys()) {
+        delete item;
+    }
+    QuickItemToCapture.clear();
+    CaptureToQuickItem.clear();
 }
 
 /**

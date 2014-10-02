@@ -25,6 +25,7 @@
 #include <QGraphicsScene>
 #include <QPainter>
 #include <QGraphicsRectItem>
+#include <QQmlEngine>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
@@ -58,6 +59,23 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     borderPen.setJoinStyle(Qt::MiterJoin);
     BorderRectangle->setPen(borderPen);
 
+}
+
+/**
+ * @brief cwCaptureManager::~cwCaptureManager
+ */
+cwCaptureManager::~cwCaptureManager()
+{
+    //We must emit this to prevent a crash in QML state machine
+    //cwCaptureItemManiputalor needs to delete all of it's qml items
+    //before deleting cwCaptureItems
+    emit aboutToDestoryManager();
+
+    //We need to delete the ViewportCaptures early. These need
+    //to be delete before the QGraphicsScene in this object
+    foreach(cwCaptureItem* item, Layers) {
+        delete item;
+    }
 }
 
 /**
@@ -232,6 +250,7 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
     capture->setParent(this);
+    QQmlEngine::setObjectOwnership(capture, QQmlEngine::CppOwnership);
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
     Captures.append(capture);

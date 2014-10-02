@@ -106,6 +106,7 @@ private:
     void setImageScale(double scale);
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
+    void deleteSceneItems();
 
 private slots:
     void capturedImage(QImage image, int id);

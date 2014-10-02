@@ -163,6 +163,10 @@ Rectangle {
         }
     }
 
+    onCaptureItemChanged: {
+        state = captureItem === null ? "" : "INIT_STATE"
+    }
+
     MouseArea {
         id: selectMouseAreaId
 
@@ -205,11 +209,9 @@ Rectangle {
         anchors.left: interactionId.right
     }
 
-
     states: [
         State {
             name: "INIT_STATE"
-            when: captureItem !== null
 
             PropertyChanges {
                 target: interactionId
