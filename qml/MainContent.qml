@@ -3,7 +3,6 @@ import QtGraphicalEffects 1.0
 import QtQuick.Controls 1.0
 
 Item {
-
     property alias dataPage: dataMainPageId
 
     anchors.fill: parent

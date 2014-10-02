@@ -126,9 +126,7 @@ Rectangle {
       @param oldPoint - Qt.Point() this is the old mouse position
       */
     function dragRotationHandler(delta, oldPoint) {
-        var xCenter = interactionId.x + interactionId.width * 0.5;
-        var yCenter = interactionId.y + interactionId.height * 0.5;
-        var center = interactionId.mapToItem(null, xCenter, yCenter);
+        var center = interactionId.mapToItem(null, centerItemId.x, centerItemId.y);
 
         var p1 = oldPoint
         var p2 = Qt.point(delta.x + p1.x, delta.y + p1.y)
@@ -139,6 +137,13 @@ Rectangle {
         var sign = VectorMath.crossProduct(v1, v2) > 0 ? -1 : 1;
 
         captureItem.rotation += sign * angle;
+    }
+
+    //This item is used to calculate the center of the interaction capture.
+    //It is used for the rotation of the item
+    Item {
+        id: centerItemId
+        anchors.centerIn: parent
     }
 
     width: 0
