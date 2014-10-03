@@ -381,7 +381,7 @@ Item {
 
                 states: [
                     State {
-                        when: layerProperties.layerObject !== null
+                        when: typeof(layerProperties.layerObject) !== "undefined" && layerProperties.layerObject !== null
 
                         PropertyChanges {
                             target: layerProperties
