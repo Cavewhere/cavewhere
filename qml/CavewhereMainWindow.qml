@@ -13,7 +13,7 @@ import QtQuick.Window 2.0
 
 ApplicationWindow {
     visible: license.hasReadLicenseAgreement
-    width: 1000
+    width: 1280
     height: 800
     title: "Cavewhere - " + version
     //    anchors.fill: parent;
