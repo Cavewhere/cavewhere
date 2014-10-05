@@ -453,9 +453,9 @@ Item {
                 text: "Export"
 
                 onClicked: {
-//                    exportDialogId.open();
-                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
-                    screenCaptureManagerId.capture()
+                    exportDialogId.open();
+//                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
+//                    screenCaptureManagerId.capture()
                 }
             }
         }
