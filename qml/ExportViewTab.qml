@@ -243,62 +243,109 @@ Item {
                 }
             }
 
-            GroupBox {
-                id: layersGroupBoxId
-                title: "Layers"
+            RowLayout {
 
-                ScrollView {
-                    ListView {
-                        id: layerListViewId
+                GroupBox {
+                    id: layersGroupBoxId
+                    title: "Layers"
 
-                        model: screenCaptureManagerId
+                    ScrollView {
+                        ListView {
+                            id: layerListViewId
 
-                        anchors.left: parent.left
-                        anchors.right: parent.right
+                            model: screenCaptureManagerId
 
-                        function updateLayerPropertyWidget() {
-                            if(currentIndex !== -1) {
-                                var modelIndex = screenCaptureManagerId.index(currentIndex);
-                                var layerObject = screenCaptureManagerId.data(modelIndex, CaptureManager.LayerObjectRole);
-                                layerProperties.layerObject = layerObject
-                            } else {
-                                layerProperties.layerObject = null;
-                            }
-                        }
-
-                        delegate: Text {
                             anchors.left: parent.left
                             anchors.right: parent.right
-                            anchors.leftMargin: 5
-                            text: layerNameRole
 
-                            MouseArea{
-                                anchors.fill: parent
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            function updateLayerPropertyWidget() {
+                                if(currentIndex !== -1) {
+                                    var modelIndex = screenCaptureManagerId.index(currentIndex);
+                                    var layerObject = screenCaptureManagerId.data(modelIndex, CaptureManager.LayerObjectRole);
+                                    layerProperties.layerObject = layerObject
+                                } else {
+                                    layerProperties.layerObject = null;
+                                }
+                            }
 
-                                onClicked: {
-                                    layerListViewId.currentIndex = index
+                            delegate: Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 5
+                                text: layerNameRole
 
-                                    if(mouse.button == Qt.RightButton) {
-                                        console.log("LayerProperties:" + layerProperties.layerObject)
-                                        layerRightClickMenu.capture = layerProperties.layerObject
-                                        layerRightClickMenu.popup()
+                                MouseArea{
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                                    onClicked: {
+                                        layerListViewId.currentIndex = index
+
+                                        if(mouse.button == Qt.RightButton) {
+                                            console.log("LayerProperties:" + layerProperties.layerObject)
+                                            layerRightClickMenu.capture = layerProperties.layerObject
+                                            layerRightClickMenu.popup()
+                                        }
                                     }
                                 }
                             }
+
+                            highlight: Rectangle {
+                                color: "#8AC6FF"
+                                radius: 3
+                            }
+
+                            onCurrentIndexChanged: updateLayerPropertyWidget()
+
+                            Connections {
+                                target: screenCaptureManagerId
+                                onRowsInserted: layerListViewId.updateLayerPropertyWidget()
+                                onRowsRemoved: layerListViewId.updateLayerPropertyWidget()
+                            }
                         }
+                    }
+                }
 
-                        highlight: Rectangle {
-                            color: "#8AC6FF"
-                            radius: 3
-                        }
+                GroupBox {
+                    title: "Layer Groups"
 
-                        onCurrentIndexChanged: updateLayerPropertyWidget()
+                    ScrollView {
+                        ListView {
+                            id: groupListViewId
+                            model: screenCaptureManagerId.groupModel
 
-                        Connections {
-                            target: screenCaptureManagerId
-                            onRowsInserted: layerListViewId.updateLayerPropertyWidget()
-                            onRowsRemoved: layerListViewId.updateLayerPropertyWidget()
+                            delegate: Rectangle {
+
+                                width: 100
+                                height: 100
+//                                color: "red"
+
+                                VisualDataModel {
+                                    id: visualModel
+                                    model: screenCaptureManagerId.groupModel
+                                    rootIndex: screenCaptureManagerId.groupModel.index(index)
+
+                                    onRootIndexChanged: {
+                                        console.log("RootIndex changed:" + rootIndex + "+" + screenCaptureManagerId.groupModel + " " + screenCaptureManagerId.groupModel.data(screenCaptureManagerId.groupModel.index(0, 0, rootIndex), CaptureGroupModel.CaptureNameRole))
+
+                                    }
+
+                                    onCountChanged: {
+                                        console.log("Count has changed!" + count)
+                                    }
+
+                                    delegate: Text {
+                                        text: captureNameRole
+                                    }
+                                }
+
+                                ListView {
+                                    model: visualModel
+                                    anchors.fill: parent
+
+
+                                }
+                            }
                         }
                     }
                 }
@@ -454,8 +501,8 @@ Item {
 
                 onClicked: {
                     exportDialogId.open();
-//                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
-//                    screenCaptureManagerId.capture()
+                    //                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
+                    //                    screenCaptureManagerId.capture()
                 }
             }
         }

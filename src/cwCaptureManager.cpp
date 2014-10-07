@@ -16,6 +16,7 @@
 #include "cwImageResolution.h"
 #include "cwCaptureItem.h"
 #include "cwViewportCapture.h"
+#include "cwCaptureGroupModel.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -34,6 +35,8 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     TopMargin(0.0),
     RightMargin(0.0),
     LeftMargin(0.0),
+    Filetype(PNG),
+    GroupModel(new cwCaptureGroupModel(this)),
     NumberOfImagesProcessed(0),
     Scene(new QGraphicsScene(this)),
     PaperRectangle(new QGraphicsRectItem()),
@@ -257,6 +260,16 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     Layers.append(capture);
     endInsertRows();
     emit numberOfCapturesChanged();
+
+    //Add the capture to the first group in the groupModel
+    if(groupModel()->rowCount() == 0) {
+        //Create the first group
+        groupModel()->addGroup();
+    }
+
+    QModelIndex firstGroupIndex = groupModel()->index(0, 0, QModelIndex());
+    groupModel()->addCapture(firstGroupIndex, capture);
+
 }
 
 /**

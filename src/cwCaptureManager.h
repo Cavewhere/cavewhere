@@ -22,6 +22,7 @@
 class cwViewportCapture;
 class cwCaptureItem;
 #include "cwProjection.h"
+class cwCaptureGroupModel;
 
 class cwCaptureManager : public QAbstractListModel
 {
@@ -40,7 +41,7 @@ class cwCaptureManager : public QAbstractListModel
 
     Q_PROPERTY(QGraphicsScene* scene READ scene CONSTANT)
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
-
+    Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
 
     Q_ENUMS(FileType Roles)
 public:   
@@ -88,6 +89,8 @@ public:
     FileType fileType() const;
     void setFileType(FileType fileType);
 
+    cwCaptureGroupModel* groupModel() const;
+
     Q_INVOKABLE void capture();
 
     QGraphicsScene* scene() const;
@@ -96,7 +99,6 @@ public:
     Q_INVOKABLE void removeViewportCapture(cwViewportCapture* capture);
 
     int numberOfCaptures() const;
-
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
@@ -142,6 +144,7 @@ private:
     QRect Viewport; //!<
     QUrl Filename; //!<
     FileType Filetype; //!<
+    cwCaptureGroupModel* GroupModel; //!<
 
     //For internal drawing
 
@@ -273,6 +276,14 @@ inline QGraphicsScene* cwCaptureManager::scene() const {
 */
 inline int cwCaptureManager::numberOfCaptures() const {
     return Captures.size();
+}
+
+/**
+* @brief cwCaptureManager::groupModel
+* @return
+*/
+inline cwCaptureGroupModel* cwCaptureManager::groupModel() const {
+    return GroupModel;
 }
 
 #endif // CWSCREENCAPTUREMANAGER_H

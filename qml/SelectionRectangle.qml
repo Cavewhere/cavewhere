@@ -11,10 +11,6 @@ Rectangle {
     border.width: 1
     border.color: "#676767"
 
-    onVisibleChanged: {
-        console.log("Visible changed:" + visible)
-    }
-
     MouseArea {
         id: leftSide
         width: selectionRectangleId.mouseBuffer
