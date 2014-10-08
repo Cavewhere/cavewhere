@@ -291,6 +291,8 @@ void cwCaptureManager::removeViewportCapture(cwViewportCapture *capture)
     Layers.removeAt(rowIndex);
     endRemoveRows();
 
+    groupModel()->removeCapture(capture);
+
     capture->deleteLater();
 }
 

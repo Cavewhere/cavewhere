@@ -44,8 +44,6 @@ void cwCaptureGroupModel::addCapture(QModelIndex parentGroup, cwViewportCapture 
     int groupSize = rowCount(parentGroup);
     int parentIndex = parentGroup.row();
 
-    qDebug() << "Group size: " << groupSize;
-
     cwCaptureGroup*  group = Groups.at(parentIndex);
     if(group->contains(capture)) {
         return;
@@ -54,6 +52,37 @@ void cwCaptureGroupModel::addCapture(QModelIndex parentGroup, cwViewportCapture 
     beginInsertRows(parentGroup, groupSize, groupSize);
     group->addCapture(capture);
     endInsertRows();
+}
+
+/**
+ * @brief cwCaptureGroupModel::removeCapture
+ * @param capture
+ *
+ * This will search for capture in all the groups and remove it. If capture doesn't
+ * exist in any of the groups, with will do nothing.
+ */
+void cwCaptureGroupModel::removeCapture(cwViewportCapture *capture)
+{
+    for(int i = 0; i < Groups.size(); i++) {
+        cwCaptureGroup* group = Groups.at(i);
+        if(group->contains(capture)) {
+            QModelIndex parentGroupIndex = index(i);
+            int captureIndex = group->indexOfCapture(capture);
+            beginRemoveRows(parentGroupIndex, captureIndex, captureIndex);
+            group->removeCapture(capture);
+            endRemoveRows();
+
+            if(group->numberOfCaptures() == 0) {
+                //Delete the group
+                beginRemoveRows(QModelIndex(), i, i);
+                Groups.removeAt(i);
+                group->deleteLater();
+                endRemoveRows();
+            }
+
+            break;
+        }
+    }
 }
 
 /**
@@ -82,8 +111,6 @@ int cwCaptureGroupModel::rowCount(const QModelIndex &parent) const
  */
 QVariant cwCaptureGroupModel::data(const QModelIndex &index, int role) const
 {
-    qDebug() << "Data:" << index << index.isValid() << role;
-
     if(!index.isValid()) {
         return QVariant();
     }
@@ -113,8 +140,6 @@ QVariant cwCaptureGroupModel::data(const QModelIndex &index, int role) const
  */
 QModelIndex cwCaptureGroupModel::index(int row, int column, const QModelIndex &parent) const
 {
-    qDebug() << "Index:" << row << column << parent;
-
     Q_UNUSED(column);
     if(!parent.isValid()) {
         if(row >= 0 && row < Groups.size()) {

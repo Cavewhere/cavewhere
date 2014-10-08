@@ -21,6 +21,8 @@ public:
     explicit cwCaptureGroup(QObject *parent = 0);
 
     void addCapture(cwViewportCapture* capture);
+    void removeCapture(cwViewportCapture* capture);
+    int indexOfCapture(cwViewportCapture* capture) const;
     cwViewportCapture* capture(int index) const;
     bool contains(cwViewportCapture* capture);
     int numberOfCaptures() const;
@@ -66,6 +68,11 @@ inline int cwCaptureGroup::numberOfCaptures() const
  * @param index - The index of the capture. If the index is invalid this will assert
  * @return Returns the catpure at index
  */
+inline int cwCaptureGroup::indexOfCapture(cwViewportCapture *capture) const
+{
+    return Captures.indexOf(capture);
+}
+
 inline cwViewportCapture *cwCaptureGroup::capture(int index) const
 {
     return Captures.at(index);

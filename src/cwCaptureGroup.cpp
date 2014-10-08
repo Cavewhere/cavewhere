@@ -47,6 +47,23 @@ void cwCaptureGroup::addCapture(cwViewportCapture *capture)
     connect(capture->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
 }
 
+/**
+ * @brief cwCaptureGroup::removeCapture
+ * @param capture
+ *
+ * This will go through the group and remove capture from it.
+ */
+void cwCaptureGroup::removeCapture(cwViewportCapture *capture)
+{
+    Q_ASSERT(capture != nullptr);
+    Q_ASSERT(contains(capture));
+
+    ScaleMapper->removeMappings(capture->scaleOrtho());
+    disconnect(capture->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
+
+    Captures.removeOne(capture);
+}
+
 
 
 /**

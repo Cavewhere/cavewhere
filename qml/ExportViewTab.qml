@@ -282,7 +282,6 @@ Item {
                                         layerListViewId.currentIndex = index
 
                                         if(mouse.button == Qt.RightButton) {
-                                            console.log("LayerProperties:" + layerProperties.layerObject)
                                             layerRightClickMenu.capture = layerProperties.layerObject
                                             layerRightClickMenu.popup()
                                         }
@@ -324,15 +323,6 @@ Item {
                                     id: visualModel
                                     model: screenCaptureManagerId.groupModel
                                     rootIndex: screenCaptureManagerId.groupModel.index(index)
-
-                                    onRootIndexChanged: {
-                                        console.log("RootIndex changed:" + rootIndex + "+" + screenCaptureManagerId.groupModel + " " + screenCaptureManagerId.groupModel.data(screenCaptureManagerId.groupModel.index(0, 0, rootIndex), CaptureGroupModel.CaptureNameRole))
-
-                                    }
-
-                                    onCountChanged: {
-                                        console.log("Count has changed!" + count)
-                                    }
 
                                     delegate: Text {
                                         text: captureNameRole

@@ -31,6 +31,7 @@ public:
 
     Q_INVOKABLE void addGroup();
     Q_INVOKABLE void addCapture(QModelIndex parentGroup, cwViewportCapture* capture);
+    void removeCapture(cwViewportCapture* capture);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     int columnCount(const QModelIndex &parent) const;
