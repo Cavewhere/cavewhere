@@ -24,7 +24,7 @@ class cwCamera;
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
 
-class cwViewportCapture : public cwCaptureItem
+class cwCaptureViewport : public cwCaptureItem
 {
     Q_OBJECT
 
@@ -37,8 +37,8 @@ class cwViewportCapture : public cwCaptureItem
 
     public:
 
-    explicit cwViewportCapture(QObject *parent = 0);
-    virtual ~cwViewportCapture();
+    explicit cwCaptureViewport(QObject *parent = 0);
+    virtual ~cwCaptureViewport();
 
     cw3dRegionViewer* view() const;
     void setView(cw3dRegionViewer* view);
@@ -115,10 +115,10 @@ private slots:
 };
 
 /**
-* @brief cwViewportCapture::resolution
+* @brief cwCaptureViewport::resolution
 * @return
 */
-inline int cwViewportCapture::resolution() const {
+inline int cwCaptureViewport::resolution() const {
     return Resolution;
 }
 
@@ -126,7 +126,7 @@ inline int cwViewportCapture::resolution() const {
 * @brief class::scale
 * @return
 */
-inline cwScale* cwViewportCapture::scaleOrtho() const {
+inline cwScale* cwCaptureViewport::scaleOrtho() const {
     return ScaleOrtho;
 }
 
@@ -134,7 +134,7 @@ inline cwScale* cwViewportCapture::scaleOrtho() const {
 * @brief cwScreenCaptureManager::viewport
 * @return
 */
-inline QRect cwViewportCapture::viewport() const {
+inline QRect cwCaptureViewport::viewport() const {
     return Viewport;
 }
 
@@ -142,15 +142,15 @@ inline QRect cwViewportCapture::viewport() const {
  * @brief previewCapture
  * @return
  */
-inline bool cwViewportCapture::previewCapture() const {
+inline bool cwCaptureViewport::previewCapture() const {
     return PreviewCapture;
 }
 
 /**
- * @brief cwViewportCapture::setPreviewCapture
+ * @brief cwCaptureViewport::setPreviewCapture
  * @param preview
  */
-inline void cwViewportCapture::setPreviewCapture(bool preview)
+inline void cwCaptureViewport::setPreviewCapture(bool preview)
 {
     PreviewCapture = preview;
 }
@@ -159,15 +159,15 @@ inline void cwViewportCapture::setPreviewCapture(bool preview)
 * @brief cwViewportCapt::previewItem
 * @return
 */
-inline QGraphicsItem* cwViewportCapture::previewItem() const {
+inline QGraphicsItem* cwCaptureViewport::previewItem() const {
     return PreviewItem;
 }
 
 /**
-* @brief cwViewportCapture::fullResolutionItem
+* @brief cwCaptureViewport::fullResolutionItem
 * @return
 */
-inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
+inline QGraphicsItem* cwCaptureViewport::fullResolutionItem() const {
     return Item;
 }
 

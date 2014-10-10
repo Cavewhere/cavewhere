@@ -9,7 +9,7 @@
 #include <QPen>
 
 //Our includes
-#include "cwViewportCapture.h"
+#include "cwCaptureViewport.h"
 #include "cwScale.h"
 #include "cwScene.h"
 #include "cwCamera.h"
@@ -25,7 +25,7 @@
 #undef near
 #endif
 
-cwViewportCapture::cwViewportCapture(QObject *parent) :
+cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     cwCaptureItem(parent),
     Resolution(300),
     ScaleOrtho(new cwScale(this)),
@@ -42,12 +42,12 @@ cwViewportCapture::cwViewportCapture(QObject *parent) :
     PreviewItem(nullptr),
     Item(nullptr)
 {
-    connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwViewportCapture::updateTransformForItems);
-    connect(this, &cwViewportCapture::positionOnPaperChanged, this, &cwViewportCapture::updateItemsPosition);
-    connect(this, &cwViewportCapture::rotationChanged, this, &cwViewportCapture::updateTransformForItems);
+    connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
+    connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
+    connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
 }
 
-cwViewportCapture::~cwViewportCapture()
+cwCaptureViewport::~cwCaptureViewport()
 {
     deleteSceneItems();
 }
@@ -56,7 +56,7 @@ cwViewportCapture::~cwViewportCapture()
 * @brief cwScreenCaptureManager::setView
 * @param view
 */
-void cwViewportCapture::setView(cw3dRegionViewer* view) {
+void cwCaptureViewport::setView(cw3dRegionViewer* view) {
     if(View != view) {
         View = view;
         emit viewChanged();
@@ -64,10 +64,10 @@ void cwViewportCapture::setView(cw3dRegionViewer* view) {
 }
 
 /**
-* @brief cwViewportCapture::setResolution
+* @brief cwCaptureViewport::setResolution
 * @param resolution
 */
-void cwViewportCapture::setResolution(int resolution) {
+void cwCaptureViewport::setResolution(int resolution) {
     if(Resolution != resolution) {
         Resolution = resolution;
         emit resolutionChanged();
@@ -81,7 +81,7 @@ void cwViewportCapture::setResolution(int resolution) {
  * This is the capturing viewport in opengl. This is the area that will be captured
  * and saved by the manager. The rectangle should be in pixels.
  */
-void cwViewportCapture::setViewport(QRect viewport) {
+void cwCaptureViewport::setViewport(QRect viewport) {
     if(Viewport != viewport) {
         Viewport = viewport;
         emit viewportChanged();
@@ -96,9 +96,9 @@ void cwViewportCapture::setViewport(QRect viewport) {
 }
 
 /**
- * @brief cwViewportCapture::capture
+ * @brief cwCaptureViewport::capture
  */
-void cwViewportCapture::capture()
+void cwCaptureViewport::capture()
 {
     if(CapturingImages) { return; }
     CapturingImages = true;
@@ -205,13 +205,13 @@ void cwViewportCapture::capture()
 }
 
 /**
- * @brief cwViewportCapture::setPaperWidthOfItem
+ * @brief cwCaptureViewport::setPaperWidthOfItem
  * @param width
  *
  * This sets the width in the paper units of how big the catpure is. This will mantain the
  * aspect of the catpure
  */
-void cwViewportCapture::setPaperWidthOfItem(double width)
+void cwCaptureViewport::setPaperWidthOfItem(double width)
 {
     //Using a fuzzy compare, to prevent recursive stack overflow
     //Mathmatically using "!=" should work, but there's a little bit of a fuzzy
@@ -227,13 +227,13 @@ void cwViewportCapture::setPaperWidthOfItem(double width)
 }
 
 /**
- * @brief cwViewportCapture::setPaperHeightOfItem
+ * @brief cwCaptureViewport::setPaperHeightOfItem
  * @param height
  *
  * This sets the height in the paper units of how big the capture is. This will mantain the
  * aspect of the catpure
  */
-void cwViewportCapture::setPaperHeightOfItem(double height)
+void cwCaptureViewport::setPaperHeightOfItem(double height)
 {
     //Using a fuzzy compare, to prevent recursive stack overflow
     //See comment in setPaperWidthOfItem for more details
@@ -247,13 +247,13 @@ void cwViewportCapture::setPaperHeightOfItem(double height)
 }
 
 /**
- * @brief cwViewportCapture::makeItemsNull
+ * @brief cwCaptureViewport::makeItemsNull
  *
  * This function is to prevent stall pointers of the Item and PreviewItem
  *
  * This function is called by the CaptureManager when scene is destroyed
  */
-void cwViewportCapture::deleteSceneItems()
+void cwCaptureViewport::deleteSceneItems()
 {
     if(PreviewItem != nullptr) {
         delete PreviewItem;
@@ -277,7 +277,7 @@ void cwViewportCapture::deleteSceneItems()
  * should be a sub rectangle of the original viewport. This function
  * will work with orthognal and perspective projections
  */
-cwProjection cwViewportCapture::tileProjection(QRectF tileViewport,
+cwProjection cwCaptureViewport::tileProjection(QRectF tileViewport,
                                                QSizeF imageSize,
                                                const cwProjection &originalProjection) const
 {
@@ -321,7 +321,7 @@ cwProjection cwViewportCapture::tileProjection(QRectF tileViewport,
  *
  * This may crop the tile, if the it goes beyond the imageSize
  */
-QSize cwViewportCapture::calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const
+QSize cwCaptureViewport::calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const
 {
     QSize croppedTileSize = tileSize;
 
@@ -356,14 +356,14 @@ QSize cwViewportCapture::calcCroppedTileSize(QSize tileSize, QSize imageSize, in
 }
 
 /**
- * @brief cwViewportCapture::setImageScale
+ * @brief cwCaptureViewport::setImageScale
  * @param scale
  *
  * This sets the scaling for the preview item and the full resolution image.
  *
  * If an orthognal projection is being used the scaleOrtho is also update.
  */
-void cwViewportCapture::setImageScale(double scale)
+void cwCaptureViewport::setImageScale(double scale)
 {
     if(ItemScale != scale) {
         if(CaptureCamera->projection().type() == cwProjection::Ortho) {
@@ -377,13 +377,13 @@ void cwViewportCapture::setImageScale(double scale)
 }
 
 /**
- * @brief cwViewportCapture::updateTransformForItem
+ * @brief cwCaptureViewport::updateTransformForItem
  * @param item - The item that needs it's transformation updated
  * @param scale - The new scale of the item
  *
  * This update the scale and rotation for the item
  */
-void cwViewportCapture::updateTransformForItem(QGraphicsItem *item, double scale) const
+void cwCaptureViewport::updateTransformForItem(QGraphicsItem *item, double scale) const
 {
     QTransform transform;
     transform.scale(scale, scale);
@@ -403,14 +403,14 @@ void cwViewportCapture::updateTransformForItem(QGraphicsItem *item, double scale
 }
 
 /**
- * @brief cwViewportCapture::updateBoundingBox
+ * @brief cwCaptureViewport::updateBoundingBox
  *
  * This will update the bounding box for the viewport capture.
  *
  * This is useful for displaying annotation, and interactions ontop of the item
  * in qml.
  */
-void cwViewportCapture::updateBoundingBox()
+void cwCaptureViewport::updateBoundingBox()
 {
     QTransform transform = previewItem()->transform();
     QRectF paperRect = previewItem()->boundingRect();
@@ -422,7 +422,7 @@ void cwViewportCapture::updateBoundingBox()
  * @brief cwScreenCaptureManager::capturedImage
  * @param image
  */
-void cwViewportCapture::capturedImage(QImage image, int id)
+void cwCaptureViewport::capturedImage(QImage image, int id)
 {
     Q_UNUSED(id)
 
@@ -465,11 +465,11 @@ void cwViewportCapture::capturedImage(QImage image, int id)
 }
 
 /**
- * @brief cwViewportCapture::updateScaleForItems
+ * @brief cwCaptureViewport::updateScaleForItems
  *
  * This updates the scale for QGraphicsItems (Preview Item and the Full resolution item)
  */
-void cwViewportCapture::updateTransformForItems()
+void cwCaptureViewport::updateTransformForItems()
 {
     double meterToPaperUnit = cwUnits::convert(1.0, cwUnits::Meters, PaperUnit);
     if(CaptureCamera->projection().type() == cwProjection::Ortho) {
@@ -492,12 +492,12 @@ void cwViewportCapture::updateTransformForItems()
 }
 
 /**
- * @brief cwViewportCapture::updateItemsPosition
+ * @brief cwCaptureViewport::updateItemsPosition
  * @param positionOnPaper
  * This sets the position of the viewport capture on the paper. This is
  * in paper units.
  */
-void cwViewportCapture::updateItemsPosition()
+void cwCaptureViewport::updateItemsPosition()
 {
     if(previewItem() != nullptr) {
         previewItem()->setPos(positionOnPaper());
@@ -513,6 +513,6 @@ void cwViewportCapture::updateItemsPosition()
 * @brief cwScreenCaptureManager::view
 * @return
 */
-cw3dRegionViewer* cwViewportCapture::view() const {
+cw3dRegionViewer* cwCaptureViewport::view() const {
     return View;
 }
