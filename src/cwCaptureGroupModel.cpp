@@ -8,7 +8,7 @@
 
 #include "cwCaptureGroupModel.h"
 #include "cwCaptureGroup.h"
-#include "cwViewportCapture.h"
+#include "cwCaptureViewport.h"
 
 cwCaptureGroupModel::cwCaptureGroupModel(QObject *parent) :
     QAbstractItemModel(parent)
@@ -36,7 +36,7 @@ void cwCaptureGroupModel::addGroup()
  *
  * Adds a capture to a parentGroup.
  */
-void cwCaptureGroupModel::addCapture(QModelIndex parentGroup, cwViewportCapture *capture)
+void cwCaptureGroupModel::addCapture(QModelIndex parentGroup, cwCaptureViewport *capture)
 {
     if(!parentGroup.isValid()) { return; }
     if(capture == nullptr) { return; }
@@ -61,7 +61,7 @@ void cwCaptureGroupModel::addCapture(QModelIndex parentGroup, cwViewportCapture 
  * This will search for capture in all the groups and remove it. If capture doesn't
  * exist in any of the groups, with will do nothing.
  */
-void cwCaptureGroupModel::removeCapture(cwViewportCapture *capture)
+void cwCaptureGroupModel::removeCapture(cwCaptureViewport *capture)
 {
     for(int i = 0; i < Groups.size(); i++) {
         cwCaptureGroup* group = Groups.at(i);
@@ -120,7 +120,7 @@ QVariant cwCaptureGroupModel::data(const QModelIndex &index, int role) const
     }
 
     int parentIndex = index.parent().row();
-    cwViewportCapture* capture = Groups.at(parentIndex)->capture(index.row());
+    cwCaptureViewport* capture = Groups.at(parentIndex)->capture(index.row());
 
     switch(role) {
     case CaptureNameRole:

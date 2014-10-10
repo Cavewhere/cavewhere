@@ -19,7 +19,7 @@
 
 //Our includes
 #include "cw3dRegionViewer.h"
-class cwViewportCapture;
+class cwCaptureViewport;
 class cwCaptureItem;
 #include "cwProjection.h"
 class cwCaptureGroupModel;
@@ -95,8 +95,8 @@ public:
 
     QGraphicsScene* scene() const;
 
-    Q_INVOKABLE void addViewportCapture(cwViewportCapture* capture);
-    Q_INVOKABLE void removeViewportCapture(cwViewportCapture* capture);
+    Q_INVOKABLE void addCaptureViewport(cwCaptureViewport* capture);
+    Q_INVOKABLE void removeCaptureViewport(cwCaptureViewport* capture);
 
     int numberOfCaptures() const;
 
@@ -159,7 +159,7 @@ private:
     QGraphicsRectItem* BorderRectangle;
     double Scale;
 
-    QList<cwViewportCapture*> Captures;
+    QList<cwCaptureViewport*> Captures;
     QList<cwCaptureItem*> Layers;
 
     void saveScene();
@@ -172,10 +172,10 @@ private:
     void addBorderItem();
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
-    void scaleCaptureToFitPage(cwViewportCapture* item);
+    void scaleCaptureToFitPage(cwCaptureViewport* item);
 
-    void addPreviewCaptureItemHelper(cwViewportCapture* capture);
-    void addFullResultionCaptureItemHelper(cwViewportCapture* capture);
+    void addPreviewCaptureItemHelper(cwCaptureViewport* capture);
+    void addFullResultionCaptureItemHelper(cwCaptureViewport* capture);
 
     void updateBorderRectangle();
 

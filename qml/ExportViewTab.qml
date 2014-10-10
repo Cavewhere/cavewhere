@@ -73,7 +73,7 @@ Item {
     Menu {
         id: layerRightClickMenu
 
-        property ViewportCapture capture: null
+        property CaptureViewport capture: null
 
         MenuItem {
             text: "Remove"
@@ -82,7 +82,7 @@ Item {
                     console.warn("Capture is null")
                     return;
                 }
-                screenCaptureManagerId.removeViewportCapture(layerRightClickMenu.capture);
+                screenCaptureManagerId.removeCaptureViewport(layerRightClickMenu.capture);
             }
         }
     }

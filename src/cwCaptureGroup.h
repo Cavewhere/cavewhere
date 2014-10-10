@@ -12,7 +12,7 @@
 #include <QObject>
 #include <QSignalMapper>
 
-class cwViewportCapture;
+class cwCaptureViewport;
 
 class cwCaptureGroup : public QObject
 {
@@ -20,11 +20,11 @@ class cwCaptureGroup : public QObject
 public:
     explicit cwCaptureGroup(QObject *parent = 0);
 
-    void addCapture(cwViewportCapture* capture);
-    void removeCapture(cwViewportCapture* capture);
-    int indexOfCapture(cwViewportCapture* capture) const;
-    cwViewportCapture* capture(int index) const;
-    bool contains(cwViewportCapture* capture);
+    void addCapture(cwCaptureViewport* capture);
+    void removeCapture(cwCaptureViewport* capture);
+    int indexOfCapture(cwCaptureViewport* capture) const;
+    cwCaptureViewport* capture(int index) const;
+    bool contains(cwCaptureViewport* capture);
     int numberOfCaptures() const;
 
 signals:
@@ -32,12 +32,12 @@ signals:
 public slots:
 
 private:
-    QList<cwViewportCapture*> Captures;
+    QList<cwCaptureViewport*> Captures;
     QSignalMapper* ScaleMapper;
     QSignalMapper* PositionMapper;
     QSignalMapper* RotationMapper;
 
-    void updateCaptureScale(const cwViewportCapture *fixedCapture, cwViewportCapture* catpureToUpdate);
+    void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
 
 private slots:
     void updateScalesFrom(QObject* capture);
@@ -49,7 +49,7 @@ private slots:
  * @param capture
  * @return Returns true if the catpure is in this group and false if it isn't
  */
-inline bool cwCaptureGroup::contains(cwViewportCapture *capture)
+inline bool cwCaptureGroup::contains(cwCaptureViewport *capture)
 {
     return Captures.contains(capture);
 }
@@ -68,12 +68,12 @@ inline int cwCaptureGroup::numberOfCaptures() const
  * @param index - The index of the capture. If the index is invalid this will assert
  * @return Returns the catpure at index
  */
-inline int cwCaptureGroup::indexOfCapture(cwViewportCapture *capture) const
+inline int cwCaptureGroup::indexOfCapture(cwCaptureViewport *capture) const
 {
     return Captures.indexOf(capture);
 }
 
-inline cwViewportCapture *cwCaptureGroup::capture(int index) const
+inline cwCaptureViewport *cwCaptureGroup::capture(int index) const
 {
     return Captures.at(index);
 }

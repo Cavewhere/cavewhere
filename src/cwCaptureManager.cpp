@@ -15,7 +15,7 @@
 #include "cwDebug.h"
 #include "cwImageResolution.h"
 #include "cwCaptureItem.h"
-#include "cwViewportCapture.h"
+#include "cwCaptureViewport.h"
 #include "cwCaptureGroupModel.h"
 #include "cwDebug.h"
 
@@ -74,7 +74,7 @@ cwCaptureManager::~cwCaptureManager()
     //before deleting cwCaptureItems
     emit aboutToDestoryManager();
 
-    //We need to delete the ViewportCaptures early. These need
+    //We need to delete the CaptureViewports early. These need
     //to be delete before the QGraphicsScene in this object
     foreach(cwCaptureItem* item, Layers) {
         delete item;
@@ -225,20 +225,20 @@ void cwCaptureManager::capture()
 
     NumberOfImagesProcessed = Captures.size();
 
-    foreach(cwViewportCapture* capture, Captures) {
-        connect(capture, &cwViewportCapture::finishedCapture, this, &cwCaptureManager::saveCaptures, Qt::UniqueConnection);
+    foreach(cwCaptureViewport* capture, Captures) {
+        connect(capture, &cwCaptureViewport::finishedCapture, this, &cwCaptureManager::saveCaptures, Qt::UniqueConnection);
         capture->setPreviewCapture(false);
         capture->capture();
     }
 }
 
 /**
- * @brief cwCaptureManager::addViewportCapture
+ * @brief cwCaptureManager::addCaptureViewport
  * @param capture
  *
  * This adds the viewport capture to the capture manager
  */
-void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
+void cwCaptureManager::addCaptureViewport(cwCaptureViewport *capture)
 {
     if(Captures.contains(capture)) {
         qWarning() << "Capture already added:" << capture << LOCATION;
@@ -249,7 +249,7 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
     addPreviewCaptureItemHelper(capture);
     addFullResultionCaptureItemHelper(capture);
 
-    connect(capture, &cwViewportCapture::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
+    connect(capture, &cwCaptureViewport::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
     capture->setParent(this);
@@ -273,12 +273,12 @@ void cwCaptureManager::addViewportCapture(cwViewportCapture *capture)
 }
 
 /**
- * @brief cwCaptureManager::removeViewportCapture
+ * @brief cwCaptureManager::removeCaptureViewport
  * @param capture
  *
  * This will remove the capture from the catpure manager. This will also delete the capture.
  */
-void cwCaptureManager::removeViewportCapture(cwViewportCapture *capture)
+void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
 {
     if(!Captures.contains(capture)) {
         qWarning() << "Can't remove. Capture manager doesn't contain" << capture << LOCATION;
@@ -365,9 +365,9 @@ QHash<int, QByteArray> cwCaptureManager::roleNames() const
  */
 void cwCaptureManager::addPreviewCaptureItem()
 {
-    Q_ASSERT(dynamic_cast<cwViewportCapture*>(sender()) != nullptr);
-    cwViewportCapture* viewportCapture = static_cast<cwViewportCapture*>(sender());
-    addPreviewCaptureItemHelper(viewportCapture);
+    Q_ASSERT(dynamic_cast<cwCaptureViewport*>(sender()) != nullptr);
+    cwCaptureViewport* captureViewport = static_cast<cwCaptureViewport*>(sender());
+    addPreviewCaptureItemHelper(captureViewport);
 }
 
 /**
@@ -379,10 +379,10 @@ void cwCaptureManager::addPreviewCaptureItem()
  */
 void cwCaptureManager::addFullResultionCaptureItem()
 {
-    Q_ASSERT(dynamic_cast<cwViewportCapture*>(sender()) != nullptr);
-    cwViewportCapture* viewportCapture = static_cast<cwViewportCapture*>(sender());
-    addFullResultionCaptureItemHelper(viewportCapture);
-    disconnect(viewportCapture, &cwViewportCapture::fullResolutionItemChanged, this, &cwCaptureManager::addFullResultionCaptureItem);
+    Q_ASSERT(dynamic_cast<cwCaptureViewport*>(sender()) != nullptr);
+    cwCaptureViewport* captureViewport = static_cast<cwCaptureViewport*>(sender());
+    addFullResultionCaptureItemHelper(captureViewport);
+    disconnect(captureViewport, &cwCaptureViewport::fullResolutionItemChanged, this, &cwCaptureManager::addFullResultionCaptureItem);
     NumberOfImagesProcessed--;
 
     if(NumberOfImagesProcessed == 0) {
@@ -401,7 +401,7 @@ void cwCaptureManager::saveCaptures()
         //All the images have been captured, go through all the captures add the fullImages
         //to the scene.
 
-        foreach(cwViewportCapture* capture, Captures) {
+        foreach(cwCaptureViewport* capture, Captures) {
             scene()->addItem(capture->fullResolutionItem());
             capture->setResolution(resolution());
             capture->previewItem()->setVisible(false);
@@ -412,10 +412,10 @@ void cwCaptureManager::saveCaptures()
 
         saveScene();
 
-        foreach(cwViewportCapture* capture, Captures) {
+        foreach(cwCaptureViewport* capture, Captures) {
             capture->previewItem()->setVisible(true);
             capture->fullResolutionItem()->setVisible(false);
-            disconnect(capture, &cwViewportCapture::finishedCapture, this, &cwCaptureManager::saveCaptures);
+            disconnect(capture, &cwCaptureViewport::finishedCapture, this, &cwCaptureManager::saveCaptures);
         }
     }
 }
@@ -563,7 +563,7 @@ QSize cwCaptureManager::calcCroppedTileSize(QSize tileSize, QSize imageSize, int
  * This will try to fit the item to the page. By default it'll be added to the (0, 0) and
  * by stretched to fit the page.
  */
-void cwCaptureManager::scaleCaptureToFitPage(cwViewportCapture *item)
+void cwCaptureManager::scaleCaptureToFitPage(cwCaptureViewport *item)
 {
     Q_ASSERT(item->previewItem() != nullptr);
 
@@ -592,7 +592,7 @@ void cwCaptureManager::scaleCaptureToFitPage(cwViewportCapture *item)
  * @brief cwCaptureManager::addPreviewCaptureItemHelper
  * @param capture
  */
-void cwCaptureManager::addPreviewCaptureItemHelper(cwViewportCapture *capture)
+void cwCaptureManager::addPreviewCaptureItemHelper(cwCaptureViewport *capture)
 {
     if(capture->previewItem() != nullptr) {
         Scene->addItem(capture->previewItem());
@@ -604,7 +604,7 @@ void cwCaptureManager::addPreviewCaptureItemHelper(cwViewportCapture *capture)
  * @brief cwCaptureManager::addFullResultionCaptureItemHelper
  * @param catpure
  */
-void cwCaptureManager::addFullResultionCaptureItemHelper(cwViewportCapture *capture)
+void cwCaptureManager::addFullResultionCaptureItemHelper(cwCaptureViewport *capture)
 {
     if(capture->fullResolutionItem() != nullptr) {
         Scene->addItem(capture->fullResolutionItem());

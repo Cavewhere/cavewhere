@@ -26,7 +26,7 @@ Item {
         viewObject.view = view
         viewObject.viewport = rectangle
         viewObject.capture();
-        manager.addViewportCapture(viewObject);
+        manager.addCaptureViewport(viewObject);
     }
 
     function resetTool() {
@@ -40,7 +40,7 @@ Item {
 
     Component {
         id: captureViewComponentId
-        ViewportCapture { }
+        CaptureViewport { }
     }
 
     SelectExportAreaInteraction {

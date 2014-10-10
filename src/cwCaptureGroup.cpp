@@ -8,7 +8,7 @@
 
 //Our includes
 #include "cwCaptureGroup.h"
-#include "cwViewportCapture.h"
+#include "cwCaptureViewport.h"
 #include "cwScale.h"
 
 cwCaptureGroup::cwCaptureGroup(QObject *parent) :
@@ -32,7 +32,7 @@ cwCaptureGroup::cwCaptureGroup(QObject *parent) :
  * This function will assert if capture is nullptr
  * This function will assert if caputer already exists
  */
-void cwCaptureGroup::addCapture(cwViewportCapture *capture)
+void cwCaptureGroup::addCapture(cwCaptureViewport *capture)
 {
     Q_ASSERT(capture != nullptr);
     Q_ASSERT(!contains(capture));
@@ -53,7 +53,7 @@ void cwCaptureGroup::addCapture(cwViewportCapture *capture)
  *
  * This will go through the group and remove capture from it.
  */
-void cwCaptureGroup::removeCapture(cwViewportCapture *capture)
+void cwCaptureGroup::removeCapture(cwCaptureViewport *capture)
 {
     Q_ASSERT(capture != nullptr);
     Q_ASSERT(contains(capture));
@@ -74,8 +74,8 @@ void cwCaptureGroup::removeCapture(cwViewportCapture *capture)
  * This will update the captureToUpdate with the fixedCapture's data. The catpureToUpdate
  * scale, position, and rotation will be updated.
  */
-void cwCaptureGroup::updateCaptureScale(const cwViewportCapture *fixedCapture,
-                                   cwViewportCapture *captureToUpdate)
+void cwCaptureGroup::updateCaptureScale(const cwCaptureViewport *fixedCapture,
+                                   cwCaptureViewport *captureToUpdate)
 {
     double newScale = fixedCapture->scaleOrtho()->scale();
     captureToUpdate->scaleOrtho()->setScale(newScale);
@@ -89,10 +89,10 @@ void cwCaptureGroup::updateCaptureScale(const cwViewportCapture *fixedCapture,
  */
 void cwCaptureGroup::updateScalesFrom(QObject *capture)
 {
-    Q_ASSERT(dynamic_cast<cwViewportCapture*>(capture) != nullptr);
-    cwViewportCapture* fixedCapture = static_cast<cwViewportCapture*>(capture);
+    Q_ASSERT(dynamic_cast<cwCaptureViewport*>(capture) != nullptr);
+    cwCaptureViewport* fixedCapture = static_cast<cwCaptureViewport*>(capture);
 
-    foreach(cwViewportCapture* current, Captures) {
+    foreach(cwCaptureViewport* current, Captures) {
         updateCaptureScale(fixedCapture, current);
     }
 }
