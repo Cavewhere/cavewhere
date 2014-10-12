@@ -63,7 +63,7 @@ QPoint cwCamera::mapToGLViewport(QPoint qtViewportPoint) const {
 QPointF cwCamera::mapToQtViewport(QPointF glViewportPoint) const
 {
     double flippedY = Viewport.y() + (Viewport.height() - glViewportPoint.y());
-    return QPointF(glViewportPoint.x(), flippedY);
+    return QPointF(glViewportPoint.x(), flippedY + 1);
 }
 
 /**
