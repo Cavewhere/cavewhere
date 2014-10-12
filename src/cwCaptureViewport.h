@@ -70,7 +70,7 @@ public:
     double cameraAzimuth() const;
     void setCameraAzimuth(double cameraAzimuth);
 
-    QPointF mapToCapture(const cwCaptureViewport *viewport, QPointF point) const;
+    QPointF mapToCapture(const cwCaptureViewport *viewport) const;
 
 signals:
     void resolutionChanged();

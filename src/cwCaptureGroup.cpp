@@ -123,15 +123,14 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
 void cwCaptureGroup::updateCaptureTranslation(const cwCaptureViewport *fixedCapture, cwCaptureViewport *captureToUpdate)
 {
 //    QPointF origin = fixedCapture->mapToCapture(WorldToPaper(QVector3D(0.0, 0.0, 0.0));
-    QPointF updateOrigin = captureToUpdate->mapToCapture(fixedCapture, QPointF(0.0, 0.0));
-    QPointF diff = updateOrigin; // - origin;
+    QPointF updateOrigin = captureToUpdate->mapToCapture(fixedCapture);
 
     QPointF oldPosition = captureToUpdate->positionOnPaper();
-    QPointF newPosition = oldPosition + diff;
+    QPointF newPosition = updateOrigin - oldPosition;
 
     qDebug() << "OldPosition:" << oldPosition << newPosition << updateOrigin;
 
-    captureToUpdate->setPositionOnPaper(newPosition);
+    captureToUpdate->setPositionOnPaper(updateOrigin);
 }
 
 /**

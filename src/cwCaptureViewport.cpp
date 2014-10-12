@@ -550,22 +550,29 @@ void cwCaptureViewport::setCameraAzimuth(double cameraAzimuth) {
  *
  * Converts point in this object's paper  coordinates to the viewport's paper coordinates.
  */
-QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport, QPointF point) const
+QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
 {
-    QPointF originPixels = viewport->viewport().topLeft() - viewport->CaptureCamera->project(QVector3D(0.0, 0.0, 0.0));
-    QPointF paperOrigin = originPixels * viewport->ItemScale;
+    qDebug() << "Rotation:" << rotation() - cameraAzimuth() << viewport->rotation() - viewport->cameraAzimuth();
+    Q_ASSERT(qFuzzyCompare(rotation() - cameraAzimuth(), viewport->rotation() - viewport->cameraAzimuth()));
+    Q_ASSERT(qFuzzyCompare(scaleOrtho()->scale(), viewport->scaleOrtho()->scale()));
 
-    QPointF thisOriginPixels = this->viewport().topLeft() - CaptureCamera->project(QVector3D(0.0, 0.0, 0.0));
-    QPointF thisOrigin = thisOriginPixels * ItemScale;
+    QPointF topLeftToOriginPixels = viewport->CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - viewport->viewport().topLeft();
+    QPointF paperOrigin = viewport->previewItem()->mapToScene(topLeftToOriginPixels);
 
-    qDebug() << "Origin:" << paperOrigin << thisOrigin;
+    QPointF thisTopLeftToOriginPixels = CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - this->viewport().topLeft();
+    QPointF thisOrigin = positionOnPaper() - previewItem()->mapToScene(thisTopLeftToOriginPixels);
 
-    QPoint scalePoint(point.x() / ItemScale, point.y() / ItemScale);
-    QVector3D worldCoordinates = CaptureCamera->unProject(scalePoint, 0.0);
+    qDebug() << "Origin:" << paperOrigin << thisOrigin << (paperOrigin + thisOrigin);
 
-    //Assuming ortho matrix
-    QPointF coordinateInPixels = viewport->CaptureCamera->mapToQtViewport(viewport->CaptureCamera->project(worldCoordinates));
-    qDebug() << "PixelCoord:" << coordinateInPixels << worldCoordinates;
-    QPointF paperCoordinate = viewport->ItemScale * coordinateInPixels; //viewport().topLeft();
-    return paperCoordinate;
+    return paperOrigin + thisOrigin;
+
+
+//    QPoint scalePoint(point.x() / ItemScale, point.y() / ItemScale);
+//    QVector3D worldCoordinates = CaptureCamera->unProject(scalePoint, 0.0);
+
+//    //Assuming ortho matrix
+//    QPointF coordinateInPixels = viewport->CaptureCamera->mapToQtViewport(viewport->CaptureCamera->project(worldCoordinates));
+//    qDebug() << "PixelCoord:" << coordinateInPixels << worldCoordinates;
+//    QPointF paperCoordinate = viewport->ItemScale * coordinateInPixels; //viewport().topLeft();
+//    return paperCoordinate;
 }
