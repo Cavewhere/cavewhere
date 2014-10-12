@@ -38,9 +38,13 @@ private:
     QSignalMapper* RotationMapper;
 
     void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
+    void updateCaptureRotation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
+    void updateCaptureTranslation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
 
 private slots:
     void updateScalesFrom(QObject* capture);
+    void updateRotationFrom(QObject* capture);
+    void updateTranslationFrom(QObject* capture);
 
 };
 

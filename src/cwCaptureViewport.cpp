@@ -18,6 +18,10 @@
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
 #include "cwLength.h"
+#include "cwGlobals.h"
+
+//QMath3D
+#include <QMath3D.h>
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
@@ -515,4 +519,53 @@ void cwCaptureViewport::updateItemsPosition()
 */
 cw3dRegionViewer* cwCaptureViewport::view() const {
     return View;
+}
+
+/**
+* @brief cwCaptureItem::setCameraPitch
+* @param cameraPitch - The camera's pitch (degrees). This should come out of the turntableinteraction
+*/
+void cwCaptureViewport::setCameraPitch(double cameraPitch) {
+    if(CameraPitch != cameraPitch) {
+        CameraPitch = cameraPitch;
+        emit cameraPitchChanged();
+    }
+}
+
+/**
+* @brief cwCaptureViewport::setCameraAzimuth
+* @param cameraAzimuth - The camera's azimuth (degrees). This should come out of the turn table interaction
+*/
+void cwCaptureViewport::setCameraAzimuth(double cameraAzimuth) {
+    if(CameraAzimuth != cameraAzimuth) {
+        CameraAzimuth = cameraAzimuth;
+        emit cameraAzimuthChanged();
+    }
+}
+
+/**
+ * @brief cwCaptureViewport::mapWorldToPaper
+ * @param worldCoordinate
+ * @return Returns the mapped coordinate
+ *
+ * Converts point in this object's paper  coordinates to the viewport's paper coordinates.
+ */
+QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport, QPointF point) const
+{
+    QPointF originPixels = viewport->viewport().topLeft() - viewport->CaptureCamera->project(QVector3D(0.0, 0.0, 0.0));
+    QPointF paperOrigin = originPixels * viewport->ItemScale;
+
+    QPointF thisOriginPixels = this->viewport().topLeft() - CaptureCamera->project(QVector3D(0.0, 0.0, 0.0));
+    QPointF thisOrigin = thisOriginPixels * ItemScale;
+
+    qDebug() << "Origin:" << paperOrigin << thisOrigin;
+
+    QPoint scalePoint(point.x() / ItemScale, point.y() / ItemScale);
+    QVector3D worldCoordinates = CaptureCamera->unProject(scalePoint, 0.0);
+
+    //Assuming ortho matrix
+    QPointF coordinateInPixels = viewport->CaptureCamera->mapToQtViewport(viewport->CaptureCamera->project(worldCoordinates));
+    qDebug() << "PixelCoord:" << coordinateInPixels << worldCoordinates;
+    QPointF paperCoordinate = viewport->ItemScale * coordinateInPixels; //viewport().topLeft();
+    return paperCoordinate;
 }

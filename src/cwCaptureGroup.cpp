@@ -18,6 +18,7 @@ cwCaptureGroup::cwCaptureGroup(QObject *parent) :
     RotationMapper(new QSignalMapper(this))
 {
     connect(ScaleMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateScalesFrom(QObject*)));
+    connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
 }
 
 /**
@@ -39,12 +40,17 @@ void cwCaptureGroup::addCapture(cwCaptureViewport *capture)
 
     if(!Captures.isEmpty()) {
         updateCaptureScale(Captures.first(), capture);
+        updateCaptureRotation(Captures.first(), capture);
+        updateCaptureTranslation(Captures.first(), capture);
     }
 
     Captures.append(capture);
 
     ScaleMapper->setMapping(capture->scaleOrtho(), capture);
+    RotationMapper->setMapping(capture, capture);
+
     connect(capture->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
+    connect(capture, SIGNAL(rotationChanged()), RotationMapper, SLOT(map()));
 }
 
 /**
@@ -59,7 +65,10 @@ void cwCaptureGroup::removeCapture(cwCaptureViewport *capture)
     Q_ASSERT(contains(capture));
 
     ScaleMapper->removeMappings(capture->scaleOrtho());
+    RotationMapper->removeMappings(capture);
+
     disconnect(capture->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
+    disconnect(capture, SIGNAL(rotationChanged()), RotationMapper, SLOT(map()));
 
     Captures.removeOne(capture);
 }
@@ -77,8 +86,52 @@ void cwCaptureGroup::removeCapture(cwCaptureViewport *capture)
 void cwCaptureGroup::updateCaptureScale(const cwCaptureViewport *fixedCapture,
                                    cwCaptureViewport *captureToUpdate)
 {
+    if(fixedCapture == captureToUpdate) { return; }
     double newScale = fixedCapture->scaleOrtho()->scale();
     captureToUpdate->scaleOrtho()->setScale(newScale);
+}
+
+/**
+ * @brief cwCaptureGroup::updateCaptureRotation
+ * @param fixedCapture
+ * @param captureToUpdate
+ */
+void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture,
+                                           cwCaptureViewport *captureToUpdate)
+{
+    if(fixedCapture == captureToUpdate) { return; }
+
+    disconnect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
+
+    double fixedRotation = fixedCapture->cameraAzimuth() - fixedCapture->rotation();
+    double captureRotation = captureToUpdate->cameraAzimuth() - captureToUpdate->rotation();
+    double diffRotation =   captureRotation - fixedRotation;
+
+    double oldRotation = captureToUpdate->rotation();
+    captureToUpdate->setRotation(oldRotation + diffRotation);
+
+    connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
+}
+
+/**
+ * @brief cwCaptureGroup::updateCatpureTranslation
+ * @param fixedCapture
+ * @param captureToUpdate
+ *
+ * This updates the captureToUpdate with the fixedCapture's translation
+ */
+void cwCaptureGroup::updateCaptureTranslation(const cwCaptureViewport *fixedCapture, cwCaptureViewport *captureToUpdate)
+{
+//    QPointF origin = fixedCapture->mapToCapture(WorldToPaper(QVector3D(0.0, 0.0, 0.0));
+    QPointF updateOrigin = captureToUpdate->mapToCapture(fixedCapture, QPointF(0.0, 0.0));
+    QPointF diff = updateOrigin; // - origin;
+
+    QPointF oldPosition = captureToUpdate->positionOnPaper();
+    QPointF newPosition = oldPosition + diff;
+
+    qDebug() << "OldPosition:" << oldPosition << newPosition << updateOrigin;
+
+    captureToUpdate->setPositionOnPaper(newPosition);
 }
 
 /**
@@ -94,6 +147,41 @@ void cwCaptureGroup::updateScalesFrom(QObject *capture)
 
     foreach(cwCaptureViewport* current, Captures) {
         updateCaptureScale(fixedCapture, current);
+    }
+}
+
+/**
+ * @brief cwCaptureGroup::updateRotationFor
+ * @param capture
+ *
+ * This updates all the rotations in this group to match the capture's translation
+ */
+void cwCaptureGroup::updateRotationFrom(QObject *capture)
+{
+    Q_ASSERT(dynamic_cast<cwCaptureViewport*>(capture) != nullptr);
+    cwCaptureViewport* fixedCapture = static_cast<cwCaptureViewport*>(capture);
+
+    foreach(cwCaptureViewport* current, Captures) {
+        updateCaptureRotation(fixedCapture, current);
+    }
+}
+
+/**
+ * @brief cwCaptureGroup::updateTranslationFrom
+ * @param capture
+ *
+ * This will update all the translation in this group to match the capture's translation.
+ *
+ * This will also constain the capture position, so that it can only be move in parallel
+ * to it's rotation.
+ */
+void cwCaptureGroup::updateTranslationFrom(QObject *capture)
+{
+    Q_ASSERT(dynamic_cast<cwCaptureViewport*>(capture) != nullptr);
+    cwCaptureViewport* fixedCapture = static_cast<cwCaptureViewport*>(capture);
+
+    foreach(cwCaptureViewport* current, Captures) {
+        updateCaptureTranslation(fixedCapture, current);
     }
 }
 

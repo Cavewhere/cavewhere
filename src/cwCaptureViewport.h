@@ -34,8 +34,10 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
+    Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
+    Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
 
-    public:
+public:
 
     explicit cwCaptureViewport(QObject *parent = 0);
     virtual ~cwCaptureViewport();
@@ -62,6 +64,14 @@ class cwCaptureViewport : public cwCaptureItem
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
 
+    double cameraPitch() const;
+    void setCameraPitch(double cameraPitch);
+
+    double cameraAzimuth() const;
+    void setCameraAzimuth(double cameraAzimuth);
+
+    QPointF mapToCapture(const cwCaptureViewport *viewport, QPointF point) const;
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -70,6 +80,8 @@ signals:
     void previewItemChanged();
     void fullResolutionItemChanged();
     void transformOriginChanged();
+    void cameraPitchChanged();
+    void cameraAzimuthChanged();
 
 public slots:
 
@@ -83,6 +95,8 @@ private:
     bool PreviewCapture;
     cwUnits::LengthUnit PaperUnit;
     QQuickItem::TransformOrigin TransformOrigin; //!<
+    double CameraAzimuth; //!<
+    double CameraPitch; //!<
 
     bool CapturingImages;
     int NumberOfImagesProcessed;
@@ -171,5 +185,20 @@ inline QGraphicsItem* cwCaptureViewport::fullResolutionItem() const {
     return Item;
 }
 
+/**
+* @brief cwCaptureItem::cameraPitch
+* @return
+*/
+inline double cwCaptureViewport::cameraPitch() const {
+    return CameraPitch;
+}
+
+/**
+* @brief cwCaptureViewport::cameraAzimuth
+* @return
+*/
+inline double cwCaptureViewport::cameraAzimuth() const {
+    return CameraAzimuth;
+}
 
 #endif // CWVIEWPORTCAPTURE_H

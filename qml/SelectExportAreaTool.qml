@@ -25,6 +25,8 @@ Item {
         var viewObject = captureViewComponentId.createObject()
         viewObject.view = view
         viewObject.viewport = rectangle
+        viewObject.cameraAzimuth = view.turnTableInteraction.azimuth
+        viewObject.cameraPitch = view.turnTableInteraction.pitch
         viewObject.capture();
         manager.addCaptureViewport(viewObject);
     }
