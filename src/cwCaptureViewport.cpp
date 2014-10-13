@@ -553,7 +553,7 @@ void cwCaptureViewport::setCameraAzimuth(double cameraAzimuth) {
 QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
 {
     qDebug() << "Rotation:" << rotation() - cameraAzimuth() << viewport->rotation() - viewport->cameraAzimuth();
-    Q_ASSERT(qFuzzyCompare(rotation() - cameraAzimuth(), viewport->rotation() - viewport->cameraAzimuth()));
+//    Q_ASSERT(qFuzzyCompare(rotation() - cameraAzimuth(), viewport->rotation() - viewport->cameraAzimuth()));
     Q_ASSERT(qFuzzyCompare(scaleOrtho()->scale(), viewport->scaleOrtho()->scale()));
 
     QPointF topLeftToOriginPixels = viewport->CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - viewport->viewport().topLeft();

@@ -9,8 +9,10 @@
 #ifndef CWCAPTUREGROUP_H
 #define CWCAPTUREGROUP_H
 
+//Qt includes
 #include <QObject>
 #include <QSignalMapper>
+#include <QPointF>
 
 class cwCaptureViewport;
 
@@ -37,9 +39,13 @@ private:
     QSignalMapper* PositionMapper;
     QSignalMapper* RotationMapper;
 
+    QPointF OldPrimaryPosition;
+
     void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
     void updateCaptureRotation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
-    void updateCaptureTranslation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
+    void updateCaptureTranslation(cwCaptureViewport* capture);
+
+    void initializePosition(cwCaptureViewport* capture);
 
 private slots:
     void updateScalesFrom(QObject* capture);
