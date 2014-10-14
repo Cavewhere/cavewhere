@@ -218,6 +218,7 @@ Item {
                 onRightMarginChanged: screenCaptureManagerId.rightMargin = rightMargin
                 onTopMarginChanged: screenCaptureManagerId.topMargin = topMargin
                 onBottomMarginChanged: screenCaptureManagerId.bottomMargin = bottomMargin
+                unit: "in"
             }
 
             GroupBox {
