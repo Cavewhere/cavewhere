@@ -91,8 +91,13 @@ void cwCaptureGroup::updateCaptureScale(const cwCaptureViewport *fixedCapture,
                                    cwCaptureViewport *captureToUpdate)
 {
     if(fixedCapture == captureToUpdate) { return; }
+
+    disconnect(captureToUpdate->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
+
     double newScale = fixedCapture->scaleOrtho()->scale();
     captureToUpdate->scaleOrtho()->setScale(newScale);
+
+    connect(captureToUpdate->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
 }
 
 /**
