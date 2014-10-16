@@ -39,13 +39,16 @@ void cwCaptureGroup::addCapture(cwCaptureViewport *capture)
     Q_ASSERT(capture != nullptr);
     Q_ASSERT(!contains(capture));
 
+    CaptureData.insert(capture, ViewportGroupData());
+
     if(!Captures.isEmpty()) {
-        updateCaptureScale(Captures.first(), capture);
-        updateCaptureRotation(Captures.first(), capture);
+        updateCaptureScale(primaryCapture(), capture);
+        updateCaptureRotation(primaryCapture(), capture);
         initializePosition(capture);
     }
 
     Captures.append(capture);
+    updateViewportGroupData(capture);
 
     ScaleMapper->setMapping(capture->scaleOrtho(), capture);
     RotationMapper->setMapping(capture, capture);
@@ -97,6 +100,8 @@ void cwCaptureGroup::updateCaptureScale(const cwCaptureViewport *fixedCapture,
     double newScale = fixedCapture->scaleOrtho()->scale();
     captureToUpdate->scaleOrtho()->setScale(newScale);
 
+    updateViewportGroupData(captureToUpdate);
+
     connect(captureToUpdate->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
 }
 
@@ -119,6 +124,8 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
     double oldRotation = captureToUpdate->rotation();
     captureToUpdate->setRotation(oldRotation + diffRotation);
 
+    updateViewportGroupData(captureToUpdate);
+
     connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
 }
 
@@ -132,16 +139,14 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
 void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
 {
     Q_ASSERT(!Captures.isEmpty());
-    if(capture == Captures.first()) { return; }
-
-    cwCaptureViewport* primaryCapture = Captures.first();
+    if(capture == primaryCapture()) { return; }
 
     //Only update the capture translation, if the pitch doesn't match
-    if(capture->cameraPitch() != primaryCapture->cameraPitch()) {
+    if(isCoplanerWithPrimaryCapture(capture)) {
 
         disconnect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
 
-        QPointF mappedOrigin = capture->mapToCapture(Captures.first());
+        QPointF mappedOrigin = capture->mapToCapture(primaryCapture());
         QPointF currentPos = capture->positionOnPaper();
 
         QTransform transform;
@@ -154,6 +159,8 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
         QPointF newPosition = invertedTransorm.map(mappedPos);
 
         capture->setPositionOnPaper(newPosition);
+
+        updateViewportGroupData(capture);
 
         connect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
     }
@@ -169,9 +176,59 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
 void cwCaptureGroup::initializePosition(cwCaptureViewport *capture)
 {
     Q_ASSERT(!Captures.isEmpty());
-    Q_ASSERT(Captures.first() != capture);
-    QPointF newOrigin = capture->mapToCapture(Captures.first());
+    Q_ASSERT(primaryCapture() != capture);
+    QPointF newOrigin = capture->mapToCapture(primaryCapture());
     capture->setPositionOnPaper(newOrigin);
+    updateViewportGroupData(capture);
+}
+
+/**
+ * @brief cwCaptureGroup::updateViewportGroupData
+ * @param capture
+ *
+ * This updates the viewport's group data with catpure's data. This will update
+ * the OldPostion and Offset in the ViewportGroupData.
+ *
+ * If the capture is the primary capture. Then this only update the OldPostion.
+ * If the capture is in the same plan as the primary. This will only update
+ * the OldPosition.
+ */
+void cwCaptureGroup::updateViewportGroupData(cwCaptureViewport *capture)
+{
+    Q_ASSERT(CaptureData.contains(capture));
+
+    CaptureData[capture].OldPosition = capture->positionOnPaper();
+
+    if(capture != primaryCapture() && !isCoplanerWithPrimaryCapture(capture)) {
+        //A non-planar catpure, update the offset
+        QPointF origin = capture->mapToCapture(primaryCapture());
+        QPointF currentPosition = capture->positionOnPaper();
+        double offset = QLineF(origin, currentPosition).length();
+
+        CaptureData[capture].Offset = offset;
+    }
+}
+
+/**
+ * @brief cwCaptureGroup::primaryCapture
+ * @return Returns the primaryCapture
+ *
+ * By default, this is the first item in the group.
+ */
+cwCaptureViewport *cwCaptureGroup::primaryCapture() const
+{
+    return Captures.first();
+}
+
+/**
+ * @brief cwCaptureGroup::isCoplanerWithPrimaryCapture
+ * @param capture
+ * @return True if the capture is coplaner with the primaryCapture (returns true if pitch's are
+ * equal between capture and primaryCapture)
+ */
+bool cwCaptureGroup::isCoplanerWithPrimaryCapture(cwCaptureViewport *capture) const
+{
+    return capture->cameraPitch() != primaryCapture()->cameraPitch();
 }
 
 /**
@@ -222,15 +279,16 @@ void cwCaptureGroup::updateTranslationFrom(QObject *capture)
     Q_ASSERT(dynamic_cast<cwCaptureViewport*>(capture) != nullptr);
     cwCaptureViewport* fixedCapture = static_cast<cwCaptureViewport*>(capture);
 
-    if(fixedCapture == Captures.first()) {
+    if(fixedCapture == primaryCapture()) {
         //This is the primary catpure. It has move, simply offset based on it's previous Position
-        QPointF offset = fixedCapture->positionOnPaper() - OldPrimaryPosition;
+        QPointF offset = fixedCapture->positionOnPaper() - CaptureData[fixedCapture].OldPosition; //OldPrimaryPosition;
         foreach(cwCaptureViewport* current, Captures) {
             if(fixedCapture != current) {
                 QPointF oldPosition = current->positionOnPaper();
                 current->setPositionOnPaper(oldPosition + offset);
             }
         }
+        updateViewportGroupData(fixedCapture);
     } else {
         //This is a secondard capture. Update it show it aligns with it's rotation
         updateCaptureTranslation(fixedCapture);

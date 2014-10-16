@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QSignalMapper>
 #include <QPointF>
+#include <QHash>
 
 class cwCaptureViewport;
 
@@ -34,18 +35,34 @@ signals:
 public slots:
 
 private:
+    class ViewportGroupData {
+    public:
+        ViewportGroupData() :
+        Offset(0.0) {}
+
+        QPointF OldPosition; //The old paper position
+        double Offset; //This is offset for rotated catpureViewports
+    };
+
     QList<cwCaptureViewport*> Captures;
+    QHash<cwCaptureViewport*, ViewportGroupData> CaptureData;
+
     QSignalMapper* ScaleMapper;
     QSignalMapper* PositionMapper;
     QSignalMapper* RotationMapper;
 
-    QPointF OldPrimaryPosition;
+//    QPointF OldPrimaryPosition;
 
     void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
     void updateCaptureRotation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
     void updateCaptureTranslation(cwCaptureViewport* capture);
 
     void initializePosition(cwCaptureViewport* capture);
+
+    void updateViewportGroupData(cwCaptureViewport* capture);
+
+    cwCaptureViewport* primaryCapture() const;
+    bool isCoplanerWithPrimaryCapture(cwCaptureViewport* capture) const;
 
 private slots:
     void updateScalesFrom(QObject* capture);

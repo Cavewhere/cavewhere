@@ -552,7 +552,7 @@ void cwCaptureViewport::setCameraAzimuth(double cameraAzimuth) {
  */
 QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
 {
-    qDebug() << "Rotation:" << rotation() - cameraAzimuth() << viewport->rotation() - viewport->cameraAzimuth();
+//    qDebug() << "Rotation:" << rotation() - cameraAzimuth() << viewport->rotation() - viewport->cameraAzimuth();
 //    Q_ASSERT(qFuzzyCompare(rotation() - cameraAzimuth(), viewport->rotation() - viewport->cameraAzimuth()));
     Q_ASSERT(qFuzzyCompare(scaleOrtho()->scale(), viewport->scaleOrtho()->scale()));
 
@@ -562,7 +562,7 @@ QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
     QPointF thisTopLeftToOriginPixels = CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - this->viewport().topLeft();
     QPointF thisOrigin = positionOnPaper() - previewItem()->mapToScene(thisTopLeftToOriginPixels);
 
-    qDebug() << "Origin:" << paperOrigin << thisOrigin << (paperOrigin + thisOrigin);
+//    qDebug() << "Origin:" << paperOrigin << thisOrigin << (paperOrigin + thisOrigin);
 
     return paperOrigin + thisOrigin;
 
