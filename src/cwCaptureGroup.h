@@ -37,11 +37,14 @@ public slots:
 private:
     class ViewportGroupData {
     public:
-        ViewportGroupData() :
-        Offset(0.0) {}
+        ViewportGroupData() {}
 
         QPointF OldPosition; //The old paper position
-        double Offset; //This is offset for rotated catpureViewports
+
+        //This is unitless offset of the viewport. The offset set is first calculated in
+        //paper units, and then divided by width(), height() to make it unitless. Unitless
+        //offsets can the be expanded, even if the scale changes.
+        QPointF Offset;
     };
 
     QList<cwCaptureViewport*> Captures;
@@ -51,11 +54,10 @@ private:
     QSignalMapper* PositionMapper;
     QSignalMapper* RotationMapper;
 
-//    QPointF OldPrimaryPosition;
-
     void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
     void updateCaptureRotation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
     void updateCaptureTranslation(cwCaptureViewport* capture);
+    void updateCaptureOffsetTranslation(cwCaptureViewport* capture);
 
     void initializePosition(cwCaptureViewport* capture);
 

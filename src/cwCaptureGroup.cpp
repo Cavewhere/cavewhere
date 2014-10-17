@@ -142,7 +142,7 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
     if(capture == primaryCapture()) { return; }
 
     //Only update the capture translation, if the pitch doesn't match
-    if(isCoplanerWithPrimaryCapture(capture)) {
+    if(!isCoplanerWithPrimaryCapture(capture)) {
 
         disconnect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
 
@@ -164,6 +164,37 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
 
         connect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
     }
+}
+
+/**
+ * @brief cwCaptureGroup::updateCaptureOffsetTranslation
+ * @param capture
+ *
+ * This update the catpure position with the stored offset. The offset is calculated
+ * with updateViewportGroupData(). This method should be called when scale, and
+ * rotation happens. This will make sure the capture stays in the same realative position.
+ *
+ * This function will do nothing if capture == primaryCapture()
+ */
+void cwCaptureGroup::updateCaptureOffsetTranslation(cwCaptureViewport *capture)
+{
+    Q_ASSERT(CaptureData.contains(capture));
+
+    if(capture == primaryCapture()) { return; }
+
+    disconnect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
+
+    QPointF origin = capture->mapToCapture(primaryCapture());
+    QPointF unScaledOffset = CaptureData[capture].Offset; //Offset is currently unitless
+    QSizeF primarySize = primaryCapture()->paperSizeOfItem();
+
+    QPointF offset(unScaledOffset.x() * primarySize.width(), unScaledOffset.y() * primarySize.height());
+
+    QPointF newPosition = origin + offset;
+
+    capture->setPositionOnPaper(newPosition);
+
+    connect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
 }
 
 /**
@@ -203,7 +234,10 @@ void cwCaptureGroup::updateViewportGroupData(cwCaptureViewport *capture)
         //A non-planar catpure, update the offset
         QPointF origin = capture->mapToCapture(primaryCapture());
         QPointF currentPosition = capture->positionOnPaper();
-        double offset = QLineF(origin, currentPosition).length();
+
+        QSizeF primarySize = primaryCapture()->paperSizeOfItem();
+        QPointF diff = (currentPosition - origin);
+        QPointF offset(diff.x() / primarySize.width(), diff.y() / primarySize.height());
 
         CaptureData[capture].Offset = offset;
     }
@@ -228,7 +262,7 @@ cwCaptureViewport *cwCaptureGroup::primaryCapture() const
  */
 bool cwCaptureGroup::isCoplanerWithPrimaryCapture(cwCaptureViewport *capture) const
 {
-    return capture->cameraPitch() != primaryCapture()->cameraPitch();
+    return capture->cameraPitch() == primaryCapture()->cameraPitch();
 }
 
 /**
@@ -260,7 +294,7 @@ void cwCaptureGroup::updateRotationFrom(QObject *capture)
 
     foreach(cwCaptureViewport* current, Captures) {
         updateCaptureRotation(fixedCapture, current);
-        updateCaptureTranslation(current);
+        updateCaptureOffsetTranslation(current);
     }
 }
 
