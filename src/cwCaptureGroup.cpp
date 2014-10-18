@@ -146,12 +146,9 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
 
         disconnect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
 
-        QPointF mappedOrigin = capture->mapToCapture(primaryCapture());
         QPointF currentPos = capture->positionOnPaper();
 
-        QTransform transform;
-        transform.rotate(-capture->rotation());
-        transform.translate(-mappedOrigin.x(), -mappedOrigin.y());
+        QTransform transform = removeRotationTransform(capture);
         QPointF mappedPos = transform.map(currentPos);
         mappedPos.setX(0);
 
@@ -189,8 +186,20 @@ void cwCaptureGroup::updateCaptureOffsetTranslation(cwCaptureViewport *capture)
     QSizeF primarySize = primaryCapture()->paperSizeOfItem();
 
     QPointF offset(unScaledOffset.x() * primarySize.width(), unScaledOffset.y() * primarySize.height());
+    QPointF newPosition;
 
-    QPointF newPosition = origin + offset;
+    if(isCoplanerWithPrimaryCapture(capture)) {
+        //This is simply an offset capture, no a "profile"
+        newPosition = origin + offset;
+    } else {
+        //This capture has a different pitch. For example the primaryCapture() is a plan, and this
+        //is a profile
+        double length = QLineF(origin, origin + offset).length();
+        QPointF mappedPos(0.0, length);
+
+        QTransform transform = removeRotationTransform(capture).inverted();
+        newPosition = transform.map(mappedPos);
+    }
 
     capture->setPositionOnPaper(newPosition);
 
@@ -263,6 +272,15 @@ cwCaptureViewport *cwCaptureGroup::primaryCapture() const
 bool cwCaptureGroup::isCoplanerWithPrimaryCapture(cwCaptureViewport *capture) const
 {
     return capture->cameraPitch() == primaryCapture()->cameraPitch();
+}
+
+QTransform cwCaptureGroup::removeRotationTransform(cwCaptureViewport *capture) const
+{
+    QPointF origin = capture->mapToCapture(primaryCapture());
+    QTransform transform;
+    transform.rotate(-capture->rotation());
+    transform.translate(-origin.x(), -origin.y());
+    return transform;
 }
 
 /**

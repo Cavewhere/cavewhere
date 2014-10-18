@@ -66,6 +66,8 @@ private:
     cwCaptureViewport* primaryCapture() const;
     bool isCoplanerWithPrimaryCapture(cwCaptureViewport* capture) const;
 
+    QTransform removeRotationTransform(cwCaptureViewport* capture) const;
+
 private slots:
     void updateScalesFrom(QObject* capture);
     void updateRotationFrom(QObject* capture);
