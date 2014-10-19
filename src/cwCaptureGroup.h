@@ -61,7 +61,7 @@ private:
 
     void initializePosition(cwCaptureViewport* capture);
 
-    void updateViewportGroupData(cwCaptureViewport* capture);
+    void updateViewportGroupData(cwCaptureViewport* capture, bool inRotation = false);
 
     cwCaptureViewport* primaryCapture() const;
     bool isCoplanerWithPrimaryCapture(cwCaptureViewport* capture) const;

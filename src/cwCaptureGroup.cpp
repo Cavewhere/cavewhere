@@ -124,7 +124,7 @@ void cwCaptureGroup::updateCaptureRotation(const cwCaptureViewport *fixedCapture
     double oldRotation = captureToUpdate->rotation();
     captureToUpdate->setRotation(oldRotation + diffRotation);
 
-    updateViewportGroupData(captureToUpdate);
+    updateViewportGroupData(captureToUpdate, true);
 
     connect(RotationMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateRotationFrom(QObject*)));
 }
@@ -155,12 +155,14 @@ void cwCaptureGroup::updateCaptureTranslation(cwCaptureViewport *capture)
         QTransform invertedTransorm = transform.inverted();
         QPointF newPosition = invertedTransorm.map(mappedPos);
 
-        capture->setPositionOnPaper(newPosition);
+        qDebug() << "Updating catpure translation:" << capture << newPosition;
 
-        updateViewportGroupData(capture);
+        capture->setPositionOnPaper(newPosition);
 
         connect(capture, SIGNAL(positionOnPaperChanged()), PositionMapper, SLOT(map()));
     }
+
+    updateViewportGroupData(capture);
 }
 
 /**
@@ -191,6 +193,7 @@ void cwCaptureGroup::updateCaptureOffsetTranslation(cwCaptureViewport *capture)
     if(isCoplanerWithPrimaryCapture(capture)) {
         //This is simply an offset capture, no a "profile"
         newPosition = origin + offset;
+        qDebug() << "Updating offest:" << capture << offset << origin << newPosition;
     } else {
         //This capture has a different pitch. For example the primaryCapture() is a plan, and this
         //is a profile
@@ -225,6 +228,7 @@ void cwCaptureGroup::initializePosition(cwCaptureViewport *capture)
 /**
  * @brief cwCaptureGroup::updateViewportGroupData
  * @param capture
+ * @param inRotation
  *
  * This updates the viewport's group data with catpure's data. This will update
  * the OldPostion and Offset in the ViewportGroupData.
@@ -233,21 +237,23 @@ void cwCaptureGroup::initializePosition(cwCaptureViewport *capture)
  * If the capture is in the same plan as the primary. This will only update
  * the OldPosition.
  */
-void cwCaptureGroup::updateViewportGroupData(cwCaptureViewport *capture)
+void cwCaptureGroup::updateViewportGroupData(cwCaptureViewport *capture, bool inRotation)
 {
     Q_ASSERT(CaptureData.contains(capture));
 
+    qDebug() << "Updating viewport group data:" << capture;
     CaptureData[capture].OldPosition = capture->positionOnPaper();
 
-    if(capture != primaryCapture() && !isCoplanerWithPrimaryCapture(capture)) {
+    if(capture != primaryCapture() && !inRotation) {
         //A non-planar catpure, update the offset
         QPointF origin = capture->mapToCapture(primaryCapture());
         QPointF currentPosition = capture->positionOnPaper();
 
         QSizeF primarySize = primaryCapture()->paperSizeOfItem();
-        QPointF diff = (currentPosition - origin);
+        QPointF diff = currentPosition - origin;
         QPointF offset(diff.x() / primarySize.width(), diff.y() / primarySize.height());
 
+        qDebug() << "Updating offset:" << offset << QLineF(QPointF(), offset).length() << primarySize.width() << primarySize.height();
         CaptureData[capture].Offset = offset;
     }
 }
