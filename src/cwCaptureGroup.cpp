@@ -190,17 +190,17 @@ void cwCaptureGroup::updateCaptureOffsetTranslation(cwCaptureViewport *capture)
     QPointF offset(unScaledOffset.x() * primarySize.width(), unScaledOffset.y() * primarySize.height());
     QPointF newPosition;
 
+    QTransform transform = removeRotationTransform(capture).inverted();
+
     if(isCoplanerWithPrimaryCapture(capture)) {
         //This is simply an offset capture, no a "profile"
-        newPosition = origin + offset;
-        qDebug() << "Updating offest:" << capture << offset << origin << newPosition;
+        newPosition = transform.map(offset);
     } else {
         //This capture has a different pitch. For example the primaryCapture() is a plan, and this
         //is a profile
         double length = QLineF(origin, origin + offset).length();
         QPointF mappedPos(0.0, length);
 
-        QTransform transform = removeRotationTransform(capture).inverted();
         newPosition = transform.map(mappedPos);
     }
 
