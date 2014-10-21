@@ -55,6 +55,7 @@ cwShot::PrivateData::PrivateData(SurveyDataType dataType) :
     BackClino(0.0),
     FromDepth(0.0),
     ToDepth(0.0),
+    surveyDataType(dataType),
     DistanceState(cwDistanceStates::Empty),
     CompassState(cwCompassStates::Empty),
     BackCompassState(cwCompassStates::Empty),
@@ -62,7 +63,6 @@ cwShot::PrivateData::PrivateData(SurveyDataType dataType) :
     BackClinoState(cwClinoStates::Empty),
     FromDepthState(cwDepthStates::Empty),
     ToDepthState(cwDepthStates::Empty),
-    surveyDataType(dataType),
     IncludeDistance(true)
 {
 
