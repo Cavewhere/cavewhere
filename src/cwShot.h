@@ -18,15 +18,21 @@ class cwValidator;
 //Qt includes
 #include <QSharedDataPointer>
 
+enum class SurveyDataType {
+    StandardCaveData,
+    DiveData,
+};
+
 class cwShot
 {
 
 public:
     cwShot();
 
-    cwShot(QString distance,
+    cwShot(SurveyDataType type, QString distance,
            QString compass, QString backCompass,
-           QString clino, QString backClino);
+           QString typeData1, QString typeData2);
+
     cwShot(const cwShot& shot);
 
     double distance() const;
@@ -54,11 +60,23 @@ public:
     void setBackClino(double backClino);
     void setBackClinoState(cwClinoStates::State state);
 
+    double fromDepth() const;
+    void setFromDepth(QString depth);
+    void setFromDepth(double depth);
+    void setFromDepthState(cwDepthStates::State state);
+
+    double toDepth() const;
+    void setToDepth(QString depth);
+    void setToDepth(double depth);
+    void setToDepthState(cwDepthStates::State state);
+
     cwDistanceStates::State distanceState() const;
     cwCompassStates::State compassState() const;
     cwCompassStates::State backCompassState() const;
     cwClinoStates::State clinoState() const;
     cwClinoStates::State backClinoState() const;
+    cwDepthStates::State fromDepthState() const;
+    cwDepthStates::State toDepthState() const;
 
     bool isDistanceIncluded() const;
     void setDistanceIncluded(bool isDistanceIncluded);
@@ -77,19 +95,25 @@ private:
 
     class PrivateData : public QSharedData {
     public:
-        PrivateData();
+        PrivateData(SurveyDataType dataType=SurveyDataType::StandardCaveData);
 
         double Distance;
         double Compass;
         double BackCompass;
         double Clino;
         double BackClino;
+        double FromDepth;
+        double ToDepth;
+
+        SurveyDataType surveyDataType;
 
         cwDistanceStates::State DistanceState;
         cwCompassStates::State CompassState;
         cwCompassStates::State BackCompassState;
         cwClinoStates::State ClinoState;
         cwClinoStates::State BackClinoState;
+        cwDepthStates::State FromDepthState;
+        cwDepthStates::State ToDepthState;
 
         bool IncludeDistance;
     };
@@ -104,6 +128,9 @@ private:
     void setPrivateCompassState(cwCompassStates::State& memberState, cwCompassStates::State newState);
     void setPrivateClinoState(cwClinoStates::State& memberState, cwClinoStates::State newState);
 
+    void setDepthValueWithString(double& memberData, int& memberState, QString newValue);
+    void setPrivateDepth(double &memberData, cwDepthStates::State &state, double value);
+    void setPrivateDepthState(cwDepthStates::State& memberState, cwDepthStates::State newState);
 };
 
 inline cwDistanceStates::State cwShot::distanceState() const {
@@ -124,6 +151,14 @@ inline cwClinoStates::State cwShot::clinoState() const {
 
 inline cwClinoStates::State cwShot::backClinoState() const {
     return Data->BackClinoState;
+}
+
+inline cwDepthStates::State cwShot::fromDepthState() const {
+    return Data->FromDepthState;
+}
+
+inline cwDepthStates::State cwShot::toDepthState() const {
+    return Data->ToDepthState;
 }
 
 /**
@@ -153,6 +188,14 @@ inline double cwShot::clino() const {
 
 inline double cwShot::backClino() const {
     return Data->BackClino;
+}
+
+inline double cwShot::fromDepth() const {
+    return Data->FromDepth;
+}
+
+inline double cwShot::toDepth() const {
+    return Data->ToDepth;
 }
 
 inline bool cwShot::isValid() const {

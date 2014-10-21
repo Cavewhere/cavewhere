@@ -31,6 +31,13 @@ enum State {
 };
 }
 
+namespace cwDepthStates {
+enum State {
+    Valid = 0, //Distance data should be valid
+    Empty = 1, //User hasn't enter any data
+};
+}
+
 
 
 #endif // CWREADINGENUMS_H
