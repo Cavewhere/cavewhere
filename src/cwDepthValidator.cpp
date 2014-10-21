@@ -28,9 +28,6 @@ QValidator::State cwDepthValidator::validate ( QString & input, int & pos ) cons
     QValidator::State state = doubleValidator.validate(input, pos);
 
     switch(state) {
-    case QValidator::Invalid: {
-        return upDownValidator.validate(input, pos);
-    }
     case QValidator::Acceptable: {
         //Just make sure we can convert the input
         bool okay;
