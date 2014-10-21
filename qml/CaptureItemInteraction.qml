@@ -66,8 +66,8 @@ Rectangle {
       Item.BottomLeft, and Item.TopLeft
       */
     function fixedPositionToPoint(fixedPosition) {
-        var position = captureItem.positionOnPaper
-        var size = captureItem.paperSizeOfItem
+        var position = Qt.point(x / captureScale, y / captureScale) //captureItem.positionOnPaper
+        var size = Qt.size(width / captureScale, height / captureScale) //captureItem.paperSizeOfItem
 
         switch(fixedPosition) {
         case Item.TopLeft:

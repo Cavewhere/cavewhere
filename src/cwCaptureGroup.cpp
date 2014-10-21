@@ -100,7 +100,7 @@ void cwCaptureGroup::updateCaptureScale(const cwCaptureViewport *fixedCapture,
     double newScale = fixedCapture->scaleOrtho()->scale();
     captureToUpdate->scaleOrtho()->setScale(newScale);
 
-    updateViewportGroupData(captureToUpdate);
+//    updateViewportGroupData(captureToUpdate, true);
 
     connect(captureToUpdate->scaleOrtho(), SIGNAL(scaleChanged()), ScaleMapper, SLOT(map()));
 }
@@ -302,6 +302,7 @@ void cwCaptureGroup::updateScalesFrom(QObject *capture)
 
     foreach(cwCaptureViewport* current, Captures) {
         updateCaptureScale(fixedCapture, current);
+        updateCaptureOffsetTranslation(current);
     }
 }
 
