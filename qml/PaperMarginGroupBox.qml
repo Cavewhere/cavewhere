@@ -9,10 +9,9 @@ GroupBox {
     property alias rightMargin: rightId.value
     property alias topMargin: topId.value
     property alias bottomMargin: bottomId.value
+    property string unit: ""
 
     title: "Margins - inches"
-
-    property string unit: ""
 
     function setDefaultLeft(margin) {
         leftId.value = margin

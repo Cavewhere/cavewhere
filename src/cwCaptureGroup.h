@@ -9,10 +9,13 @@
 #ifndef CWCAPTUREGROUP_H
 #define CWCAPTUREGROUP_H
 
+//Qt includes
 #include <QObject>
 #include <QSignalMapper>
+#include <QPointF>
+#include <QHash>
 
-class cwViewportCapture;
+class cwCaptureViewport;
 
 class cwCaptureGroup : public QObject
 {
@@ -20,9 +23,11 @@ class cwCaptureGroup : public QObject
 public:
     explicit cwCaptureGroup(QObject *parent = 0);
 
-    void addCapture(cwViewportCapture* capture);
-    cwViewportCapture* capture(int index) const;
-    bool contains(cwViewportCapture* capture);
+    void addCapture(cwCaptureViewport* capture);
+    void removeCapture(cwCaptureViewport* capture);
+    int indexOfCapture(cwCaptureViewport* capture) const;
+    cwCaptureViewport* capture(int index) const;
+    bool contains(cwCaptureViewport* capture);
     int numberOfCaptures() const;
 
 signals:
@@ -30,15 +35,43 @@ signals:
 public slots:
 
 private:
-    QList<cwViewportCapture*> Captures;
+    class ViewportGroupData {
+    public:
+        ViewportGroupData() {}
+
+        QPointF OldPosition; //The old paper position
+
+        //This is unitless offset of the viewport. The offset set is first calculated in
+        //paper units, and then divided by width(), height() to make it unitless. Unitless
+        //offsets can the be expanded, even if the scale changes.
+        QPointF Offset;
+    };
+
+    QList<cwCaptureViewport*> Captures;
+    QHash<cwCaptureViewport*, ViewportGroupData> CaptureData;
+
     QSignalMapper* ScaleMapper;
     QSignalMapper* PositionMapper;
     QSignalMapper* RotationMapper;
 
-    void updateCaptureScale(const cwViewportCapture *fixedCapture, cwViewportCapture* catpureToUpdate);
+    void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
+    void updateCaptureRotation(const cwCaptureViewport* fixedCapture, cwCaptureViewport* captureToUpdate);
+    void updateCaptureTranslation(cwCaptureViewport* capture);
+    void updateCaptureOffsetTranslation(cwCaptureViewport* capture);
+
+    void initializePosition(cwCaptureViewport* capture);
+
+    void updateViewportGroupData(cwCaptureViewport* capture, bool inRotation = false);
+
+    cwCaptureViewport* primaryCapture() const;
+    bool isCoplanerWithPrimaryCapture(cwCaptureViewport* capture) const;
+
+    QTransform removeRotationTransform(cwCaptureViewport* capture) const;
 
 private slots:
     void updateScalesFrom(QObject* capture);
+    void updateRotationFrom(QObject* capture);
+    void updateTranslationFrom(QObject* capture);
 
 };
 
@@ -47,7 +80,7 @@ private slots:
  * @param capture
  * @return Returns true if the catpure is in this group and false if it isn't
  */
-inline bool cwCaptureGroup::contains(cwViewportCapture *capture)
+inline bool cwCaptureGroup::contains(cwCaptureViewport *capture)
 {
     return Captures.contains(capture);
 }
@@ -66,7 +99,12 @@ inline int cwCaptureGroup::numberOfCaptures() const
  * @param index - The index of the capture. If the index is invalid this will assert
  * @return Returns the catpure at index
  */
-inline cwViewportCapture *cwCaptureGroup::capture(int index) const
+inline int cwCaptureGroup::indexOfCapture(cwCaptureViewport *capture) const
+{
+    return Captures.indexOf(capture);
+}
+
+inline cwCaptureViewport *cwCaptureGroup::capture(int index) const
 {
     return Captures.at(index);
 }

@@ -73,7 +73,7 @@ Item {
     Menu {
         id: layerRightClickMenu
 
-        property ViewportCapture capture: null
+        property CaptureViewport capture: null
 
         MenuItem {
             text: "Remove"
@@ -82,7 +82,7 @@ Item {
                     console.warn("Capture is null")
                     return;
                 }
-                screenCaptureManagerId.removeViewportCapture(layerRightClickMenu.capture);
+                screenCaptureManagerId.removeCaptureViewport(layerRightClickMenu.capture);
             }
         }
     }
@@ -218,6 +218,7 @@ Item {
                 onRightMarginChanged: screenCaptureManagerId.rightMargin = rightMargin
                 onTopMarginChanged: screenCaptureManagerId.topMargin = topMargin
                 onBottomMarginChanged: screenCaptureManagerId.bottomMargin = bottomMargin
+                unit: "in"
             }
 
             GroupBox {
@@ -282,7 +283,6 @@ Item {
                                         layerListViewId.currentIndex = index
 
                                         if(mouse.button == Qt.RightButton) {
-                                            console.log("LayerProperties:" + layerProperties.layerObject)
                                             layerRightClickMenu.capture = layerProperties.layerObject
                                             layerRightClickMenu.popup()
                                         }
@@ -324,15 +324,6 @@ Item {
                                     id: visualModel
                                     model: screenCaptureManagerId.groupModel
                                     rootIndex: screenCaptureManagerId.groupModel.index(index)
-
-                                    onRootIndexChanged: {
-                                        console.log("RootIndex changed:" + rootIndex + "+" + screenCaptureManagerId.groupModel + " " + screenCaptureManagerId.groupModel.data(screenCaptureManagerId.groupModel.index(0, 0, rootIndex), CaptureGroupModel.CaptureNameRole))
-
-                                    }
-
-                                    onCountChanged: {
-                                        console.log("Count has changed!" + count)
-                                    }
 
                                     delegate: Text {
                                         text: captureNameRole
@@ -500,9 +491,9 @@ Item {
                 text: "Export"
 
                 onClicked: {
-                    exportDialogId.open();
-                    //                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
-                    //                    screenCaptureManagerId.capture()
+//                    exportDialogId.open();
+                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
+                    screenCaptureManagerId.capture()
                 }
             }
         }

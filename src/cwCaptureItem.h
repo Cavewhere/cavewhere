@@ -80,7 +80,7 @@ inline QSizeF cwCaptureItem::paperSizeOfItem() const {
 }
 
 /**
-* @brief cwViewportCapture::postitionOnPaper
+* @brief cwCaptureViewport::postitionOnPaper
 * @return
 */
 inline QPointF cwCaptureItem::positionOnPaper() const {

@@ -24,7 +24,7 @@ class cwCamera;
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
 
-class cwViewportCapture : public cwCaptureItem
+class cwCaptureViewport : public cwCaptureItem
 {
     Q_OBJECT
 
@@ -34,11 +34,13 @@ class cwViewportCapture : public cwCaptureItem
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
+    Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
+    Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
 
-    public:
+public:
 
-    explicit cwViewportCapture(QObject *parent = 0);
-    virtual ~cwViewportCapture();
+    explicit cwCaptureViewport(QObject *parent = 0);
+    virtual ~cwCaptureViewport();
 
     cw3dRegionViewer* view() const;
     void setView(cw3dRegionViewer* view);
@@ -62,6 +64,14 @@ class cwViewportCapture : public cwCaptureItem
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
 
+    double cameraPitch() const;
+    void setCameraPitch(double cameraPitch);
+
+    double cameraAzimuth() const;
+    void setCameraAzimuth(double cameraAzimuth);
+
+    QPointF mapToCapture(const cwCaptureViewport *viewport) const;
+
 signals:
     void resolutionChanged();
     void viewportChanged();
@@ -70,6 +80,8 @@ signals:
     void previewItemChanged();
     void fullResolutionItemChanged();
     void transformOriginChanged();
+    void cameraPitchChanged();
+    void cameraAzimuthChanged();
 
 public slots:
 
@@ -83,6 +95,8 @@ private:
     bool PreviewCapture;
     cwUnits::LengthUnit PaperUnit;
     QQuickItem::TransformOrigin TransformOrigin; //!<
+    double CameraAzimuth; //!<
+    double CameraPitch; //!<
 
     bool CapturingImages;
     int NumberOfImagesProcessed;
@@ -115,10 +129,10 @@ private slots:
 };
 
 /**
-* @brief cwViewportCapture::resolution
+* @brief cwCaptureViewport::resolution
 * @return
 */
-inline int cwViewportCapture::resolution() const {
+inline int cwCaptureViewport::resolution() const {
     return Resolution;
 }
 
@@ -126,7 +140,7 @@ inline int cwViewportCapture::resolution() const {
 * @brief class::scale
 * @return
 */
-inline cwScale* cwViewportCapture::scaleOrtho() const {
+inline cwScale* cwCaptureViewport::scaleOrtho() const {
     return ScaleOrtho;
 }
 
@@ -134,7 +148,7 @@ inline cwScale* cwViewportCapture::scaleOrtho() const {
 * @brief cwScreenCaptureManager::viewport
 * @return
 */
-inline QRect cwViewportCapture::viewport() const {
+inline QRect cwCaptureViewport::viewport() const {
     return Viewport;
 }
 
@@ -142,15 +156,15 @@ inline QRect cwViewportCapture::viewport() const {
  * @brief previewCapture
  * @return
  */
-inline bool cwViewportCapture::previewCapture() const {
+inline bool cwCaptureViewport::previewCapture() const {
     return PreviewCapture;
 }
 
 /**
- * @brief cwViewportCapture::setPreviewCapture
+ * @brief cwCaptureViewport::setPreviewCapture
  * @param preview
  */
-inline void cwViewportCapture::setPreviewCapture(bool preview)
+inline void cwCaptureViewport::setPreviewCapture(bool preview)
 {
     PreviewCapture = preview;
 }
@@ -159,17 +173,32 @@ inline void cwViewportCapture::setPreviewCapture(bool preview)
 * @brief cwViewportCapt::previewItem
 * @return
 */
-inline QGraphicsItem* cwViewportCapture::previewItem() const {
+inline QGraphicsItem* cwCaptureViewport::previewItem() const {
     return PreviewItem;
 }
 
 /**
-* @brief cwViewportCapture::fullResolutionItem
+* @brief cwCaptureViewport::fullResolutionItem
 * @return
 */
-inline QGraphicsItem* cwViewportCapture::fullResolutionItem() const {
+inline QGraphicsItem* cwCaptureViewport::fullResolutionItem() const {
     return Item;
 }
 
+/**
+* @brief cwCaptureItem::cameraPitch
+* @return
+*/
+inline double cwCaptureViewport::cameraPitch() const {
+    return CameraPitch;
+}
+
+/**
+* @brief cwCaptureViewport::cameraAzimuth
+* @return
+*/
+inline double cwCaptureViewport::cameraAzimuth() const {
+    return CameraAzimuth;
+}
 
 #endif // CWVIEWPORTCAPTURE_H

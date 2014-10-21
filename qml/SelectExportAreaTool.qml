@@ -25,8 +25,10 @@ Item {
         var viewObject = captureViewComponentId.createObject()
         viewObject.view = view
         viewObject.viewport = rectangle
+        viewObject.cameraAzimuth = view.turnTableInteraction.azimuth
+        viewObject.cameraPitch = view.turnTableInteraction.pitch
         viewObject.capture();
-        manager.addViewportCapture(viewObject);
+        manager.addCaptureViewport(viewObject);
     }
 
     function resetTool() {
@@ -40,7 +42,7 @@ Item {
 
     Component {
         id: captureViewComponentId
-        ViewportCapture { }
+        CaptureViewport { }
     }
 
     SelectExportAreaInteraction {

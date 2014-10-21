@@ -13,7 +13,7 @@
 #include <QAbstractItemModel>
 
 //Our includes
-class cwViewportCapture;
+class cwCaptureViewport;
 class cwCaptureGroup;
 
 class cwCaptureGroupModel : public QAbstractItemModel
@@ -30,7 +30,8 @@ public:
     explicit cwCaptureGroupModel(QObject *parent = 0);
 
     Q_INVOKABLE void addGroup();
-    Q_INVOKABLE void addCapture(QModelIndex parentGroup, cwViewportCapture* capture);
+    Q_INVOKABLE void addCapture(QModelIndex parentGroup, cwCaptureViewport* capture);
+    void removeCapture(cwCaptureViewport* capture);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     int columnCount(const QModelIndex &parent) const;
