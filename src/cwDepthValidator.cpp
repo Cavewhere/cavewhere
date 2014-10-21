@@ -15,7 +15,7 @@
 cwDepthValidator::cwDepthValidator(QObject *parent) :
     cwValidator(parent)
 {
-    setErrorText("Oops, you haven't entered a valid <i>Depth reading</i>. <br> <i>Depth readings</i> need to be a ");
+    setErrorText("Oops, you haven't entered a valid <i>Depth reading</i>. <br> <i>Depth readings</i> need to be a double");
 }
 
 QValidator::State cwDepthValidator::validate ( QString & input, int & pos ) const {
@@ -29,9 +29,6 @@ QValidator::State cwDepthValidator::validate ( QString & input, int & pos ) cons
 
     switch(state) {
     case QValidator::Invalid: {
-        QRegExpValidator upDownValidator;
-        QRegExp regexp("up|down", Qt::CaseInsensitive);
-        upDownValidator.setRegExp(regexp);
         return upDownValidator.validate(input, pos);
     }
     case QValidator::Acceptable: {
