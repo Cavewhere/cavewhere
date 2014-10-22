@@ -31,6 +31,7 @@ cwProject *cwOpenFileEventHandler::project() const
 
 bool cwOpenFileEventHandler::eventFilter(QObject *obj, QEvent *event)
 {
+    Q_UNUSED(obj);
     if(event->type() == QEvent::FileOpen) {
         Q_ASSERT(dynamic_cast<QApplication*>(obj) != nullptr);
         Q_ASSERT(dynamic_cast<QFileOpenEvent*>(event) != nullptr);

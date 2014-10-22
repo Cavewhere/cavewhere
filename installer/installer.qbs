@@ -15,14 +15,23 @@ Project {
         name: "cavewhere-install"
         type: "deployedApplication"
 
-
         property var qt: qtApp.Qt.core.binPath
 
         Group {
-            name: "Cavewhere Executable"
+            name: "Windows Cavewhere Executable"
             fileTags: ["qtApplication"]
+            condition: qbs.targetOS.contains("windows")
             files: [
                 project.installDir + "/Cavewhere.exe"
+            ]
+        }
+
+        Group {
+            name: "Mac Cavewhere Bundle"
+            fileTags: ["qtApplication"]
+            condition: qbs.targetOS.contains("osx")
+            files: [
+                project.installDir + "/Cavewhere.app"
             ]
         }
 
@@ -35,20 +44,75 @@ Project {
             }
 
             prepare: {
-                var cmd = new Command(product.qt + "/windeployqt.exe")
-                cmd.workDirectory = product.installDir
-                cmd.arguments = ["--qmldir",
-                                 product.sourceDirectory + "/" + project.installDir + "/qml",
-                                 input.filePath]
-                cmd.description = "running windeployqt.exe"
+                var targetOS = product.moduleProperty("qbs", "targetOS");
+                var deploymentApp = "";
+                var args = [];
+                var description = "";
+                if(targetOS.contains("windows")) {
+                    deploymentApp = "windeployqt.exe"
+                    args = ["--qmldir",
+                            product.sourceDirectory + "/" + project.installDir + "/qml",
+                            input.filePath]
+                } else if(targetOS.contains("osx")) {
+                    deploymentApp = "macdeployqt"
+                    args = [input.filePath,
+                            "-qmldir=" + product.sourceDirectory + "/" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml",
+                            ]
+                }
+
+                var cmd = new Command(product.qt + "/" + deploymentApp)
+                cmd.arguments = args
+                cmd.description = "running " + deploymentApp
                 return cmd
             }
         }
     }
 
     Product {
-        name: "installer"
+        name: "Mac Installer"
+        type: "shellInstaller"
+        condition: qbs.targetOS.contains("osx")
+
+        property var qtLibPath: qtApp.Qt.core.libPath
+        readonly property string version: Git.productVersion
+
+        Depends { name: "cavewhere-install" }
+        Depends { name: "Git" }
+
+        Group {
+            name: "shellFiles"
+            fileTags: "shell"
+            files: [
+                "mac/installMac.sh"
+            ]
+        }
+
+        Rule {
+            inputs: ["shell"]
+            usings: ["deployedApplication"]
+            multiplex: true
+
+            Artifact {
+                filePath: "Cavewhere " + product.version + ".zip"
+                fileTags: "shellInstaller"
+            }
+
+            prepare: {
+                var cmd = new Command(inputs.shell[0].filePath)
+                cmd.arguments = [product.version,
+                                 product.qtLibPath]
+
+                cmd.workingDirectory = product.sourceDirectory + "/" + project.installDir
+                cmd.description = "running " + inputs.shell[0].filePath
+                return cmd
+            }
+        }
+    }
+
+    Product {
+        name: "Windows Installer"
         type: "innoInstaller"
+        condition: qbs.targetOS.contains("windows")
 
         readonly property string version: Git.productVersion
 
@@ -113,8 +177,6 @@ innoInputFile
                 return cmd
             }
         }
-
-
     }
 
     CppApplication {

@@ -29,6 +29,12 @@ Project {
         name: "Cavewhere"
 
         readonly property string gitVersion: Git.productVersion
+        readonly property string installPrefix: {
+            if(qbs.targetOS.contains("osx")) {
+                return name + ".app/Contents/MacOS/"
+            }
+            return ""
+        }
 
         Depends { name: "cpp" }
         Depends { name: "Qt";
@@ -154,7 +160,7 @@ Project {
         Group {
             name: "qmlFiles"
             qbs.install: qbs.buildVariant == "release"
-            qbs.installDir: "qml"
+            qbs.installDir: product.installPrefix + "qml"
             files: [
                 "qml/*.qml",
                 "qml/*.js"
@@ -163,7 +169,7 @@ Project {
 
         Group {
             name: "shaderFiles"
-            qbs.installDir: "shaders"
+            qbs.installDir: product.installPrefix + "shaders"
             qbs.install: qbs.buildVariant == "release"
 
             files: [
@@ -177,7 +183,7 @@ Project {
 
         Group {
             name: "shaderFiles-compass"
-            qbs.installDir: "shaders/compass"
+            qbs.installDir: product.installPrefix + "shaders/compass"
             qbs.install: qbs.buildVariant == "release"
 
             files: [

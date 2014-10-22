@@ -377,6 +377,7 @@ void cwRegionTreeModel::beginRemoveTrip(int beginIndex, int endIndex) {
   */
 void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
     cwCave* cave = qobject_cast<cwCave*>(sender());
+    Q_UNUSED(cave);
     Q_ASSERT(cave != nullptr);
 
     endRemoveRows();
