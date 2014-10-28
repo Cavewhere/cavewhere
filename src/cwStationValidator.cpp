@@ -23,12 +23,32 @@ QValidator::State cwStationValidator::validate( QString & input, int & pos ) con
     }
 
     QRegExpValidator validator;
-    QRegExp regExp("\\w+");
-    validator.setRegExp(regExp);
+
+    validator.setRegExp(validCharactersRegex());
     return validator.validate(input, pos);
 }
 
 int cwStationValidator::validate( QString input ) const {
     int pos = 0;
     return (int)validate(input, pos);
+}
+
+/**
+ * @brief cwStationValidator::validCharactersRegex
+ * @return Retruns the regex that makes up a valid station name
+ */
+QRegExp cwStationValidator::validCharactersRegex()
+{
+   return QRegExp("(?:[a-zA-Z0-9]|-|_)+");
+}
+
+/**
+ * @brief cwStationValidator::invalidCharactersRegex
+ * @return Return the regex that will match invalid station character names
+ *
+ * This is the inverse of validCharactersRegex()
+ */
+QRegExp cwStationValidator::invalidCharactersRegex()
+{
+    return QRegExp("((?![a-zA-Z0-9]|-|_).)*");
 }

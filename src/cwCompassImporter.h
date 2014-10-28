@@ -11,6 +11,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwCave.h"
+#include "cwStationRenamer.h"
 
 //Qt include
 #include <QRegExp>
@@ -58,6 +59,7 @@ private:
     QRegExp SurveyNameRegExp;
     QRegExp DateRegExp;
     QRegExp CalibrationRegExp;
+    cwStationRenamer StationRenamer;
 
     static const QString CompassImportKey;
 

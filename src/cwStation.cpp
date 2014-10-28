@@ -23,9 +23,9 @@ cwStation::cwStation(const cwStation &station) :
 }
 
 cwStation::cwStation(QString name) :
-    Data(new PrivateData(name))
+    Data(new PrivateData())
 {
-
+    setName(name);
 }
 
 cwStation::PrivateData::PrivateData() :
@@ -168,6 +168,19 @@ void cwStation::setDownInputState(cwDistanceStates::State state)
     setPrivateLRUDState(Data->DownState, state);
 }
 
+/**
+ * @brief cwStation::nameIsValid
+ * @param stationName
+ * @return Returns true if the station name is valid, and false if it isn't
+ *
+ * This function is useful for writing importers.
+ */
+bool cwStation::nameIsValid(QString stationName)
+{
+    cwStationValidator validator;
+    return QValidator::Acceptable == validator.validate(stationName);
+}
+
 
 bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
     if(value.isEmpty()) {
@@ -212,9 +225,15 @@ void cwStation::setPrivateLRUDState(cwDistanceStates::State &memberState, cwDist
     }
 }
 
+/**
+ * @brief cwStation::setName
+ * @param name
+ * @return True if the name was set, and false if it wasn't.
+ *
+ * Make sure the nameIsValid() before set the name of the station.
+ */
 bool cwStation::setName(QString name) {
-    cwStationValidator validator;
-    if(QValidator::Acceptable == validator.validate(name)) {
+    if(nameIsValid(name)) {
         Data->Name = name;
         return true;
     }

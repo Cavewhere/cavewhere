@@ -19,6 +19,9 @@ public:
     State validate( QString & input, int & pos ) const;
     Q_INVOKABLE int validate( QString input ) const;
 
+    static QRegExp validCharactersRegex();
+    static QRegExp invalidCharactersRegex();
+
 signals:
 
 public slots:

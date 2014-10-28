@@ -72,6 +72,8 @@ public:
     bool operator ==(const cwStation& station) const;
     bool operator !=(const cwStation& station) const;
 
+    static bool nameIsValid(QString stationName);
+
 private:
     class PrivateData : public QSharedData {
     public:

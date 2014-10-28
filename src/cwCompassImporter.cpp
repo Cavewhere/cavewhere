@@ -22,8 +22,10 @@ cwCompassImporter::cwCompassImporter(QObject *parent) :
     cwTask(parent),
     SurveyNameRegExp("^SURVEY NAME:\\s*"),
     DateRegExp("SURVEY DATE:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)"),
-    CalibrationRegExp("DECLINATION:\\s*(\\S+)\\s+FORMAT:\\s*(\\w+)(?:\\s+CORRECTIONS:\\s*(\\S+)\\s+(\\S+)\\s+(\\S+)\\s*)?")
+    CalibrationRegExp("DECLINATION:\\s*(\\S+)(?:\\s+FORMAT:\\s*)?(\\w+)(?:\\s+CORRECTIONS:\\s*(\\S+)\\s+(\\S+)\\s+(\\S+)\\s*)?(?:\\s+CORRECTIONS2:\\s*(\\S+)\\s+(\\S+))?.*")
+
 {
+//    CalibrationRegExp.setMinimal(true);
 }
 
 /**
@@ -42,12 +44,16 @@ void cwCompassImporter::runTask()
         CurrentFileGood = true;
         CurrentTrip = nullptr;
         LineCount = 0;
+        StationRenamer.setCave(CurrentCave);
 
         //Make sure file is good
         verifyCompassDataFileExists();
 
         //Parse the current file
         parseFile();
+
+        //Fix invalid station names
+        StationRenamer.renameInvalidStations();
 
         if(!CurrentFileGood) {
             //Parsing error in the last cave, remove it from list
@@ -419,6 +425,10 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
                 }
             }
 
+        } else if(fileFormatString.size() == 1) {
+            //No format, so use some defaults
+            CurrentTrip->calibrations()->setDistanceUnit(cwUnits::Feet);
+            CurrentTrip->calibrations()->setBackSights(false);
         } else {
             emit statusMessage(QString("I found that the file format to be %1. It must be 11 or 12 characters long. In file %2, on line %3")
                                .arg(fileFormatString.size())
@@ -482,8 +492,8 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             QString downString = dataStrings.at(8);
             QString flags = dataStrings.size() >= 10 ? dataStrings.at(9) : QString();
 
-            cwStation fromStation(fromStationName);
-            cwStation toStation(toStationName);
+            cwStation fromStation = StationRenamer.createStation(fromStationName);
+            cwStation toStation = StationRenamer.createStation(toStationName);
             cwShot shot;
 
             double length;
