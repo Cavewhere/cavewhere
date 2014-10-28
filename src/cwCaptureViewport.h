@@ -64,6 +64,8 @@ public:
     Q_INVOKABLE void setPaperWidthOfItem(double width);
     Q_INVOKABLE void setPaperHeightOfItem(double height);
 
+    Q_INVOKABLE void setPositionAfterScale(QPointF position);
+
     double cameraPitch() const;
     void setCameraPitch(double cameraPitch);
 
@@ -82,6 +84,7 @@ signals:
     void transformOriginChanged();
     void cameraPitchChanged();
     void cameraAzimuthChanged();
+    void positionAfterScaleChanged();
 
 public slots:
 

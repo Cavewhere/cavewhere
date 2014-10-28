@@ -8,6 +8,9 @@
 //Our includes
 #include "cwCaptureItem.h"
 
+//Qt include
+#include <QDebug>
+
 //Std includes
 #include "math.h"
 
@@ -72,6 +75,14 @@ void cwCaptureItem::setBoundingBox(QRectF boundingbox)
         BoundingBox = boundingbox;
         emit boundingBoxChanged();
     }
+}
+
+/**
+ * @brief cwCaptureItem::emitPositionOnPaper
+ */
+void cwCaptureItem::emitPositionOnPaper()
+{
+   emit positionOnPaperChanged();
 }
 
 /**

@@ -60,6 +60,7 @@ private:
 protected:
     void setPaperSizeOfItem(QSizeF paperSize);
     void setBoundingBox(QRectF boundingbox);
+    void emitPositionOnPaper();
 
 };
 

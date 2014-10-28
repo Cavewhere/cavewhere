@@ -37,7 +37,7 @@ public slots:
 private:
     class ViewportGroupData {
     public:
-        ViewportGroupData() {}
+        ViewportGroupData() : CanTranslate(true) {}
 
         QPointF OldPosition; //The old paper position
 
@@ -45,6 +45,13 @@ private:
         //paper units, and then divided by width(), height() to make it unitless. Unitless
         //offsets can the be expanded, even if the scale changes.
         QPointF Offset;
+
+        //This can prevent the viewport catpure from translating. This is useful for the
+        //updateTranslationAfterScaleFrom function. This prevents the secondary from
+        //updating it's translation.
+        bool CanTranslate;
+
+
     };
 
     QList<cwCaptureViewport*> Captures;
@@ -52,6 +59,7 @@ private:
 
     QSignalMapper* ScaleMapper;
     QSignalMapper* PositionMapper;
+    QSignalMapper* PositionAfterScaleMapper;
     QSignalMapper* RotationMapper;
 
     void updateCaptureScale(const cwCaptureViewport *fixedCapture, cwCaptureViewport* catpureToUpdate);
@@ -67,11 +75,14 @@ private:
     bool isCoplanerWithPrimaryCapture(cwCaptureViewport* capture) const;
 
     QTransform removeRotationTransform(cwCaptureViewport* capture) const;
+    QPointF calculateOffsetWithPrimary(cwCaptureViewport* capture) const;
+    QPointF paperOffset(QPointF offset) const;
 
 private slots:
     void updateScalesFrom(QObject* capture);
     void updateRotationFrom(QObject* capture);
     void updateTranslationFrom(QObject* capture);
+    void updateTranslationAfterScaleFrom(QObject* capture);
 
 };
 

@@ -114,8 +114,8 @@ Rectangle {
             var sizeAfter = captureItem.paperSizeOfItem
             var after = fixedPositionToPoint(fixedPoint)
 
-            captureItem.positionOnPaper = Qt.point(position.x + (before.x - after.x),
-                                                   position.y + (before.y - after.y));
+            captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
+                                                       position.y + (before.y - after.y)));
         }
     }
 

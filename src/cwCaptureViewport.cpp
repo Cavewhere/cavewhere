@@ -251,6 +251,32 @@ void cwCaptureViewport::setPaperHeightOfItem(double height)
 }
 
 /**
+ * @brief cwCaptureViewport::setPositionAfterScale
+ * @param posiiton
+ *
+ * This function should be called after scaling the capture viewport.
+ * This is a special case for positioning the viewport. This will
+ * cause the capture group to position other captures correctly. After the
+ * scale, the CaptureItemInteraction changes the scale, it may need position
+ * the capture, and this positioning must be handled differently then
+ * a normal setPositionOnPaper(). Specifially, a secondary capture scaling
+ * has no effect on the parent primary capture. In this case, the secondary
+ * will update primary capture.
+ */
+void cwCaptureViewport::setPositionAfterScale(QPointF position)
+{
+    //Block signals from this object while setting the position. This
+    //vill be replace with positionAfterScaleChanged() signal
+    blockSignals(true);
+    setPositionOnPaper(position);
+    updateItemsPosition();
+    blockSignals(false);
+
+    emit positionAfterScaleChanged();
+    emitPositionOnPaper(); //Emit position changed!
+}
+
+/**
  * @brief cwCaptureViewport::makeItemsNull
  *
  * This function is to prevent stall pointers of the Item and PreviewItem
@@ -552,8 +578,6 @@ void cwCaptureViewport::setCameraAzimuth(double cameraAzimuth) {
  */
 QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
 {
-//    qDebug() << "Rotation:" << rotation() - cameraAzimuth() << viewport->rotation() - viewport->cameraAzimuth();
-//    Q_ASSERT(qFuzzyCompare(rotation() - cameraAzimuth(), viewport->rotation() - viewport->cameraAzimuth()));
     Q_ASSERT(qFuzzyCompare(scaleOrtho()->scale(), viewport->scaleOrtho()->scale()));
 
     QPointF topLeftToOriginPixels = viewport->CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - viewport->viewport().topLeft();
@@ -562,17 +586,5 @@ QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
     QPointF thisTopLeftToOriginPixels = CaptureCamera->project(QVector3D(0.0, 0.0, 0.0)) - this->viewport().topLeft();
     QPointF thisOrigin = positionOnPaper() - previewItem()->mapToScene(thisTopLeftToOriginPixels);
 
-//    qDebug() << "Origin:" << paperOrigin << thisOrigin << (paperOrigin + thisOrigin);
-
     return paperOrigin + thisOrigin;
-
-
-//    QPoint scalePoint(point.x() / ItemScale, point.y() / ItemScale);
-//    QVector3D worldCoordinates = CaptureCamera->unProject(scalePoint, 0.0);
-
-//    //Assuming ortho matrix
-//    QPointF coordinateInPixels = viewport->CaptureCamera->mapToQtViewport(viewport->CaptureCamera->project(worldCoordinates));
-//    qDebug() << "PixelCoord:" << coordinateInPixels << worldCoordinates;
-//    QPointF paperCoordinate = viewport->ItemScale * coordinateInPixels; //viewport().topLeft();
-//    return paperCoordinate;
 }
