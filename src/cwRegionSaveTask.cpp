@@ -169,8 +169,6 @@ void cwRegionSaveTask::saveTripCalibration(CavewhereProto::TripCalibration *prot
     proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
     proto->set_frontsights(tripCalibration->hasFrontSights());
     proto->set_backsights(tripCalibration->hasBackSights());
-
-    qDebug() << "Has front site:" << proto->frontsights() << tripCalibration->hasFrontSights() << "Has backs:" << proto->backsights() << tripCalibration->hasBackSights();
 }
 
 /**
