@@ -21,7 +21,7 @@
 #include "cwGlobals.h"
 
 //QMath3D
-#include <QMath3D.h>
+#include <QtMath>
 
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
