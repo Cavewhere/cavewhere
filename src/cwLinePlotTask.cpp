@@ -21,6 +21,7 @@
 #include "cwSurveyChunk.h"
 #include "cwDebug.h"
 #include "cwLength.h"
+#include "cwStationValidator.h"
 
 //Qt includes
 #include <QDebug>
@@ -376,63 +377,64 @@ void cwLinePlotTask::indexStations()
 QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStationPositionLookup &stationPostions)
 {
     double positionPrecision = 3; //position to 3 digits
-     double positionFactor = pow(10.0, positionPrecision);
+    double positionFactor = pow(10.0, positionPrecision);
 
-     QRegExp regex("(\\d+)\\.(\\w+)");
+    QString stationPattern = cwStationValidator::validCharactersRegex().pattern();
+    QRegExp regex(QString("(\\d+)\\.(%1)").arg(stationPattern));
 
-     //This vector is populated with all the stations for each cave
-     QVector<cwStationPositionLookup> caveStations;
-     caveStations.resize(CaveStationLookups.size());
+    //This vector is populated with all the stations for each cave
+    QVector<cwStationPositionLookup> caveStations;
+    caveStations.resize(CaveStationLookups.size());
 
-     QMapIterator<QString, QVector3D> iter(stationPostions.positions());
-     while( iter.hasNext() ) {
-         iter.next();
+    QMapIterator<QString, QVector3D> iter(stationPostions.positions());
+    while( iter.hasNext() ) {
+        iter.next();
 
-         QString name = iter.key();
-         QVector3D position = iter.value();
+        QString name = iter.key();
+        QVector3D position = iter.value();
 
-         //Cut off positions to 3 digits
-         position.setX(qRound(position.x() * positionFactor) / positionFactor);
-         position.setY(qRound(position.y() * positionFactor) / positionFactor);
-         position.setZ(qRound(position.z() * positionFactor) / positionFactor);
+        //Cut off positions to 3 digits
+        position.setX(qRound(position.x() * positionFactor) / positionFactor);
+        position.setY(qRound(position.y() * positionFactor) / positionFactor);
+        position.setZ(qRound(position.z() * positionFactor) / positionFactor);
 
-         if(regex.exactMatch(name)) {
+        if(regex.exactMatch(name)) {
 
-             QString caveIndexString = regex.cap(1); //Extract the index
-             QString stationName = regex.cap(2);//Extract the station
-             QString caveName = caveIndexString;
+            QString caveIndexString = regex.cap(1); //Extract the index
+            QString stationName = regex.cap(2);//Extract the station
+            QString caveName = caveIndexString;
 
-             bool okay;
-             int caveIndex = caveIndexString.toInt(&okay);
+            bool okay;
+            int caveIndex = caveIndexString.toInt(&okay);
 
-             if(!okay) {
-                 qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
-                 return QVector<cwStationPositionLookup>();
-             }
+            if(!okay) {
+                qDebug() << "Can't covent caveIndex is not an int:" << caveIndexString << LOCATION;
+                return QVector<cwStationPositionLookup>();
+            }
 
-             //Make sure the index is good
-             if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
-                 qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
-                 return QVector<cwStationPositionLookup>();
-             }
+            //Make sure the index is good
+            if(caveIndex < 0 || caveIndex >= Region->caveCount()) {
+                qDebug() << "CaveIndex is bad:" << caveIndex << LOCATION;
+                return QVector<cwStationPositionLookup>();
+            }
 
-             cwCave* cave = Region->cave(caveIndex);
+            cwCave* cave = Region->cave(caveIndex);
 
-             //Make sure the caveName is valid
-             if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
-                 qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
-                 return QVector<cwStationPositionLookup>();
-             }
+            //Make sure the caveName is valid
+            if(caveName.compare(cave->name(), Qt::CaseInsensitive) != 0) {
+                qDebug() << "CaveName is invalid:" << caveName << "looking for" << cave->name() << LOCATION;
+                return QVector<cwStationPositionLookup>();
+            }
 
-             cwStationPositionLookup& lookup = caveStations[caveIndex];
-             lookup.setPosition(stationName, position);
+            cwStationPositionLookup& lookup = caveStations[caveIndex];
+            lookup.setPosition(stationName, position);
 
-         } else {
-             qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
-         }
-     }
+        } else {
+            qDebug() << "Couldn't match: " << name << "This is a bug!" << LOCATION;
+        }
+    }
 
-     return caveStations;
+    return caveStations;
 }
 
 /**
