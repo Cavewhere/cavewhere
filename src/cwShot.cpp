@@ -12,26 +12,34 @@
 #include "cwDistanceValidator.h"
 #include "cwCompassValidator.h"
 #include "cwClinoValidator.h"
+#include "cwDepthValidator.h"
 #include "cwValidator.h"
 
 
 cwShot::cwShot() :
-    Data(new PrivateData())
-{    }
+    Data(new PrivateData(SurveyDataType::StandardCaveData))
+{ }
 
-cwShot::cwShot(QString distance,
+cwShot::cwShot(SurveyDataType type,
+               QString distance,
                QString compass,
                QString backCompass,
-               QString clino,
-               QString backClino) :
-    Data(new PrivateData())
+               QString typeData1,
+               QString typeData2) :
+    Data(new PrivateData(type))
 {
-
     setDistance(distance);
     setCompass(compass);
     setBackCompass(backCompass);
-    setClino(clino);
-    setBackClino(backClino);
+    if (type == SurveyDataType::StandardCaveData) {
+        setClino(typeData1);
+        setBackClino(typeData2);
+
+    }
+    else if (type == SurveyDataType::DiveData) {
+        setFromDepth(typeData1);
+        setToDepth(typeData2);
+    }
 }
 
 cwShot::cwShot(const cwShot &shot) :
@@ -39,17 +47,22 @@ cwShot::cwShot(const cwShot &shot) :
 {
 }
 
-cwShot::PrivateData::PrivateData() :
+cwShot::PrivateData::PrivateData(SurveyDataType dataType) :
     Distance(0.0),
     Compass(0.0),
     BackCompass(0.0),
     Clino(0.0),
     BackClino(0.0),
+    FromDepth(0.0),
+    ToDepth(0.0),
+    surveyDataType(dataType),
     DistanceState(cwDistanceStates::Empty),
     CompassState(cwCompassStates::Empty),
     BackCompassState(cwCompassStates::Empty),
     ClinoState(cwClinoStates::Empty),
     BackClinoState(cwClinoStates::Empty),
+    FromDepthState(cwDepthStates::Empty),
+    ToDepthState(cwDepthStates::Empty),
     IncludeDistance(true)
 {
 
@@ -149,6 +162,30 @@ void cwShot::setBackClinoState(cwClinoStates::State state)
     setPrivateClinoState(Data->BackClinoState, state);
 }
 
+void cwShot::setFromDepth(QString depth) {
+    setDepthValueWithString(Data->FromDepth, (int&)Data->FromDepthState, depth);
+}
+
+void cwShot::setFromDepth(double depth) {
+    setPrivateDepth(Data->FromDepth, Data->FromDepthState, depth);
+}
+
+void cwShot::setFromDepthState(cwDepthStates::State state) {
+    setPrivateDepthState(Data->FromDepthState, state);
+}
+
+void cwShot::setToDepth(QString depth) {
+    setDepthValueWithString(Data->ToDepth, (int&)Data->ToDepthState, depth);
+}
+
+void cwShot::setToDepth(double depth) {
+    setPrivateDepth(Data->ToDepth, Data->ToDepthState, depth);
+}
+
+void cwShot::setToDepthState(cwDepthStates::State state) {
+    setPrivateDepthState(Data->ToDepthState, state);
+}
+
 /**
   \brief Sets the value with a new value, if valid
   */
@@ -192,6 +229,22 @@ void cwShot::setClinoValueWithString(double &memberData, int &memberState, QStri
 }
 
 /**
+  Sets the value of depth member data, if valid
+  */
+void cwShot::setDepthValueWithString(double &memberData, int &memberState, QString newValue)
+{
+    cwDepthValidator validator;
+    ValidState state = setValueWithString(validator, memberData, memberState, newValue);
+     if(state == ValidString) {
+         if(newValue.compare("down", Qt::CaseInsensitive) == 0) {
+            memberState = cwClinoStates::Down;
+         } else if(newValue.compare("up", Qt::CaseInsensitive) == 0) {
+            memberState = cwClinoStates::Up;
+         }
+     }
+}
+
+/**
   This is a convenance function to set the member for the back and front site compass
   */
 void cwShot::setPrivateCompass(double &memberData, cwCompassStates::State &state, double value) {
@@ -208,6 +261,16 @@ void cwShot::setPrivateClino(double &memberData, cwClinoStates::State &state, do
     if(cwClinoValidator::check(value)) {
         memberData = value;
         state = cwClinoStates::Valid;
+    }
+}
+
+/**
+  This is a convenience function to set the member for the from and to depths
+  */
+void cwShot::setPrivateDepth(double &memberData, cwDepthStates::State &state, double value) {
+    if(cwDepthValidator::check(value)) {
+        memberData = value;
+        state = cwDepthStates::Valid;
     }
 }
 
@@ -261,3 +324,23 @@ void cwShot::setPrivateClinoState(cwClinoStates::State &memberState, cwClinoStat
     }
 }
 
+/**
+  This updates the memeberState.  This make sure newState is correct, for the clino.
+
+  This function uses a switch statement because users can send typecast inergers into this.  We
+  need to make sure all is well.
+  */
+void cwShot::setPrivateDepthState(cwDepthStates::State &memberState, cwDepthStates::State newState) {
+    //We need this switch statement because serialization class (or any other class) could send in interger
+    switch(newState) {
+      case cwDepthStates::Empty:
+        memberState = cwDepthStates::Empty;
+        break;
+      case cwDepthStates::Valid:
+        memberState = cwDepthStates::Valid;
+        break;
+      default:
+        memberState = cwDepthStates::Empty;
+        break;
+      }
+}
