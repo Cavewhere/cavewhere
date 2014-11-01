@@ -20,9 +20,6 @@
 #include "cwLength.h"
 #include "cwGlobals.h"
 
-//QMath3D
-#include <QtMath>
-
 //undef these because micrsoft is fucking retarded...
 #ifdef Q_OS_WIN
 #undef far
