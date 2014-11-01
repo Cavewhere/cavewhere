@@ -39,7 +39,7 @@ private:
     public:
         ViewportGroupData() : CanTranslate(true) {}
 
-        QPointF OldPosition; //The old paper position
+//        QPointF OldPosition; //The old paper position
 
         //This is unitless offset of the viewport. The offset set is first calculated in
         //paper units, and then divided by width(), height() to make it unitless. Unitless
