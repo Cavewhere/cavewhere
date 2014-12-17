@@ -85,6 +85,7 @@
 #include "cwQuickSceneView.h"
 #include "cwCaptureItemManiputalor.h"
 #include "cwCaptureGroupModel.h"
+#include "cwEventRecorderModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -177,4 +178,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<QGraphicsScene>("Cavewhere", 1, 0, "GraphicsScene");
     qmlRegisterType<cwCaptureItemManiputalor>("Cavewhere", 1, 0, "CaptureItemManiputalor");
     qmlRegisterType<cwCaptureGroupModel>("Cavewhere", 1, 0, "CaptureGroupModel");
+    qmlRegisterType<cwEventRecorderModel>("Cavewhere", 1, 0, "EventRecorderModel");
 }

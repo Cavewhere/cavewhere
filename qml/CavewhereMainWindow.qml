@@ -12,6 +12,9 @@ import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
 
 ApplicationWindow {
+    id: applicationWindow
+    objectName: "applicationWindow"
+
     visible: license.hasReadLicenseAgreement
     width: 1280
     height: 800
@@ -87,6 +90,10 @@ ApplicationWindow {
     //All the dialogs in cavewher are parented under this item.
     GlobalDialogHandler {
         id: globalDialogHandler
+    }
+
+    Component.onCompleted: {
+        eventRecorderModel.rootEventObject = applicationWindow
     }
 }
 

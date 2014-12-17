@@ -30,6 +30,7 @@ or implied, of Stanislaw Adaszewski. */
 #include <QVector>
 #include <QEvent>
 #include <QDateTime>
+#include <QPointer>
 
 class QTimer;
 

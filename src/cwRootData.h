@@ -32,6 +32,7 @@ class cwQMLReload;
 class cwLicenseAgreement;
 class cwRegionSceneManager;
 class cwScreen;
+class cwEventRecorderModel;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -58,8 +59,7 @@ class cwRootData : public QObject
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
-
-
+    Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -78,6 +78,7 @@ public:
     cwLicenseAgreement* license() const;
     cwRegionSceneManager* regionSceneManager() const;
     QScreen* primaryScreen() const;
+    cwEventRecorderModel* eventRecorderModel() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -117,6 +118,8 @@ private:
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
     cwLicenseAgreement* License; //!<
     cwRegionSceneManager* RegionSceneManager; //!<
+    cwEventRecorderModel* EventRecorderModel; //!<
+
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -235,5 +238,12 @@ inline QScreen* cwRootData::primaryScreen() const {
     return QGuiApplication::primaryScreen();
 }
 
+/**
+* @brief cwRoot::eventRecorderModel
+* @return Returns the event recorder model. Used to record events for debugging playback
+*/
+inline cwEventRecorderModel* cwRootData::eventRecorderModel() const {
+    return EventRecorderModel;
+}
 
 #endif // CWGLOBALQMLDATA_H

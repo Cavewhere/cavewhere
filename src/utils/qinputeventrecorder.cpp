@@ -32,6 +32,7 @@ or implied, of Stanislaw Adaszewski. */
 #include <QTimer>
 #include <QWidget>
 #include <QApplication>
+#include <QDebug>
 
 #include "eventserialization.h"
 

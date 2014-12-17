@@ -30,16 +30,19 @@ or implied, of Stanislaw Adaszewski. */
 #include <QDataStream>
 #include <QContextMenuEvent>
 
+//Our includes
+#include "cwMetaEvent.h"
+
 struct EventClass
 {
-	enum
-	{
+    enum {
 		ContextMenuEvent = 1,
 		KeyEvent,
 		MouseEvent,
 		TabletEvent,
 		TouchEvent,
-		WheelEvent
+        WheelEvent,
+        MetaCallEvent
 	};
 };
 
@@ -50,6 +53,7 @@ QDataStream& operator<<(QDataStream &ds, const QMouseEvent &ev);
 //QDataStream& operator<<(QDataStream &ds, const QTouchEvent &ev);
 QDataStream& operator<<(QDataStream &ds, const QWheelEvent &ev);
 QDataStream& operator<<(QDataStream &ds, const QInputEvent *ev);
+QDataStream& operator<<(QDataStream &ds, const cwMetaEvent &ev);
 QDataStream& operator>>(QDataStream &ds, QContextMenuEvent* &ev);
 QDataStream& operator>>(QDataStream &ds, QKeyEvent* &ev);
 QDataStream& operator>>(QDataStream &ds, QMouseEvent* &ev);

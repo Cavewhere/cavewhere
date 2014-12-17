@@ -34,6 +34,7 @@
 #include "cwOpenFileEventHandler.h"
 #include "cwQMLReload.h"
 #include "cwDebug.h"
+#include "cwApplication.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -45,7 +46,7 @@ QUrl mainWindowSourcePath() {
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
+    cwApplication a(argc, argv);
 
     cwRootData* rootData = new cwRootData();
 

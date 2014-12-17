@@ -126,5 +126,30 @@ MenuBar {
                 terrainRenderer.update()
             }
         }
+
+        Menu {
+            title: "Event Recording"
+
+            MenuItem {
+                text: eventRecorderModel.recording ? "Stop" : "Start"
+                shortcut: "Ctrl+P"
+                onTriggered: {
+                    if(eventRecorderModel.recording) {
+                        eventRecorderModel.stopRecording()
+                    } else {
+                        eventRecorderModel.startRecording()
+                    }
+                }
+            }
+
+            MenuItem {
+                text: "Play Previous Recording"
+                shortcut: "Ctrl+."
+                enabled: !eventRecorderModel.recording
+                onTriggered: {
+                    eventRecorderModel.replayLastRecording();
+                }
+            }
+        }
     }
 }

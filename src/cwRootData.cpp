@@ -20,6 +20,7 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
+#include "cwEventRecorderModel.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -68,8 +69,11 @@ cwRootData::cwRootData(QObject *parent) :
 
     QuickView = nullptr;
 
+    //For debugging
     QMLReloader = new cwQMLReload(this);
+    EventRecorderModel = new cwEventRecorderModel(this);
 
+    //For license agreement
     License = new cwLicenseAgreement(this);
     License->setVersion(version());
 
@@ -78,6 +82,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     ScrapManager->setGLScraps(RegionSceneManager->scraps());
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
+
 }
 
 /**
