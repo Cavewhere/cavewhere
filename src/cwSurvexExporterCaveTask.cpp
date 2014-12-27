@@ -10,6 +10,7 @@
 #include "cwSurvexExporterTripTask.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwSurveyChunk.h"
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
@@ -40,6 +41,9 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
    // stream << "*sd compass 2.0 degrees" << endl;
    // stream << "*sd clino 2.0 degrees" << endl << endl;
 
+    //Add fix station to tie the cave down
+    fixFirstStation(stream, cave);
+
     //Haven't done anything
     TotalProgress = 0;
 
@@ -54,6 +58,30 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     stream << "*end ; End of " << cave->name() << endl;
 
     return true;
+}
+
+/**
+ * @brief cwSurvexExporterCaveTask::fixFirstStation
+ * @param stream
+ * @param cave
+ *
+ * This fixes the first station in the cave, if the cave has any stations.
+ */
+void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, cwCave *cave)
+{
+    if(cave != nullptr) {
+        if(!cave->trips().isEmpty()) {
+            cwTrip* firstTrip = cave->trips().first();
+            if(!firstTrip->chunks().isEmpty()) {
+                cwSurveyChunk* firstChunk = firstTrip->chunks().first();
+                if(!firstChunk->stations().isEmpty()) {
+                    cwStation station = firstChunk->stations().first();
+
+                    stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << endl;
+                }
+            }
+        }
+    }
 }
 
 

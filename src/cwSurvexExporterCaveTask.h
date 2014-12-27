@@ -26,6 +26,8 @@ public:
 
 private:
     cwSurvexExporterTripTask* TripExporter;
+
+    void fixFirstStation(QTextStream& stream, cwCave* cave);
 };
 
 #endif // CWSURVEXEXPORTERCAVETASK_H
