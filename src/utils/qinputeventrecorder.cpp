@@ -112,7 +112,7 @@ QInputEventRecorder::~QInputEventRecorder()
 
 bool QInputEventRecorder::eventFilter(QObject *obj, QEvent *ev)
 {
-    qDebug() << "Event:" << obj << ev;
+//    qDebug() << "Event:" << obj << ev;
 
 	if (!isChild(obj, m_Obj))
 		return false;

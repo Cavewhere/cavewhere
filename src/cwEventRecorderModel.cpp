@@ -61,15 +61,7 @@ bool cwEventRecorderModel::eventFilter(QObject *object, QEvent *event)
 {
     if(Recording) {
 
-        QObject* parent = object;
-        while(parent != nullptr) {
-            if(parent == rootEventObject()) {
-                break;
-            }
-            parent = parent->parent();
-        }
-
-        if(parent == nullptr) {
+        if(object != rootEventObject()) {
             return false;
         }
 
@@ -80,6 +72,8 @@ bool cwEventRecorderModel::eventFilter(QObject *object, QEvent *event)
             record.Object = object;
             record.ObjectMetaData = cwEventRecorderObject(object);
             record.TimeOffset = ElapsedTimer.elapsed();
+
+            Q_ASSERT(!record.ObjectMetaData.fullName().isEmpty());
 
             ElapsedTimer.start();
 
@@ -104,6 +98,10 @@ bool cwEventRecorderModel::eventFilter(QObject *object, QEvent *event)
  */
 QEvent* cwEventRecorderModel::cloneEvent(QEvent *event) const
 {
+    if(event == nullptr) {
+        return nullptr;
+    }
+
     if (dynamic_cast<QContextMenuEvent*>(event))
         return new QContextMenuEvent(*static_cast<QContextMenuEvent*>(event));
     else if (dynamic_cast<QKeyEvent*>(event))
@@ -117,7 +115,8 @@ QEvent* cwEventRecorderModel::cloneEvent(QEvent *event) const
     else if (dynamic_cast<QWheelEvent*>(event))
         return new QWheelEvent(*static_cast<QWheelEvent*>(event));
     if(event->type() == QEvent::MetaCall) {
-        return new cwMetaEvent();
+        return nullptr;
+//        return new cwMetaEvent();
     }
 
     return nullptr;
@@ -272,7 +271,7 @@ void cwEventRecorderModel::startRecording()
  */
 void cwEventRecorderModel::stopRecording()
 {
-    if(recording()) { return; }
+    if(!recording()) { return; }
     if(ReplayingRecords) { return; }
     TempFile.close();
     Recording = false;
@@ -325,7 +324,9 @@ void cwEventRecorderModel::playBackCurrentRecord()
         QObject* object = cwEventRecorderObject::findObject(rootEventObject(), record.ObjectMetaData);
         if(object != nullptr) {
             QEvent* eventCopy = cloneEvent(record.Event);
-            QCoreApplication::postEvent(object, eventCopy);
+            if(eventCopy != nullptr) {
+                QCoreApplication::postEvent(object, eventCopy);
+            }
         } else {
             qDebug() << "Couldn't find object" << record.ObjectMetaData.fullName() << LOCATION;
             qDebug() << "Play back stopped";
