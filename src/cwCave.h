@@ -28,8 +28,8 @@ class cwCave : public QObject, public cwUndoer
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
-    Q_PROPERTY(cwLength* length READ length NOTIFY lengthChanged)
-    Q_PROPERTY(cwLength* depth READ depth NOTIFY depthChanged)
+    Q_PROPERTY(cwLength* length READ length CONSTANT)
+    Q_PROPERTY(cwLength* depth READ depth CONSTANT)
 
 public:
     explicit cwCave(QObject* parent = nullptr);
@@ -71,9 +71,6 @@ signals:
     void nameChanged(QString name);
 
     void stationPositionPositionChanged();
-
-    void lengthChanged(); //Never called
-    void depthChanged(); //Never called
 
 protected:
     QList<cwTrip*> Trips;

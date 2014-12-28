@@ -87,6 +87,7 @@
 #include "cwCaptureGroupModel.h"
 #include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
+#include "cwPageSelectionModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -181,4 +182,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwCaptureGroupModel>("Cavewhere", 1, 0, "CaptureGroupModel");
     qmlRegisterType<cwEventRecorderModel>("Cavewhere", 1, 0, "EventRecorderModel");
     qmlRegisterType<cwTaskManagerModel>("Cavewhere", 1, 0, "TaskManagerModel");
+    qmlRegisterType<cwPageSelectionModel>("Cavewhere", 1, 0, "PageSelectionModel");
 }

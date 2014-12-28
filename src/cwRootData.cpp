@@ -22,6 +22,7 @@
 #include "cwRegionSceneManager.h"
 #include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
+#include "cwPageSelectionModel.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -90,6 +91,7 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setGLScraps(RegionSceneManager->scraps());
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
+    PageSelectionModel = new cwPageSelectionModel(this);
 }
 
 /**

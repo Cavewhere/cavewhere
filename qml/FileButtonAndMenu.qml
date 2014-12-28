@@ -33,7 +33,7 @@ MenuBar {
             text: "Open"
             shortcut: "Ctrl+O"
             onTriggered: {
-                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
+//                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
                 project.load();
             }
         }

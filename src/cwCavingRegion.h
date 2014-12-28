@@ -13,19 +13,25 @@
 #include <QList>
 #include <QUndoCommand>
 #include <QWeakPointer>
+#include <QAbstractListModel>
 #include <QDebug>
 
 //Our includes
 class cwCave;
 #include "cwUndoer.h"
 
-class cwCavingRegion : public QObject, public cwUndoer
+class cwCavingRegion : public QAbstractListModel, public cwUndoer
 {
     Q_OBJECT
 
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
 
+    Q_ENUMS(Roles)
 public:
+    enum Roles {
+        CaveObjectRole
+    };
+
     explicit cwCavingRegion(QObject *parent = nullptr);
     cwCavingRegion(const cwCavingRegion& object);
     cwCavingRegion& operator=(const cwCavingRegion& object);
@@ -35,6 +41,10 @@ public:
     Q_INVOKABLE int caveCount() const;
     Q_INVOKABLE cwCave* cave(int index) const;
     QList<cwCave*> caves() const;
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    QVariant data(const QModelIndex &index, int role) const;
+    QHash<int, QByteArray> roleNames() const;
 
     Q_INVOKABLE void addCave(cwCave* cave = nullptr);
     void addCaves(QList<cwCave*> cave);

@@ -34,6 +34,7 @@ class cwRegionSceneManager;
 class cwScreen;
 class cwEventRecorderModel;
 class cwTaskManagerModel;
+class cwPageSelectionModel;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -62,6 +63,7 @@ class cwRootData : public QObject
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
+    Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -82,6 +84,7 @@ public:
     QScreen* primaryScreen() const;
     cwEventRecorderModel* eventRecorderModel() const;
     cwTaskManagerModel* taskManagerModel() const;
+    cwPageSelectionModel* pageSelectionModel() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -123,6 +126,7 @@ private:
     cwRegionSceneManager* RegionSceneManager; //!<
     cwEventRecorderModel* EventRecorderModel; //!<
     cwTaskManagerModel* TaskManagerModel; //!<
+    cwPageSelectionModel* PageSelectionModel; //!<
 
 
     //Default class, aren't used exept to prevent qml from complaining
@@ -257,5 +261,15 @@ inline cwEventRecorderModel* cwRootData::eventRecorderModel() const {
 inline cwTaskManagerModel* cwRootData::taskManagerModel() const {
     return TaskManagerModel;
 }
+
+/**
+* @brief cwRootData::pageSelectionModel
+* @return
+*/
+inline cwPageSelectionModel* cwRootData::pageSelectionModel() const {
+    return PageSelectionModel;
+}
+
+
 
 #endif // CWGLOBALQMLDATA_H

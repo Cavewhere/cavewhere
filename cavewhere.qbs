@@ -214,7 +214,7 @@ Project {
             name: "DocumentationFiles"
             files: [
                 "docs/FileFormatDocumentation.txt",
-                "LICENSE.txt"
+                "LICENSE.txt",
             ]
         }
 

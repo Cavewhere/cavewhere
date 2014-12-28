@@ -71,4 +71,4 @@ QDebug operator<<(QDebug str, const QEvent *ev)
      }
      return str.maybeSpace();
 }
-#endif
+#endif //QT_NO_DEBUG_STREAM

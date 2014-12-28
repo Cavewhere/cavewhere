@@ -13,7 +13,7 @@
 #include <QDebug>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
-    QObject(parent)
+    QAbstractListModel(parent)
 {
 }
 
@@ -21,7 +21,7 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
   \brief Copy constructor
   */
 cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
-    QObject(nullptr),
+    QAbstractListModel(nullptr),
     cwUndoer(object.undoStack())
 {
     copy(object);
@@ -32,6 +32,48 @@ cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
   */
 cwCavingRegion& cwCavingRegion::operator=(const cwCavingRegion& object) {
     return copy(object);
+}
+
+/**
+ * @brief cwCavingRegion::rowCount
+ * @param parent
+ * @return
+ */
+int cwCavingRegion::rowCount(const QModelIndex &parent) const
+{
+    Q_UNUSED(parent);
+    return caveCount();
+}
+
+/**
+ * @brief cwCavingRegion::data
+ * @param index
+ * @param role
+ * @return
+ */
+QVariant cwCavingRegion::data(const QModelIndex &index, int role) const
+{
+    if(!index.isValid()) {
+        return QVariant();
+    }
+
+    switch(role) {
+    case CaveObjectRole:
+        return QVariant::fromValue(Caves.at(index.row()));
+    }
+
+    return QVariant();
+}
+
+/**
+ * @brief cwCavingRegion::roleNames
+ * @return
+ */
+QHash<int, QByteArray> cwCavingRegion::roleNames() const
+{
+    QHash<int, QByteArray> roles;
+    roles.insert(CaveObjectRole, "caveObjectRole");
+    return roles;
 }
 
 /**
@@ -48,6 +90,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 
     if(!object.Caves.isEmpty()) {
         emit beginInsertCaves(0, object.Caves.size() - 1);
+        emit beginInsertRows(QModelIndex(), 0, object.Caves.size() - 1);
     }
 
     //Add new caves
@@ -70,6 +113,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 
     if(Caves.size() - 1 >= 0) {
         emit insertedCaves(0, Caves.size() -1);
+        emit endInsertRows();
         emit caveCountChanged();
     }
 
