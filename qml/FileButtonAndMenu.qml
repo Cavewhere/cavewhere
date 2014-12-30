@@ -59,7 +59,6 @@ MenuBar {
         }
 
         MenuItem {
-            visible: Qt.platform.os === "linux" || Qt.platform.os === "windows"
             text: "Quit"
             shortcut: "Ctrl+Q"
             onTriggered: Qt.quit()
