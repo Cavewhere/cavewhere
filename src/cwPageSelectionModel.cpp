@@ -149,8 +149,6 @@ void cwPageSelectionModel::setCurrentPage(QString currentPage) {
 
         emit currentPageChanged();
     }
-
-    printPageHistory();
 }
 
 /**
@@ -181,8 +179,6 @@ void cwPageSelectionModel::back()
 
         LockHistory = false;
     }
-
-    printPageHistory();
 }
 
 /**
@@ -201,8 +197,6 @@ void cwPageSelectionModel::forward()
 
         LockHistory = false;
     }
-
-    printPageHistory();
 }
 
 /**
