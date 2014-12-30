@@ -51,14 +51,6 @@ MenuBar {
             onTriggered: project.saveAs();
         }
 
-        MenuItem {
-            text: "Export View"
-            onTriggered: {
-                var dialogComponent = Qt.createComponent("ExportMapDialog.qml")
-                var dialog = dialogComponent.createObject(globalDialogHandler)
-            }
-        }
-
         MenuSeparator {}
 
         MenuItem {
