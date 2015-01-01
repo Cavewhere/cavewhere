@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwProjectIOTask.h"
+#include "cwSQLManager.h"
 #include "cwDebug.h"
 
 //Sqlite lite includes
@@ -48,36 +49,10 @@ bool cwProjectIOTask::connectToDatabase(QString connectionName) {
 /**
   \brief Begins a transaction for sql statements
 
-  restartSlot is called when the database is busy with another transaction. By default this is
-  null. If it's null no slot is called by a time, the function simply returns with an error message, and
-  returns false.  If the database is busy, this also returns false.  If this function returns false, this
-  means that other SQL functions should run.
-
   You should call endTransaction to end the transaction.
   */
-bool cwProjectIOTask::beginTransation(const char* restartSlot) {
-    //SQLITE begin transation
-    QString beginTransationQuery = "BEGIN IMMEDIATE TRANSACTION";
-    QSqlQuery query = Database.exec(beginTransationQuery);
-    QSqlError error = query.lastError();
-
-    //Check if there's error
-    if(error.isValid()) {
-        if(error.number() == SQLITE_BUSY) {
-            if(restartSlot != nullptr) {
-                //The database is busy, try to get a lock in 500ms
-                QTimer::singleShot(500, this, restartSlot);
-            } else {
-                qDebug() << "Can't begin transaction because the database is busy" << LOCATION;
-            }
-            return false;
-        } else {
-            qDebug() << "Database error whene trying to begin transaction: " << error << LOCATION;
-            return false;
-        }
-    }
-
-    return true;
+bool cwProjectIOTask::beginTransation() {
+    return cwSQLManager::instance()->beginTransaction(Database);
 }
 
 /**
@@ -89,17 +64,9 @@ void cwProjectIOTask::endTransation() {
     //If the task is running
     if(isRunning()) {
         //Commit the data
-        QString commitTransationQuery = "COMMIT";
-        QSqlQuery query = Database.exec(commitTransationQuery);
-        if(query.lastError().isValid()) {
-            qDebug() << "Couldn't commit transaction:" << query.lastError() << LOCATION;
-        }
+        cwSQLManager::instance()->endTransaction(Database, cwSQLManager::Commit);
     } else {
         //Roll back the commited images
-        QString rollbackTransationQuery = "ROLLBACK";
-        QSqlQuery query = Database.exec(rollbackTransationQuery);
-        if(query.lastError().isValid()) {
-            qDebug() << "Couldn't rollback transaction:" << query.lastError() << LOCATION;
-        }
+        cwSQLManager::instance()->endTransaction(Database, cwSQLManager::RollBack);
     }
 }

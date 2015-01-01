@@ -14,6 +14,7 @@
 #include "cwNote.h"
 #include "cwDebug.h"
 #include "cwScrap.h"
+#include "cwSQLManager.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -42,6 +43,8 @@ void cwImageCleanupTask::runTask()
 
         QSet<int> validIds = extractAllValidImageIds();
         QSet<int> unusedIds = DatabaseIds.subtract(validIds);
+
+        cwSQLManager::Transaction transaction(&Database);
 
         QString SQL("DELETE FROM Images WHERE id == ?");
         QSqlQuery removeImageIdQuery(Database);
@@ -74,8 +77,7 @@ void cwImageCleanupTask::runTask()
  */
 void cwImageCleanupTask::tryFetchAllImageIds()
 {
-    bool good = beginTransation(SLOT(tryFetchAllImageIds()));
-    if(!good) { return; }
+    cwSQLManager::Transaction transaction(&Database, cwSQLManager::ReadOnly);
 
     QString sql("select id from images");
     QSqlQuery imageIdsQuery(sql, Database);

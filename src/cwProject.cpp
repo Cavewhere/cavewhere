@@ -17,6 +17,7 @@
 #include "cwRegionLoadTask.h"
 #include "cwGlobals.h"
 #include "cwDebug.h"
+#include "cwSQLManager.h"
 
 //Qt includes
 #include <QDir>
@@ -113,9 +114,9 @@ void cwProject::createDefaultSchema() {
  */
 void cwProject::createTable(const QSqlDatabase& database, QString sql)
 {
-    //Create the caving region
     QSqlQuery createObjectDataTable(database);
 
+    //Create the caving region
     bool couldPrepare = createObjectDataTable.prepare(sql);
     if(!couldPrepare) {
         qDebug() << "Couldn't prepare table:" << createObjectDataTable.lastError().databaseText() << sql << LOCATION;
@@ -369,6 +370,8 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
   This returns the id of the image in the database
   */
 int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
+    cwSQLManager::Transaction transaction(&database);
+
     QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "
             "VALUES (?, ?, ?, ?, ?, ?)";
 
@@ -401,6 +404,8 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
  */
 bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
 {
+    cwSQLManager::Transaction transaction(&database);
+
     QString SQL("UPDATE Images SET type=?, width=?, height=?, dotsPerMeter=?, imageData=? where id=?");
 
     QSqlQuery query(database);
@@ -428,6 +433,8 @@ bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &ima
  */
 bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
 {
+    cwSQLManager::Transaction transaction(&database);
+
     //Create the delete SQL statement
     QString SQL("DELETE FROM Images WHERE");
     SQL += QString(" id == %1").arg(image.original());
@@ -457,6 +464,7 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
  */
 void cwProject::createDefaultSchema(const QSqlDatabase &database)
 {
+    cwSQLManager::Transaction transaction(&database);
 
     //Create the database with full vacuum so we don't use up tons of space
     QSqlQuery vacuumQuery(database);
@@ -485,15 +493,6 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
     docsFiles.append(QPair<QString, QString>("qt.pro", ":/src/qt.proto"));
     docsFiles.append(QPair<QString, QString>("cavewhere.pro", ":/src/qt.proto"));
     insertDocumentation(database, docsFiles);
-
-    //FIXME: Remove once Proto buffer fixes the file format
-    //Create the caving region
-    query =
-            QString("CREATE TABLE IF NOT EXISTS CavingRegion (") +
-            QString("id INTEGER PRIMARY KEY AUTOINCREMENT,") + //First index
-            QString("qCompress_XML BLOB") + //Last index
-            QString(")");
-    createTable(database, query);
 
     //Create the caving region
     QString imageTableQuery =

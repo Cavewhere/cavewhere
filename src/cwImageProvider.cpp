@@ -8,6 +8,7 @@
 //Our includes
 #include "cwImageProvider.h"
 #include "cwDebug.h"
+#include "cwSQLManager.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -154,6 +155,8 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
         return cwImageData();
     }
 
+    cwSQLManager::instance()->beginTransaction(database, cwSQLManager::ReadOnly);
+
     //Setup the query
     QSqlQuery query(database);
     bool successful;
@@ -165,6 +168,7 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
     if(!successful) {
         qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << RequestImageSQL;
+        cwSQLManager::instance()->endTransaction(database);
         database.close();
         return cwImageData();
     }
@@ -175,6 +179,7 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
     if(!successful) {
         qDebug() << "Couldn't exec query image id:" << id << LOCATION;
+        cwSQLManager::instance()->endTransaction(database);
         database.close();
         return cwImageData();
     }
@@ -196,10 +201,12 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
             }
         }
 
+        cwSQLManager::instance()->endTransaction(database);
         database.close();
         return cwImageData(size, dotsPerMeter, type, imageData);
     }
 
+    cwSQLManager::instance()->endTransaction(database);
     database.close();
     qDebug() << "Query has no data for id:" << id << LOCATION;
     return cwImageData();

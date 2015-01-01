@@ -28,6 +28,8 @@
 #include "cwStationPositionLookup.h"
 #include "cwLength.h"
 #include "cwImageResolution.h"
+#include "cwDebug.h"
+#include "cwSQLManager.h"
 
 ////Serielization includes
 //#include "cwSerialization.h"
@@ -64,6 +66,8 @@ void cwRegionSaveTask::runTask() {
     //Clear the region of data
     *Region = cwCavingRegion();
 
+    qDebug() << "Finished saving!!!";
+
     //Finished
     done();
 
@@ -76,6 +80,8 @@ void cwRegionSaveTask::runTask() {
  */
 void cwRegionSaveTask::saveToProtoBuffer()
 {
+    cwSQLManager::Transaction transaction(&Database);
+
     CavewhereProto::CavingRegion region;
     saveCavingRegion(region);
 
@@ -96,7 +102,11 @@ void cwRegionSaveTask::saveToProtoBuffer()
     }
 
     insertCavingRegion.bindValue(0, regionByteArray);
-    insertCavingRegion.exec();
+    bool success = insertCavingRegion.exec();
+
+    if(!success) {
+        qDebug()  << "Couldn't execute query:" << insertCavingRegion.lastError().databaseText() << queryStr << LOCATION;
+    }
 
 }
 

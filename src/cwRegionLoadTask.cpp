@@ -20,6 +20,7 @@
 #include "cwScrap.h"
 #include "cwSurveyNoteModel.h"
 #include "cwImageResolution.h"
+#include "cwSQLManager.h"
 #include "cwDebug.h"
 
 ////Serielization includes
@@ -115,6 +116,8 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
  */
 QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
 {
+    cwSQLManager::Transaction transaction(&Database, cwSQLManager::ReadOnly);
+
     QSqlQuery selectObjectData(Database);
     QString queryStr =
             QString("SELECT protoBuffer FROM ObjectData where id = 1");
@@ -713,6 +716,8 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
  */
 void cwRegionLoadTask::insureVacuuming()
 {
+    cwSQLManager::Transaction transaction(&Database);
+
     int vacuum = -1;
 
     {

@@ -21,7 +21,8 @@
 //TODO: REMOVE for testing only
 #include <QFile>
 
-cwCropImageTask::cwCropImageTask(QObject* parent) : cwProjectIOTask(parent) {
+cwCropImageTask::cwCropImageTask(QObject* parent) :
+    cwProjectIOTask(parent) {
     AddImageTask = new cwAddImageTask(this);
     AddImageTask->setParentTask(this);
 

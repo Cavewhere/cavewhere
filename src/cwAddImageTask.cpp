@@ -153,11 +153,11 @@ void cwAddImageTask::calculateNumberOfSteps() {
   \brief This tries to add the image to the database
   */
 void cwAddImageTask::tryAddingImagesToDatabase() {
-    bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
-    if(!good) {
-        qDebug() << "Couldn't begin transaction!";
-        return;
-    }
+//    bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
+//    if(!good) {
+//        qDebug() << "Couldn't begin transaction!";
+//        return;
+//    }
 
     //Database image, original image
     QList< PrivateImageData > images;
@@ -229,7 +229,7 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         }
     }
 
-    endTransation();
+//    endTransation();
 }
 
 

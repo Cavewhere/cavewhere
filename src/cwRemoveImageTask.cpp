@@ -48,7 +48,7 @@ void cwRemoveImageTask::runTask()
 void cwRemoveImageTask::tryToRemoveImages()
 {
     //Try to start a transaction
-    bool good = beginTransation(SLOT(tryToRemoveImages()));
+    bool good = beginTransation();
     if(!good) { return; }
 
     foreach(cwImage image, Images) {

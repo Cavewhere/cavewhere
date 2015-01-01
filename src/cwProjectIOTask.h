@@ -37,7 +37,7 @@ protected:
     static QAtomicInt DatabaseConnectionCounter;
 
     bool connectToDatabase(QString connectionName);
-    bool beginTransation(const char *restartSlot = nullptr);
+    bool beginTransation();
     void endTransation();
 
 };
