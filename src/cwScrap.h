@@ -140,6 +140,7 @@ private:
 
     //For rendering, points in note coordinates
     cwTriangulatedData TriangulationData;
+    bool TriangulationDataDirty;
 
     //Clamps a pointF that's in note coordinates to the scrap
     QPointF clampToScrap(QPointF point);

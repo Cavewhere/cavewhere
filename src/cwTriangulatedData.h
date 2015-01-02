@@ -34,13 +34,23 @@ public:
     QVector<uint> indices() const;
     void setIndices(QVector<uint> indices);
 
+    bool isStale() const;
+    void setStale(bool isStale);
+
+    bool isNull() const;
+
 private:
     class PrivateData : public QSharedData {
     public:
+        PrivateData() :
+            Stale(false)
+        {}
+
         cwImage croppedImage;
         QVector<QVector3D> points;
         QVector<QVector2D> texCoords;
         QVector<uint> indices;
+        bool Stale;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -100,5 +110,29 @@ inline QVector<uint> cwTriangulatedData::indices() const {
   */
 inline void cwTriangulatedData::setIndices(QVector<uint> indices) {
     Data->indices = indices;
+}
+
+
+/**
+ * @brief cwTriangulatedData::stale
+ * @return True if the data is old and should be recalculated
+ */
+inline bool cwTriangulatedData::isStale() const
+{
+    return Data->Stale;
+}
+
+/**
+ * @brief cwTriangulatedData::setStale
+ * @param isStale
+ *
+ * This is used by cwScrapManager to keep track, if the triangulatedData is old or not.
+ * This is set to true if it should be recalculated and false if it shouldn't. It is
+ * useful to keep track of this incase cavewhere shuts down before the scrap calculation
+ * have been completed.
+ */
+inline void cwTriangulatedData::setStale(bool isStale)
+{
+    Data->Stale = isStale;
 }
 #endif // CWTRIANGULATEDATA_H

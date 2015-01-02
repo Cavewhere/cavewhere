@@ -124,6 +124,7 @@ message TriangulatedData {
     repeated QtProto.QVector3D points = 2;
     repeated QtProto.QVector2D texCoords = 3;
     repeated uint32 indices = 4;
+    optional bool stale = 5;
 }
 
 message NoteStation {

@@ -457,9 +457,12 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
         indexes[i] = protoTriangulatedData.indices(i);
     }
 
+    bool stale = protoTriangulatedData.stale();
+
     data.setPoints(points);
     data.setTexCoords(texCoords);
     data.setIndices(indexes);
+    data.setStale(stale);
 
     return data;
 }

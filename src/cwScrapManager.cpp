@@ -77,7 +77,20 @@ void cwScrapManager::setRegion(cwCavingRegion* region) {
   \brief Sets the project for the scrap manager
   */
 void cwScrapManager::setProject(cwProject *project) {
-    Project = project;
+    if(project != Project) {
+        if(Project != nullptr) {
+            disconnect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
+        }
+
+        Project = project;
+
+        if(Project != nullptr) {
+            setRegion(Project->cavingRegion());
+            ImageProvider.setProjectPath(Project->filename());
+
+            connect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
+        }
+    }
 }
 
 /**
@@ -122,6 +135,16 @@ void cwScrapManager::updateAllScraps() {
     }
 
     updateScrapGeometryHelper(scraps);
+}
+
+/**
+ * @brief cwScrapManager::updateImageProviderPath
+ *
+ * This updates the image providers project path
+ */
+void cwScrapManager::updateImageProviderPath()
+{
+    ImageProvider.setProjectPath(Project->filename());
 }
 
 /**
@@ -193,6 +216,27 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
     if(TriangulateTask->isRunning()) {
         DeletedScraps.insert(scrap);
     }
+}
+
+/**
+ * @brief cwScrapManager::scrapImagesOkay
+ * @param scrap
+ * @return Returns true if the scrap's cropped image is in the database, and false if it's missing
+ */
+bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
+{
+    if(scrap->triangulationData().croppedImage().isValid()) {
+        //Should be in the database
+        foreach(int mipmap, scrap->triangulationData().croppedImage().mipmaps()) {
+            cwImageData imageData = ImageProvider.data(mipmap, true);
+            if(!imageData.size().isValid()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    //No cropped image
+    return false;
 }
 
 /**
@@ -320,6 +364,10 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     }
 }
 
+/**
+ * @brief cwScrapManager::updateScrapGeometryHelper
+ * @param scraps
+ */
 void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
     if(scraps.isEmpty()) { return; }
@@ -327,6 +375,11 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     foreach(cwScrap* scrap, scraps) {
         connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+
+        cwTriangulatedData oldData = scrap->triangulationData();
+        oldData.setStale(true);
+        scrap->setTriangulationData(oldData);
+
         DirtyScraps.insert(scrap);
     }
 
@@ -477,7 +530,7 @@ void cwScrapManager::notesRemovedHelper(cwSurveyNoteModel *noteModel,
  */
 void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 {
-    QList<cwScrap*> newScraps;
+    QList<cwScrap*> scrapsToUpdate;
     for(int i = begin; i <= end; i++) {
         cwScrap* scrap = parentNote->scrap(i);
 
@@ -486,10 +539,20 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
 
         //Add the scrap data that's already in it
         GLScraps->addScrapToUpdate(scrap);
+
+        //Make sure the scrap's previously calculated data is okay.
+        if(scrap->triangulationData().isStale() ||
+                scrap->triangulationData().isNull() ||
+                !scrapImagesOkay(scrap)
+                )
+        {
+            //Isn't okay, we need to recalculate it
+            scrapsToUpdate.append(scrap);
+        }
     }
 
     //Update all the scrap geometry for the scrap
-    updateScrapGeometry(newScraps);
+    updateScrapGeometry(scrapsToUpdate);
 }
 
 /**
@@ -770,7 +833,10 @@ void cwScrapManager::taskFinished() {
 
         for(int i = 0; i < validScraps.size(); i++) {
             cwScrap* scrap = validScraps.at(i);
+
             cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
+            Q_ASSERT(!triangleData.isStale());
+
             scrap->setTriangulationData(triangleData);
             GLScraps->addScrapToUpdate(scrap);
         }

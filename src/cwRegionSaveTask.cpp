@@ -330,6 +330,8 @@ void cwRegionSaveTask::saveTriangulatedData(CavewhereProto::TriangulatedData *pr
     foreach(uint index, triangluatedData.indices()) {
         protoTriangulatedData->add_indices(index);
     }
+
+    protoTriangulatedData->set_stale(triangluatedData.isStale());
 }
 
 /**

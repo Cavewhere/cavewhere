@@ -29,6 +29,7 @@ class cwRemoveImageTask;
 class cwLinePlotManager;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
+#include "cwImageProvider.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -44,7 +45,6 @@ public:
     explicit cwScrapManager(QObject *parent = 0);
     ~cwScrapManager();
 
-    void setRegion(cwCavingRegion* region);
     void setProject(cwProject* project);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
 
@@ -58,10 +58,13 @@ signals:
 
 public slots:
     void updateAllScraps();
+    void updateImageProviderPath();
 
 private:
     cwCavingRegion* Region;
     cwLinePlotManager* LinePlotManager;
+
+    cwImageProvider ImageProvider;
 
     QList<cwScrap*> WaitingForUpdate; //These are the scraps that are running through task
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
@@ -73,10 +76,12 @@ private:
     cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
 
-    //For testing only
+    //The gl scraps that need updating
     cwGLScraps* GLScraps;
 
     bool AutomaticUpdate; //!<
+
+    void setRegion(cwCavingRegion* region);
 
     void connectCave(cwCave* cave);
     void connectTrip(cwTrip* trip);
@@ -106,6 +111,8 @@ private:
     void regenerateScrapGeometryHelper(cwScrap* scrap);
 
     void addToDeletedScraps(cwScrap* scrap);
+
+    bool scrapImagesOkay(cwScrap* scrap);
 
 private slots:
     void cavesInserted(int begin, int end);

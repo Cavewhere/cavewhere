@@ -54,7 +54,6 @@ cwRootData::cwRootData(QObject *parent) :
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(this);
     ScrapManager->setProject(Project);
-    ScrapManager->setRegion(Region);
     ScrapManager->setLinePlotManager(LinePlotManager);
 
     //Setup the survey export manager

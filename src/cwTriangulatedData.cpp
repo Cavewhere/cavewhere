@@ -11,3 +11,15 @@ cwTriangulatedData::cwTriangulatedData() :
     Data(new PrivateData)
 {
 }
+
+/**
+ * @brief cwTriangulatedData::isNull
+ * @return Returns null if all the parameters are empty.
+ */
+bool cwTriangulatedData::isNull() const
+{
+    return !Data->croppedImage.isValid() &&
+            Data->indices.isEmpty() &&
+            Data->points.isEmpty() &&
+            Data->texCoords.isEmpty();
+}
