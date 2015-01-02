@@ -127,6 +127,7 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
     }
 
     saveStationLookup(protoCave->mutable_stationpositionlookup(), cave->stationPositionLookup());
+    protoCave->set_stationpositionlookupstale(cave->isStationPositionLookupStale());
 }
 
 /**

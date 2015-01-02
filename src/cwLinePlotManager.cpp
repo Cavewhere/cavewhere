@@ -70,9 +70,19 @@ void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
   \brief Connects all the caves in the region to this object
   */
 void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
+    bool caveIsStale = false;
+
     for(int i = 0; i < region->caveCount(); i++) {
         cwCave* cave = region->cave(i);
         connectCave(cave);
+
+        if(cave->isStationPositionLookupStale()) {
+            caveIsStale = true;
+        }
+    }
+
+    if(caveIsStale) {
+        runSurvex();
     }
 }
 
@@ -175,6 +185,20 @@ void cwLinePlotManager::validateResultsData(cwLinePlotTask::LinePlotResultData &
 }
 
 /**
+ * @brief cwLinePlotManager::markCaveStationsAsStale
+ *
+ * This will go through all the caves in the region and mark them as stale
+ * This is useful, to make sure that the cave data is upto date. If the user
+ * closes cavewhere before the line plot is re-processed.
+ */
+void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
+{
+    foreach(cwCave* cave, Region->caves()) {
+        cave->setStationPositionLookupStale(isStale);
+    }
+}
+
+/**
   \brief Called when the region adds more caves
   */
 void cwLinePlotManager::connectAddedCaves(int beginIndex, int endIndex) {
@@ -228,6 +252,7 @@ void cwLinePlotManager::runSurvex() {
         if(LinePlotTask->isReady()) {
 //            qDebug() << "Running the task";
             //qDebug() << "\tSetting data!" << LinePlotTask->status();
+            setCaveStationLookupAsStale(true);
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
@@ -277,6 +302,9 @@ void cwLinePlotManager::updateLinePlot() {
     //Update the 3D plot
     GLLinePlot->setPoints(resultData.stationPositions());
     GLLinePlot->setIndexes(resultData.linePlotIndexData());
+
+    //Mark all caves as up todate
+    setCaveStationLookupAsStale(false);
 
     emit stationPositionInCavesChanged(resultData.caveData().keys());
     emit stationPositionInTripsChanged(resultData.trips().toList());

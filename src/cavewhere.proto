@@ -12,6 +12,7 @@ message Cave {
     optional Units.LengthUnit lengthUnit = 3;
     optional Units.LengthUnit depthUnit = 4;
     optional StationPositionLookup stationPositionLookup = 5;
+    optional bool stationPositionLookupStale = 6;
 }
 
 message Trip {

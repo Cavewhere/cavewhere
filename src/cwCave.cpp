@@ -14,7 +14,8 @@
 cwCave::cwCave(QObject* parent) :
     QObject(parent),
     Length(new cwLength(this)),
-    Depth(new cwLength(this))
+    Depth(new cwLength(this)),
+    StationPositionModelStale(false)
 {
     Length->setUnit(cwUnits::Meters);
     Depth->setUnit(cwUnits::Meters);
@@ -82,6 +83,8 @@ cwCave& cwCave::Copy(const cwCave& object) {
 
     *Length = *(object.Length);
     *Depth = *(object.Depth);
+
+    StationPositionModelStale = object.StationPositionModelStale;
 
     return *this;
 }
@@ -314,4 +317,25 @@ void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
     StationPositionModel = model;
 
     emit stationPositionPositionChanged();
+}
+
+/**
+ * @brief cwCave::setStationPositionLookupStale
+ * @param isStale
+ *
+ * Sets the station position lookup as stale. If true, the station position lookup, should
+ * be recalculated, else, it shouldn't be recalculated.
+ */
+void cwCave::setStationPositionLookupStale(bool isStale)
+{
+    StationPositionModelStale = isStale;
+}
+
+/**
+ * @brief cwCave::isStationPositionLookupStale
+ * @return True if the station position lookup is old and stale, false it is up to date
+ */
+bool cwCave::isStationPositionLookupStale() const
+{
+    return StationPositionModelStale;
 }

@@ -57,6 +57,8 @@ private:
 
     void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 
+    void setCaveStationLookupAsStale(bool isStale);
+
 private slots:
     void regionDestroyed(QObject* region);
     void runSurvex();

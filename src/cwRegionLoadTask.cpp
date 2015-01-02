@@ -193,6 +193,10 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
 
     cwStationPositionLookup stationLookup = loadStationPositionLookup(protoCave.stationpositionlookup());
     cave->setStationPositionLookup(stationLookup);
+
+    if(protoCave.has_stationpositionlookup()) {
+        cave->setStationPositionLookupStale(protoCave.stationpositionlookupstale());
+    }
 }
 
 /**

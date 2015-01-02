@@ -56,6 +56,9 @@ public:
     cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionLookup(const cwStationPositionLookup& model);
 
+    void setStationPositionLookupStale(bool isStale);
+    bool isStationPositionLookupStale() const;
+
     QList< cwStation > stations() const;
 
 signals:
@@ -80,6 +83,7 @@ protected:
     cwLength* Depth;
 
     cwStationPositionLookup StationPositionModel;
+    bool StationPositionModelStale;
 
     virtual void setUndoStackForChildren();
 private:
