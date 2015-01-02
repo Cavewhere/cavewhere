@@ -53,7 +53,7 @@ void cwRemoveImageTask::tryToRemoveImages()
 
     foreach(cwImage image, Images) {
         if(image.isValid()) {
-            cwProject::removeImage(Database, image);
+            cwProject::removeImage(Database, image, false);
         }
     }
 

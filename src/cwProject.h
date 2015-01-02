@@ -46,9 +46,6 @@ public:
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
-    cwScrapManager* scrapManager();
-    void setScrapManager(cwScrapManager* manager);
-
     Q_INVOKABLE void load();
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs();
@@ -62,7 +59,7 @@ public:
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
     static bool updateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
-    static bool removeImage(const QSqlDatabase& database, cwImage image);
+    static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);
 
     static void createDefaultSchema(const QSqlDatabase& database);
 

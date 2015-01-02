@@ -309,11 +309,11 @@ void cwProject::updateRegionData(cwCavingRegion* region) {
 
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
 
-    //Copy the data from the loaded region
-    *Region = *region;
-
     //Update the project filename
     setFilename(loadTask->databaseFilename());
+
+    //Copy the data from the loaded region
+    *Region = *region;
 }
 
 /**
@@ -431,9 +431,11 @@ bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &ima
  * @param image - The Image that going to be removed
  * @return True if the image could be removed, and false if it couldn't be removed
  */
-bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
+bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool withTransaction)
 {
-    cwSQLManager::Transaction transaction(&database);
+    if(withTransaction) {
+        cwSQLManager::instance()->beginTransaction(database);
+    }
 
     //Create the delete SQL statement
     QString SQL("DELETE FROM Images WHERE");
@@ -450,10 +452,19 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image)
 
     if(!successful) {
         qDebug() << "Couldn't delete images: " << query.lastError();
+
+        if(withTransaction) {
+            cwSQLManager::instance()->endTransaction(database);
+        }
+
         return false;
     }
 
     query.exec();
+
+    if(withTransaction) {
+        cwSQLManager::instance()->endTransaction(database);
+    }
 
     return true;
 }
@@ -529,10 +540,4 @@ void cwProject::load()
 {
     QString filename = cwGlobals::openFile("Load Cavewhere Project", "Cavewhere Project (*.cw)", QString("OpenProject"));
     loadFile(filename);
-}
-
-
-void cwProject::setScrapManager(cwScrapManager *manager)
-{
-    Q_UNUSED(manager)
 }
