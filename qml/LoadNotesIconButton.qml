@@ -23,7 +23,7 @@ IconButton {
 
     FileDialogHelper {
         id: fileDialog;
-        filter: "Images (*.png *.jpg *.jpeg *.tiff)"
+        filter: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
         multipleFiles: true
         settingKey: "lastNoteGalleryImageLocation"
         caption: "Load Images"
