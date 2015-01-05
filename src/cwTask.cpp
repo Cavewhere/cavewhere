@@ -139,6 +139,7 @@ void cwTask::start() {
 
         //Make sure we are preparing to start
         CurrentStatus = PreparingToStart;
+        emit preparingToStart();
     }
 
     //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
@@ -169,9 +170,34 @@ void cwTask::restart() {
   */
 void cwTask::setNumberOfSteps(int steps) {
     QWriteLocker locker(&NumberOfStepsLocker);
+//    qDebug() << "Setting the number of steps:" << steps << NumberOfSteps;
     if(steps != NumberOfSteps) {
         NumberOfSteps = steps;
         emit numberOfStepsChanged(steps);
+    }
+}
+
+/**
+ * @brief cwTask::setProgress
+ * @param progress - Sets the current progress for the task
+ *
+ * The progress will be clamped between 0 and numberOfSteps()
+ */
+void cwTask::setProgress(int progress)
+{
+
+    Q_ASSERT(progress >= 0);
+    Q_ASSERT(progress <= numberOfSteps());
+
+    QReadLocker rlocker(&ProgressLocker);
+    if(Progress != progress) {
+        rlocker.unlock();
+
+        QWriteLocker locker(&ProgressLocker);
+        Progress = progress;
+        locker.unlock();
+
+        emit progressChanged();
     }
 }
 
@@ -200,7 +226,7 @@ void cwTask::done() {
 }
 
 /**
-  \brief Starts running the task on the current thread
+  \brief Starts running the task on the task's thread
 
   THIS should only be called from start()
   */
@@ -225,6 +251,9 @@ void cwTask::startOnCurrentThread() {
         CurrentStatus = Running;
     }
 
+    //Set the progress to zero
+    setProgress(0);
+
     //Run the task
     emit started();
     runTask();
@@ -237,6 +266,7 @@ void cwTask::startOnCurrentThread() {
   */
 void cwTask::changeThreads(QThread* thread) {
     moveToThread(thread);
+    emit threadChanged();
 }
 
 /**
@@ -273,4 +303,39 @@ bool cwTask::isParentsRunning() {
         currentParentTask = currentParentTask->ParentTask;
     }
     return true;
+}
+
+/**
+* @brief cwTask::setName
+* @param name - The new name of the task
+*
+* The default name of the task is a empty string
+*/
+void cwTask::setName(QString name) {
+    QWriteLocker locker(&NameLocker);
+    if(Name != name) {
+        Name = name;
+        emit nameChanged();
+    }
+}
+
+/**
+* @brief cwTask::name
+* @return Return's the name of the task. If the task isn't named this returns the task's class name
+*/
+QString cwTask::name() const {
+    QReadLocker locker(&NameLocker);
+    if(Name.isEmpty()) {
+        return QString::fromLocal8Bit(metaObject()->className());
+    }
+    return Name;
+}
+
+/**
+* @brief cwTask::progress
+* @return Returns the progress, this will between 0 and numberOfSteps();
+*/
+int cwTask::progress() const {
+    QReadLocker locker(&ProgressLocker);
+    return Progress;
 }

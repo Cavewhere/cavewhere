@@ -27,6 +27,7 @@ class cwGLScraps;
 class cwStationPositionLookup;
 class cwRemoveImageTask;
 class cwLinePlotManager;
+class cwTaskManagerModel;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
@@ -47,6 +48,7 @@ public:
 
     void setProject(cwProject* project);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
+    void setTaskManager(cwTaskManagerModel* taskManager);
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
@@ -75,6 +77,7 @@ private:
     cwTriangulateTask* TriangulateTask;
     cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
+    cwTaskManagerModel* TaskManagerModel;
 
     //The gl scraps that need updating
     cwGLScraps* GLScraps;

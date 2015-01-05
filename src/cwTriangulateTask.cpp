@@ -59,6 +59,8 @@ void cwTriangulateTask::runTask() {
     TriangulatedScraps.clear();
     TriangulatedScraps.reserve(Scraps.size());
 
+    setNumberOfSteps(Scraps.size() * 2);
+
     //Crop all the scrap data
     cropScraps();
 
@@ -72,8 +74,8 @@ void cwTriangulateTask::runTask() {
     This runs the cropping task on all the scraps
   */
 void cwTriangulateTask::cropScraps() {
-    foreach(cwTriangulateInData data, Scraps) {
-        if(!isRunning()) { return; }
+    for(int i = 0; i < Scraps.size() && isRunning(); i++) {
+        const cwTriangulateInData& data = Scraps.at(i);
 
         QRectF cropArea = data.outline().boundingRect();
         CropTask->setOriginal(data.noteImage());
@@ -84,6 +86,8 @@ void cwTriangulateTask::cropScraps() {
         cwTriangulatedData triangulatedData;
         triangulatedData.setCroppedImage(CropTask->croppedImage());
         TriangulatedScraps.append(triangulatedData);
+
+        setProgress(i + 1);
     }
 }
 
@@ -94,6 +98,7 @@ void cwTriangulateTask::triangulateScraps() {
     //For each scrap
     for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         triangulateScrap(i);
+        setProgress((i + 1) * 2);
     }
 }
 

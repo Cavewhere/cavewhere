@@ -18,7 +18,7 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
     TripExporter = new cwSurvexExporterTripTask(this);
     TripExporter->setParentSurvexExporter(this);
 
-    connect(TripExporter, SIGNAL(progressed(int)), SIGNAL(progressed(int)));
+//    connect(TripExporter, SIGNAL(progressed(int)), SIGNAL(progressed(int)));
 }
 
 /**

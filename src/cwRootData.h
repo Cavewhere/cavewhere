@@ -33,6 +33,7 @@ class cwLicenseAgreement;
 class cwRegionSceneManager;
 class cwScreen;
 class cwEventRecorderModel;
+class cwTaskManagerModel;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -60,6 +61,7 @@ class cwRootData : public QObject
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
+    Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -79,6 +81,7 @@ public:
     cwRegionSceneManager* regionSceneManager() const;
     QScreen* primaryScreen() const;
     cwEventRecorderModel* eventRecorderModel() const;
+    cwTaskManagerModel* taskManagerModel() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -119,6 +122,7 @@ private:
     cwLicenseAgreement* License; //!<
     cwRegionSceneManager* RegionSceneManager; //!<
     cwEventRecorderModel* EventRecorderModel; //!<
+    cwTaskManagerModel* TaskManagerModel; //!<
 
 
     //Default class, aren't used exept to prevent qml from complaining
@@ -244,6 +248,14 @@ inline QScreen* cwRootData::primaryScreen() const {
 */
 inline cwEventRecorderModel* cwRootData::eventRecorderModel() const {
     return EventRecorderModel;
+}
+
+/**
+* @brief cwRootData::taskManagerModel
+* @return The task manager model for visualizing running tasks
+*/
+inline cwTaskManagerModel* cwRootData::taskManagerModel() const {
+    return TaskManagerModel;
 }
 
 #endif // CWGLOBALQMLDATA_H

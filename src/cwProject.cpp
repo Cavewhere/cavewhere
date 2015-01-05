@@ -18,6 +18,7 @@
 #include "cwGlobals.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
+#include "cwTaskManagerModel.h"
 
 //Qt includes
 #include <QDir>
@@ -280,6 +281,26 @@ void cwProject::newProject() {
 }
 
 /**
+ * @brief cwProject::setTaskManager
+ * @param manager
+ *
+ * When adding images to the project, this will allow the user to see the image progress
+ */
+void cwProject::setTaskManager(cwTaskManagerModel *manager)
+{
+    TaskManager = manager;
+}
+
+/**
+ * @brief cwProject::taskManager
+ * @return Return's the current taskManager
+ */
+cwTaskManagerModel *cwProject::taskManager() const
+{
+    return TaskManager;
+}
+
+/**
   Loads the project, loads all the files to the project
   */
 void cwProject::loadFile(QString filename) {
@@ -317,6 +338,36 @@ void cwProject::updateRegionData(cwCavingRegion* region) {
 }
 
 /**
+ * @brief cwProject::deleteImageTask
+ *
+ * This will start the process of deleting the image task. This will first move the image task
+ * from the other thread to the main thread. Once it's moved, it will delete it using deletImageTask
+ */
+void cwProject::startDeleteImageTask()
+{
+    Q_ASSERT(sender() != nullptr);
+    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
+
+    cwAddImageTask* task = static_cast<cwAddImageTask*>(sender());
+    connect(task, &cwTask::threadChanged, this, &cwProject::deleteImageTask);
+
+    task->setThread(thread());
+}
+
+/**
+ * @brief cwProject::deleteImageTask
+ *
+ * This deletes the image task
+ */
+void cwProject::deleteImageTask()
+{
+    Q_ASSERT(sender() != nullptr);
+    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
+    Q_ASSERT(sender()->thread() == thread());
+    sender()->deleteLater();
+}
+
+/**
   \brief Sets the current project file
 
   \param newFilename - The new filename that this project will be moved to.
@@ -335,31 +386,37 @@ void cwProject::setFilename(QString newFilename) {
   \param receiver - The reciever of the addedImages signal
   \param slot - The slot that'll handle the addImages signal
 
-  This will also popup a dialog when the images are being loaded
   */
 void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const char* slot) {
     if(receiver == nullptr )  { return; }
 
     //Create a new image task
-    cwAddImageTask* addImageTask = new cwAddImageTask();
-    connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-    connect(addImageTask, SIGNAL(finished()), addImageTask, SLOT(deleteLater()));
-    connect(addImageTask, SIGNAL(stopped()), addImageTask, SLOT(deleteLater()));
-    addImageTask->setThread(LoadSaveThread);
+    foreach(QString path, noteImagePath) {
+        cwAddImageTask* addImageTask = new cwAddImageTask();
 
-    //Set the project path
-    addImageTask->setDatabaseFilename(filename());
+        TaskManager->addTask(addImageTask);
 
-    //Set all the noteImagePath
-    addImageTask->setNewImagesPath(noteImagePath);
+        connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
+        connect(addImageTask, &cwTask::finished, this, &cwProject::startDeleteImageTask);
+        connect(addImageTask, &cwTask::stopped, this, &cwProject::startDeleteImageTask);
+        addImageTask->setThread(LoadSaveThread);
 
-    //Run the addImageTask, in an asyncus way
-    addImageTask->start();
+        //Set the project path
+        addImageTask->setDatabaseFilename(filename());
 
-    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
-    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    progressDialog->setTask(addImageTask);
-    progressDialog->show();
+        //Set all the noteImagePath
+        addImageTask->setNewImagesPath(QStringList() << path); //noteImagePath);
+
+        //Run the addImageTask, in an asyncus way
+        addImageTask->start();
+    }
+
+
+
+//    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
+//    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+//    progressDialog->setTask(addImageTask);
+//    progressDialog->show();
 }
 
 /**

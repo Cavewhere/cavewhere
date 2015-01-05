@@ -395,6 +395,6 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
             stream << "*flags not duplicate" << endl;
         }
 
-        emit progressed(i);
+//        emit progressed(i);
     }
 }

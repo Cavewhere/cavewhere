@@ -21,6 +21,7 @@
 #include "cwRemoveImageTask.h"
 #include "cwImageResolution.h"
 #include "cwLinePlotManager.h"
+#include "cwTaskManagerModel.h"
 
 //Qt includes
 #include <QThread>
@@ -33,6 +34,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     TriangulateTask(new cwTriangulateTask()),
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(nullptr),
+    TaskManagerModel(nullptr),
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
@@ -112,6 +114,30 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
         if(LinePlotManager != nullptr) {
             connect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
                     this, &cwScrapManager::updateStationPositionChangedForScraps);
+        }
+    }
+}
+
+/**
+ * @brief cwScrapManager::setTaskManager
+ * @param taskManager
+ *
+ * We use this to expose the task's that are running in this manager to the user. This allows
+ * the user to see if the task is running or not running.
+ */
+void cwScrapManager::setTaskManager(cwTaskManagerModel *taskManager)
+{
+    if(TaskManagerModel != taskManager) {
+        if(TaskManagerModel != nullptr) {
+            TaskManagerModel->removeTask(TriangulateTask);
+            TaskManagerModel->removeTask(RemoveImageTask);
+        }
+
+        TaskManagerModel = taskManager;
+
+        if(TaskManagerModel != nullptr) {
+            TaskManagerModel->addTask(TriangulateTask);
+            TaskManagerModel->removeTask(RemoveImageTask);
         }
     }
 }

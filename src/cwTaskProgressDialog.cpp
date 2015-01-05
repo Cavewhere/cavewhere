@@ -25,7 +25,7 @@ void cwTaskProgressDialog::setTask(cwTask* task) {
     connect(StopButton, SIGNAL(clicked()), SLOT(stopTask()));
 
     connect(task, SIGNAL(numberOfStepsChanged(int)), ProgressBar, SLOT(setMaximum(int)));
-    connect(task, SIGNAL(progressed(int)), ProgressBar, SLOT(setValue(int)));
+//    connect(task, SIGNAL(progressed(int)), ProgressBar, SLOT(setValue(int)));
     connect(task, SIGNAL(statusMessage(QString)), StatusLabel, SLOT(setText(QString)));
 
     connect(task, SIGNAL(started()), SLOT(started()));

@@ -20,7 +20,7 @@ cwSurvexExporterRegionTask::cwSurvexExporterRegionTask(QObject* parent) :
 {
     CaveExporter = new cwSurvexExporterCaveTask(this);
     CaveExporter->setParentSurvexExporter(this);
-    connect(CaveExporter, SIGNAL(progressed(int)), SLOT(UpdateProgress(int)));
+//    connect(CaveExporter, SIGNAL(progressed(int)), SLOT(UpdateProgress(int)));
     Region = new cwCavingRegion(this);
 }
 

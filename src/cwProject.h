@@ -17,6 +17,7 @@ class cwCavingRegion;
 class cwAddImageTask;
 class cwTrip;
 class cwScrapManager;
+class cwTaskManagerModel;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -24,6 +25,7 @@ class cwScrapManager;
 #include <QThread>
 #include <QMap>
 #include <QHash>
+#include <QPointer>
 class QUndoStack;
 
 /**
@@ -55,6 +57,9 @@ public:
 
     QString filename() const;
 
+    void setTaskManager(cwTaskManagerModel* manager);
+    cwTaskManagerModel* taskManager() const;
+
     void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
@@ -82,13 +87,14 @@ private:
     //The region that this project looks after
     cwCavingRegion* Region;
 
-    //This prevents the scrapmanager for regenerating all
-
     //For loading images from the disk into this project
     QThread* LoadSaveThread;
 
     //The undo stack
     QUndoStack* UndoStack;
+
+    //Task manager, for visualizing running tasks
+    QPointer<cwTaskManagerModel> TaskManager;
 
     void createTempProjectFile();
     void createDefaultSchema();
@@ -101,6 +107,8 @@ private:
      void privateSave();
 private slots:
     void updateRegionData(cwCavingRegion* region);
+    void startDeleteImageTask();
+    void deleteImageTask();
 
 };
 

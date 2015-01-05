@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.1
 
 Rectangle {
     id: sidebarArea
@@ -44,7 +45,8 @@ Rectangle {
 
     Column {
         id: buttonBar
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
 
         property int currentIndex: 0
 
@@ -70,5 +72,58 @@ Rectangle {
 //            troggled: 2 == parent.currentIndex
 //            onButtonIsTroggled: parent.currentIndex = 2
 //        }
+    }
+
+    ListView {
+        id: taskListView
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: buttonBar.bottom
+        anchors.bottom: parent.bottom
+
+        model: rootData.taskManagerModel
+        verticalLayoutDirection: ListView.BottomToTop
+
+        delegate: Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            height: columnLayoutId.height + 10
+
+            ColumnLayout {
+                id: columnLayoutId
+
+                y: 5
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Text {
+                    id: nameText
+                    text: nameRole
+                }
+
+                Rectangle {
+                    border.width: 1
+                    border.color: "black"
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 5
+                    anchors.rightMargin: 5
+
+                    implicitHeight: 12
+
+                    Rectangle {
+                        property double precentComplete: progressRole / numberOfStepsRole
+                        x: 1
+                        y: 1
+                        width: (parent.width - 2) * precentComplete
+                        height: parent.height - 2
+                        color: "red"
+                    }
+                }
+            }
+        }
     }
 }

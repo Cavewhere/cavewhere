@@ -21,6 +21,7 @@
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
 #include "cwEventRecorderModel.h"
+#include "cwTaskManagerModel.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -34,8 +35,14 @@ cwRootData::cwRootData(QObject *parent) :
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
+
+    //Task Manager, allows the users to see running tasks
+    TaskManagerModel = new cwTaskManagerModel(this);
+
     //Create the project, this saves and load data
     Project = new cwProject(this);
+    Project->setTaskManager(TaskManagerModel);
+
     Region = Project->cavingRegion();
 
     Region->setUndoStack(undoStack());
@@ -55,6 +62,7 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager = new cwScrapManager(this);
     ScrapManager->setProject(Project);
     ScrapManager->setLinePlotManager(LinePlotManager);
+    ScrapManager->setTaskManager(TaskManagerModel);
 
     //Setup the survey export manager
     SurveyExportManager = new cwSurveyExportManager(this);

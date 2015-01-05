@@ -151,7 +151,7 @@ void cwSurvexImporter::loadFile(QString filename) {
 
     }
     //Emit the current line number
-    emit progressed(CurrentTotalNumberOfLines);
+//    emit progressed(CurrentTotalNumberOfLines);
 
     IncludeStack.removeLast();
 }

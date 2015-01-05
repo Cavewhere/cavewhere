@@ -126,7 +126,15 @@ void cwAddImageTask::calculateNumberOfSteps() {
 
     foreach(QString imagePath, NewImagePaths) {
         QImageReader reader(imagePath);
-        QSize imageSize = reader.size();
+        QSize imageSize;
+        if(reader.supportsOption(QImageIOHandler::Size)) {
+            //Format support reading the size without reading the whole image
+            imageSize = reader.size();
+        } else {
+            //Read the whole image and get the size
+            QImage image = reader.read();
+            imageSize = image.size();
+        }
         sizes.append(imageSize);
     }
 
@@ -771,6 +779,24 @@ QImage cwAddImageTask::ensureImageDivisibleBy4(QImage originalImage, QSizeF *cli
 
     *clipArea = QSizeF(validWidth, validHeight);
     return paddedImage;
+}
+
+/**
+  \brief This increases the current progress of the task
+
+  This function is thread safe
+
+  This uses an atomic integer that's thread safe
+  */
+void cwAddImageTask::IncreaseProgress() {
+    int originalValue = Progress.fetchAndAddRelaxed(1);
+    originalValue += 1;
+
+    //Normalize to progress
+    double percent = 100.0 * (originalValue / (double)numberOfSteps());
+    int wholeProgress = (qRound(percent) / 100.0) * numberOfSteps();
+
+    setProgress(wholeProgress);
 }
 
 

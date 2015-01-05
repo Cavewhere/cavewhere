@@ -184,15 +184,5 @@ inline QSize cwAddImageTask::halfSize(QSize size) const {
     return QSize(qMax(size.width() / 2, 1), qMax(size.height() / 2, 1));
 }
 
-/**
-  \brief This increases the current progress of the task
-
-  This uses an atomic integer that's thread safe, calling a signal is also
-  thread safe.
-  */
-inline void cwAddImageTask::IncreaseProgress() {
-    int originalValue = Progress.fetchAndAddRelaxed(1);
-    emit progressed(originalValue + 1);
-}
 
 #endif // CWLOADIMAGETASK_H
