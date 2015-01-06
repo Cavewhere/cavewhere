@@ -56,7 +56,7 @@ QEvent* cwApplication::cloneEvent(QEvent *event) const
     return nullptr;
 }
 
-
+#ifdef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug str, const QEvent *ev)
 {
     static int eventEnumIndex = QEvent::staticMetaObject
@@ -71,3 +71,4 @@ QDebug operator<<(QDebug str, const QEvent *ev)
      }
      return str.maybeSpace();
 }
+#endif
