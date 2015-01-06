@@ -1045,9 +1045,9 @@ void cwSurveyChunkView::positionStationRow(StationRow row, int index) {
   */
 void cwSurveyChunkView::positionElement(QQuickItem* item, const QQuickItem* titleItem, int index, int yOffset, QSizeF size) {
     QRectF titleRect = mapRectFromItem(titleItem, titleItem->boundingRect());
-    size = !size.isValid() ? titleRect.size() + QSizeF(-1, 0) : size;
-    float y = titleRect.bottom() + titleRect.height() * index;
-    QPointF position(titleRect.left(), yOffset + y - 1);
+    size = !size.isValid() ? titleRect.size() : size;
+    float y = (titleRect.bottom() - 1) + (titleRect.height() - 1) * index;
+    QPointF position(titleRect.left(), yOffset + y);
     //item->setPosition(position - QPointF(0.0, size.height()));
     if(item->position() == QPointF(0.0, 0.0)) {
         //Not position yet
@@ -1076,24 +1076,24 @@ void cwSurveyChunkView::positionShotRow(ShotRow row, int index) {
     row.backClino()->setProperty("visible", HasBackSights);
 
     //Has only one
-    float azimuthHeight = AzimuthTitle->height() + 1;
-    float clinoHeight = ClinoTitle->height() + 1;
+    float azimuthHeight = AzimuthTitle->height();
+    float clinoHeight = ClinoTitle->height();
     float backAzimuthY = 0.0;
     float backClinoY = 0.0;
 
     //Has both back and front sight
     if(HasFrontSights && HasBackSights) {
-        azimuthHeight = floor(AzimuthTitle->height() / 2.0 + 1);
-        clinoHeight = floor(ClinoTitle->height() / 2.0 + 1);
-        backAzimuthY = azimuthHeight;
-        backClinoY = clinoHeight;
+        azimuthHeight = floor(AzimuthTitle->height() / 2.0);
+        clinoHeight = floor(ClinoTitle->height() / 2.0);
+        backAzimuthY = azimuthHeight - 1;
+        backClinoY = clinoHeight - 1;
     }
 
-    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width(), azimuthHeight));
+    positionElement(row.frontCompass(), AzimuthTitle, index, 0, QSize(AzimuthTitle->width() + 1, azimuthHeight));
     positionElement(row.frontClino(), ClinoTitle, index, 0, QSize(ClinoTitle->width(), clinoHeight));
 
-    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width(), azimuthHeight - 1));
-    positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight - 1));
+    positionElement(row.backCompass(), AzimuthTitle, index, backAzimuthY, QSize(AzimuthTitle->width() + 1, azimuthHeight));
+    positionElement(row.backClino(), ClinoTitle, index, backClinoY, QSize(ClinoTitle->width(), clinoHeight));
 }
 
 /**
