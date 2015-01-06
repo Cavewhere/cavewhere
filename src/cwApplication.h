@@ -36,6 +36,6 @@ private:
 /// Gives human-readable event type information.
 #ifdef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug str, const QEvent * ev);
-#endif QT_NO_DEBUG_STREAM
+#endif //QT_NO_DEBUG_STREAM
 
 #endif // CWAPPLICATION_H
