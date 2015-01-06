@@ -790,11 +790,12 @@ QImage cwAddImageTask::ensureImageDivisibleBy4(QImage originalImage, QSizeF *cli
   */
 void cwAddImageTask::IncreaseProgress() {
     int originalValue = Progress.fetchAndAddRelaxed(1);
-    originalValue += 1;
 
     //Normalize to progress
     double percent = 100.0 * (originalValue / (double)numberOfSteps());
     int wholeProgress = (qRound(percent) / 100.0) * numberOfSteps();
+
+    wholeProgress = qMax(0, qMin(wholeProgress, numberOfSteps()));
 
     setProgress(wholeProgress);
 }
