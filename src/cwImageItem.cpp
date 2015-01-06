@@ -335,8 +335,7 @@ QPointF cwImageItem::mapQtViewportToNote(QPoint qtViewportCoordinate) {
 QPointF cwImageItem::mapNoteToQtViewport(QPointF mapNote) const
 {
     QPointF glViewportPoint = Camera->project(QVector3D(mapNote.x(), mapNote.y(), 0.0), RotationModelMatrix);
-    QPointF qtViewportPoint = Camera->mapToQtViewport(glViewportPoint);
-    return qtViewportPoint;
+    return glViewportPoint;
 }
 
 /**
