@@ -27,112 +27,118 @@ Rectangle {
     ScrollView {
         id: scrollAreaId
 
-        property real contentY: typeof(scrollAreaId.__verticalScrollBar.value) != "undefined" ? scrollAreaId.__verticalScrollBar.value : 0
-        property real contentX: typeof(scrollAreaId.__horizontalScrollBar.value) != "undefined" ? scrollAreaId.__horizontalScrollBar.value : 0
-
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.margins: 1;
 
-        width: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
+        width: flickableAreaId.contentWidth
 
-        function ensureVisible(r){
-            var contentY = scrollAreaId.contentY;
-            if (scrollAreaId.contentY >= r.y) {
-                contentY = r.y;
-            } else if (scrollAreaId.contentY+height <= r.y+r.height) {
-                contentY = r.y+r.height-height;
-            }
-            scrollAreaId.__verticalScrollBar.value = contentY
-        }
+        Flickable {
+            id: flickableAreaId
 
-        Column {
-            id: column
+            contentHeight: column.height
+            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
-            spacing: 5
-
-            CalibrationEditor {
-                width: view.contentWidth
-                calibration: currentTrip === null ? null : currentTrip.calibration
-            }
-
-            BreakLine { }
-
-            TeamTable {
-                id: teamTable
-                model: currentTrip !== null ? currentTrip.team : null
-                width: view.contentWidth
-            }
-
-            BreakLine { }
-
-            SectionLabel {
-                text: "Data"
-            }
-
-            SurveyChunkGroupView {
-                id: view
-
-                height: contentHeight
-                width: view.contentWidth
-
-                viewportX: scrollAreaId.contentX;
-                viewportY: scrollAreaId.contentY;
-                viewportWidth: scrollAreaId.viewport.width;
-                viewportHeight: scrollAreaId.viewport.height;
-
-                onEnsureVisibleRectChanged: scrollAreaId.ensureVisible(ensureVisibleRect);
-            }
-
-            Text {
-                visible: !addSurveyData.visible
-                text: {
-                    if(currentTrip === null) { return "" }
-                    var unit = ""
-                    switch(currentTrip.calibration.distanceUnit) {
-                    case Units.Meters:
-                        unit = "m"
-                        break;
-                    case Units.Feet:
-                        unit = "ft"
-                        break;
-                    }
-
-                    return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+            function ensureVisible(r){
+                console.log("Ensure visible:" + r.y + " " + r.height)
+                var contentY = flickableAreaId.contentY;
+                if (flickableAreaId.contentY >= r.y) {
+                    contentY = r.y;
+                } else if (flickableAreaId.contentY+height <= r.y+r.height) {
+                    contentY = r.y+r.height-height;
                 }
+
+                flickableAreaId.contentY = contentY;
             }
 
-            Image {
-                id: spaceAddBar
-                source: "qrc:icons/spacebar.png"
+            Column {
+                id: column
 
-                anchors.horizontalCenter: view.horizontalCenter
+                spacing: 5
 
-                visible: currentTrip !== null && currentTrip.numberOfChunks > 0
+                CalibrationEditor {
+                    width: view.contentWidth
+                    calibration: currentTrip === null ? null : currentTrip.calibration
+                }
+
+                BreakLine { }
+
+                TeamTable {
+                    id: teamTable
+                    model: currentTrip !== null ? currentTrip.team : null
+                    width: view.contentWidth
+                }
+
+                BreakLine { }
+
+                SectionLabel {
+                    text: "Data"
+                }
+
+                SurveyChunkGroupView {
+                    id: view
+
+                    height: contentHeight
+                    width: view.contentWidth
+
+                    viewportX: flickableAreaId.contentX;
+                    viewportY: flickableAreaId.contentY;
+                    viewportWidth: scrollAreaId.viewport.width;
+                    viewportHeight: scrollAreaId.viewport.height;
+
+                    onEnsureVisibleRectChanged: flickableAreaId.ensureVisible(ensureVisibleRect);
+                }
 
                 Text {
-                    anchors.centerIn: parent
-                    text: "Press <b>Space</b> to add another data block";
-                }
+                    visible: !addSurveyData.visible
+                    text: {
+                        if(currentTrip === null) { return "" }
+                        var unit = ""
+                        switch(currentTrip.calibration.distanceUnit) {
+                        case Units.Meters:
+                            unit = "m"
+                            break;
+                        case Units.Feet:
+                            unit = "ft"
+                            break;
+                        }
 
-                MouseArea {
-                    anchors.fill: parent
-
-                    onClicked: {
-                        currentTrip.addNewChunk();
+                        return "Total Length: " + Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                     }
                 }
-            }
 
-            AddButton {
-                id: addSurveyData
-                text: "Add Survey Data"
-                anchors.horizontalCenter: view.horizontalCenter
-                visible: currentTrip !== null && currentTrip.numberOfChunks === 0
+                Image {
+                    id: spaceAddBar
+                    source: "qrc:icons/spacebar.png"
 
-                onClicked: {
-                    currentTrip.addNewChunk()
+                    anchors.horizontalCenter: view.horizontalCenter
+
+                    visible: currentTrip !== null && currentTrip.numberOfChunks > 0
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Press <b>Space</b> to add another data block";
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+
+                        onClicked: {
+                            currentTrip.addNewChunk();
+                        }
+                    }
+                }
+
+                AddButton {
+                    id: addSurveyData
+                    text: "Add Survey Data"
+                    anchors.horizontalCenter: view.horizontalCenter
+                    visible: currentTrip !== null && currentTrip.numberOfChunks === 0
+
+                    onClicked: {
+                        currentTrip.addNewChunk()
+                    }
                 }
             }
         }
