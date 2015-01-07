@@ -263,6 +263,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     cwCavingRegion* regionPtr = Region; //.data();
 
     emit regionPtr->beginInsertCaves(BeginIndex, EndIndex);
+    emit regionPtr->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Caves.size(); i++) {
         int index = BeginIndex + i;
         regionPtr->Caves.insert(index, Caves[i]);
@@ -272,6 +273,7 @@ void cwCavingRegion::InsertRemoveCave::insertCaves() {
     OwnsCaves = false;
 
     emit regionPtr->insertedCaves(BeginIndex, EndIndex);
+    emit regionPtr->endInsertRows();
     emit regionPtr->caveCountChanged();
 }
 
@@ -283,6 +285,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
     cwCavingRegion* regionPtr = Region; //.data();
 
     emit regionPtr->beginRemoveCaves(BeginIndex, EndIndex);
+    emit regionPtr->beginRemoveRows(QModelIndex(), BeginIndex, EndIndex);
 
     for(int i = Caves.size() - 1; i >= 0; i--) {
         int index = BeginIndex + i;
@@ -293,6 +296,7 @@ void cwCavingRegion::InsertRemoveCave::removeCaves() {
     OwnsCaves = true;
 
     emit regionPtr->removedCaves(BeginIndex, EndIndex);
+    emit regionPtr->endRemoveRows();
     emit regionPtr->caveCountChanged();
 }
 

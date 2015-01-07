@@ -5,10 +5,11 @@
 **
 **************************************************************************/
 
+import Cavewhere 1.0
 import QtQml 2.2
 import QtQuick 2.0
-import QtQuick.Controls 1.2
-import Cavewhere 1.0
+import QtQuick.Controls 1.2 as Controls;
+import QtQuick.Layouts 1.1
 
 Rectangle {
     id: pageId
@@ -27,40 +28,78 @@ Rectangle {
         }
     }
 
-    TableView {
-        anchors.fill: parent
-        anchors.margins: 3
+    ColumnLayout {
 
-        model: rootData.region
+//        anchors.fill: parent
 
-        TableViewColumn{ role: "caveObjectRole"  ; title: "Cave" ; width: 200 }
-        TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
-        TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
-        TableViewColumn{ role: "caveObjectRole" ; title: "Leads" ; width: 100 }
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 5
 
-        itemDelegate:
-            Item {
-            LinkText {
-                visible: styleData.column === 0
-                text: styleData.value.name
+        RowLayout {
+
+            Layout.fillWidth: true
+
+            Button {
+                text: "Add Cave"
+                iconSource: "qrc:/icons/plus.png"
+
+                Layout.alignment: Qt.AlignLeft
+
                 onClicked: {
-                    rootData.pageSelectionModel.setCurrentPage(pageId, styleData.value.name);
+                    region.addCave();
                 }
             }
 
-            UnitValueInput {
-                visible: styleData.column === 1 || styleData.column === 2
-                unitValue: {
-                    switch(styleData.column) {
-                    case 1:
-                        return styleData.value.length
-                    case 2:
-                        return styleData.value.depth
-                    default:
-                        return null
+            Item { Layout.fillWidth: true }
+
+            Controls.TextField {
+                id: searchBox
+
+                placeholderText: "Search..."
+                inputMethodHints: Qt.ImhNoPredictiveText
+
+                Layout.alignment: Qt.AlignRight
+
+                implicitWidth: 250
+            }
+        }
+
+        Controls.TableView {
+            model: rootData.region
+
+            Layout.fillHeight: true
+            implicitWidth: 450
+
+            Controls.TableViewColumn{ role: "caveObjectRole"  ; title: "Cave" ; width: 200 }
+            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
+            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+
+            itemDelegate:
+                Item {
+                LinkText {
+                    visible: styleData.column === 0
+                    text: styleData.value.name
+                    onClicked: {
+                        rootData.pageSelectionModel.setCurrentPage(pageId, styleData.value.name);
                     }
                 }
-                valueReadOnly: true
+
+                UnitValueInput {
+                    visible: styleData.column === 1 || styleData.column === 2
+                    unitValue: {
+                        switch(styleData.column) {
+                        case 1:
+                            return styleData.value.length
+                        case 2:
+                            return styleData.value.depth
+                        default:
+                            return null
+                        }
+                    }
+                    valueReadOnly: true
+                }
             }
         }
     }
@@ -73,6 +112,7 @@ Rectangle {
 
         onObjectAdded: {
             //In-ables the link
+            console.log("Added!");
             rootData.pageSelectionModel.registerPageLink(pageId, //From
                                                          caveOverviewPageId, //To
                                                          object.cave.name, //Name
