@@ -16,9 +16,31 @@
 cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
     QObject(parent),
     LockHistory(false),
-    CurrentPageIndex(0)
+    CurrentPageIndex(0),
+    RootNode(new PageTreeNode())
 {
 
+}
+
+/**
+ * @brief cwPageSelectionModel::registerRootPage
+ * @param page
+ *
+ * Sets the root page for the page selection model. This will reset all the data in the model
+ *
+ * This will not clear the orphen list
+ */
+void cwPageSelectionModel::registerRootPage(QObject *page)
+{
+    if(RootPage != page) {
+        RootPage = page;
+
+        //Clear all the data in the selection model
+        PageParameters.clear();
+        PageDefaults.clear();
+        RootNode = PageTreeNodePtr(new PageTreeNode());
+        ObjectToPageLookup.clear();
+    }
 }
 
 /**
@@ -59,8 +81,11 @@ void cwPageSelectionModel::registerPageLink(QObject *from,
     link.Name = name;
     link.Function = function;
 
-    PageLinks.insert(to, link);
-    StringToPageLinks.insert(objectToLinkStringList(to).join("/"), link);
+    insertIntoPageTree(link);
+
+//    PageLinks.insert(to, link);
+//    qDebug() << "registerPageLink:" << objectToLinkStringList(to).join("/") << to;
+//    StringToPageLinks.insert(objectToLinkStringList(to).join("/"), link);
 }
 
 /**
@@ -93,7 +118,10 @@ void cwPageSelectionModel::setCurrentSelection(QObject *object, QVariantMap para
 
 /**
 * @brief cwPageSelectionModel::setCurrentPage
-* @param currentPage
+* @param currentPage - The current page
+*
+* This will update the current page of the model. This will try to change the selection the current
+* page of the qml
 */
 void cwPageSelectionModel::setCurrentPage(QString currentPage) {
     if(currentPage.isEmpty()) {
@@ -102,49 +130,7 @@ void cwPageSelectionModel::setCurrentPage(QString currentPage) {
 
     if(CurrentPage != currentPage) {
 
-        QStringList newPageList = pageLinkDifferance(currentPage, CurrentPage);
-        foreach(QString page, newPageList) {
-            //Go to the page
-            PageLink link = StringToPageLinks.value(page);
-            if(!link.FromObject.isNull()) {
-                bool okay = QMetaObject::invokeMethod(link.FromObject,
-                                                      link.Function,
-                                                      Q_ARG(QVariant, link.Parameters));
-                if(!okay) {
-                    qDebug() << "Can't invokeMethod" << link.FromObject << link.Function << link.Parameters << LOCATION;
-                }
-            } else {
-                qDebug() << "Link parent object is null, this is a bug" << LOCATION;
-            }
-        }
-
-        if(!newPageList.isEmpty()) {
-            //Load the default view for the page
-            PageLink link = StringToPageLinks.value(currentPage);
-            PageDefaultSelection pageDefault = PageDefaults.value(link.ToObject);
-            qDebug() << "PageDefault:" << currentPage << pageDefault.Page << pageDefault.Function;
-            if(!pageDefault.Page.isNull()) {
-                bool okay = QMetaObject::invokeMethod(pageDefault.Page,
-                                                      pageDefault.Function,
-                                                      Q_ARG(QVariant, pageDefault.Parameters));
-                if(!okay) {
-                    qDebug() << "Can't invokeMethod" << pageDefault.Page << link.Function << link.Parameters << LOCATION;
-                }
-            }
-        }
-
-        if(!LockHistory) {
-            //Remove old pages
-            int numberToRemove = (PageHistory.size() - 1) - CurrentPageIndex;
-            for(int i = 0; i < numberToRemove; i++) {
-                PageHistory.removeLast();
-            }
-
-            //Set the new current page
-            PageHistory.append(currentPage);
-            CurrentPageIndex = PageHistory.size() - 1;
-        }
-
+        loadPage(currentPage, CurrentPage);
         CurrentPage = currentPage;
 
         emit currentPageChanged();
@@ -199,6 +185,16 @@ void cwPageSelectionModel::forward()
     }
 }
 
+///**
+// * @brief cwPageSelectionModel::reload
+// *
+// * This will reload the current page.
+// */
+//void cwPageSelectionModel::reload()
+//{
+//    loadPage(CurrentPage, QString());
+//}
+
 /**
  * @brief cwPageSelectionModel::pageDifferance
  * @param newPage
@@ -250,18 +246,13 @@ QStringList cwPageSelectionModel::pageLinkDifferance(QString newPageLink, QStrin
  */
 QStringList cwPageSelectionModel::objectToLinkStringList(QObject *object) const
 {
-    QStringList pageNames;
-
-    PageLink link = PageLinks.value(object);
-    while(!link.Name.isEmpty()) {
-        pageNames.prepend(link.Name);
-
-        //Go up to the parent link
-        object = link.FromObject;
-        link = PageLinks.value(object);
+    QStringList linkString;
+    while(ObjectToPageLookup.contains(object)) {
+        PageTreeNodePtr node = ObjectToPageLookup.value(object);
+        linkString.prepend(node->Link.Name);
+        object = node->Link.FromObject;
     }
-
-    return pageNames;
+    return linkString;
 }
 
 /**
@@ -323,4 +314,131 @@ void cwPageSelectionModel::printPageHistory() const
         }
     }
     qDebug() << "*****************************************************";
+}
+
+/**
+ * @brief cwPageSelectionModel::loadPage
+ * @param newPage
+ * @param currentPage
+ *
+ * This is a helper function for the reload() and setCurrentPage(). This function calls the qml
+ * to update the current page.
+ */
+void cwPageSelectionModel::loadPage(QString newPage, QString oldPage)
+{
+    QStringList newPageList = pageLinkDifferance(newPage, oldPage);
+    foreach(QString page, newPageList) {
+        //Go to the page
+        PageLink link = stringToPageLink(page);
+        if(!link.FromObject.isNull()) {
+            bool okay = QMetaObject::invokeMethod(link.FromObject,
+                                                  link.Function,
+                                                  Q_ARG(QVariant, link.Parameters));
+            if(!okay) {
+                qDebug() << "Can't invokeMethod" << link.FromObject << link.Function << link.Parameters << LOCATION;
+            }
+        } else {
+            qDebug() << "Link parent object is null for " << page << "this is a bug" << LOCATION;
+        }
+    }
+
+    if(!newPageList.isEmpty()) {
+        //Load the default view for the page
+        PageLink link = stringToPageLink(newPage);
+        PageDefaultSelection pageDefault = PageDefaults.value(link.ToObject);
+        qDebug() << "PageDefault:" << newPage << pageDefault.Page << pageDefault.Function;
+        if(!pageDefault.Page.isNull()) {
+            bool okay = QMetaObject::invokeMethod(pageDefault.Page,
+                                                  pageDefault.Function,
+                                                  Q_ARG(QVariant, pageDefault.Parameters));
+            if(!okay) {
+                qDebug() << "Can't invokeMethod" << pageDefault.Page << link.Function << link.Parameters << LOCATION;
+            }
+        }
+    }
+
+    if(!LockHistory) {
+        //Remove old pages
+        int numberToRemove = (PageHistory.size() - 1) - CurrentPageIndex;
+        for(int i = 0; i < numberToRemove; i++) {
+            PageHistory.removeLast();
+        }
+
+        //Set the new current page
+        PageHistory.append(newPage);
+        CurrentPageIndex = PageHistory.size() - 1;
+    }
+}
+
+/**
+ * @brief cwPageSelectionModel::instertIntoPageTree
+ * @param link
+ *
+ * This inserts the link into the page tree. Links can be inserted out of order. If inserted out of
+ * order, ie link is register before parent pages, this will orphen the link and print a warning messsage.
+ *
+ * This function will then try to instert orphen links.
+ */
+void cwPageSelectionModel::insertIntoPageTree(const cwPageSelectionModel::PageLink &link, bool appendToOrphenLinks)
+{
+    PageTreeNodePtr parentNode;
+
+    PageTreeNodePtr childNode(new PageTreeNode());
+    childNode->Link = link;
+
+    //The from object node already exists in the tree
+    if(ObjectToPageLookup.contains(link.FromObject)) {
+        //Add the link as a child of the fromObject
+        parentNode = ObjectToPageLookup.value(link.FromObject);
+    } else {
+        //From object doesn't exist in the tree
+        Q_ASSERT(!RootPage.isNull()); //Root page has been deleted or not set, via registerRootPage
+        if(link.FromObject == RootPage) {
+            //Add to RootNode
+            parentNode = RootNode;
+        } else {
+            //This is an orphin link
+            if(appendToOrphenLinks) {
+                qDebug() << "Found and orphened link" << link.Name << "To:" << link.ToObject << "From:" << link.FromObject << LOCATION;
+                OrphenLinks.insert(link, 0);
+            }
+            return;
+        }
+    }
+
+    //Add the child to the parentNode
+    OrphenLinks.remove(link);
+    parentNode->ChildNodes.insert(link.Name, childNode);
+    ObjectToPageLookup.insert(link.ToObject, childNode);
+
+    foreach(const PageLink& link, OrphenLinks.keys()) {
+        //Recursive call for trying to append orphen links,
+        insertIntoPageTree(link, false);
+    }
+}
+
+/**
+ * @brief cwPageSelectionModel::stringToPageLink
+ * @param pageLinkString
+ * @return
+ *
+ * This will iterate the through the pageTree starting from the RootNode and find the link base
+ * on the string. The string will be broken into it's parents using "/" as a seperator. It's part
+ * is used to traverse the tree.
+ *
+ * If the link can't be found, then this returns an empty link
+ */
+cwPageSelectionModel::PageLink cwPageSelectionModel::stringToPageLink(const QString &pageLinkString) const
+{
+    QStringList parts = pageLinkString.split("/");
+    PageTreeNodePtr current = RootNode;
+
+    foreach(QString part, parts) {
+        if(!current->ChildNodes.contains(part)) {
+            return PageLink();
+        }
+        current = current->ChildNodes.value(part);
+    }
+
+    return current->Link;
 }

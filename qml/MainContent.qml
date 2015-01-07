@@ -110,10 +110,17 @@ Item {
     }
 
     Component.onCompleted: {
+        var oldCurrentPage = rootData.pageSelectionModel.currentPage; //Set the current root so reloading qml works
+        rootData.pageSelectionModel.registerRootPage(mainContentId);
         rootData.pageSelectionModel.registerPageLink(mainContentId, terrainRendererId, "View", "setCurrentMainPage", {page:'View'});
         rootData.pageSelectionModel.registerPageLink(mainContentId, dataMainPageId, "Data", "setCurrentMainPage", {page:'Data'});
-        rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
+        if(rootData.pageSelectionModel.currentPage === "") {
+            //We are starting up for the first time
+            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
+        } else {
+            //QML reloaded for debugging
+            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
+            rootData.pageSelectionModel.currentPage = oldCurrentPage;
+        }
     }
-
-
 }
