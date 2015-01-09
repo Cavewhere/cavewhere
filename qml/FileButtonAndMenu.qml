@@ -12,7 +12,7 @@ import QtQuick.Controls 1.0
 
 MenuBar {
     property var terrainRenderer; //For taking screenshots
-    property var dataPage; //Should be a DataMainPage
+//    property var dataPage; //Should be a DataMainPage
     property Loader mainContentLoader;
 
     signal openAboutWindow;
@@ -24,7 +24,7 @@ MenuBar {
             text: "New"
             shortcut: "Ctrl+N"
             onTriggered:{
-                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
+//                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
                 project.newProject();
             }
         }

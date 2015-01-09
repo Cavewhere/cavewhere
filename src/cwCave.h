@@ -23,15 +23,21 @@ class cwLength;
 #include <QDebug>
 #include <QWeakPointer>
 #include <QVariant>
+#include <QAbstractListModel>
 
-class cwCave : public QObject, public cwUndoer
+class cwCave : public QAbstractListModel, public cwUndoer
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
 
+    Q_ENUMS(Roles)
 public:
+    enum Roles {
+        TripObjectRole
+    };
+
     explicit cwCave(QObject* parent = nullptr);
     cwCave(const cwCave& object);
     cwCave& operator=(const cwCave& object);
@@ -52,6 +58,10 @@ public:
     void insertTrip(int i, cwTrip* trip);
     void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
+
+    int rowCount(const QModelIndex &parent) const;
+    QVariant data(const QModelIndex &index, int role) const;
+    QHash<int, QByteArray> roleNames() const;
 
     cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionLookup(const cwStationPositionLookup& model);

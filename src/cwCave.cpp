@@ -12,7 +12,7 @@
 #include "cwLength.h"
 
 cwCave::cwCave(QObject* parent) :
-    QObject(parent),
+    QAbstractListModel(parent),
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
     StationPositionModelStale(false)
@@ -28,7 +28,7 @@ cwCave::cwCave(QObject* parent) :
   \brief Copy constructor
   */
 cwCave::cwCave(const cwCave& object) :
-    QObject(nullptr),
+    QAbstractListModel(nullptr),
     cwUndoer(),
     Length(new cwLength(this)),
     Depth(new cwLength(this))
@@ -157,6 +157,50 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
 void cwCave::removeTrip(int i) {
     if(i < 0 || i >= Trips.size()) { return; }
     pushUndo(new RemoveTripCommand(this, i, i));
+}
+
+/**
+ * @brief cwCave::rowCount
+ * @param parent
+ * @return Returns the number of trips in the cwCave
+ */
+int cwCave::rowCount(const QModelIndex &parent) const
+{
+    Q_UNUSED(parent);
+    return tripCount();
+}
+
+/**
+ * @brief cwCave::data
+ * @param index
+ * @param role
+ * @return
+ */
+QVariant cwCave::data(const QModelIndex &index, int role) const
+{
+   if(!index.isValid()) {
+       return QVariant();
+   }
+
+   switch(role) {
+   case TripObjectRole:
+       return QVariant::fromValue(Trips.at(index.row()));
+   default:
+       return QVariant();
+   }
+
+   return QVariant();
+}
+
+/**
+ * @brief cwCave::roleNames
+ * @return Returns the roleNames of the model. See the Qt doc for details
+ */
+QHash<int, QByteArray> cwCave::roleNames() const
+{
+    QHash<int, QByteArray> roles;
+    roles.insert(TripObjectRole, "tripObjectRole");
+    return roles;
 }
 
 /**

@@ -14,24 +14,11 @@ import QtQuick.Layouts 1.1
 Rectangle {
     id: pageId
 
-    /**
-      This is for global page selection
-      obj.cave = caveObject <- This will the view to a specific cave
-      obj.cave = null <- This will change to an overview
-      */
-    function setPage(obj) {
-        console.log("Obj:" + obj.cave)
-        if(obj.cave) {
-            caveOverviewPageId.currentCave = obj.cave
-        } else {
-            caveOverviewPageId.currentCave = null
-        }
+    function cavePageName(caveName) {
+        return "Cave=" + caveName;
     }
 
     ColumnLayout {
-
-//        anchors.fill: parent
-
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.bottom: parent.bottom
@@ -72,7 +59,7 @@ Rectangle {
             Layout.fillHeight: true
             implicitWidth: 450
 
-            Controls.TableViewColumn{ role: "caveObjectRole"  ; title: "Cave" ; width: 200 }
+            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Cave" ; width: 200 }
             Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
             Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
 
@@ -82,7 +69,8 @@ Rectangle {
                     visible: styleData.column === 0
                     text: styleData.value.name
                     onClicked: {
-                        rootData.pageSelectionModel.setCurrentPage(pageId, styleData.value.name);
+                        rootData.pageSelectionModel.gotoPageByName(pageId,
+                                                                   cavePageName(styleData.value.name));
                     }
                 }
 
@@ -107,35 +95,39 @@ Rectangle {
     Instantiator {
         model: rootData.region
         delegate: QtObject {
-            property var cave: caveObjectRole
+            id: delegateObjectId
+            property Cave cave: caveObjectRole
+            property Page page
+            property Connections connections: Connections {
+                target: cave
+                onNameChanged: {
+                    page.name = cavePageName(delegateObjectId.cave.name);
+                }
+            }
         }
 
         onObjectAdded: {
             //In-ables the link
             console.log("Added!");
-            rootData.pageSelectionModel.registerPageLink(pageId, //From
-                                                         caveOverviewPageId, //To
-                                                         object.cave.name, //Name
-                                                         "setPage", //Function
-                                                         {cave:object.cave}
-                                                         )
+            var linkId = rootData.pageSelectionModel.registerPage(pageId, //From
+                                                                  cavePageName(object.cave.name), //Name
+                                                                  caveOverviewPageComponent,
+                                                                  {currentCave:object.cave}
+                                                                  )
+
+            object.page = linkId
 
         }
 
         onObjectRemoved: {
             //TODO, implement me
         }
-
     }
 
-    CaveOverviewPage {
-        id: caveOverviewPageId
-        visible: currentCave != null
-    }
-
-    Component.onCompleted: {
-        //Sets up the default selection
-        rootData.pageSelectionModel.registerDefaultPageSelection(pageId, "setPage", {cave:0})
+    //Child page
+    Component {
+        id: caveOverviewPageComponent
+        CaveOverviewPage { }
     }
 
 

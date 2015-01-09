@@ -1,11 +1,12 @@
 import QtQuick 2.0
 import QtGraphicalEffects 1.0
 import QtQuick.Controls 1.0
+import Cavewhere 1.0
 
 Item {
     id: mainContentId
 
-    property alias dataPage: dataMainPageId
+//    property alias dataPage: dataMainPageId
 
     /**
       This is for global page selection
@@ -69,7 +70,7 @@ Item {
                 console.log("Don't know how to show page:" + pageShown);
             }
 
-            rootData.pageSelectionModel.setCurrentPage(mainContentId, page);
+            rootData.pageSelectionModel.gotoPageByName(null, page);
         }
     }
 
@@ -82,22 +83,15 @@ Item {
 
         property int currentPosition: height * mainSideBar.pageShownReal
 
-        //       Replace with the view
-        RenderingView {
-            id: terrainRendererId
-            width:  parent.width
-            height: parent.height
-            x: 0; y: -container.currentPosition
-            scene: regionSceneManager.scene
+        PageView {
+            anchors.fill: parent
+            pageSelectionModel: rootData.pageSelectionModel
         }
 
-        DataMainPage {
-            id: dataMainPageId
-            width:  parent.width
-            height: parent.height
-            x: 0;
-            y: height - container.currentPosition
-        }
+        //       Replace with the view
+
+
+
 
 //        Rectangle {
 //            //visible: mainSideBar.pageShown == "draft"
@@ -109,18 +103,44 @@ Item {
 //        }
     }
 
-    Component.onCompleted: {
-        var oldCurrentPage = rootData.pageSelectionModel.currentPage; //Set the current root so reloading qml works
-        rootData.pageSelectionModel.registerRootPage(mainContentId);
-        rootData.pageSelectionModel.registerPageLink(mainContentId, terrainRendererId, "View", "setCurrentMainPage", {page:'View'});
-        rootData.pageSelectionModel.registerPageLink(mainContentId, dataMainPageId, "Data", "setCurrentMainPage", {page:'Data'});
-        if(rootData.pageSelectionModel.currentPage === "") {
-            //We are starting up for the first time
-            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
-        } else {
-            //QML reloaded for debugging
-            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
-            rootData.pageSelectionModel.currentPage = oldCurrentPage;
+    Component {
+        id: renderingComponent
+        RenderingView {
+//            id: terrainRendererId
+            width:  parent.width
+            height: parent.height
+            x: 0; y: -container.currentPosition
+            scene: regionSceneManager.scene
         }
+    }
+
+    Component {
+        id: dataMainPageComponent
+        DataMainPage {
+//            id: dataMainPageId
+            width:  parent.width
+            height: parent.height
+            x: 0;
+            y: height - container.currentPosition
+        }
+    }
+
+    Component.onCompleted: {
+        var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
+        rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
+        rootData.pageSelectionModel.gotoPage(viewPage);
+
+        //        var oldCurrentPage = rootData.pageSelectionModel.currentPage; //Set the current root so reloading qml works
+//        rootData.pageSelectionModel.registerRootPage(mainContentId);
+//        rootData.pageSelectionModel.registerPageLink(mainContentId, terrainRendererId, "View", "setCurrentMainPage", {page:'View'});
+//        rootData.pageSelectionModel.registerPageLink(mainContentId, dataMainPageId, "Data", "setCurrentMainPage", {page:'Data'});
+//        if(rootData.pageSelectionModel.currentPage === "") {
+//            //We are starting up for the first time
+//            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
+//        } else {
+//            //QML reloaded for debugging
+//            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
+//            rootData.pageSelectionModel.currentPage = oldCurrentPage;
+//        }
     }
 }

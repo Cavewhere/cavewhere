@@ -79,6 +79,8 @@ Rectangle {
                 SurveyChunkGroupView {
                     id: view
 
+                    trip: rootData.defaultTrip
+
                     height: contentHeight
                     width: view.contentWidth
 
