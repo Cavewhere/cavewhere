@@ -76,5 +76,6 @@
         <file>icons/dragArrow/arrowHighRightBlack.png</file>
         <file>icons/dragArrow/rotateArrow.png</file>
         <file>icons/dragArrow/rotateArrowBlack.png</file>
+        <file>icons/unknownPage.png</file>
     </qresource>
 </RCC>

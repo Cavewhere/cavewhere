@@ -10,10 +10,10 @@ import Cavewhere 1.0
 import QtQuick.Controls 1.0
 import "Utils.js" as Utils
 
+//PageItem {
+
 Rectangle {
     id: area
-
-    anchors.fill: parent
 
     property alias currentTrip: view.trip
     property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
@@ -79,7 +79,7 @@ Rectangle {
                 SurveyChunkGroupView {
                     id: view
 
-                    trip: rootData.defaultTrip
+                    trip: defaultTrip
 
                     height: contentHeight
                     width: view.contentWidth
@@ -167,4 +167,4 @@ Rectangle {
         }
     }
 }
-
+//}

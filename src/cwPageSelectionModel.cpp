@@ -10,10 +10,12 @@
 #include "cwPageSelectionModel.h"
 #include "cwDebug.h"
 #include "cwPage.h"
+#include "cwGlobalDirectory.h"
 
 //Qt includse
 #include <QDebug>
 #include <QQmlComponent>
+#include <QVariantMap>
 
 cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
     QObject(parent),
@@ -23,8 +25,8 @@ cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
     CurrentPageIndex(0)
 {
     RootPage->setParent(this);
-    QuickItemToPage.insert(nullptr, RootPage);
-
+    //    QuickItemToPage.insertMulti(nullptr, RootPage);
+    //    PageToQuickItem.insert(RootPage, nullptr);
 }
 
 /**
@@ -34,25 +36,27 @@ cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
  *
  * This will map a pageItem and page together. This function should only be called by a PageView.
  */
-void cwPageSelectionModel::registerQuickItemToPage(QQuickItem *pageItem, cwPage *page)
-{
-    Q_ASSERT(pageItem != nullptr);
-    Q_ASSERT(page != nullptr);
-    QuickItemToPage.insert(pageItem, page);
+//void cwPageSelectionModel::registerQuickItemToPage(QQuickItem *pageItem, cwPage *page)
+//{
+//    Q_ASSERT(pageItem != nullptr);
+//    Q_ASSERT(page != nullptr);
+//    qDebug() << "Registering pageItem:" << (void*)pageItem << page << page->name();
+//    QuickItemToPage.insertMulti(pageItem, page);
+//    PageToQuickItem.insert(page, pageItem);
 
-    //Sometimes qml loads things out of order and pages must be register when the quickItemToPage
-    //is registered.
-    if(DelayRegisterationPages.contains(pageItem)) {
-        DelayedPage delayedPage = DelayRegisterationPages.value(pageItem);
-        Q_ASSERT(delayedPage.ParentPageItem == pageItem);
-        registerPage(delayedPage.ParentPageItem,
-                     delayedPage.PageName,
-                     delayedPage.PageComponent,
-                     delayedPage.PageProperties);
-        DelayRegisterationPages.remove(pageItem);
-    }
+//    //Sometimes qml loads things out of order and pages must be register when the quickItemToPage
+//    //is registered.
+//    if(DelayRegisterationPages.contains(pageItem)) {
+//        DelayedPage delayedPage = DelayRegisterationPages.value(pageItem);
+//        Q_ASSERT(delayedPage.ParentPageItem == pageItem);
+//        registerPage(delayedPage.ParentPageItem,
+//                     delayedPage.PageName,
+//                     delayedPage.PageComponent,
+//                     delayedPage.PageProperties);
+//        DelayRegisterationPages.remove(pageItem);
+//    }
 
-}
+//}
 
 
 /**
@@ -63,7 +67,7 @@ void cwPageSelectionModel::registerQuickItemToPage(QQuickItem *pageItem, cwPage 
  * @param pageProperties
  * @return
  */
-cwPage* cwPageSelectionModel::registerPage(QQuickItem *parentPageItem,
+cwPage* cwPageSelectionModel::registerPage(cwPage *parentPage,
                                            QString pageName,
                                            QQmlComponent *pageComponent,
                                            QVariantMap pageProperties)
@@ -72,24 +76,58 @@ cwPage* cwPageSelectionModel::registerPage(QQuickItem *parentPageItem,
     Q_ASSERT(!pageName.isEmpty());
     Q_ASSERT(pageComponent != nullptr);
 
-    //The parent page has been register, or this is root page
-    if(QuickItemToPage.contains(parentPageItem) || parentPageItem == nullptr) {
-        cwPage* parentPage = QuickItemToPage.value(parentPageItem);
-        cwPage* page = new cwPage(parentPage, pageComponent, pageName, pageProperties);
 
-        return page;
-    } else {
-        //The page isn't ready for pages to be registered. Delay registeration.
-        //Basically the page is in the middle of being load. Component.onComplete() hasn't
-        //been called yet.
-        DelayRegisterationPages.insert(parentPageItem, DelayedPage(parentPageItem,
-                                                                   pageName,
-                                                                   pageComponent,
-                                                                   pageProperties));
+    if(parentPage == nullptr) {
+        parentPage = RootPage;
     }
 
-    qDebug() << "Can't find parent page item:" << parentPageItem << LOCATION;
-    return nullptr;
+    qDebug() << "Registering page:" << parentPage << parentPage->name() << pageName << pageComponent << pageProperties;
+
+    Q_ASSERT(isPageOrphan(parentPage)); //Make sure the parent page exists in the model
+
+    cwPage* page = new cwPage(parentPage, pageComponent, pageName, pageProperties);
+    return page;
+
+    //    //The parent page has been register, or this is root page
+    //    if(QuickItemToPage.contains(parentPageItem) || parentPageItem == nullptr) {
+    //        cwPage* parentPage = QuickItemToPage.value(parentPageItem);
+
+    //        return page;
+    //    } else {
+    //        //The page isn't ready for pages to be registered. Delay registeration.
+    //        //Basically the page is in the middle of being load. Component.onComplete() hasn't
+    //        //been called yet.
+    //        DelayRegisterationPages.insert(parentPageItem, DelayedPage(parentPageItem,
+    //                                                                   pageName,
+    //                                                                   pageComponent,
+    //                                                                   pageProperties));
+    //    }
+
+    //    qDebug() << "Can't find parent page item:" << parentPageItem << LOCATION;
+    //    return nullptr;
+}
+
+/**
+ * @brief cwPageSelectionModel::unregisterPage
+ * @param page
+ */
+void cwPageSelectionModel::unregisterPage(cwPage *page)
+{
+    qDebug() << "unregisterPage:" << page;
+
+    if(page != nullptr) {
+        Q_ASSERT(page != currentPage());
+
+        page->parentPage()->removeChild(page);
+        page->deleteLater();
+
+        //        QQuickItem* item = PageToQuickItem.value(page);
+        //        Q_ASSERT(item != nullptr);
+        //        QuickItemToPage.remove(item);
+        //        PageToQuickItem.remove(page);
+    } else {
+        qDebug() << "Unregistering a null page! This is a bug" << LOCATION;
+    }
 }
 
 
@@ -203,18 +241,45 @@ void cwPageSelectionModel::setCurrentLink(QString link) {
     if(currentLink() != link) {
         cwPage* page = stringToPage(link);
 
-        gotoPage(page);
+        if(page != nullptr) {
+            gotoPage(page);
+        } else {
+            //Don't know how to go to link, perhaps, it's not register yet
+            //This will go through all the parent pages until we get to the full
+            //link address
+            QStringList expandedLinks = expandLink(link);
+            for(int i = 0; i < expandedLinks.size(); i++) {
+                QString parentLink = expandedLinks.at(i);
+                page = stringToPage(parentLink);
+
+                if(page == nullptr) {
+                    UnknownLinkAddress = link;
+                }
+
+                //Lock the history until we get last element
+                if(i != expandedLinks.size() - 1) { LockHistory = true; }
+
+                gotoPage(page);
+
+                if(i != expandedLinks.size() - 1) { LockHistory = false; }
+
+                if(page == nullptr) {
+                    //Page doesn't exist
+                    break;
+                }
+            }
+        }
     }
 }
 
 /**
  * @brief cwPageSelectionModel::gotoPage
  * @param page
+ *
+ * If the page is null, this will goto the UnknownPage
  */
 void cwPageSelectionModel::gotoPage(cwPage *page)
 {
-    Q_ASSERT(page != nullptr);
-
     if(CurrentPage != page) {
 
         if(CurrentPage != nullptr) {
@@ -235,9 +300,13 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
             }
 
             //Set the new current page
-            PageHistory.append(CurrentPage);
-            CurrentPageIndex = PageHistory.size() - 1;
+            if(PageHistory.isEmpty() || CurrentPage != PageHistory.last()) {
+                PageHistory.append(CurrentPage);
+                CurrentPageIndex = PageHistory.size() - 1;
+            }
         }
+
+        printPageHistory();
 
         emit currentPageChanged();
         emit currentLinkChanged();
@@ -249,20 +318,21 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
  * @param parent
  * @param pageLink
  */
-void cwPageSelectionModel::gotoPageByName(QQuickItem *parentItem, QString subPage)
+void cwPageSelectionModel::gotoPageByName(cwPage *parentPage, QString subPage)
 {
-    if(QuickItemToPage.contains(parentItem)) {
-        cwPage* parentPage = QuickItemToPage.value(parentItem);
-        cwPage* childPage = parentPage->childPage(subPage);
+    qDebug() << "Go to page:" << parentPage << subPage;
 
-        if(childPage != nullptr) {
-            gotoPage(childPage);
-        } else {
-            qDebug() << "Child page is null" << parentItem << subPage << "This is a bug!" << LOCATION;
-        }
-    } else {
-        qDebug() << "Can't go to page:" << parentItem << subPage << "because parentItem isn't registered" << LOCATION;
+    if(parentPage == nullptr) {
+        parentPage = RootPage;
     }
+
+    cwPage* childPage = parentPage->childPage(subPage);
+
+    if(childPage == nullptr) {
+        UnknownLinkAddress = QString("%1/%2").arg(parentPage->fullname()).arg(subPage);
+    }
+
+    gotoPage(childPage);
 }
 
 /**
@@ -300,6 +370,26 @@ void cwPageSelectionModel::forward()
         LockHistory = false;
     }
 }
+
+/**
+ * @brief cwPageSelectionModel::createUnknownPage
+ *
+ * Creates an unknown page. This page is shown when a link is broken or the user types in a bad link
+ */
+//void cwPageSelectionModel::updateUnknownPage(QString badLink)
+//{
+//    Q_ASSERT(UnknownPageComponent != nullptr);
+
+//    QVariantMap map;
+//    map.insert("link", badLink);
+
+//    if(UnknownPage != nullptr) {
+//        UnknownPage->component()->setParent(this);
+//        unregisterPage(UnknownPage);
+//    }
+
+//    UnknownPage = registerPage(nullptr, "Unknown Page", UnknownPageComponent, map);
+//}
 
 ///**
 // * @brief cwPageSelectionModel::reload
@@ -386,32 +476,32 @@ void cwPageSelectionModel::forward()
  * [1] = Data/Cave A
  * [2] = Data/Cave A/Trip 1
  */
-//QStringList cwPageSelectionModel::expandLink(QString link) const
-//{
-//    QStringList linkParts = link.split("/");
+QStringList cwPageSelectionModel::expandLink(QString link) const
+{
+    QStringList linkParts = link.split("/");
 
-//    QStringList expandedLinks;
-//    expandedLinks.reserve(3);
+    QStringList expandedLinks;
+    expandedLinks.reserve(linkParts.size());
 
-//    //Populate the expandedLinks with empty strings
-//    for(int i = 0; i < linkParts.size(); i++) {
-//        expandedLinks.append(QString());
-//    }
+    //Populate the expandedLinks with empty strings
+    for(int i = 0; i < linkParts.size(); i++) {
+        expandedLinks.append(QString());
+    }
 
-//    for(int i = 0; i < linkParts.size(); i++) {
-//        QString linkPart = linkParts.at(i);
+    for(int i = 0; i < linkParts.size(); i++) {
+        QString linkPart = linkParts.at(i);
 
-//        if(i != 0) {
-//            linkPart = QString("/") + linkPart;
-//        }
+        if(i != 0) {
+            linkPart = QString("/") + linkPart;
+        }
 
-//        for(int j = i; j < linkParts.size(); j++) {
-//            expandedLinks[j] = expandedLinks.at(j) + linkPart;
-//        }
-//    }
+        for(int j = i; j < linkParts.size(); j++) {
+            expandedLinks[j] = expandedLinks.at(j) + linkPart;
+        }
+    }
 
-//    return expandedLinks;
-//}
+    return expandedLinks;
+}
 
 /**
  * @brief cwPageSelectionModel::printPageHistory
@@ -566,12 +656,30 @@ cwPage* cwPageSelectionModel::stringToPage(const QString &pageLinkString) const
 }
 
 /**
+ * @brief cwPageSelectionModel::isPageOrphan
+ * @param page - The page that will be checked
+ * @return True if the last parent page is the RootPage. False if page isn't in the selection model
+ */
+bool cwPageSelectionModel::isPageOrphan(cwPage *page) const
+{
+    while(page != RootPage && page != nullptr) {
+        page = page->parentPage();
+    }
+    return page == RootPage;
+}
+
+/**
 * @brief cwPageSelectionModel::currentPage
 * @return Retruns the full name of the current page
 *
 * You can use this to call gotoPage()
 */
 QString cwPageSelectionModel::currentLink() const {
-    return CurrentPage->fullname();
+    if(CurrentPage != nullptr) {
+        return CurrentPage->fullname();
+    }
+    return UnknownLinkAddress;
 }
+
+
 

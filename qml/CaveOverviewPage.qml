@@ -11,15 +11,19 @@ import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 
+//PageItem {
+
 Rectangle {
     id: cavePageArea
-
-    property Cave currentCave: null
-
     anchors.fill: parent;
+
+    property Cave currentCave
 
     function tripPageName(tripName) {
         return "Trip=" + tripName;
+    }
+    onCurrentCaveChanged: {
+        instantiatorId.model = cavePageArea.currentCave
     }
 
     DoubleClickTextInput {
@@ -53,9 +57,9 @@ Rectangle {
             id: lengthDepthContainerId
 
             color: "lightgray"
-//            anchors.left: parent.left
-//            anchors.top: usedStationWidgetId.top
-//            anchors.margins: 5
+            //            anchors.left: parent.left
+            //            anchors.top: usedStationWidgetId.top
+            //            anchors.margins: 5
 
             implicitWidth:  caveLengthAndDepthId.width + 10
             implicitHeight: caveLengthAndDepthId.height + 10
@@ -83,15 +87,15 @@ Rectangle {
                     visible: styleData.column === 0
                     text: styleData.value.name
                     onClicked: {
-                        rootData.pageSelectionModel.gotoPageByName(cavePageArea,
+                        rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                                                                    tripPageName(styleData.value.name));
                     }
                 }
 
-//                TripLengthTask {
-//                    id: tripLengthTask
-//                    trip: styleData.value
-//                }
+                //                TripLengthTask {
+                //                    id: tripLengthTask
+                //                    trip: styleData.value
+                //                }
 
                 Text {
                     visible: styleData.column === 1
@@ -103,11 +107,11 @@ Rectangle {
                     text: "Unknown"
                 }
 
-//                UnitValueInput {
-//                    visible: styleData.column === 3
-//                    unitValue: tripLengthTask.length
-//                    valueReadOnly: true
-//                }
+                //                UnitValueInput {
+                //                    visible: styleData.column === 3
+                //                    unitValue: tripLengthTask.length
+                //                    valueReadOnly: true
+                //                }
             }
         }
     }
@@ -117,6 +121,7 @@ Rectangle {
         id: instantiatorId
 
         onModelChanged: {
+            console.log("Item overviewPage:" + cavePageArea)
             console.log("Model changed:" + cavePageArea.currentCave + " " + model)
         }
 
@@ -135,26 +140,25 @@ Rectangle {
         onObjectAdded: {
             //In-ables the link
             console.log("Added! Page for trip" + object.trip + object.trip.name) //cavingTrip);
-            rootData.pageSelectionModel.registerPage(cavePageArea, //From
-                                                     tripPageName(object.trip.name), //Name
-                                                     surveyEditorComponent, //Function
-                                                     {"currentTrip":object.trip}
-                                                     )
+            var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
+                                                                tripPageName(object.trip.name), //Name
+                                                                surveyEditorComponent, //Function
+                                                                {"currentTrip":object.trip}
+                                                                )
+            object.page = page;
 
         }
 
         onObjectRemoved: {
-            //TODO, implement me
+            rootData.pageSelectionModel.unregisterPage(object.page);
         }
-    }
-
-    onCurrentCaveChanged: {
-        instantiatorId.model = cavePageArea.currentCave
     }
 
     Component {
         id: surveyEditorComponent
         SurveyEditor {
+            anchors.fill: parent
         }
     }
 }
+//}

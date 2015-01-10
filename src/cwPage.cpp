@@ -95,6 +95,22 @@ QString cwPage::fullname() const
     return result.join("/");
 }
 
+/**
+ * @brief cwPage::removeChild
+ * @param page - This removes the child page
+ *
+ * The caller is responisble for deleting the page. This page isn't no long page's parent
+ */
+void cwPage::removeChild(cwPage *page)
+{
+    Q_ASSERT(page->parentPage() == this);
+    Q_ASSERT(ChildPages.contains(page->name()));
+    Q_ASSERT(ChildPages.value(page->name()) == page);
+    ChildPages.remove(page->name());
+    page->setParent(nullptr);
+    page->ParentPage = nullptr;
+}
+
 QStringList cwPage::splitLinkIntoParts(QString pageFullname)
 {
     return pageFullname.split('/');

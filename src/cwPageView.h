@@ -15,6 +15,8 @@
 
 //Our includes
 class cwPageSelectionModel;
+class cwPage;
+#include "cwPageViewAttachedType.h"
 
 /**
  * @brief The cwPageView class
@@ -28,6 +30,7 @@ class cwPageView : public QQuickItem
     Q_OBJECT
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel WRITE setPageSelectionModel NOTIFY pageSelectionModelChanged)
+    Q_PROPERTY(QQmlComponent* unknownPageComponent READ unknownPageComponent WRITE setUnknownPageComponent NOTIFY unknownPageComponentChanged)
 
 public:
     cwPageView(QQuickItem* parentItem = nullptr);
@@ -36,8 +39,24 @@ public:
     cwPageSelectionModel* pageSelectionModel() const;
     void setPageSelectionModel(cwPageSelectionModel* pageSelectionModel);
 
+    QQmlComponent* unknownPageComponent() const;
+    void setUnknownPageComponent(QQmlComponent* unknownPageComponent);
+
+    /**
+     * @brief cwPageView::qmlAttachedProperties
+     * @param object
+     * @return Return a attachment object for object
+     *
+     * This attaches pageViewAttachedType to object
+     */
+    static cwPageViewAttachedType* qmlAttachedProperties(QObject* object) {
+        qDebug() << "Attaching page view object to" << object;
+        return new cwPageViewAttachedType(object);
+    }
+
 signals:
     void pageSelectionModelChanged();
+    void unknownPageComponentChanged();
 
 public slots:
 
@@ -49,10 +68,17 @@ private:
     QHash<QQmlComponent*, QQuickItem*> ComponentToItem;
     QList<QQuickItem*> PageItems;
 
-    void updateProperties(QQuickItem* pageItem, QVariantMap properties);
+    //For displaying the unknown page
+    QPointer<QQmlComponent> UnknownPageComponent; //!<
+    QQuickItem* UnknownPageItem;
+
+    void updateProperties(QQuickItem* pageItem, cwPage* page);
     void showPage(QQuickItem* pageItem);
+    QQuickItem* createChildItemFromComponent(QQmlComponent* component, cwPage* page);
 
 };
+
+QML_DECLARE_TYPEINFO(cwPageView, QML_HAS_ATTACHED_PROPERTIES)
 
 
 

@@ -41,6 +41,8 @@ public:
 
     cwPage* childPage(QString name) const { return ChildPages.value(name, nullptr); }
 
+    void removeChild(cwPage* page);
+
     static QStringList splitLinkIntoParts(QString pageFullname);
 
 signals:

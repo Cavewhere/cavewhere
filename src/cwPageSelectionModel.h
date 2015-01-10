@@ -39,11 +39,12 @@ public:
 //                                                  QByteArray function,
 //                                                  QVariantMap defaultSelection = QVariantMap());
 
-    void registerQuickItemToPage(QQuickItem* pageItem, cwPage* page);
-    Q_INVOKABLE cwPage* registerPage(QQuickItem *parentPageItem,
+//    void registerQuickItemToPage(QQuickItem* pageItem, cwPage* page);
+    Q_INVOKABLE cwPage* registerPage(cwPage *parentPageItem,
                                          QString pageName,
                                          QQmlComponent* pageComponent,
                                          QVariantMap pageProperties = QVariantMap());
+    Q_INVOKABLE void unregisterPage(cwPage* page);
 
 //    Q_INVOKABLE void registerSelection(QObject* object,
 //                                      QByteArray function);
@@ -53,10 +54,11 @@ public:
 
 
 
+
     QString currentLink() const;
     void setCurrentLink(QString link);
     Q_INVOKABLE void gotoPage(cwPage* page);
-    Q_INVOKABLE void gotoPageByName(QQuickItem* parentPage, QString subPage);
+    Q_INVOKABLE void gotoPageByName(cwPage *parentPage, QString subPage);
 
     cwPage* currentPage() const;
 
@@ -67,33 +69,36 @@ public:
     Q_INVOKABLE void forward();
 //    Q_INVOKABLE void reload();
 
+
+
 signals:
     void currentLinkChanged();
     void currentPageChanged();
     void hasForwardChanged();
     void hasBackwardChanged();
+
 //    void currentPageComponentChanged();
 
 public slots:
 
 private:
-    class DelayedPage {
-    public:
-        DelayedPage() {}
-        DelayedPage(QQuickItem *parentPageItem,
-                    QString pageName,
-                    QQmlComponent *pageComponent,
-                    QVariantMap pageProperties) :
-            ParentPageItem(parentPageItem),
-            PageName(pageName),
-            PageComponent(pageComponent),
-            PageProperties(pageProperties) {}
+//    class DelayedPage {
+//    public:
+//        DelayedPage() {}
+//        DelayedPage(QQuickItem *parentPage,
+//                    QString pageName,
+//                    QQmlComponent *pageComponent,
+//                    QVariantMap pageProperties) :
+//            ParentPageItem(parentPageItem),
+//            PageName(pageName),
+//            PageComponent(pageComponent),
+//            PageProperties(pageProperties) {}
 
-        QQuickItem *ParentPageItem;
-        QString PageName;
-        QQmlComponent *PageComponent;
-        QVariantMap PageProperties;
-    };
+//        QQuickItem *ParentPageItem;
+//        QString PageName;
+//        QQmlComponent *PageComponent;
+//        QVariantMap PageProperties;
+//    };
 
 //    class PageDefaultSelection {
 //    public:
@@ -125,13 +130,18 @@ private:
     QList<cwPage*> PageHistory;
     cwPage* CurrentPage; //!<
     int CurrentPageIndex;
-//    QPointer<QQmlComponent> CurrentPageComponent; //!<
+
+    //This gets the unknown link address for the model
+    //If the user enters a bad link, the text will be stored here
+    QString UnknownLinkAddress;
 
     //This allow's us to lookup the parent page, when calling registerPage
-    QHash<QQuickItem*, cwPage*> QuickItemToPage;
+//    QHash<QQuickItem*, cwPage*> QuickItemToPage;
+//    QHash<cwPage*, QQuickItem*> PageToQuickItem;
 
-    QHash<QQuickItem*, DelayedPage> DelayRegisterationPages;
+//    QHash<QQuickItem*, DelayedPage> DelayRegisterationPages;
 
+//    void updateUnknownPage(QString badLink);
 
 //    QHash<QObject*, PageDefaultSelection> PageDefaults; //Key: page, value is how the page will clear it's selection
 //    QHash<QObject*, PageLink> PageLinks; //Key: parent, Value: Page
@@ -145,7 +155,7 @@ private:
 
 //    QStringList pageLinkDifferance(QString newPageLink, QString oldPageLink) const;
 //    QStringList objectToLinkStringList(QObject* object) const;
-//    QStringList expandLink(QString link) const;
+    QStringList expandLink(QString link) const;
 
     void printPageHistory() const;
 
@@ -153,6 +163,9 @@ private:
 
 //    void insertIntoPageTree(const PageLink& link, bool appendToOrphenLinks = true);
     cwPage* stringToPage(const QString& pageLinkString) const;
+
+    bool isPageOrphan(cwPage* page) const;
+
 };
 
 //Q_DECLARE_METATYPE(cwPageSelectionModel::PagePtr)

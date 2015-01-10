@@ -84,8 +84,14 @@ Item {
         property int currentPosition: height * mainSideBar.pageShownReal
 
         PageView {
+            id: pageViewId
             anchors.fill: parent
             pageSelectionModel: rootData.pageSelectionModel
+//            unknownPageComponent: mainContentId.unknownPageComponent
+
+//            Item {
+
+//            }
         }
 
         //       Replace with the view
@@ -125,10 +131,19 @@ Item {
         }
     }
 
+    Component {
+        id: unknownPageComponent
+        UnknownPage {
+            anchors.fill: parent
+        }
+    }
+
     Component.onCompleted: {
+        pageViewId.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         rootData.pageSelectionModel.gotoPage(viewPage);
+
 
         //        var oldCurrentPage = rootData.pageSelectionModel.currentPage; //Set the current root so reloading qml works
 //        rootData.pageSelectionModel.registerRootPage(mainContentId);

@@ -3,10 +3,11 @@ import QtQuick.Controls 1.1
 import QtQuick.Layouts 1.1
 import QtGraphicalEffects 1.0
 
-Item {
-    property alias scene: rendererId.scene
+//PageItem {
 
     SplitView {
+        property alias scene: rendererId.scene
+
         anchors.fill: parent
 
         Item {
@@ -40,4 +41,4 @@ Item {
             viewer: rendererId
         }
     }
-}
+//}
