@@ -77,7 +77,19 @@ Rectangle {
                     }
                     valueReadOnly: true
                 }
+
+                DataRightClickMouseMenu {
+                    anchors.fill: parent
+                    removeChallenge: removeChallengeId
+                }
             }
+        }
+    }
+
+    RemoveAskBox {
+        id: removeChallengeId
+        onRemove: {
+            rootData.region.removeCave(index);
         }
     }
 

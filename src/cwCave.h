@@ -56,7 +56,7 @@ public:
 
     Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
     void insertTrip(int i, cwTrip* trip);
-    void removeTrip(int i);
+    Q_INVOKABLE void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
 
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;

@@ -12,6 +12,7 @@ ShadowRectangle {
     id: removeChallenge
 
     property string removeName;
+    property int index; //The index that we're going to remove
 
     function show() {
         state = "visible"
@@ -20,8 +21,8 @@ ShadowRectangle {
     visible: false
     z: 1
 
-    x: 20
-    y: 5
+//    x: 20
+//    y: 5
 
     width: askRow.width + 6
     height: askRow.height + 6

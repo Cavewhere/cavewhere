@@ -26,8 +26,6 @@ Rectangle {
     }
 
 
-
-
     RowLayout {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -141,6 +139,11 @@ Rectangle {
                             return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
                         }
                     }
+
+                    DataRightClickMouseMenu {
+                        anchors.fill: parent
+                        removeChallenge: removeChallengeId
+                    }
                 }
             }
         }
@@ -154,6 +157,13 @@ Rectangle {
         }
     }
 
+
+    RemoveAskBox {
+        id: removeChallengeId
+        onRemove: {
+            currentCave.removeTrip(index)
+        }
+    }
 
     Instantiator {
         id: instantiatorId
