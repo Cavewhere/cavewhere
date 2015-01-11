@@ -101,10 +101,18 @@ MenuBar {
             text: "Reload"
             shortcut: "Ctrl+R"
             onTriggered: {
+                //Keep the current address for the current page
+                var currentAddress = rootData.pageSelectionModel.currentPageAddress;
+                rootData.pageSelectionModel.clear();
+
                 var currentSource = mainContentLoader.source;
                 mainContentLoader.source = ""
                 qmlReloader.reload();
                 mainContentLoader.source = currentSource;
+
+                console.log("Loader status:" + mainContentLoader.status + "Loader:" + Loader.Ready + " " + currentAddress)
+
+                rootData.pageSelectionModel.currentPageAddress = currentAddress;
             }
         }
 

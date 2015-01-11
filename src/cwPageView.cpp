@@ -15,6 +15,7 @@
 //Qt includes
 #include <QQmlEngine>
 #include <QQmlContext>
+#include <QStack>
 
 cwPageView::cwPageView(QQuickItem *parentItem) :
     QQuickItem(parentItem),
@@ -25,7 +26,6 @@ cwPageView::cwPageView(QQuickItem *parentItem) :
 
 cwPageView::~cwPageView()
 {
-
 }
 
 /**
@@ -57,6 +57,9 @@ void cwPageView::setPageSelectionModel(cwPageSelectionModel* pageSelectionModel)
 
 /**
  * @brief cwPageView::loadCurrentPage
+ *
+ * This function should be called when the PageSelectionModel's currentPage has been changed
+ * This will update the view's current page with the PageSelectionModel's current page.
  */
 void cwPageView::loadCurrentPage()
 {
@@ -66,18 +69,31 @@ void cwPageView::loadCurrentPage()
 
     if(currentPage != nullptr && currentPage->component() != nullptr) {
 
-        QQuickItem* pageItem = ComponentToItem.value(currentPage->component());
-        if(pageItem == nullptr) {
-            pageItem = createChildItemFromComponent(currentPage->component(), currentPage);
-//            PageSelectionModel->registerQuickItemToPage(pageItem, currentPage);
-            ComponentToItem.insert(currentPage->component(), pageItem);
+        QQuickItem* item = ComponentToItem.value(currentPage->component());
+        if(item == nullptr) {
+            item = createChildItemFromComponent(currentPage->component(), currentPage);
+            ComponentToItem.insert(currentPage->component(), item);
         } else {
-            //Update all the properties for the page
-            updateProperties(pageItem, currentPage);
+            //Update all the properties for the page, the parent pages
+            QStack<cwPage*> parentPages;
+            cwPage* stackCurrent = currentPage;
+            while(stackCurrent != nullptr) {
+                parentPages.push(stackCurrent);
+                stackCurrent = stackCurrent->parentPage();
+            }
+
+            while(!parentPages.isEmpty()) {
+                cwPage* page = parentPages.pop();
+                QQuickItem* pageItem = ComponentToItem.value(page->component());
+
+                if(pageItem != nullptr) {
+                    updateProperties(pageItem, page);
+                }
+            }
         }
 
         //Show the page
-        showPage(pageItem);
+        showPage(item);
     } else {
         if(UnknownPageItem != nullptr) {
             showPage(UnknownPageItem);
@@ -89,8 +105,8 @@ void cwPageView::loadCurrentPage()
 
 /**
  * @brief cwPageView::updateProperties
- * @param pageItem
- * @param properties
+ * @param pageItem - The pageItem who's properties will be updated
+ * @param page - The page, with it's properties that will update page
  *
  * This goes through all the properties and updates them in the pageItem
  */
@@ -99,33 +115,25 @@ void cwPageView::updateProperties(QQuickItem *pageItem, cwPage* page)
     Q_ASSERT(pageItem != nullptr);
 
     if(page != nullptr) {
+        cwPageViewAttachedType* attachedType = qobject_cast<cwPageViewAttachedType*>(
+                    qmlAttachedPropertiesObject<cwPageView>(pageItem));
+
+        if(attachedType != nullptr) {
+            attachedType->setPage(page);
+        }
 
         QVariantMap properties = page->pageProperties();
         foreach(QString propertyName, properties.keys()) {
             QByteArray propertyNameBytes = propertyName.toLocal8Bit();
 
             if(pageItem->metaObject()->indexOfProperty(propertyNameBytes.data()) != -1) {
-                qDebug() << "Setting page Properties:" << pageItem << propertyName << properties.value(propertyName);
                 pageItem->setProperty(propertyNameBytes.data(), properties.value(propertyName));
             } else {
                 qDebug() << "Property" << propertyName << "doesn't exist for " << pageItem << ", this is a bug" << LOCATION;
             }
         }
 
-        cwPageViewAttachedType* attachedType = qobject_cast<cwPageViewAttachedType*>(
-                    qmlAttachedPropertiesObject<cwPageView>(pageItem));
-
-        qDebug() << "Setting page properties:" << page << pageItem << attachedType;
-        if(attachedType != nullptr) {
-            attachedType->setPage(page);
-        } else {
-            qDebug() << "Can't find attached PageView Object";
-        }
     }
-
-//    QQmlContext* context = QQmlEngine::contextForObject(pageItem);
-//    context->setContextProperty("page", page);
-//    pageItem->setProperty("page", QVariant::fromValue(page));
 }
 
 /**
@@ -151,6 +159,8 @@ void cwPageView::showPage(QQuickItem *pageItem)
  */
 QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, cwPage* page)
 {
+    component->setParent(this);
+
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QObject* object = component->beginCreate(context);
     object->setParent(this);
@@ -160,10 +170,12 @@ QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, c
     item->setParentItem(this);
     PageItems.append(item);
 
+    //For this to work propertly, we set the properties before the component has been complete
     updateProperties(item, page);
 
     component->completeCreate();
 
+    //Update the properties after the component has been completed
     updateProperties(item, page);
 
     return item;
@@ -179,7 +191,7 @@ cwPageSelectionModel* cwPageView::pageSelectionModel() const {
 
 /**
 * @brief cwPageSelectionModel::unknownPageComponent
-* @return
+* @return Returns the component that is used to create the Unknown page
 */
 QQmlComponent* cwPageView::unknownPageComponent() const {
     return UnknownPageComponent;
@@ -187,7 +199,11 @@ QQmlComponent* cwPageView::unknownPageComponent() const {
 
 /**
 * @brief cwPageSelectionModel::setUnknownPageComponent
-* @param unknownPageComponent
+* @param unknownPageComponent - The unknown page component
+*
+* This is used to create the unknown page item. The unknown page item is shown when
+* PageSelectionModel changes the current page to null. The view will show the unknown page
+* at that point.
 */
 void cwPageView::setUnknownPageComponent(QQmlComponent* unknownPageComponent) {
     if(UnknownPageComponent != unknownPageComponent) {

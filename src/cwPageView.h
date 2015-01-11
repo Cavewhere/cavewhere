@@ -47,10 +47,10 @@ public:
      * @param object
      * @return Return a attachment object for object
      *
-     * This attaches pageViewAttachedType to object
+     * This attaches pageViewAttachedType to object. This function should never be called
+     * expected from the Qt Framework
      */
     static cwPageViewAttachedType* qmlAttachedProperties(QObject* object) {
-        qDebug() << "Attaching page view object to" << object;
         return new cwPageViewAttachedType(object);
     }
 

@@ -11,16 +11,13 @@ import QtQuick 2.0
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 
-//PageItem {
-
-
 Rectangle {
     id: pageId
 
     anchors.fill: parent
 
-    function cavePageName(caveName) {
-        return "Cave=" + caveName;
+    function cavePageName(cave) {
+        return "Cave=" + cave.name;
     }
 
 
@@ -76,7 +73,7 @@ Rectangle {
                     text: styleData.value.name
                     onClicked: {
                         rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   cavePageName(styleData.value.name));
+                                                                   cavePageName(styleData.value));
                     }
                 }
 
@@ -104,25 +101,22 @@ Rectangle {
             id: delegateObjectId
             property Cave cave: caveObjectRole
             property Page page
-            property Connections connections: Connections {
-                target: cave
-                onNameChanged: {
-                    page.name = cavePageName(delegateObjectId.cave.name);
-                }
-            }
         }
 
         onObjectAdded: {
             //In-ables the link
-            console.log("Added!" + pageId.PageView.page);
             var linkId = rootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
-                                                                  cavePageName(object.cave.name), //Name
+                                                                  cavePageName(object.cave), //Name
                                                                   caveOverviewPageComponent,
                                                                   {currentCave:object.cave}
                                                                   )
 
             object.page = linkId
-
+            object.page.setNamingFunction(object.cave,
+                                          "nameChanged()",
+                                          pageId,
+                                          "cavePageName",
+                                          object.cave)
         }
 
         onObjectRemoved: {
@@ -227,4 +221,3 @@ Rectangle {
     //        }
     //    }
 }
-//}

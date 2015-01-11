@@ -22,7 +22,7 @@ cwPageViewAttachedType::~cwPageViewAttachedType()
 
 /**
 * @brief cwPageViewAttachedType::page
-* @return
+* @return Returns the cwPage for the attached property
 */
 cwPage* cwPageViewAttachedType::page() const {
     return Page;
@@ -30,7 +30,7 @@ cwPage* cwPageViewAttachedType::page() const {
 
 /**
 * @brief cwPageViewAttachedType::setPage
-* @param page
+* @param page - Sets the current page attached property
 */
 void cwPageViewAttachedType::setPage(cwPage* page) {
     if(Page != page) {

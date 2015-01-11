@@ -78,7 +78,7 @@ signals:
     void beginRemoveTrips(int begin, int end);
     void removedTrips(int begin, int end);
 
-    void nameChanged(QString name);
+    void nameChanged();
 
     void stationPositionPositionChanged();
 

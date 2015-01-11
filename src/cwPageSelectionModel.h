@@ -20,11 +20,16 @@
 //Our includes
 class cwPage;
 
+/**
+ * @brief The cwPageSelectionModel class
+ *
+ * This class manages page links, current page, and history of pages.
+ */
 class cwPageSelectionModel : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QString currentLink READ currentLink WRITE setCurrentLink NOTIFY currentLinkChanged)
+    Q_PROPERTY(QString currentPageAddress READ currentPageAddress WRITE setCurrentPageAddress NOTIFY currentPageAddressChanged)
     Q_PROPERTY(cwPage* currentPage READ currentPage NOTIFY currentPageChanged)
 
     Q_PROPERTY(bool hasForward READ hasForward NOTIFY hasForwardChanged)
@@ -33,30 +38,14 @@ class cwPageSelectionModel : public QObject
 public:
     explicit cwPageSelectionModel(QObject *parent = 0);
 
-
-//    Q_INVOKABLE void registerRootPage(QObject* page);
-//    Q_INVOKABLE void registerDefaultPageSelection(QObject* page,
-//                                                  QByteArray function,
-//                                                  QVariantMap defaultSelection = QVariantMap());
-
-//    void registerQuickItemToPage(QQuickItem* pageItem, cwPage* page);
     Q_INVOKABLE cwPage* registerPage(cwPage *parentPageItem,
                                          QString pageName,
                                          QQmlComponent* pageComponent,
                                          QVariantMap pageProperties = QVariantMap());
     Q_INVOKABLE void unregisterPage(cwPage* page);
 
-//    Q_INVOKABLE void registerSelection(QObject* object,
-//                                      QByteArray function);
-
-//    void setCurrentSelection(QObject* object,
-//                             QVariantMap parameters);
-
-
-
-
-    QString currentLink() const;
-    void setCurrentLink(QString link);
+    QString currentPageAddress() const;
+    void setCurrentPageAddress(const QString &address);
     Q_INVOKABLE void gotoPage(cwPage* page);
     Q_INVOKABLE void gotoPageByName(cwPage *parentPage, QString subPage);
 
@@ -67,139 +56,56 @@ public:
 
     Q_INVOKABLE void back();
     Q_INVOKABLE void forward();
-//    Q_INVOKABLE void reload();
 
-
+    Q_INVOKABLE void clear();
 
 signals:
-    void currentLinkChanged();
+    void currentPageAddressChanged();
     void currentPageChanged();
     void hasForwardChanged();
     void hasBackwardChanged();
 
-//    void currentPageComponentChanged();
-
 public slots:
 
 private:
-//    class DelayedPage {
-//    public:
-//        DelayedPage() {}
-//        DelayedPage(QQuickItem *parentPage,
-//                    QString pageName,
-//                    QQmlComponent *pageComponent,
-//                    QVariantMap pageProperties) :
-//            ParentPageItem(parentPageItem),
-//            PageName(pageName),
-//            PageComponent(pageComponent),
-//            PageProperties(pageProperties) {}
-
-//        QQuickItem *ParentPageItem;
-//        QString PageName;
-//        QQmlComponent *PageComponent;
-//        QVariantMap PageProperties;
-//    };
-
-//    class PageDefaultSelection {
-//    public:
-//        QPointer<QObject> Page;
-//        QByteArray Function;
-//        QVariantMap Parameters;
-//    };
-
-
-
-//        class PageParameter {
-//    public:
-//        QPointer<QObject> Object;
-//        QByteArray Function;
-//    };
-
-//    class PageTreeNode {
-
-//    public:
-//        PageLink Link; //The link to the page
-//        QHash<QString, QSharedPointer<PageTreeNode> > ChildNodes;
-//    };
-
-//    typedef QSharedPointer<PageTreeNode> PageTreeNodePtr;
-
     cwPage* RootPage;
 
     bool LockHistory;
-    QList<cwPage*> PageHistory;
-    cwPage* CurrentPage; //!<
+    QList<QPointer<cwPage> > PageHistory;
+    QPointer<cwPage> CurrentPage; //!<
     int CurrentPageIndex;
 
     //This gets the unknown link address for the model
     //If the user enters a bad link, the text will be stored here
     QString UnknownLinkAddress;
 
-    //This allow's us to lookup the parent page, when calling registerPage
-//    QHash<QQuickItem*, cwPage*> QuickItemToPage;
-//    QHash<cwPage*, QQuickItem*> PageToQuickItem;
-
-//    QHash<QQuickItem*, DelayedPage> DelayRegisterationPages;
-
-//    void updateUnknownPage(QString badLink);
-
-//    QHash<QObject*, PageDefaultSelection> PageDefaults; //Key: page, value is how the page will clear it's selection
-//    QHash<QObject*, PageLink> PageLinks; //Key: parent, Value: Page
-//    QHash<QObject*, PageParameter> PageParameters; //Key: object, Value: PageSelection function
-//    QHash<QString, PageLink> StringToPageLinks; //Holds the whole url to PageLink
-
-//    QPointer<QObject> RootPage; //Where all the PageLink should start registering from here
-//    PageTreeNodePtr RootNode;
-//    QHash<QObject*, PageTreeNodePtr> ObjectToPageLookup; //Key: From page, value: PageNode in the page tree;
-//    QMap<PageLink, char> OrphenLinks; //Nodes that we added out of order, value isn't used, always 0
-
-//    QStringList pageLinkDifferance(QString newPageLink, QString oldPageLink) const;
-//    QStringList objectToLinkStringList(QObject* object) const;
     QStringList expandLink(QString link) const;
 
     void printPageHistory() const;
 
-//    void loadPage(QString newPage, QString oldPage);
-
-//    void insertIntoPageTree(const PageLink& link, bool appendToOrphenLinks = true);
     cwPage* stringToPage(const QString& pageLinkString) const;
 
-    bool isPageOrphan(cwPage* page) const;
+    bool isPageInModel(cwPage* page) const;
 
 };
 
-//Q_DECLARE_METATYPE(cwPageSelectionModel::PagePtr)
-
-
 
 /**
-* @brief cwPageSelectionModel::hasForward
-* @return Returns the current page that the page selection model is pointing to
-*/
-inline cwPage *cwPageSelectionModel::currentPage() const
-{
-    return CurrentPage;
-}
-
+ * @brief cwPageSelectionModel::hasForward
+ * @return true if user can go forward in the page history and false if forward() will
+ * do nothing.
+ */
 inline bool cwPageSelectionModel::hasForward() const {
     return CurrentPageIndex < PageHistory.size() - 1;
 }
 
 /**
 * @brief cwPageSelectionModel::hasBackward
-* @return
+* @return true if the user can go backward in the page history and false if back() will
+* do nothing
 */
 inline bool cwPageSelectionModel::hasBackward() const {
     return CurrentPageIndex > 0;
 }
-
-
-///**
-//* @brief cwPageSelectionModel::currentPageComponent
-//* @return
-//*/
-//inline QQmlComponent* cwPageSelectionModel::currentPageComponent() const {
-//    return CurrentPageComponent;
-//}
 
 #endif // CWPAGESELECTIONMODEL_H

@@ -411,7 +411,7 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
-        connect(cave, SIGNAL(nameChanged(QString)), SLOT(caveDataChanged()));
+        connect(cave, SIGNAL(nameChanged()), SLOT(caveDataChanged()));
 
         connect(cave, SIGNAL(beginInsertTrips(int,int)), SLOT(beginInsertTrip(int,int)));
         connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(endInsertTrip(int,int)));
@@ -438,7 +438,7 @@ void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
 void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* currentTrip = parentCave->trip(i);
-        connect(currentTrip, SIGNAL(nameChanged(QString)), SLOT(tripDataChanged()));
+        connect(currentTrip, SIGNAL(nameChanged()), SLOT(tripDataChanged()));
         connect(currentTrip, SIGNAL(dateChanged(QDate)), SLOT(tripDataChanged()));
     }
 }

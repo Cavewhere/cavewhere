@@ -390,12 +390,12 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 
 void cwTrip::NameCommand::redo() {
     Trip->Name = NewName;
-    emit Trip->nameChanged(Trip->Name);
+    emit Trip->nameChanged();
 }
 
 void cwTrip::NameCommand::undo() {
     Trip->Name = OldName;
-    emit Trip->nameChanged(Trip->Name);
+    emit Trip->nameChanged();
 }
 
 cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {

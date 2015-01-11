@@ -25,7 +25,7 @@ Item {
             }
 
             Text {
-                text: "\"" + rootData.pageSelectionModel.currentLink + "\"" + " doesn't exist..."
+                text: "\"" + rootData.pageSelectionModel.currentPageAddress + "\"" + " doesn't exist..."
                 font.italic: true
                 Layout.alignment: Qt.AlignCenter
                 visible: text.length > 0

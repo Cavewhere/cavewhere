@@ -93,7 +93,7 @@ void cwLinePlotManager::connectCave(cwCave* cave) {
     connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(runSurvex()));
     connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(connectAddedTrips(int,int)));
     connect(cave, SIGNAL(removedTrips(int,int)), SLOT(runSurvex()));
-    connect(cave, SIGNAL(nameChanged(QString)), SLOT(runSurvex()));
+    connect(cave, SIGNAL(nameChanged()), SLOT(runSurvex()));
     connectTrips(cave);
 }
 
@@ -114,7 +114,7 @@ void cwLinePlotManager::connectTrip(cwTrip* trip) {
     connect(trip, SIGNAL(chunksInserted(int,int)), SLOT(runSurvex()));
     connect(trip, SIGNAL(chunksInserted(int,int)), SLOT(connectAddedChunks(int,int)));
     connect(trip, SIGNAL(chunksRemoved(int,int)), SLOT(runSurvex()));
-    connect(trip, SIGNAL(nameChanged(QString)), SLOT(runSurvex()));
+    connect(trip, SIGNAL(nameChanged()), SLOT(runSurvex()));
     connect(trip->calibrations(), SIGNAL(calibrationsChanged()), SLOT(runSurvex()));
     connectChunks(trip);
 }

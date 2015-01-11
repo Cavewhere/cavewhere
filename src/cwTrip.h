@@ -84,7 +84,7 @@ public:
     void stationPositionModelUpdated();
 
 signals:
-    void nameChanged(QString name);
+    void nameChanged();
     void dateChanged(QDate date);
     void chunksInserted(int begin, int end);
     void chunksRemoved(int begin, int end);

@@ -11,16 +11,14 @@ import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 
-//PageItem {
-
 Rectangle {
     id: cavePageArea
     anchors.fill: parent;
 
     property Cave currentCave
 
-    function tripPageName(tripName) {
-        return "Trip=" + tripName;
+    function tripPageName(trip) {
+        return "Trip=" + trip.name;
     }
     onCurrentCaveChanged: {
         instantiatorId.model = cavePageArea.currentCave
@@ -88,7 +86,7 @@ Rectangle {
                     text: styleData.value.name
                     onClicked: {
                         rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                   tripPageName(styleData.value.name));
+                                                                   tripPageName(styleData.value));
                     }
                 }
 
@@ -120,36 +118,46 @@ Rectangle {
     Instantiator {
         id: instantiatorId
 
-        onModelChanged: {
-            console.log("Item overviewPage:" + cavePageArea)
-            console.log("Model changed:" + cavePageArea.currentCave + " " + model)
-        }
-
         delegate: QtObject {
             id: delegateObjectId
             property Trip trip: tripObjectRole
             property Page page
-            property Connections connections: Connections {
-                target: trip
-                onNameChanged: {
-                    page.name = tripPageName(delegateObjectId.trip.name);
-                }
-            }
+//            property QtObjectWithParent subObject: QtObjectWithParent {
+////                parent: delegateObjectId.page
+//                property Connections connection: Connections {
+//                    target: trip
+//                    onNameChanged: {
+//                        page.name = tripPageName(delegateObjectId.trip.name);
+//                    }
+//                    Component.onDestruction: {
+//                        console.log("Connection destroyed!" + trip.name + " " + page.name)
+//                    }
+//                }
+
+//                onParentChanged: {
+//                    console.log("Parent changed!" + parent + " " + delegateObjectId.page);
+//                }
+//            }
         }
 
         onObjectAdded: {
             //In-ables the link
-            console.log("Added! Page for trip" + object.trip + object.trip.name) //cavingTrip);
+//            console.log("Adding object:" + cavePageArea.PageView.page + " " + cavePageArea.PageView.page.name + " " + object.trip.name + " " + surveyEditorComponent)
             var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
-                                                                tripPageName(object.trip.name), //Name
+                                                                tripPageName(object.trip), //Name
                                                                 surveyEditorComponent, //Function
                                                                 {"currentTrip":object.trip}
                                                                 )
             object.page = page;
-
+            page.setNamingFunction(object.trip, //The trip that's signaling
+                                   "nameChanged()", //Signal
+                                   cavePageArea, //The object that has renaming function
+                                   "tripPageName", //The function that will generate the name
+                                   {trip:object.trip}) //The paramaters to tripPageName() function
         }
 
         onObjectRemoved: {
+//            console.log("Removing object:" + object.page);
             rootData.pageSelectionModel.unregisterPage(object.page);
         }
     }
@@ -161,4 +169,3 @@ Rectangle {
         }
     }
 }
-//}

@@ -45,8 +45,15 @@ public:
 
     static QStringList splitLinkIntoParts(QString pageFullname);
 
+    Q_INVOKABLE void setNamingFunction(QObject* object, const QByteArray& signal,
+                                       QObject* functionObject, const QByteArray& function,
+                                       QVariant functionParameter);
+
 signals:
     void nameChanged();
+
+private slots:
+    void renamePage();
 
 private:
     cwPage* ParentPage;
@@ -54,6 +61,13 @@ private:
     QString Name;
     QVariantMap PageProperties; //To setup properties on the page
     QHash<QString, cwPage*> ChildPages;
+
+    //For automatically renaming the page, these parameters are handed to QMetaObject::invokeMethod
+    QPointer<QObject> RenamingObject;
+    QByteArray RenamingFunction;
+    QVariant RenamingeFunctionParameter;
+
+
 };
 
 #endif // CWPAGE_H

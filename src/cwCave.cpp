@@ -221,14 +221,14 @@ cwCave::NameCommand::NameCommand(cwCave* cave, QString name) {
 void cwCave::NameCommand::redo() {
     cwCave* cave = CavePtr; //.data();
     cave->Name = newName;
-    emit cave->nameChanged(cave->Name);
+    emit cave->nameChanged();
 }
 
 
 void cwCave::NameCommand::undo() {
     cwCave* cave = CavePtr; //.data();
     cave->Name = oldName;
-    emit cave->nameChanged(cave->Name);
+    emit cave->nameChanged();
 }
 
 cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,

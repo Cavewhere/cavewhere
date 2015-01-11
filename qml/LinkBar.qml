@@ -43,8 +43,8 @@ RowLayout {
     TextField {
         Layout.fillWidth: true
 
-        text: rootData.pageSelectionModel.currentLink
-        onEditingFinished: rootData.pageSelectionModel.currentLink = text
+        text: rootData.pageSelectionModel.currentPageAddress
+        onEditingFinished: rootData.pageSelectionModel.currentPageAddress = text
     }
 }
 
