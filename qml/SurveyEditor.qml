@@ -10,8 +10,6 @@ import Cavewhere 1.0
 import QtQuick.Controls 1.0
 import "Utils.js" as Utils
 
-//PageItem {
-
 Rectangle {
     id: area
 
@@ -167,4 +165,3 @@ Rectangle {
         }
     }
 }
-//}
