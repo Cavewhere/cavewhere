@@ -204,6 +204,18 @@ QHash<int, QByteArray> cwCave::roleNames() const
 }
 
 /**
+ * @brief cwCave::index
+ * @param row
+ * @param column
+ * @param parent
+ * @return
+ */
+QModelIndex cwCave::index(int row, int column, const QModelIndex &parent) const
+{
+   return QAbstractListModel::index(row, column, parent);
+}
+
+/**
   \brief Sets the undo stack for the cave and all of it's children
   */
 void cwCave::setUndoStackForChildren() {
@@ -250,6 +262,7 @@ cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
 void cwCave::InsertRemoveTrip::insertTrips() {
     cwCave* cave = CavePtr; //.data();
     emit cave->beginInsertTrips(BeginIndex, EndIndex);
+    emit cave->beginInsertRows(QModelIndex(), BeginIndex, EndIndex);
     for(int i = 0; i < Trips.size(); i++) {
         int index = BeginIndex + i;
         cave->Trips.insert(index, Trips[i]);
@@ -258,12 +271,14 @@ void cwCave::InsertRemoveTrip::insertTrips() {
 
     OwnsTrips = false;
 
+    emit cave->endInsertRows();
     emit cave->insertedTrips(BeginIndex, EndIndex);
 }
 
 void cwCave::InsertRemoveTrip::removeTrips() {
     cwCave* cave = CavePtr; //.data();
     emit cave->beginRemoveTrips(BeginIndex, EndIndex);
+    emit cave->beginRemoveRows(QModelIndex(), BeginIndex, EndIndex);
 
     //Remove all the trips from the back to the front
     for(int i = Trips.size() - 1; i >= 0; i--) {
@@ -274,6 +289,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
 
     OwnsTrips = true;
 
+    emit cave->endRemoveRows();
     emit cave->removedTrips(BeginIndex, EndIndex);
 }
 

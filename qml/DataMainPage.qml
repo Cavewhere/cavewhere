@@ -27,32 +27,18 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.margins: 5
 
-        RowLayout {
-
+        AddAndSearchBar {
             Layout.fillWidth: true
+            addButtonText: "Add Cave"
+            onAdd: {
+                region.addCave();
 
-            Button {
-                text: "Add Cave"
-                iconSource: "qrc:/icons/plus.png"
+                var lastIndex = rootData.region.rowCount() - 1;
+                var lastModelIndex = rootData.region.index(lastIndex);
+                var lastCave = rootData.region.data(lastModelIndex, Cave.TripObjectRole);
 
-                Layout.alignment: Qt.AlignLeft
-
-                onClicked: {
-                    region.addCave();
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Controls.TextField {
-                id: searchBox
-
-                placeholderText: "Search..."
-                inputMethodHints: Qt.ImhNoPredictiveText
-
-                Layout.alignment: Qt.AlignRight
-
-                implicitWidth: 250
+                rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                           cavePageName(lastCave));
             }
         }
 

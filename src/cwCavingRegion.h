@@ -42,9 +42,10 @@ public:
     Q_INVOKABLE cwCave* cave(int index) const;
     QList<cwCave*> caves() const;
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
-    QVariant data(const QModelIndex &index, int role) const;
+    Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
     QHash<int, QByteArray> roleNames() const;
+    Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;
 
     Q_INVOKABLE void addCave(cwCave* cave = nullptr);
     void addCaves(QList<cwCave*> cave);

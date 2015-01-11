@@ -77,6 +77,18 @@ QHash<int, QByteArray> cwCavingRegion::roleNames() const
 }
 
 /**
+ * @brief cwCavingRegion::index
+ * @param row
+ * @param column
+ * @param parent
+ * @return
+ */
+QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent) const
+{
+    return QAbstractListModel::index(row, column, parent);
+}
+
+/**
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {

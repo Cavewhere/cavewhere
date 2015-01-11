@@ -10,6 +10,7 @@ import Cavewhere 1.0
 import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
+import "Utils.js" as Utils
 
 Rectangle {
     id: cavePageArea
@@ -24,93 +25,132 @@ Rectangle {
         instantiatorId.model = cavePageArea.currentCave
     }
 
-    DoubleClickTextInput {
-        id: caveNameText
-        text: currentCave != null ? currentCave.name : "" //From c++
-        anchors.left: parent.left
-        anchors.leftMargin: 5
-        anchors.top: parent.top
-        anchors.topMargin: 5
-        font.bold: true
-        font.pointSize: 20
 
-        onFinishedEditting: {
-            currentCave.name = newText
-        }
-    }
 
-    //    UsedStationsWidget {
-    //        id: usedStationWidgetId
-
-    //        anchors.left: lengthDepthContainerId.right
-    //        anchors.top: caveNameText.bottom
-    //        anchors.bottom: parent.bottom
-    //        anchors.leftMargin: 5
-    //        anchors.bottomMargin: 5
-    //        width: 250
-    //    }
 
     RowLayout {
-        Rectangle {
-            id: lengthDepthContainerId
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
 
-            color: "lightgray"
-            //            anchors.left: parent.left
-            //            anchors.top: usedStationWidgetId.top
-            //            anchors.margins: 5
+        ColumnLayout {
+            Layout.alignment: Qt.AlignTop
 
-            implicitWidth:  caveLengthAndDepthId.width + 10
-            implicitHeight: caveLengthAndDepthId.height + 10
+            DoubleClickTextInput {
+                id: caveNameText
+                text: currentCave.name
+                font.bold: true
+                font.pointSize: 20
 
-            CaveLengthAndDepth {
-                id: caveLengthAndDepthId
+                onFinishedEditting: {
+                    currentCave.name = newText
+                }
+            }
 
-                anchors.centerIn: parent
+            Rectangle {
+                id: lengthDepthContainerId
 
-                currentCave: cavePageArea.currentCave
+                color: "lightgray"
+                //            anchors.left: parent.left
+                //            anchors.top: usedStationWidgetId.top
+                //            anchors.margins: 5
+
+                implicitWidth:  caveLengthAndDepthId.width + 10
+                implicitHeight: caveLengthAndDepthId.height + 10
+
+                CaveLengthAndDepth {
+                    id: caveLengthAndDepthId
+
+                    anchors.centerIn: parent
+
+                    currentCave: cavePageArea.currentCave
+                }
             }
         }
 
-        Controls.TableView {
-            model: currentCave
+        ColumnLayout {
 
-            Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
-            Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
-            Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; }
-            Controls.TableViewColumn{ role: "tripObjectRole"; title: "Length"; }
+            AddAndSearchBar {
+                Layout.fillWidth: true
+                addButtonText: "Add Trip"
+                onAdd: {
+                    currentCave.addTrip()
 
-            itemDelegate:
-                Item {
-                LinkText {
-                    visible: styleData.column === 0
-                    text: styleData.value.name
-                    onClicked: {
-                        rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                   tripPageName(styleData.value));
+                    var lastIndex = currentCave.rowCount() - 1;
+                    var lastModelIndex = currentCave.index(lastIndex);
+                    var lastTrip = currentCave.data(lastModelIndex, Cave.TripObjectRole);
+
+                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                               tripPageName(lastTrip));
+                }
+            }
+
+            Controls.TableView {
+                model: currentCave
+
+                implicitWidth: 600
+
+                Layout.fillHeight: true
+
+                //            anchors.top: parent.top
+                //            anchors.bottom: parent.bottom
+
+                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
+                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
+                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; width: 100 }
+                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Length"; width: 100 }
+
+                itemDelegate:
+                    Item {
+                    LinkText {
+                        visible: styleData.column === 0
+                        text: styleData.value.name
+                        onClicked: {
+                            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                       tripPageName(styleData.value));
+                        }
+                    }
+
+                    TripLengthTask {
+                        id: tripLengthTask
+                        trip: styleData.value
+                    }
+
+                    Text {
+                        visible: styleData.column === 1
+                        text: styleData.value.date.toLocaleDateString()
+                    }
+
+                    Text {
+                        visible: styleData.column === 2
+                        text: "Unknown"
+                    }
+
+                    Text {
+                        visible: styleData.column === 3
+                        text: {
+                            var unit = ""
+                            switch(styleData.value.calibration.distanceUnit) {
+                            case Units.Meters:
+                                unit = "m"
+                                break;
+                            case Units.Feet:
+                                unit = "ft"
+                                break;
+                            }
+
+                            return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                        }
                     }
                 }
-
-                //                TripLengthTask {
-                //                    id: tripLengthTask
-                //                    trip: styleData.value
-                //                }
-
-                Text {
-                    visible: styleData.column === 1
-                    text: styleData.value.date
-                }
-
-                Text {
-                    visible: styleData.column === 2
-                    text: "Unknown"
-                }
-
-                //                UnitValueInput {
-                //                    visible: styleData.column === 3
-                //                    unitValue: tripLengthTask.length
-                //                    valueReadOnly: true
-                //                }
             }
+        }
+
+        UsedStationsWidget {
+            id: usedStationWidgetId
+
+            Layout.fillHeight: true
+
+            implicitWidth: 250
         }
     }
 
@@ -122,27 +162,10 @@ Rectangle {
             id: delegateObjectId
             property Trip trip: tripObjectRole
             property Page page
-//            property QtObjectWithParent subObject: QtObjectWithParent {
-////                parent: delegateObjectId.page
-//                property Connections connection: Connections {
-//                    target: trip
-//                    onNameChanged: {
-//                        page.name = tripPageName(delegateObjectId.trip.name);
-//                    }
-//                    Component.onDestruction: {
-//                        console.log("Connection destroyed!" + trip.name + " " + page.name)
-//                    }
-//                }
-
-//                onParentChanged: {
-//                    console.log("Parent changed!" + parent + " " + delegateObjectId.page);
-//                }
-//            }
         }
 
         onObjectAdded: {
             //In-ables the link
-//            console.log("Adding object:" + cavePageArea.PageView.page + " " + cavePageArea.PageView.page.name + " " + object.trip.name + " " + surveyEditorComponent)
             var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                 tripPageName(object.trip), //Name
                                                                 surveyEditorComponent, //Function
@@ -157,7 +180,6 @@ Rectangle {
         }
 
         onObjectRemoved: {
-//            console.log("Removing object:" + object.page);
             rootData.pageSelectionModel.unregisterPage(object.page);
         }
     }
