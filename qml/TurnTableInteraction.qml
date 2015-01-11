@@ -10,11 +10,11 @@ BaseTurnTableInteraction {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: {
             if(mouse.button == Qt.LeftButton) {
-                interactionId.state = "rotateState"
-                startRotating(Qt.point(mouse.x, mouse.y));
-            } else {
                 interactionId.state = "panState"
                 startPanning(Qt.point(mouse.x, mouse.y));
+            } else {
+                interactionId.state = "rotateState"
+                startRotating(Qt.point(mouse.x, mouse.y));
             }
         }
 
