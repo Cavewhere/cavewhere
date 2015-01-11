@@ -86,6 +86,7 @@ Item {
         PageView {
             id: pageViewId
             anchors.fill: parent
+            anchors.margins: 3
             pageSelectionModel: rootData.pageSelectionModel
 //            unknownPageComponent: mainContentId.unknownPageComponent
 

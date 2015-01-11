@@ -8,6 +8,7 @@
 import QtQuick 2.0
 import Cavewhere 1.0
 import QtQuick.Controls 1.0
+import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
 Rectangle {
@@ -20,7 +21,6 @@ Rectangle {
         id: tripLengthTask
         trip: currentTrip
     }
-
 
     ScrollView {
         id: scrollAreaId
@@ -54,6 +54,45 @@ Rectangle {
                 id: column
 
                 spacing: 5
+
+                ColumnLayout {
+                    width: view.contentWidth
+
+                    SectionLabel {
+                        text: "Trip"
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        DoubleClickTextInput {
+                            id: tripNameText
+                            text: currentTrip.name
+                            font.bold: true
+                            font.pointSize: 20
+
+                            onFinishedEditting: {
+                                currentTrip.name = newText
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        DoubleClickTextInput {
+                            id: tripDate
+                            text: Qt.formatDateTime(currentTrip.date, "yyyy-MM-dd")
+                            font.bold: true
+
+                            onFinishedEditting: {
+                                currentTrip.date = newText
+                            }
+                        }
+                    }
+                }
+
+                BreakLine { }
 
                 CalibrationEditor {
                     width: view.contentWidth
@@ -152,8 +191,8 @@ Rectangle {
         }
     }
 
-    NoteExplorer {
-        noteModel: currentTrip !== null ? currentTrip.notes : null
+    NotesGallery {
+        notesModel: currentTrip.notes
         anchors.left: scrollAreaId.right
         anchors.right: parent.right
         anchors.top: area.top
@@ -161,7 +200,20 @@ Rectangle {
         clip: true
 
         onImagesAdded: {
-            currentTrip.notes.addFromFiles(images, project)
+            currentTrip.notes.addFromFiles(images, rootData.project)
         }
     }
+
+//    NoteExplorer {
+//        noteModel: currentTrip !== null ? currentTrip.notes : null
+//        anchors.left: scrollAreaId.right
+//        anchors.right: parent.right
+//        anchors.top: area.top
+//        anchors.bottom: area.bottom
+//        clip: true
+
+//        onImagesAdded: {
+//            currentTrip.notes.addFromFiles(images, project)
+//        }
+//    }
 }

@@ -117,7 +117,7 @@ Rectangle {
 
                     Text {
                         visible: styleData.column === 1
-                        text: styleData.value.date.toLocaleDateString()
+                        text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
                     }
 
                     Text {
@@ -176,7 +176,7 @@ Rectangle {
                                    "nameChanged()", //Signal
                                    cavePageArea, //The object that has renaming function
                                    "tripPageName", //The function that will generate the name
-                                   {trip:object.trip}) //The paramaters to tripPageName() function
+                                   object.trip) //The paramaters to tripPageName() function
         }
 
         onObjectRemoved: {

@@ -16,7 +16,6 @@ Rectangle {
 
     signal imagesAdded(variant images)
 
-    anchors.fill: parent
     anchors.margins: 3
 
     LoadNotesWidget {
