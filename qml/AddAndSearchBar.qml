@@ -4,8 +4,6 @@ import QtQuick.Controls 1.2 as Controls
 
 RowLayout {
 
-//    Layout.fillWidth: true
-
     property alias addButtonText: addButtonId.text
 
     signal add();
@@ -24,14 +22,15 @@ RowLayout {
 
     Item { Layout.fillWidth: true }
 
-    Controls.TextField {
-        id: searchBox
+    //TODO: Add me back in, and implement!
+//    Controls.TextField {
+//        id: searchBox
 
-        placeholderText: "Search..."
-        inputMethodHints: Qt.ImhNoPredictiveText
+//        placeholderText: "Filter..."
+//        inputMethodHints: Qt.ImhNoPredictiveText
 
-        Layout.alignment: Qt.AlignRight
+//        Layout.alignment: Qt.AlignRight
 
-        implicitWidth: 250
-    }
+//        implicitWidth: 250
+//    }
 }
