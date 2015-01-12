@@ -11,27 +11,9 @@ import Cavewhere 1.0
 
 Rectangle {
     id: usedStationsArea
-    //    radius: 4
-    //    gradient: Gradient {
-    //        GradientStop {
-    //            position: 0
-    //            color: "#cccccc"
-    //        }
 
-    //        GradientStop {
-    //            position: 0.18
-    //            color: "#ffffff"
-    //        }
-    //    }
-    // transformOrigin: Item.Center
-    //    anchors.bottomMargin: 5
-    //    anchors.left: parent.left
-    //    anchors.leftMargin: 5
-    //    anchors.top: parent.top
-    //    anchors.bottom: parent.bottom
-    //    anchors.topMargin: 5
-    // border.color: "#000000"
     border.width: 1
+    border.color: "#A7A7A7"
 
     ScrollView {
         anchors.rightMargin: 2
@@ -69,17 +51,9 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    BreakLine {
         id: lineId
-        height: 1
-        color: Qt.rgba(0.0, 0.0, 0.0, 1.0);
-        anchors.right: parent.right
-        anchors.rightMargin: 2
-        anchors.left: parent.left
-        anchors.leftMargin: 2
         anchors.top: usedStationsLabel.bottom
-        //anchors.bottom: usedStationsView.top
-
     }
 
     Text {
@@ -91,6 +65,4 @@ Rectangle {
         anchors.topMargin: 4
         font.pixelSize:14
     }
-
-    //    }
 }
