@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import QtQuick.Layouts 1.1
+import QtGraphicalEffects 1.0
 
 Rectangle {
     id: button
@@ -36,10 +37,23 @@ Rectangle {
         GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
     }
 
+    Colorize {
+        id: colorizeEffect
+        source: buttonLayoutId
+//        anchors.centerIn: parent
+        anchors.fill: buttonLayoutId
+        visible: false
+
+        hue: 1.0
+        saturation: 0.0
+        lightness: 0.5
+    }
+
     RowLayout {
         id: buttonLayoutId
 
         anchors.centerIn: parent
+        visible: true;
 
         Image {
             id: icon
@@ -84,15 +98,36 @@ Rectangle {
     states: [
         State {
             name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled
+            extend: "enabledState"
             PropertyChanges { target: stop1; color: "#E6E6E6" }
             PropertyChanges { target: stop2; color: "#B3B3B3" }
         },
 
         State {
             name: "mousePressedState";
+            extend: "enabledState"
             when: mouseArea.containsMouse && mousePressed && enabled
             PropertyChanges { target: stop1; color: "#B3B3B3" }
             PropertyChanges { target: stop2; color: "#B3B3B3" }
+        },
+
+        State {
+            name: "enabledState"
+            when: enabled
+            PropertyChanges { target: stop1; color: "#FAFAFA" }
+            PropertyChanges { target: stop2; color: "#D3D3D3" }
+            PropertyChanges {
+                target: mouseArea
+                enabled: true
+            }
+            PropertyChanges {
+                target: colorizeEffect
+                visible: false
+            }
+            PropertyChanges {
+                target: buttonLayoutId
+                visible: true
+            }
         },
 
         State {
@@ -104,11 +139,19 @@ Rectangle {
                 target: mouseArea
                 enabled: false
             }
-
             PropertyChanges {
-                target: buttonText
-                color: "#717171"
+                target: colorizeEffect
+                visible: true
             }
+            PropertyChanges {
+                target: buttonLayoutId
+                visible: false
+            }
+
+//            PropertyChanges {
+//                target: buttonText
+//                color: "#717171"
+//            }
         }
 
     ]

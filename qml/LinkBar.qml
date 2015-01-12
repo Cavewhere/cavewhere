@@ -1,46 +1,26 @@
 import QtQuick 2.0
-import QtQuick.Controls 1.2
+import QtQuick.Controls 1.2 as Controls
 import QtQuick.Layouts 1.1
 
 RowLayout {
 
-    Rectangle {
-        width: textBackId.width
-        height: textBackId.height
-
-        color: "red"
-
-        Text {
-            id: textBackId
-            text: "Back"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: rootData.pageSelectionModel.back();
-
+    Button {
+        iconSource: "qrc:/icons/leftCircleArrow-32x32.png"
+        enabled: rootData.pageSelectionModel.hasBackward
+        onClicked: {
+            rootData.pageSelectionModel.back();
         }
     }
 
-    Rectangle {
-        width: textForwardId.width
-        height: textForwardId.height
-
-        color: "blue"
-
-        Text {
-            id: textForwardId
-            text: "Forward"
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: rootData.pageSelectionModel.forward();
-
+    Button {
+        iconSource: "qrc:/icons/rightCircleArrow-32x32.png"
+        enabled: rootData.pageSelectionModel.hasForward
+        onClicked: {
+            rootData.pageSelectionModel.forward();
         }
     }
 
-    TextField {
+    Controls.TextField {
         Layout.fillWidth: true
 
         text: rootData.pageSelectionModel.currentPageAddress

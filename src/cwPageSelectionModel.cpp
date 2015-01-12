@@ -199,12 +199,15 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
                 PageHistory.append(CurrentPage);
                 CurrentPageIndex = PageHistory.size() - 1;
             }
+
         }
 
 //        printPageHistory();
 
         emit currentPageChanged();
         emit currentPageAddressChanged();
+        emit hasBackwardChanged();
+        emit hasForwardChanged();
     }
 }
 
