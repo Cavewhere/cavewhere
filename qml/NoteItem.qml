@@ -53,6 +53,14 @@ ImageItem {
         imageItem: noteArea
     }
 
+    NoteLeadInteraction {
+        id: addLeadInteraction
+        anchors.fill: parent
+        scrapView: scrapViewId
+        basePanZoomInteraction: panZoomInteraction
+        imageItem: noteArea
+    }
+
     NoteItemSelectionInteraction {
         id: noteSelectionInteraction
         anchors.fill: parent
@@ -96,6 +104,7 @@ ImageItem {
             panZoomInteraction,
             addScrapInteraction,
             addStationInteraction,
+            addLeadInteraction,
             noteSelectionInteraction,
             noteNorthUpInteraction,
             noteScaleInteraction,
@@ -111,6 +120,9 @@ ImageItem {
                     break;
                 case "ADD-STATION":
                     addStationInteraction.activate();
+                    break;
+                case "ADD-LEAD":
+                    addLeadInteraction.activate();
                     break;
                 case "SELECT":
                     noteSelectionInteraction.activate();
@@ -174,6 +186,10 @@ ImageItem {
         },
 
         State {
+            name: "ADD-LEAD"
+        },
+
+        State {
             name: "SELECT"
         }
     ]
@@ -193,6 +209,13 @@ ImageItem {
             to: "ADD-STATION"
             ScriptAction {
                 script: interactionManagerId.active(addStationInteraction)
+            }
+        },
+
+        Transition {
+            to: "ADD-LEAD"
+            ScriptAction {
+                script: interactionManagerId.active(addLeadInteraction)
             }
         },
 

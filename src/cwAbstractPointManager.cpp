@@ -95,6 +95,8 @@ QQuickItem* cwAbstractPointManager::createItem() {
     //Add the point to the transform updater
     if(TransformUpdater != nullptr) {
         TransformUpdater->addPointItem(item);
+    } else {
+        qDebug() << "No transformUpdater, point's won't be positioned correctly, this is a bug" << LOCATION;
     }
 
     return item;

@@ -18,6 +18,7 @@
 #include "cwNoteTranformation.h"
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
+#include "cwLead.h"
 class cwNote;
 class cwCave;
 
@@ -34,12 +35,18 @@ class cwScrap : public QObject
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
 
-    Q_ENUMS(StationDataRole)
+    Q_ENUMS(StationDataRole LeadDataRole)
 public:
 
     enum StationDataRole {
         StationName,
         StationPosition
+    };
+
+    enum LeadDataRole {
+        LeadPosition,
+        LeadDesciption,
+        LeadSize
     };
 
     explicit cwScrap(QObject *parent = 0);
@@ -73,6 +80,13 @@ public:
     Q_INVOKABLE void setStationData(StationDataRole role, int noteStationIndex, QVariant value);
     bool hasStation(QString name) const;
 
+    void addLead(cwLead lead);
+    void removeLead(int leadId);
+    void setLeads(QList<cwLead> leads);
+    QList<cwLead> leads() const;
+    QVariant leadData(LeadDataRole role, int leadIndex) const;
+    void setLeadData(LeadDataRole role, int leadIndex, QVariant value);
+
     cwNoteTranformation* noteTransformation() const;
 
     bool calculateNoteTransform() const;
@@ -103,6 +117,12 @@ signals:
     void stationRemoved(int index);
     void stationsReset();
 
+    //For leads
+    void leadsInserted(int begin, int end);
+    void leadsRemoved(int begin, int end);
+    void leadsDataChanged(int begin, int end, QVector<int> roles);
+    void leadsReset();
+
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
 
@@ -129,6 +149,9 @@ private:
 
     //The stations that the scrap owns
     QList<cwNoteStation> Stations;
+
+    //All the leads that are with this scrap
+    QList<cwLead> Leads;
 
     //The note transform, this is used for guessing the station name's for the user
     cwNoteTranformation* NoteTransformation;

@@ -13,6 +13,7 @@
 #include "cwScrapOutlinePointView.h"
 #include "cwSGPolygonNode.h"
 #include "cwSGLinesNode.h"
+#include "cwScrapLeadView.h"
 
 //Qt includes
 #include <QGraphicsPolygonItem>
@@ -28,11 +29,13 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     PolygonNode(nullptr),
     OutlineNode(nullptr),
     StationView(new cwScrapStationView(this)),
+    LeadView(new cwScrapLeadView(this)),
     OutlinePointView(new cwScrapOutlinePointView(this)),
     SelectionManager(nullptr),
     Selected(false)
 {
     StationView->setScrapItem(this);
+    LeadView->setScrapItem(this);
     OutlinePointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
@@ -40,6 +43,7 @@ cwScrapItem::cwScrapItem(QQuickItem *parent) :
     //Set the declarative context for the station view
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QQmlEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(LeadView, context);
     QQmlEngine::setContextForObject(OutlinePointView, context);
 }
 
@@ -51,10 +55,12 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     PolygonNode(nullptr),
     OutlineNode(nullptr),
     StationView(new cwScrapStationView(this)),
+    LeadView(new cwScrapLeadView(this)),
     OutlinePointView(new cwScrapOutlinePointView(this)),
     Selected(false)
 {
     StationView->setScrapItem(this);
+    LeadView->setScrapItem(this);
     OutlinePointView->setScrapItem(this);
 
     setFlag(QQuickItem::ItemHasContents, true);
@@ -62,6 +68,7 @@ cwScrapItem::cwScrapItem(QQmlContext *context, QQuickItem *parent) :
     //Set the declarative context for the station view
     QQmlEngine::setContextForObject(this, context);
     QQmlEngine::setContextForObject(StationView, context);
+    QQmlEngine::setContextForObject(LeadView, context);
     QQmlEngine::setContextForObject(OutlinePointView, context);
 }
 
@@ -80,6 +87,7 @@ void cwScrapItem::setScrap(cwScrap* scrap) {
 
         Scrap = scrap;
         StationView->setScrap(Scrap);
+        LeadView->setScrap(Scrap);
         OutlinePointView->setScrap(Scrap);
 
         if(Scrap != nullptr) {
@@ -173,6 +181,7 @@ void cwScrapItem::setTransformUpdater(cwTransformUpdater* transformUpdater) {
         }
 
         StationView->setTransformUpdater(TransformUpdater);
+        LeadView->setTransformUpdater(TransformUpdater);
         OutlinePointView->setTransformUpdater(TransformUpdater);
 
         emit transformUpdaterChanged();

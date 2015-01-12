@@ -91,6 +91,9 @@
 #include "cwPageView.h"
 #include "cwPage.h"
 #include "cwPageViewAttachedType.h"
+#include "cwBaseNotePointInteraction.h"
+#include "cwBaseNoteLeadInteraction.h"
+#include "cwScrapLeadView.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -189,4 +192,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");
     qmlRegisterType<cwPage>("Cavewhere", 1, 0, "Page");
     qmlRegisterType<cwPageViewAttachedType>();
+    qmlRegisterType<cwBaseNotePointInteraction>();
+    qmlRegisterType<cwBaseNoteLeadInteraction>("Cavewhere", 1, 0, "BaseNoteLeadInteraction");
+    qmlRegisterType<cwScrapLeadView>("Cavewhere", 1, 0, "ScrapLeadView");
 }

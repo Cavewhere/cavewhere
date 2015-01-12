@@ -79,5 +79,6 @@
         <file>icons/unknownPage.png</file>
         <file>icons/leftCircleArrow-32x32.png</file>
         <file>icons/rightCircleArrow-32x32.png</file>
+        <file>icons/question.png</file>
     </qresource>
 </RCC>

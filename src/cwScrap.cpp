@@ -272,6 +272,103 @@ bool cwScrap::hasStation(QString name) const
 }
 
 /**
+ * @brief cwScrap::addLead
+ * @param lead
+ */
+void cwScrap::addLead(cwLead lead)
+{
+    qDebug() << "Add lead!";
+    Leads.append(lead);
+    emit leadsInserted(Leads.size() - 1, Leads.size() - 1);
+}
+
+/**
+ * @brief cwScrap::removeLead
+ * @param leadId
+ */
+void cwScrap::removeLead(int leadId)
+{
+    Q_ASSERT(leadId >= 0);
+    Q_ASSERT(leadId < Leads.size());
+    Leads.removeAt(leadId);
+    emit leadsRemoved(leadId, leadId);
+}
+
+/**
+ * @brief cwScrap::setLeads
+ * @param leads
+ */
+void cwScrap::setLeads(QList<cwLead> leads)
+{
+    Leads = leads;
+    emit leadsReset();
+}
+
+/**
+ * @brief cwScrap::leads
+ * @return
+ */
+QList<cwLead> cwScrap::leads() const
+{
+    return Leads;
+}
+
+/**
+ * @brief cwScrap::leadData
+ * @param role
+ * @param leadIndex
+ * @return
+ */
+QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
+{
+    if(leadIndex < 0 || leadIndex > Leads.size()) {
+        return QVariant();
+    }
+
+    const cwLead& lead = Leads.at(leadIndex);
+
+    switch(role) {
+    case LeadPosition:
+        return lead.positionOnNote();
+    case LeadDesciption:
+        return lead.desciption();
+    case LeadSize:
+        return lead.size();
+    }
+
+    return QVariant();
+}
+
+/**
+ * @brief cwScrap::setLeadData
+ * @param role
+ * @param leadIndex
+ * @param value
+ */
+void cwScrap::setLeadData(cwScrap::LeadDataRole role, int leadIndex, QVariant value)
+{
+    if(leadIndex < 0 || leadIndex >= Leads.size()) {
+        return;
+    }
+
+    QVector<int> roleChanged;
+    roleChanged.append(role);
+
+    cwLead& lead = Leads[leadIndex];
+    switch(role) {
+    case LeadPosition:
+        lead.setPositionOnNote(value.toPointF());
+        break;
+    case LeadDesciption:
+        lead.setDescription(value.toString());
+    case LeadSize:
+        lead.setSize(value.toSizeF());
+    }
+
+    emit leadsDataChanged(leadIndex, leadIndex, roleChanged);
+}
+
+/**
   \brief Gets the station at stationId
 
   stationId - The station at stationId, if the station id is invalid, this returns

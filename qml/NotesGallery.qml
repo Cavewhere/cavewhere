@@ -364,6 +364,15 @@ Rectangle {
                 text: "Add"
 
                 IconButton {
+                    id: addScrapId
+                    iconSource: "qrc:icons/addScrap.png"
+                    sourceSize: mainToolBar.iconSize
+                    text: "Scrap"
+
+                    onClicked: noteGallery.state = "ADD-SCRAP"
+                }
+
+                IconButton {
                     id: addStationId
                     iconSource: "qrc:icons/addStation.png"
                     sourceSize: mainToolBar.iconSize
@@ -373,12 +382,12 @@ Rectangle {
                 }
 
                 IconButton {
-                    id: addScrapId
-                    iconSource: "qrc:icons/addScrap.png"
+                    id: addLeadId
+                    iconSource: "qrc:icons/addStation.png"
                     sourceSize: mainToolBar.iconSize
-                    text: "Scrap"
+                    text: "Lead"
 
-                    onClicked: noteGallery.state = "ADD-SCRAP"
+                    onClicked: noteGallery.state = "ADD-LEAD"
                 }
             }
         }
@@ -526,6 +535,20 @@ Rectangle {
             PropertyChanges {
                 target: noteArea
                 state: "ADD-STATION"
+            }
+        },
+
+        State {
+            name: "ADD-LEAD"
+            extend:  "CARPET"
+            PropertyChanges {
+                target: addLeadId
+                selected: true
+            }
+
+            PropertyChanges {
+                target: noteArea
+                state: "ADD-LEAD"
             }
         },
 

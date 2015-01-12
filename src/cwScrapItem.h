@@ -21,6 +21,7 @@ class cwScrapOutlinePointView;
 class cwSGPolygonNode;
 class cwSGLinesNode;
 class cwSelectionManager;
+class cwScrapLeadView;
 
 /**
   \brief This draws a scrap
@@ -33,6 +34,8 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
     Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
+    Q_PROPERTY(cwScrapLeadView* leadView READ leadView CONSTANT)
+
     Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView NOTIFY outlinePointViewChanged)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
@@ -54,6 +57,7 @@ public:
     QSGTransformNode* transformNode() const;
 
     cwScrapStationView* stationView() const;
+    cwScrapLeadView* leadView() const;
     cwScrapOutlinePointView* outlinePointView() const;
 
     cwSelectionManager* selectionManager() const;
@@ -81,6 +85,7 @@ private:
     cwSGPolygonNode* PolygonNode; //!< Draws the polygon
     cwSGLinesNode* OutlineNode; //!< Drawing the outline of the polygon
     cwScrapStationView* StationView; //!< All the stations in the scrap
+    cwScrapLeadView* LeadView; //!< All the leads in the scrap
     cwScrapOutlinePointView* OutlinePointView; //!< All the control points around the scrap
     QVector<QPointF> ScrapPoints;
 
@@ -143,6 +148,14 @@ Gets selectionManager
 */
 inline cwSelectionManager* cwScrapItem::selectionManager() const {
     return SelectionManager;
+}
+
+/**
+* @brief cwScrapItem::leadView
+* @return
+*/
+inline cwScrapLeadView* cwScrapItem::leadView() const {
+    return LeadView;
 }
 
 
