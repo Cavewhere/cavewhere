@@ -6,22 +6,23 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Controls 1.0
 import Cavewhere 1.0
 
 Rectangle {
     id: usedStationsArea
-    radius: 4
-    gradient: Gradient {
-        GradientStop {
-            position: 0
-            color: "#cccccc"
-        }
+    //    radius: 4
+    //    gradient: Gradient {
+    //        GradientStop {
+    //            position: 0
+    //            color: "#cccccc"
+    //        }
 
-        GradientStop {
-            position: 0.18
-            color: "#ffffff"
-        }
-    }
+    //        GradientStop {
+    //            position: 0.18
+    //            color: "#ffffff"
+    //        }
+    //    }
     // transformOrigin: Item.Center
     //    anchors.bottomMargin: 5
     //    anchors.left: parent.left
@@ -32,9 +33,7 @@ Rectangle {
     // border.color: "#000000"
     border.width: 1
 
-    ListView {
-        id: usedStationsView
-
+    ScrollView {
         anchors.rightMargin: 2
         anchors.bottomMargin: 2
         anchors.leftMargin: 2
@@ -43,27 +42,30 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.topMargin: 0
-        clip: true
-        model: usedStationsModel.usedStations;
-
-        delegate: Text {
-            id: textId
-
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 3
-            anchors.rightMargin: 3
-
-            text: modelData
+        ListView {
+            id: usedStationsView
 
 
-        }
+            clip: true
+            model: usedStationsModel.usedStations;
 
+            delegate: Text {
+                id: textId
 
-        UsedStationTaskManager {
-            id: usedStationsModel;
-            cave: currentCave != null ? currentCave : null
-            listenToCaveChanges: parent.visible
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 3
+                anchors.rightMargin: 3
+
+                text: modelData
+            }
+
+            UsedStationTaskManager {
+                id: usedStationsModel;
+                cave: currentCave != null ? currentCave : null
+                listenToChanges: parent.visible
+                threaded: true
+            }
         }
     }
 
@@ -90,5 +92,5 @@ Rectangle {
         font.pixelSize:14
     }
 
-
+    //    }
 }

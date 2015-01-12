@@ -35,6 +35,7 @@
 #include "cwQMLReload.h"
 #include "cwDebug.h"
 #include "cwApplication.h"
+#include "cwUsedStationsTask.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -72,6 +73,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
+    qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

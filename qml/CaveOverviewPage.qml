@@ -99,6 +99,20 @@ Rectangle {
 
                 itemDelegate:
                     Item {
+
+                    TripLengthTask {
+                        id: tripLengthTask
+                        trip: styleData.value
+                    }
+
+                    UsedStationTaskManager {
+                        id: usedStationTaskManager
+                        trip: styleData.value
+                        bold: false
+                        abbreviated: true
+                        onlyLargestRange: true
+                    }
+
                     LinkText {
                         visible: styleData.column === 0
                         text: styleData.value.name
@@ -108,10 +122,6 @@ Rectangle {
                         }
                     }
 
-                    TripLengthTask {
-                        id: tripLengthTask
-                        trip: styleData.value
-                    }
 
                     Text {
                         visible: styleData.column === 1
@@ -120,7 +130,12 @@ Rectangle {
 
                     Text {
                         visible: styleData.column === 2
-                        text: "Unknown"
+                        text: {
+                            if(usedStationTaskManager.usedStations.length > 0) {
+                                return usedStationTaskManager.usedStations[0]
+                            }
+                            return ""
+                        }
                     }
 
                     Text {

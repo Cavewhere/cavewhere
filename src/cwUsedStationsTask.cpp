@@ -100,7 +100,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::createSurveyGroups(QL
             group.addStation(station.stationName());
         } else {
             //Create a group
-            SurveyGroup group(station.surveyName());
+            SurveyGroup group(station.surveyName(), TaskSettings);
             group.addStation(station.stationName());
             groupLookup[group.name()] = group;
         }
@@ -139,22 +139,35 @@ QString cwUsedStationsTask::SurveyGroup::groupString() const {
     Q_ASSERT(!StationsNames.isEmpty());
     QString groupString;
     if(!Name.isEmpty()) {
-        groupString += QString("<b>%1</b> Survey, ").arg(Name);
+        QString argsString;
+        argsString += TaskSettings.bold() ? QString("<b>%1</b>") : QString("%1");
+        argsString += TaskSettings.abbreviated() ? " " : " Survey, ";
+        groupString += argsString.arg(Name);
     }
 
     if(StationsNames.size() == 1) {
         //Only one station
         QString station = StationsNames.first();
+
+        QString argsString;
+        argsString += TaskSettings.abbreviated() ? "" : "Station ";
+        argsString += TaskSettings.bold() ? QString(" <b>%1</b>") : QString("%1");
+
         if(station.isEmpty() && Name.isEmpty()) { return QString(); }
         if(station.isEmpty()) {
-            groupString = QString("Station <b>%1</b>").arg(Name); //The group string is really the station
+            groupString = argsString.arg(Name); //The group string is really the station
         } else {
-            groupString += QString("Station <b>%1</b>").arg(station);
+            groupString += argsString.arg(station);
         }
 
     } else {
         //More than one station
-        groupString += QString("Stations <b>%1</b> to <b>%2</b>").arg(StationsNames.first(), StationsNames.last());
+        QString argsString;
+        argsString += TaskSettings.abbreviated() ? "" : "Stations ";
+        argsString += TaskSettings.bold() ? QString(" <b>%1</b>") : QString("%1");
+        argsString += TaskSettings.abbreviated() ? "-" : " to ";
+        argsString += TaskSettings.bold() ? QString(" <b>%2</b>") : QString("%2");
+        groupString += argsString.arg(StationsNames.first(), StationsNames.last());
     }
 
     return groupString;
@@ -193,7 +206,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
         QString firstStation = numericStations.first();
         int previousStation = firstStation.toInt();
 
-        SurveyGroup currentGroup(Name);
+        SurveyGroup currentGroup(Name, TaskSettings);
         currentGroup.addStation(firstStation);
 
         for(int i = 1; i < numericStations.size(); i++) {
@@ -204,7 +217,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
                     continousGroups.append(currentGroup);
 
                     //Create a new group
-                    currentGroup = SurveyGroup(Name);
+                    currentGroup = SurveyGroup(Name, TaskSettings);
                     currentGroup.addStation(stationNumber);
                 }
                 //Add the station to this group
@@ -220,7 +233,7 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
 
     //Add the non-numeric stations
     foreach(QString nonNumericStation, nonNumericStations) {
-        SurveyGroup group(Name);
+        SurveyGroup group(Name, TaskSettings);
         group.addStation(nonNumericStation);
         continousGroups.append(group);
     }
@@ -243,7 +256,20 @@ bool cwUsedStationsTask::SurveyGroup::lessThanForNumericStation(QString left, QS
   \brief Converts each group into a string
   */
 QList<QString> cwUsedStationsTask::groupStrings(QList<SurveyGroup> groups) const {
-    QList<QString> groupStrings;
+
+    if(TaskSettings.onlyLargestRange()) {
+        SurveyGroup largestGroup;
+        foreach(const SurveyGroup& group, groups) {
+            if(largestGroup.stations().size() < group.stations().size()) {
+                //Found a large group
+                largestGroup = group;
+            }
+        }
+        return QStringList() << largestGroup.groupString();
+    }
+
+
+    QStringList groupStrings;
     foreach(SurveyGroup group, groups) {
         QString groupString = group.groupString();
         if(!groupString.isEmpty()) {
@@ -252,3 +278,4 @@ QList<QString> cwUsedStationsTask::groupStrings(QList<SurveyGroup> groups) const
     }
     return groupStrings;
 }
+
