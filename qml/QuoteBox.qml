@@ -15,16 +15,56 @@ import QtGraphicalEffects 1.0
 
 Item {
     id: root
+    default property alias defaultChildren: childrenContainer.children
     property alias color: boxColorOverlay.color
     property alias borderColor: boxOutlineColorOverlay.color
     property alias borderWidth: box.borderWidth
+    property alias radius: rectangleItem.radius
+    property double margin: 5
+    property double shadowPadding: 5
+
+    property Item pointAtObject
+    property point pointAtObjectPosition
+
+    /**
+      This points the arrow of the quote box at position relative to item
+      */
+    function pointAt(item, position) {
+        if(item !== null) {
+            var triangleCoords = item.mapToItem(triangleItem, position.x, position.y);
+
+            //Top and center
+            var pointX = triangleCoords.x - triangleItem.x - triangleItem.implicitWidth / 2 - shadowPadding;
+            var pointY = triangleCoords.y - shadowPadding
+
+            var mappedPoint = triangleItem.mapToItem(root, pointX, pointY);
+            var x = root.x + mappedPoint.x
+            var y = root.y + mappedPoint.y
+
+            return Qt.point(x, y);
+        }
+        return Qt.point(0, 0)
+    }
+
+    x: pointAt(pointAtObject, pointAtObjectPosition).x
+    y: pointAt(pointAtObject, pointAtObjectPosition).y
+
+    onPointAtObjectChanged: {
+        console.log("Object changed")
+        pointAt(pointAtObject, pointAtObjectPosition)
+    }
+
+    onPointAtObjectPositionChanged: {
+        console.log("Object Position changed" + pointAtObjectPosition)
+        pointAt(pointAtObject, pointAtObjectPosition);
+    }
 
     Item {
         id: itemWithoutShadow
         visible: false
 
-        width: boxOutlineColorOverlay.width + 10
-        height: boxOutlineColorOverlay.height + 10
+        width: boxOutlineColorOverlay.width + shadowPadding * 2
+        height: boxOutlineColorOverlay.height + shadowPadding * 2
 
         Item {
             id: boxOutline
@@ -33,8 +73,8 @@ Item {
 
             width: rectangleItem.width
             height: triangleItem.height + rectangleItem.height
-            x: 5
-            y: 5
+            x: shadowPadding
+            y: shadowPadding
 
             Image {
                 id: triangleItem
@@ -46,9 +86,9 @@ Item {
 
             Rectangle {
                 id: rectangleItem
-                width: 200
-                height: 50
-                radius: 5
+                width: childrenContainer.width + margin
+                height: childrenContainer.height + margin
+                radius: 0
                 y: triangleItem.height
                 color: "black"
             }
@@ -77,11 +117,11 @@ Item {
 
             Rectangle {
                 id: rectangleItemBorder
-                width: rectangleItem.width - box.borderWidth * 1.5
-                height: rectangleItem.height - box.borderWidth * 1.5
+                width: rectangleItem.width - box.borderWidth * 2
+                height: rectangleItem.height - box.borderWidth * 2
                 radius: rectangleItem.radius - box.borderWidth
-                x: box.borderWidth * 0.75
-                y: triangleItem.height + box.borderWidth * 0.75
+                x: box.borderWidth
+                y: triangleItem.height + box.borderWidth
                 color: "black"
             }
             visible: false
@@ -90,7 +130,7 @@ Item {
         ColorOverlay {
             id: boxOutlineColorOverlay
             cached: true
-            color: "gray"
+            color: "darkgray"
             source: boxOutline
             anchors.fill: boxOutline
         }
@@ -112,13 +152,18 @@ Item {
         cached: true
         horizontalOffset: 2
         verticalOffset: 2
-        radius: 8
+        radius: 5
         samples: 32
         color: "#262626"
         source: itemWithoutShadow
     }
 
-
-
+    Item {
+        id: childrenContainer
+        width: childrenRect.width + margin
+        height: childrenRect.height + margin
+        x: margin + shadowPadding
+        y: rectangleItem.y + margin + shadowPadding
+    }
 }
 
