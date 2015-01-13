@@ -11,6 +11,9 @@
 class cwLeadData : public QSharedData
 {
 public:
+    QPointF Position;
+    QString Description;
+    QSizeF Size;
 
 };
 
@@ -34,5 +37,61 @@ cwLead &cwLead::operator=(const cwLead &rhs)
 cwLead::~cwLead()
 {
 
+}
+
+/**
+ * @brief cwLead::setPositionOnNote
+ * @param point - The position of the lead on the scrap
+ */
+void cwLead::setPositionOnNote(QPointF point)
+{
+    data->Position = point;
+}
+
+/**
+ * @brief cwLead::positionOnNote
+ * @return The position of the lead on the scrap
+ */
+QPointF cwLead::positionOnNote() const
+{
+    return data->Position;
+}
+
+/**
+ * @brief cwLead::setDescription
+ * @param desciption - The text desciption of the lead
+ */
+void cwLead::setDescription(QString desciption)
+{
+    data->Description = desciption;
+}
+
+/**
+ * @brief cwLead::desciption
+ * @return The text desciption of the lead
+ */
+QString cwLead::desciption() const
+{
+    return data->Description;
+}
+
+/**
+ * @brief cwLead::setSize
+ * @param size - The size of the lead. This is a length like 2ft by 5ft or 3m by 2m
+ *
+ * There are no units for the cwLead. The unit's are stored in the cwTrip's calibration
+ */
+void cwLead::setSize(QSizeF size)
+{
+    data->Size = size;
+}
+
+/**
+ * @brief cwLead::size
+ * @return
+ */
+QSizeF cwLead::size() const
+{
+    return data->Size;
 }
 

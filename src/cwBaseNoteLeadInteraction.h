@@ -9,18 +9,22 @@
 #ifndef CWBASENOTELEADINTERACTION_H
 #define CWBASENOTELEADINTERACTION_H
 
-#include <QQuickItem>
+//Our includes
+#include "cwBaseNotePointInteraction.h"
 
-class cwBaseNoteLeadInteraction : public QQuickItem
+class cwBaseNoteLeadInteraction : public cwBaseNotePointInteraction
 {
     Q_OBJECT
 public:
-    cwBaseNoteLeadInteraction();
+    cwBaseNoteLeadInteraction(QQuickItem* parent = 0);
     ~cwBaseNoteLeadInteraction();
 
 signals:
 
 public slots:
+
+protected:
+    void addPoint(QPointF notePosition, cwScrapItem *scrapItem);
 };
 
 #endif // CWBASENOTELEADINTERACTION_H
