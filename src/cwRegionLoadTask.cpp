@@ -503,15 +503,16 @@ cwTeamMember cwRegionLoadTask::loadTeamMember(const CavewhereProto::TeamMember& 
 cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStation)
 {
     cwStation station;
+
     station.setName(loadString(protoStation.name()));
     station.setLeft(protoStation.left());
     station.setRight(protoStation.right());
     station.setUp(protoStation.up());
     station.setDown(protoStation.down());
-    station.setLeftInputState((cwDistanceStates::State)station.leftInputState());
-    station.setRightInputState((cwDistanceStates::State)station.rightInputState());
-    station.setUpInputState((cwDistanceStates::State)station.upInputState());
-    station.setDownInputState((cwDistanceStates::State)station.downInputState());
+    station.setLeftInputState((cwDistanceStates::State)protoStation.leftstate());
+    station.setRightInputState((cwDistanceStates::State)protoStation.rightstate());
+    station.setUpInputState((cwDistanceStates::State)protoStation.upstate());
+    station.setDownInputState((cwDistanceStates::State)protoStation.downstate());
     return station;
 }
 
