@@ -44,7 +44,7 @@ void cwImageCleanupTask::runTask()
         QSet<int> validIds = extractAllValidImageIds();
         QSet<int> unusedIds = DatabaseIds.subtract(validIds);
 
-        cwSQLManager::Transaction transaction(&Database);
+        beginTransation();
 
         QString SQL("DELETE FROM Images WHERE id == ?");
         QSqlQuery removeImageIdQuery(Database);
