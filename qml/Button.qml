@@ -24,8 +24,8 @@ Rectangle {
 
     signal clicked();
 
-    width: buttonLayoutId.width + 6
-    height: buttonLayoutId.height + 6
+    implicitWidth:  buttonLayoutId.implicitWidth + 6
+    implicitHeight: buttonLayoutId.implicitHeight + 6
 
     radius: 4
 
@@ -37,27 +37,17 @@ Rectangle {
         GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
     }
 
-    Colorize {
-        id: colorizeEffect
-        source: buttonLayoutId
-//        anchors.centerIn: parent
-        anchors.fill: buttonLayoutId
-        visible: false
-
-        hue: 1.0
-        saturation: 0.0
-        lightness: 0.5
-    }
+    state: "enabledState"
 
     RowLayout {
         id: buttonLayoutId
 
         anchors.centerIn: parent
-        visible: true;
+        visible: false;
 
         Image {
             id: icon
-            visible: status === Image.Ready && iconOnTheLeft
+            visible: iconOnTheLeft
         }
 
         Text {
@@ -70,8 +60,18 @@ Rectangle {
             id: iconRightId
             source: icon.source
             sourceSize: icon.sourceSize
-            visible: status === Image.Ready && !iconOnTheLeft
+            visible: !iconOnTheLeft
         }
+    }
+
+    Colorize {
+        id: colorizeEffect
+        source: buttonLayoutId
+        anchors.fill: buttonLayoutId
+
+        hue: 1.0
+        saturation: 0.0
+        lightness: 0.5
     }
 
     MouseArea {
@@ -139,19 +139,6 @@ Rectangle {
                 target: mouseArea
                 enabled: false
             }
-            PropertyChanges {
-                target: colorizeEffect
-                visible: true
-            }
-            PropertyChanges {
-                target: buttonLayoutId
-                visible: false
-            }
-
-//            PropertyChanges {
-//                target: buttonText
-//                color: "#717171"
-//            }
         }
 
     ]
