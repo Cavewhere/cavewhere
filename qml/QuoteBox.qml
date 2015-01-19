@@ -35,12 +35,13 @@ Item {
       */
     property double triangleOffset: .1
 
+    //These two properties will position the QuoteBox's arrow to point to pointAtObject with
+    //and offset of pointAtObjectPosition
     property Item pointAtObject
     property point pointAtObjectPosition
 
     function updatePosition() {
         var newPos = pointAt(pointAtObject, pointAtObjectPosition)
-        console.log("newPos:" + newPos )
         x = newPos.x
         y = newPos.y
     }
@@ -51,61 +52,21 @@ Item {
     function pointAt(item, position) {
         if(item !== null) {
             var globalPos = item.mapToItem(null, position.x, position.y)
-//            var dropShadowCoords = triangleItem.mapToItem(dropShadowId, 0, 0);
             var globalTrianglePos = arrowTipId.mapToItem(null, 0, 0)
-
-//            testTipId.x = globalTrianglePos.x //- shadowPadding
-//            testTipId.y = globalTrianglePos.y
-
-            var drop = dropShadowId.mapToItem(null, 0, 0)
-
-//            console.log("DropShadowId.mapToItem: " + drop.x + " " + drop.y + " " + dropShadowCoords.x + " " + dropShadowCoords.y)
-
-            console.log("Global coords: " + globalPos.x + " " + globalPos.y + " " + globalTrianglePos.x + " " + globalTrianglePos.y)
-
-//            var triangleCoords = item.mapToItem(triangleItem, position.x, position.y);
-//            var dropShadowCoords = triangleItem.mapToItem(dropShadowId, triangleCoords.x, triangleCoords.y);
-
-//            console.log("Coords:" + position + " " + triangleCoords.x + " " + triangleCoords.y + " " + dropShadowCoords.x + " " + dropShadowCoords.y)
-
-//            //Top and center
-//            var pointX = dropShadowCoords.x - triangleItem.x - triangleItem.implicitWidth / 2 - shadowPadding;
-//            var pointY = dropShadowCoords.y - shadowPadding
-
-//            var mappedPoint = dropShadowId.mapToItem(root, pointX, pointY);
-
-//            console.log("mappedPoint:" + mappedPoint.x + " " + mappedPoint.y)
-
-//            testTipId.x = mappedPoint.x
-//            testTipId.y = mappedPoint.y
 
             var x = root.x + (globalPos.x - globalTrianglePos.x)
             var y = root.y + (globalPos.y - globalTrianglePos.y)
-
 
             return Qt.point(x, y);
         }
         return Qt.point(0, 0)
     }
 
-//    x: {
-//        var newX = pointAt(pointAtObject, pointAtObjectPosition).x
-//        if(x !== newX) {
-//            return newX;
-//        }
-//        return x;
-
-////        pointAt(pointAtObject, pointAtObjectPosition).x
-//    }
-//    y: pointAt(pointAtObject, pointAtObjectPosition).y
-
     onPointAtObjectChanged: {
-        console.log("Object changed")
         updatePosition()
     }
 
     onPointAtObjectPositionChanged: {
-        console.log("Object Position changed" + pointAtObjectPosition)
         updatePosition()
     }
 
@@ -261,7 +222,6 @@ Item {
                 origin.y: 0
 
                 onAngleChanged:  {
-                    console.log("Angle changed")
                     root.updatePosition()
                 }
             },
@@ -298,12 +258,10 @@ Item {
                 }
 
                 onXChanged: {
-                    console.log("X changed")
                     root.updatePosition()
                 }
 
                 onYChanged:  {
-                    console.log("Y changed")
                     root.updatePosition()
                 }
             }
