@@ -724,7 +724,7 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
  */
 void cwRegionLoadTask::insureVacuuming()
 {
-    cwSQLManager::Transaction transaction(&Database);
+//    cwSQLManager::Transaction transaction(&Database);
 
     int vacuum = -1;
 
@@ -743,11 +743,15 @@ void cwRegionLoadTask::insureVacuuming()
         //Turn on full Vacuum
         QSqlQuery turnOnFullVacuum(Database);
 
-        turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
-        qDebug() << "Turn on vacuum:" << turnOnFullVacuum.lastError().text();
+        bool success = turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
+        if(!success) {
+            qDebug() << "Turn on vacuum error:" << turnOnFullVacuum.lastError().text() << LOCATION;
+        }
 
-        turnOnFullVacuum.exec("VACUUM");
-        qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
+        success = turnOnFullVacuum.exec("VACUUM");
+        if(!success) {
+            qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
+        }
     }
     case 1:
         //Full Vacuum

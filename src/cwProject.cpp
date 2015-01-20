@@ -139,11 +139,21 @@ void cwProject::createTable(const QSqlDatabase& database, QString sql)
  */
 void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QString, QString> > filenames) //QString filename, QString pathToContent)
 {
-    QSqlQuery deleteDocsQuery(database);
-    QString deleteQuery = "delete * from FileFormatDocumenation";
-    bool success = deleteDocsQuery.exec(deleteQuery);
-    if(!success) {
-        qDebug() << "Couldn't delete delete contents from FileFormatDocumenation" << LOCATION;
+    QSqlQuery hasDocsQuery(database);
+    QString hasDocsQuerySQL = "SELECT name FROM sqlite_master WHERE type='table' AND name='FileFormatDocumenation'";
+    bool success = hasDocsQuery.exec(hasDocsQuerySQL);
+    if(success && hasDocsQuery.next()) {
+        Q_ASSERT(hasDocsQuery.value(0).toString() == QString("FileFormatDocumenation"));
+        QSqlQuery deleteDocsQuery(database);
+        QString deleteQuery = "delete from FileFormatDocumenation";
+        bool success = deleteDocsQuery.exec(deleteQuery);
+        if(!success) {
+            qDebug() << "Couldn't delete contents from FileFormatDocumenation" << deleteDocsQuery.lastError().text() << LOCATION;
+        }
+    } else {
+        if(!success) {
+            qDebug() << "Couldn't run query" << hasDocsQuery.lastError().text() << LOCATION;
+        }
     }
 
     QSqlQuery insertDocsQuery(database);
@@ -224,7 +234,7 @@ void cwProject::privateSave() {
 QString cwProject::convertFromURL(QString filenameUrl) const
 {
     QUrl fileUrl(filenameUrl);
-    if(fileUrl.isValid()) {
+    if(fileUrl.isValid() && fileUrl.isLocalFile()) {
         return fileUrl.toLocalFile();
     }
     return filenameUrl;
@@ -543,12 +553,13 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool wi
  */
 void cwProject::createDefaultSchema(const QSqlDatabase &database)
 {
-    cwSQLManager::Transaction transaction(&database);
 
     //Create the database with full vacuum so we don't use up tons of space
     QSqlQuery vacuumQuery(database);
     QString query = QString("PRAGMA auto_vacuum = 1");
     vacuumQuery.exec(query);
+
+    cwSQLManager::Transaction transaction(&database);
 
     //Create the caving region
     QString objectDataQuery =
