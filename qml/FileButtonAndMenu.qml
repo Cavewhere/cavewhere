@@ -11,9 +11,12 @@ import QtQuick.Controls 1.0
 import QtQuick.Dialogs 1.2
 
 MenuBar {
+    id: menuBarId
     property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
     property Loader mainContentLoader;
+    property FileDialog loadFileDialog;
+    property FileDialog saveAsFileDialog;
 
     signal openAboutWindow;
 
@@ -34,15 +37,7 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                fileDialog.open()
-            }
-
-            property FileDialog fileDialog: FileDialog {
-                id: fileDialogId
-                nameFilters: ["Cavewhere File (*.cw)"]
-                onAccepted: {
-                    rootData.project.loadFile(fileDialogId.fileUrl)
-                }
+                loadFileDialog.open()
             }
         }
 
@@ -63,15 +58,9 @@ MenuBar {
         MenuItem {
             id: saveAsMenuItem
             text: "Save As"
-            onTriggered: fileDialog.open()
-            property FileDialog fileDialog: FileDialog {
-                id: saveAsFileDialogId
-                nameFilters: ["Cavewhere Project (*.cw)"]
-                title: "Save Cavewhere Project As"
-                selectExisting: false
-                onAccepted: {
-                    project.saveAs(fileUrl)
-                }
+            onTriggered:{
+                console.log("Open file dialog:" + saveAsFileDialog)
+                saveAsFileDialog.open()
             }
         }
 

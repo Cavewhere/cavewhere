@@ -10,6 +10,7 @@ import QtQuick 2.0
 //import QtGraphicalEffects 1.0
 import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
+import QtQuick.Dialogs 1.2
 
 ApplicationWindow {
     id: applicationWindow
@@ -34,6 +35,8 @@ ApplicationWindow {
 //        terrainRenderer: terrainRendererId
 //        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
         mainContentLoader: loadMainContentsId
+        saveAsFileDialog: saveAsFileDialogId
+        loadFileDialog: loadFileDialogId
 
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
@@ -80,6 +83,24 @@ ApplicationWindow {
         }
     }
 
+    FileDialog {
+        id: saveAsFileDialogId
+        nameFilters: ["Cavewhere Project (*.cw)"]
+        title: "Save Cavewhere Project As"
+        selectExisting: false
+        onAccepted: {
+            project.saveAs(fileUrl)
+        }
+    }
+
+    FileDialog {
+        id: loadFileDialogId
+        nameFilters: ["Cavewhere File (*.cw)"]
+        onAccepted: {
+            rootData.project.loadFile(fileUrl)
+        }
+    }
+
     //There's only one shadow input text editor for the cavewhere program
     //This make the input creation much faster for any thing that needs an editor
     //Only one editor can be open at a time
@@ -91,6 +112,8 @@ ApplicationWindow {
     GlobalDialogHandler {
         id: globalDialogHandler
     }
+
+
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindow
