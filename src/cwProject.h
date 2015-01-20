@@ -35,8 +35,9 @@ class QUndoStack;
   */
 class cwProject :  public QObject{
 Q_OBJECT
-    Q_PROPERTY(QString filename READ filename WRITE setFilename NOTIFY filenameChanged)
+    Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(bool temporaryProject READ isTemporaryProject NOTIFY temporaryProjectChanged)
 
 public:
     cwProject(QObject* parent = nullptr);
@@ -48,9 +49,7 @@ public:
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
-    Q_INVOKABLE void load();
     Q_INVOKABLE void save();
-    Q_INVOKABLE void saveAs();
     Q_INVOKABLE void saveAs(QString newFilename);
 
     Q_INVOKABLE void newProject();
@@ -60,7 +59,7 @@ public:
     void setTaskManager(cwTaskManagerModel* manager);
     cwTaskManagerModel* taskManager() const;
 
-    void addImages(QStringList noteImagePath, QObject* reciever, const char* slot);
+    void addImages(QList<QUrl> noteImagePath, QObject* reciever, const char* slot);
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
     static bool updateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
@@ -73,6 +72,7 @@ public:
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
+    void temporaryProjectChanged();
 
 public slots:
      void loadFile(QString filename);
@@ -105,6 +105,8 @@ private:
     void setFilename(QString newFilename);
 
      void privateSave();
+
+     QString convertFromURL(QString fileUrl) const;
 private slots:
     void updateRegionData(cwCavingRegion* region);
     void startDeleteImageTask();

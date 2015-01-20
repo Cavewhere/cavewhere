@@ -166,8 +166,10 @@ void cwCavingRegion::addCaves(QList<cwCave*> caves) {
     }
 
     //Run the insert cave command
-    int firstIndex = Caves.size();
-    pushUndo(new InsertCaveCommand(this, caves, firstIndex));
+    if(!caves.isEmpty()) {
+        int firstIndex = Caves.size();
+        pushUndo(new InsertCaveCommand(this, caves, firstIndex));
+    }
 }
 
 /**

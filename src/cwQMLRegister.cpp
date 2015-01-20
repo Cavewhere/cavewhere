@@ -28,7 +28,6 @@
 #include "cwGLLinePlot.h"
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
-#include "cwFileDialogHelper.h"
 #include "cwImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
 #include "cwBasePanZoomInteraction.h"
@@ -121,7 +120,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
-    qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
     qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
     qmlRegisterType<cwNote>("Cavewhere", 1, 0, "Note");
     qmlRegisterType<cwBasePanZoomInteraction>("Cavewhere", 1, 0, "BasePanZoomInteraction");

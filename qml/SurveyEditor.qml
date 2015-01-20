@@ -39,7 +39,6 @@ Rectangle {
             contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
             function ensureVisible(r){
-                console.log("Ensure visible:" + r.y + " " + r.height)
                 var contentY = flickableAreaId.contentY;
                 if (flickableAreaId.contentY >= r.y) {
                     contentY = r.y;

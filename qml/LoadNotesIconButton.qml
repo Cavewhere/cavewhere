@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import QtQuick.Dialogs 1.2
 
 IconButton {
     id: buttonId
@@ -21,15 +22,13 @@ IconButton {
         fileDialog.open();
     }
 
-    FileDialogHelper {
+    FileDialog {
         id: fileDialog;
-        filter: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
-        multipleFiles: true
-        settingKey: "lastNoteGalleryImageLocation"
-        caption: "Load Images"
-        onFilesSelected: {
-            var validImages = imageValidator.validateImages(selected);
-            buttonId.filesSelected(validImages)
+        nameFilters: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
+        title: "Load Images"
+        selectMultiple: true
+        onAccepted: {
+            buttonId.filesSelected(fileDialog.fileUrls)
         }
     }
 

@@ -87,6 +87,8 @@ void cwProject::createTempProjectFile() {
 
     //Create default schema
     createDefaultSchema();
+
+    emit temporaryProjectChanged();
 }
 
 /**
@@ -181,14 +183,14 @@ void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QS
 }
 
 /**
-  \brief Saves the project
+  \brief Saves the project.
+
+  Make sure the project isn't a temporary project. If it is a temporary project,
+ call saveAs(filename) instead
   */
 void cwProject::save() {
-    if(isTemporaryProject()) {
-        saveAs();
-    } else {
-        privateSave();
-    }
+    Q_ASSERT(!isTemporaryProject());
+    privateSave();
 }
 
 
@@ -211,17 +213,21 @@ void cwProject::privateSave() {
 }
 
 /**
- * @brief cwProject::saveAs
+ * @brief cwProject::convertFromURL
+ * @param fileUrl - The url that will be convert
+ * @return Returns the converted url
  *
-    Saves the project as.  This will copy the current project to a different location, leaving
-    the original. If the project is a temperary project, the temperary project will be removed
-    from disk.
+ * For example if fileUrl = file://SOME/LOCAL/FILENAME with will convert it to //SOME/LOCAL/FILENAME
+ *
+ * If the filenameUrl isn't a url, this just returns filenameUrl
  */
-void cwProject::saveAs()
+QString cwProject::convertFromURL(QString filenameUrl) const
 {
-    QString filename = QFileDialog::getSaveFileName(nullptr, "Save Cavewhere Project As", "", "Cavewhere Project (*.cw)");
-    filename = cwGlobals::addExtension(filename, "cw");
-    saveAs(filename);
+    QUrl fileUrl(filenameUrl);
+    if(fileUrl.isValid()) {
+        return fileUrl.toLocalFile();
+    }
+    return filenameUrl;
 }
 
 /**
@@ -232,6 +238,9 @@ void cwProject::saveAs()
     from disk.
   */
 void cwProject::saveAs(QString newFilename){
+    newFilename = cwGlobals::addExtension(newFilename, "cw");
+    newFilename = convertFromURL(newFilename);
+
     //Just save it the user is overwritting it
     if(newFilename == filename()) {
         privateSave();
@@ -264,6 +273,8 @@ void cwProject::saveAs(QString newFilename){
 
     //Save the current data
     privateSave();
+
+    emit temporaryProjectChanged();
 }
 
 /**
@@ -307,6 +318,8 @@ void cwProject::loadFile(QString filename) {
 
     if(filename.isEmpty()) { return; }
 
+    filename = convertFromURL(filename);
+
     //Load the region task
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
     connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(updateRegionData(cwCavingRegion*)));
@@ -335,6 +348,8 @@ void cwProject::updateRegionData(cwCavingRegion* region) {
 
     //Copy the data from the loaded region
     *Region = *region;
+
+    emit temporaryProjectChanged();
 }
 
 /**
@@ -387,11 +402,14 @@ void cwProject::setFilename(QString newFilename) {
   \param slot - The slot that'll handle the addImages signal
 
   */
-void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const char* slot) {
+void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const char* slot) {
     if(receiver == nullptr )  { return; }
 
     //Create a new image task
-    foreach(QString path, noteImagePath) {
+    foreach(QUrl url, noteImagePath) {
+        QString path = url.toLocalFile();
+        qDebug() << "Adding image:" << path;
+
         cwAddImageTask* addImageTask = new cwAddImageTask();
 
         TaskManager->addTask(addImageTask);
@@ -410,13 +428,6 @@ void cwProject::addImages(QStringList noteImagePath, QObject* receiver, const ch
         //Run the addImageTask, in an asyncus way
         addImageTask->start();
     }
-
-
-
-//    cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog();
-//    progressDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-//    progressDialog->setTask(addImageTask);
-//    progressDialog->show();
 }
 
 /**
@@ -586,15 +597,4 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
         UndoStack = undoStack;
         emit undoStackChanged();
     }
-}
-
-/**
- * @brief cwProject::load
- *
- * This creates a file widget that asks the user to load a file from disk
- */
-void cwProject::load()
-{
-    QString filename = cwGlobals::openFile("Load Cavewhere Project", "Cavewhere Project (*.cw)", QString("OpenProject"));
-    loadFile(filename);
 }

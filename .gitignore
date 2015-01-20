@@ -927,3 +927,11 @@ src/main.cpp.REMOTE.33091.cpp
 src/qbs/protoBuffer/ProtoBuffer.qbs.user
 plotsauce
 cavern
+Cavewhere 0.017.zip
+cavewhere.qbs.user.3.3-pre1
+installer/installer.qbs.user
+installer/installer.qbs.user.3.3-pre1
+qbsModules/modules/Git/Git.qbs.user
+us.stackdump
+vc100.pdb
+._.DS_Store

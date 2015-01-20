@@ -8,7 +8,7 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
 import QtQuick.Controls 1.0
-
+import QtQuick.Dialogs 1.2
 
 MenuBar {
     property var terrainRenderer; //For taking screenshots
@@ -34,7 +34,15 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                project.load();
+                fileDialog.open()
+            }
+
+            property FileDialog fileDialog: FileDialog {
+                id: fileDialogId
+                nameFilters: ["Cavewhere File (*.cw)"]
+                onAccepted: {
+                    rootData.project.loadFile(fileDialogId.fileUrl)
+                }
             }
         }
 
@@ -43,12 +51,28 @@ MenuBar {
         MenuItem {
             text: "Save"
             shortcut: "Ctrl+S"
-            onTriggered: project.save();
+            onTriggered: {
+                if(!project.temporaryProject) {
+                    project.save();
+                } else {
+                    saveAsMenuItem.fileDialog.open()
+                }
+            }
         }
 
         MenuItem {
+            id: saveAsMenuItem
             text: "Save As"
-            onTriggered: project.saveAs();
+            onTriggered: fileDialog.open()
+            property FileDialog fileDialog: FileDialog {
+                id: saveAsFileDialogId
+                nameFilters: ["Cavewhere Project (*.cw)"]
+                title: "Save Cavewhere Project As"
+                selectExisting: false
+                onAccepted: {
+                    project.saveAs(fileUrl)
+                }
+            }
         }
 
         MenuSeparator {}
