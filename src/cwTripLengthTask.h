@@ -15,6 +15,7 @@ class cwSurveyChunk;
 
 //Qt includes
 #include <QPair>
+#include <QPointer>
 
 /**
   This class isn't thread safe!
@@ -49,7 +50,7 @@ private slots:
    void disconnectTrip();
 
 private:
-   cwTrip* Trip;
+   QPointer<cwTrip> Trip;
    double Length; //!< The length of the trip
 
    void connectChunks();
@@ -68,12 +69,6 @@ inline double cwTripLengthTask::length() const {
     return Length;
 }
 
-/**
-Gets trip
-*/
-inline cwTrip* cwTripLengthTask::trip() const {
-    return Trip;
-}
 
 
 
