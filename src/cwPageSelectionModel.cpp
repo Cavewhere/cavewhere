@@ -81,13 +81,37 @@ cwPage* cwPageSelectionModel::registerPage(cwPage *parentPage,
         }
     }
 
-
-
     if(newPage == nullptr) {
         cwPage* page = new cwPage(parentPage, pageComponent, pageName, pageProperties);
         return page;
     }
     return newPage;
+}
+
+/**
+ * @brief cwPageSelectionModel::registerSubPage
+ * @param parentPage
+ * @param pageName
+ * @param pageProperties
+ * @return The page that was registered in the mode
+ *
+ * This function is slightly different the registerPage(). This is useful for registering a
+ * different view inside of the current page. Basicially, both the parentPage and the page that is
+ * returned from this function has the same QQmlComponent and the pageProperties are different.
+ *
+ * For example, this is used with the Carpet Mode in the SurveyEditor
+ */
+cwPage *cwPageSelectionModel::registerSubPage(cwPage *parentPage, QString pageName, QVariantMap pageProperties)
+{
+    Q_ASSERT(parentPage != nullptr);
+
+    //Inherite properties from the parent
+    QVariantMap properties = parentPage->pageProperties();
+    foreach(QString key, pageProperties.keys()) {
+        properties.insert(key, pageProperties.value(key));
+    }
+
+    return registerPage(parentPage, pageName, parentPage->component(), properties);
 }
 
 /**
