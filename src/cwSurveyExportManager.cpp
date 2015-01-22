@@ -11,11 +11,12 @@
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegionTask.h"
 #include "cwCompassExporterCaveTask.h"
-#include "cwRegionTreeModel.h"
 #include "cwDebug.h"
+#include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwGlobals.h"
+
 
 //Qt includes
 #include <QFileDialog>
@@ -28,11 +29,8 @@
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     QObject(parent),
-    Model(nullptr),
-    SelectionModel(nullptr),
     ExportThread(new QThread(this))
 {
-
 }
 
 /**
@@ -44,79 +42,20 @@ cwSurveyExportManager::~cwSurveyExportManager() {
 }
 
 /**
-  Sets the caving region tree model that this class uses to update it's menu option based
-  on the current selection.
-  */
-void cwSurveyExportManager::setCavingRegionTreeModel(cwRegionTreeModel *model) {
-    if(Model != model) {
-        Model = model;
-        connect(Model, SIGNAL(dataChanged(QModelIndex,QModelIndex)), SLOT(updateActions()));
-    }
-}
-
-/**
-  \brief Opens the survex exporter
-  */
-void cwSurveyExportManager::openExportSurvexTripFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(nullptr, "Export trip to Survex", "", "Survex *.svx");
-    filename = cwGlobals::addExtension(filename, "svx");
-    exportSurvexTrip(filename);
-}
-
-/**
-  \brief Asks the user to choose a file to export the currently selected file
-  */
-void cwSurveyExportManager::openExportSurvexCaveFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(nullptr, "Export cave to Survex", "", "Survex *.svx");
-    filename = cwGlobals::addExtension(filename, "svx");
-    exportSurvexCave(filename);
-}
-
-/**
-  cwSurveyEditorMainWindow
-  \brief Open a file dialog for the user to save
-  all the data to survex file
-  */
-void cwSurveyExportManager::openExportSurvexRegionFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(nullptr, "Export region to Survex", "", "Survex *.svx");
-    filename = cwGlobals::addExtension(filename, "svx");
-    exportSurvexRegion(filename);
-}
-
-void cwSurveyExportManager::openExportCompassTripFileDialog()
-{
-    QMessageBox* messageBox = new QMessageBox();
-    messageBox->setAttribute(Qt::WA_DeleteOnClose, true);
-    messageBox->setText("Currently exporting a single trip to compass <b>isn't supported</b>");
-    messageBox->show();
-}
-
-/**
-  Opens the compass file export dialog
-  */
-void cwSurveyExportManager::openExportCompassCaveFileDialog() {
-    QString filename = QFileDialog::getSaveFileName(nullptr, "Export cave to Compass", "", "Compass *.dat");
-    filename = cwGlobals::addExtension(filename, "dat");
-    exportCaveToCompass(filename);
-}
-
-void cwSurveyExportManager::openExportCompassRegionFileDialog()
-{
-    QMessageBox* messageBox = new QMessageBox();
-    messageBox->setAttribute(Qt::WA_DeleteOnClose, true);
-    messageBox->setText("Currently exporting a compass Makefile <b>isn't supported</b>");
-    messageBox->show();
-}
-
-/**
   \brief Exports the survex region to filename
   */
 void cwSurveyExportManager::exportSurvexRegion(QString filename) {
     if(filename.isEmpty()) { return; }
+    if(cavingRegion() == nullptr) {
+        qDebug() << "Caving region is null! this is a bug" << LOCATION;
+        return;
+    }
+    filename = cwGlobals::convertFromURL(filename);
+    filename = cwGlobals::addExtension(filename, "svx");
 
     cwSurvexExporterRegionTask* exportTask = new cwSurvexExporterRegionTask();
     exportTask->setOutputFile(filename);
-    exportTask->setData(*(Model->cavingRegion()));
+    exportTask->setData(*cavingRegion());
     connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
     connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
     exportTask->setThread(ExportThread);
@@ -128,6 +67,8 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexCave(QString filename) {
     if(filename.isEmpty()) { return; }
+    filename = cwGlobals::convertFromURL(filename);
+    filename = cwGlobals::addExtension(filename, "svx");
 
     cwCave* cave = currentCave();
 
@@ -147,6 +88,9 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
   */
 void cwSurveyExportManager::exportSurvexTrip(QString filename) {
     if(filename.isEmpty()) { return; }
+    filename = cwGlobals::convertFromURL(filename);
+    filename = cwGlobals::addExtension(filename, "svx");
+
     cwTrip* trip = currentTrip();
     if(trip != nullptr) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
@@ -165,6 +109,8 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
 void cwSurveyExportManager::exportCaveToCompass(QString filename) {
     Q_UNUSED(filename);
     if(filename.isEmpty()) { return; }
+    filename = cwGlobals::convertFromURL(filename);
+    filename = cwGlobals::addExtension(filename, "dat");
 
     cwCave* cave = currentCave();
     if(cave != nullptr) {
@@ -196,58 +142,17 @@ void cwSurveyExportManager::updateActions() {
 }
 
 /**
-  Sets the region's selection model
-
-  This allows the survey export manager to keep the export menu options update with the correct
-  information
-  */
-void cwSurveyExportManager::setRegionSelectionModel(QItemSelectionModel *selectionModel) {
-
-    //Make sure the selection model is setup correctly
-    if(selectionModel->model() != Model) {
-        qDebug() << "Can't set selection model because model isn't correct" << LOCATION;
-        return;
-    }
-
-    if(selectionModel != SelectionModel) {
-        if(SelectionModel != nullptr) {
-            disconnect(SelectionModel, nullptr, this, nullptr);
-        }
-
-        SelectionModel = selectionModel;
-
-        if(SelectionModel != nullptr) {
-            connect(SelectionModel, SIGNAL(currentChanged(QModelIndex,QModelIndex)), SLOT(updateActions()));
-
-            updateActions();
-        }
-    }
-}
-
-/**
 Gets currentCaveName
 */
 QString cwSurveyExportManager::currentCaveName() const {
-    QModelIndex currentIndex = SelectionModel->currentIndex();
-    if(Model->isTrip(currentIndex)) {
-        currentIndex = currentIndex.parent();
-    }
-
-    if(Model->isCave(currentIndex)) {
-        return Model->data(currentIndex, cwRegionTreeModel::NameRole).toString();
-    }
-    return QString();
+    return currentCave() != nullptr ? currentCave()->name() : QString();
 }
 
 /**
 Gets currentTripName
 */
 QString cwSurveyExportManager::currentTripName() const {
-    QModelIndex currentIndex = SelectionModel->currentIndex();
-    if(Model->isTrip(currentIndex)) {
-        return Model->data(currentIndex, cwRegionTreeModel::NameRole).toString();
-    }
-    return QString();
+    return currentTrip() != nullptr ? currentTrip()->name() : QString();
 }
 
 /**
@@ -255,19 +160,77 @@ QString cwSurveyExportManager::currentTripName() const {
   */
 cwCave *cwSurveyExportManager::currentCave() const
 {
-    cwCave* cave = nullptr;
-    QModelIndex currentSelected = SelectionModel->currentIndex();
-    if(Model->isTrip(currentSelected)) {
-        cave = Model->trip(currentSelected)->parentCave();
-    } else if(Model->isCave(currentSelected)) {
-        cave = Model->cave(SelectionModel->currentIndex());
-    }
-    return cave;
+    return cave();
 }
 
 /**
   Gets the current selected trip
   */
 cwTrip* cwSurveyExportManager::currentTrip() const {
-    return Model->trip(SelectionModel->currentIndex());
+    return trip();
+}
+
+/**
+* @brief cwSurveyExportManager::trip
+* @return The current trip that is assigned to the survey export manager
+*/
+cwTrip* cwSurveyExportManager::trip() const {
+    return Trip;
+}
+
+/**
+* @brief cwSurveyExportManager::setTrip
+* @param Sets the current trip for the survey export manager. This will also call setCave() with
+* the trip's parentCave
+*/
+void cwSurveyExportManager::setTrip(cwTrip* trip) {
+    if(Trip != trip) {
+        Trip = trip;
+        setCave(Trip->parentCave());
+        updateActions();
+        emit tripChanged();
+    }
+}
+
+/**
+* @brief cwSurveyExportManager::cave
+* @return The current cave that is assigned to this export manager
+*/
+cwCave* cwSurveyExportManager::cave() const {
+    return Cave;
+}
+
+/**
+ * @brief cwSurveyExportManager::setCave
+ * @param cave - Sets the cave for this manager. This will also call setCavingRegion() with the
+ * cave's parent()
+ */
+void cwSurveyExportManager::setCave(cwCave* cave) {
+    if(Cave != cave) {
+        Cave = cave;
+        Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
+        setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
+        updateActions();
+        emit caveChanged();
+    }
+}
+
+/**
+* @brief cwSurveyExportManager::cavingRegion
+* @return - Returns the current region for the export manager
+*/
+cwCavingRegion* cwSurveyExportManager::cavingRegion() const {
+    return CavingRegion;
+}
+
+/**
+ * @brief cwSurveyExportManager::setCavingRegion
+ * @param cavingRegion - Returns the caving region for this manager
+ */
+void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
+    if(CavingRegion != cavingRegion) {
+        CavingRegion = cavingRegion;
+        updateActions();
+        emit cavingRegionChanged();
+    }
 }

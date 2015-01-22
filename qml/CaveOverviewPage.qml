@@ -25,7 +25,6 @@ Rectangle {
         instantiatorId.model = cavePageArea.currentCave
     }
 
-
     RowLayout {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -63,6 +62,12 @@ Rectangle {
                     currentCave: cavePageArea.currentCave
                 }
             }
+
+            ExportImportButtons {
+                id: exportButton
+                currentRegion: rootData.region
+                currentCave: cavePageArea.currentCave
+            }
         }
 
         ColumnLayout {
@@ -83,6 +88,7 @@ Rectangle {
             }
 
             Controls.TableView {
+                id: tableViewId
                 model: currentCave
 
                 implicitWidth: 600
@@ -99,6 +105,15 @@ Rectangle {
 
                 itemDelegate:
                     Item {
+
+                    Connections {
+                        target: tableViewId
+                        onCurrentRowChanged: {
+                            if(tableViewId.currentRow === styleData.row) {
+                                exportButton.currentTrip = styleData.value
+                            }
+                        }
+                    }
 
                     TripLengthTask {
                         id: tripLengthTask
@@ -193,7 +208,7 @@ Rectangle {
             //In-ables the link
             var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                 tripPageName(object.trip), //Name
-                                                                surveyEditorComponent, //Function
+                                                                surveyEditorComponent, //component
                                                                 {"currentTrip":object.trip}
                                                                 )
             object.page = page;

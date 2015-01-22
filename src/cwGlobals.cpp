@@ -41,3 +41,21 @@ QString cwGlobals::addExtension(QString filename, QString extensionHint)
     return filename;
 }
 
+/**
+ * @brief cwGlobals::convertFromURL
+ * @param fileUrl - The url that will be convert
+ * @return Returns the converted url
+ *
+ * For example if fileUrl = file://SOME/LOCAL/FILENAME with will convert it to //SOME/LOCAL/FILENAME
+ *
+ * If the filenameUrl isn't a url, this just returns filenameUrl
+ */
+QString cwGlobals::convertFromURL(QString filenameUrl)
+{
+    QUrl fileUrl(filenameUrl);
+    if(fileUrl.isValid() && fileUrl.isLocalFile()) {
+        return fileUrl.toLocalFile();
+    }
+    return filenameUrl;
+}
+

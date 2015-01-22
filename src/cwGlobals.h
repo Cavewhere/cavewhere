@@ -22,6 +22,7 @@ public:
     static const double DegreesToRadians;
 
     static QString addExtension(QString filename, QString extensionHint);
+    static QString convertFromURL(QString filenameUrl);
 };
 
 #endif // CWGLOBALS_H
