@@ -38,6 +38,7 @@ Rectangle {
             ExportImportButtons {
                 id: exportButton
                 currentRegion: rootData.region
+                importVisible: true
             }
 
         }

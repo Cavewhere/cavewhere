@@ -16,12 +16,19 @@ Item {
     property alias currentTrip: exportManager.trip
     property alias currentCave: exportManager.cave
     property alias currentRegion: exportManager.cavingRegion
+    property alias importVisible: importButton.visible
 
     implicitWidth: rowId.width
     implicitHeight: rowId.height
 
     SurveyExportManager {
         id: exportManager
+    }
+
+    SurveyImportManager {
+        id: importManager
+        cavingRegion: iconBar.currentRegion
+        undoStack: rootData.undoStack
     }
 
     Item {
@@ -38,6 +45,7 @@ Item {
                     title: "Export " + exportManager.currentTripName + " to survex"
                     nameFilters: ["Survex (*.svx)"]
                     selectExisting: false
+                    selectMultiple: false
                     onAccepted: {
                         exportManager.exportSurvexTrip(fileUrl);
                     }
@@ -50,6 +58,7 @@ Item {
                     title: "Export " + exportManager.currentCaveName + " to survex"
                     nameFilters: ["Survex (*.svx)"]
                     selectExisting: false
+                    selectMultiple: false
                     onAccepted: {
                         exportManager.exportSurvexCave(fileUrl);
                     }
@@ -62,6 +71,7 @@ Item {
                     title: "Export All Caves to survex"
                     nameFilters: ["Survex (*.svx)"]
                     selectExisting: false
+                    selectMultiple: false
                     onAccepted: {
                         exportManager.exportSurvexRegion(fileUrl);
                     }
@@ -74,11 +84,27 @@ Item {
                     title: "Export " + exportManager.currentCaveName + " to compass"
                     nameFilters: ["Compass (*.dat)"]
                     selectExisting: false
+                    selectMultiple: false
                     onAccepted: {
                         exportManager.exportCaveToCompass(fileUrl);
                     }
                 }
+            },
+            State {
+                name: "IMPORT_COMPASS"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Import from Compass"
+                    nameFilters: ["Compass (*.dat)"]
+                    selectExisting: true
+                    selectMultiple: true
+                    onAccepted: {
+                        importManager.importCompassDataFile(fileUrls);
+                    }
+                }
             }
+
+
         ]
     }
 
@@ -147,6 +173,7 @@ Item {
             id: importButton
 
             text: "Import"
+            visible: false
 
             onClicked: {
                 importContextMenu.popup()
@@ -162,7 +189,10 @@ Item {
 
                 Controls.MenuItem {
                     text: "Compass (.dat)"
-                    onTriggered: rootData.surveyImportManager.importCompassDataFile();
+                    onTriggered: {
+                        fileDialogItem.state = "IMPORT_COMPASS"
+                        fileDialog.open()
+                    }
                 }
             }
         }

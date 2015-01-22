@@ -39,6 +39,7 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
 {
     if(CavingRegion != region) {
         CavingRegion = region;
+        emit cavingRegionChanged();
     }
 }
 
@@ -58,17 +59,9 @@ void cwSurveyImportManager::importSurvex() {
  *
  * Open a compass file to import
  */
-void cwSurveyImportManager::importCompassDataFile()
+void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
 {
-    static const QString compassImportKey = "LastCompassImportFilename";
-
-    QSettings settings;
-    QString lastFile = settings.value(compassImportKey).toString();
-    QStringList dataFiles = QFileDialog::getOpenFileNames(nullptr, "Compass Data File", lastFile, "*.dat");
-
-    if(!dataFiles.isEmpty()) {
-        settings.setValue(compassImportKey, dataFiles.first());
-    }
+    QStringList dataFiles = urlsToStringList(filenames);
 
     if(CompassImporter->isReady()) {
         CompassImporter->setCompassDataFiles(dataFiles + QueuedCompassFile);
@@ -114,4 +107,46 @@ void cwSurveyImportManager::compassImporterFinished()
 void cwSurveyImportManager::compassMessages(QString message)
 {
     qDebug() << "Compass Importer:" << message;
+}
+
+/**
+ * @brief cwSurveyImportManager::urlsToStringList
+ * @param urls
+ * @return The converted urls as a stringlist
+ */
+QStringList cwSurveyImportManager::urlsToStringList(QList<QUrl> urls)
+{
+    QStringList filenames;
+    foreach(QUrl url, urls) {
+        filenames.append(url.toLocalFile());
+    }
+    return filenames;
+}
+
+/**
+ * @brief cwSurveyImportManager::cavingRegion
+ * @return Returns the current caving region that the import will add to
+ */
+cwCavingRegion *cwSurveyImportManager::cavingRegion() const
+{
+    return CavingRegion;
+}
+
+/**
+* @brief cwSurveyImportManager::undoStack
+* @return
+*/
+QUndoStack* cwSurveyImportManager::undoStack() const {
+    return UndoStack;
+}
+
+/**
+* @brief cwSurveyImportManager::setUndoStack
+* @param undoStack
+*/
+void cwSurveyImportManager::setUndoStack(QUndoStack* undoStack) {
+    if(UndoStack != undoStack) {
+        UndoStack = undoStack;
+        emit undoStackChanged();
+    }
 }

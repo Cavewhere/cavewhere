@@ -22,7 +22,6 @@ class cwUndoer
 {
 public:
     QUndoStack* undoStack() const;
-
     void setUndoStack(QUndoStack* undoStack);
 
 //    void addUndoChild(cwUndoer* undoer);

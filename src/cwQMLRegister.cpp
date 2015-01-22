@@ -96,6 +96,7 @@
 #include <QScreen>
 #include <QGraphicsScene>
 #include <QDebug>
+#include <QUndoStack>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -148,7 +149,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");
     qmlRegisterType<cwItemSelectionModel>("Cavewhere", 1, 0, "ItemSelectionModel");
     qmlRegisterType<cwSurveyExportManager>("Cavewhere", 1, 0, "SurveyExportManager");
-    qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
+    qmlRegisterType<cwSurveyImportManager>("Cavewhere", 1, 0, "SurveyImportManager");
     qmlRegisterType<cwTripLengthTask>("Cavewhere", 1, 0, "TripLengthTask");
     qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
@@ -186,5 +187,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwPageSelectionModel>("Cavewhere", 1, 0, "PageSelectionModel");
     qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");
     qmlRegisterType<cwPage>("Cavewhere", 1, 0, "Page");
+    qmlRegisterType<QUndoStack>("Cavawhere", 1, 0, "UndoStack");
     qmlRegisterType<cwPageViewAttachedType>();
 }
