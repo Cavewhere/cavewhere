@@ -26,6 +26,7 @@
 //Qt includes
 #include <QDebug>
 #include <QTime>
+#include <QThread>
 
 //Std includes
 #include <math.h>
@@ -46,7 +47,7 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
-    Region = new cwCavingRegion(this);
+    Region = new cwCavingRegion();
 
     SurvexFile = new QTemporaryFile(this);
     SurvexFile->open();
@@ -87,7 +88,10 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 
 }
 
-
+cwLinePlotTask::~cwLinePlotTask()
+{
+    delete Region;
+}
 
 /**
   \brief Set's the data for the line plot task
@@ -98,8 +102,17 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
         return;
     }
 
+    //Move region to the current thread
+    QMetaObject::invokeMethod(this,
+                              "moveCaveRegionToThread",
+                              Qt::BlockingQueuedConnection,
+                              Q_ARG(QThread*, QThread::currentThread()));
+
     //Copy over all region data
-    *Region = region;
+    *Region = region;  
+
+    //Move region back to task thread
+    moveCaveRegionToThread(thread());
 
     //Populate the original pointers
     RegionOriginalPointers = RegionDataPtrs(region);
@@ -498,6 +511,11 @@ void cwLinePlotTask::updateExteralCaveStationLookups()
             cave->setStationPositionLookup(CaveStationLookups[i]);
         }
     }
+}
+
+void cwLinePlotTask::moveCaveRegionToThread(QThread *thread)
+{
+    Region->moveToThread(thread);
 }
 
 

@@ -8,8 +8,10 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwDebug.h"
 
 //Qt includes
+#include <QThread>
 #include <QDebug>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
@@ -92,6 +94,9 @@ QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
+    Q_ASSERT(object.thread() == thread());
+    Q_ASSERT(QThread::currentThread() == thread());
+
     if(&object == this) {
         return *this;
     }
@@ -112,8 +117,6 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         //Strange copying to make sure the newCaves are
         //On the correct thread
         cwCave* newCave = new cwCave(*cave);
-
-        newCave->moveToThread(thread());
 
         newCave->setParent(this);  //Uncomment because this cause problems with QML
 
