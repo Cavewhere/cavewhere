@@ -28,6 +28,7 @@ MenuBar {
             shortcut: "Ctrl+N"
             onTriggered:{
 //                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
+                rootData.pageSelectionModel.gotoPageByName(null, "View")
                 project.newProject();
             }
         }
