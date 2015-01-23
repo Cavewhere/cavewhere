@@ -43,7 +43,7 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
     Q_INVOKABLE void addFromFiles(QList<QUrl> files, cwProject* project);

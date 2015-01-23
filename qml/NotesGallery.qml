@@ -15,6 +15,7 @@ Rectangle {
     property Note currentNote
 
     signal imagesAdded(variant images)
+    signal backClicked();
 
     anchors.margins: 3
 
@@ -345,6 +346,7 @@ Rectangle {
                 onClicked: {
                     noteGallery.state = "CARPET"
                     noteGallery.state = ""
+                    noteGallery.backClicked()
                 }
             }
 

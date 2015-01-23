@@ -118,15 +118,24 @@ void cwPageView::updateProperties(QQuickItem *pageItem, cwPage* page)
         cwPageViewAttachedType* attachedType = qobject_cast<cwPageViewAttachedType*>(
                     qmlAttachedPropertiesObject<cwPageView>(pageItem));
 
-        if(attachedType != nullptr) {
-            attachedType->setPage(page);
+        Q_ASSERT(attachedType != nullptr);
+
+        attachedType->setPage(page);
+        QVariantMap properties = attachedType->defaultProperties();
+        QVariantMap pageProperties = page->pageProperties();
+
+        //Merge the default with the page properties, the page properties overwrite
+        //the default properties
+        foreach (QString propertyName, pageProperties.keys()) {
+            properties.insert(propertyName, pageProperties.value(propertyName));
         }
 
-        QVariantMap properties = page->pageProperties();
+        //Go through all the properties and set them on the item
         foreach(QString propertyName, properties.keys()) {
             QByteArray propertyNameBytes = propertyName.toLocal8Bit();
 
             if(pageItem->metaObject()->indexOfProperty(propertyNameBytes.data()) != -1) {
+                qDebug() << "Setting property:" << pageItem << page->fullname() << propertyNameBytes << properties.value(propertyName);
                 pageItem->setProperty(propertyNameBytes.data(), properties.value(propertyName));
             } else {
                 qDebug() << "Property" << propertyName << "doesn't exist for " << pageItem << ", this is a bug" << LOCATION;

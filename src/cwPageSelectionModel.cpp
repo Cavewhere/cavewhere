@@ -226,7 +226,7 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
 
         }
 
-//        printPageHistory();
+        printPageHistory();
 
         emit currentPageChanged();
         emit currentPageAddressChanged();
@@ -430,7 +430,9 @@ bool cwPageSelectionModel::isPageInModel(cwPage *page) const
 * You can use this to call setCurrentLink()
 */
 QString cwPageSelectionModel::currentPageAddress() const {
+    qDebug() << "Current Page Address - Sauce!" << CurrentPage;
     if(CurrentPage != nullptr) {
+        qDebug() << "Current Page Address:" << CurrentPage.data() << CurrentPage->fullname();
         return CurrentPage->fullname();
     }
     return UnknownLinkAddress;

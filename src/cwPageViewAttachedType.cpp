@@ -39,3 +39,13 @@ void cwPageViewAttachedType::setPage(cwPage* page) {
     }
 }
 
+/**
+* @brief cwPageViewAttachedType::setDefaultProperties
+* @param defaultProperties
+*/
+void cwPageViewAttachedType::setDefaultProperties(QVariantMap defaultProperties) {
+    if(DefaultProperties != defaultProperties) {
+        DefaultProperties = defaultProperties;
+        emit defaultPropertiesChanged();
+    }
+}

@@ -92,7 +92,7 @@ QString cwPage::fullname() const
     }
 
     QStringList result;
-    result.reserve( names.size() ); // reserve is new in Qt 4.7
+    result.reserve( names.size() );
     std::reverse_copy( names.begin(), names.end(), std::back_inserter( result ) );
 
     return result.join("/");
