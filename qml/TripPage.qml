@@ -14,10 +14,24 @@ import "Utils.js" as Utils
 Rectangle {
     id: area
 
-    property alias currentTrip: view.trip
+    property alias currentTrip: surveyEditor.currentTrip
     property string viewMode: ""
 
-    property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
+    function registerSubPages() {
+        var oldCarpetPage = PageView.page.childPage("Carpet")
+        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+            if(oldCarpetPage !== null) {
+                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+            }
+
+            if(PageView.page.name !== "Carpet") {
+                var page = rootData.pageSelectionModel.registerSubPage(area.PageView.page,
+                                                                       "Carpet",
+                                                                       {"viewMode":"CARPET"});
+            }
+        }
+
+    }
 
     /**
       Initilizing properties, if they aren't explicitly specified in the page
@@ -34,13 +48,17 @@ Rectangle {
         } else {
             notesGallery.setMode("DEFAULT")
             state = "" //Show the survey data on the left side
+            surveyEditor.visible = true
+            notesGallery.visible = true
         }
     }
 
     SurveyEditor {
+        id: surveyEditor
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
+        visible: true
     }
 
     Rectangle {
@@ -50,7 +68,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         border.width: 1
 
-        width: collapseButton.width + 6
+        width: expandButton.width + 6
         visible: false
 
         ColumnLayout {
@@ -83,11 +101,10 @@ Rectangle {
 
     }
 
-    SurveyEditorNoteGallery {
+    NotesGallery {
         id: notesGallery
-        editor: area
         notesModel: currentTrip.notes
-        anchors.left: clipArea.right
+        anchors.left: surveyEditor.right
         anchors.right: parent.right
         anchors.top: area.top
         anchors.bottom: area.bottom
@@ -102,21 +119,17 @@ Rectangle {
         }
 
         onModeChanged: {
-            console.log("Mode changed:" + mode + (mode === "CARPET"))
             if(mode === "CARPET" && area.viewMode === "") {
-                console.log("I get here!")
                 rootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
             }
         }
-
     }
 
-    Component.onCompleted: {
-        var page = rootData.pageSelectionModel.registerSubPage(area.PageView.page,
-                                                               "Carpet",
-                                                               {"viewMode":"CARPET"});
-        console.log("Registering Carpet page:" + page)
-    }
+    PageView.onPageChanged: registerSubPages()
+
+//    Component.onCompleted: {
+//        registerSubPages()
+//    }
 
     states: [
         State {
@@ -133,7 +146,7 @@ Rectangle {
             }
 
             PropertyChanges {
-                target: clipArea
+                target: surveyEditor
                 visible: false
             }
         }
@@ -144,11 +157,12 @@ Rectangle {
             from: ""
             to: "COLLAPSE"
 
-            PropertyAction { target: clipArea; property: "visible"; value: true }
+            PropertyAction { target: surveyEditor; property: "visible"; value: true }
+            PropertyAction { target: collapseRectangleId; property: "visible"; value: false }
 
 
             PropertyAction {
-                target: clipArea; property: "clip"; value: true
+                target: surveyEditor; property: "clip"; value: true
             }
 
             ParallelAnimation {
@@ -157,23 +171,25 @@ Rectangle {
                 }
 
                 NumberAnimation {
-                    target: clipArea
+                    target: surveyEditor
                     property: "width"
                     to: 0
                 }
             }
 
             PropertyAction {
-                target: clipArea; property: "clip"; value: false
+                target: surveyEditor; property: "clip"; value: false
             }
 
+            PropertyAction { target: collapseRectangleId; property: "visible"; value: true }
         },
 
         Transition {
             from: "COLLAPSE"
             to: ""
 
-            PropertyAction { target: notesGallery; property: "anchors.left"; value: clipArea.right}
+
+            PropertyAction { target: notesGallery; property: "anchors.left"; value: surveyEditor.right}
 
             ParallelAnimation {
                 AnchorAnimation {
@@ -181,13 +197,11 @@ Rectangle {
                 }
 
                 NumberAnimation {
-                    target: clipArea
+                    target: surveyEditor
                     property: "width"
-                    to: scrollAreaId.width
+                    to: surveyEditor.contentWidth
                 }
             }
-
         }
     ]
-
 }

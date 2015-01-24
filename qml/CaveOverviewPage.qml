@@ -208,7 +208,7 @@ Rectangle {
             //In-ables the link
             var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                 tripPageName(object.trip), //Name
-                                                                surveyEditorComponent, //component
+                                                                tripPageComponent, //component
                                                                 {"currentTrip":object.trip}
                                                                 )
             object.page = page;
@@ -225,8 +225,8 @@ Rectangle {
     }
 
     Component {
-        id: surveyEditorComponent
-        SurveyEditor {
+        id: tripPageComponent
+        TripPage {
             anchors.fill: parent
         }
     }

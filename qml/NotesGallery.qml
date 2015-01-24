@@ -13,7 +13,36 @@ Rectangle {
 
     property alias notesModel: galleryView.model;
     property Note currentNote
+    readonly property string mode: {
+        switch(state) {
+        case "": return "DEFAULT"
+        case "NO_NOTES": return "DEFAULT"
+        case "CARPET": return "CARPET"
+        case "SELECT": return "CARPET"
+        case "ADD-STATION": return "CARPET"
+        case "ADD-SCRAP": return "CARPET"
+        default: return "ERROR"
+        }
+    }
 
+    function setMode(mode) {
+        if(mode !== noteGallery.mode) {
+            switch(mode) {
+            case "DEFAULT":
+                noteGallery.state = "CARPET"
+                if(notesModel.rowCount() === 0) {
+                    noteGallery.state = "NO_NOTES"
+                } else {
+                    noteGallery.state = ""
+                    galleryContainer.visible = true;
+                    mainButtonArea.visible = true;
+                }
+                break;
+            case "CARPET":
+                noteGallery.state = "SELECT"
+            }
+        }
+    }
     signal imagesAdded(variant images)
     signal backClicked();
 
@@ -460,7 +489,6 @@ Rectangle {
                 target: galleryView
                 onCountChanged: {
                     if(count > 0) {
-                        console.log("Changing state to the default state")
                         noteGallery.state = ""
                         galleryContainer.visible = true
                         mainButtonArea.visible = true

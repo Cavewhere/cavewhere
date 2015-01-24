@@ -16,6 +16,7 @@ Item {
 
     property alias currentTrip: view.trip
     property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
+    readonly property alias contentWidth: scrollAreaId.width //For animation
 
     clip: false
 
@@ -75,7 +76,7 @@ Item {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 3
-                            iconSource: "qrc:/icons/moreArrow.png"
+                            iconSource: "qrc:/icons/moreArrowLeft.png"
                             onClicked: {
                                 area.state = "COLLAPSE"
                             }

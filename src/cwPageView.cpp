@@ -135,7 +135,7 @@ void cwPageView::updateProperties(QQuickItem *pageItem, cwPage* page)
             QByteArray propertyNameBytes = propertyName.toLocal8Bit();
 
             if(pageItem->metaObject()->indexOfProperty(propertyNameBytes.data()) != -1) {
-                qDebug() << "Setting property:" << pageItem << page->fullname() << propertyNameBytes << properties.value(propertyName);
+//                qDebug() << "Setting property:" << pageItem << page->fullname() << propertyNameBytes << properties.value(propertyName);
                 pageItem->setProperty(propertyNameBytes.data(), properties.value(propertyName));
             } else {
                 qDebug() << "Property" << propertyName << "doesn't exist for " << pageItem << ", this is a bug" << LOCATION;
