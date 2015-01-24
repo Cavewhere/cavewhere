@@ -80,6 +80,7 @@
         <file>icons/leftCircleArrow-32x32.png</file>
         <file>icons/rightCircleArrow-32x32.png</file>
         <file>icons/question.png</file>
+        <file>icons/moreArrowLeft.png</file>
         <file>icons/quoteTriangle.png</file>
     </qresource>
 </RCC>

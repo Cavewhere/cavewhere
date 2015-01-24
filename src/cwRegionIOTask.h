@@ -20,8 +20,13 @@ public:
 
     void setCavingRegion(const cwCavingRegion& region);
 
+    void copyRegionTo(cwCavingRegion& region);
+
 protected:
     cwCavingRegion* Region;
+
+private:
+    Q_INVOKABLE void moveRegionToThread(QThread* thread);
 };
 
 #endif // CWREGIONIOTASK_H

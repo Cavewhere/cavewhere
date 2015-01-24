@@ -45,14 +45,11 @@ class cwRootData : public QObject
     Q_OBJECT
 
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
-    Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel NOTIFY regionModelChanged)
-    Q_PROPERTY(cwItemSelectionModel* regionSelectionModel READ regionSelectionModel)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
     Q_PROPERTY(cwProject* project READ project NOTIFY projectChanged)
     Q_PROPERTY(cwTripCalibration* defaultTripCalibration READ defaultTripCalibration NOTIFY defaultTripCalibrationChanged)
     Q_PROPERTY(cwTrip* defaultTrip READ defaultTrip NOTIFY defaultTripChanged)
-    Q_PROPERTY(cwSurveyExportManager* surveyExportManager READ surveyExportManager NOTIFY surveyExportManagerChanged)
     Q_PROPERTY(cwSurveyImportManager* surveyImportManager READ surveyImportManager NOTIFY surveyImportManagerChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack NOTIFY undoStackChanged)
     Q_PROPERTY(QQuickView* quickView READ quickView WRITE setQuickView NOTIFY quickWindowChanged)
@@ -68,12 +65,9 @@ class cwRootData : public QObject
 public:
     explicit cwRootData(QObject *parent = 0);
     cwCavingRegion* region() const;
-    cwRegionTreeModel* regionModel() const;
-    cwItemSelectionModel* regionSelectionModel() const;
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;
     cwProject* project() const;
-    cwSurveyExportManager* surveyExportManager() const;
     cwSurveyImportManager* surveyImportManager() const;
     QUndoStack* undoStack() const;
     QQuickView* quickView() const;
@@ -94,11 +88,9 @@ public:
 
 signals:
     void regionChanged();
-    void regionModelChanged();
     void linePlotManagerChanged();
     void scrapManagerChanged();
     void projectChanged();
-    void surveyExportManagerChanged();
     void surveyImportManagerChanged();
     void undoStackChanged();
     void quickWindowChanged();
@@ -113,12 +105,9 @@ public slots:
 
 private:
     cwCavingRegion* Region; //!< Where all the data is stored
-    cwRegionTreeModel* RegionTreeModel; //!< For so listviews can access Region
-    cwItemSelectionModel* RegionTreeSelectionModel; //!< Allows survey export manager to know what item's are selected
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
     cwProject* Project; //!< For saving and loading, image saving and loading
-    cwSurveyExportManager* SurveyExportManager; //!< For export survey data to compass, survex, etc
     cwSurveyImportManager* SurveyImportManager; //!< For importing survey data from survex, etc
     QQuickView* QuickView; //!< For exporting the 3d screen to a file
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
@@ -155,23 +144,6 @@ inline cwCavingRegion* cwRootData::region() const {
 }
 
 /**
-Gets regionModel
-*/
-inline cwRegionTreeModel* cwRootData::regionModel() const {
-    return RegionTreeModel;
-}
-
-/**
-  Get the region tree selection model
-
-  This allow the cpp to know when the user selects different items (region, cave, trip)
-  in the data section
-  */
-inline cwItemSelectionModel *cwRootData::regionSelectionModel() const {
-    return RegionTreeSelectionModel;
-}
-
-/**
   Gets linePlotManager
   */
 inline cwLinePlotManager* cwRootData::linePlotManager() const {
@@ -189,14 +161,6 @@ inline cwScrapManager* cwRootData::scrapManager() const {
   */
 inline cwProject* cwRootData::project() const {
     return Project;
-}
-
-/**
-  Get's the survey export manager, this holds the menu actions for exporting survey data
-  */
-inline cwSurveyExportManager *cwRootData::surveyExportManager() const
-{
-    return SurveyExportManager;
 }
 
 /**

@@ -87,7 +87,10 @@ void cwRegionSaveTask::saveToProtoBuffer()
 
     std::string regionString = region.SerializeAsString();
 
-    QByteArray regionByteArray(&regionString[0], regionString.size());
+    QByteArray regionByteArray;
+    if(!regionString.empty()) {
+        regionByteArray = QByteArray(&regionString[0], regionString.size());
+    }
 
     QSqlQuery insertCavingRegion(Database);
     QString queryStr =

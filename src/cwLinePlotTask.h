@@ -95,6 +95,7 @@ public:
     };
 
     explicit cwLinePlotTask(QObject *parent = 0);
+    ~cwLinePlotTask();
 
     LinePlotResultData linePlotData() const;
 
@@ -207,6 +208,8 @@ private:
     QVector<cwStationPositionLookup> splitLookupByCave(const cwStationPositionLookup& stationPostions);
     void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations);
     void updateExteralCaveStationLookups();
+
+    Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
 
 };
 

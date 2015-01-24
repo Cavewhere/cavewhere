@@ -142,7 +142,7 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   create a icon for each file.  The original file, icon, and mipmaps will be stored in the
   project.
   */
-void cwSurveyNoteModel::addFromFiles(QStringList files, cwProject* project) {
+void cwSurveyNoteModel::addFromFiles(QList<QUrl> files, cwProject* project) {
     project->addImages(files, this, SLOT(addNotesWithNewImages(QList<cwImage>)));
 }
 

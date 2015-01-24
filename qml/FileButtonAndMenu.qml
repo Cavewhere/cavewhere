@@ -8,12 +8,15 @@
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
 import QtQuick.Controls 1.0
-
+import QtQuick.Dialogs 1.2
 
 MenuBar {
+    id: menuBarId
     property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
     property Loader mainContentLoader;
+    property FileDialog loadFileDialog;
+    property FileDialog saveAsFileDialog;
 
     signal openAboutWindow;
 
@@ -25,6 +28,7 @@ MenuBar {
             shortcut: "Ctrl+N"
             onTriggered:{
 //                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
+                rootData.pageSelectionModel.gotoPageByName(null, "View")
                 project.newProject();
             }
         }
@@ -34,7 +38,7 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                project.load();
+                loadFileDialog.open()
             }
         }
 
@@ -43,12 +47,22 @@ MenuBar {
         MenuItem {
             text: "Save"
             shortcut: "Ctrl+S"
-            onTriggered: project.save();
+            onTriggered: {
+                if(!project.temporaryProject) {
+                    project.save();
+                } else {
+                    saveAsMenuItem.fileDialog.open()
+                }
+            }
         }
 
         MenuItem {
+            id: saveAsMenuItem
             text: "Save As"
-            onTriggered: project.saveAs();
+            onTriggered:{
+                console.log("Open file dialog:" + saveAsFileDialog)
+                saveAsFileDialog.open()
+            }
         }
 
         MenuSeparator {}

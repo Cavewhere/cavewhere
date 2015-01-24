@@ -10,16 +10,13 @@
 
 //Qt includes
 #include <QObject>
-#include <QModelIndex>
-class QAction;
-class QMenu;
-class QItemSelectionModel;
+#include <QPointer>
 class QThread;
 
 //Our includes
-class cwRegionTreeModel;
 class cwCave;
 class cwTrip;
+class cwCavingRegion;
 
 /**
     This class will open dialogs to export data.
@@ -33,46 +30,48 @@ class cwSurveyExportManager : public QObject
     Q_PROPERTY(QString currentCaveName READ currentCaveName NOTIFY updateMenu)
     Q_PROPERTY(QString currentTripName READ currentTripName NOTIFY updateMenu)
 
+    Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
+    Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
+    Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
+
 public:
     explicit cwSurveyExportManager(QObject *parent = 0);
     ~cwSurveyExportManager();
 
-    QItemSelectionModel* regionSelectionModel() const;
-    void setRegionSelectionModel(QItemSelectionModel* selectionModel);
-
-    cwRegionTreeModel* cavingRegionTreeModel() const;
-    void setCavingRegionTreeModel(cwRegionTreeModel* model);
-
     QString currentCaveName() const;
     QString currentTripName() const;
 
+    cwCavingRegion* cavingRegion() const;
+    void setCavingRegion(cwCavingRegion* cavingRegion);
+
+    cwCave* cave() const;
+    void setCave(cwCave* cave);
+
+    cwTrip* trip() const;
+    void setTrip(cwTrip* trip);
+
 signals:
     void updateMenu();
+    void tripChanged();
+    void caveChanged();
+    void cavingRegionChanged();
 
 public slots:
-    //Survex exports
-    void openExportSurvexTripFileDialog();
-    void openExportSurvexCaveFileDialog();
-    void openExportSurvexRegionFileDialog();
-
-    //Compass exports
-    void openExportCompassTripFileDialog();
-    void openExportCompassCaveFileDialog();
-    void openExportCompassRegionFileDialog();
-
-private slots:
     void exportSurvexTrip(QString filename);
     void exportSurvexCave(QString filename);
     void exportSurvexRegion(QString filename);
     void exportCaveToCompass(QString filename);
+
+private slots:
     void exporterFinished();
 
     void updateActions();
 
 private:
-    //This model allows use to export different data
-    cwRegionTreeModel* Model;
-    QItemSelectionModel* SelectionModel; //Query which item is selected
+    //The data that will be exported
+    QPointer<cwTrip> Trip; //!<
+    QPointer<cwCave> Cave; //!<
+    QPointer<cwCavingRegion> CavingRegion; //!<
 
     //The thread that the exporting runs on
     QThread* ExportThread;
@@ -84,17 +83,5 @@ private:
     cwTrip* currentTrip() const;
 
 };
-
-/**
-    Gets the tree model that this survey export manager uses to update it's actions
-  */
-inline cwRegionTreeModel *cwSurveyExportManager::cavingRegionTreeModel() const {
-    return nullptr;
-}
-
-
-
-
-
 
 #endif // CWSURVEYEXPORTMANGER_H

@@ -12,6 +12,9 @@
 #include <QObject>
 #include <QUndoStack>
 #include <QStringList>
+#include <QPointer>
+#include <QList>
+#include <QUrl>
 
 //Our includes
 class cwCavingRegion;
@@ -23,6 +26,10 @@ class cwCompassImporter;
 class cwSurveyImportManager : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
+    Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);
     ~cwSurveyImportManager();
@@ -30,12 +37,15 @@ public:
     void setCavingRegion(cwCavingRegion* region);
     cwCavingRegion* cavingRegion() const;
 
+    QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
     Q_INVOKABLE void importSurvex();
-    Q_INVOKABLE void importCompassDataFile();
+    Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
 
 signals:
+    void cavingRegionChanged();
+    void undoStackChanged();
     
 public slots:
 
@@ -46,24 +56,15 @@ private slots:
 private:
     QThread* ImportThread;
 
-    cwCavingRegion* CavingRegion;
-    QUndoStack* UndoStack;
+    QPointer<cwCavingRegion> CavingRegion;
+    QPointer<QUndoStack> UndoStack;
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
 
-
+    QStringList urlsToStringList(QList<QUrl> urls);
 };
 
-inline cwCavingRegion *cwSurveyImportManager::cavingRegion() const
-{
-    return CavingRegion;
-}
-
-inline void cwSurveyImportManager::setUndoStack(QUndoStack *undoStack)
-{
-    UndoStack = undoStack;
-}
 
 
 

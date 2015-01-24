@@ -11,6 +11,7 @@
 //Qt includes
 #include <QAbstractListModel>
 #include <QList>
+#include <QUrl>
 
 //Our includes
 #include "cwNote.h"
@@ -42,10 +43,10 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
-    Q_INVOKABLE void addFromFiles(QStringList files, cwProject* project);
+    Q_INVOKABLE void addFromFiles(QList<QUrl> files, cwProject* project);
     Q_INVOKABLE void removeNote(int index);
 
     void stationPositionModelUpdated();

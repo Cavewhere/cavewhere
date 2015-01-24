@@ -127,7 +127,7 @@ void cwTaskManagerModel::addTask(cwTask *task)
  */
 void cwTaskManagerModel::removeTask(cwTask *task)
 {
-    qDebug() << "Remove Task:" << task;
+    qDebug() << "Remove Task:" << task << "TODO, implement this function!!!";
     Q_UNUSED(task);
 
 }

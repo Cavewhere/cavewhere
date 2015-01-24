@@ -42,63 +42,20 @@ QString cwGlobals::addExtension(QString filename, QString extensionHint)
 }
 
 /**
- * @brief cwGlobals::openFile
- * @param caption
- * @param qSettingsKey
- * @param filter
- * @return
+ * @brief cwGlobals::convertFromURL
+ * @param fileUrl - The url that will be convert
+ * @return Returns the converted url
+ *
+ * For example if fileUrl = file://SOME/LOCAL/FILENAME with will convert it to //SOME/LOCAL/FILENAME
+ *
+ * If the filenameUrl isn't a url, this just returns filenameUrl
  */
-QString cwGlobals::openFile(QString caption, QString filter, QString qSettingsKey, QFileDialog::Options options)
+QString cwGlobals::convertFromURL(QString filenameUrl)
 {
-    QString lastDirectory;
-    QSettings settings;
-
-    if(!qSettingsKey.isEmpty()) {
-        lastDirectory = settings.value(qSettingsKey).toString();
-        qDebug() << "Getting lastDirectory:" << lastDirectory;
+    QUrl fileUrl(filenameUrl);
+    if(fileUrl.isValid() && fileUrl.isLocalFile()) {
+        return fileUrl.toLocalFile();
     }
-
-    QString openedFile = QFileDialog::getOpenFileName(nullptr, caption, lastDirectory, filter, 0, options);
-
-    QFileInfo fileInfo(openedFile);
-    if(!qSettingsKey.isEmpty() && fileInfo.exists())
-    {
-        qDebug() << "Setting value:" << qSettingsKey << fileInfo.absolutePath();
-        settings.setValue(qSettingsKey, fileInfo.absolutePath());
-        settings.sync();
-    }
-
-    return openedFile;
-}
-
-/**
- * @brief cwGlobals::openFiles
- * @param caption
- * @param filter
- * @param qSettingsKey
- * @return
- */
-QStringList cwGlobals::openFiles(QString caption, QString filter, QString qSettingsKey, QFileDialog::Options options)
-{
-    QString lastDirectory;
-    QSettings settings;
-
-    if(!qSettingsKey.isEmpty()) {
-        lastDirectory = settings.value(qSettingsKey).toString();
-    }
-
-    QStringList openedFiles = QFileDialog::getOpenFileNames(nullptr, caption, lastDirectory, filter, 0, options);
-
-
-    if(!openedFiles.isEmpty() && !qSettingsKey.isEmpty())
-    {
-        QFileInfo fileInfo(openedFiles.first());
-        if(fileInfo.exists()) {
-            settings.setValue(qSettingsKey, fileInfo.absolutePath());
-            settings.sync();
-        }
-    }
-
-    return openedFiles;
+    return filenameUrl;
 }
 

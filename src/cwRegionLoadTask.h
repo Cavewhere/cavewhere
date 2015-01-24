@@ -41,7 +41,7 @@ public:
     explicit cwRegionLoadTask(QObject *parent = 0);
 
 signals:
-    void finishedLoading(cwCavingRegion* region);
+    void finishedLoading();
 
 public slots:
 

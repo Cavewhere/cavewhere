@@ -35,11 +35,11 @@ public:
     void setName(QString name);
     QString name() const { return Name; }
 
-    QString fullname() const;
+    Q_INVOKABLE QString fullname() const;
 
     QVariantMap pageProperties() const { return PageProperties; }
 
-    cwPage* childPage(QString name) const { return ChildPages.value(name, nullptr); }
+    Q_INVOKABLE cwPage* childPage(QString name) const { return ChildPages.value(name, nullptr); }
 
     void removeChild(cwPage* page);
 

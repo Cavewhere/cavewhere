@@ -20,67 +20,95 @@ Rectangle {
         return "Cave=" + cave.name;
     }
 
-
-    ColumnLayout {
+    RowLayout {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.margins: 5
 
-        AddAndSearchBar {
-            Layout.fillWidth: true
-            addButtonText: "Add Cave"
-            onAdd: {
-                region.addCave();
+        ColumnLayout {
+            Layout.alignment: Qt.AlignTop
 
-                var lastIndex = rootData.region.rowCount() - 1;
-                var lastModelIndex = rootData.region.index(lastIndex);
-                var lastCave = rootData.region.data(lastModelIndex, Cave.TripObjectRole);
-
-                rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                           cavePageName(lastCave));
+            Text {
+                font.bold: true
+                font.pointSize: 20
+                text: "All Caves"
             }
+
+            ExportImportButtons {
+                id: exportButton
+                currentRegion: rootData.region
+                importVisible: true
+            }
+
         }
 
-        Controls.TableView {
-            model: rootData.region
+        ColumnLayout {
 
-            Layout.fillHeight: true
-            implicitWidth: 450
+            AddAndSearchBar {
+                Layout.fillWidth: true
+                addButtonText: "Add Cave"
+                onAdd: {
+                    region.addCave();
 
-            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Cave" ; width: 200 }
-            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
-            Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+                    var lastIndex = rootData.region.rowCount() - 1;
+                    var lastModelIndex = rootData.region.index(lastIndex);
+                    var lastCave = rootData.region.data(lastModelIndex, Cave.TripObjectRole);
 
-            itemDelegate:
-                Item {
-                LinkText {
-                    visible: styleData.column === 0
-                    text: styleData.value.name
-                    onClicked: {
-                        rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   cavePageName(styleData.value));
-                    }
+                    rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                               cavePageName(lastCave));
                 }
+            }
 
-                UnitValueInput {
-                    visible: styleData.column === 1 || styleData.column === 2
-                    unitValue: {
-                        switch(styleData.column) {
-                        case 1:
-                            return styleData.value.length
-                        case 2:
-                            return styleData.value.depth
-                        default:
-                            return null
+            Controls.TableView {
+                id: tableViewId
+                model: rootData.region
+
+                Layout.fillHeight: true
+                implicitWidth: 450
+
+                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Cave" ; width: 200 }
+                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
+                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+
+                itemDelegate:
+                    Item {
+
+                    Connections {
+                        target: tableViewId
+                        onCurrentRowChanged: {
+                            exportButton.currentCave = styleData.value
                         }
                     }
-                    valueReadOnly: true
-                }
 
-                DataRightClickMouseMenu {
-                    anchors.fill: parent
-                    removeChallenge: removeChallengeId
+                    LinkText {
+                        visible: styleData.column === 0
+                        text: styleData.value.name
+                        onClicked: {
+                            rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       cavePageName(styleData.value));
+                        }
+                    }
+
+                    UnitValueInput {
+                        visible: styleData.column === 1 || styleData.column === 2
+                        unitValue: {
+                            switch(styleData.column) {
+                            case 1:
+                                return styleData.value.length
+                            case 2:
+                                return styleData.value.depth
+                            default:
+                                return null
+                            }
+                        }
+                        valueReadOnly: true
+                    }
+
+                    DataRightClickMouseMenu {
+                        anchors.fill: parent
+                        removeChallenge: removeChallengeId
+                    }
                 }
             }
         }

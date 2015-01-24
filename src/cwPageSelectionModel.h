@@ -38,10 +38,14 @@ class cwPageSelectionModel : public QObject
 public:
     explicit cwPageSelectionModel(QObject *parent = 0);
 
-    Q_INVOKABLE cwPage* registerPage(cwPage *parentPageItem,
+    Q_INVOKABLE cwPage* registerPage(cwPage *parentPage,
                                          QString pageName,
                                          QQmlComponent* pageComponent,
                                          QVariantMap pageProperties = QVariantMap());
+    Q_INVOKABLE cwPage* registerSubPage(cwPage* parentPage,
+                                        QString pageName,
+                                        QVariantMap pageProperties = QVariantMap());
+
     Q_INVOKABLE void unregisterPage(cwPage* page);
 
     QString currentPageAddress() const;

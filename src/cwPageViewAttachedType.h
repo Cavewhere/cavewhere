@@ -12,6 +12,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QVariantMap>
 
 //Our inculdes
 class cwPage;
@@ -33,6 +34,7 @@ class cwPageViewAttachedType : public QObject
     Q_OBJECT
 
     Q_PROPERTY(cwPage* page READ page NOTIFY pageChanged)
+    Q_PROPERTY(QVariantMap defaultProperties READ defaultProperties WRITE setDefaultProperties NOTIFY defaultPropertiesChanged)
 
 public:
     explicit cwPageViewAttachedType(QObject *parent = 0);
@@ -41,14 +43,27 @@ public:
     cwPage* page() const;
     void setPage(cwPage* page);
 
+    QVariantMap defaultProperties() const;
+    void setDefaultProperties(QVariantMap defaultProperties);
+
 signals:
     void pageChanged();
+    void defaultPropertiesChanged();
 
 public slots:
 
 private:
     QPointer<cwPage> Page; //!<
+    QVariantMap DefaultProperties; //!<
 
 };
+
+/**
+* @brief cwPageViewAttachedType::defaultProperties
+* @return
+*/
+inline QVariantMap cwPageViewAttachedType::defaultProperties() const {
+    return DefaultProperties;
+}
 
 #endif // CWPAGEVIEWATTACHEDTYPE_H

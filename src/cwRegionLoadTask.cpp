@@ -70,7 +70,7 @@ void cwRegionLoadTask::runTask() {
     }
 
     if(isRunning()) {
-        emit finishedLoading(Region);
+        emit finishedLoading();
     }
 
     done();
@@ -503,15 +503,16 @@ cwTeamMember cwRegionLoadTask::loadTeamMember(const CavewhereProto::TeamMember& 
 cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStation)
 {
     cwStation station;
+
     station.setName(loadString(protoStation.name()));
     station.setLeft(protoStation.left());
     station.setRight(protoStation.right());
     station.setUp(protoStation.up());
     station.setDown(protoStation.down());
-    station.setLeftInputState((cwDistanceStates::State)station.leftInputState());
-    station.setRightInputState((cwDistanceStates::State)station.rightInputState());
-    station.setUpInputState((cwDistanceStates::State)station.upInputState());
-    station.setDownInputState((cwDistanceStates::State)station.downInputState());
+    station.setLeftInputState((cwDistanceStates::State)protoStation.leftstate());
+    station.setRightInputState((cwDistanceStates::State)protoStation.rightstate());
+    station.setUpInputState((cwDistanceStates::State)protoStation.upstate());
+    station.setDownInputState((cwDistanceStates::State)protoStation.downstate());
     return station;
 }
 
@@ -723,7 +724,7 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
  */
 void cwRegionLoadTask::insureVacuuming()
 {
-    cwSQLManager::Transaction transaction(&Database);
+//    cwSQLManager::Transaction transaction(&Database);
 
     int vacuum = -1;
 
@@ -742,11 +743,15 @@ void cwRegionLoadTask::insureVacuuming()
         //Turn on full Vacuum
         QSqlQuery turnOnFullVacuum(Database);
 
-        turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
-        qDebug() << "Turn on vacuum:" << turnOnFullVacuum.lastError().text();
+        bool success = turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
+        if(!success) {
+            qDebug() << "Turn on vacuum error:" << turnOnFullVacuum.lastError().text() << LOCATION;
+        }
 
-        turnOnFullVacuum.exec("VACUUM");
-        qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
+        success = turnOnFullVacuum.exec("VACUUM");
+        if(!success) {
+            qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
+        }
     }
     case 1:
         //Full Vacuum

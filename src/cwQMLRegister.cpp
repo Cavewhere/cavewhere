@@ -28,7 +28,6 @@
 #include "cwGLLinePlot.h"
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
-#include "cwFileDialogHelper.h"
 #include "cwImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
 #include "cwBasePanZoomInteraction.h"
@@ -100,6 +99,7 @@
 #include <QScreen>
 #include <QGraphicsScene>
 #include <QDebug>
+#include <QUndoStack>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -124,7 +124,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
-    qmlRegisterType<cwFileDialogHelper>("Cavewhere", 1, 0, "FileDialogHelper");
     qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
     qmlRegisterType<cwNote>("Cavewhere", 1, 0, "Note");
     qmlRegisterType<cwBasePanZoomInteraction>("Cavewhere", 1, 0, "BasePanZoomInteraction");
@@ -153,7 +152,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyChunkTrimmer>("Cavewhere", 1, 0, "SurveyChunkTrimmer");
     qmlRegisterType<cwItemSelectionModel>("Cavewhere", 1, 0, "ItemSelectionModel");
     qmlRegisterType<cwSurveyExportManager>("Cavewhere", 1, 0, "SurveyExportManager");
-    qmlRegisterType<cwSurveyImportManager>("Cavawhere", 1, 0, "SurveyImportManager");
+    qmlRegisterType<cwSurveyImportManager>("Cavewhere", 1, 0, "SurveyImportManager");
     qmlRegisterType<cwTripLengthTask>("Cavewhere", 1, 0, "TripLengthTask");
     qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
@@ -191,6 +190,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwPageSelectionModel>("Cavewhere", 1, 0, "PageSelectionModel");
     qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");
     qmlRegisterType<cwPage>("Cavewhere", 1, 0, "Page");
+    qmlRegisterType<QUndoStack>("Cavawhere", 1, 0, "UndoStack");
     qmlRegisterType<cwPageViewAttachedType>();
     qmlRegisterType<cwBaseNotePointInteraction>();
     qmlRegisterType<cwBaseNoteLeadInteraction>("Cavewhere", 1, 0, "BaseNoteLeadInteraction");

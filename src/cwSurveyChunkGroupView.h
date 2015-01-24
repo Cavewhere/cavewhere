@@ -11,6 +11,7 @@
 //Qt includes
 #include <QQuickItem>
 #include <QSignalMapper>
+#include <QPointer>
 class QModelIndex;
 
 //Our includes
@@ -78,7 +79,7 @@ protected:
 
 private:
     //The model
-    cwTrip* Trip;
+    QPointer<cwTrip> Trip;
 
     //GUI elements
     cwSurveyChunkViewComponents* ChunkQMLComponents; //The components for creating a chunk

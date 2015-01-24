@@ -60,8 +60,10 @@ void cwTripLengthTask::connectChunk(cwSurveyChunk *chunk)
 
 void cwTripLengthTask::disconnectChunks()
 {
-    foreach(cwSurveyChunk* chunk, Trip->chunks()) {
-        disconnectChunk(chunk);
+    if(!Trip.isNull()) {
+        foreach(cwSurveyChunk* chunk, Trip->chunks()) {
+            disconnectChunk(chunk);
+        }
     }
 }
 
@@ -100,14 +102,21 @@ void cwTripLengthTask::chunkAdded(int begin, int end)
   Disconnects the trip from the task
   */
 void cwTripLengthTask::disconnectTrip() {
-    disconnect(Trip, nullptr, this, nullptr);
-    disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
-    disconnectChunks();
-    Trip = nullptr;
+    if(!Trip.isNull()) {
+        disconnect(Trip, nullptr, this, nullptr);
+        disconnect(Trip->calibrations(), SIGNAL(tapeCalibrationChanged(double)), this, SLOT(restart()));
+        disconnectChunks();
+        Trip = nullptr;
+    }
 }
 
 void cwTripLengthTask::runTask()
 {
+    if(Trip.isNull()) {
+        Length = 0;
+        done();
+    }
+
     double distance = 0.0;
     int numberOfShots = 0;
 
@@ -124,4 +133,11 @@ void cwTripLengthTask::runTask()
     lengthChanged();
 
     done();
+}
+
+/**
+Gets trip
+*/
+cwTrip* cwTripLengthTask::trip() const {
+    return Trip;
 }

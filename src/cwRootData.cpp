@@ -48,13 +48,6 @@ cwRootData::cwRootData(QObject *parent) :
 
     Region->setUndoStack(undoStack());
 
-    //Setup the region tree model, this model allows the user to see Region in tree form
-    RegionTreeModel = new cwRegionTreeModel(this);
-    RegionTreeModel->setCavingRegion(Region);
-
-    //Notifies the survey exporter when selection has changed
-    RegionTreeSelectionModel = new cwItemSelectionModel(RegionTreeModel, this);
-
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(this);
     LinePlotManager->setRegion(Region);
@@ -64,11 +57,6 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setProject(Project);
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setTaskManager(TaskManagerModel);
-
-    //Setup the survey export manager
-    SurveyExportManager = new cwSurveyExportManager(this);
-    SurveyExportManager->setCavingRegionTreeModel(RegionTreeModel);
-    SurveyExportManager->setRegionSelectionModel(RegionTreeSelectionModel);
 
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(this);

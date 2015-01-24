@@ -8,8 +8,10 @@
 //Our includes
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwDebug.h"
 
 //Qt includes
+#include <QThread>
 #include <QDebug>
 
 cwCavingRegion::cwCavingRegion(QObject *parent) :
@@ -92,6 +94,9 @@ QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
+    Q_ASSERT(object.thread() == thread());
+    Q_ASSERT(QThread::currentThread() == thread());
+
     if(&object == this) {
         return *this;
     }
@@ -113,12 +118,7 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
         //On the correct thread
         cwCave* newCave = new cwCave(*cave);
 
-        // FIXME : Test on windows
-        //We need to comment this out because it's bad programming,
-        //Can't notify other threads with sendEvent, ASSERTs on windows
         newCave->setParent(this);  //Uncomment because this cause problems with QML
-
-        newCave->moveToThread(thread());
 
         Caves.append(newCave);
     }
@@ -166,8 +166,10 @@ void cwCavingRegion::addCaves(QList<cwCave*> caves) {
     }
 
     //Run the insert cave command
-    int firstIndex = Caves.size();
-    pushUndo(new InsertCaveCommand(this, caves, firstIndex));
+    if(!caves.isEmpty()) {
+        int firstIndex = Caves.size();
+        pushUndo(new InsertCaveCommand(this, caves, firstIndex));
+    }
 }
 
 /**

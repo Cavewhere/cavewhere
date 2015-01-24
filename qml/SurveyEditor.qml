@@ -7,22 +7,28 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
-import QtQuick.Controls 1.0
+import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
-Rectangle {
-    id: area
+Item {
+    id: clipArea
 
     property alias currentTrip: view.trip
     property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
+    readonly property alias contentWidth: scrollAreaId.width //For animation
+
+    clip: false
+
+    width: scrollAreaId.width
+    height: 100
 
     TripLengthTask {
         id: tripLengthTask
         trip: currentTrip
     }
 
-    ScrollView {
+    Controls.ScrollView {
         id: scrollAreaId
 
         anchors.top: parent.top
@@ -31,6 +37,7 @@ Rectangle {
         anchors.margins: 1;
 
         width: flickableAreaId.contentWidth
+        visible: true
 
         Flickable {
             id: flickableAreaId
@@ -39,7 +46,6 @@ Rectangle {
             contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
             function ensureVisible(r){
-                console.log("Ensure visible:" + r.y + " " + r.height)
                 var contentY = flickableAreaId.contentY;
                 if (flickableAreaId.contentY >= r.y) {
                     contentY = r.y;
@@ -58,8 +64,23 @@ Rectangle {
                 ColumnLayout {
                     width: view.contentWidth
 
-                    SectionLabel {
-                        text: "Trip"
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: collapseButton.height
+                        SectionLabel {
+                            text: "Trip"
+                        }
+
+                        Button {
+                            id: collapseButton
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 3
+                            iconSource: "qrc:/icons/moreArrowLeft.png"
+                            onClicked: {
+                                area.state = "COLLAPSE"
+                            }
+                        }
                     }
 
                     RowLayout {
@@ -190,30 +211,4 @@ Rectangle {
             mouse.accepted = false;
         }
     }
-
-    NotesGallery {
-        notesModel: currentTrip.notes
-        anchors.left: scrollAreaId.right
-        anchors.right: parent.right
-        anchors.top: area.top
-        anchors.bottom: area.bottom
-        clip: true
-
-        onImagesAdded: {
-            currentTrip.notes.addFromFiles(images, rootData.project)
-        }
-    }
-
-//    NoteExplorer {
-//        noteModel: currentTrip !== null ? currentTrip.notes : null
-//        anchors.left: scrollAreaId.right
-//        anchors.right: parent.right
-//        anchors.top: area.top
-//        anchors.bottom: area.bottom
-//        clip: true
-
-//        onImagesAdded: {
-//            currentTrip.notes.addFromFiles(images, project)
-//        }
-//    }
 }
