@@ -108,7 +108,7 @@ private:
 
      QString convertFromURL(QString fileUrl) const;
 private slots:
-    void updateRegionData(cwCavingRegion* region);
+    void updateRegionData();
     void startDeleteImageTask();
     void deleteImageTask();
 

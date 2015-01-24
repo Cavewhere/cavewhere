@@ -70,7 +70,7 @@ void cwRegionLoadTask::runTask() {
     }
 
     if(isRunning()) {
-        emit finishedLoading(Region);
+        emit finishedLoading();
     }
 
     done();

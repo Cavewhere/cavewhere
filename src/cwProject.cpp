@@ -332,7 +332,9 @@ void cwProject::loadFile(QString filename) {
 
     //Load the region task
     cwRegionLoadTask* loadTask = new cwRegionLoadTask();
-    connect(loadTask, SIGNAL(finishedLoading(cwCavingRegion*)), SLOT(updateRegionData(cwCavingRegion*)));
+    connect(loadTask, &cwRegionLoadTask::finishedLoading,
+            this, &cwProject::updateRegionData);
+
     loadTask->setThread(LoadSaveThread);
 
     //Set the data for the project
@@ -348,7 +350,7 @@ void cwProject::loadFile(QString filename) {
 
   This should only be called by cwRegionLoadTask
   */
-void cwProject::updateRegionData(cwCavingRegion* region) {
+void cwProject::updateRegionData() {
     TempProject = false;
 
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
@@ -357,7 +359,7 @@ void cwProject::updateRegionData(cwCavingRegion* region) {
     setFilename(loadTask->databaseFilename());
 
     //Copy the data from the loaded region
-    *Region = *region;
+    loadTask->copyRegionTo(*Region);
 
     emit temporaryProjectChanged();
 }
