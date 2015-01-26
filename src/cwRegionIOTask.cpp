@@ -23,7 +23,22 @@ cwRegionIOTask::cwRegionIOTask(QObject* parent) :
       This does a deap copy of the region, so it make a snapshot
       */
 void cwRegionIOTask::setCavingRegion(const cwCavingRegion& region) {
+    Q_ASSERT(thread() == Region->thread());
+
+    //Move the region to the current thread
+    if(QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, "moveRegionToThread",
+                                  Qt::BlockingQueuedConnection,
+                                  Q_ARG(QThread*, QThread::currentThread()));
+    }
+
     *Region = region;
+
+    //Move Region back to task's thread
+    if(QThread::currentThread() != thread()) {
+        Region->moveToThread(thread());
+        Region->setParent(this);
+    }
 }
 
 /**
@@ -52,7 +67,7 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
     //Move Region back to task's thread
     if(QThread::currentThread() != thread()) {
         Region->moveToThread(thread());
-        Region->setParent(nullptr);
+        Region->setParent(this);
     }
 }
 
