@@ -28,6 +28,15 @@ Item {
     implicitWidth: textArea.width
     implicitHeight: textArea.height
 
+    onFocusChanged: {
+        if(focus) {
+            if(globalShadowTextInput.coreClickInput !== null) {
+                globalShadowTextInput.coreClickInput.commitChanges()
+            }
+            openEditor()
+        }
+    }
+
     function commitChanges() {
         //Emit the finishedEditting signal
         if(validator !== null) {

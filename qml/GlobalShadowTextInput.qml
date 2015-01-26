@@ -72,6 +72,34 @@ MouseArea {
             property var pressKeyEvent
             signal pressKeyPressed; //This is emitted every time key is pressed
 
+            KeyNavigation.tab: {
+                if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
+                    return null
+                }
+                return coreClickInput.KeyNavigation.tab
+            }
+
+            KeyNavigation.backtab: {
+                if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
+                    return null
+                }
+                return coreClickInput.KeyNavigation.backtab
+            }
+
+            onFocusChanged: {
+                if(!focus && editor.visible && !coreClickInput.focus) {
+                    coreClickInput.commitChanges();
+                }
+
+                if(typeof coreClickInput !== 'undefined' &&
+                        coreClickInput !== null &&
+                        coreClickInput.focus)
+                {
+                    forceActiveFocus()
+                    selectAll()
+                }
+            }
+
             function defaultKeyHandling() {
                 if(pressKeyEvent.key === Qt.Key_Return || pressKeyEvent.key === Qt.Key_Enter) {
                     enterPressed()
