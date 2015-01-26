@@ -48,7 +48,7 @@ void cwScrapLeadView::updateItemPosition(QQuickItem *item, int index)
     item->setProperty("position3D", QVector3D(point));
 }
 
-void cwScrapLeadView::updateViewWithData(int begin, int end, QVector<int> roles)
+void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
 {
     foreach(int role, roles) {
         if(role == cwScrap::LeadPosition) {

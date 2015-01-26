@@ -45,22 +45,13 @@ ScrapPointItem {
         }
     }
 
-    Rectangle {
+    SelectedBackground {
         id: selectedBackground
 
         anchors.left: stationImage.left
         anchors.top: stationImage.top
         anchors.right: stationName.right
         anchors.bottom: stationName.bottom
-        anchors.margins: -2
-
-        radius: 4
-
-        color: "#418CFF"
-        border.width: 1
-        border.color: "white"
-
-        opacity: .5
 
         visible: selected && scrapItem.selected
     }

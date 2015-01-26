@@ -10,6 +10,7 @@
 #include "cwScrapItem.h"
 #include "cwScrap.h"
 #include "cwLead.h"
+#include "cwScrapLeadView.h"
 
 cwBaseNoteLeadInteraction::cwBaseNoteLeadInteraction(QQuickItem *parent) :
     cwBaseNotePointInteraction(parent)
@@ -37,5 +38,8 @@ void cwBaseNoteLeadInteraction::addPoint(QPointF notePosition, cwScrapItem *scra
     lead.setPositionOnNote(notePosition);
 
     scrap->addLead(lead);
+
+    //Get the last lead in the list and select id
+    scrapItem->leadView()->setSelectedItemIndex(scrap->leads().size() - 1);
 }
 

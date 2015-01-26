@@ -46,7 +46,9 @@ public:
     enum LeadDataRole {
         LeadPosition,
         LeadDesciption,
-        LeadSize
+        LeadSize,
+        LeadUnits,
+        LeadSupportedUnits
     };
 
     explicit cwScrap(QObject *parent = 0);
@@ -84,8 +86,8 @@ public:
     void removeLead(int leadId);
     void setLeads(QList<cwLead> leads);
     QList<cwLead> leads() const;
-    QVariant leadData(LeadDataRole role, int leadIndex) const;
-    void setLeadData(LeadDataRole role, int leadIndex, QVariant value);
+    Q_INVOKABLE QVariant leadData(LeadDataRole role, int leadIndex) const;
+    Q_INVOKABLE void setLeadData(LeadDataRole role, int leadIndex, QVariant value);
 
     cwNoteTranformation* noteTransformation() const;
 
@@ -120,7 +122,7 @@ signals:
     //For leads
     void leadsInserted(int begin, int end);
     void leadsRemoved(int begin, int end);
-    void leadsDataChanged(int begin, int end, QVector<int> roles);
+    void leadsDataChanged(int begin, int end, QList<int> roles);
     void leadsReset();
 
     void noteTransformationChanged();

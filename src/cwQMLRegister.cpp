@@ -195,4 +195,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwBaseNotePointInteraction>();
     qmlRegisterType<cwBaseNoteLeadInteraction>("Cavewhere", 1, 0, "BaseNoteLeadInteraction");
     qmlRegisterType<cwScrapLeadView>("Cavewhere", 1, 0, "ScrapLeadView");
+    qmlRegisterType<cwScrapPointView>();
 }

@@ -23,12 +23,10 @@ FloatingGroupBox {
 
     signal activateDPIInteraction
 
-    titleText: "Image Info"
+    title: "Image Info"
 
     Row {
         spacing: 5
-        x: floatingGroup.margin
-        y: floatingGroup.margin
 
         Button {
             id: setResolution

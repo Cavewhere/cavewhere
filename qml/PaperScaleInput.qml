@@ -46,32 +46,16 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            Rectangle {
-
+            TitledRectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                radius: 5
-
-                width: childrenRect.width + columnOnPaper.x * 2.0
-                height: childrenRect.height
-
-                Column {
-                    id: columnOnPaper
-                    x: 3
-
-                    Text {
-                        id: onPaperId
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "On Paper"
-                    }
-
-                    UnitValueInput {
-                        id: onPaperLengthInput
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        unitValue: null
-                        valueVisible: false
-                        valueReadOnly: autoScaling
-                        defaultUnit: Units.LengthUnitless
-                    }
+                title: "On Paper"
+                UnitValueInput {
+                    id: onPaperLengthInput
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    unitValue: null
+                    valueVisible: false
+                    valueReadOnly: autoScaling
+                    defaultUnit: Units.LengthUnitless
                 }
             }
 
@@ -80,32 +64,16 @@ Item {
                 text: "="
             }
 
-            Rectangle {
-
+            TitledRectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                radius: 5
-
-                width: childrenRect.width + columnInCave.x * 2.0
-                height: childrenRect.height
-
-                Column {
-                    id: columnInCave
-                    x: 3
-
-                    Text {
-                        id: inCaveId
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "In Cave"
-                    }
-
-                    UnitValueInput {
-                        id: inCaveLengthInput
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        unitValue: null
-                        valueVisible: false
-                        valueReadOnly: autoScaling
-                        defaultUnit: Units.LengthUnitless
-                    }
+                title: "In Cave"
+                UnitValueInput {
+                    id: inCaveLengthInput
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    unitValue: null
+                    valueVisible: false
+                    valueReadOnly: autoScaling
+                    defaultUnit: Units.LengthUnitless
                 }
             }
         }

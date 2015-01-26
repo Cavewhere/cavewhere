@@ -167,6 +167,11 @@ ImageItem {
                 return null;
             }
         }
+
+        LeadInfoEditor {
+            id: leadInfoEditor
+            leadView: scrapViewId.selectedScrapItem !== null ? scrapViewId.selectedScrapItem.leadView : null
+        }
     }
 
     //For rendering scraps onto the view

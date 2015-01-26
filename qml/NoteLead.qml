@@ -5,15 +5,28 @@ ScrapPointItem {
     width: 2
     height: 2
 
-    Image {
-        source: "qrc:/icons/question.png"
-        anchors.centerIn: parent
+    SelectedBackground {
+        id: selectedBackground
+
+        anchors.fill: questionImage
+
+        visible: selected && scrapItem.selected
     }
 
-//    Rectangle {
-//        width: 5
-//        height: 5
-//        color: "red"
-//    }
+    Image {
+        id: questionImage
+        source: "qrc:/icons/question.png"
+        anchors.centerIn: parent
+
+        ScrapPointMouseArea {
+            id: stationMouseArea
+            anchors.fill: parent
+
+            onPointSelected: select();
+            onPointMoved: scrap.setLeadData(Scrap.LeadPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
+        }
+    }
+
+
 }
 

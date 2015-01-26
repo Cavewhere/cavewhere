@@ -263,6 +263,8 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
             QQuickItem* newItem = Items.at(selectedIndex);
             if(selectionManager() != nullptr) {
                 selectionManager()->setSelectedItem(newItem);
+            } else {
+                qDebug() << "Selection manager isn't set!!!" << LOCATION;
             }
         }
 

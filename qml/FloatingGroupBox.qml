@@ -12,8 +12,8 @@ Item {
     id: floatingGroupBoxId
 
     property int margin: 3
-    property alias titleText: titleTextId.text
-    default property alias boxGroupChildren: boxGroupId.children
+    property alias title: titleId.text
+    default property alias boxGroupChildren: container.children
 
     width: childrenRect.width
     height: childrenRect.height
@@ -24,7 +24,7 @@ Item {
     }
 
     Text {
-        id: titleTextId
+        id: titleId
         z: 1
         anchors.right: boxGroupId.right
         anchors.bottom: boxGroupId.top
@@ -37,21 +37,31 @@ Item {
 
         color: style.floatingWidgetColor
         radius: style.floatingWidgetRadius
-        height: boxGroupId.height + titleTextId.height
-        width: boxGroupId.width
+        height: boxGroupId.height + titleId.height + margin
+        width: boxGroupId.width + margin * 2
         //        y: groupAreaRect.height / 2.0
     }
+
 
     Rectangle {
         id: boxGroupId
 
-        y: titleTextId.height
+        x: margin
+        y: titleId.height
 
         border.width: 1
         radius: style.floatingWidgetRadius
         color: "#00000000"
 
-        width: childrenRect.width + margin * 2;
-        height: childrenRect.height + margin * 2;
+        width: container.width + margin * 2;
+        height: container.height + margin * 2;
+
+        Item {
+            id: container
+            x: margin
+            y: margin
+            width: childrenRect.width
+            height: childrenRect.height
+        }
     }
 }

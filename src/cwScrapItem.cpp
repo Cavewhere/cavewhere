@@ -198,6 +198,7 @@ void cwScrapItem::setSelectionManager(cwSelectionManager* selectionManager) {
 
         stationView()->setSelectionManager(SelectionManager);
         outlinePointView()->setSelectionManager(SelectionManager);
+        leadView()->setSelectionManager(SelectionManager);
 
         emit selectionManagerChanged();
     }

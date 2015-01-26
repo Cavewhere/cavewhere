@@ -33,10 +33,10 @@ class cwScrapItem : public QQuickItem
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)
-    Q_PROPERTY(cwScrapStationView* stationView READ stationView NOTIFY stationViewChanged)
+    Q_PROPERTY(cwScrapStationView* stationView READ stationView CONSTANT)
     Q_PROPERTY(cwScrapLeadView* leadView READ leadView CONSTANT)
 
-    Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView NOTIFY outlinePointViewChanged)
+    Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView CONSTANT)
     Q_PROPERTY(cwSelectionManager* selectionManager READ selectionManager WRITE setSelectionManager NOTIFY selectionManagerChanged)
 
 public:
@@ -67,8 +67,6 @@ signals:
     void scrapChanged();
     void selectedChanged();
     void transformUpdaterChanged();
-    void stationViewChanged();
-    void outlinePointViewChanged();
     void selectionManagerChanged();
 
 public slots:

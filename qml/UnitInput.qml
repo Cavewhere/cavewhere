@@ -10,8 +10,9 @@ import QtQuick.Controls 1.2 as Controls
 
 Item {
     id: unitInput
-    property var unitModel
+    property var unitModel: null
     property int unit
+    property bool readOnly: false
 
     signal newUnit(int unit)
 
@@ -28,11 +29,12 @@ Item {
 
     Text {
         id: textArea
-        color: pallete.inputTextColor
+        color: readOnly ? "black" : pallete.inputTextColor
         text: unitModel !== null ? " " + unitModel[menuId.selectedIndex] : "";
 
         MouseArea {
             anchors.fill: parent
+            enabled: !readOnly
 
             onClicked: {
                 menuId.popup()

@@ -18,6 +18,8 @@
 
 class cwScrapLeadView : public cwScrapPointView
 {
+    Q_OBJECT
+
 public:
     cwScrapLeadView(QQuickItem* parent = 0);
     ~cwScrapLeadView();
@@ -29,7 +31,7 @@ private:
     virtual void updateItemPosition(QQuickItem* item, int index);
 
 private slots:
-    void updateViewWithData(int begin, int end, QVector<int> roles);
+    void updateViewWithData(int begin, int end, QList<int> roles);
 
 protected:
 //    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);

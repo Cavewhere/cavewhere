@@ -14,6 +14,7 @@
 #include "cwLength.h"
 #include "cwGlobals.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QDebug>
@@ -334,6 +335,10 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
         return lead.desciption();
     case LeadSize:
         return lead.size();
+    case LeadUnits:
+        return parentNote()->parentTrip()->calibrations()->distanceUnit();
+    case LeadSupportedUnits:
+        return parentNote()->parentTrip()->calibrations()->supportedUnits();
     }
 
     return QVariant();
@@ -351,7 +356,11 @@ void cwScrap::setLeadData(cwScrap::LeadDataRole role, int leadIndex, QVariant va
         return;
     }
 
-    QVector<int> roleChanged;
+    if(!value.isValid()) {
+        return;
+    }
+
+    QList<int> roleChanged;
     roleChanged.append(role);
 
     cwLead& lead = Leads[leadIndex];
@@ -361,8 +370,12 @@ void cwScrap::setLeadData(cwScrap::LeadDataRole role, int leadIndex, QVariant va
         break;
     case LeadDesciption:
         lead.setDescription(value.toString());
+        break;
     case LeadSize:
         lead.setSize(value.toSizeF());
+        break;
+    default:
+        return;
     }
 
     emit leadsDataChanged(leadIndex, leadIndex, roleChanged);
