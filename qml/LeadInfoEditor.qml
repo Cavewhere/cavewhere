@@ -78,6 +78,7 @@ FloatingGroupBox {
                 ClickTextInput {
                     id: widthTextId
                     Layout.alignment: Qt.AlignHCenter
+                    KeyNavigation.tab: heightTextId
                     onFinishedEditting: {
                         var oldSize = leadView.scrap.leadData(Scrap.LeadSize, leadView.selectedItemIndex);
                         leadView.scrap.setLeadData(Scrap.LeadSize,
@@ -85,6 +86,7 @@ FloatingGroupBox {
                                                    Qt.size(toLeadDim(newText),
                                                            oldSize.height))
                     }
+
                 }
             }
 
@@ -97,6 +99,8 @@ FloatingGroupBox {
 
                 ClickTextInput {
                     id: heightTextId
+                    KeyNavigation.tab: leadDescriptionArea
+                    KeyNavigation.backtab: widthTextId
                     Layout.alignment: Qt.AlignHCenter
                     onFinishedEditting: {
                         var oldSize = leadView.scrap.leadData(Scrap.LeadSize, leadView.selectedItemIndex);
@@ -116,6 +120,7 @@ FloatingGroupBox {
 
         TextArea {
             id: leadDescriptionArea
+            KeyNavigation.backtab: heightTextId
             implicitHeight: 100
             onTextChanged: {
                 if(leadView !== null && leadView.scrap !== null) {
@@ -127,7 +132,7 @@ FloatingGroupBox {
         LeadQuickComments {
             Layout.fillWidth: true
             category: "Passage Type"
-            keywords: ["Aven", "Borehole", "Crawl", "Caynon",
+            keywords: ["Aven", "Borehole", "Crawl", "Climb", "Caynon",
                 "Dig", "Dome", "Pit", "Sump", "Tight", "Traverse", "Walking"]
             textArea: leadDescriptionArea
         }
@@ -157,7 +162,7 @@ FloatingGroupBox {
         LeadQuickComments {
             Layout.fillWidth: true
             category: "Gear Needed"
-            keywords: ["Bolts", "Cable Ladder", "Cave Dive", "Handline", "Hammer", "Rope"]
+            keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope"]
             textArea: leadDescriptionArea
         }
     }
