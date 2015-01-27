@@ -132,17 +132,21 @@ FloatingGroupBox {
         LeadQuickComments {
             Layout.fillWidth: true
             category: "Passage Type"
-            keywords: ["Aven", "Borehole", "Crawl", "Climb", "Caynon",
-                "Dig", "Dome", "Pit", "Sump", "Tight", "Traverse", "Walking"]
+            keywords: ["Aven", "Borehole", "Caynon", "Dig", "Dome", "Phreatic", "Pit", "Sump",]
             textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
             category: "Passage Fill"
             Layout.fillWidth: true
-            keywords: ["Breakdown", "Cobbles", "Muddy", "Sandy", "Water",
-                "Tight", "Traverse", "Walking"]
+            keywords: ["Breakdown", "Cobbles", "Muddy", "Sandy", "Water"]
             textArea: leadDescriptionArea
+        }
+
+        LeadQuickComments {
+            category: "Passage Traversal"
+            Layout.fillWidth: true
+            keywords: ["Crawl", "Climb", "Low", "High", "Swim", "Tight", "Traverse", "Walking"]
         }
 
         LeadQuickComments {
