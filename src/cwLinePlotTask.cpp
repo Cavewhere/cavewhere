@@ -331,10 +331,7 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
 //    cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
 
     //Add the cave to the results with empty station lookup
-    cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
-    if(!Result.Caves.contains(externalCave)) {
-        Result.Caves.insert(externalCave, LinePlotCaveData());
-    }
+    addEmptyStationLookup(caveIndex);
 
     const StationTripScrapLookup& lookup = TripLookups[caveIndex];
     QList<int> tripIndexes = lookup.trips(stationName);
@@ -465,6 +462,11 @@ void cwLinePlotTask::updateInteralCaveStationLookups(QVector<cwStationPositionLo
         cwStationPositionLookup& newLookup = caveStations[i];
         cwStationPositionLookup& oldLookup = CaveStationLookups[i];
 
+        if(newLookup.positions().size() != oldLookup.positions().size()) {
+            //This adds the station lookup as changed if the new looup has delete or added stations
+            addEmptyStationLookup(i);
+        }
+
         QMap<QString, QVector3D> newPositions = newLookup.positions();
         QMap<QString, QVector3D> oldPositions = oldLookup.positions();
 
@@ -516,6 +518,20 @@ void cwLinePlotTask::updateExteralCaveStationLookups()
 void cwLinePlotTask::moveCaveRegionToThread(QThread *thread)
 {
     Region->moveToThread(thread);
+}
+
+/**
+ * @brief cwLinePlotTask::addEmptyStationLookup
+ * @param caveIndex
+ *
+ * Adds an emptry station lookup to the results.
+ */
+void cwLinePlotTask::addEmptyStationLookup(int caveIndex)
+{
+    cwCave* externalCave = RegionOriginalPointers.Caves.at(caveIndex).Cave;
+    if(!Result.Caves.contains(externalCave)) {
+        Result.Caves.insert(externalCave, LinePlotCaveData());
+    }
 }
 
 

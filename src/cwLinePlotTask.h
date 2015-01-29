@@ -211,6 +211,8 @@ private:
 
     Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
 
+    void addEmptyStationLookup(int caveIndex);
+
 };
 
 /**
