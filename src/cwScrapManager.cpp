@@ -22,13 +22,14 @@
 #include "cwImageResolution.h"
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
+#include "cwRegionTreeModel.h"
 
 //Qt includes
 #include <QThread>
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
-    Region(nullptr),
+    //    Region(nullptr),
     LinePlotManager(nullptr),
     TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
@@ -53,29 +54,6 @@ cwScrapManager::~cwScrapManager()
 }
 
 /**
-  \brief Set the region for the scrap manager
-  */
-void cwScrapManager::setRegion(cwCavingRegion* region) {
-    if(Region != nullptr) {
-        disconnect(Region, nullptr, this, nullptr);
-    }
-
-    Region = region;
-
-    if(Region != nullptr) {
-//        connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
-//        connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
-        connect(Region, &cwCavingRegion::insertedCaves, this, &cwScrapManager::cavesInserted);
-        connect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwScrapManager::cavesRemoved);
-//        connect(Region, SIGNAL(removedCaves(int,int)), SLOT(updateCaveScrapGeometry(int, int)));
-
-        if(Region->hasCaves()) {
-            cavesInserted(0, Region->caveCount() - 1);
-        }
-    }
-}
-
-/**
   \brief Sets the project for the scrap manager
   */
 void cwScrapManager::setProject(cwProject *project) {
@@ -87,11 +65,40 @@ void cwScrapManager::setProject(cwProject *project) {
         Project = project;
 
         if(Project != nullptr) {
-            setRegion(Project->cavingRegion());
             ImageProvider.setProjectPath(Project->filename());
 
             connect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
         }
+    }
+}
+
+/**
+ * @brief cwScrapManager::setRegionTreeModel
+ * @param regionTreeModel
+ *
+ * Sets the region tree. This class listens to region tree adds and removes
+ */
+void cwScrapManager::setRegionTreeModel(cwRegionTreeModel *regionTreeModel)
+{
+    if(RegionModel != regionTreeModel) {
+
+        if(!RegionModel.isNull()) {
+            disconnect(RegionModel.data(), &cwRegionTreeModel::rowsInserted,
+                       this, &cwScrapManager::inserted);
+            disconnect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
+                       this, &cwScrapManager::removed);
+        }
+
+        RegionModel = regionTreeModel;
+
+        if(!RegionModel.isNull()) {
+            connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted,
+                    this, &cwScrapManager::inserted);
+            connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
+                    this, &cwScrapManager::removed);
+        }
+
+        handleRegionReset();
     }
 }
 
@@ -106,7 +113,7 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
     if(LinePlotManager != linePlotManager) {
         if(LinePlotManager != nullptr) {
             disconnect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
-                    this, &cwScrapManager::updateStationPositionChangedForScraps);
+                       this, &cwScrapManager::updateStationPositionChangedForScraps);
         }
 
         LinePlotManager = linePlotManager;
@@ -152,7 +159,7 @@ void cwScrapManager::updateAllScraps() {
 
     //Get all the scraps for the whole region
     QList<cwScrap*> scraps;
-    foreach(cwCave* cave, Region->caves()) {
+    foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
                 scraps.append(note->scraps());
@@ -266,29 +273,73 @@ bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 }
 
 /**
- * @brief cwScrapManager::connectCave
- * @param cave
+ * @brief cwScrapManager::handleRegionReset
+ *
+ * This should be called if the RegionTreeModel has been reset
  */
-void cwScrapManager::connectCave(cwCave *cave) {
-    connect(cave, &cwCave::insertedTrips, this, &cwScrapManager::tripsInserted);
-    connect(cave, &cwCave::beginRemoveTrips, this, &cwScrapManager::tripsRemoved);
+void cwScrapManager::handleRegionReset()
+{
+    foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
+        foreach(cwTrip* trip, cave->trips()) {
+            foreach(cwNote* note, trip->notes()->notes()) {
+                scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+            }
+        }
+    }
 }
 
 /**
- * @brief cwScrapManager::connectTrip
- * @param trip
+ * @brief cwScrapManager::inserted
+ * @param parent
+ * @param begin
+ * @param end
  */
-void cwScrapManager::connectTrip(cwTrip *trip) {
-    connectNoteModel(trip->notes());
+void cwScrapManager::inserted(QModelIndex parent, int begin, int end)
+{
+
+    if(RegionModel->isTrip(parent) || RegionModel->isNote(parent)) {
+        for(int i = begin; i <= end; i++) {
+            QModelIndex index = RegionModel->index(i, 0, parent);
+
+            switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
+            case cwRegionTreeModel::NoteType: {
+                cwNote* note = index.data(cwRegionTreeModel::ObjectRole).value<cwNote*>();
+                connectNote(note);
+                break;
+            }
+            }
+        }
+
+        if(RegionModel->isNote(parent)) {
+            scrapInsertedHelper(RegionModel->note(parent), begin, end);
+        }
+    }
 }
 
 /**
- * @brief cwScrapManager::connectNoteModel
- * @param noteModel
+ * @brief cwScrapManager::removed
+ * @param parent
+ * @param begin
+ * @param end
  */
-void cwScrapManager::connectNoteModel(cwSurveyNoteModel *noteModel) {
-    connect(noteModel, &cwSurveyNoteModel::rowsInserted, this, &cwScrapManager::notesInserted);
-    connect(noteModel, &cwSurveyNoteModel::rowsAboutToBeRemoved, this, &cwScrapManager::notesRemoved);
+void cwScrapManager::removed(QModelIndex parent, int begin, int end)
+{
+    if(RegionModel->isTrip(parent) || RegionModel->isNote(parent)) {
+        for(int i = begin; i <= end; i++) {
+            QModelIndex index = RegionModel->index(i, 0, parent);
+            switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
+            case cwRegionTreeModel::NoteType: {
+                cwNote* note = index.data(cwRegionTreeModel::ObjectRole).value<cwNote*>();
+                disconnectNote(note);
+                break;
+            }
+            }
+        }
+
+        if(RegionModel->isNote(parent)) {
+            scrapRemovedHelper(RegionModel->note(parent), begin, end);
+        }
+    }
 }
 
 /**
@@ -296,9 +347,6 @@ void cwScrapManager::connectNoteModel(cwSurveyNoteModel *noteModel) {
  * @param note
  */
 void cwScrapManager::connectNote(cwNote *note) {
-    connect(note, &cwNote::insertedScraps, this, &cwScrapManager::scrapInserted);
-    connect(note, &cwNote::beginRemovingScraps, this, &cwScrapManager::scrapRemoved);
-
     connect(note->imageResolution(), &cwImageResolution::valueChanged, this, &cwScrapManager::updateScrapsWithNewNoteResolution);
     connect(note->imageResolution(), &cwImageResolution::unitChanged, this, &cwScrapManager::updateScrapsWithNewNoteResolution);
 }
@@ -321,42 +369,11 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
 }
 
 /**
- * @brief cwScrapManager::disconnectCave
- * @param cave
- */
-void cwScrapManager::disconnectCave(cwCave *cave)
-{
-    disconnect(cave, &cwCave::insertedTrips, this, &cwScrapManager::tripsInserted);
-    disconnect(cave, &cwCave::beginRemoveTrips, this, &cwScrapManager::tripsRemoved);
-}
-
-/**
- * @brief cwScrapManager::disconnectTrip
- * @param trip
- */
-void cwScrapManager::disconnectTrip(cwTrip *trip)
-{
-    Q_UNUSED(trip);
-}
-
-/**
- * @brief cwScrapManager::disconnectNoteModel
- * @param noteModel
- */
-void cwScrapManager::disconnectNoteModel(cwSurveyNoteModel *noteModel)
-{
-    disconnect(noteModel, &cwSurveyNoteModel::rowsInserted, this, &cwScrapManager::notesInserted);
-    disconnect(noteModel, &cwSurveyNoteModel::rowsAboutToBeRemoved, this, &cwScrapManager::notesRemoved);
-}
-
-/**
  * @brief cwScrapManager::disconnectNote
  * @param note
  */
 void cwScrapManager::disconnectNote(cwNote *note)
 {
-    disconnect(note, &cwNote::insertedScraps, this, &cwScrapManager::scrapInserted);
-    disconnect(note, &cwNote::beginRemovingScraps, this, &cwScrapManager::scrapRemoved);
     disconnect(note, &cwNote::imageResolutionChanged, this, &cwScrapManager::updateScrapsWithNewNoteResolution);
 }
 
@@ -469,17 +486,17 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
  * @param begin
  * @param end
  */
-void cwScrapManager::tripsInsertedHelper(cwCave *parentCave, int begin, int end)
-{
-    for(int i = begin; i <= end; i++) {
-        cwTrip* trip = parentCave->trip(i);
-        connectTrip(trip);
+//void cwScrapManager::tripsInsertedHelper(cwCave *parentCave, int begin, int end)
+//{
+//    for(int i = begin; i <= end; i++) {
+//        cwTrip* trip = parentCave->trip(i);
+//        connectTrip(trip);
 
-        if(trip->notes()->hasNotes()) {
-            notesInsertedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
-        }
-    }
-}
+//        if(trip->notes()->hasNotes()) {
+//            notesInsertedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
+//        }
+//    }
+//}
 
 /**
  * @brief cwScrapManager::tripsRemovedHelper
@@ -487,17 +504,17 @@ void cwScrapManager::tripsInsertedHelper(cwCave *parentCave, int begin, int end)
  * @param begin
  * @param end
  */
-void cwScrapManager::tripsRemovedHelper(cwCave *parentCave, int begin, int end)
-{
-    for(int i = begin; i <= end; i++) {
-        cwTrip* trip = parentCave->trip(i);
-        disconnectTrip(trip);
+//void cwScrapManager::tripsRemovedHelper(cwCave *parentCave, int begin, int end)
+//{
+//    for(int i = begin; i <= end; i++) {
+//        cwTrip* trip = parentCave->trip(i);
+//        disconnectTrip(trip);
 
-        if(trip->notes()->hasNotes()) {
-            notesRemovedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
-        }
-    }
-}
+//        if(trip->notes()->hasNotes()) {
+//            notesRemovedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
+//        }
+//    }
+//}
 
 /**
  * @brief cwScrapManager::notesInsertedHelper
@@ -506,23 +523,23 @@ void cwScrapManager::tripsRemovedHelper(cwCave *parentCave, int begin, int end)
  * @param begin
  * @param end
  */
-void cwScrapManager::notesInsertedHelper(cwSurveyNoteModel *noteModel,
-                                         QModelIndex parent,
-                                         int begin,
-                                         int end)
-{
-    Q_UNUSED(parent);
+//void cwScrapManager::notesInsertedHelper(cwSurveyNoteModel *noteModel,
+//                                         QModelIndex parent,
+//                                         int begin,
+//                                         int end)
+//{
+//    Q_UNUSED(parent);
 
-    for(int i = begin; i <= end; i++) {
-        cwNote* note = noteModel->notes().at(i);
-        connectNote(note);
+//    for(int i = begin; i <= end; i++) {
+//        cwNote* note = noteModel->notes().at(i);
+//        connectNote(note);
 
-        if(note->hasScraps()) {
-            scrapInsertedHelper(note, 0, note->scraps().size() - 1);
-        }
-    }
+//        if(note->hasScraps()) {
+//            scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+//        }
+//    }
 
-}
+//}
 
 /**
  * @brief cwScrapManager::notesRemovedHelper
@@ -531,22 +548,22 @@ void cwScrapManager::notesInsertedHelper(cwSurveyNoteModel *noteModel,
  * @param begin
  * @param end
  */
-void cwScrapManager::notesRemovedHelper(cwSurveyNoteModel *noteModel,
-                                        QModelIndex parent,
-                                        int begin,
-                                        int end)
-{
-    Q_UNUSED(parent);
+//void cwScrapManager::notesRemovedHelper(cwSurveyNoteModel *noteModel,
+//                                        QModelIndex parent,
+//                                        int begin,
+//                                        int end)
+//{
+//    Q_UNUSED(parent);
 
-    for(int i = begin; i <= end; i++) {
-        cwNote* note = noteModel->notes().at(i);
-        disconnectNote(note);
+//    for(int i = begin; i <= end; i++) {
+//        cwNote* note = noteModel->notes().at(i);
+//        disconnectNote(note);
 
-        if(note->hasScraps()) {
-            scrapRemovedHelper(note, 0, note->scraps().size() - 1);
-        }
-    }
-}
+//        if(note->hasScraps()) {
+//            scrapRemovedHelper(note, 0, note->scraps().size() - 1);
+//        }
+//    }
+//}
 
 /**
  * @brief cwScrapManager::scrapInsertedHelper
@@ -600,100 +617,13 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
     }
 }
 
-
-/**
- * @brief cwScrapManager::cavesInserted
- * @param begin
- * @param end
- *
- * This is called when the region has new caves that have been inserted
- */
-void cwScrapManager::cavesInserted(int begin, int end) {
-    //Go through all the caves
-    for(int i = begin; i <= end; i++) {
-        cwCave* cave = Region->cave(i);
-        connectCave(cave);
-
-        if(cave->hasTrips()) {
-            int lastTripIndex = cave->tripCount() - 1;
-            tripsInsertedHelper(cave, 0, lastTripIndex);
-        }
-    }
-}
-
-/**
- * @brief cwScrapManager::cavesRemoved
- * @param begin
- * @param end
- *
- * Removes caves from the scrap manager, this should be called before.
- *
- * This needs to be called before cave is really remove.  It still needs to be valid
- */
-void cwScrapManager::cavesRemoved(int begin, int end) {
-    //Go remove all scrap froms the removed caves
-    for(int i = begin; i <= end; i++) {
-        cwCave* cave = Region->cave(i);
-
-        disconnectCave(cave);
-
-        if(cave->hasTrips()) {
-            int lastTripIndex = cave->tripCount() - 1;
-            tripsRemovedHelper(cave, 0, lastTripIndex);
-        }
-    }
-}
-
-/**
- * @brief cwScrapManager::tripsInserted
- * @param begin
- * @param end
- *
- * Insert all the trips
- */
-void cwScrapManager::tripsInserted(int begin, int end) {
-    cwCave* cave = static_cast<cwCave*>(sender());
-    tripsInsertedHelper(cave, begin, end);
-}
-
-/**
- * @brief cwScrapManager::tripsRemoved
- * @param begin
- * @param end
- */
-void cwScrapManager::tripsRemoved(int begin, int end) {
-    cwCave* cave = static_cast<cwCave*>(sender());
-    tripsRemovedHelper(cave, begin, end);
-}
-
-/**
- * @brief cwScrapManager::notesInserted
- * @param parent
- * @param begin
- * @param end
- */
-void cwScrapManager::notesInserted(QModelIndex parent, int begin, int end) {
-    cwSurveyNoteModel* noteModel = static_cast<cwSurveyNoteModel*>(sender());
-    notesInsertedHelper(noteModel, parent, begin, end);
-}
-
-/**
- * @brief cwScrapManager::notesRemoved
- * @param parent
- * @param begin
- * @param end
- */
-void cwScrapManager::notesRemoved(QModelIndex parent, int begin, int end) {
-    cwSurveyNoteModel* noteModel = static_cast<cwSurveyNoteModel*>(sender());
-    notesRemovedHelper(noteModel, parent, begin, end);
-}
-
 /**
  * @brief cwScrapManager::scrapInserted
  * @param begin
  * @param end
  */
 void cwScrapManager::scrapInserted(int begin, int end) {
+    Q_ASSERT(qobject_cast<cwNote*>(sender()));
     cwNote* note = static_cast<cwNote*>(sender());
     scrapInsertedHelper(note, begin, end);
 }
@@ -704,6 +634,7 @@ void cwScrapManager::scrapInserted(int begin, int end) {
  * @param end
  */
 void cwScrapManager::scrapRemoved(int begin, int end) {
+    Q_ASSERT(qobject_cast<cwNote*>(sender()));
     cwNote* note = static_cast<cwNote*>(sender());
     scrapRemovedHelper(note, begin, end);
 }

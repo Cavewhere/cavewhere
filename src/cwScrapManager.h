@@ -13,6 +13,7 @@
 #include <QModelIndex>
 #include <QSet>
 #include <QWeakPointer>
+#include <QPointer>
 
 //Our includes
 class cwCavingRegion;
@@ -28,6 +29,7 @@ class cwStationPositionLookup;
 class cwRemoveImageTask;
 class cwLinePlotManager;
 class cwTaskManagerModel;
+class cwRegionTreeModel;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
@@ -47,6 +49,7 @@ public:
     ~cwScrapManager();
 
     void setProject(cwProject* project);
+    void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setTaskManager(cwTaskManagerModel* taskManager);
 
@@ -63,7 +66,7 @@ public slots:
     void updateImageProviderPath();
 
 private:
-    cwCavingRegion* Region;
+    QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
 
     cwImageProvider ImageProvider;
@@ -84,17 +87,9 @@ private:
 
     bool AutomaticUpdate; //!<
 
-    void setRegion(cwCavingRegion* region);
-
-    void connectCave(cwCave* cave);
-    void connectTrip(cwTrip* trip);
-    void connectNoteModel(cwSurveyNoteModel* noteModel);
     void connectNote(cwNote* note);
     void connectScrap(cwScrap* scrap);
 
-    void disconnectCave(cwCave* cave);
-    void disconnectTrip(cwTrip* trip);
-    void disconnectNoteModel(cwSurveyNoteModel* noteModel);
     void disconnectNote(cwNote* note);
     void disconnectScrap(cwScrap* scrap);
 
@@ -103,10 +98,6 @@ private:
     cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
     QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations, const cwStationPositionLookup& positionLookup) const;
 
-    void tripsInsertedHelper(cwCave* parentCave, int begin, int end);
-    void tripsRemovedHelper(cwCave* parentCave, int begin, int end);
-    void notesInsertedHelper(cwSurveyNoteModel* noteModel, QModelIndex parent, int begin, int end);
-    void notesRemovedHelper(cwSurveyNoteModel* noteModel, QModelIndex parent, int begin, int end);
     void scrapInsertedHelper(cwNote* parentNote, int begin, int end);
     void scrapRemovedHelper(cwNote* parentNote, int begin, int end);
 
@@ -118,12 +109,11 @@ private:
     bool scrapImagesOkay(cwScrap* scrap);
 
 private slots:
-    void cavesInserted(int begin, int end);
-    void cavesRemoved(int begin, int end);
-    void tripsInserted(int begin, int end);
-    void tripsRemoved(int begin, int end);
-    void notesInserted(QModelIndex parent, int begin, int end);
-    void notesRemoved(QModelIndex parent, int begin, int end);
+    void handleRegionReset();
+
+    void inserted(QModelIndex parent, int begin, int end);
+    void removed(QModelIndex parent, int begin, int end);
+
     void scrapInserted(int begin, int end);
     void scrapRemoved(int begin, int end);
 

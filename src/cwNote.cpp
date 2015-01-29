@@ -163,10 +163,13 @@ void cwNote::addScrap(cwScrap* scrap) {
         return;
     }
 
+    int lastIndex = Scraps.size();
+
+    emit beginInsertingScraps(lastIndex, lastIndex);
+
     setupScrap(scrap);
     Scraps.append(scrap);
 
-    int lastIndex = Scraps.size() - 1;
 
     emit insertedScraps(lastIndex, lastIndex);
 }

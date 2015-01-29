@@ -12,12 +12,21 @@
 class cwCavingRegion;
 class cwTrip;
 class cwCave;
+class cwNote;
+class cwScrap;
 
 //Qt includes
 #include <QAbstractItemModel>
 #include <QtGlobal>
 #include <QDebug>
+#include <QPointer>
 
+/**
+ * @brief The cwRegionTreeModel class
+ *
+ * The regionTreeModel allows for global access to cwRegion via a QAbstractItemModel tree. Currently
+ * the tree model supports signaling support for add and removing cwCave, cwTrip, cwNote, cwScrap.
+ */
 class cwRegionTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -26,17 +35,16 @@ class cwRegionTreeModel : public QAbstractItemModel
 
 public:
     enum RoleItem {
-        TypeRole = Qt::UserRole + 1,
-        NameRole, //For everything
-        DateRole,  //Only valid for trips
+        TypeRole, //Returns an ItemType
         ObjectRole, //For exctracting the object
-        IconSourceRole //Store a url to the image
     };
 
     enum ItemType {
         RegionType,
         CaveType,
-        TripType
+        TripType,
+        NoteType,
+        ScrapType
     };
 
     explicit cwRegionTreeModel(QObject *parent = 0);
@@ -45,25 +53,26 @@ public:
     cwCavingRegion* cavingRegion() const;
 
     Q_INVOKABLE QModelIndex index ( int row, int column, const QModelIndex & parent ) const;
-   // Q_INVOKABLE QModelIndex index ( int row, const QModelIndex& parent) const;
     QModelIndex index (cwCave* cave) const;
     QModelIndex index (cwTrip* trip) const;
+    QModelIndex index (cwNote* note) const;
+    QModelIndex index (cwScrap* scrap) const;
+
     QModelIndex parent ( const QModelIndex & index ) const;
     int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
     int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     Q_INVOKABLE QVariant data ( const QModelIndex & index, int role) const;
-    Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
-    Q_INVOKABLE void removeIndex(QModelIndex item);
-    Qt::ItemFlags flags ( const QModelIndex & index) const;
 
     Q_INVOKABLE cwTrip* trip(const QModelIndex& index) const;
     Q_INVOKABLE cwCave* cave(const QModelIndex& index) const;
+    Q_INVOKABLE cwNote* note(const QModelIndex& index) const;
+    Q_INVOKABLE cwScrap* scrap(const QModelIndex& index) const;
 
+    Q_INVOKABLE bool isScrap(const QModelIndex& index) const;
+    Q_INVOKABLE bool isNote(const QModelIndex& index) const;
     Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
     Q_INVOKABLE bool isCave(const QModelIndex& index) const;
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
-
-    Q_INVOKABLE int row(const QModelIndex& index) const;
 
     virtual QHash<int, QByteArray> roleNames() const;
 
@@ -72,24 +81,29 @@ signals:
 public slots:
 
 private slots:
-    void beginInsertCaves(int beginIndex, int endIndex);
-    void endInsertCaves(int beginIndex, int endIndex);
+    void beginInsertCaves(QModelIndex parent, int begin, int end);
+    void insertedCaves(QModelIndex parent, int begin, int end);
+    void beginRemoveCaves(QModelIndex parent, int begin, int end);
+    void removedCaves(QModelIndex parent, int begin, int end);
 
-    void beginRemoveCaves(int beginIndex, int endIndex);
-    void endRemoveCaves(int beginIndex, int endIndex);
+    void beginInsertTrips(QModelIndex parent, int begin, int end);
+    void insertedTrips(QModelIndex parent, int begin, int end);
+    void beginRemoveTrips(QModelIndex parent, int begin, int end);
+    void removedTrips(QModelIndex parent, int begin, int end);
 
-    void beginInsertTrip(int beginIndex, int endIndex);
-    void endInsertTrip(int beginIndex, int endIndex);
+    void beginInsertNotes(QModelIndex parent, int begin, int end);
+    void insertedNotes(QModelIndex parent, int begin, int end);
+    void beginRemoveNotes(QModelIndex parent, int begin, int end);
+    void removeNotes(QModelIndex parent, int begin, int end);
 
-    void beginRemoveTrip(int beginIndex, int endIndex);
-    void endRemoveTrip(int beginIndex, int endIndex);
-
-    void caveDataChanged();
-    void tripDataChanged();
+    void beginInsertScraps(int begin, int end);
+    void insertedScraps(int begin, int end);
+    void beginRemoveScraps(int begin, int end);
+    void removedScraps(int begin, int end);
 
 private:
 
-    cwCavingRegion* Region;
+    QPointer<cwCavingRegion> Region;
 
     void addCaveConnections(int beginIndex, int endIndex);
     void removeCaveConnections(int beginIndex, int endIndex);
@@ -97,42 +111,32 @@ private:
     void addTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
     void removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex);
 
+    void addNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
+    void removeNoteConnections(cwTrip* parentTrip, int beginIndex, int endIndex);
+
+    void beginRemoveTrips(cwCave* parentCave, int begin, int end);
+    void beginRemoveNotes(cwTrip* parentTrip, int begin, int end);
+    void beginRemoveScraps(cwNote* parentNote, int  begin, int end);
+
+    void insertedTrips(cwCave* parentCave, int begin, int end);
+    void insertedNotes(cwTrip* parentTrip, int begin, int end);
+    void insertedScraps(cwNote* parentNote, int begin, int end);
+
 };
 
-
-/**
-  \brief Called when a cave is beginning to be added
-  */
-inline void cwRegionTreeModel::beginInsertCaves(int beginIndex, int endIndex) {
-    beginInsertRows(QModelIndex(), beginIndex, endIndex);
-}
-
-/**
-  \brief Cave removed
-  */
-inline void cwRegionTreeModel::endRemoveCaves(int /*beginIndex*/, int /*endIndex*/) {
-    endRemoveRows();
-}
-
-/**
-  \brief Get's the caving region that this model represents
-  */
-inline cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
-    return Region;
-}
 
 /**
   \brief Checks if index is a trip, returns true if it is, false if it isn't
   */
 inline bool cwRegionTreeModel::isTrip(const QModelIndex &index) const {
-    return trip(index) != nullptr;
+    return index.data(TypeRole).toInt() == TripType;
 }
 
 /**
   \brief Checks if index is a cave, returns true if it is, false if it isn't
   */
 inline bool cwRegionTreeModel::isCave(const QModelIndex &index) const {
-    return cave(index) != nullptr;
+    return index.data(TypeRole).toInt() == CaveType;
 }
 
 /**
@@ -143,11 +147,25 @@ inline bool cwRegionTreeModel::isRegion(const QModelIndex &index) const {
 }
 
 /**
-  Gets the row of the index, this is for qml
-  */
-inline int cwRegionTreeModel::row(const QModelIndex &index) const {
-    return index.row();
+ * @brief cwRegionTreeModel::isScrap
+ * @param index
+ * @return
+ */
+inline bool cwRegionTreeModel::isScrap(const QModelIndex &index) const
+{
+    return index.data(TypeRole).toInt() == ScrapType;
 }
+
+/**
+ * @brief cwRegionTreeModel::isNote
+ * @param index
+ * @return
+ */
+inline bool cwRegionTreeModel::isNote(const QModelIndex &index) const
+{
+    return index.data(TypeRole).toInt() == NoteType;
+}
+
 
 
 

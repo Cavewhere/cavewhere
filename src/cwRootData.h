@@ -61,6 +61,7 @@ class cwRootData : public QObject
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
+    Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -79,6 +80,7 @@ public:
     cwEventRecorderModel* eventRecorderModel() const;
     cwTaskManagerModel* taskManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
+    cwRegionTreeModel* regionTreeModel() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -116,6 +118,7 @@ private:
     cwEventRecorderModel* EventRecorderModel; //!<
     cwTaskManagerModel* TaskManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
+    cwRegionTreeModel* RegionTreeModel; //!<
 
 
     //Default class, aren't used exept to prevent qml from complaining
@@ -232,6 +235,14 @@ inline cwTaskManagerModel* cwRootData::taskManagerModel() const {
 */
 inline cwPageSelectionModel* cwRootData::pageSelectionModel() const {
     return PageSelectionModel;
+}
+
+/**
+* @brief cwRootD::regionTreeModel
+* @return
+*/
+inline cwRegionTreeModel* cwRootData::regionTreeModel() const {
+    return RegionTreeModel;
 }
 
 

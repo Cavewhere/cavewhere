@@ -93,6 +93,8 @@
 #include "cwBaseNotePointInteraction.h"
 #include "cwBaseNoteLeadInteraction.h"
 #include "cwScrapLeadView.h"
+#include "cwRegionTreeModel.h"
+#include "cwLeadView.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -196,4 +198,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwBaseNoteLeadInteraction>("Cavewhere", 1, 0, "BaseNoteLeadInteraction");
     qmlRegisterType<cwScrapLeadView>("Cavewhere", 1, 0, "ScrapLeadView");
     qmlRegisterType<cwScrapPointView>();
+    qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
+    qmlRegisterType<cwLeadView>("Cavewhere", 1, 0, "LeadView");
 }

@@ -45,8 +45,11 @@ cwRootData::cwRootData(QObject *parent) :
     Project->setTaskManager(TaskManagerModel);
 
     Region = Project->cavingRegion();
-
     Region->setUndoStack(undoStack());
+
+    //Setup the region tree
+    RegionTreeModel = new cwRegionTreeModel(this);
+    RegionTreeModel->setCavingRegion(Region);
 
     //Setup the loop closer
     LinePlotManager = new cwLinePlotManager(this);
@@ -55,6 +58,7 @@ cwRootData::cwRootData(QObject *parent) :
     //Setup the scrap manager
     ScrapManager = new cwScrapManager(this);
     ScrapManager->setProject(Project);
+    ScrapManager->setRegionTreeModel(RegionTreeModel);
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setTaskManager(TaskManagerModel);
 
@@ -80,6 +84,8 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+
 }
 
 /**

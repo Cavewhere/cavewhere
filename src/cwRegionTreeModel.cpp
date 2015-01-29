@@ -10,6 +10,9 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwScrap.h"
+#include "cwSurveyNoteModel.h"
+#include "cwNote.h"
 #include "cwGlobalIcons.h"
 
 //Qt include
@@ -27,13 +30,284 @@ QHash<int, QByteArray> cwRegionTreeModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
     roles[TypeRole] = "indexType";
-    roles[NameRole] = "name";
-    roles[DateRole] = "date"; //Only valid for trips
     roles[ObjectRole] = "object";
-    roles[IconSourceRole] = "iconSource";
     return roles;
 }
 
+
+/**
+  \brief Get's the caving region that this model represents
+  */
+cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
+    return Region;
+}
+
+/**
+ * @brief cwRegionTreeModel::beginInsertCaves
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginInsertCaves(QModelIndex parent, int begin, int end)
+{
+    Q_UNUSED(parent);
+    beginInsertRows(QModelIndex(), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedCaves
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
+{
+    Q_UNUSED(parent);
+    Q_ASSERT(parent == QModelIndex());
+
+    addCaveConnections(begin, end);
+    endInsertRows();
+
+    for(int i = begin; i <= end; i++) {
+        cwCave* cave = Region->cave(i);
+        if(cave->tripCount() > 0) {
+            QModelIndex parentCaveIndex = index(cave);
+            beginInsertRows(parentCaveIndex, 0, cave->tripCount() - 1);
+            insertedTrips(cave, 0, cave->tripCount() - 1);
+        }
+    }
+}
+
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveCaves
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
+{
+    Q_UNUSED(parent);
+    Q_ASSERT(parent == QModelIndex());
+
+    for(int i = begin; i < end; i++) {
+        cwCave* cave = index(i, 0, QModelIndex()).data(ObjectRole).value<cwCave*>();
+        beginRemoveTrips(cave, 0, cave->trips().size() - 1);
+        endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+    }
+
+    removeCaveConnections(begin, end);
+    beginRemoveRows(QModelIndex(), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::removedCaves
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::removedCaves(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    endRemoveRows();
+}
+
+/**
+ * @brief cwRegionTreeModel::beginInsertTrips
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginInsertTrips(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
+    cwCave* parentCave = static_cast<cwCave*>(sender());
+
+    QModelIndex parentIndex = index(parentCave);
+
+    beginInsertRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedTrips
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedTrips(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
+    cwCave* parentCave = static_cast<cwCave*>(sender());
+
+    insertedTrips(parentCave, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveTrips
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveTrips(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
+    cwCave* parentCave = static_cast<cwCave*>(sender());
+
+    beginRemoveTrips(parentCave, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::removedTrips
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::removedTrips(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
+    Q_UNUSED(parent);
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    endRemoveRows();
+}
+
+/**
+ * @brief cwRegionTreeModel::beginInsertNotes
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginInsertNotes(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
+    cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
+
+    beginRemoveNotes(parentNoteModel->parentTrip(), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedNotes
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedNotes(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
+    cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
+
+    insertedNotes(parentNoteModel->parentTrip(), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveNotes
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveNotes(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_UNUSED(parent);
+
+    Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
+    cwSurveyNoteModel* noteModel = static_cast<cwSurveyNoteModel*>(sender());
+
+    beginRemoveNotes(noteModel->parentTrip(), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::removeNotes
+ * @param parent
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::removeNotes(QModelIndex parent, int begin, int end)
+{
+    Q_ASSERT(parent == QModelIndex());
+    Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
+    Q_UNUSED(parent);
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    endRemoveRows();
+}
+
+/**
+ * @brief cwRegionTreeModel::beginInsertScraps
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginInsertScraps(int begin, int end)
+{
+    Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    cwNote* parentNote = static_cast<cwNote*>(sender());
+
+    QModelIndex parentIndex = index(parentNote);
+
+    beginInsertRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedScraps
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedScraps(int begin, int end)
+{
+    Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    insertedScraps(qobject_cast<cwNote*>(sender()), begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveScraps
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveScraps(int begin, int end)
+{
+    Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    cwNote* parentNote = static_cast<cwNote*>(sender());
+    QModelIndex parentIndex = index(parentNote);
+
+    beginRemoveRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::removedScraps
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::removedScraps(int begin, int end)
+{
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    endRemoveRows();
+}
+
+/**
+ * @brief cwRegionTreeModel::setCavingRegion
+ * @param region
+ */
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
    //Remove all the connections
     removeCaveConnections(0, rowCount() - 1);
@@ -41,36 +315,81 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
     //Reset the model
     beginResetModel();
     Region = region;
-    connect(Region, SIGNAL(beginInsertCaves(int,int)), SLOT(beginInsertCaves(int,int)));
-    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(endInsertCaves(int,int)));
-    connect(Region, SIGNAL(beginRemoveCaves(int,int)), SLOT(beginRemoveCaves(int,int)));
-    connect(Region, SIGNAL(removedCaves(int,int)), SLOT(endRemoveCaves(int,int)));
+    connect(Region, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)), SLOT(beginInsertCaves(QModelIndex,int,int)));
+    connect(Region, SIGNAL(rowsInserted(QModelIndex,int,int)), SLOT(insertedCaves(QModelIndex,int,int)));
+    connect(Region, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)), SLOT(beginRemoveCaves(QModelIndex,int,int)));
+    connect(Region, SIGNAL(rowsRemoved(QModelIndex,int,int)), SLOT(removedCaves(QModelIndex,int,int)));
     endResetModel();
 
     addCaveConnections(0, rowCount() - 1);
 }
 
-
+/**
+ * @brief cwRegionTreeModel::index
+ * @param row
+ * @param column
+ * @param parent
+ * @return
+ */
 QModelIndex cwRegionTreeModel::index ( int row, int column, const QModelIndex & parent) const {
-    if(column != 0) { return QModelIndex(); }
-    if(Region == nullptr) { return QModelIndex(); }
+    Q_ASSERT(column == 0);
+    if(Region.isNull()) { return QModelIndex(); }
     if(row < 0) { return QModelIndex(); }
 
-    if(!parent.isValid()) {
-        //Try to get a cave
-        if(row >= Region->caveCount()) {
-            return QModelIndex();
+    switch(parent.data(TypeRole).toInt()) {
+    case RegionType: {
+        if(!parent.isValid()) {
+            //Try to get a cave
+            if(row >= Region->caveCount()) {
+                return QModelIndex();
+            }
+            return createIndex(row, column, Region->cave(row));
         }
-        return createIndex(row, column, Region->cave(row));
+        Q_ASSERT(false);
+        break;
     }
 
-    cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-    if(parentCave != nullptr) {
-        if(row >= parentCave->tripCount()) {
-            return QModelIndex();
-        }
+    case CaveType: {
+        cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
+        if(parentCave != nullptr) {
+            if(row >= parentCave->tripCount()) {
+                return QModelIndex();
+            }
 
-        return createIndex(row, column, parentCave->trip(row));
+            return createIndex(row, column, parentCave->trip(row));
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    case TripType: {
+        cwTrip* parentTrip = qobject_cast<cwTrip*>((QObject*)parent.internalPointer());
+        if(parentTrip != nullptr) {
+            if(row >= parentTrip->notes()->notes().size()) {
+                return QModelIndex();
+            }
+
+            return createIndex(row, column, parentTrip->notes()->notes().at(row));
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    case NoteType: {
+        cwNote* parentNote = qobject_cast<cwNote*>((QObject*)parent.internalPointer());
+        if(parentNote != nullptr) {
+            if(row >= parentNote->scraps().size()) {
+                return QModelIndex();
+            }
+
+            return createIndex(row, column, parentNote->scrap(row));
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    default:
+        break;
     }
 
     return QModelIndex();
@@ -107,25 +426,110 @@ QModelIndex cwRegionTreeModel::index (cwTrip* trip) const {
     return index(tripIndex, 0, parentIndex);
 }
 
+/**
+ * @brief cwRegionTreeModel::index
+ * @param note
+ * @return
+ */
+QModelIndex cwRegionTreeModel::index(cwNote *note) const
+{
+    cwTrip* parentTrip = note->parentTrip();
+    if(parentTrip == nullptr) { return QModelIndex(); }
+    int noteIndex = parentTrip->notes()->notes().indexOf(note);
 
+    QModelIndex parentIndex = index(parentTrip);
+    if(!parentIndex.isValid()) { return QModelIndex(); }
+
+    if(noteIndex < 0) { return QModelIndex(); }
+
+    return index(noteIndex, 0, parentIndex);
+}
+
+/**
+ * @brief cwRegionTreeModel::index
+ * @param scrap
+ * @return
+ */
+QModelIndex cwRegionTreeModel::index(cwScrap *scrap) const
+{
+    cwNote* parentNote = scrap->parentNote();
+    if(parentNote == nullptr) { return QModelIndex(); }
+    int scrapIndex = parentNote->scraps().indexOf(scrap);
+
+    QModelIndex parentIndex = index(parentNote);
+    if(!parentIndex.isValid()) { return QModelIndex(); }
+
+    if(scrapIndex < 0) { return QModelIndex(); }
+
+    return index(scrapIndex, 0, parentIndex);
+}
+
+/**
+ * @brief cwRegionTreeModel::parent
+ * @param index
+ * @return
+ */
 QModelIndex cwRegionTreeModel::parent ( const QModelIndex & index ) const {
-    cwCave* cave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(cave != nullptr) {
-        return QModelIndex(); //Caves don't have parents
+    switch(index.data(TypeRole).toInt()) {
+    case RegionType:
+        return QModelIndex();
+    case CaveType:
+        return QModelIndex();
+
+    case TripType: {
+
+        cwTrip* trip = qobject_cast<cwTrip*>(static_cast<QObject*>(index.internalPointer()));
+        if(trip != nullptr) {
+            cwCave* parentCave = trip->parentCave();
+            int row = Region->indexOf(parentCave);
+            Q_ASSERT(row >= 0); //This should always return with a valid index
+
+            return createIndex(row, 0, parentCave);
+        }
+
+        Q_ASSERT(false);
+        break;
     }
 
-    cwTrip* trip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(trip != nullptr) {
-        cwCave* parentCave = qobject_cast<cwCave*>(((QObject*)trip)->parent());
-        int row = Region->indexOf(parentCave);
-        Q_ASSERT(row >= 0); //This should always return with a valid index
+    case NoteType: {
+        cwNote* note = qobject_cast<cwNote*>(static_cast<QObject*>(index.internalPointer()));
+        if(note != nullptr) {
+            cwTrip* parentTrip = note->parentTrip();
+            int row = parentTrip->notes()->notes().indexOf(note);
+            Q_ASSERT(row >= 0);
 
-        return createIndex(row, 0, parentCave);
+            return createIndex(row, 0, parentTrip);
+        }
+
+        Q_ASSERT(false);
+        break;
+    }
+
+    case ScrapType: {
+        cwScrap* scrap = qobject_cast<cwScrap*>(static_cast<QObject*>(index.internalPointer()));
+        if(scrap != nullptr) {
+            cwNote* parentNote = scrap->parentNote();
+            int row = parentNote->scraps().indexOf(scrap);
+            Q_ASSERT(row >= 0);
+
+            return createIndex(row, 0, parentNote);
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    default:
+        break;
     }
 
     return QModelIndex();
 }
 
+/**
+ * @brief cwRegionTreeModel::rowCount
+ * @param parent
+ * @return
+ */
 int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
     if(Region == nullptr) { return 0; }
 
@@ -133,20 +537,63 @@ int cwRegionTreeModel::rowCount ( const QModelIndex & parent ) const {
         return Region->caveCount();
     }
 
-    cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
-    if(parentCave != nullptr) {
-        return parentCave->tripCount();
+    switch(parent.data(TypeRole).toInt()) {
+    case RegionType: {
+        Q_ASSERT(false);
+        break;
+    }
+
+    case CaveType: {
+        cwCave* parentCave = qobject_cast<cwCave*>((QObject*)parent.internalPointer());
+        if(parentCave != nullptr) {
+            return parentCave->tripCount();
+        }
+        Q_ASSERT(false);
+        break;
+
+    }
+
+    case TripType: {
+        cwTrip* parentTrip = qobject_cast<cwTrip*>((QObject*)parent.internalPointer());
+        if(parentTrip != nullptr) {
+            return parentTrip->notes()->rowCount();
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    case NoteType: {
+        cwNote* parentNote = qobject_cast<cwNote*>((QObject*)parent.internalPointer());
+        if(parentNote != nullptr) {
+            return parentNote->scraps().size();
+        }
+        Q_ASSERT(false);
+        break;
+    }
+
+    default:
+        break;
     }
 
     return 0;
 }
 
+/**
+ * @brief cwRegionTreeModel::columnCount
+ * @return
+ */
 int cwRegionTreeModel::columnCount ( const QModelIndex & /*parent*/) const {
     if(Region == nullptr) { return 0; }
 
     return 1; //Always one column
 }
 
+/**
+ * @brief cwRegionTreeModel::data
+ * @param index
+ * @param role
+ * @return
+ */
 QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
     if(!index.isValid()) {     //Root item selected
         switch(role) {
@@ -156,129 +603,55 @@ QVariant cwRegionTreeModel::data ( const QModelIndex & index, int role ) const {
         return QVariant();
     }
 
-    cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
+    cwCave* currentCave = qobject_cast<cwCave*>(static_cast<QObject*>(index.internalPointer()));
     if(currentCave != nullptr) {
         switch(role) {
-        case NameRole:
-        case Qt::DisplayRole:
-            return QVariant(currentCave->name());
-        case Qt::DecorationRole: {
-            QPixmap icon;
-            if(!QPixmapCache::find(cwGlobalIcons::Cave, &icon)) {
-                icon = QPixmap(cwGlobalIcons::CaveFilename);
-                cwGlobalIcons::Cave = QPixmapCache::insert(icon);
-            }
-            return QVariant(icon);
-        }
         case ObjectRole:
             return QVariant::fromValue(currentCave);
         case TypeRole:
             return CaveType;
-        case DateRole:
-            return QDate(); //Caves dont have a date
-        case IconSourceRole:
-            return QUrl::fromLocalFile(":icons/cave.png");
         default:
             return QVariant();
         }
     }
 
-    cwTrip* currentTrip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
+    cwTrip* currentTrip = qobject_cast<cwTrip*>(static_cast<QObject*>(index.internalPointer()));
     if(currentTrip != nullptr) {
         switch(role) {
-        case NameRole:
-        case Qt::DisplayRole:
-            return QVariant(currentTrip->name());
-        case Qt::DecorationRole: {
-            QPixmap icon;
-            if(!QPixmapCache::find(cwGlobalIcons::Trip, &icon)) {
-                icon = QPixmap(cwGlobalIcons::TripFilename);
-                cwGlobalIcons::Trip = QPixmapCache::insert(icon);
-            }
-            return QVariant(icon);
-        }
         case ObjectRole:
             return QVariant::fromValue(currentTrip);
         case TypeRole:
             return TripType;
-        case DateRole:
-            return QVariant(currentTrip->date());
-        case IconSourceRole:
-            return QUrl::fromLocalFile(":icons/trip.png");
         default:
             return QVariant();
         }
     }
 
+    cwNote* note = qobject_cast<cwNote*>(static_cast<QObject*>(index.internalPointer()));
+    if(note != nullptr) {
+        switch(role) {
+        case ObjectRole:
+            return QVariant::fromValue(note);
+        case TypeRole:
+            return NoteType;
+        default:
+            return QVariant();
+        }
+    }
 
+    cwScrap* scrap = qobject_cast<cwScrap*>(static_cast<QObject*>(index.internalPointer()));
+    if(scrap != nullptr) {
+        switch(role) {
+        case ObjectRole:
+            return QVariant::fromValue(scrap);
+        case TypeRole:
+            return ScrapType;
+        default:
+            return QVariant();
+        }
+    }
 
     return QVariant();
-}
-
-/**
-  \brief Sets the data for the model
-  */
-bool cwRegionTreeModel::setData(const QModelIndex &index, const QVariant &value, int role) {
-    if(!index.isValid()) { return false; }
-
-    cwCave* currentCave = qobject_cast<cwCave*>((QObject*)index.internalPointer());
-    if(currentCave != nullptr) {
-        switch(role) {
-        case NameRole:
-        case Qt::DisplayRole:
-            currentCave->setName(value.toString());
-            emit dataChanged(index, index);
-            return true;
-        default:
-            return false;
-        }
-    }
-
-    cwTrip* currentTrip = qobject_cast<cwTrip*>((QObject*)index.internalPointer());
-    if(currentTrip != nullptr) {
-        switch(role) {
-        case NameRole:
-        case Qt::DisplayRole:
-            currentTrip->setName(value.toString());
-            emit dataChanged(index, index);
-            return true;
-        case DateRole:
-            currentTrip->setDate(value.toDate());
-            emit dataChanged(index, index);
-            return true;
-        default:
-            return false;
-        }
-    }
-    return false;
-}
-
-/**
-  \brief This removes a item from the model
-
-  If the item is a cave then it removes the cave from the index
-  If the item is a trip then it removes the trip from the parent cave
-  */
-void cwRegionTreeModel::removeIndex(QModelIndex item) {
-    if(!item.isValid()) { return; } //Can't remove an invalid
-
-    QModelIndex parentItem = parent(item);
-
-    if(item.data(TypeRole) == CaveType) {
-        //item is a cave remove it from the region
-        Region->removeCave(item.row());
-    } else if(item.data(TypeRole) == TripType) {
-        //item is a trip remove it from the parent cave
-        cwCave* parentCave = cave(parentItem);
-        Q_ASSERT(parentCave != nullptr);
-
-        parentCave->removeTrip(item.row());
-    }
-}
-
-Qt::ItemFlags cwRegionTreeModel::flags ( const QModelIndex & index) const {
-    Q_UNUSED(index);
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
 }
 
 /**
@@ -308,101 +681,34 @@ cwCave* cwRegionTreeModel::cave(const QModelIndex& index) const {
 }
 
 /**
-  \brief New caves inserted
-  */
-void cwRegionTreeModel::endInsertCaves(int beginIndex, int endIndex) {
-    endInsertRows();
-
-    addCaveConnections(beginIndex, endIndex);
+ * @brief cwRegionTreeModel::note
+ * @param index
+ * @return
+ */
+cwNote *cwRegionTreeModel::note(const QModelIndex &index) const
+{
+    QVariant noteVariant = data(index, ObjectRole);
+    if(noteVariant.canConvert<cwNote*>()) {
+        cwNote* note = noteVariant.value<cwNote*>();
+        return note;
+    }
+    return nullptr;
 }
 
 /**
-  \brief Caled when a cave is about to be
-  */
-void cwRegionTreeModel::beginRemoveCaves(int beginIndex, int endIndex) {
-    removeCaveConnections(beginIndex, endIndex);
-
-    beginRemoveRows(QModelIndex(), beginIndex, endIndex);
+ * @brief cwRegionTreeModel::scrap
+ * @param index
+ * @return
+ */
+cwScrap *cwRegionTreeModel::scrap(const QModelIndex &index) const
+{
+    QVariant scrapVariant = data(index, ObjectRole);
+    if(scrapVariant.canConvert<cwScrap*>()) {
+        cwScrap* note = scrapVariant.value<cwScrap*>();
+        return note;
+    }
+    return nullptr;
 }
-
-/**
-  \brief The cave has begun inserting trips into itself.
-
-  This alerts the views of this model, that it's changing
-  */
-void cwRegionTreeModel::beginInsertTrip(int beginIndex, int endIndex) {
-    cwCave* cave = qobject_cast<cwCave*>(sender());
-
-    QModelIndex caveIndex = index(cave);
-    Q_ASSERT(caveIndex.isValid());
-
-    beginInsertRows(caveIndex, beginIndex, endIndex);
-}
-
-/**
-  \brief The cave has inserted trips into itself
-
-  This update the trip connections
-  */
-void cwRegionTreeModel::endInsertTrip(int beginIndex, int endIndex) {
-    cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_ASSERT(cave != nullptr);
-
-    endInsertRows();
-
-    addTripConnections(cave, beginIndex, endIndex);
-}
-
-/**
-  \brief The cave has begun to removed trips from itself
-
-  This alerts the views of this model, to update themselfs
-  */
-void cwRegionTreeModel::beginRemoveTrip(int beginIndex, int endIndex) {
-    cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_ASSERT(cave != nullptr);
-
-    QModelIndex caveIndex = index(cave);
-    Q_ASSERT(caveIndex.isValid());
-
-    removeTripConnections(cave, beginIndex, endIndex);
-
-    beginRemoveRows(caveIndex, beginIndex, endIndex);
-}
-
-/**
-  \brief The cave has removed the trips from itself
-
-  This alerts the views to update themselves
-  */
-void cwRegionTreeModel::endRemoveTrip(int /*beginIndex*/, int /*endIndex*/) {
-    cwCave* cave = qobject_cast<cwCave*>(sender());
-    Q_UNUSED(cave);
-    Q_ASSERT(cave != nullptr);
-
-    endRemoveRows();
-}
-
-
-/**
-  \brief calls dataChanged() when the cave data has changed
-  */
- void cwRegionTreeModel::caveDataChanged() {
-     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-     cwCave* cave = static_cast<cwCave*>(sender());
-     QModelIndex modelIndex = index(cave);
-     emit dataChanged(modelIndex, modelIndex);
- }
-
- /**
-   \brief calls dataChanged() when the trip data has changed
-   */
- void cwRegionTreeModel::tripDataChanged() {
-     Q_ASSERT(qobject_cast<cwTrip*>(sender()) != nullptr);
-     cwTrip* trip = static_cast<cwTrip*>(sender());
-     QModelIndex modelIndexOfTrip = index(trip);
-     emit dataChanged(modelIndexOfTrip, modelIndexOfTrip);
- }
 
 /**
   \brief Adds all the connection for a cave
@@ -411,12 +717,15 @@ void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
 
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
-        connect(cave, SIGNAL(nameChanged()), SLOT(caveDataChanged()));
 
-        connect(cave, SIGNAL(beginInsertTrips(int,int)), SLOT(beginInsertTrip(int,int)));
-        connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(endInsertTrip(int,int)));
-        connect(cave, SIGNAL(beginRemoveTrips(int,int)), SLOT(beginRemoveTrip(int,int)));
-        connect(cave, SIGNAL(removedTrips(int,int)), SLOT(endRemoveTrip(int,int)));
+        connect(cave, SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
+                this, SLOT(beginInsertTrips(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(cave, SIGNAL(rowsInserted(QModelIndex,int,int)),
+                this, SLOT(insertedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(cave, SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
+                this, SLOT(beginRemoveTrips(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(cave, SIGNAL(rowsRemoved(QModelIndex,int,int)),
+                this, SLOT(removedTrips(QModelIndex,int,int)), Qt::UniqueConnection);
 
         addTripConnections(cave, 0, cave->tripCount() - 1);
     }
@@ -438,8 +747,17 @@ void cwRegionTreeModel::removeCaveConnections(int beginIndex, int endIndex) {
 void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* currentTrip = parentCave->trip(i);
-        connect(currentTrip, SIGNAL(nameChanged()), SLOT(tripDataChanged()));
-        connect(currentTrip, SIGNAL(dateChanged(QDate)), SLOT(tripDataChanged()));
+
+        connect(currentTrip->notes(), SIGNAL(rowsAboutToBeInserted(QModelIndex,int,int)),
+                this, SLOT(beginInsertNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(currentTrip->notes(), SIGNAL(rowsInserted(QModelIndex,int,int)),
+                this, SLOT(insertedNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(currentTrip->notes(), SIGNAL(rowsAboutToBeRemoved(QModelIndex,int,int)),
+                this, SLOT(beginRemoveNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+        connect(currentTrip->notes(), SIGNAL(rowsRemoved(QModelIndex,int,int)),
+                this, SLOT(removeNotes(QModelIndex,int,int)), Qt::UniqueConnection);
+
+        addNoteConnections(currentTrip, 0, currentTrip->notes()->notes().size() - 1);
     }
 }
 
@@ -455,5 +773,148 @@ void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex
 
 }
 
+/**
+ * @brief cwRegionTreeModel::addNoteConnections
+ * @param parentTrip
+ * @param beginIndex
+ * @param endIndex
+ */
+void cwRegionTreeModel::addNoteConnections(cwTrip *parentTrip, int beginIndex, int endIndex)
+{
+   for(int i = beginIndex; i <= endIndex; i++) {
+       cwNote* note = parentTrip->notes()->notes().at(i);
+       connect(note, SIGNAL(beginInsertingScraps(int,int)),
+               this, SLOT(beginInsertScraps(int,int)), Qt::UniqueConnection);
+       connect(note, SIGNAL(insertedScraps(int,int)),
+               this, SLOT(insertedScraps(int,int)), Qt::UniqueConnection);
+       connect(note, SIGNAL(beginRemovingScraps(int,int)),
+               this, SLOT(beginRemoveScraps(int,int)), Qt::UniqueConnection);
+       connect(note, SIGNAL(removedScraps(int,int)),
+               this, SLOT(removedScraps(int,int)), Qt::UniqueConnection);
+   }
+}
 
+/**
+ * @brief cwRegionTreeModel::removeNoteConnections
+ * @param parentTrip
+ * @param beginIndex
+ * @param endIndex
+ */
+void cwRegionTreeModel::removeNoteConnections(cwTrip *parentTrip, int beginIndex, int endIndex)
+{
+    for(int i = beginIndex; i <= endIndex; i++) {
+        cwNote* note = parentTrip->notes()->notes().at(i);
+        disconnect(note, 0, this, 0);
+    }
+}
 
+/**
+ * @brief cwRegionTreeModel::beginRemoveTrips
+ * @param parentCave
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
+{
+    QModelIndex parentIndex = index(parentCave);
+
+    for(int i = begin; i <= end; i++) {
+        cwTrip* trip = index(i, 0, parentIndex).data(ObjectRole).value<cwTrip*>();
+        beginRemoveNotes(trip, 0, trip->notes()->rowCount() - 1);
+        endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+    }
+
+    removeTripConnections(parentCave, begin, end);
+    beginRemoveRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveNotes
+ * @param parentTrip
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
+{
+    QModelIndex parentIndex = index(parentTrip);
+
+    for(int i = begin; i <= end; i++) {
+        cwNote* note = index(i, 0, parentIndex).data(ObjectRole).value<cwNote*>();
+        beginRemoveScraps(note, 0, note->scraps().size() - 1);
+        endRemoveRows();
+    }
+
+    removeNoteConnections(parentTrip, begin, end);
+    beginRemoveRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::beginRemoveScraps
+ * @param parentNote
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end)
+{
+    QModelIndex parentIndex = index(parentNote);
+
+    beginRemoveRows(parentIndex, begin, end);
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedTrips
+ * @param parentCave
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
+{
+    addTripConnections(parentCave, begin, end);
+    endInsertRows();
+
+    for(int i = begin; i <= end; i++) {
+        cwTrip* trip = parentCave->trip(i);
+        int lastIndex = trip->notes()->rowCount() - 1;
+        if(lastIndex >= 0) {
+            QModelIndex parentTripIndex = index(trip);
+            beginInsertRows(parentTripIndex, 0, lastIndex);
+            insertedNotes(trip, 0, lastIndex);
+        }
+    }
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedNotes
+ * @param parentTrip
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedNotes(cwTrip *parentTrip, int begin, int end)
+{
+    addNoteConnections(parentTrip, begin, end);
+    endInsertRows();
+
+    for(int i = begin; i <= end; i++) {
+        cwNote* note = parentTrip->notes()->notes().at(i);
+        int lastIndex = note->scraps().size() - 1;
+        if(lastIndex >= 0) {
+            QModelIndex parentNoteIndex = index(note);
+            beginInsertRows(parentNoteIndex, 0, lastIndex);
+            insertedScraps(note, 0, lastIndex);
+        }
+    }
+}
+
+/**
+ * @brief cwRegionTreeModel::insertedScraps
+ * @param parentNote
+ * @param begin
+ * @param end
+ */
+void cwRegionTreeModel::insertedScraps(cwNote *parentNote, int begin, int end)
+{
+    Q_UNUSED(parentNote);
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+    endInsertRows();
+}
