@@ -11,3 +11,5 @@ cwTriangulateInData::cwTriangulateInData() :
     Data(new PrivateData())
 {
 }
+
+

@@ -157,6 +157,8 @@ private:
     QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point, const QList<cwTriangulateStation>& stations, const QPolygonF& scrapOutline) const;
     QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations, const QMatrix4x4 &toWorldCoords, const QVector3D &point);
 
+    //For lead handling
+    QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads) const;
 };
 
 /**

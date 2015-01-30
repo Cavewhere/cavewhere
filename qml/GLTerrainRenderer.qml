@@ -36,6 +36,12 @@ RegionViewer {
         region: rootData.region
     }
 
+    LeadView {
+        anchors.fill: parent
+        regionModel: rootData.regionTreeModel
+        camera: renderer.camera
+    }
+
     Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20

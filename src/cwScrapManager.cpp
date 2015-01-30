@@ -366,6 +366,9 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::stationPositionChanged, this, &cwScrapManager::updateScrapStations);
     connect(scrap, &cwScrap::stationRemoved, this, &cwScrapManager::updateScrapStation);
     connect(scrap, &cwScrap::stationNameChanged, this, &cwScrapManager::updateScrapStation);
+    connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
+    connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
+    connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
 }
 
 /**
@@ -393,6 +396,9 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::stationPositionChanged, this, &cwScrapManager::updateScrapStations);
     disconnect(scrap, &cwScrap::stationRemoved, this, &cwScrapManager::updateScrapStation);
     disconnect(scrap, &cwScrap::stationNameChanged, this, &cwScrapManager::updateScrapStation);
+    disconnect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
+    disconnect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
+    disconnect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
 }
 
 /**
@@ -458,6 +464,8 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
     data.setNoteImageResolution(dotsPerMeter);
+
+    data.setLeads(scrap->leads());
 
     return data;
 }
@@ -688,6 +696,62 @@ void cwScrapManager::updateScrapStation(int noteStationIndex)
     Q_UNUSED(noteStationIndex);
     cwScrap* scrap = static_cast<cwScrap*>(sender());
     updateExistingScrapGeometryHelper(scrap);
+}
+
+/**
+ * @brief cwScrapManager::scrapLeadInserted
+ * @param begin
+ * @param end
+ *
+ * Called when a lead is added
+ */
+void cwScrapManager::scrapLeadInserted(int begin, int end)
+{
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+
+    cwScrap* scrap = static_cast<cwScrap*>(sender());
+    updateExistingScrapGeometryHelper(scrap);
+}
+
+/**
+ * @brief cwScrapManager::scrapLeadRemoved
+ * @param begin
+ * @param end
+ *
+ * Called when a lead is removed
+ */
+void cwScrapManager::scrapLeadRemoved(int begin, int end)
+{
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+
+    cwScrap* scrap = static_cast<cwScrap*>(sender());
+    updateExistingScrapGeometryHelper(scrap);
+}
+
+/**
+ * @brief cwScrapManager::scrapLeadUpdated
+ * @param begin
+ * @param end
+ * @param roles
+ *
+ * Called when the lead's data has changed. This only re-runs the scrap if the note position
+ * has changed.
+ */
+void cwScrapManager::scrapLeadUpdated(int begin, int end, QList<int> roles)
+{
+    Q_UNUSED(begin);
+    Q_UNUSED(end);
+
+    cwScrap* scrap = static_cast<cwScrap*>(sender());
+
+    foreach(int role, roles) {
+        if(role == cwScrap::LeadPositionOnNote) {
+            updateExistingScrapGeometryHelper(scrap);
+            break;
+        }
+    }
 }
 
 /**

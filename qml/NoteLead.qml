@@ -23,7 +23,9 @@ ScrapPointItem {
             anchors.fill: parent
 
             onPointSelected: select();
-            onPointMoved: scrap.setLeadData(Scrap.LeadPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
+            onPointMoved: scrap.setLeadData(Scrap.LeadPositionOnNote,
+                                            pointIndex,
+                                            Qt.point(noteCoord.x, noteCoord.y));
         }
     }
 

@@ -34,6 +34,9 @@ public:
     QVector<uint> indices() const;
     void setIndices(QVector<uint> indices);
 
+    QVector<QVector3D> leadPoints() const;
+    void setLeadPoints(QVector<QVector3D> points);
+
     bool isStale() const;
     void setStale(bool isStale);
 
@@ -50,6 +53,7 @@ private:
         QVector<QVector3D> points;
         QVector<QVector2D> texCoords;
         QVector<uint> indices;
+        QVector<QVector3D> leadPoints;
         bool Stale;
     };
 
@@ -110,6 +114,26 @@ inline QVector<uint> cwTriangulatedData::indices() const {
   */
 inline void cwTriangulatedData::setIndices(QVector<uint> indices) {
     Data->indices = indices;
+}
+
+/**
+ * @brief cwTriangulatedData::leadPoints
+ * @return The carpeted lead points for the scrap
+ */
+inline QVector<QVector3D> cwTriangulatedData::leadPoints() const
+{
+    return Data->leadPoints;
+}
+
+/**
+ * @brief cwTriangulatedData::setLeadPoints
+ * @param points - The lead points for the scrap.
+ *
+ * This should only be set by the cwTriangulateTask
+ */
+inline void cwTriangulatedData::setLeadPoints(QVector<QVector3D> points)
+{
+    Data->leadPoints = points;
 }
 
 

@@ -12,10 +12,11 @@
 #include <QSharedData>
 #include <QPolygonF>
 
-//Qt includes
+//Our includes
 #include "cwImage.h"
 #include "cwTriangulateStation.h"
 #include "cwNoteTranformation.h"
+#include "cwLead.h"
 
 class cwTriangulateInData
 {
@@ -37,6 +38,9 @@ public:
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
 
+    QList<cwLead> leads() const;
+    void setLeads(QList<cwLead> leads);
+
 private:
     class PrivateData : public QSharedData {
     public:
@@ -45,6 +49,7 @@ private:
         QPolygonF Outline;
         cwNoteTranformation NoteTransform;
         QList<cwTriangulateStation> Stations;
+        QList<cwLead> Leads;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -123,6 +128,24 @@ inline double cwTriangulateInData::noteImageResolution() const
 inline void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
 {
     Data->DotPerMeter = dotsPerMeter;
+}
+
+/**
+ * @brief cwTriangulateInData::leads
+ * @return The leads that will be processed
+ */
+inline QList<cwLead> cwTriangulateInData::leads() const
+{
+    return Data->Leads;
+}
+
+/**
+ * @brief cwTriangulateInData::setLead
+ * @param leads - Returns the leads that will be morphed
+ */
+inline void cwTriangulateInData::setLeads(QList<cwLead> leads)
+{
+    Data->Leads = leads;
 }
 
 #endif // CWTRIANGULATEINDATA_H

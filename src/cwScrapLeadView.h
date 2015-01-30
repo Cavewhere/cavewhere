@@ -11,6 +11,7 @@
 
 //Our includes
 #include "cwScrapPointView.h"
+#include "cwScrap.h"
 #include "cwGlobalDirectory.h"
 
 //Qt includes
@@ -26,6 +27,9 @@ public:
 
     void setScrap(cwScrap* scrap);
 
+    void setPositionRole(cwScrap::LeadDataRole role);
+    cwScrap::LeadDataRole positionRole() const;
+
 private:
     virtual QUrl qmlSource() const;
     virtual void updateItemPosition(QQuickItem* item, int index);
@@ -35,15 +39,23 @@ private slots:
 
 protected:
 //    virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
+
+private:
+    cwScrap::LeadDataRole PositionRole; //Should be either LeadPositionOnNote or LeadPosition
+
 };
 
+
 /**
- * @brief cwScrapStationView::qmlSource
- * @return The qml source of the point that'll be rendered
+ * @brief cwScrapLeadView::positionRole
+ * @return Returns the position that this view will use to display the lead
+ *
+ * By default this is cwScrap::LeadPositionOnNote.
  */
-inline QUrl cwScrapLeadView::qmlSource() const
+inline cwScrap::LeadDataRole cwScrapLeadView::positionRole() const
 {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/NoteLead.qml");
+    return PositionRole;
 }
+
 
 #endif // CWSCRAPLEADVIEW_H

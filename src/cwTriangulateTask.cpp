@@ -131,14 +131,21 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Create the texture coordinates
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
-    //Morph the points
+    //Morph the points for the scrap
     QVector<QVector3D> points = morphPoints(triangleData.points(), scrapData, toLocal, croppedImage);
+
+    //Morph the lead points for the scrap
+    QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrapData.leads()),
+                                                 scrapData,
+                                                 toLocal,
+                                                 croppedImage);
 
     //For testing
     cwTriangulatedData& outScrapData = TriangulatedScraps[index];
     outScrapData.setIndices(triangleData.indices());
     outScrapData.setPoints(points);
     outScrapData.setTexCoords(texCoords);
+    outScrapData.setLeadPoints(leadPoints);
 }
 
 /**
@@ -881,6 +888,24 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     }
 
     return weightPosition;
+}
+
+/**
+ * @brief cwTriangulateTask::leadPositionToVector3D
+ * @param leads - The leads positions to extract
+ * @return Returns the leads positions in QVector<QVector3D>
+ *
+ * This will go through all the leads and append the positions of the leads in order to QVector.
+ * The vector is then returned.
+ */
+QVector<QVector3D> cwTriangulateTask::leadPositionToVector3D(const QList<cwLead> &leads) const
+{
+    QVector<QVector3D> leadPositions;
+    leadPositions.reserve(leads.size());
+    foreach(const cwLead& lead, leads) {
+        leadPositions.append(QVector3D(lead.positionOnNote()));
+    }
+    return leadPositions;
 }
 
 /**

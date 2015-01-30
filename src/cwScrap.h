@@ -44,7 +44,8 @@ public:
     };
 
     enum LeadDataRole {
-        LeadPosition,
+        LeadPositionOnNote,
+        LeadPosition, //Global in view, calculated in TriangulationData
         LeadDesciption,
         LeadSize,
         LeadUnits,
@@ -275,12 +276,7 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
-/**
-  \brief Sets the triangulation data
-  */
-inline void cwScrap::setTriangulationData(cwTriangulatedData data) {
-    TriangulationData = data;
-}
+
 
 /**
   \brief Gets the triangulation data

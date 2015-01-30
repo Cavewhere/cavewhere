@@ -330,6 +330,11 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
 
     switch(role) {
     case LeadPosition:
+        if(leadIndex < triangulationData().leadPoints().size()) {
+            return triangulationData().leadPoints().at(leadIndex);
+        }
+        return QVector3D();
+    case LeadPositionOnNote:
         return lead.positionOnNote();
     case LeadDesciption:
         return lead.desciption();
@@ -365,7 +370,7 @@ void cwScrap::setLeadData(cwScrap::LeadDataRole role, int leadIndex, QVariant va
 
     cwLead& lead = Leads[leadIndex];
     switch(role) {
-    case LeadPosition:
+    case LeadPositionOnNote:
         lead.setPositionOnNote(value.toPointF());
         break;
     case LeadDesciption:
@@ -894,4 +899,16 @@ void cwScrap::setParentCave(cwCave *cave) {
     if(cave != ParentCave) {
         ParentCave = cave;
     }
+}
+
+/**
+  \brief Sets the triangulation data
+  */
+void cwScrap::setTriangulationData(cwTriangulatedData data) {
+    TriangulationData = data;
+
+    QList<int> roles;
+    roles.append(cwScrap::LeadPosition);
+
+    leadsDataChanged(0, leads().size() - 1, roles);
 }

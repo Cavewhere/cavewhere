@@ -11,42 +11,58 @@
 
 //Qt includes
 #include <QPointer>
+#include <QModelIndex>
 
 //Our includes
 #include "cwAbstractPointManager.h"
-class cwCavingRegion;
+class cwRegionTreeModel;
 class cwScrap;
+class cwScrapLeadView;
+class cwCamera;
 
-class cwLeadView : public cwAbstractPointManager
+/**
+ * @brief The cwLeadView class
+ *
+ * This shows all the leads from all the caves and all scraps. This class creates a cwScrapLeadView
+ * for each scrap, and pass around the same transformation to all of them. It also sets the positionRole()
+ * for each of the cwScrapLeadView to cwScrap::LeadPosition so it uses the global position of the
+ * lead. This global position is calculated by the carpeting algorithm.
+ */
+class cwLeadView : public QQuickItem
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
+    Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
+    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 
 
 public:
-    cwLeadView();
+    cwLeadView(QQuickItem* parent = 0);
     ~cwLeadView();
 
-    cwCavingRegion* region() const;
-    void setRegion(cwCavingRegion* region);
+    cwRegionTreeModel* regionModel() const;
+    void setRegionModel(cwRegionTreeModel* regionModel);
 
-protected:
-    QUrl qmlSource() const;
-    void updateItemData(QQuickItem* item, int pointIndex);
-    void updateItemPosition(QQuickItem* item, int pointIndex);
+    cwCamera* camera() const;
+    void setCamera(cwCamera* camera);
 
 signals:
-    void regionChanged();
+    void regionModelChanged();
+    void cameraChanged();
 
 private:
-    QPointer<cwCavingRegion> Region; //!<
+    QPointer<cwRegionTreeModel> RegionModel; //!<
+    QPointer<cwCamera> Camera; //!<
+    cwTransformUpdater* TransformUpdater;
 
-    QHash<cwScrap*, int> ScrapIndexOffset; //Each scrap will have a range of valid indexes, we mantain this database
+    QHash<cwScrap*, cwScrapLeadView*> ScrapToView; //Each scrap will have a range of valid indexes, we mantain this database
+
+    void addScrap(cwScrap* scrap);
+    void removeScrap(cwScrap* scrap);
 
 private slots:
-
-
+    void scrapsAdded(QModelIndex parent, int begin, int end);
+    void scrapsRemoved(QModelIndex parent, int begin, int end);
 
 };
 

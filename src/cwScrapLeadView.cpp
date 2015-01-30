@@ -10,7 +10,8 @@
 #include "cwScrap.h"
 
 cwScrapLeadView::cwScrapLeadView(QQuickItem *parent) :
-    cwScrapPointView(parent)
+    cwScrapPointView(parent),
+    PositionRole(cwScrap::LeadPositionOnNote)
 {
 
 }
@@ -44,15 +45,26 @@ void cwScrapLeadView::setScrap(cwScrap *scrap)
 
 void cwScrapLeadView::updateItemPosition(QQuickItem *item, int index)
 {
-    QPointF point = Scrap->leadData(cwScrap::LeadPosition, index).value<QPointF>();
-    item->setProperty("position3D", QVector3D(point));
+    QVector3D point;
+    switch (positionRole()) {
+    case cwScrap::LeadPositionOnNote:
+        point = QVector3D(Scrap->leadData(positionRole(), index).value<QPointF>());
+        break;
+    case cwScrap::LeadPosition:
+        point = Scrap->leadData(positionRole(), index).value<QVector3D>();
+        break;
+    default:
+        break;
+    }
+    item->setProperty("position3D", point);
 }
 
 void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
 {
     foreach(int role, roles) {
-        if(role == cwScrap::LeadPosition) {
+        if(positionRole() == role) {
             updateItemsPositions(begin, end);
+            break;
         }
     }
 }
@@ -63,3 +75,33 @@ void cwScrapLeadView::updateViewWithData(int begin, int end, QList<int> roles)
 //    return nullptr;
 //}
 
+/**
+ * @brief cwScrapLeadView::setPositionRole
+ * @param role
+ */
+void cwScrapLeadView::setPositionRole(cwScrap::LeadDataRole role)
+{
+    Q_ASSERT(role == cwScrap::LeadPosition || role == cwScrap::LeadPositionOnNote);
+    if(role != PositionRole) {
+        PositionRole = role;
+        updateAllItemData();;
+    }
+}
+
+/**
+ * @brief cwScrapStationView::qmlSource
+ * @return The qml source of the point that'll be rendered
+ */
+QUrl cwScrapLeadView::qmlSource() const
+{
+    switch(positionRole()) {
+    case cwScrap::LeadPosition:
+        return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/LeadPoint.qml");
+    case cwScrap::LeadPositionOnNote:
+        return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/NoteLead.qml");
+    default:
+        break;
+    }
+    return QUrl();
+
+}

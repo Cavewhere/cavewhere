@@ -124,6 +124,10 @@ private slots:
     void updateScrapStations(int begin, int end); //This is called by cwScrap
     void updateScrapStation(int noteStationIndex); //This is called by a cwScrap
 
+    void scrapLeadInserted(int begin, int end);
+    void scrapLeadRemoved(int begin, int end);
+    void scrapLeadUpdated(int begin, int end, QList<int> roles);
+
     void updateScrapsWithNewNoteResolution(); //This is called by cwNote
     void updateScrapWithNewNoteTransform(); //This is called by cwNoteTransform
 
