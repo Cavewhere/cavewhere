@@ -19,6 +19,7 @@ class cwPage : public QObject
     Q_OBJECT
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
+    Q_PROPERTY(QVariantMap selectionProperties READ selectionProperties WRITE setSelectionProperties NOTIFY selectionPropertiesChanged)
 
 public:
     cwPage();
@@ -34,6 +35,9 @@ public:
 
     void setName(QString name);
     QString name() const { return Name; }
+
+    QVariantMap selectionProperties() const;
+    void setSelectionProperties(QVariantMap selectionProperties);
 
     Q_INVOKABLE QString fullname() const;
 
@@ -51,6 +55,7 @@ public:
 
 signals:
     void nameChanged();
+    void selectionPropertiesChanged();
 
 private slots:
     void renamePage();
@@ -60,6 +65,7 @@ private:
     QPointer<QQmlComponent> Component;
     QString Name;
     QVariantMap PageProperties; //To setup properties on the page
+    QVariantMap SelectionProperties; //Allows for changing the selection of the page
     QHash<QString, cwPage*> ChildPages;
 
     //For automatically renaming the page, these parameters are handed to QMetaObject::invokeMethod
@@ -70,4 +76,11 @@ private:
 
 };
 
+/**
+* @brief cwPage::selectionProperties
+* @return
+*/
+inline QVariantMap cwPage::selectionProperties() const {
+    return SelectionProperties;
+}
 #endif // CWPAGE_H

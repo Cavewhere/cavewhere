@@ -36,6 +36,9 @@ public:
     void setSize(QSizeF size);
     QSizeF size() const;
 
+    void setCompleted(bool compeleted);
+    bool completed() const;
+
 private:
     QSharedDataPointer<cwLeadData> data;
 };

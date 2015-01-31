@@ -62,9 +62,11 @@ public slots:
 
 private slots:
     void loadCurrentPage();
+    void updateSelectionOnCurrentPage();
 
 private:
     QPointer<cwPageSelectionModel> PageSelectionModel; //!<
+    QPointer<cwPage> CurrentPage; //The current page that's begin viewed
     QHash<QQmlComponent*, QQuickItem*> ComponentToItem;
     QList<QQuickItem*> PageItems;
 
@@ -73,6 +75,8 @@ private:
     QQuickItem* UnknownPageItem;
 
     void updateProperties(QQuickItem* pageItem, cwPage* page);
+    void updateProperties(QQuickItem* pageItem, QVariantMap defaultProperties, QVariantMap properties);
+
     void showPage(QQuickItem* pageItem);
     QQuickItem* createChildItemFromComponent(QQmlComponent* component, cwPage* page);
 

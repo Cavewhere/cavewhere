@@ -198,3 +198,14 @@ void cwPage::renamePage()
         }
     }
 }
+
+/**
+* @brief cwPage::setSelectionProperties
+* @param selectionProperties
+*/
+void cwPage::setSelectionProperties(QVariantMap selectionProperties) {
+    if(SelectionProperties != selectionProperties) {
+        SelectionProperties = selectionProperties;
+        emit selectionPropertiesChanged();
+    }
+}

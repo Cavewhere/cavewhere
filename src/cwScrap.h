@@ -49,7 +49,8 @@ public:
         LeadDesciption,
         LeadSize,
         LeadUnits,
-        LeadSupportedUnits
+        LeadSupportedUnits,
+        LeadCompleted
     };
 
     explicit cwScrap(QObject *parent = 0);
@@ -89,6 +90,7 @@ public:
     QList<cwLead> leads() const;
     Q_INVOKABLE QVariant leadData(LeadDataRole role, int leadIndex) const;
     Q_INVOKABLE void setLeadData(LeadDataRole role, int leadIndex, QVariant value);
+    Q_INVOKABLE int numberOfLeads() const;
 
     cwNoteTranformation* noteTransformation() const;
 

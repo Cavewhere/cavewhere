@@ -344,6 +344,8 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
         return parentNote()->parentTrip()->calibrations()->distanceUnit();
     case LeadSupportedUnits:
         return parentNote()->parentTrip()->calibrations()->supportedUnits();
+    case LeadCompleted:
+        return lead.completed();
     }
 
     return QVariant();
@@ -371,19 +373,35 @@ void cwScrap::setLeadData(cwScrap::LeadDataRole role, int leadIndex, QVariant va
     cwLead& lead = Leads[leadIndex];
     switch(role) {
     case LeadPositionOnNote:
+        if(lead.positionOnNote() == value.toPointF()) { return; }
         lead.setPositionOnNote(value.toPointF());
         break;
     case LeadDesciption:
+        if(lead.desciption() == value.toString()) { return; }
         lead.setDescription(value.toString());
         break;
     case LeadSize:
+        if(lead.size() == value.toSizeF()) { return; }
         lead.setSize(value.toSizeF());
+        break;
+    case LeadCompleted:
+        if(lead.completed() == value.toBool()) { return; }
+        lead.setCompleted(value.toBool());
         break;
     default:
         return;
     }
 
     emit leadsDataChanged(leadIndex, leadIndex, roleChanged);
+}
+
+/**
+ * @brief cwScrap::numberOfLeads
+ * @return Returns the number of leads in a scrap
+ */
+int cwScrap::numberOfLeads() const
+{
+    return Leads.size();
 }
 
 /**

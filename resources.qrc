@@ -82,5 +82,6 @@
         <file>icons/question.png</file>
         <file>icons/moreArrowLeft.png</file>
         <file>icons/quoteTriangle.png</file>
+        <file>icons/x.png</file>
     </qresource>
 </RCC>

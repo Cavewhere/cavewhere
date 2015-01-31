@@ -95,6 +95,7 @@
 #include "cwScrapLeadView.h"
 #include "cwRegionTreeModel.h"
 #include "cwLeadView.h"
+#include "cwLinkGenerator.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -200,4 +201,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScrapPointView>();
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwLeadView>("Cavewhere", 1, 0, "LeadView");
+    qmlRegisterType<cwLinkGenerator>("Cavewhere", 1, 0, "LinkGenerator");
 }

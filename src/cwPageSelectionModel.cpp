@@ -252,7 +252,7 @@ void cwPageSelectionModel::gotoPageByName(cwPage *parentPage, QString subPage)
     cwPage* childPage = parentPage->childPage(subPage);
 
     if(childPage == nullptr) {
-        UnknownLinkAddress = QString("%1/%2").arg(parentPage->fullname()).arg(subPage);
+        UnknownLinkAddress = QString("%1%2%3").arg(parentPage->fullname()).arg(seperator()).arg(subPage);
     }
 
     gotoPage(childPage);
@@ -319,6 +319,15 @@ void cwPageSelectionModel::clear()
 }
 
 /**
+ * @brief cwPageSelectionModel::seperator
+ * @return "/"
+ */
+QString cwPageSelectionModel::seperator()
+{
+    return QString("/");
+}
+
+/**
  * @brief cwPageSelectionModel::expandLink
  * @param link - The link that will be expanded
  * @return A list of expanded links
@@ -335,7 +344,7 @@ void cwPageSelectionModel::clear()
  */
 QStringList cwPageSelectionModel::expandLink(QString link) const
 {
-    QStringList linkParts = link.split("/");
+    QStringList linkParts = link.split(seperator());
 
     QStringList expandedLinks;
     expandedLinks.reserve(linkParts.size());
@@ -349,7 +358,7 @@ QStringList cwPageSelectionModel::expandLink(QString link) const
         QString linkPart = linkParts.at(i);
 
         if(i != 0) {
-            linkPart = QString("/") + linkPart;
+            linkPart = seperator() + linkPart;
         }
 
         for(int j = i; j < linkParts.size(); j++) {
@@ -385,7 +394,7 @@ void cwPageSelectionModel::printPageHistory() const
  * @return
  *
  * This will iterate the through the pageTree starting from the RootNode and find the link base
- * on the string. The string will be broken into it's parents using "/" as a seperator. It's part
+ * on the string. The string will be broken into it's parents using seperator(). It's part
  * is used to traverse the tree.
  *
  * If the link can't be found, then this returns null page

@@ -63,6 +63,8 @@ public:
 
     Q_INVOKABLE void clear();
 
+    static QString seperator();
+
 signals:
     void currentPageAddressChanged();
     void currentPageChanged();

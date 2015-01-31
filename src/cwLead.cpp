@@ -14,6 +14,7 @@ public:
     QPointF Position;
     QString Description;
     QSizeF Size;
+    bool Completed;
 
 };
 
@@ -93,5 +94,24 @@ void cwLead::setSize(QSizeF size)
 QSizeF cwLead::size() const
 {
     return data->Size;
+}
+
+/**
+ * @brief cwLead::setCompeleted
+ * @param compeleted - Set to true if the lead has been complete, true if completed and false if
+ * it is still a lead
+ */
+void cwLead::setCompleted(bool compeleted)
+{
+    data->Completed = compeleted;
+}
+
+/**
+ * @brief cwLead::completed
+ * @return return true if the lead is completed and false if the lead is still a lead
+ */
+bool cwLead::completed() const
+{
+    return data->Completed;
 }
 

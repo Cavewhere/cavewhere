@@ -35,6 +35,7 @@ class cwPageViewAttachedType : public QObject
 
     Q_PROPERTY(cwPage* page READ page NOTIFY pageChanged)
     Q_PROPERTY(QVariantMap defaultProperties READ defaultProperties WRITE setDefaultProperties NOTIFY defaultPropertiesChanged)
+    Q_PROPERTY(QVariantMap defaultSelectionProperties READ defaultSelectionProperties WRITE setDefaultSelectionProperties NOTIFY defaultSelectionPropertiesChanged)
 
 public:
     explicit cwPageViewAttachedType(QObject *parent = 0);
@@ -46,15 +47,20 @@ public:
     QVariantMap defaultProperties() const;
     void setDefaultProperties(QVariantMap defaultProperties);
 
+    QVariantMap defaultSelectionProperties() const;
+    void setDefaultSelectionProperties(QVariantMap defaultSelectionProperties);
+
 signals:
     void pageChanged();
     void defaultPropertiesChanged();
+    void defaultSelectionPropertiesChanged();
 
 public slots:
 
 private:
     QPointer<cwPage> Page; //!<
     QVariantMap DefaultProperties; //!<
+    QVariantMap DefaultSelectionProperties; //!<
 
 };
 
@@ -64,6 +70,14 @@ private:
 */
 inline QVariantMap cwPageViewAttachedType::defaultProperties() const {
     return DefaultProperties;
+}
+
+/**
+* @brief cwPageViewAttachedType::defaultSelectionProperties
+* @return
+*/
+inline QVariantMap cwPageViewAttachedType::defaultSelectionProperties() const {
+    return DefaultSelectionProperties;
 }
 
 #endif // CWPAGEVIEWATTACHEDTYPE_H

@@ -46,7 +46,7 @@ void cwPageView::setPageSelectionModel(cwPageSelectionModel* pageSelectionModel)
 
         if(!PageSelectionModel.isNull()) {
             connect(PageSelectionModel, &cwPageSelectionModel::currentPageChanged,
-                       this, &cwPageView::loadCurrentPage);
+                    this, &cwPageView::loadCurrentPage);
 
             loadCurrentPage();
         }
@@ -66,40 +66,75 @@ void cwPageView::loadCurrentPage()
     Q_ASSERT(!PageSelectionModel.isNull());
 
     cwPage* currentPage = PageSelectionModel->currentPage();
+    if(currentPage != CurrentPage) {
 
-    if(currentPage != nullptr && currentPage->component() != nullptr) {
+        if(!CurrentPage.isNull()) {
+            disconnect(CurrentPage, &cwPage::selectionPropertiesChanged,
+                       this, &cwPageView::updateSelectionOnCurrentPage);
+        }
 
-        QQuickItem* item = ComponentToItem.value(currentPage->component());
-        if(item == nullptr) {
-            item = createChildItemFromComponent(currentPage->component(), currentPage);
-            ComponentToItem.insert(currentPage->component(), item);
-        } else {
-            //Update all the properties for the page, the parent pages
-            QStack<cwPage*> parentPages;
-            cwPage* stackCurrent = currentPage;
-            while(stackCurrent != nullptr) {
-                parentPages.push(stackCurrent);
-                stackCurrent = stackCurrent->parentPage();
-            }
+        CurrentPage = currentPage;
 
-            while(!parentPages.isEmpty()) {
-                cwPage* page = parentPages.pop();
-                QQuickItem* pageItem = ComponentToItem.value(page->component());
+        if(currentPage != nullptr && currentPage->component() != nullptr) {
 
-                if(pageItem != nullptr) {
-                    updateProperties(pageItem, page);
+            connect(CurrentPage, &cwPage::selectionPropertiesChanged,
+                    this, &cwPageView::updateSelectionOnCurrentPage);
+
+            QQuickItem* item = ComponentToItem.value(currentPage->component());
+            if(item == nullptr) {
+                item = createChildItemFromComponent(currentPage->component(), currentPage);
+                ComponentToItem.insert(currentPage->component(), item);
+            } else {
+                //Update all the properties for the page, the parent pages
+                QStack<cwPage*> parentPages;
+                cwPage* stackCurrent = currentPage;
+                while(stackCurrent != nullptr) {
+                    parentPages.push(stackCurrent);
+                    stackCurrent = stackCurrent->parentPage();
+                }
+
+                while(!parentPages.isEmpty()) {
+                    cwPage* page = parentPages.pop();
+                    QQuickItem* pageItem = ComponentToItem.value(page->component());
+
+                    if(pageItem != nullptr) {
+                        updateProperties(pageItem, page);
+                    }
                 }
             }
-        }
 
-        //Show the page
-        showPage(item);
-    } else {
-        if(UnknownPageItem != nullptr) {
-            showPage(UnknownPageItem);
+            //Show the page
+            showPage(item);
         } else {
-            qDebug() << "Couldn't show unknown page!!! This is a bug" << LOCATION;
+            if(UnknownPageItem != nullptr) {
+                showPage(UnknownPageItem);
+            } else {
+                qDebug() << "Couldn't show unknown page!!! This is a bug" << LOCATION;
+            }
         }
+    }
+}
+
+/**
+ * @brief cwPageView::updateSelection
+ *
+ * This update's the selection properties on the current page
+ */
+void cwPageView::updateSelectionOnCurrentPage()
+{
+    Q_ASSERT(CurrentPage == PageSelectionModel->currentPage());
+    Q_ASSERT(CurrentPage != nullptr);
+    QQuickItem* pageItem = ComponentToItem.value(CurrentPage->component(), nullptr);
+
+    if(pageItem != nullptr) {
+        cwPageViewAttachedType* attachedType = qobject_cast<cwPageViewAttachedType*>(
+                    qmlAttachedPropertiesObject<cwPageView>(pageItem));
+
+        Q_ASSERT(attachedType != nullptr);
+
+        updateProperties(pageItem,
+                         attachedType->defaultSelectionProperties(),
+                         CurrentPage->selectionProperties());
     }
 }
 
@@ -121,27 +156,31 @@ void cwPageView::updateProperties(QQuickItem *pageItem, cwPage* page)
         Q_ASSERT(attachedType != nullptr);
 
         attachedType->setPage(page);
-        QVariantMap properties = attachedType->defaultProperties();
-        QVariantMap pageProperties = page->pageProperties();
 
-        //Merge the default with the page properties, the page properties overwrite
-        //the default properties
-        foreach (QString propertyName, pageProperties.keys()) {
-            properties.insert(propertyName, pageProperties.value(propertyName));
+        updateProperties(pageItem, attachedType->defaultProperties(), page->pageProperties());
+        updateProperties(pageItem, attachedType->defaultSelectionProperties(), page->selectionProperties());
+    }
+}
+
+void cwPageView::updateProperties(QQuickItem *pageItem, QVariantMap defaultProperties, QVariantMap pageProperties)
+{
+    Q_ASSERT(pageItem != nullptr);
+    //Merge the default with the page properties, the page properties overwrite
+    //the default properties
+    foreach (QString propertyName, pageProperties.keys()) {
+        defaultProperties.insert(propertyName, pageProperties.value(propertyName));
+    }
+
+    //Go through all the properties and set them on the item
+    foreach(QString propertyName, defaultProperties.keys()) {
+        QByteArray propertyNameBytes = propertyName.toLocal8Bit();
+
+        if(pageItem->metaObject()->indexOfProperty(propertyNameBytes.data()) != -1) {
+//            qDebug() << "Setting property:" << pageItem << propertyNameBytes << defaultProperties.value(propertyName);
+            pageItem->setProperty(propertyNameBytes.data(), defaultProperties.value(propertyName));
+        } else {
+            qDebug() << "Property" << propertyName << "doesn't exist for " << pageItem << ", this is a bug" << LOCATION;
         }
-
-        //Go through all the properties and set them on the item
-        foreach(QString propertyName, properties.keys()) {
-            QByteArray propertyNameBytes = propertyName.toLocal8Bit();
-
-            if(pageItem->metaObject()->indexOfProperty(propertyNameBytes.data()) != -1) {
-//                qDebug() << "Setting property:" << pageItem << page->fullname() << propertyNameBytes << properties.value(propertyName);
-                pageItem->setProperty(propertyNameBytes.data(), properties.value(propertyName));
-            } else {
-                qDebug() << "Property" << propertyName << "doesn't exist for " << pageItem << ", this is a bug" << LOCATION;
-            }
-        }
-
     }
 }
 

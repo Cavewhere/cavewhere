@@ -10,39 +10,49 @@ Item {
     property var keywords //A string list
 
     implicitWidth: 150
-    implicitHeight: columnLayout.height
+    implicitHeight: backgroundRectangle.height
 
-    ColumnLayout {
-        id: columnLayout
-
+    Rectangle {
+        id: backgroundRectangle
         anchors.left: parent.left
         anchors.right: parent.right
 
-        Text {
-            id: sectionLabel
-            font.underline: true
-        }
+        height: columnLayout.height + columnLayout.anchors.margins * 2
 
-        Flow {
-            id: flow
-            spacing: 3
-            Layout.fillWidth: true
+        ColumnLayout {
+            id: columnLayout
 
-            Repeater {
-                model: keywords
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 3
 
-                delegate:
-                    CWButton {
-                    text: modelData
+            Text {
+                id: sectionLabel
+                font.underline: true
+            }
 
-                    onClicked: {
-                        var space = "";
-                        if(textArea.text.length !== 0 &&
-                                textArea.text[textArea.text.length - 1] !== " ")
-                        {
-                            space = " ";
+            Flow {
+                id: flow
+                spacing: 3
+                Layout.fillWidth: true
+
+                Repeater {
+                    model: keywords
+
+                    delegate:
+                        CWButton {
+                        text: modelData
+
+                        onClicked: {
+                            var space = "";
+                            if(textArea.text.length !== 0 &&
+                                    textArea.text[textArea.text.length - 1] !== " ")
+                            {
+                                space = " ";
+                            }
+                            textArea.text = textArea.text + space + modelData
                         }
-                        textArea.text = textArea.text + space + modelData
                     }
                 }
             }

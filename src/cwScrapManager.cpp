@@ -861,8 +861,6 @@ void cwScrapManager::taskFinished() {
             scrap->setTriangulationData(triangleData);
             GLScraps->addScrapToUpdate(scrap);
         }
-
-        qDebug() << "Task finished!";
     }
 }
 

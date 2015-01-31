@@ -49,3 +49,14 @@ void cwPageViewAttachedType::setDefaultProperties(QVariantMap defaultProperties)
         emit defaultPropertiesChanged();
     }
 }
+
+/**
+* @brief cwPageViewAttachedType::setDefaultSelectionProperties
+* @param defaultSelectionProperties
+*/
+void cwPageViewAttachedType::setDefaultSelectionProperties(QVariantMap defaultSelectionProperties) {
+    if(DefaultSelectionProperties != defaultSelectionProperties) {
+        DefaultSelectionProperties = defaultSelectionProperties;
+        emit defaultSelectionPropertiesChanged();
+    }
+}

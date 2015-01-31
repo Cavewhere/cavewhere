@@ -16,6 +16,7 @@ Rectangle {
 
     property alias currentTrip: surveyEditor.currentTrip
     property string viewMode: ""
+    property alias currentNoteIndex: notesGallery.currentNoteIndex
 
     function registerSubPages() {
         var oldCarpetPage = PageView.page.childPage("Carpet")
@@ -41,6 +42,10 @@ Rectangle {
                 "viewMode":""
     }
 
+    PageView.defaultSelectionProperties: {
+        "currentNoteIndex": 0
+    }
+
     onViewModeChanged: {
         if(viewMode == "CARPET") {
             notesGallery.setMode("CARPET")
@@ -51,6 +56,10 @@ Rectangle {
             surveyEditor.visible = true
             notesGallery.visible = true
         }
+    }
+
+    onCurrentNoteIndexChanged: {
+        PageView.page.selectionProperties = { "currentNoteIndex":currentNoteIndex }
     }
 
     SurveyEditor {
@@ -120,7 +129,9 @@ Rectangle {
 
         onModeChanged: {
             if(mode === "CARPET" && area.viewMode === "") {
+                var page = area.PageView.page
                 rootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
+                rootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
             }
         }
     }

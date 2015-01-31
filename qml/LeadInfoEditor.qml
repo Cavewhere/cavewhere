@@ -8,123 +8,39 @@ FloatingGroupBox {
 
     property ScrapLeadView leadView;
 
-    function updateData(begin, end, roles) {
-        if(leadView.selectedItemIndex >= begin && leadView.selectedItemIndex <= end) {
-            for(var roleIndex in roles) {
-                var role = roles[roleIndex]
-                switch(role) {
-                case Scrap.LeadDesciption:
-                    leadDescriptionArea.text = leadView.scrap.leadData(role, leadView.selectedItemIndex);
-                    break;
-                case Scrap.LeadSize:
-                    var size = leadView.scrap.leadData(role, leadView.selectedItemIndex);
-                    widthTextId.text = (size.width >= 0 ? size.width : "?")
-                    heightTextId.text = (size.height >= 0 ? size.height : "?")
-                    break;
-                case Scrap.LeadSupportedUnits:
-                    unit.unitModel = leadView.scrap.leadData(role, leadView.selectedItemIndex);
-                    break;
-                case Scrap.LeadUnits:
-                    unit.unit = leadView.scrap.leadData(role, leadView.selectedItemIndex);
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-    }
-
-    function toLeadDim(text) {
-        if(text === "?") {
-            return -1;
-        } else if(text < 0) {
-            return -1;
-        }
-        return text;
-    }
-
     title: "Lead Info"
     visible: leadView !== null && leadView.selectedItemIndex >= 0
 
     ColumnLayout {
 
-        //This connection update data in the editor
-        Connections {
-            target: leadView !== null ? leadView.scrap : null
-            onLeadsDataChanged: updateData(begin, end, roles);
-            ignoreUnknownSignals: true
+        LeadListener {
+            id: lead
+            scrap: leadView !== null ? leadView.scrap : null
+            index: leadView !== null ? leadView.selectedItemIndex : -1
         }
 
-        Connections {
-            target: leadView
-            onSelectedItemIndexChanged: updateData(leadView.selectedItemIndex,
-                                                   leadView.selectedItemIndex,
-                                                   [Scrap.LeadSupportedUnits,
-                                                    Scrap.LeadUnits,
-                                                    Scrap.LeadSize,
-                                                    Scrap.LeadDesciption])
-            ignoreUnknownSignals: true
-        }
-
-
-        RowLayout {
-            Text {
-                text: "Size:"
-            }
-
-            TitledRectangle {
-                title: "Width"
-
-                ClickTextInput {
-                    id: widthTextId
-                    Layout.alignment: Qt.AlignHCenter
-                    KeyNavigation.tab: heightTextId
-                    onFinishedEditting: {
-                        var oldSize = leadView.scrap.leadData(Scrap.LeadSize, leadView.selectedItemIndex);
-                        leadView.scrap.setLeadData(Scrap.LeadSize,
-                                                   leadView.selectedItemIndex,
-                                                   Qt.size(toLeadDim(newText),
-                                                           oldSize.height))
-                    }
-
-                }
-            }
-
-            Text {
-                text: "x"
-            }
-
-            TitledRectangle {
-                title: "Height"
-
-                ClickTextInput {
-                    id: heightTextId
-                    KeyNavigation.tab: leadDescriptionArea
-                    KeyNavigation.backtab: widthTextId
-                    Layout.alignment: Qt.AlignHCenter
-                    onFinishedEditting: {
-                        var oldSize = leadView.scrap.leadData(Scrap.LeadSize, leadView.selectedItemIndex);
-                        leadView.scrap.setLeadData(Scrap.LeadSize,
-                                                   leadView.selectedItemIndex,
-                                                   Qt.size(oldSize.width,
-                                                           toLeadDim(newText)))
-                    }
-                }
-            }
-
-            UnitInput {
-                id: unit
-                readOnly: true
-            }
+        SizeEditor {
+            id: sizeEditor
+            onWidthFinishedEditting: lead.width = lead.toLeadDim(newText)
+            onHeightFinishedEditting: lead.height = lead.toLeadDim(newText)
+            unit: lead.unit
+            unitModel: lead.unitModel
+            widthText: lead.width
+            heightText: lead.height
+            nextTab: leadDescriptionArea
         }
 
         TextArea {
             id: leadDescriptionArea
-            KeyNavigation.backtab: heightTextId
+            KeyNavigation.backtab: sizeEditor.heightTextObject
             implicitHeight: 100
-            onTextChanged: {
-                if(leadView !== null && leadView.scrap !== null) {
-                    leadView.scrap.setLeadData(Scrap.LeadDesciption, leadView.selectedItemIndex, text)
+            onTextChanged: lead.description = text
+            text: lead.description
+
+            Connections {
+                target: lead
+                onDescriptionChanged: {
+                    leadDescriptionArea.text = lead.description
                 }
             }
         }
@@ -147,6 +63,7 @@ FloatingGroupBox {
             category: "Passage Traversal"
             Layout.fillWidth: true
             keywords: ["Crawl", "Climb", "Low", "High", "Swim", "Tight", "Traverse", "Walking"]
+            textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
@@ -166,7 +83,7 @@ FloatingGroupBox {
         LeadQuickComments {
             Layout.fillWidth: true
             category: "Gear Needed"
-            keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope"]
+            keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope", "Dig Equipment"]
             textArea: leadDescriptionArea
         }
     }
