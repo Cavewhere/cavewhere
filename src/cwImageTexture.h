@@ -67,11 +67,11 @@ private:
     static QThread* TextureLoadingThread;
     cwTextureUploadTask* TextureUploadTask;
 
-    void startLoadingImage();
     void deleteLoadNoteTask();
     void deleteGLTexture();
 
 private slots:
+    void startLoadingImage();
     void markAsDirty();
 };
 

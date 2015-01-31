@@ -196,9 +196,13 @@ void cwImageTexture::startLoadingImage()
 
             connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::markAsDirty);
             connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::textureUploaded);
+            connect(TextureUploadTask, &cwTextureUploadTask::shouldRerun, this, &cwImageTexture::startLoadingImage);
         }
 
-        if(TextureUploadTask->isRunning()) { return; }
+        if(TextureUploadTask->isRunning()) {
+            TextureUploadTask->restart();
+            return;
+        }
 
         DeleteTexture = false;
         TextureUploadTask->setImage(image());
