@@ -14,6 +14,8 @@ RegionViewer {
     property alias turnTableInteraction: turnTableInteractionId
     property alias interactionManager: interactionManagerId
 
+    clip: true
+
     TurnTableInteraction {
         id: turnTableInteractionId
         anchors.fill: parent
