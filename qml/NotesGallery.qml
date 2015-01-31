@@ -13,6 +13,8 @@ Rectangle {
 
     property alias notesModel: galleryView.model;
     property Note currentNote
+    property alias currentNoteIndex: galleryView.currentIndex
+
     readonly property string mode: {
         switch(state) {
         case "": return "DEFAULT"
@@ -21,6 +23,7 @@ Rectangle {
         case "SELECT": return "CARPET"
         case "ADD-STATION": return "CARPET"
         case "ADD-SCRAP": return "CARPET"
+        case "ADD-LEAD": return "CARPET"
         default: return "ERROR"
         }
     }
@@ -29,7 +32,9 @@ Rectangle {
         if(mode !== noteGallery.mode) {
             switch(mode) {
             case "DEFAULT":
-                noteGallery.state = "CARPET"
+                if(noteGallery.mode == "CARPET") {
+                    noteGallery.state = "CARPET"
+                }
                 if(notesModel.rowCount() === 0) {
                     noteGallery.state = "NO_NOTES"
                 } else {
@@ -43,6 +48,7 @@ Rectangle {
             }
         }
     }
+
     signal imagesAdded(variant images)
     signal backClicked();
 
