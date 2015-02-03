@@ -13,8 +13,11 @@ RegionViewer {
 
     property alias turnTableInteraction: turnTableInteractionId
     property alias interactionManager: interactionManagerId
+    property alias leadView: leadViewId
 
     clip: true
+
+
 
     TurnTableInteraction {
         id: turnTableInteractionId
@@ -39,6 +42,7 @@ RegionViewer {
     }
 
     LeadView {
+        id: leadViewId
         anchors.fill: parent
         regionModel: rootData.regionTreeModel
         camera: renderer.camera

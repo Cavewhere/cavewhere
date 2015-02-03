@@ -118,7 +118,7 @@ Sets camera
 void cwLabel3dView::setCamera(cwCamera* camera) {
     if(Camera != camera) {
         Camera = camera;
-        connect(Camera, &cwCamera::viewChanged, this, &cwLabel3dView::updatePositions);
+        connect(Camera, &cwCamera::viewMatrixChanged, this, &cwLabel3dView::updatePositions);
         connect(Camera, &cwCamera::projectionChanged, this, &cwLabel3dView::updatePositions);
         updatePositions();
         emit cameraChanged();

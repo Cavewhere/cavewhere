@@ -18,68 +18,76 @@ PointItem {
         source: "qrc:/icons/question.png"
         anchors.centerIn: parent
 
-        visible: !lead.completed
+        visible: !lead.completed || selected
+        opacity: lead.completed ? 0.6 : 1.0
 
         MouseArea {
             anchors.fill: parent
-            onClicked: selected = true
+            onClicked: selected = !selected
         }
     }
 
-    QuoteBox {
-        visible: selected
-        pointAtObject: questionImage
-        pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
-                                        questionImage.height)
+    Component {
+        id: quoteBoxComponent
+        QuoteBox {
+            pointAtObject: questionImage
+            pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
+                                            questionImage.height)
 
-        Item {
-            width: columnLayout.width
-            height: columnLayout.height
+            Item {
+                width: columnLayout.width
+                height: columnLayout.height
 
-            CWButton {
-                anchors.right: parent.right
-                iconSource: "qrc:/icons/x.png"
-                onClicked: selected = false
-            }
+                CWButton {
+                    anchors.right: parent.right
+                    iconSource: "qrc:/icons/x.png"
+                    onClicked: selected = false
+                }
 
-            ColumnLayout {
-                id: columnLayout
+                ColumnLayout {
+                    id: columnLayout
 
-                CheckBox {
-                    id: checkBox
-                    text: "Completed"
-                    onCheckedChanged: lead.completed = checked
+                    CheckBox {
+                        id: checkBox
+                        text: "Completed"
+                        onCheckedChanged: lead.completed = checked
 
-                    Connections {
-                        target: lead
-                        onCompletedChanged: checkBox.checked = lead.completed
+                        Connections {
+                            target: lead
+                            onCompletedChanged: checkBox.checked = lead.completed
+                        }
                     }
-                }
 
-                SizeEditor {
-                    readOnly: true
-                    backgroundColor: "#C6C6C6"
-                    widthText: lead.width
-                    heightText: lead.height
-                }
-
-                LinkText {
-                    text: "Notes"
-                    onClicked: linkGenerator.gotoScrap(scrap)
-
-
-                    LinkGenerator {
-                        id: linkGenerator
-                        pageSelectionModel: rootData.pageSelectionModel
+                    SizeEditor {
+                        readOnly: true
+                        backgroundColor: "#C6C6C6"
+                        widthText: lead.width
+                        heightText: lead.height
                     }
-                }
 
-                Text {
-                    visible: text.length > 0
-                    text: lead.description
+                    Text {
+                        visible: text.length > 0
+                        text: lead.description
+                    }
+
+                    LinkText {
+                        text: "Notes"
+                        onClicked: linkGenerator.gotoScrap(scrap)
+
+
+                        LinkGenerator {
+                            id: linkGenerator
+                            pageSelectionModel: rootData.pageSelectionModel
+                        }
+                    }
                 }
             }
         }
+    }
+
+    Loader {
+        sourceComponent: selected ? quoteBoxComponent : null
+        asynchronous: true
     }
 }
 

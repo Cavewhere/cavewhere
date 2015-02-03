@@ -247,8 +247,9 @@ void cwAbstractPointManager::updateAllItemData()
 }
 
 /**
-Sets selectedStationIndex
-*/
+ * @brief cwAbstractPointManager::setSelectedItemIndex
+ * @param selectedIndex - The item that should be selected. Set to -1 to deselect the current item
+ */
 void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
     if(SelectedItemIndex != selectedIndex) {
         if(selectedIndex >= Items.size()) {
@@ -266,6 +267,8 @@ void cwAbstractPointManager::setSelectedItemIndex(int selectedIndex) {
             } else {
                 qDebug() << "Selection manager isn't set!!!" << LOCATION;
             }
+        } else {
+            selectionManager()->setSelectedItem(nullptr); //deselect the current item
         }
 
         emit selectedItemIndexChanged();

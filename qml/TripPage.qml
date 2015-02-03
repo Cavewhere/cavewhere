@@ -46,6 +46,8 @@ Rectangle {
         "currentNoteIndex": 0
     }
 
+    PageView.onPageChanged: registerSubPages()
+
     onViewModeChanged: {
         if(viewMode == "CARPET") {
             notesGallery.setMode("CARPET")
@@ -136,7 +138,7 @@ Rectangle {
         }
     }
 
-    PageView.onPageChanged: registerSubPages()
+
 
 //    Component.onCompleted: {
 //        registerSubPages()

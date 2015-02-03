@@ -50,7 +50,8 @@ public:
         LeadSize,
         LeadUnits,
         LeadSupportedUnits,
-        LeadCompleted
+        LeadCompleted,
+        LeadNumberOfRoles
     };
 
     explicit cwScrap(QObject *parent = 0);
@@ -123,7 +124,9 @@ signals:
     void stationsReset();
 
     //For leads
+    void leadsBeginInserted(int begin, int end);
     void leadsInserted(int begin, int end);
+    void leadsBeginRemoved(int begin, int end);
     void leadsRemoved(int begin, int end);
     void leadsDataChanged(int begin, int end, QList<int> roles);
     void leadsReset();

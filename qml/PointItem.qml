@@ -18,4 +18,7 @@ Positioner3D {
     property int pointIndex; //The index in the item list
     property bool selected: false
 
+    onSelectedChanged: {
+        parentView.selectedItemIndex = selected ? pointIndex : -1
+    }
 }

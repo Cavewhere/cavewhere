@@ -153,7 +153,7 @@ Rectangle {
     //Child page
     Component {
         id: caveOverviewPageComponent
-        CaveOverviewPage {
+        CavePage {
             anchors.fill: parent
         }
     }

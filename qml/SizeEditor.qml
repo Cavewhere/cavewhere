@@ -18,10 +18,6 @@ RowLayout {
     signal widthFinishedEditting(string newText)
     signal heightFinishedEditting(string newText)
 
-    Text {
-        text: "Size:"
-    }
-
     TitledRectangle {
         id: rect1
         title: "Width"

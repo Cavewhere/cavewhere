@@ -32,7 +32,7 @@ void cwTransformUpdater::setCamera(cwCamera* camera) {
 
     if(Camera != nullptr) {
         connect(Camera, SIGNAL(projectionChanged()), SLOT(update()));
-        connect(Camera, SIGNAL(viewChanged()), SLOT(update()));
+        connect(Camera, SIGNAL(viewMatrixChanged()), SLOT(update()));
         connect(Camera, SIGNAL(viewportChanged()), SLOT(update()));
         update();
 

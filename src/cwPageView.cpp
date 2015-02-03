@@ -198,6 +198,8 @@ void cwPageView::showPage(QQuickItem *pageItem)
             item->setVisible(false);
         }
     }
+
+    emit currentPageItemChanged();
 }
 
 /**
@@ -263,3 +265,17 @@ void cwPageView::setUnknownPageComponent(QQmlComponent* unknownPageComponent) {
         emit unknownPageComponentChanged();
     }
 }
+
+
+/**
+* @brief cwPageView::currentPageItem
+* @return The current visible page that the page view is showing
+*/
+QQuickItem* cwPageView::currentPageItem() const {
+    if(!CurrentPage.isNull()) {
+        QQuickItem* pageItem = ComponentToItem.value(CurrentPage->component(), nullptr);
+        return pageItem;
+    }
+    return nullptr;
+}
+

@@ -21,8 +21,36 @@ Rectangle {
     function tripPageName(trip) {
         return "Trip=" + trip.name;
     }
+
+    function registerSubPages() {
+        var oldCarpetPage = PageView.page.childPage("Leads")
+        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+            if(oldCarpetPage !== null) {
+                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+            }
+
+            if(PageView.page.name !== "Leads") {
+                var page = rootData.pageSelectionModel.registerPage(PageView.page,
+                                                                    "Leads",
+                                                                    caveLeadsPage,
+                                                                    {"cave":currentCave});
+            }
+        }
+    }
+
+    PageView.onPageChanged: registerSubPages()
+
     onCurrentCaveChanged: {
         instantiatorId.model = cavePageArea.currentCave
+        registerSubPages()
+    }
+
+    Component {
+        id: caveLeadsPage
+        CaveLeadPage {
+            anchors.fill: parent
+
+        }
     }
 
     RowLayout {
@@ -67,6 +95,25 @@ Rectangle {
                 id: exportButton
                 currentRegion: rootData.region
                 currentCave: cavePageArea.currentCave
+            }
+
+            Rectangle {
+                color: "gray"
+
+                width: 100
+                height: 40
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Leads"
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked:  {
+                        rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                    }
+                }
             }
         }
 

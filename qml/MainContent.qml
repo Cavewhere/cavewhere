@@ -84,7 +84,7 @@ Item {
         property int currentPosition: height * mainSideBar.pageShownReal
 
         PageView {
-            id: pageViewId
+            id: pageView
             anchors.fill: parent
             anchors.margins: 3
             pageSelectionModel: rootData.pageSelectionModel
@@ -140,7 +140,7 @@ Item {
     }
 
     Component.onCompleted: {
-        pageViewId.unknownPageComponent = unknownPageComponent
+        pageView.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         rootData.pageSelectionModel.gotoPage(viewPage);

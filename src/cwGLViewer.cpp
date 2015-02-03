@@ -34,7 +34,7 @@ cwGLViewer::cwGLViewer(QQuickItem *parent) :
 
     connect(this, SIGNAL(widthChanged()), SLOT(privateResizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(privateResizeGL()));
-    connect(Camera, SIGNAL(viewChanged()), SLOT(updateRenderer()));
+    connect(Camera, SIGNAL(viewMatrixChanged()), SLOT(updateRenderer()));
     connect(Camera, SIGNAL(projectionChanged()), SLOT(updateRenderer()));
 
     setRenderTarget(QQuickPaintedItem::InvertedYFramebufferObject);

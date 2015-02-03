@@ -31,6 +31,7 @@ class cwPageView : public QQuickItem
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel WRITE setPageSelectionModel NOTIFY pageSelectionModelChanged)
     Q_PROPERTY(QQmlComponent* unknownPageComponent READ unknownPageComponent WRITE setUnknownPageComponent NOTIFY unknownPageComponentChanged)
+    Q_PROPERTY(QQuickItem* currentPageItem READ currentPageItem NOTIFY currentPageItemChanged)
 
 public:
     cwPageView(QQuickItem* parentItem = nullptr);
@@ -41,6 +42,8 @@ public:
 
     QQmlComponent* unknownPageComponent() const;
     void setUnknownPageComponent(QQmlComponent* unknownPageComponent);
+
+    QQuickItem* currentPageItem() const;
 
     /**
      * @brief cwPageView::qmlAttachedProperties
@@ -57,6 +60,7 @@ public:
 signals:
     void pageSelectionModelChanged();
     void unknownPageComponentChanged();
+    void currentPageItemChanged();
 
 public slots:
 

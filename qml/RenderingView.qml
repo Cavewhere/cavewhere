@@ -6,8 +6,11 @@ import QtGraphicalEffects 1.0
 
 SplitView {
     property alias scene: rendererId.scene
+    property alias turnTableInteraction: rendererId.turnTableInteraction
+    property alias leadView: rendererId.leadView
 
     anchors.fill: parent
+
 
     Item {
         Layout.fillHeight: true

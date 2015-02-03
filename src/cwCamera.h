@@ -23,6 +23,7 @@ class cwCamera : public QObject
     //Only valid with ortho projection
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
+    Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
 
 public:
     explicit cwCamera(QObject *parent = 0);
@@ -64,7 +65,7 @@ public:
 signals:
     void viewportChanged();
     void projectionChanged();
-    void viewChanged();
+    void viewMatrixChanged();
     void pixelsPerMeterChanged();
     void zoomScaleChanged();
 

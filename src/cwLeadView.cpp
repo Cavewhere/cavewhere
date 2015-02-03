@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwScrapLeadView.h"
 #include "cwTransformUpdater.h"
+#include "cwSelectionManager.h"
 
 //Qt includes
 #include <QQmlEngine>
@@ -18,7 +19,8 @@
 
 cwLeadView::cwLeadView(QQuickItem *parent) :
     QQuickItem(parent),
-    TransformUpdater(new cwTransformUpdater(this))
+    TransformUpdater(new cwTransformUpdater(this)),
+    SelectionMananger(new cwSelectionManager(this))
 {
     connect(TransformUpdater, &cwTransformUpdater::cameraChanged, this, &cwLeadView::cameraChanged);
 
@@ -77,6 +79,7 @@ void cwLeadView::addScrap(cwScrap *scrap)
     leadView->setHeight(height());
     leadView->setPositionRole(cwScrap::LeadPosition);
     leadView->setTransformUpdater(TransformUpdater);
+    leadView->setSelectionManager(SelectionMananger);
     leadView->setScrap(scrap);
 
     ScrapToView.insert(scrap, leadView);
@@ -156,4 +159,22 @@ cwCamera* cwLeadView::camera() const {
 */
 void cwLeadView::setCamera(cwCamera* camera) {
     TransformUpdater->setCamera(camera);
+}
+
+/**
+ * @brief cwLeadView::select
+ * @param scarp - The scrap that the lead is located in
+ * @param index - The index of the lead in the scrap
+ *
+ * This finds the scrapView for the scrap and selects the lead at index. If the scrap
+ * isn't in the view, this does nothing.
+ */
+void cwLeadView::select(cwScrap *scrap, int index)
+{
+    if(ScrapToView.contains(scrap)) {
+        cwScrapLeadView* scrapLeadView = ScrapToView.value(scrap, nullptr);
+        if(scrapLeadView != nullptr) {
+            scrapLeadView->setSelectedItemIndex(index);
+        }
+    }
 }

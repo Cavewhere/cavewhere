@@ -25,7 +25,6 @@ PointItem {
 
     onSelectedChanged: {
         if(selected) {
-            parentView.selectedItemIndex = pointIndex;
             scrapItem.selected = true
             forceActiveFocus();
         }

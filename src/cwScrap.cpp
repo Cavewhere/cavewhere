@@ -278,9 +278,11 @@ bool cwScrap::hasStation(QString name) const
  */
 void cwScrap::addLead(cwLead lead)
 {
-    qDebug() << "Add lead!";
+    int begin = Leads.size() - 1;
+    int end = begin;
+    emit leadsBeginInserted(begin, end);
     Leads.append(lead);
-    emit leadsInserted(Leads.size() - 1, Leads.size() - 1);
+    emit leadsInserted(begin, end);
 }
 
 /**
@@ -291,6 +293,7 @@ void cwScrap::removeLead(int leadId)
 {
     Q_ASSERT(leadId >= 0);
     Q_ASSERT(leadId < Leads.size());
+    emit leadsBeginRemoved(leadId, leadId);
     Leads.removeAt(leadId);
     emit leadsRemoved(leadId, leadId);
 }
@@ -346,6 +349,8 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
         return parentNote()->parentTrip()->calibrations()->supportedUnits();
     case LeadCompleted:
         return lead.completed();
+    default:
+        return QVariant();
     }
 
     return QVariant();
@@ -901,6 +906,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
 
     OutlinePoints = other.OutlinePoints;
     Stations = other.Stations;
+    Leads = other.Leads;
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;

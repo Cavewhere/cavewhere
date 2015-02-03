@@ -46,6 +46,8 @@ public:
     cwCamera* camera() const;
     void setCamera(cwCamera* camera);
 
+    Q_INVOKABLE void select(cwScrap* scarp, int index);
+
 signals:
     void regionModelChanged();
     void cameraChanged();
@@ -54,6 +56,7 @@ private:
     QPointer<cwRegionTreeModel> RegionModel; //!<
     QPointer<cwCamera> Camera; //!<
     cwTransformUpdater* TransformUpdater;
+    cwSelectionManager* SelectionMananger;
 
     QHash<cwScrap*, cwScrapLeadView*> ScrapToView; //Each scrap will have a range of valid indexes, we mantain this database
 

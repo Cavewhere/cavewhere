@@ -10,6 +10,7 @@
 #include "cwCamera.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
+#include "cwMatrix4x4Animation.h"
 
 //Std includes
 #include "math.h"
@@ -18,10 +19,15 @@ const float cwBaseTurnTableInteraction::DefaultPitch = 90.0f;
 const float cwBaseTurnTableInteraction::DefaultAzimuth = 0.0f;
 
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
-    cwInteraction(parent)
+    cwInteraction(parent),
+    ViewMatrixAnimation(new cwMatrix4x4Animation(this))
 {
     ZoomLevel = 1.0; //1 pixel = 1 meter
 
+    ViewMatrixAnimation->setDuration(1000);
+    ViewMatrixAnimation->setEasingCurve(QEasingCurve(QEasingCurve::InOutCubic));
+    connect(ViewMatrixAnimation, &cwMatrix4x4Animation::valueChanged,
+            this, &cwBaseTurnTableInteraction::updateViewMatrixFromAnimation);
 //    resetView();
 
     setupInteractionTimers();
@@ -37,6 +43,36 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
 void cwBaseTurnTableInteraction::setGridPlane(const QPlane3D &plan)
 {
     LastDitchRotationPlane = plan;
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::centerOn
+ * @param point - Should be in world coordinates
+ *
+ * This will center the camera on point. The point will be in the center of the screen.
+ */
+void cwBaseTurnTableInteraction::centerOn(QVector3D point, bool animate)
+{
+    QVector3D projectPoint = Camera->projectionMatrix() * Camera->viewMatrix() * point;
+    double depth = projectPoint.z();
+
+    QPoint screenCenter = Camera->viewport().center();
+    QVector3D worldScreenCenter = Camera->unProject(screenCenter, (depth + 1.0) / 2.0);
+
+    QVector3D translation = worldScreenCenter - point;
+
+    QMatrix4x4 viewMatrix = Camera->viewMatrix();
+    viewMatrix.translate(translation);
+
+    if(animate) {
+        stopAnimation();
+
+        ViewMatrixAnimation->setStartValue(Camera->viewMatrix());
+        ViewMatrixAnimation->setEndValue(viewMatrix);
+        ViewMatrixAnimation->start();
+    } else {
+        Camera->setViewMatrix(viewMatrix);
+    }
 }
 
 /**
@@ -68,6 +104,29 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     }
 
     return ray.point(t);
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::stopAnimation
+ *
+ * Stops h
+ */
+void cwBaseTurnTableInteraction::stopAnimation()
+{
+    if(ViewMatrixAnimation->state() == QAbstractAnimation::Running) {
+        ViewMatrixAnimation->setCurrentTime(ViewMatrixAnimation->duration());
+        ViewMatrixAnimation->stop();
+    }
+}
+
+/**
+ * @brief cwBaseTurnTableInteraction::updateViewMatrixFromAnimation
+ *
+ * This updates the view matrix of the camera
+ */
+void cwBaseTurnTableInteraction::updateViewMatrixFromAnimation(QVariant matrix)
+{
+    Camera->setViewMatrix(matrix.value<QMatrix4x4>());
 }
 
 /**
@@ -151,6 +210,7 @@ void cwBaseTurnTableInteraction::resetView() {
     viewMatrix.translate(QVector3D(0.0, 0.0, -50));
     Camera->setViewMatrix(viewMatrix);
 }
+
 
 /**
  * @brief cwBaseTurnTableInteraction::rotateLastPosition

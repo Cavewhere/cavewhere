@@ -13,6 +13,7 @@
 #include "cwInteraction.h"
 class cwCamera;
 class cwScene;
+class cwMatrix4x4Animation;
 
 //Qt 3D
 #include <QPlane3D>
@@ -50,6 +51,8 @@ public:
 
     void setGridPlane(const QPlane3D& plan);
 
+    Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
+
 signals:
     void rotationChanged();
     void azimuthChanged();
@@ -74,6 +77,7 @@ private slots:
 
     void resetView();
 
+    void updateViewMatrixFromAnimation(QVariant matrix);
 private:
     QVector3D LastMouseGlobalPosition; //For panning
     QPlane3D PanPlane;
@@ -101,6 +105,8 @@ private:
     QPointer<cwCamera> Camera; //!<
     QPointer<cwScene> Scene; //!<
 
+    cwMatrix4x4Animation* ViewMatrixAnimation;
+
     void zoomPerspective();
     void zoomOrtho();
 
@@ -115,6 +121,9 @@ private:
     double clampPitch(double pitch) const;
 
     QVector3D unProject(QPoint point);
+
+    void stopAnimation();
+
 
 
 };

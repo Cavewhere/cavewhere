@@ -92,7 +92,7 @@ void cwCamera::setProjection(cwProjection projection) {
 void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
     ViewMatrix = matrix;
     ViewProjectionMatrixIsDirty = true;
-    emit viewChanged();
+    emit viewMatrixChanged();
 }
 
 /**
