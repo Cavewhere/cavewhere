@@ -97,24 +97,33 @@ Rectangle {
                 currentCave: cavePageArea.currentCave
             }
 
-            Rectangle {
-                color: "gray"
-
-                width: 100
-                height: 40
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Leads"
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked:  {
-                        rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
-                    }
+            CWButton {
+                text: "Leads"
+                iconSource: "qrc:icons/question.png"
+                onClicked: {
+                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                 }
             }
+
+
+//            Rectangle {
+//                color: "gray"
+
+//                width: 100
+//                height: 40
+
+//                Text {
+//                    anchors.centerIn: parent
+//                    text: "Leads"
+//                }
+
+//                MouseArea {
+//                    anchors.fill: parent
+//                    onClicked:  {
+//            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+//                    }
+//                }
+//            }
         }
 
         ColumnLayout {

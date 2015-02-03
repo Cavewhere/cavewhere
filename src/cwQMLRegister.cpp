@@ -97,6 +97,8 @@
 #include "cwLeadView.h"
 #include "cwLinkGenerator.h"
 #include "cwLeadModel.h"
+#include "cwSortFilterProxyModel.h"
+#include "cwLeadsSortFilterProxyModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -204,4 +206,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLeadView>("Cavewhere", 1, 0, "LeadView");
     qmlRegisterType<cwLinkGenerator>("Cavewhere", 1, 0, "LinkGenerator");
     qmlRegisterType<cwLeadModel>("Cavewhere", 1, 0, "LeadModel");
+    qmlRegisterType<cwSortFilterProxyModel>("Cavewhere", 1, 0, "SortFilterProxyModel");
+    qmlRegisterType<cwLeadsSortFilterProxyModel>("Cavewhere", 1, 0, "LeadsSortFilterProxyModel");
 }
