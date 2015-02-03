@@ -14,6 +14,7 @@ Rectangle {
     }
 
     TableView {
+        id: tableView
         anchors.top: parent.top
         anchors.bottom: parent.bottom
 
@@ -26,6 +27,18 @@ Rectangle {
         TableViewColumn { role: "leadDescription"; title: "Description" }
         TableViewColumn { role: "leadPosition"; title: "Goto" }
 
+        section.property: "leadCompleted"
+        section.delegate: Rectangle {
+            width: tableView.width
+            height: childrenRect.height
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 3
+                text: section == "true" ? "Completed Leads" : "Leads"
+                font.bold: true
+            }
+        }
 
         itemDelegate: Item {
             Loader {
