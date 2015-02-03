@@ -16,9 +16,6 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-//        implicitWidth: tableView.width
-//        anchors.top: parent.top
-//        anchors.bottom: parent.bottom
 
         RowLayout {
             TextField {
