@@ -90,7 +90,7 @@ void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
     Q_UNUSED(parent);
     Q_ASSERT(parent == QModelIndex());
 
-    for(int i = begin; i < end; i++) {
+    for(int i = begin; i <= end; i++) {
         cwCave* cave = index(i, 0, QModelIndex()).data(ObjectRole).value<cwCave*>();
         beginRemoveTrips(cave, 0, cave->trips().size() - 1);
         endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
