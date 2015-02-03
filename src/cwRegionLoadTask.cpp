@@ -379,7 +379,6 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     for(int i = 0; i < protoScrap.outlinepoints_size(); i++) {
         outlinePoint[i] = loadPointF(protoScrap.outlinepoints(i));
     }
-
     scrap->setPoints(outlinePoint);
 
     QList<cwNoteStation> stations;
@@ -387,8 +386,14 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     for(int i = 0; i < protoScrap.notestations_size(); i++) {
         stations.append(loadNoteStation(protoScrap.notestations(i)));
     }
-
     scrap->setStations(stations);
+
+    QList<cwLead> leads;
+    leads.reserve(protoScrap.leads_size());
+    for(int i = 0; i < protoScrap.leads_size(); i++) {
+        leads.append(loadLead(protoScrap.leads(i)));
+    }
+    scrap->setLeads(leads);
 
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
@@ -461,11 +466,18 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
         indexes[i] = protoTriangulatedData.indices(i);
     }
 
+    QVector<QVector3D> leadPositions;
+    leadPositions.resize(protoTriangulatedData.leadpositions_size());
+    for(int i = 0; i < protoTriangulatedData.leadpositions_size(); i++) {
+        leadPositions[i] = loadVector3D(protoTriangulatedData.leadpositions(i));
+    }
+
     bool stale = protoTriangulatedData.stale();
 
     data.setPoints(points);
     data.setTexCoords(texCoords);
     data.setIndices(indexes);
+    data.setLeadPoints(leadPositions);
     data.setStale(stale);
 
     return data;
@@ -554,6 +566,21 @@ cwStationPositionLookup cwRegionLoadTask::loadStationPositionLookup(const Cavewh
         stationLookup.setPosition(name, position);
     }
     return stationLookup;
+}
+
+/**
+ * @brief cwRegionLoadTask::loadLead
+ * @param protoLead
+ * @return Return's a lead from the a protoLead
+ */
+cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
+{
+    cwLead lead;
+    lead.setPositionOnNote(loadPointF(protoLead.positiononnote()));
+    lead.setDescription(loadString(protoLead.description()));
+    lead.setSize(loadSizeF(protoLead.size()));
+    lead.setCompleted(protoLead.completed());
+    return lead;
 }
 
 /**

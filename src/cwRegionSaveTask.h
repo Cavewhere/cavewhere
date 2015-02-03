@@ -28,6 +28,7 @@ class cwTeamMember;
 class cwStation;
 class cwShot;
 class cwStationPositionLookup;
+class cwLead;
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -84,6 +85,7 @@ private:
     void saveCavingRegion(CavewhereProto::CavingRegion& region);
     void saveStationLookup(CavewhereProto::StationPositionLookup* positionLookup,
                            const cwStationPositionLookup& stationLookup);
+    void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);
 
     //Utils
     void saveString(QtProto::QString* protoString, QString string);
@@ -95,9 +97,6 @@ private:
     void saveVector2D(QtProto::QVector2D* protoVector2D, QVector2D vector2D);
     void saveStringList(QtProto::QStringList* protoStringList, QStringList stringlist);
 
-//    //TODO: Remove old boost serialization
-//    void xmlSerialization();
-//    void writeXMLToDatabase(QString xml);
 };
 
 #endif // CWXMLPROJECTSAVETASK_H

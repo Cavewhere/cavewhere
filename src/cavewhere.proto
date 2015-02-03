@@ -118,6 +118,7 @@ message Scrap {
     optional NoteTranformation noteTransformation = 3;
     optional bool calculateNoteTransform = 4;
     optional TriangulatedData triangleData = 5;
+    repeated Lead leads = 6;
 }
 
 message TriangulatedData {
@@ -126,6 +127,7 @@ message TriangulatedData {
     repeated QtProto.QVector2D texCoords = 3;
     repeated uint32 indices = 4;
     optional bool stale = 5;
+    repeated QtProto.QVector3D leadPositions = 6;
 }
 
 message NoteStation {
@@ -185,4 +187,11 @@ message StationPositionLookup {
         required QtProto.QString stationName = 1;
         required QtProto.QVector3D position = 2;
     }
+}
+
+message Lead {
+    optional QtProto.QPointF positionOnNote = 1;
+    optional QtProto.QString description = 2;
+    optional QtProto.QSizeF size = 3;
+    optional bool completed = 4;
 }

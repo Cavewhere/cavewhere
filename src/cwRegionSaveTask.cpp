@@ -30,6 +30,7 @@
 #include "cwImageResolution.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
+#include "cwLead.h"
 
 ////Serielization includes
 //#include "cwSerialization.h"
@@ -268,6 +269,11 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
         saveNoteStation(protoNoteStation, station);
     }
 
+    foreach(const cwLead& lead, scrap->leads()) {
+        CavewhereProto::Lead* protoLead = protoScrap->add_leads();
+        saveLead(protoLead, lead);
+    }
+
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
     saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
@@ -333,6 +339,11 @@ void cwRegionSaveTask::saveTriangulatedData(CavewhereProto::TriangulatedData *pr
 
     foreach(uint index, triangluatedData.indices()) {
         protoTriangulatedData->add_indices(index);
+    }
+
+    foreach(QVector3D leadPoint, triangluatedData.leadPoints()) {
+        QtProto::QVector3D* protoVector3D = protoTriangulatedData->add_leadpositions();
+        saveVector3D(protoVector3D, leadPoint);
     }
 
     protoTriangulatedData->set_stale(triangluatedData.isStale());
@@ -514,42 +525,17 @@ void cwRegionSaveTask::saveStationLookup(CavewhereProto::StationPositionLookup *
     }
 }
 
-///**
-// * @brief cwRegionSaveTask::xmlSerialization
-// *
-// * TODO: Remove this once Proto Buffers are Stable
-// */
-//void cwRegionSaveTask::xmlSerialization()
-//{
-//    //Serielize the Region to XML data
-//    std::stringstream stream;
-//    boost::archive::xml_oarchive xmlSaveArchive(stream);
-//    xmlSaveArchive << BOOST_SERIALIZATION_NVP(Region);
-
-//    //Write the data to the database
-//    writeXMLToDatabase(QString::fromStdString(stream.str()));
-//}
-
-///**
-//  Writes the xml data to the database
-
-//  TODO: Remove this once Proto Buffers are Stable
-//  */
-//void cwRegionSaveTask::writeXMLToDatabase(QString xml) {
-
-//    QSqlQuery insertCavingRegion(Database);
-//    QString queryStr =
-//            QString("INSERT OR REPLACE INTO CavingRegion ") +
-//            QString("(id, qCompress_XML) ") +
-//            QString("VALUES (1, ?)");
-
-//    bool successful = insertCavingRegion.prepare(queryStr);
-//    if(!successful) {
-//        qDebug() << "Couldn't create query to insert region xml data:" << insertCavingRegion.lastError();
-//        stop();
-//    }
-
-//    insertCavingRegion.bindValue(0, xml);
-//    insertCavingRegion.exec();
-//}
-
+/**
+ * @brief cwRegionSaveTask::saveLead
+ * @param protoLead
+ * @param lead
+ *
+ * Saves the lead to disk
+ */
+void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &lead)
+{
+    savePointF(protoLead->mutable_positiononnote(), lead.positionOnNote());
+    saveString(protoLead->mutable_description(), lead.desciption());
+    saveSizeF(protoLead->mutable_size(), lead.size());
+    protoLead->set_completed(lead.completed());
+}
