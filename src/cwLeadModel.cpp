@@ -13,6 +13,7 @@
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
+#include "cwSurveyChunk.h"
 
 //Std includes
 #include <limits>
@@ -92,6 +93,8 @@ QVariant cwLeadModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue(scrap);
     case LeadIndexInScrap:
         return leadIndex;
+    case LeadDistanceToReferanceStation:
+        return leadDistance(scrap, leadIndex);
     default:
         return QVariant();
     }
@@ -145,6 +148,7 @@ QHash<int, QByteArray> cwLeadModel::roleNames() const
     names.insert(LeadCompleted, "leadCompleted");
     names.insert(LeadSizeAsString, "leadSizeAsString");
     names.insert(LeadNearestStation, "leadNearestStation");
+    names.insert(LeadDistanceToReferanceStation, "leadDistanceToReferanceStation");
     return names;
 }
 
@@ -171,6 +175,14 @@ void cwLeadModel::fullModelReset()
                addScrap(scrap);
            }
        }
+   }
+
+   if(cave()->tripCount() > 0
+           && !cave()->trip(0)->chunks().isEmpty()
+           && cave()->trip(0)->chunks().first()->stationCount() > 0)
+   {
+        QString firstStation = cave()->trip(0)->chunks().first()->station(0).name();
+        setReferanceStation(firstStation);
    }
 
    endResetModel();
@@ -453,6 +465,23 @@ QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
 }
 
 /**
+ * @brief cwLeadModel::leadDistance
+ * @param scrap
+ * @param leadIndex
+ * @return The distance from lead in scrap to the referance station, in meters.
+ */
+double cwLeadModel::leadDistance(cwScrap *scrap, int leadIndex) const
+{
+    if(cave()->stationPositionLookup().hasPosition(referanceStation())) {
+        QVector3D stationPosition = cave()->stationPositionLookup().position(referanceStation());
+        QVector3D leadPosition = scrap->leadData(cwScrap::LeadPosition, leadIndex).value<QVector3D>();
+        QVector3D diff = stationPosition - leadPosition;
+        return diff.length();
+    }
+    return 0.0;
+}
+
+/**
 * @brief cwLeadModel::regionModel
 * @return
 */
@@ -499,5 +528,30 @@ void cwLeadModel::setCave(cwCave* cave) {
         Cave = cave;
         fullModelReset();
         emit caveChanged();
+    }
+}
+
+/**
+* @brief cwLeadModel::setReferanceStation
+* @param referanceStation
+*
+* This is used to calculate distance to the lead from the referanceStation. The distance
+* is only line of sight.
+*/
+void cwLeadModel::setReferanceStation(QString referanceStation) {
+    if(ReferanceStation != referanceStation) {
+        ReferanceStation = referanceStation;
+
+        if(rowCount() > 0) {
+            QModelIndex first = index(0);
+            QModelIndex last = index(rowCount() - 1);
+
+            QVector<int> roles;
+            roles.append(LeadDistanceToReferanceStation);
+
+            emit dataChanged(first, last, roles);
+        }
+
+        emit referanceStationChanged();
     }
 }

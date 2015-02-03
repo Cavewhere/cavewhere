@@ -31,6 +31,7 @@ class cwLeadModel : public QAbstractListModel
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionTreeModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
+    Q_PROPERTY(QString referanceStation READ referanceStation WRITE setReferanceStation NOTIFY referanceStationChanged)
 
     Q_ENUMS(Roles)
 public:
@@ -46,6 +47,7 @@ public:
         LeadNearestStation,
         LeadScrap,
         LeadIndexInScrap,
+        LeadDistanceToReferanceStation
     };
 
     explicit cwLeadModel(QObject *parent = 0);
@@ -57,7 +59,10 @@ public:
     cwCave* cave() const;
     void setCave(cwCave* cave);
 
-    int rowCount(const QModelIndex &parent) const;
+    QString referanceStation() const;
+    void setReferanceStation(QString referanceStation);
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
     Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
@@ -66,6 +71,7 @@ public:
 signals:
     void regionModelChanged();
     void caveChanged();
+    void referanceStationChanged();
 
 public slots:
 
@@ -76,6 +82,8 @@ private:
     QMap<cwScrap*, int> ScrapToOffset;
     QMap<int, cwScrap*> OffsetToScrap;
 
+    QString ReferanceStation; //!< For calculating the distance to the leads
+
     void fullModelReset();
 
     void removeScrap(cwScrap* scrap);
@@ -85,6 +93,8 @@ private:
     QString nearestStation(cwScrap* scrap, int leadIndex) const;
 
     QPair<cwScrap*, int> scrapAndIndex(QModelIndex index) const;
+
+    double leadDistance(cwScrap* scrap, int leadIndex) const;
 
 private slots:
     void beginInsertLeads(int begin, int end);
@@ -98,5 +108,13 @@ private slots:
 
 
 };
+
+/**
+* @brief cwLeadModel::referanceStation
+* @return The station that
+*/
+inline QString cwLeadModel::referanceStation() const {
+    return ReferanceStation;
+}
 
 #endif // CWLEADMODEL_H

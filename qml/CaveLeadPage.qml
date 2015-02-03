@@ -15,9 +15,10 @@ Rectangle {
     }
 
     ColumnLayout {
-        implicitWidth: tableView.width
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
+        anchors.fill: parent
+//        implicitWidth: tableView.width
+//        anchors.top: parent.top
+//        anchors.bottom: parent.bottom
 
         RowLayout {
             TextField {
@@ -31,16 +32,39 @@ Rectangle {
                 implicitWidth: 150
             }
 
-            Item { Layout.fillWidth: true }
+            Item { implicitWidth: 50 }
+
+            Text {
+                text: "Lead Distance from:"
+            }
+
+            ClickTextInput {
+                text: leadModel.referanceStation.length === 0 ? "No Station" : leadModel.referanceStation
+                onFinishedEditting: {
+                    leadModel.referanceStation = newText
+                }
+            }
+
+            InformationButton {
+                onClicked: distanceStationHelpArea.visible = !distanceStationHelpArea.visible
+            }
+
+            HelpArea {
+                id: distanceStationHelpArea
+                implicitWidth: 200
+                text: "Lead distance from a station, calculates the <b>line of sight</b> distance from the station to all the leads."
+            }
         }
 
         TableView {
             id: tableView
 
             Layout.fillHeight: true
+            Layout.fillWidth: true
 
             sortIndicatorVisible: true
             sortIndicatorColumn: 1
+
 
             implicitWidth: 400
             model: LeadsSortFilterProxyModel {
@@ -59,8 +83,13 @@ Rectangle {
             TableViewColumn { role: "leadCompleted"; width: 20 }
             TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65}
             TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
-            TableViewColumn { role: "leadDescription"; title: "Description" }
-            TableViewColumn { role: "leadPosition"; title: "Goto" }
+            TableViewColumn {
+                role: "leadDistanceToReferanceStation";
+                title: "Distance to " + leadModel.referanceStation;
+                width: 100
+            }
+            TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
+            TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
 
             section.property: "leadCompleted"
             section.delegate: Rectangle {
@@ -78,15 +107,17 @@ Rectangle {
             itemDelegate: Item {
                 Loader {
                     sourceComponent: {
-                        switch(styleData.column) {
-                        case 0:
+                        switch(tableView.getColumn(styleData.column).role) {
+                        case "leadCompleted":
                             return checkboxComponent;
-                        case 1:
-                        case 2:
-                        case 3:
+                        case "leadNearestStation":
+                        case "leadSizeAsString":
+                        case "leadDescription":
                             return textComponent
-                        case 4:
+                        case "leadPosition":
                             return gotoViewComponent
+                        case "leadDistanceToReferanceStation":
+                            return lengthComponent
                         }
                     }
                 }
@@ -116,6 +147,14 @@ Rectangle {
                         Component.onCompleted: {
                             checked = styleData.value
                         }
+                    }
+                }
+
+                Component {
+                    id: lengthComponent
+                    Text {
+                        text: Math.round(styleData.value) + " m"
+                        x: 3
                     }
                 }
 
