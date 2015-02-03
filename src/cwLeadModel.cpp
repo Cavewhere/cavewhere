@@ -198,14 +198,7 @@ void cwLeadModel::fullModelReset()
  */
 void cwLeadModel::removeScrap(cwScrap *scrap)
 {
-    Q_ASSERT(ScrapToOffset.contains(scrap));
-
-    int offset = ScrapToOffset.value(scrap);
-    Q_ASSERT(OffsetToScrap.contains(offset));
-
-    ScrapToOffset.remove(scrap);
-    OffsetToScrap.remove(offset);
-
+    removeScrapFromOffsetDatabase(scrap);
     disconnect(scrap, 0, this, 0);
 }
 
@@ -220,18 +213,9 @@ void cwLeadModel::addScrap(cwScrap *scrap)
 {
     Q_ASSERT(!ScrapToOffset.contains(scrap));
 
-    int lastOffset = 0;
-    int lastNumberOfLeads = 0;
-
-    if(!OffsetToScrap.isEmpty()) {
-        lastOffset = OffsetToScrap.lastKey();
-        lastNumberOfLeads = OffsetToScrap.last()->numberOfLeads();
+    if(scrap->numberOfLeads() > 0) {
+        addScrapToOffsetDatabase(scrap);
     }
-
-    int offset = lastOffset + lastNumberOfLeads;
-
-    OffsetToScrap.insert(offset, scrap);
-    ScrapToOffset.insert(scrap, offset);
 
     connect(scrap, &cwScrap::leadsBeginInserted, this, &cwLeadModel::beginInsertLeads);
     connect(scrap, &cwScrap::leadsInserted, this, &cwLeadModel::endInsertLeads);
@@ -249,23 +233,30 @@ void cwLeadModel::addScrap(cwScrap *scrap)
  */
 void cwLeadModel::updateOffsets(cwScrap *startScrap)
 {
+    int offset = ScrapToOffset.value(startScrap);
+    int nextOffset = offset + startScrap->numberOfLeads();
 
-    auto iter = ScrapToOffset.lowerBound(startScrap);
-    Q_ASSERT(iter != ScrapToOffset.end());
+    auto iter = OffsetToScrap.lowerBound(offset);
+    Q_ASSERT(iter != OffsetToScrap.end());
 
-    int nextOffset = iter.value() + iter.key()->numberOfLeads();
+    iter++;
 
-    for(; iter != ScrapToOffset.end(); iter++) {
-        iter.value() = nextOffset;
-        nextOffset = iter.value() + iter.key()->numberOfLeads();
+    bool updateOffset = false;
+    for(; iter != OffsetToScrap.end(); iter++) {
+        cwScrap* currentScrap = iter.value();
+        ScrapToOffset.insert(currentScrap, nextOffset);
+        nextOffset = nextOffset + currentScrap->numberOfLeads();
+        updateOffset = true;
     }
 
-    QMap<int, cwScrap*> offsetToScrap;
-    for(iter = ScrapToOffset.begin(); iter != ScrapToOffset.end(); iter++) {
-        offsetToScrap.insert(iter.value(), iter.key());
+    if(updateOffset) {
+        QMap<int, cwScrap*> offsetToScrap;
+        for(auto iter = ScrapToOffset.begin(); iter != ScrapToOffset.end(); iter++) {
+            offsetToScrap.insert(iter.value(), iter.key());
+        }
+        OffsetToScrap = offsetToScrap;
     }
 
-    OffsetToScrap = offsetToScrap;
 }
 
 /**
@@ -279,6 +270,9 @@ void cwLeadModel::beginInsertLeads(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(sender());
+
+    addScrapToOffsetDatabase(scrap);
+
     Q_ASSERT(ScrapToOffset.contains(scrap));
 
     int offset = ScrapToOffset.value(scrap);
@@ -336,6 +330,10 @@ void cwLeadModel::endRemoveLeads(int begin, int end)
 
     Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(sender());
+
+    if(scrap->numberOfLeads() == 0) {
+        removeScrapFromOffsetDatabase(scrap);
+    }
 
     updateOffsets(scrap);
 
@@ -456,6 +454,7 @@ QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
         iter--;
     }
 
+    qDebug() << "iter.key:" << iter.key() << "index.row():" << index.row();
     Q_ASSERT(iter.key() <= index.row());
 
     cwScrap* scrap = iter.value();
@@ -479,6 +478,49 @@ double cwLeadModel::leadDistance(cwScrap *scrap, int leadIndex) const
         return diff.length();
     }
     return 0.0;
+}
+
+/**
+ * @brief cwLeadModel::addScrapToOffsetDatabase
+ * @param scrap
+ *
+ * This tries to add the scrap to the offset database
+ *
+ * If the scrap doesn't have any leads, this does nothing
+ */
+void cwLeadModel::addScrapToOffsetDatabase(cwScrap *scrap)
+{
+    if(!ScrapToOffset.contains(scrap)) {
+        int lastOffset = 0;
+        int lastNumberOfLeads = 0;
+
+        if(!OffsetToScrap.isEmpty()) {
+            lastOffset = OffsetToScrap.lastKey();
+            lastNumberOfLeads = OffsetToScrap.last()->numberOfLeads();
+        }
+
+        int offset = lastOffset + lastNumberOfLeads;
+
+        OffsetToScrap.insert(offset, scrap);
+        ScrapToOffset.insert(scrap, offset);
+    }
+}
+
+/**
+ * @brief cwLeadModel::removeScrapFromOffsetDatabase
+ * @param scrap
+ *
+ * This tries to remove the scrap from the offset database
+ */
+void cwLeadModel::removeScrapFromOffsetDatabase(cwScrap *scrap)
+{
+    if(ScrapToOffset.contains(scrap)) {
+        int offset = ScrapToOffset.value(scrap);
+        Q_ASSERT(OffsetToScrap.contains(offset));
+
+        ScrapToOffset.remove(scrap);
+        OffsetToScrap.remove(offset);
+    }
 }
 
 /**

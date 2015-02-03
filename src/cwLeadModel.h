@@ -96,6 +96,9 @@ private:
 
     double leadDistance(cwScrap* scrap, int leadIndex) const;
 
+    void addScrapToOffsetDatabase(cwScrap* scrap);
+    void removeScrapFromOffsetDatabase(cwScrap* scrap);
+
 private slots:
     void beginInsertLeads(int begin, int end);
     void endInsertLeads(int begin, int end);

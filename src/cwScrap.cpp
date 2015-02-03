@@ -278,7 +278,7 @@ bool cwScrap::hasStation(QString name) const
  */
 void cwScrap::addLead(cwLead lead)
 {
-    int begin = Leads.size() - 1;
+    int begin = Leads.size();
     int end = begin;
     emit leadsBeginInserted(begin, end);
     Leads.append(lead);
