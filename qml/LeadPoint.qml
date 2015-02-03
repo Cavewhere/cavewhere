@@ -50,6 +50,7 @@ PointItem {
                     CheckBox {
                         id: checkBox
                         text: "Completed"
+                        checked: lead.completed
                         onCheckedChanged: lead.completed = checked
 
                         Connections {
