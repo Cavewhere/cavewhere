@@ -19,6 +19,10 @@ Positioner3D {
     property bool selected: false
 
     onSelectedChanged: {
-        parentView.selectedItemIndex = selected ? pointIndex : -1
+        if(parentView.selectedItemIndex === pointIndex && !selected) {
+            parentView.selectedItemIndex = -1
+        } else if(selected) {
+            parentView.selectedItemIndex = pointIndex
+        }
     }
 }
