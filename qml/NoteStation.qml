@@ -40,7 +40,7 @@ ScrapPointItem {
     }
 
     Keys.onPressed: {
-        if(event.key === 0x01000003) { //Backspace key = Qt::Key_Backspace
+        if(event.key === Qt.Key_Backspace) {
             scrap.removeStation(pointIndex);
         }
     }
