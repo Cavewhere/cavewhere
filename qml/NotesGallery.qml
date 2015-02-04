@@ -420,7 +420,7 @@ Rectangle {
 
                 IconButton {
                     id: addLeadId
-                    iconSource: "qrc:icons/addStation.png"
+                    iconSource: "qrc:icons/addLead.png"
                     sourceSize: mainToolBar.iconSize
                     text: "Lead"
 

@@ -83,5 +83,6 @@
         <file>icons/moreArrowLeft.png</file>
         <file>icons/quoteTriangle.png</file>
         <file>icons/x.png</file>
+        <file>icons/addLead.png</file>
     </qresource>
 </RCC>
