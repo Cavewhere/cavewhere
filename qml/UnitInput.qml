@@ -30,7 +30,7 @@ Item {
     Text {
         id: textArea
         color: readOnly ? "black" : pallete.inputTextColor
-        text: unitModel !== null ? " " + unitModel[menuId.selectedIndex] : "";
+        text: unitModel !== null && typeof(unitModel) !== 'undefined' ? " " + unitModel[menuId.selectedIndex] : "";
 
         MouseArea {
             anchors.fill: parent
