@@ -65,7 +65,8 @@ Rectangle {
 
             implicitWidth: 400
             model: LeadsSortFilterProxyModel {
-                source: leadModel
+                //We check if the leadPage is visible to improve preformance where leadModel changes
+                source: leadPage.visible ? leadModel : null
 
                 sortOrder: tableView.sortIndicatorOrder
                 sortCaseSensitivity: Qt.CaseInsensitive

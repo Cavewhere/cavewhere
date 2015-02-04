@@ -454,7 +454,6 @@ QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
         iter--;
     }
 
-    qDebug() << "iter.key:" << iter.key() << "index.row():" << index.row();
     Q_ASSERT(iter.key() <= index.row());
 
     cwScrap* scrap = iter.value();
