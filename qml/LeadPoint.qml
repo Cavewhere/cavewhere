@@ -7,6 +7,14 @@ PointItem {
     id: point
     property Scrap scrap;
 
+    z: selected ? 1 : 0
+
+    onSelectedChanged: {
+        if(parent != null) {
+            parent.z = selected ? 1 : 0
+        }
+    }
+
     LeadListener {
         id: lead
         index: pointIndex
