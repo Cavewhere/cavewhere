@@ -167,9 +167,13 @@ Rectangle {
                             var scrap = tableView.model.data(index, LeadModel.LeadScrap);
                             var leadIndex = tableView.model.data(index, LeadModel.LeadIndexInScrap);
 
+                            //This is a work around, just passing styleData.value to TurnTableInteraction.centerOn()
+                            //doesn't work, and it centerOn (0, 0, 0)
+                            var pos = Qt.vector3d(styleData.value.x, styleData.value.y, styleData.value.z )
+
                             //Change to the view page, animate to the lead position, and select it
                             rootData.pageSelectionModel.currentPageAddress = "View"
-                            pageView.currentPageItem.turnTableInteraction.centerOn(styleData.value, true);
+                            pageView.currentPageItem.turnTableInteraction.centerOn(pos, true);
                             pageView.currentPageItem.leadView.select(scrap, leadIndex);
                         }
                     }
