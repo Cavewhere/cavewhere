@@ -86,7 +86,7 @@ public:
     bool hasStation(QString name) const;
 
     void addLead(cwLead lead);
-    void removeLead(int leadId);
+    Q_INVOKABLE void removeLead(int leadId);
     void setLeads(QList<cwLead> leads);
     QList<cwLead> leads() const;
     Q_INVOKABLE QVariant leadData(LeadDataRole role, int leadIndex) const;

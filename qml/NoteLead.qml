@@ -29,6 +29,14 @@ ScrapPointItem {
         }
     }
 
+    Keys.onDeletePressed: {
+        scrap.removeLead(pointIndex);
+    }
 
+    Keys.onPressed: {
+        if(event.key === Qt.Key_Backspace) {
+            scrap.removeLead(pointIndex);
+        }
+    }
 }
 
