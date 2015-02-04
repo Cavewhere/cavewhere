@@ -56,6 +56,8 @@ Rectangle {
         TableView {
             id: tableView
 
+            property bool blockChanges: false
+
             Layout.fillHeight: true
             Layout.fillWidth: true
 
@@ -123,27 +125,19 @@ Rectangle {
                 Component {
                     id: checkboxComponent
                     CheckBox {
-                        property bool modelChecked: styleData.value
-
-                        onModelCheckedChanged: {
-                            checked = modelChecked
+                        id: checkbox
+                        Binding {
+                            target: checkbox
+                            property: "checked"
+                            value: styleData.value
                         }
 
                         onCheckedChanged: {
-                            var index = tableView.model.index(styleData.row);
-                            tableView.model.setData(index, checked, LeadModel.LeadCompleted);
-
-                            //Update the checked, because the sorting probably change the
-                            //data an styleData.row
-                            index = tableView.model.index(styleData.row);
-                            var newData = tableView.model.data(index, LeadModel.LeadCompleted);
-                            if(typeof newData !== "undefined") {
-                                checked = newData;
+                            if(styleData.value !== "") {
+                                var index = tableView.model.index(styleData.row);
+                                tableView.model.setData(index, checked, LeadModel.LeadCompleted);
                             }
-                        }
 
-                        Component.onCompleted: {
-                            checked = styleData.value
                         }
                     }
                 }
