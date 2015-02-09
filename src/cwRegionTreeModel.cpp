@@ -198,7 +198,9 @@ void cwRegionTreeModel::beginInsertNotes(QModelIndex parent, int begin, int end)
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
 
-    beginRemoveNotes(parentNoteModel->parentTrip(), begin, end);
+    QModelIndex parentIndex = index(parentNoteModel->parentTrip());
+
+    beginInsertRows(parentIndex, begin, end);
 }
 
 /**
