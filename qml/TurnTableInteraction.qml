@@ -113,7 +113,7 @@ BaseTurnTableInteraction {
                     var previousScale = previousDisance / startDistance;
                     var currentScale = currentDistance / startDistance;
 
-                    var deltaScale = currentScale - previousScale
+                    var deltaScale = previousScale - currentScale
                     var delta = deltaScale * 500;
 
                     var diff = Qt.point(touchPoints[0].startX - endMousePosition.x,
