@@ -73,7 +73,7 @@ BaseTurnTableInteraction {
                 if(touchState == "") {
                     console.log("Start Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
-                    touchState == "pan"
+                    touchState = "pan"
                 } else {
                     console.log("Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     pan(Qt.point(touchPoint[0].x, touchPoints[0].y))
