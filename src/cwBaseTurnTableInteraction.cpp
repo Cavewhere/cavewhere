@@ -15,6 +15,10 @@
 //Std includes
 #include "math.h"
 
+//Qt includes
+#include <QStyleHints>
+#include <QGuiApplication>
+
 const float cwBaseTurnTableInteraction::DefaultPitch = 90.0f;
 const float cwBaseTurnTableInteraction::DefaultAzimuth = 0.0f;
 
@@ -169,6 +173,7 @@ void cwBaseTurnTableInteraction::pan(QPoint position) {
   Called when the rotation is about to begin
   */
 void cwBaseTurnTableInteraction::startRotating(QPoint position) {
+    qDebug() << "Start rotating:" << position;
     position = Camera->mapToGLViewport(position);
     LastMouseGlobalPosition = unProject(position);
     LastMousePosition = position;
@@ -178,6 +183,7 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
   Rotates the view
   */
 void cwBaseTurnTableInteraction::rotate(QPoint position) {
+    qDebug() << "Rotate:" << position;
     TimeoutRotationPosition = position;
     if(!RotationInteractionTimer->isActive()) {
         RotationInteractionTimer->start();
@@ -562,5 +568,13 @@ cwCamera* cwBaseTurnTableInteraction::camera() const {
 */
 cwScene* cwBaseTurnTableInteraction::scene() const {
     return Scene;
+}
+
+/**
+* @brief cwBaseTurnTableInteraction::startDragDistance
+* @return QStyleHints::startDragDistance
+*/
+int cwBaseTurnTableInteraction::startDragDistance() const {
+    return QGuiApplication::styleHints()->startDragDistance();
 }
 

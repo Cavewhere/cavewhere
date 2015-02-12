@@ -31,6 +31,7 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(double pitch READ pitch WRITE setPitch NOTIFY pitchChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
+    Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
 
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
@@ -52,6 +53,8 @@ public:
     void setGridPlane(const QPlane3D& plan);
 
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
+
+    int startDragDistance() const;
 
 signals:
     void rotationChanged();

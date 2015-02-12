@@ -5,134 +5,212 @@ BaseTurnTableInteraction {
     id: interactionId
 
     Rectangle {
-        id: centerPoint
+        id: centerPointRect
         width: 10
         height: width
         color: "red"
         radius: width * 0.5
         opacity: 0.5
-        visible: false
+//        visible: false
     }
 
-    MouseArea {
+    Rectangle {
+        id: point1
+        width: 10
+        height: 10
+        color: "green"
+
+    }
+
+    Rectangle {
+        id: point2
+        width: 10
+        height: 10
+        color: "blue"
+    }
+
+
+    MultiPointTouchArea {
+        id: multiTouchArea
+
+        property bool subMouseEnabled: true
+        property bool startedRotating: false
+        property point endMousePosition
+
         anchors.fill: parent
-        z: 1
-        hoverEnabled: true
-        onContainsMouseChanged: {
-            if(containsMouse) {
-                interaction.enabled = true
-                pintchInteraction.enabled = false
-                multiTouchArea.enabled = false
-                console.log("Pinch area disabled")
-            } else {
-                interaction.enabled = false
-                multiTouchArea.enabled = true
-                pintchInteraction.enabled = true
-                console.log("Pinch area enabled")
-            }
+        mouseEnabled: false
+        maximumTouchPoints: 2
+//        minimumTouchPoints: 2
+
+        function length(x, y) {
+            return Math.sqrt(x * x + y * y);
         }
 
-        onPressed: mouse.accepted = false
-    }
 
-    MouseArea {
-        id: interaction
-        enabled: false
-        anchors.fill: parent;
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: {
-            if(mouse.button == Qt.LeftButton) {
-                state = "panState"
-                startPanning(Qt.point(mouse.x, mouse.y));
-            } else {
-                state = "rotateState"
-                startRotating(Qt.point(mouse.x, mouse.y));
-            }
+            console.log("Multi touch pressed" + touchPoints.length)
+            subMouseEnabled = false
+
+            point1.x = touchPoints[0].x
+            point1.y = touchPoints[0].y
+
+            point2.x = touchPoints[1].x
+            point2.y = touchPoints[1].y
         }
 
-        onWheel: {
-            console.log("wheel:" + (-wheel.angleDelta.y))
-            if(multiTouchArea.enableWheel) {
-                zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
-            }
+        onReleased: {
+//            console.log("Multi touch released" + interaction.mouseX + " " + interaction.mouseY)
+            subMouseEnabled = true
+            startedRotating = false
+            endMousePosition = Qt.point(mouseArea.mouseX, mouseArea.mouseY)
         }
 
-        states: [
-            State {
-                name: "panState"
-                PropertyChanges {
-                    target: interaction;
+        onUpdated: {
+            console.log("Multi touch updated" + touchPoints.length)
 
-                    onPositionChanged: {
-                        interactionId.pan(Qt.point(mouseX, mouseY))
+
+            if(touchPoints.length === 2) {
+
+
+//                point1.x = touchPoints[0].x
+//                point1.y = touchPoints[0].y
+
+//                point2.x = touchPoints[1].x
+//                point2.y = touchPoints[1].y
+
+
+                var currentDistance = length(touchPoints[0].x - touchPoints[1].x,
+                                             touchPoints[0].y - touchPoints[1].y);
+                var startDistance = length(touchPoints[0].startX - touchPoints[1].startX,
+                                              touchPoints[0].startY - touchPoints[1].startY);
+
+                var diffDistance = Math.abs(currentDistance - startDistance)
+                var startDrag = interactionId.startDragDistance
+                console.log("DiffDistance:" + diffDistance + " " + interactionId.startDragDistance)
+                if(startedRotating || diffDistance < startDrag) {
+                    //Rotate
+                    var xDiff = touchPoints[0].startX - touchPoints[0].x
+                    var yDiff = touchPoints[0].startY - touchPoints[0].y
+
+                    if(length(xDiff, yDiff) > startDrag) {
+                        if(!startedRotating) {
+                            startRotating(Qt.point(touchPoints[0].startX, touchPoints[0].startY));
+                            startedRotating = true
+                        } else {
+                            rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                        }
                     }
+                } else {
+                    //Zoom
+                    var previousDisance = length(touchPoints[0].previousX - touchPoints[1].previousX,
+                                                 touchPoints[0].previousY - touchPoints[1].previousY);
+                    var previousScale = previousDisance / startDistance;
+                    var currentScale = currentDistance / startDistance;
 
-                    onReleased: {
-                        interactionId.state = ""; //Go back to orginial state
+                    var deltaScale = currentScale - previousScale
+                    var delta = deltaScale * 500;
+
+//                    var centerPoint = Qt.point(touchPoints[0].startX + (touchPoints[0].startX - touchPoints[1].startX) / 2,
+//                                           touchPoints[0].startY + (touchPoints[0].startY - touchPoints[1].startY) / 2);
+
+
+                    var centerPoint = Qt.point(touchPoints[0].startX, touchPoints[0].startY);
+
+                    console.log("CenterPoint:" + centerPoint)
+
+                    centerPointRect.x = centerPoint.x
+                    centerPointRect.y = centerPoint.y
+
+                    zoom(centerPoint, delta)
+                }
+            }
+        }
+
+//        PmouseEnabled/            id: pintchInteraction
+//            anchors.fill: parent
+
+//            onPinchStarted: { centerPoint.visible = true; console.log("Pinch started") }
+//            onPinchFinished: { centerPoint.visible = false; console.log("Pinch Finished") }
+//            onPinchUpdated: {
+//                //            console.log("Pinch updated!" + pinch.startCenter + " " + pinch.scale)
+
+//                var deltaScale = pinch.scale - pinch.previousScale
+//                var delta = Math.round(deltaScale * 500);
+
+//                if(delta != 0) {
+//                    centerPoint.x = pinch.startCenter.x
+//                    centerPoint.y = pinch.startCenter.y
+//                    zoom(pinch.startCenter, delta);
+//                }
+
+//                //            console.log("Delta:" + delta)
+//            }
+
+            MouseArea {
+                id: mouseArea
+                enabled: multiTouchArea.subMouseEnabled
+                anchors.fill: parent;
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                hoverEnabled: true
+                onPressed: {
+                    if(mouse.button == Qt.LeftButton) {
+                        state = "panState"
+                        startPanning(Qt.point(mouse.x, mouse.y));
+                    } else {
+                        state = "rotateState"
+                        startRotating(Qt.point(mouse.x, mouse.y));
                     }
                 }
-            },
 
-            State {
-                name: "rotateState"
-                PropertyChanges {
-                    target: interaction;
+                onWheel: {
+//                    if(multiTouchArea.enableWheel) {
+                    console.log("EndMousePoint:" + multiTouchArea.endMousePosition + " " + wheel.x + " " + wheel.y)
 
-                    onPositionChanged: {
-                        interactionId.rotate(Qt.point(mouseX, mouseY));
+                    if(multiTouchArea.endMousePosition !== Qt.point(wheel.x, wheel.y)) {
+                        console.log("wheel:" + (-wheel.angleDelta.y))
+                        zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
                     }
-
-                    onReleased: {
-                        interactionId.state = "";
-                    }
+//                    }
                 }
-            }
 
-        ]
-    }
+                states: [
+                    State {
+                        name: "panState"
+                        PropertyChanges {
+                            target: mouseArea;
 
-    PinchArea {
-        id: pintchInteraction
-        anchors.fill: parent
+                            onPositionChanged: {
+                                if(mouseArea.pressed) {
+                                    interactionId.pan(Qt.point(mouseX, mouseY))
+                                }
+                            }
 
-        onPinchStarted: { centerPoint.visible = true; console.log("Pinch started") }
-        onPinchFinished: { centerPoint.visible = false; console.log("Pinch started") }
-        onPinchUpdated: {
-            //            console.log("Pinch updated!" + pinch.startCenter + " " + pinch.scale)
+                            onReleased: {
+                                    interactionId.state = ""; //Go back to orginial state
+//                                }
+                            }
+                        }
+                    },
 
-            var deltaScale = pinch.scale - pinch.previousScale
-            var delta = Math.round(deltaScale * 500);
+                    State {
+                        name: "rotateState"
+                        PropertyChanges {
+                            target: startDistance;
 
-            if(delta != 0) {
-                centerPoint.x = pinch.startCenter.x
-                centerPoint.y = pinch.startCenter.y
-                zoom(pinch.startCenter, delta);
-            }
+                            onPositionChanged: {
+                                if(mouseArea.pressed) {
+                                    interactionId.rotate(Qt.point(mouseX, mouseY));
+                                }
+                            }
 
-            //            console.log("Delta:" + delta)
-        }
+                            onReleased: {
+                                interactionId.state = "";
+                            }
+                        }
+                    }
 
-        MultiPointTouchArea {
-            id: multiTouchArea
-            property bool enableWheel: true
-
-            anchors.fill: parent
-            maximumTouchPoints: 3
-            minimumTouchPoints: 3
-            mouseEnabled: false
-
-
-            onPressed: {
-                enableWheel = false
-                console.log("MultipointTouchArea pressed")
-            }
-
-            onReleased: {
-                enableWheel = true
-                console.log("MultipointTouchArea released")
+                ]
             }
         }
-    }
-
-
+//    }
 }
