@@ -34,8 +34,10 @@ BaseTurnTableInteraction {
         id: multiTouchArea
 
         property bool subMouseEnabled: true
+        property string touchState: ""
         property bool startedRotating: false
         property bool startedZoom: false
+        property bool startedPan: false
         property point endMousePosition
 
         anchors.fill: parent
@@ -63,27 +65,21 @@ BaseTurnTableInteraction {
         onReleased: {
 //            console.log("Multi touch released" + interaction.mouseX + " " + interaction.mouseY)
             subMouseEnabled = true
-            startedRotating = false
-            startedZoom = false
+            touchState = ""
+            endMousePosition = Qt.point(mouseArea.mouseX, mouseArea.mouseY)
         }
 
         onUpdated: {
             console.log("Multi touch updated" + touchPoints.length)
 
-            if(touchPoints.length === 1) {
-
-
-
+            if(touchPoints.length === 1 && (touchState == "" || touchState == "pan")) {
+                if(touchState == "") {
+                    startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                    touchState == "pan"
+                } else {
+                    pan(Qt.point(touchPoint[0].x, touchPoints[0].y))
+                }
             } else if(touchPoints.length === 2) {
-
-
-//                point1.x = touchPoints[0].x
-//                point1.y = touchPoints[0].y
-
-//                point2.x = touchPoints[1].x
-//                point2.y = touchPoints[1].y
-
-
                 var currentDistance = length(touchPoints[0].x - touchPoints[1].x,
                                              touchPoints[0].y - touchPoints[1].y);
                 var startDistance = length(touchPoints[0].startX - touchPoints[1].startX,
@@ -92,22 +88,22 @@ BaseTurnTableInteraction {
                 var diffDistance = Math.abs(currentDistance - startDistance)
                 var startDrag = interactionId.startDragDistance
                 console.log("DiffDistance:" + diffDistance + " " + interactionId.startDragDistance)
-                if((startedRotating || diffDistance < startDrag) && !startedZoom) {
+                if((startedRotating || diffDistance < startDrag) && (touchState == "" || touchState == "rotate")) {
                     //Rotate
                     var xDiff = touchPoints[0].startX - touchPoints[0].x
                     var yDiff = touchPoints[0].startY - touchPoints[0].y
 
                     if(length(xDiff, yDiff) > startDrag) {
-                        if(!startedRotating) {
+                        if(touchState == "") {
                             startRotating(Qt.point(touchPoints[0].startX, touchPoints[0].startY));
-                            startedRotating = true
+                            touchState = "rotate"
                         } else {
                             rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
                         }
                     }
-                } else if(!startedRotating) {
+                } else if(touchState == "" || touchState == "zoom") {
                     //Zoom
-                    startedZoom = true
+                    touchState = "zoom"
 
                     var previousDisance = length(touchPoints[0].previousX - touchPoints[1].previousX,
                                                  touchPoints[0].previousY - touchPoints[1].previousY);
