@@ -209,7 +209,7 @@ BaseTurnTableInteraction {
                     State {
                         name: "rotateState"
                         PropertyChanges {
-                            target: startDistance;
+                            target: mouseArea;
 
                             onPositionChanged: {
                                 if(mouseArea.pressed) {
