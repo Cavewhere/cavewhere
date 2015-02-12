@@ -74,7 +74,7 @@ BaseTurnTableInteraction {
                     console.log("Start Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
                     touchState = "pan"
-                } else {
+                } else if(touchState == "pan") {
                     console.log("Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     pan(Qt.point(touchPoints[0].x, touchPoints[0].y))
                 }
@@ -100,7 +100,7 @@ BaseTurnTableInteraction {
                         if(touchState == "") {
                             startRotating(Qt.point(touchPoints[0].startX, touchPoints[0].startY));
                             touchState = "rotate"
-                        } else {
+                        } else if (touchState == "rotate"){
                             rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
                         }
                     }
@@ -123,8 +123,8 @@ BaseTurnTableInteraction {
                     var centerPoint = Qt.point(0, 0);
                     console.log("point1STart:" + point1Start + endMousePosition + " " + length(diff.x, diff.y))
                     if(length(diff.x, diff.y) > 1) {
-                        centerPoint = Qt.point(touchPoints[0].startX + (touchPoints[0].startX - touchPoints[1].startX) / 2,
-                                               touchPoints[0].startY + (touchPoints[0].startY - touchPoints[1].startY) / 2);
+                        centerPoint = Qt.point(touchPoints[0].startX + (touchPoints[1].startX - touchPoints[0].startX) / 2,
+                                               touchPoints[0].startY + (touchPoints[1].startY - touchPoints[0].startY) / 2);
 
                     } else {
                         centerPoint = Qt.point(touchPoints[0].startX, touchPoints[0].startY);
