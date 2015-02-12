@@ -76,7 +76,7 @@ BaseTurnTableInteraction {
                     touchState = "pan"
                 } else {
                     console.log("Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
-                    pan(Qt.point(touchPoint[0].x, touchPoints[0].y))
+                    pan(Qt.point(touchPoints[0].x, touchPoints[0].y))
                 }
             } else if(touchPoints.length === 2) {
                 var currentDistance = length(touchPoints[0].x - touchPoints[1].x,
