@@ -69,7 +69,7 @@ BaseTurnTableInteraction {
         onUpdated: {
             console.log("Multi touch updated" + touchPoints.length + " [" + touchState + "]")
 
-            if(touchPoints.length === 1 && (touchState == "" || touchState == "pan")) {
+            if(touchPoints.length === 1) {
                 if(touchState == "") {
                     console.log("Start Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
@@ -79,6 +79,10 @@ BaseTurnTableInteraction {
                     pan(Qt.point(touchPoints[0].x, touchPoints[0].y))
                 }
             } else if(touchPoints.length === 2) {
+                if(touchState == "pan") {
+                    touchState = ""
+                }
+
                 var currentDistance = length(touchPoints[0].x - touchPoints[1].x,
                                              touchPoints[0].y - touchPoints[1].y);
                 var startDistance = length(touchPoints[0].startX - touchPoints[1].startX,
@@ -87,7 +91,7 @@ BaseTurnTableInteraction {
                 var diffDistance = Math.abs(currentDistance - startDistance)
                 var startDrag = interactionId.startDragDistance
                 console.log("DiffDistance:" + diffDistance + " " + interactionId.startDragDistance)
-                if(diffDistance < startDrag && (touchState == "" || touchState == "rotate")) {
+                if(diffDistance < startDrag && (touchState == "" || touchState == "rotate" )) {
                     //Rotate
                     var xDiff = touchPoints[0].startX - touchPoints[0].x
                     var yDiff = touchPoints[0].startY - touchPoints[0].y
