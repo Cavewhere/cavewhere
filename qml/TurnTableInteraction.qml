@@ -35,6 +35,7 @@ BaseTurnTableInteraction {
 
         property bool subMouseEnabled: true
         property bool startedRotating: false
+        property bool startedZoom: false
         property point endMousePosition
 
         anchors.fill: parent
@@ -51,25 +52,29 @@ BaseTurnTableInteraction {
             console.log("Multi touch pressed" + touchPoints.length)
             subMouseEnabled = false
 
-            point1.x = touchPoints[0].x
-            point1.y = touchPoints[0].y
+//            point1.x = touchPoints[0].x
+//            point1.y = touchPoints[0].y
 
-            point2.x = touchPoints[1].x
-            point2.y = touchPoints[1].y
+//            point2.x = touchPoints[1].x
+//            point2.y = touchPoints[1].y
+            endMousePosition = Qt.point(mouseArea.mouseX, mouseArea.mouseY)
         }
 
         onReleased: {
 //            console.log("Multi touch released" + interaction.mouseX + " " + interaction.mouseY)
             subMouseEnabled = true
             startedRotating = false
-            endMousePosition = Qt.point(mouseArea.mouseX, mouseArea.mouseY)
+            startedZoom = false
         }
 
         onUpdated: {
             console.log("Multi touch updated" + touchPoints.length)
 
+            if(touchPoints.length === 1) {
 
-            if(touchPoints.length === 2) {
+
+
+            } else if(touchPoints.length === 2) {
 
 
 //                point1.x = touchPoints[0].x
@@ -87,7 +92,7 @@ BaseTurnTableInteraction {
                 var diffDistance = Math.abs(currentDistance - startDistance)
                 var startDrag = interactionId.startDragDistance
                 console.log("DiffDistance:" + diffDistance + " " + interactionId.startDragDistance)
-                if(startedRotating || diffDistance < startDrag) {
+                if((startedRotating || diffDistance < startDrag) && !startedZoom) {
                     //Rotate
                     var xDiff = touchPoints[0].startX - touchPoints[0].x
                     var yDiff = touchPoints[0].startY - touchPoints[0].y
@@ -100,8 +105,10 @@ BaseTurnTableInteraction {
                             rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
                         }
                     }
-                } else {
+                } else if(!startedRotating) {
                     //Zoom
+                    startedZoom = true
+
                     var previousDisance = length(touchPoints[0].previousX - touchPoints[1].previousX,
                                                  touchPoints[0].previousY - touchPoints[1].previousY);
                     var previousScale = previousDisance / startDistance;
@@ -110,12 +117,19 @@ BaseTurnTableInteraction {
                     var deltaScale = currentScale - previousScale
                     var delta = deltaScale * 500;
 
-//                    var centerPoint = Qt.point(touchPoints[0].startX + (touchPoints[0].startX - touchPoints[1].startX) / 2,
-//                                           touchPoints[0].startY + (touchPoints[0].startY - touchPoints[1].startY) / 2);
+                    var diff = Qt.point(touchPoints[0].startX - endMousePosition.x,
+                                        touchPoints[0].startY - endMousePosition.y);
 
+                    var point1Start = Qt.point(touchPoints[0].startX, touchPoints[0].startY)
+                    var centerPoint = Qt.point(0, 0);
+                    console.log("point1STart:" + point1Start + endMousePosition + " " + length(diff.x, diff.y))
+                    if(length(diff.x, diff.y) > 1) {
+                        centerPoint = Qt.point(touchPoints[0].startX + (touchPoints[0].startX - touchPoints[1].startX) / 2,
+                                               touchPoints[0].startY + (touchPoints[0].startY - touchPoints[1].startY) / 2);
 
-                    var centerPoint = Qt.point(touchPoints[0].startX, touchPoints[0].startY);
-
+                    } else {
+                        centerPoint = Qt.point(touchPoints[0].startX, touchPoints[0].startY);
+                    }
                     console.log("CenterPoint:" + centerPoint)
 
                     centerPointRect.x = centerPoint.x
