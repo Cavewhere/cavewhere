@@ -35,9 +35,6 @@ BaseTurnTableInteraction {
 
         property bool subMouseEnabled: true
         property string touchState: ""
-        property bool startedRotating: false
-        property bool startedZoom: false
-        property bool startedPan: false
         property point endMousePosition
 
         anchors.fill: parent
@@ -70,13 +67,15 @@ BaseTurnTableInteraction {
         }
 
         onUpdated: {
-            console.log("Multi touch updated" + touchPoints.length)
+            console.log("Multi touch updated" + touchPoints.length + " [" + touchState + "]")
 
             if(touchPoints.length === 1 && (touchState == "" || touchState == "pan")) {
                 if(touchState == "") {
+                    console.log("Start Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
                     touchState == "pan"
                 } else {
+                    console.log("Pan:" + touchPoints[0].x + " " + touchPoints[0].y)
                     pan(Qt.point(touchPoint[0].x, touchPoints[0].y))
                 }
             } else if(touchPoints.length === 2) {
@@ -88,7 +87,7 @@ BaseTurnTableInteraction {
                 var diffDistance = Math.abs(currentDistance - startDistance)
                 var startDrag = interactionId.startDragDistance
                 console.log("DiffDistance:" + diffDistance + " " + interactionId.startDragDistance)
-                if((startedRotating || diffDistance < startDrag) && (touchState == "" || touchState == "rotate")) {
+                if(diffDistance < startDrag && (touchState == "" || touchState == "rotate")) {
                     //Rotate
                     var xDiff = touchPoints[0].startX - touchPoints[0].x
                     var yDiff = touchPoints[0].startY - touchPoints[0].y
