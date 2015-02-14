@@ -88,32 +88,12 @@ Item {
             anchors.fill: parent
             anchors.margins: 3
             pageSelectionModel: rootData.pageSelectionModel
-//            unknownPageComponent: mainContentId.unknownPageComponent
-
-//            Item {
-
-//            }
         }
-
-        //       Replace with the view
-
-
-
-
-//        Rectangle {
-//            //visible: mainSideBar.pageShown == "draft"
-//            color: "blue"
-//            width:  parent.width
-//            height: parent.height
-//            x: 0;
-//            y: height * 2 - container.currentPosition
-//        }
     }
 
     Component {
         id: renderingComponent
         RenderingView {
-//            id: terrainRendererId
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
@@ -124,7 +104,6 @@ Item {
     Component {
         id: dataMainPageComponent
         DataMainPage {
-//            id: dataMainPageId
             width:  parent.width
             height: parent.height
             x: 0;
@@ -144,19 +123,5 @@ Item {
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         rootData.pageSelectionModel.gotoPage(viewPage);
-
-
-        //        var oldCurrentPage = rootData.pageSelectionModel.currentPage; //Set the current root so reloading qml works
-//        rootData.pageSelectionModel.registerRootPage(mainContentId);
-//        rootData.pageSelectionModel.registerPageLink(mainContentId, terrainRendererId, "View", "setCurrentMainPage", {page:'View'});
-//        rootData.pageSelectionModel.registerPageLink(mainContentId, dataMainPageId, "Data", "setCurrentMainPage", {page:'Data'});
-//        if(rootData.pageSelectionModel.currentPage === "") {
-//            //We are starting up for the first time
-//            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
-//        } else {
-//            //QML reloaded for debugging
-//            rootData.pageSelectionModel.setCurrentPage(mainContentId, "View");
-//            rootData.pageSelectionModel.currentPage = oldCurrentPage;
-//        }
     }
 }
