@@ -16,6 +16,45 @@ Rectangle {
     //Pageshown is an enumerated type that is either, view, data, draft
     property alias pageShown: buttonBar.currentIndex;
 
+    readonly property string viewPage: "View"
+    readonly property string dataPage: "Data"
+
+    property bool gotoToPage: true
+
+    //This is for global page selection
+    onPageShownChanged: {
+        if(!gotoToPage) { return; }
+
+        var page;
+        switch(pageShown) {
+        case 0:
+            page = viewPage;
+            break;
+        case 1:
+            page = dataPage;
+            break;
+        default:
+            console.log("Don't know how to show page:" + pageShown);
+        }
+
+        rootData.pageSelectionModel.gotoPageByName(null, page);
+    }
+
+    Connections {
+        target: rootData.pageSelectionModel
+
+        onCurrentPageAddressChanged: {
+            gotoToPage = false;
+            var address = rootData.pageSelectionModel.currentPageAddress;
+
+            if(address.search(viewPage) == 0) {
+                pageShown = 0;
+            } else if(address.search(dataPage) == 0) {
+                pageShown = 1
+            }
+            gotoToPage = true
+        }
+    }
 
     Rectangle {
         id: sideBarBackground

@@ -56,22 +56,7 @@ Item {
             }
         }
 
-        //This is for global page selection
-        onPageShownChanged: {
-            var page;
-            switch(pageShown) {
-            case 0:
-                page = "View";
-                break;
-            case 1:
-                page = "Data";
-                break;
-            default:
-                console.log("Don't know how to show page:" + pageShown);
-            }
 
-            rootData.pageSelectionModel.gotoPageByName(null, page);
-        }
     }
 
     Item {
