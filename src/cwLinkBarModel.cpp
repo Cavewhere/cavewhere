@@ -107,11 +107,8 @@ void cwLinkBarModel::updateNames()
         if(!Names.isEmpty()) {
             names.erase(names.begin(), names.begin() + Names.size());
         }
-        qDebug() << "Begin insert:" << Names.size() << names.size();
-        qDebug() << "Adding names:" << names;
         beginInsertRows(QModelIndex(), Names.size(), Names.size() + names.size() - 1);
         Names.append(names);
-        qDebug() << "Names:" << Names;
         endInsertRows();
     }
 

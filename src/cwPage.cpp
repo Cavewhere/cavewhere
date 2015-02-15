@@ -8,6 +8,7 @@
 
 #include "cwPage.h"
 #include "cwDebug.h"
+#include "cwPageSelectionModel.h"
 
 cwPage::cwPage()
     : ParentPage(nullptr)
@@ -95,7 +96,7 @@ QString cwPage::fullname() const
     result.reserve( names.size() );
     std::reverse_copy( names.begin(), names.end(), std::back_inserter( result ) );
 
-    return result.join("/");
+    return result.join(cwPageSelectionModel::seperator());
 }
 
 /**
@@ -123,7 +124,7 @@ void cwPage::removeChild(cwPage *page)
  */
 QStringList cwPage::splitLinkIntoParts(QString pageFullname)
 {
-    return pageFullname.split('/');
+    return pageFullname.split(cwPageSelectionModel::seperator());
 }
 
 /**

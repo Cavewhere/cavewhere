@@ -21,6 +21,21 @@ Rectangle {
 
     property bool gotoToPage: true
 
+    /**
+      pageType should be either "View" or "Data"
+      */
+    function findPage(pageType) {
+        var history = rootData.pageSelectionModel.history;
+        for(var i = history.length - 1; i >= 0; i--) {
+            var page = history[i];
+            var fullAddress = page.fullname();
+            if(fullAddress.search(pageType) === 0) {
+                return fullAddress;
+            }
+        }
+        return pageType;
+    }
+
     //This is for global page selection
     onPageShownChanged: {
         if(!gotoToPage) { return; }
@@ -28,16 +43,16 @@ Rectangle {
         var page;
         switch(pageShown) {
         case 0:
-            page = viewPage;
+            page = findPage(viewPage);
             break;
         case 1:
-            page = dataPage;
+            page = findPage(dataPage);
             break;
         default:
             console.log("Don't know how to show page:" + pageShown);
         }
 
-        rootData.pageSelectionModel.gotoPageByName(null, page);
+        rootData.pageSelectionModel.currentPageAddress = page;
     }
 
     Connections {
