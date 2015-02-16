@@ -121,6 +121,7 @@ Project {
             //debug mode.
             condition: qbs.buildVariant == "debug"
             cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "\"")
+            .concat("CW_DEBUG")
         }
 
         Properties {
