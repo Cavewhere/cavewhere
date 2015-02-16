@@ -198,13 +198,6 @@ void cwCompassImporter::parseTripName(QFile *file)
 
     LineCount++;
 
-    if(tripName.size() > 12) {
-        emit statusMessage(QString("I found the trip name to be longer than 12 characters. I'm trimming it to 12 characters, in %1 on line %2")
-                           .arg(CurrentFilename)
-                           .arg(LineCount));
-        tripName.resize(12);
-    }
-
     if(!isFileGood(file, "survey name")) { return; }
 
     CurrentTrip->setName(tripName);
