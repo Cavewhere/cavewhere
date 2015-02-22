@@ -84,30 +84,6 @@ MenuBar {
         title: "Debug"
 
         MenuItem {
-            text: "Screenshot"
-            onTriggered: {
-
-                var exporter = Qt.createQmlObject('import QtQuick 2.0; import Cavewhere 1.0; ExportRegioonViewerToImageTask {}', fileMenuButton, "");
-                exporter.window = quickView;
-                exporter.regionViewer = terrainRenderer;
-
-                //Hide all children
-                var i;
-                for(i in terrainRenderer.children) {
-                    terrainRenderer.children[i].visible = false
-                }
-
-                exporter.takeScreenshot();
-                exporter.destroy();
-
-                //Show all Children
-                for(i in terrainRenderer.children) {
-                    terrainRenderer.children[i].visible = true
-                }
-            }
-        }
-
-        MenuItem {
             text: "Compute Scraps"
             onTriggered: scrapManager.updateAllScraps()
         }
