@@ -97,6 +97,7 @@ ApplicationWindow {
         id: loadFileDialogId
         nameFilters: ["Cavewhere File (*.cw)"]
         onAccepted: {
+            rootData.pageSelectionModel.clearHistory();
             rootData.pageSelectionModel.gotoPageByName(null, "View")
             rootData.project.loadFile(fileUrl)
         }

@@ -460,6 +460,17 @@ cwPage *cwPageSelectionModel::currentPage() const
 }
 
 /**
+ * @brief cwPageSelectionModel::clearHistory
+ *
+ * This will clear the history for the page selection model
+ */
+void cwPageSelectionModel::clearHistory()
+{
+    CurrentPage.clear();
+    PageHistory.clear();
+}
+
+/**
 * @brief cwPageSelectionModel::history
 * @return The page history
 */

@@ -57,6 +57,7 @@ public:
 
     cwPage* currentPage() const;
 
+    Q_INVOKABLE void clearHistory();
     QList<QObject*> history() const;
 
     bool hasForward() const;
