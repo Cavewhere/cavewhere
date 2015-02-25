@@ -654,11 +654,15 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     if(parentNote()->parentTrip() == nullptr) { return QString(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QString(); }
 
-    cwTrip* parentTrip = parentNote()->parentTrip();
     cwCave* parentCave = parentNote()->parentTrip()->parentCave();
     cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
 
-    QSet<cwStation> neigborStations = parentTrip->neighboringStations(previousStation.name());
+    QSet<cwStation> neigborStations;
+
+    foreach(cwTrip* trip, parentCave->trips()) {
+        QSet<cwStation> tripStations = trip->neighboringStations(previousStation.name());
+        neigborStations.unite(tripStations);
+    }
 
     //Make sure we have neigbors
     if(neigborStations.isEmpty()) {
