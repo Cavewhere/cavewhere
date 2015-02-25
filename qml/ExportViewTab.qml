@@ -8,7 +8,7 @@ import "Utils.js" as Utils
 Item {
     id: exportViewTabId
 
-    implicitWidth: rowLayoutId.width
+    implicitWidth: quickSceneView.implicitWidth + sidebarColumnId.implicitWidth
 
     property GLTerrainRenderer view
     property alias hideExternalTools: selectionTool.visible
@@ -93,8 +93,10 @@ Item {
         anchors.fill: parent
 
         QuickSceneView {
-            width: 500
+            id: quickSceneView
+            implicitWidth: 500
             Layout.fillHeight: true
+            Layout.fillWidth: true
             scene: screenCaptureManagerId.scene
 
             CaptureItemManiputalor {
@@ -103,160 +105,205 @@ Item {
             }
         }
 
-        ScrollView {
+        ColumnLayout {
+            id: sidebarColumnId
 
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-
-            width: 300
-
-            ColumnLayout {
-                id: columnLayoutId
+            RowLayout {
+                Layout.fillWidth: true
 
                 GroupBox {
-                    title: "Paper Size"
+                    title: "File type"
 
-                    ColumnLayout {
-
-                        ComboBox {
-                            id: paperComboBoxId
-                            model: paperSizeModel
-                            textRole: "name"
-
-                            //                    property alias paperRectangle: paperSizeInteraction.paperRectangle
-
-                            function updatePaperRectangleFromModel() {
-                                var item = paperSizeModel.get(currentIndex);
-
-                                if(item) {
-                                    exportViewTabId.updatePaperRectangle(item.width, item.height)
-                                }
-                            }
-
-                            function updateDefaultMargins() {
-                                var item = paperSizeModel.get(currentIndex);
-                                paperMarginGroupBoxId.setDefaultLeft(item.defaultLeftMargin)
-                                paperMarginGroupBoxId.setDefaultRight(item.defaultRightMargin)
-                                paperMarginGroupBoxId.setDefaultTop(item.defaultTopMargin)
-                                paperMarginGroupBoxId.setDefaultBottom(item.defaultBottomMargin)
-                            }
-
-                            onCurrentIndexChanged: {
-                                updatePaperRectangleFromModel()
-                                updateDefaultMargins()
-                            }
-
-                            Component.onCompleted: {
-                                updatePaperRectangleFromModel()
-                                updateDefaultMargins()
-                            }
-                        }
-
-                        RowLayout {
-                            Text {
-                                text: "Width"
-                            }
-
-                            ClickTextInput {
-                                id: paperSizeWidthInputId
-                                text: screenCaptureManagerId.paperSize.width
-                                readOnly: paperComboBoxId.currentIndex != 3
-                                onFinishedEditting: {
-                                    paperSizeModel.setProperty(paperComboBoxId.currentIndex, "width", newText)
-                                    paperComboBoxId.updatePaperRectangleFromModel();
-                                }
-                            }
-
-                            Text {
-                                text: "in"
-                                font.italic: true
-                            }
-
-                            Text {
-                                text: "Height"
-                            }
-
-                            ClickTextInput {
-                                text: screenCaptureManagerId.paperSize.height
-                                readOnly: paperSizeWidthInputId.readOnly
-                                onFinishedEditting: {
-                                    paperSizeModel.setProperty(paperComboBoxId.currentIndex, "height", newText)
-                                    paperComboBoxId.updatePaperRectangleFromModel();
-                                }
-                            }
-
-                            Text {
-                                text: "in"
-                                font.italic: true
-                            }
-                        }
-
-                        RowLayout {
-                            Text {
-                                text: "Resolution"
-                            }
-
-                            SpinBox {
-                                id: resolutionSpinBoxId
-                                value: screenCaptureManagerId.resolution
-                                stepSize: 100
-                                maximumValue: 600
-
-                                onValueChanged: {
-                                    screenCaptureManagerId.resolution = value
-                                }
-
-                                Connections {
-                                    target: screenCaptureManagerId
-                                    onResolutionChanged: resolutionSpinBoxId.value = screenCaptureManagerId.resolution
-                                }
-                            }
-
-                            Text {
-                                text: "DPI"
-                                font.italic: true
-                            }
-                        }
+                    ComboBox {
+                        id: fileTypeExportComboBox
+                        model: ["PNG"]
                     }
                 }
 
-                PaperMarginGroupBox {
-                    id: paperMarginGroupBoxId
+                Button {
+                    text: "Export"
 
-                    onLeftMarginChanged: screenCaptureManagerId.leftMargin = leftMargin
-                    onRightMarginChanged: screenCaptureManagerId.rightMargin = rightMargin
-                    onTopMarginChanged: screenCaptureManagerId.topMargin = topMargin
-                    onBottomMarginChanged: screenCaptureManagerId.bottomMargin = bottomMargin
-                    unit: "in"
-                }
-
-                GroupBox {
-                    title: "Orientation"
-
-                    RowLayout {
-                        id: portraitLandscrapSwitch
-                        Text {
-                            text: "Portrait"
-                        }
-
-                        Switch {
-                            id: orientationSwitchId
-                            onCheckedChanged: {
-                                paperSizeInteraction.paperRectangle.landScape = checked
-                                paperComboBoxId.updatePaperRectangleFromModel()
-                            }
-                        }
-
-                        Text {
-                            text: "Landscrape"
-                        }
+                    onClicked: {
+                        exportDialogId.open();
+                        //                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
+                        //                    screenCaptureManagerId.capture()
                     }
                 }
+            }
 
-                RowLayout {
+            BreakLine {  }
+
+            Button {
+                text: "Options"
+                onClicked: {
+                    optionsScrollViewId.visible = !optionsScrollViewId.visible
+                }
+
+            }
+
+            Item {
+                width: 1
+                visible: !optionsScrollViewId.visible
+                Layout.fillHeight: true //!optionsScrollViewId.visible
+            }
+
+            ScrollView {
+                id: optionsScrollViewId
+                visible: false
+
+                Layout.fillHeight: true
+
+                implicitWidth: columnLayoutId.width + 15
+
+                ColumnLayout {
+                    id: columnLayoutId
+
+
 
                     GroupBox {
-                        id: layersGroupBoxId
+                        id: paperSizeId
+                        title: "Paper Size"
+
+                        ColumnLayout {
+
+                            ComboBox {
+                                id: paperComboBoxId
+                                model: paperSizeModel
+                                textRole: "name"
+
+                                //                    property alias paperRectangle: paperSizeInteraction.paperRectangle
+
+                                function updatePaperRectangleFromModel() {
+                                    var item = paperSizeModel.get(currentIndex);
+
+                                    if(item) {
+                                        exportViewTabId.updatePaperRectangle(item.width, item.height)
+                                    }
+                                }
+
+                                function updateDefaultMargins() {
+                                    var item = paperSizeModel.get(currentIndex);
+                                    paperMarginGroupBoxId.setDefaultLeft(item.defaultLeftMargin)
+                                    paperMarginGroupBoxId.setDefaultRight(item.defaultRightMargin)
+                                    paperMarginGroupBoxId.setDefaultTop(item.defaultTopMargin)
+                                    paperMarginGroupBoxId.setDefaultBottom(item.defaultBottomMargin)
+                                }
+
+                                onCurrentIndexChanged: {
+                                    updatePaperRectangleFromModel()
+                                    updateDefaultMargins()
+                                }
+
+                                Component.onCompleted: {
+                                    updatePaperRectangleFromModel()
+                                    updateDefaultMargins()
+                                }
+                            }
+
+                            RowLayout {
+                                Text {
+                                    text: "Width"
+                                }
+
+                                ClickTextInput {
+                                    id: paperSizeWidthInputId
+                                    text: screenCaptureManagerId.paperSize.width
+                                    readOnly: paperComboBoxId.currentIndex != 3
+                                    onFinishedEditting: {
+                                        paperSizeModel.setProperty(paperComboBoxId.currentIndex, "width", newText)
+                                        paperComboBoxId.updatePaperRectangleFromModel();
+                                    }
+                                }
+
+                                Text {
+                                    text: "in"
+                                    font.italic: true
+                                }
+
+                                Text {
+                                    text: "Height"
+                                }
+
+                                ClickTextInput {
+                                    text: screenCaptureManagerId.paperSize.height
+                                    readOnly: paperSizeWidthInputId.readOnly
+                                    onFinishedEditting: {
+                                        paperSizeModel.setProperty(paperComboBoxId.currentIndex, "height", newText)
+                                        paperComboBoxId.updatePaperRectangleFromModel();
+                                    }
+                                }
+
+                                Text {
+                                    text: "in"
+                                    font.italic: true
+                                }
+                            }
+
+                            RowLayout {
+                                Text {
+                                    text: "Resolution"
+                                }
+
+                                SpinBox {
+                                    id: resolutionSpinBoxId
+                                    value: screenCaptureManagerId.resolution
+                                    stepSize: 100
+                                    maximumValue: 600
+
+                                    onValueChanged: {
+                                        screenCaptureManagerId.resolution = value
+                                    }
+
+                                    Connections {
+                                        target: screenCaptureManagerId
+                                        onResolutionChanged: resolutionSpinBoxId.value = screenCaptureManagerId.resolution
+                                    }
+                                }
+
+                                Text {
+                                    text: "DPI"
+                                    font.italic: true
+                                }
+                            }
+                        }
+                    }
+
+                    PaperMarginGroupBox {
+                        id: paperMarginGroupBoxId
+
+                        onLeftMarginChanged: screenCaptureManagerId.leftMargin = leftMargin
+                        onRightMarginChanged: screenCaptureManagerId.rightMargin = rightMargin
+                        onTopMarginChanged: screenCaptureManagerId.topMargin = topMargin
+                        onBottomMarginChanged: screenCaptureManagerId.bottomMargin = bottomMargin
+                        unit: "in"
+                    }
+
+                    GroupBox {
+                        id: orientationId
+                        title: "Orientation"
+
+                        RowLayout {
+                            id: portraitLandscrapSwitch
+                            Text {
+                                text: "Portrait"
+                            }
+
+                            Switch {
+                                id: orientationSwitchId
+                                onCheckedChanged: {
+                                    paperSizeInteraction.paperRectangle.landScape = checked
+                                    paperComboBoxId.updatePaperRectangleFromModel()
+                                }
+                            }
+
+                            Text {
+                                text: "Landscrape"
+                            }
+                        }
+                    }
+
+                    GroupBox {
+                        id: layersId
                         title: "Layers"
 
                         ScrollView {
@@ -316,6 +363,7 @@ Item {
                     }
 
                     GroupBox {
+                        id: layerGroupsId
                         title: "Layer Groups"
 
                         ScrollView {
@@ -349,160 +397,141 @@ Item {
                             }
                         }
                     }
-                }
 
-                GroupBox {
-                    id: layerProperties
 
-                    property var layerObject: null
+                    GroupBox {
+                        id: layerProperties
 
-                    title: "" //layerObject !== null ? "Properies of " + layerObject.name : ""
-                    visible: false //layerObject !== null
+                        property var layerObject: null
 
-                    ColumnLayout {
+                        title: "" //layerObject !== null ? "Properies of " + layerObject.name : ""
+                        visible: false //layerObject !== null
 
-                        PaperScaleInput {
-                            id: paperScaleInputId
-                            usingInteraction: false
-                            scaleObject: null
-                        }
+                        ColumnLayout {
 
-                        RowLayout {
-                            Text {
-                                text: "Size"
+                            PaperScaleInput {
+                                id: paperScaleInputId
+                                usingInteraction: false
+                                scaleObject: null
                             }
 
-                            ClickTextInput {
-                                id: sizeWidthInputId
-                                text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
+                            RowLayout {
+                                Text {
+                                    text: "Size"
+                                }
+
+                                ClickTextInput {
+                                    id: sizeWidthInputId
+                                    text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.width : ""
+                                }
+
+                                Text {
+                                    text: "x"
+                                }
+
+                                ClickTextInput {
+                                    id: sizeHeightInputId
+                                    text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.height : ""
+                                }
+
                             }
 
-                            Text {
-                                text: "x"
-                            }
+                            RowLayout {
+                                Text {
+                                    text: "Position"
+                                }
 
-                            ClickTextInput {
-                                id: sizeHeightInputId
-                                text: "" //layerProperties.layerObject !== null ? layerProperties.layerObject.paperSizeOfItem.height : ""
-                            }
+                                Text {
+                                    text: "x:"
+                                }
 
-                        }
+                                ClickTextInput {
+                                    id: posXInputId
+                                    text: ""
+                                }
 
-                        RowLayout {
-                            Text {
-                                text: "Position"
-                            }
+                                Text {
+                                    text: "y:"
+                                }
 
-                            Text {
-                                text: "x:"
-                            }
-
-                            ClickTextInput {
-                                id: posXInputId
-                                text: ""
-                            }
-
-                            Text {
-                                text: "y:"
-                            }
-
-                            ClickTextInput {
-                                id: posYInputId
-                                text: ""
-                            }
-                        }
-
-                        RowLayout {
-                            Text {
-                                text: "Rotation"
-                            }
-
-                            ClickTextInput {
-                                id: rotationInput
-                                text: ""
-                            }
-                        }
-
-
-                    }
-
-                    states: [
-                        State {
-                            when: typeof(layerProperties.layerObject) !== "undefined" && layerProperties.layerObject !== null
-
-                            PropertyChanges {
-                                target: layerProperties
-                                title: "Properies of " + layerObject.name
-                                visible: true
-                            }
-
-                            PropertyChanges {
-                                target: paperScaleInputId
-                                scaleObject: layerProperties.layerObject.scaleOrtho
-                            }
-
-                            PropertyChanges {
-                                target: sizeWidthInputId
-                                text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
-                                onFinishedEditting: {
-                                    layerProperties.layerObject.setPaperWidthOfItem(newText)
+                                ClickTextInput {
+                                    id: posYInputId
+                                    text: ""
                                 }
                             }
 
-                            PropertyChanges {
-                                target: sizeHeightInputId
-                                text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
-                                onFinishedEditting: {
-                                    layerProperties.layerObject.setPaperHeightOfItem(newText)
+                            RowLayout {
+                                Text {
+                                    text: "Rotation"
+                                }
+
+                                ClickTextInput {
+                                    id: rotationInput
+                                    text: ""
                                 }
                             }
 
-                            PropertyChanges {
-                                target: posXInputId
-                                text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
-                                onFinishedEditting: {
-                                    var y = layerProperties.layerObject.positionOnPaper.y
-                                    layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
-                                }
-                            }
 
-                            PropertyChanges {
-                                target: posYInputId
-                                text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
-                                onFinishedEditting: {
-                                    var x = layerProperties.layerObject.positionOnPaper.x
-                                    layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
-                                }
-                            }
-
-                            PropertyChanges {
-                                target: rotationInput
-                                text: Utils.fixed(layerProperties.layerObject.rotation, 2);
-                                onFinishedEditting: {
-                                    layerProperties.layerObject.rotation = newText
-                                }
-                            }
                         }
-                    ]
-                }
 
-                GroupBox {
-                    title: "File type"
+                        states: [
+                            State {
+                                when: typeof(layerProperties.layerObject) !== "undefined" && layerProperties.layerObject !== null
 
-                    ComboBox {
-                        id: fileTypeExportComboBox
-                        model: ["PDF", "SVG", "PNG"]
-                    }
-                }
+                                PropertyChanges {
+                                    target: layerProperties
+                                    title: "Properies of " + layerObject.name
+                                    visible: true
+                                }
 
-                Button {
-                    Layout.alignment: Qt.AlignRight
-                    text: "Export"
+                                PropertyChanges {
+                                    target: paperScaleInputId
+                                    scaleObject: layerProperties.layerObject.scaleOrtho
+                                }
 
-                    onClicked: {
-                        exportDialogId.open();
-                        //                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
-                        //                    screenCaptureManagerId.capture()
+                                PropertyChanges {
+                                    target: sizeWidthInputId
+                                    text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
+                                    onFinishedEditting: {
+                                        layerProperties.layerObject.setPaperWidthOfItem(newText)
+                                    }
+                                }
+
+                                PropertyChanges {
+                                    target: sizeHeightInputId
+                                    text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
+                                    onFinishedEditting: {
+                                        layerProperties.layerObject.setPaperHeightOfItem(newText)
+                                    }
+                                }
+
+                                PropertyChanges {
+                                    target: posXInputId
+                                    text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
+                                    onFinishedEditting: {
+                                        var y = layerProperties.layerObject.positionOnPaper.y
+                                        layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
+                                    }
+                                }
+
+                                PropertyChanges {
+                                    target: posYInputId
+                                    text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
+                                    onFinishedEditting: {
+                                        var x = layerProperties.layerObject.positionOnPaper.x
+                                        layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
+                                    }
+                                }
+
+                                PropertyChanges {
+                                    target: rotationInput
+                                    text: Utils.fixed(layerProperties.layerObject.rotation, 2);
+                                    onFinishedEditting: {
+                                        layerProperties.layerObject.rotation = newText
+                                    }
+                                }
+                            }
+                        ]
                     }
                 }
             }
