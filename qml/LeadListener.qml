@@ -36,7 +36,8 @@ QtObject {
                    [Scrap.LeadSupportedUnits,
                     Scrap.LeadUnits,
                     Scrap.LeadSize,
-                    Scrap.LeadDesciption])
+                    Scrap.LeadDesciption,
+                    Scrap.LeadCompleted])
     }
 
     function updateData(begin, end, roles) {
@@ -82,6 +83,8 @@ QtObject {
     onCompletedChanged: scrap.setLeadData(Scrap.LeadCompleted,
                                           index,
                                           completed)
+
+
 
 
 

@@ -198,13 +198,6 @@ void cwCompassImporter::parseTripName(QFile *file)
 
     LineCount++;
 
-    if(tripName.size() > 12) {
-        emit statusMessage(QString("I found the trip name to be longer than 12 characters. I'm trimming it to 12 characters, in %1 on line %2")
-                           .arg(CurrentFilename)
-                           .arg(LineCount));
-        tripName.resize(12);
-    }
-
     if(!isFileGood(file, "survey name")) { return; }
 
     CurrentTrip->setName(tripName);
@@ -512,14 +505,16 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
             if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
 
-            shot.setDistance(cwUnits::convert(length, cwUnits::Feet, CurrentTrip->calibrations()->distanceUnit()));
+            cwUnits::LengthUnit distanceUnits = CurrentTrip->calibrations()->distanceUnit();
+
+            shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
             shot.setCompass(bearing);
             shot.setClino(inclination);
 
-            fromStation.setLeft(left);
-            fromStation.setRight(right);
-            fromStation.setUp(up);
-            fromStation.setDown(down);
+            fromStation.setLeft(cwUnits::convert(left, cwUnits::Feet, distanceUnits));
+            fromStation.setRight(cwUnits::convert(right, cwUnits::Feet, distanceUnits));
+            fromStation.setUp(cwUnits::convert(up, cwUnits::Feet, distanceUnits));
+            fromStation.setDown(cwUnits::convert(down, cwUnits::Feet, distanceUnits));
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {
                 QString backCompassString = dataStrings.at(9);

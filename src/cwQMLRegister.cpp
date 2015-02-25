@@ -99,6 +99,7 @@
 #include "cwLeadModel.h"
 #include "cwSortFilterProxyModel.h"
 #include "cwLeadsSortFilterProxyModel.h"
+#include "cwLinkBarModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -113,6 +114,18 @@ cwQMLRegister::cwQMLRegister()
 
 void cwQMLRegister::registerQML()
 {
+    qRegisterMetaType<QThread*>("QThread*");
+    qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
+    qRegisterMetaType<QList <QString> >("QList<QString>");
+    qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
+    qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
+    qRegisterMetaType<QList <cwPage* > >("QList<cwPage*>");
+    qRegisterMetaType<QModelIndex>("QModelIndex");
+    qRegisterMetaType<cwImage>("cwImage");
+    qRegisterMetaType<GLuint>("GLuint");
+    qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+
+
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
     qmlRegisterType<cwSurveyChunk>("Cavewhere", 1, 0, "SurveyChunk");
@@ -208,4 +221,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLeadModel>("Cavewhere", 1, 0, "LeadModel");
     qmlRegisterType<cwSortFilterProxyModel>("Cavewhere", 1, 0, "SortFilterProxyModel");
     qmlRegisterType<cwLeadsSortFilterProxyModel>("Cavewhere", 1, 0, "LeadsSortFilterProxyModel");
+    qmlRegisterType<cwLinkBarModel>("Cavewhere", 1, 0, "LinkBarModel");
 }

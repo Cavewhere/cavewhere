@@ -12,7 +12,7 @@ ShadowRectangle {
     id: removeChallenge
 
     property string removeName;
-    property int index; //The index that we're going to remove
+    property int indexToRemove
 
     function show() {
         state = "visible"

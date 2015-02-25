@@ -164,6 +164,7 @@ Item {
     DoubleClickTextInput {
         id: editor
         anchors.fill: parent
+        autoResize: true
 
         onFinishedEditting: {
             surveyChunk.setData(dataRole, rowIndex, newText)

@@ -6,8 +6,6 @@ import Cavewhere 1.0
 TabView {
     id: tabViewId
 
-//    Layout.minimumWidth: 175
-
     property GLTerrainRenderer viewer
     property Tab viewTab
 
@@ -26,9 +24,11 @@ TabView {
     }
 
     function resizeCurrentTab() {
+        resizing = true
         tabViewId.Layout.maximumWidth = getTab(currentIndex).implicitWidth
         tabViewId.Layout.minimumWidth = getTab(currentIndex).implicitWidth
         tabViewId.Layout.maximumWidth = Number.MAX_VALUE
+        resizing = false
     }
 
     onCurrentIndexChanged: {
@@ -41,11 +41,11 @@ TabView {
             if(!tab) {
                 return null
             }
-            return getTab(currentIndex)
+            return getTab(currentIndex).item
         }
         ignoreUnknownSignals: true
         onImplicitWidthChanged: {
-//            resizeCurrentTab()
+            resizeCurrentTab()
         }
     }
 

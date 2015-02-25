@@ -10,23 +10,26 @@ import Cavewhere 1.0
 
 Item {
     id: clickTextInput
-    property alias text: textArea.text
-    property alias font: textArea.font
-    property alias style: textArea.style
-    property alias styleColor: textArea.styleColor
-    property alias color: textArea.color
+    property alias text: textAreaId.text
+    property alias font: textAreaId.font
+    property alias style: textAreaId.style
+    property alias styleColor: textAreaId.styleColor
+    property alias color: textAreaId.color
     property bool acceptMousePress: false  //This make the double click text box accept mouse clicks (This
     property bool doubleClickEdit: false
     property bool isEditting: false
     property Validator validator;
     property bool readOnly: false
+    property bool autoResize: false
     property string errorText
 
     signal startedEditting()
     signal finishedEditting(string newText)
 
-    implicitWidth: textArea.width
-    implicitHeight: textArea.height
+    implicitWidth: textAreaId.width
+    implicitHeight: textAreaId.height
+
+    onWidthChanged: updateTextDimensions()
 
     onFocusChanged: {
         if(focus) {
@@ -34,6 +37,14 @@ Item {
                 globalShadowTextInput.coreClickInput.commitChanges()
             }
             openEditor()
+        }
+    }
+
+    function updateTextDimensions() {
+        if(width != implicitWidth && autoResize) {
+            if(textAreaId.width != width) {
+                textAreaId.width = width
+            }
         }
     }
 
@@ -66,7 +77,7 @@ Item {
 
         globalShadowTextInput.enabled = false
         doubleClickArea.enabled = true;
-        textArea.visible = true;
+        textAreaId.visible = true;
         isEditting = false;
         globalShadowTextInput.errorHelpBox.visible = false;
 
@@ -76,10 +87,10 @@ Item {
     function openEditor() {
         clickTextInput.startedEditting()
 
-        textArea.visible = false
+        textAreaId.visible = false
 
         globalShadowTextInput.textInput.text = clickTextInput.text
-        globalShadowTextInput.textInput.font = textArea.font
+        globalShadowTextInput.textInput.font = textAreaId.font
         globalShadowTextInput.editor.visible = true
         globalShadowTextInput.textInput.forceActiveFocus()
         globalShadowTextInput.textInput.selectAll();
@@ -105,9 +116,18 @@ Item {
     }
 
     Text {
-        id: textArea
+        id: textAreaId
 
-        anchors.centerIn: parent
+//        anchors.left: parent.left
+//        anchors.right: parent.right
+//        anchors.margins: 3
+        horizontalAlignment: Qt.AlignHCenter
+        anchors.verticalCenter: parent.verticalCenter
+        elide: Text.ElideRight
+
+
+//        anchors.centerIn: parent
+
 
 //        onTextChanged: {
 //            textChangedAnimation.restart()
@@ -116,7 +136,7 @@ Item {
 //        SequentialAnimation {
 //            id: textChangedAnimation
 //            NumberAnimation {
-//                target: textArea;
+//                target: textAreaId;
 //                property: "scale";
 //                easing.type: Easing.OutInElastic
 //                from: 1.0;
@@ -124,7 +144,7 @@ Item {
 //                duration: 100
 //            }
 //            NumberAnimation {
-//                target: textArea;
+//                target: textAreaId;
 //                property: "scale";
 //                easing.type: Easing.OutInElastic
 //                to: 1.0

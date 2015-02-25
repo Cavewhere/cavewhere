@@ -75,6 +75,8 @@ cwPage* cwPageSelectionModel::registerPage(cwPage *parentPage,
             }
         }
 
+        emit historyChanged();
+
         if(CurrentPage == childPage) {
             //Replace the current page with the new page
             CurrentPage = newPage;
@@ -223,6 +225,8 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
                 PageHistory.append(CurrentPage);
                 CurrentPageIndex = PageHistory.size() - 1;
             }
+
+            emit historyChanged();
 
         }
 
@@ -455,4 +459,26 @@ cwPage *cwPageSelectionModel::currentPage() const
     return CurrentPage;
 }
 
+/**
+ * @brief cwPageSelectionModel::clearHistory
+ *
+ * This will clear the history for the page selection model
+ */
+void cwPageSelectionModel::clearHistory()
+{
+    CurrentPage.clear();
+    PageHistory.clear();
+}
+
+/**
+* @brief cwPageSelectionModel::history
+* @return The page history
+*/
+QList<QObject *> cwPageSelectionModel::history() const {
+    QList<QObject*> pages;
+    foreach(cwPage* page, PageHistory) {
+        pages.append(page);
+    }
+    return pages;
+}
 

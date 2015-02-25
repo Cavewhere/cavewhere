@@ -65,15 +65,7 @@ int main(int argc, char *argv[])
 //        qDebug() << "Image formats:" << imageFormats;
 //    }
 
-    qRegisterMetaType<QThread*>("QThread*");
-    qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
-    qRegisterMetaType<QList <QString> >("QList<QString>");
-    qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
-    qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
-    qRegisterMetaType<QModelIndex>("QModelIndex");
-    qRegisterMetaType<cwImage>("cwImage");
-    qRegisterMetaType<GLuint>("GLuint");
-    qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

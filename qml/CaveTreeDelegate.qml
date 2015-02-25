@@ -34,7 +34,7 @@ FocusScope {
             id: removeChallengeId
             removeName: name
             onRemove: {
-                var itemIndex = regionVisualDataModel.modelIndex(index);
+                var itemIndex = regionVisualDataModel.modelIndex(indexToRemove);
                 regionModel.removeIndex(itemIndex);
             }
         }

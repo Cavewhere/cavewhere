@@ -35,6 +35,8 @@ class cwPageSelectionModel : public QObject
     Q_PROPERTY(bool hasForward READ hasForward NOTIFY hasForwardChanged)
     Q_PROPERTY(bool hasBackward READ hasBackward NOTIFY hasBackwardChanged)
 
+    Q_PROPERTY(QList<QObject*> history READ history NOTIFY historyChanged)
+
 public:
     explicit cwPageSelectionModel(QObject *parent = 0);
 
@@ -55,6 +57,9 @@ public:
 
     cwPage* currentPage() const;
 
+    Q_INVOKABLE void clearHistory();
+    QList<QObject*> history() const;
+
     bool hasForward() const;
     bool hasBackward() const;
 
@@ -70,6 +75,7 @@ signals:
     void currentPageChanged();
     void hasForwardChanged();
     void hasBackwardChanged();
+    void historyChanged();
 
 public slots:
 
