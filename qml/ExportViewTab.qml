@@ -94,7 +94,7 @@ Item {
 
         QuickSceneView {
             id: quickSceneView
-            implicitWidth: 500
+            implicitWidth: 300
             Layout.fillHeight: true
             Layout.fillWidth: true
             scene: screenCaptureManagerId.scene
