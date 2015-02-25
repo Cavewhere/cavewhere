@@ -117,7 +117,7 @@ Rectangle {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            rootData.region.removeCave(index);
+            rootData.region.removeCave(indexToRemove);
         }
     }
 

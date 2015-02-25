@@ -25,7 +25,7 @@ MouseArea {
                                                         rightClickMouseArea.clickPos.y)
                 removeChallenge.x = pos.x
                 removeChallenge.y = pos.y
-                removeChallenge.index = styleData.row
+                removeChallenge.indexToRemove = styleData.row
                 removeChallenge.removeName = styleData.value.name
                 removeChallenge.show()
             }

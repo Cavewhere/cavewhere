@@ -247,7 +247,7 @@ Rectangle {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            currentCave.removeTrip(index)
+            currentCave.removeTrip(indexToRemove)
         }
     }
 
