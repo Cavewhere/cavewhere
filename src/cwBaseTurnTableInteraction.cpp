@@ -173,7 +173,6 @@ void cwBaseTurnTableInteraction::pan(QPoint position) {
   Called when the rotation is about to begin
   */
 void cwBaseTurnTableInteraction::startRotating(QPoint position) {
-    qDebug() << "Start rotating:" << position;
     position = Camera->mapToGLViewport(position);
     LastMouseGlobalPosition = unProject(position);
     LastMousePosition = position;
@@ -183,7 +182,6 @@ void cwBaseTurnTableInteraction::startRotating(QPoint position) {
   Rotates the view
   */
 void cwBaseTurnTableInteraction::rotate(QPoint position) {
-    qDebug() << "Rotate:" << position;
     TimeoutRotationPosition = position;
     if(!RotationInteractionTimer->isActive()) {
         RotationInteractionTimer->start();
