@@ -33,35 +33,40 @@ Interaction {
     focus: visible
     Keys.onEscapePressed: done()
 
-    MouseArea {
-        id: mouseAreaId
+    PanZoomPitchArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        basePanZoom: basePanZoomInteraction
 
-        onPressed: {
-            if(pressedButtons == Qt.RightButton) {
-                basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+        MouseArea {
+            id: mouseAreaId
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+            onPressed: {
+                if(pressedButtons == Qt.RightButton) {
+                    basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                }
             }
-        }
 
-        onPositionChanged: {
-            if(pressedButtons == Qt.RightButton) {
-                basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+            onPositionChanged: {
+                if(pressedButtons == Qt.RightButton) {
+                    basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                }
             }
-        }
 
-        onClicked: {
-            if(mouse.button === Qt.LeftButton) {
-                firstMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                scaleLengthItem.p1 = firstMouseLocation
-                scaleLengthItem.p2 = scaleLengthItem.p1
-                interaction.state = "WaitForSecondClick"
-                scaleLengthItem.visible = true;
+            onClicked: {
+                if(mouse.button === Qt.LeftButton) {
+                    firstMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                    scaleLengthItem.p1 = firstMouseLocation
+                    scaleLengthItem.p2 = scaleLengthItem.p1
+                    interaction.state = "WaitForSecondClick"
+                    scaleLengthItem.visible = true;
+                }
             }
-        }
 
-        onWheel: {
-            basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onWheel: {
+                basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            }
         }
     }
 

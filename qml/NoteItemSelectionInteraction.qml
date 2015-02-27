@@ -14,16 +14,21 @@ Interaction {
     property ScrapView scrapView
     property ImageItem imageItem
 
-    MouseArea {
+    PanZoomPitchArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-        onPositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-        onClicked: {
-            var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-            scrapView.selectScrapAt(notePoint)
+        basePanZoom: basePanZoomInteraction
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+            onPositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+            onClicked: {
+                var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                scrapView.selectScrapAt(notePoint)
+            }
+            onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
-        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 
 }

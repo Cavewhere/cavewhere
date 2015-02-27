@@ -13,71 +13,76 @@ BaseScrapInteraction {
 
     property BasePanZoomInteraction basePanZoomInteraction
 
-    MouseArea {
+    PanZoomPitchArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        hoverEnabled: true
+        basePanZoom: basePanZoomInteraction
 
-        property var lastPoint; //This is a Array of the last point
-        property var lastPointIndex; //The last point item that was added
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
 
-        onPressed: {
-            if(pressedButtons === Qt.RightButton) {
-                basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-            }
+            property var lastPoint; //This is a Array of the last point
+            property var lastPointIndex; //The last point item that was added
 
-            if(mouse.button === Qt.LeftButton) {
-                if(scrap === null) {
-                    interaction.addScrap()
+            onPressed: {
+                if(pressedButtons === Qt.RightButton) {
+                    basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
                 }
 
-                //Scrap is completed, we just need to create a new scrap
-                var index
-                if(!lastPoint["IsSnapped"] && scrap.isClosed()) {
-                    interaction.addScrap()
-                    index = 0; //Insert the point at the begining of the new scrap
+                if(mouse.button === Qt.LeftButton) {
+                    if(scrap === null) {
+                        interaction.addScrap()
+                    }
+
+                    //Scrap is completed, we just need to create a new scrap
+                    var index
+                    if(!lastPoint["IsSnapped"] && scrap.isClosed()) {
+                        interaction.addScrap()
+                        index = 0; //Insert the point at the begining of the new scrap
+                    } else {
+                        index = lastPoint["InsertIndex"]
+                    }
+
+                    scrap.insertPoint(index, lastPoint["NoteCoordsPoint"])
+                    outlinePointView.selectedItemIndex = index
+
+                    lastPointIndex = index
+                }
+            }
+
+            onReleased: {
+                lastPointIndex = -1
+            }
+
+            onPositionChanged: {
+                if(pressedButtons === Qt.RightButton) {
+                    basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                }
+
+                if(pressedButtons === Qt.LeftButton &&
+                        lastPointIndex !== -1) {
+                    var noteCoords = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                    scrap.setPoint(lastPointIndex, noteCoords)
+                }
+
+                //Is the last point snapped to something
+                lastPoint = interaction.snapToScrapLine(Qt.point(mouse.x, mouse.y))
+                if(lastPoint["IsSnapped"]) {
+                    var point = lastPoint["QtViewportPoint"]
+                    snapPoint.setPosition(point)
+                    snapPoint.visible = true;
                 } else {
-                    index = lastPoint["InsertIndex"]
+                    snapPoint.visible = false;
                 }
-
-                scrap.insertPoint(index, lastPoint["NoteCoordsPoint"])
-                outlinePointView.selectedItemIndex = index
-
-                lastPointIndex = index
-            }
-        }
-
-        onReleased: {
-            lastPointIndex = -1
-        }
-
-        onPositionChanged: {
-            if(pressedButtons === Qt.RightButton) {
-                basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
             }
 
-            if(pressedButtons === Qt.LeftButton &&
-                    lastPointIndex !== -1) {
-                var noteCoords = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                scrap.setPoint(lastPointIndex, noteCoords)
+            onEntered: {
+                interaction.forceActiveFocus()
             }
 
-            //Is the last point snapped to something
-            lastPoint = interaction.snapToScrapLine(Qt.point(mouse.x, mouse.y))
-            if(lastPoint["IsSnapped"]) {
-                var point = lastPoint["QtViewportPoint"]
-                snapPoint.setPosition(point)
-                snapPoint.visible = true;
-            } else {
-                snapPoint.visible = false;
-            }
+            onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
-
-        onEntered: {
-            interaction.forceActiveFocus()
-        }
-
-        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 
     HelpBox {
