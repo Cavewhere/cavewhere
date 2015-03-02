@@ -16,6 +16,7 @@ BaseNoteStationInteraction {
 
     NotePointAddMouseArea {
         id: mouseArea
+        baseNotePointInteraction: interaction
     }
 
     HelpBox {

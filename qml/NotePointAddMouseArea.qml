@@ -3,6 +3,7 @@ import Cavewhere 1.0
 
 PanZoomPitchArea {
     property BasePanZoomInteraction basePanZoomInteraction
+    property Interaction baseNotePointInteraction
     property ImageItem imageItem
 
     anchors.fill: parent
@@ -20,7 +21,7 @@ PanZoomPitchArea {
         onReleased: {
             if(mouse.button === Qt.LeftButton) {
                 var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                parent.addPoint(notePoint)
+                baseNotePointInteraction.addPoint(notePoint)
             }
         }
 
