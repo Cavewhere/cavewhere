@@ -323,7 +323,7 @@ void cwUsedStationTaskManager::disconnectChunk(cwSurveyChunk *chunk)
 /**
   Get's the cave for this task
   */
-inline cwCave* cwUsedStationTaskManager::cave() {
+cwCave* cwUsedStationTaskManager::cave() {
     return Cave;
 }
 
