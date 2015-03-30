@@ -10,11 +10,13 @@
 
 //Our includes
 #include "cwTask.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QStringList>
 #include <QFile>
 #include <QTextStream>
+#include <QScopedPointer>
 
 class cwExporterTask : public cwTask
 {
@@ -22,6 +24,7 @@ Q_OBJECT
 
 public:
     explicit cwExporterTask(QObject* object);
+    ~cwExporterTask() { qDebug() << "Deleted:" << this; }
 
     void setParentSurvexExporter(cwExporterTask* parent);
 
@@ -33,7 +36,7 @@ public:
 
 protected:
     QStringList Errors;
-    QTextStream OutputStream;
+    QScopedPointer<QTextStream> OutputStream;
 
     bool openOutputFile();
     void closeOutputFile();
@@ -42,7 +45,7 @@ private:
     cwExporterTask* ParentExportTask;
 
     QString OutputFileName;
-    QFile OutputFile;
+    QScopedPointer<QFile> OutputFile;
 };
 
 #endif // CWSURVEXEXPORTERTASK_H

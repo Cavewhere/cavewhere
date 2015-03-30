@@ -67,7 +67,7 @@ bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion
   */
 void cwSurvexExporterRegionTask::runTask() {
     if(openOutputFile()) {
-        bool good = writeRegion(OutputStream, Region);
+        bool good = writeRegion(*OutputStream.data(), Region);
         closeOutputFile();
 
         if(!good) {

@@ -935,3 +935,5 @@ qbsModules/modules/Git/Git.qbs.user
 us.stackdump
 vc100.pdb
 ._.DS_Store
+qt5-4-1-debug/
+build-installer-Desktop-Release/

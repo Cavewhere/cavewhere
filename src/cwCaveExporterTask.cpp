@@ -33,7 +33,7 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   */
 void cwCaveExporterTask::runTask() {
     if(checkData() && openOutputFile()) {
-        bool good = writeCave(OutputStream, Cave);
+        bool good = writeCave(*OutputStream.data(), Cave);
         closeOutputFile();
 
         if(!good) {

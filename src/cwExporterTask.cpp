@@ -74,15 +74,18 @@ QStringList cwExporterTask::errors() {
   \brief Opens the survex output file for writting
   */
 bool cwExporterTask::openOutputFile() {
-    OutputFile.setFileName(OutputFileName);
-    bool canWrite = OutputFile.open(QIODevice::WriteOnly);
+    OutputFile.reset(new QFile());
+    OutputStream.reset(new QTextStream());
+
+    OutputFile->setFileName(OutputFileName);
+    bool canWrite = OutputFile->open(QIODevice::WriteOnly);
     if(!canWrite) {
         //File is bad
         Errors.append(QString("Open file %1").arg(OutputFileName));
         stop();
     } else {
         //File is good
-        OutputStream.setDevice(&OutputFile);
+        OutputStream->setDevice(OutputFile.data());
     }
 
     return canWrite;
@@ -91,8 +94,8 @@ bool cwExporterTask::openOutputFile() {
   \brief Closes the survex output file
   */
 void cwExporterTask::closeOutputFile() {
-    if(OutputFile.isOpen()) {
-        OutputStream.flush();
-        OutputFile.close();
+    if(OutputFile->isOpen()) {
+        OutputStream->flush();
+        OutputFile->close();
     }
 }

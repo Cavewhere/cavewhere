@@ -42,7 +42,7 @@ void cwSurvexExporterTripTask::runTask() {
     setNumberOfSteps(Trip->numberOfStations());
 
     openOutputFile();
-    writeTrip(OutputStream, Trip);
+    writeTrip(*OutputStream.data(), Trip);
     closeOutputFile();
 
     done();
