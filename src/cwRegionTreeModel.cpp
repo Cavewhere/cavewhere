@@ -51,6 +51,7 @@ cwCavingRegion *cwRegionTreeModel::cavingRegion() const {
 void cwRegionTreeModel::beginInsertCaves(QModelIndex parent, int begin, int end)
 {
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
     beginInsertRows(QModelIndex(), begin, end);
 }
 
@@ -64,6 +65,7 @@ void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
 {
     Q_UNUSED(parent);
     Q_ASSERT(parent == QModelIndex());
+    Q_ASSERT(begin <= end);
 
     addCaveConnections(begin, end);
     endInsertRows();
@@ -86,14 +88,17 @@ void cwRegionTreeModel::insertedCaves(QModelIndex parent, int begin, int end)
  * @param end
  */
 void cwRegionTreeModel::beginRemoveCaves(QModelIndex parent, int begin, int end)
-{
+{;
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
     Q_ASSERT(parent == QModelIndex());
 
     for(int i = begin; i <= end; i++) {
         cwCave* cave = index(i, 0, QModelIndex()).data(ObjectRole).value<cwCave*>();
-        beginRemoveTrips(cave, 0, cave->trips().size() - 1);
-        endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+        if(cave->hasTrips()) {
+            beginRemoveTrips(cave, 0, cave->trips().size() - 1);
+            endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+        }
     }
 
     removeCaveConnections(begin, end);
@@ -125,6 +130,7 @@ void cwRegionTreeModel::beginInsertTrips(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* parentCave = static_cast<cwCave*>(sender());
@@ -144,6 +150,7 @@ void cwRegionTreeModel::insertedTrips(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* parentCave = static_cast<cwCave*>(sender());
@@ -161,6 +168,7 @@ void cwRegionTreeModel::beginRemoveTrips(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
     cwCave* parentCave = static_cast<cwCave*>(sender());
@@ -194,6 +202,7 @@ void cwRegionTreeModel::beginInsertNotes(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
@@ -213,6 +222,7 @@ void cwRegionTreeModel::insertedNotes(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* parentNoteModel = static_cast<cwSurveyNoteModel*>(sender());
@@ -230,6 +240,7 @@ void cwRegionTreeModel::beginRemoveNotes(QModelIndex parent, int begin, int end)
 {
     Q_ASSERT(parent == QModelIndex());
     Q_UNUSED(parent);
+    Q_ASSERT(begin <= end);
 
     Q_ASSERT(qobject_cast<cwSurveyNoteModel*>(sender()) != nullptr);
     cwSurveyNoteModel* noteModel = static_cast<cwSurveyNoteModel*>(sender());
@@ -250,6 +261,7 @@ void cwRegionTreeModel::removeNotes(QModelIndex parent, int begin, int end)
     Q_UNUSED(parent);
     Q_UNUSED(begin);
     Q_UNUSED(end);
+    Q_ASSERT(begin <= end);
     endRemoveRows();
 }
 
@@ -261,6 +273,8 @@ void cwRegionTreeModel::removeNotes(QModelIndex parent, int begin, int end)
 void cwRegionTreeModel::beginInsertScraps(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    Q_ASSERT(begin <= end);
+
     cwNote* parentNote = static_cast<cwNote*>(sender());
 
     QModelIndex parentIndex = index(parentNote);
@@ -276,6 +290,8 @@ void cwRegionTreeModel::beginInsertScraps(int begin, int end)
 void cwRegionTreeModel::insertedScraps(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    Q_ASSERT(begin <= end);
+
     insertedScraps(qobject_cast<cwNote*>(sender()), begin, end);
 }
 
@@ -287,6 +303,8 @@ void cwRegionTreeModel::insertedScraps(int begin, int end)
 void cwRegionTreeModel::beginRemoveScraps(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    Q_ASSERT(begin <= end);
+
     cwNote* parentNote = static_cast<cwNote*>(sender());
     QModelIndex parentIndex = index(parentNote);
 
@@ -303,6 +321,8 @@ void cwRegionTreeModel::removedScraps(int begin, int end)
     Q_UNUSED(begin);
     Q_UNUSED(end);
     Q_ASSERT(qobject_cast<cwNote*>(sender()) != nullptr);
+    Q_ASSERT(begin <= end);
+
     endRemoveRows();
 }
 
@@ -312,7 +332,9 @@ void cwRegionTreeModel::removedScraps(int begin, int end)
  */
 void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
    //Remove all the connections
-    removeCaveConnections(0, rowCount() - 1);
+    if(rowCount() > 0) {
+        removeCaveConnections(0, rowCount() - 1);
+    }
 
     //Reset the model
     beginResetModel();
@@ -323,7 +345,9 @@ void cwRegionTreeModel::setCavingRegion(cwCavingRegion* region) {
     connect(Region, SIGNAL(rowsRemoved(QModelIndex,int,int)), SLOT(removedCaves(QModelIndex,int,int)));
     endResetModel();
 
-    addCaveConnections(0, rowCount() - 1);
+    if(rowCount() > 0) {
+        addCaveConnections(0, rowCount() - 1);
+    }
 }
 
 /**
@@ -716,7 +740,6 @@ cwScrap *cwRegionTreeModel::scrap(const QModelIndex &index) const
   \brief Adds all the connection for a cave
   */
 void cwRegionTreeModel::addCaveConnections(int beginIndex, int endIndex) {
-
     for(int i = beginIndex; i <= endIndex; i++) {
         cwCave* cave = Region->cave(i);
 
@@ -767,7 +790,6 @@ void cwRegionTreeModel::addTripConnections(cwCave* parentCave, int beginIndex, i
   \brief Removes the connections for a trips between beginIndex and endIndex
   */
 void cwRegionTreeModel::removeTripConnections(cwCave* parentCave, int beginIndex, int endIndex) {
-
     for(int i = beginIndex; i <= endIndex; i++) {
         cwTrip* trip = parentCave->trip(i);
         disconnect(trip, 0, this, 0); //disconnect signals and slots to this object
@@ -818,12 +840,15 @@ void cwRegionTreeModel::removeNoteConnections(cwTrip *parentTrip, int beginIndex
  */
 void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
 {
+    Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentCave);
 
     for(int i = begin; i <= end; i++) {
         cwTrip* trip = index(i, 0, parentIndex).data(ObjectRole).value<cwTrip*>();
-        beginRemoveNotes(trip, 0, trip->notes()->rowCount() - 1);
-        endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+        if(trip->notes()->rowCount() > 0) {
+            beginRemoveNotes(trip, 0, trip->notes()->rowCount() - 1);
+            endRemoveRows(); //beginRemoveTrips() starts the endRemoveRows
+        }
     }
 
     removeTripConnections(parentCave, begin, end);
@@ -838,12 +863,15 @@ void cwRegionTreeModel::beginRemoveTrips(cwCave *parentCave, int begin, int end)
  */
 void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
 {
+    Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentTrip);
 
     for(int i = begin; i <= end; i++) {
         cwNote* note = index(i, 0, parentIndex).data(ObjectRole).value<cwNote*>();
-        beginRemoveScraps(note, 0, note->scraps().size() - 1);
-        endRemoveRows();
+        if(note->hasScraps()) {
+            beginRemoveScraps(note, 0, note->scraps().size() - 1);
+            endRemoveRows();
+        }
     }
 
     removeNoteConnections(parentTrip, begin, end);
@@ -858,6 +886,7 @@ void cwRegionTreeModel::beginRemoveNotes(cwTrip *parentTrip, int begin, int end)
  */
 void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end)
 {
+    Q_ASSERT(begin <= end);
     QModelIndex parentIndex = index(parentNote);
 
     beginRemoveRows(parentIndex, begin, end);
@@ -871,6 +900,7 @@ void cwRegionTreeModel::beginRemoveScraps(cwNote *parentNote, int begin, int end
  */
 void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
 {
+    Q_ASSERT(begin <= end);
     addTripConnections(parentCave, begin, end);
     endInsertRows();
 
@@ -893,6 +923,8 @@ void cwRegionTreeModel::insertedTrips(cwCave *parentCave, int begin, int end)
  */
 void cwRegionTreeModel::insertedNotes(cwTrip *parentTrip, int begin, int end)
 {
+    Q_ASSERT(begin <= end);
+
     addNoteConnections(parentTrip, begin, end);
     endInsertRows();
 
@@ -918,5 +950,6 @@ void cwRegionTreeModel::insertedScraps(cwNote *parentNote, int begin, int end)
     Q_UNUSED(parentNote);
     Q_UNUSED(begin);
     Q_UNUSED(end);
+    Q_ASSERT(begin <= end);
     endInsertRows();
 }
