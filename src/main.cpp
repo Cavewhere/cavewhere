@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 
     //Cavewhere Transations
     QTranslator cavewhereTranslator;
-    cavewhereTranslator.load("translations/mandarin.qm");
+    cavewhereTranslator.load("/Users/vpicaver/Documents/Projects/cavewhere/translations/mandarin.qm" ); //translations/mandarin.qm");
     a.installTranslator(&cavewhereTranslator);
 
 //    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
