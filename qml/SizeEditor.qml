@@ -20,7 +20,7 @@ RowLayout {
 
     TitledRectangle {
         id: rect1
-        title: "Width"
+        title: qsTr("Width")
 
         ClickTextInput {
             id: widthTextId
@@ -31,12 +31,12 @@ RowLayout {
     }
 
     Text {
-        text: "x"
+        text: qsTr("x")
     }
 
     TitledRectangle {
         color: backgroundColor
-        title: "Height"
+        title: qsTr("Height")
 
         ClickTextInput {
             id: heightTextId

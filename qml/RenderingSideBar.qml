@@ -50,8 +50,8 @@ TabView {
     }
 
     Component.onCompleted: {
-        addTab("View", cameraOptionsTabComponentId);
-        addTab("Export", exportTabComponentId);
+        addTab(qsTr("View"), cameraOptionsTabComponentId);
+        addTab(qsTr("Export"), exportTabComponentId);
 
         viewTab = getTab(0)
     }

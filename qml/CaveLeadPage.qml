@@ -21,7 +21,7 @@ Rectangle {
             TextField {
                 id: searchBox
 
-                placeholderText: "Filter..."
+                placeholderText: qsTr("Filter...")
                 inputMethodHints: Qt.ImhNoPredictiveText
 
                 Layout.alignment: Qt.AlignRight
@@ -32,11 +32,11 @@ Rectangle {
             Item { implicitWidth: 50 }
 
             Text {
-                text: "Lead Distance from:"
+                text: qsTr("Lead Distance from:")
             }
 
             ClickTextInput {
-                text: leadModel.referanceStation.length === 0 ? "No Station" : leadModel.referanceStation
+                text: leadModel.referanceStation.length === 0 ? qsTr("No Station") : leadModel.referanceStation
                 onFinishedEditting: {
                     leadModel.referanceStation = newText
                 }
@@ -49,7 +49,7 @@ Rectangle {
             HelpArea {
                 id: distanceStationHelpArea
                 implicitWidth: 200
-                text: "Lead distance from a station, calculates the <b>line of sight</b> distance from the station to all the leads."
+                text: qsTr("Lead distance from a station, calculates the <b>line of sight</b> distance from the station to all the leads.")
             }
         }
 
@@ -85,13 +85,13 @@ Rectangle {
             TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
             TableViewColumn {
                 role: "leadDistanceToReferanceStation";
-                title: "Distance to " + leadModel.referanceStation;
+                title: qsTr("Distance to ") + leadModel.referanceStation;
                 width: 100
             }
             TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
             TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
 
-            section.property: "leadCompleted"
+            section.property: qsTr("leadCompleted")
             section.delegate: Rectangle {
                 width: tableView.width
                 height: childrenRect.height
@@ -161,7 +161,7 @@ Rectangle {
                 Component {
                     id: gotoViewComponent
                     LinkText {
-                        text: "Goto"
+                        text: qsTr("Goto")
                         onClicked: {
                             var index = tableView.model.index(styleData.row);
                             var scrap = tableView.model.data(index, LeadModel.LeadScrap);

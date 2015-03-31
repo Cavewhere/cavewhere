@@ -130,7 +130,7 @@ Interaction {
             Button {
                 anchors.verticalCenter: parent.verticalCenter
 
-                text: "Done"
+                text: qsTr("Done")
                 onClicked: doneButtonPressed()
             }
         }
@@ -139,7 +139,7 @@ Interaction {
 
     HelpBox {
         id: helpBoxId
-        text: "<b>Click</b> the length's first point"
+        text: qsTr("<b>Click</b> the length's first point")
         visible: true
     }
 
@@ -174,7 +174,7 @@ Interaction {
 
             PropertyChanges {
                 target: helpBoxId
-                text: "<b> Click </b> the length's second point"
+                text: qsTr("<b> Click </b> the length's second point")
             }
         },
 

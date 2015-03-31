@@ -115,7 +115,7 @@ Item {
 
         Button {
             id: exportButton
-            text: "Export"
+            text: qsTr("Export")
 
             onClicked: {
                 exportContextMenu.popup();
@@ -128,7 +128,7 @@ Item {
                     title: "Survex"
 
                     ExportSurveyMenuItem {
-                        prefixText: "Current trip"
+                        prefixText: qsTr("Current trip")
                         currentText: exportManager.currentTripName
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_TRIP_SURVEX"
@@ -137,7 +137,7 @@ Item {
                     }
 
                     ExportSurveyMenuItem {
-                        prefixText: "Current cave"
+                        prefixText: qsTr("Current cave")
                         currentText: exportManager.currentCaveName
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_SURVEX"
@@ -146,7 +146,7 @@ Item {
                     }
 
                     Controls.MenuItem {
-                        text: "Region (all caves)"
+                        text: qsTr("Region (all caves)")
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_REGION_SURVEX"
                             fileDialog.open()
@@ -158,7 +158,7 @@ Item {
                     title: "Compass"
 
                     ExportSurveyMenuItem {
-                        prefixText: "Current cave"
+                        prefixText: qsTr("Current cave")
                         currentText: exportManager.currentCaveName
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_COMPASS"
@@ -172,7 +172,7 @@ Item {
         Button {
             id: importButton
 
-            text: "Import"
+            text: qsTr("Import")
             visible: false
 
             onClicked: {

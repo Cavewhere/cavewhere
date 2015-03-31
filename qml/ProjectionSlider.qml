@@ -28,7 +28,7 @@ Item {
             }
 
             Text {
-                text: "Orthognal"
+                text: qsTr("Orthognal")
             }
 
             ToggleSlider {
@@ -50,7 +50,7 @@ Item {
             }
 
             Text {
-                text: "Perspective"
+                text: qsTr("Perspective")
             }
         }
 

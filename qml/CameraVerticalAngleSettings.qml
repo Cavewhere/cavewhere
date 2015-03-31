@@ -24,7 +24,7 @@ ColumnLayout {
         }
 
         Text {
-            text: "°"
+            text: qsTr("°")
         }
 
         ClinoValidator {
@@ -34,7 +34,7 @@ ColumnLayout {
         ColumnLayout {
             Button {
                 id: planButtonId
-                text: "Plan"
+                text: qsTr("Plan")
                 width: profileButtonId.width
                 onClicked: {
                     pitchAnimation.to = 90
@@ -45,7 +45,7 @@ ColumnLayout {
 
             Button {
                 id: profileButtonId
-                text: "Profile"
+                text: qsTr("Profile")
                 onClicked: {
                     pitchAnimation.to = 0.0
                     pitchAnimation.restart()

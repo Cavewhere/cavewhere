@@ -106,7 +106,7 @@ Rectangle {
 
         SideBarButton {
             id: viewButton
-            text: "View"
+            text: qsTr("View")
             image: "qrc:/icons/viewIcon.png"
             troggled: 0 == parent.currentIndex
             onButtonIsTroggled: parent.currentIndex = 0
@@ -114,7 +114,7 @@ Rectangle {
 
         SideBarButton {
             id: dataEntyButton
-            text: "Data"
+            text: qsTr("Data")
             image: "qrc:icons/book.png"
             troggled: 1 == parent.currentIndex
             onButtonIsTroggled: parent.currentIndex = 1           

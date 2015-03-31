@@ -35,7 +35,7 @@ DataBox {
             font.pixelSize: 10
             font.bold: true
             color: "#EEEEEE"
-            text: "Excluded"
+            text: qsTr("Excluded")
         }
     }
 

@@ -8,7 +8,7 @@ FloatingGroupBox {
 
     property ScrapLeadView leadView;
 
-    title: "Lead Info"
+    title: qsTr("Lead Info")
     visible: leadView !== null && leadView.selectedItemIndex >= 0
 
     ColumnLayout {
@@ -47,20 +47,20 @@ FloatingGroupBox {
 
         LeadQuickComments {
             Layout.fillWidth: true
-            category: "Passage Type"
+            category: qsTr("Passage Type")
             keywords: ["Aven", "Borehole", "Caynon", "Dig", "Dome", "Phreatic", "Pit", "Sump",]
             textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
-            category: "Passage Fill"
+            category: qsTr("Passage Fill")
             Layout.fillWidth: true
             keywords: ["Breakdown", "Cobbles", "Muddy", "Sandy", "Water"]
             textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
-            category: "Passage Traversal"
+            category: qsTr("Passage Traversal")
             Layout.fillWidth: true
             keywords: ["Crawl", "Climb", "Low", "High", "Swim", "Tight", "Traverse", "Walking"]
             textArea: leadDescriptionArea
@@ -68,21 +68,21 @@ FloatingGroupBox {
 
         LeadQuickComments {
             Layout.fillWidth: true
-            category: "Stream Type"
+            category: qsTr("Stream Type")
             keywords: ["Large", "Stream", "Small", "Trickle"]
             textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
             Layout.fillWidth: true
-            category: "Air"
+            category: qsTr("Air")
             keywords: ["Strong", "Air", "Weak"]
             textArea: leadDescriptionArea
         }
 
         LeadQuickComments {
             Layout.fillWidth: true
-            category: "Gear Needed"
+            category: qsTr("Gear Needed")
             keywords: ["Bolts", "Cable Ladder", "Handline", "Hammer", "Rope", "Dig Equipment"]
             textArea: leadDescriptionArea
         }

@@ -14,7 +14,7 @@ DrawLengthInteraction {
     property NoteTransform noteTransform
     property Note note
 
-    doneTextLabel: "<b>In cave length</b>"
+    doneTextLabel: qsTr("<b>In cave length</b>")
 
     onDoneButtonPressed: {
         var imageSize = imageItem.imageProperties.size

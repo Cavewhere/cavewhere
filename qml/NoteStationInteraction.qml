@@ -21,6 +21,6 @@ BaseNoteStationInteraction {
 
     HelpBox {
         id: stationHelpBox
-        text: qsTr("Click to add new station")
+        text: qsTr(qsTr("Click to add new station"))
     }
 }

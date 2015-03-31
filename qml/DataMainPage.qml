@@ -32,7 +32,7 @@ Rectangle {
             Text {
                 font.bold: true
                 font.pointSize: 20
-                text: "All Caves"
+                text: qsTr("All Caves")
             }
 
             ExportImportButtons {

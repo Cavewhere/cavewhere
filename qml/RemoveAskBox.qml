@@ -65,12 +65,12 @@ ShadowRectangle {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "Remove <b>" + removeName + "</b>?"
+            text: qsTr("Remove <b>" + removeName + "</b>?")
             visible: removeName.length !== 0
         }
 
         Button {
-            text: "Remove"
+            text: qsTr("Remove")
             onClicked: {
                 remove();
                 removeChallenge.state = ""
@@ -78,7 +78,7 @@ ShadowRectangle {
         }
 
         Button {
-            text: "Cancel"
+            text: qsTr("Cancel")
             onClicked: {
                 removeChallenge.state = ""
             }

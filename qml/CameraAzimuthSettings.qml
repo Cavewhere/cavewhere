@@ -22,7 +22,7 @@ ColumnLayout {
 
         Button {
             id: northButton
-            text: "North"
+            text: qsTr("North")
             onClicked: {
                 azimuthAnimationId.restartRotation(0.0)
             }
@@ -33,7 +33,7 @@ ColumnLayout {
 
         Button {
             id: westButton
-            text: "West"
+            text: qsTr("West")
             width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(270.0)
@@ -60,13 +60,13 @@ ColumnLayout {
             }
 
             Text {
-                text: "°"
+                text: qsTr("°")
             }
         }
 
         Button {
             id: eastButton
-            text: "East"
+            text: qsTr("East")
             width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(90.0)
@@ -77,7 +77,7 @@ ColumnLayout {
         Item { width:1; height:1 }
         Button {
             id: southButton
-            text: "South"
+            text: qsTr("South")
             width: northButton.width
             onClicked: {
                 azimuthAnimationId.restartRotation(180.0)

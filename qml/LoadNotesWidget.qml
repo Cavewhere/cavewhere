@@ -56,7 +56,7 @@ Item {
 
                 Text {
                     id: noteTextId
-                    text: "No notes found..."
+                    text: qsTr("No notes found...")
                     font.pointSize: 14
                     font.bold: true
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -67,7 +67,7 @@ Item {
                     spacing: 5
 
                     Text {
-                        text: "Add scanned notes"
+                        text: qsTr("Add scanned notes")
                         anchors.verticalCenter: loadNoteButtonId.verticalCenter
                     }
 

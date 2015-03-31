@@ -19,7 +19,7 @@ Rectangle {
     property Cave currentCave
 
     function tripPageName(trip) {
-        return "Trip=" + trip.name;
+        return qsTr("Trip=") + trip.name;
     }
 
     function registerSubPages() {
@@ -98,7 +98,7 @@ Rectangle {
             }
 
             CWButton {
-                text: "Leads"
+                text: qsTr("Leads")
                 iconSource: "qrc:icons/question.png"
                 onClicked: {
                     rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
@@ -130,7 +130,7 @@ Rectangle {
 
             AddAndSearchBar {
                 Layout.fillWidth: true
-                addButtonText: "Add Trip"
+                addButtonText: qsTr("Add Trip")
                 onAdd: {
                     currentCave.addTrip()
 

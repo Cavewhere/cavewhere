@@ -76,7 +76,7 @@ Item {
         property CaptureViewport capture: null
 
         MenuItem {
-            text: "Remove"
+            text: qsTr("Remove")
             onTriggered: {
                 if(layerRightClickMenu.capture == null) {
                     console.warn("Capture is null")
@@ -112,7 +112,7 @@ Item {
                 Layout.fillWidth: true
 
                 GroupBox {
-                    title: "File type"
+                    title: qsTr("File type")
 
                     ComboBox {
                         id: fileTypeExportComboBox
@@ -121,7 +121,7 @@ Item {
                 }
 
                 Button {
-                    text: "Export"
+                    text: qsTr("Export")
 
                     onClicked: {
                         exportDialogId.open();
@@ -134,7 +134,7 @@ Item {
             BreakLine {  }
 
             Button {
-                text: "Options"
+                text: qsTr("Options")
                 onClicked: {
                     optionsScrollViewId.visible = !optionsScrollViewId.visible
                 }
@@ -162,7 +162,7 @@ Item {
 
                     GroupBox {
                         id: paperSizeId
-                        title: "Paper Size"
+                        title: qsTr("Paper Size")
 
                         ColumnLayout {
 
@@ -202,7 +202,7 @@ Item {
 
                             RowLayout {
                                 Text {
-                                    text: "Width"
+                                    text: qsTr("Width")
                                 }
 
                                 ClickTextInput {
@@ -216,12 +216,12 @@ Item {
                                 }
 
                                 Text {
-                                    text: "in"
+                                    text: qsTr("in")
                                     font.italic: true
                                 }
 
                                 Text {
-                                    text: "Height"
+                                    text: qsTr("Height")
                                 }
 
                                 ClickTextInput {
@@ -234,14 +234,14 @@ Item {
                                 }
 
                                 Text {
-                                    text: "in"
+                                    text: qsTr("in")
                                     font.italic: true
                                 }
                             }
 
                             RowLayout {
                                 Text {
-                                    text: "Resolution"
+                                    text: qsTr("Resolution")
                                 }
 
                                 SpinBox {
@@ -261,7 +261,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "DPI"
+                                    text: qsTr("DPI")
                                     font.italic: true
                                 }
                             }
@@ -280,12 +280,12 @@ Item {
 
                     GroupBox {
                         id: orientationId
-                        title: "Orientation"
+                        title: qsTr("Orientation")
 
                         RowLayout {
                             id: portraitLandscrapSwitch
                             Text {
-                                text: "Portrait"
+                                text: qsTr("Portrait")
                             }
 
                             Switch {
@@ -297,14 +297,14 @@ Item {
                             }
 
                             Text {
-                                text: "Landscrape"
+                                text: qsTr("Landscrape")
                             }
                         }
                     }
 
                     GroupBox {
                         id: layersId
-                        title: "Layers"
+                        title: qsTr("Layers")
 
                         ScrollView {
                             ListView {
@@ -364,7 +364,7 @@ Item {
 
                     GroupBox {
                         id: layerGroupsId
-                        title: "Layer Groups"
+                        title: qsTr("Layer Groups")
 
                         ScrollView {
                             ListView {
@@ -417,7 +417,7 @@ Item {
 
                             RowLayout {
                                 Text {
-                                    text: "Size"
+                                    text: qsTr("Size")
                                 }
 
                                 ClickTextInput {
@@ -426,7 +426,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "x"
+                                    text: qsTr("x")
                                 }
 
                                 ClickTextInput {
@@ -438,11 +438,11 @@ Item {
 
                             RowLayout {
                                 Text {
-                                    text: "Position"
+                                    text: qsTr("Position")
                                 }
 
                                 Text {
-                                    text: "x:"
+                                    text: qsTr("x:")
                                 }
 
                                 ClickTextInput {
@@ -451,7 +451,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "y:"
+                                    text: qsTr("y:")
                                 }
 
                                 ClickTextInput {
@@ -462,7 +462,7 @@ Item {
 
                             RowLayout {
                                 Text {
-                                    text: "Rotation"
+                                    text: qsTr("Rotation")
                                 }
 
                                 ClickTextInput {
@@ -480,7 +480,7 @@ Item {
 
                                 PropertyChanges {
                                     target: layerProperties
-                                    title: "Properies of " + layerObject.name
+                                    title: qsTr("Properies of ") + layerObject.name
                                     visible: true
                                 }
 
@@ -540,7 +540,7 @@ Item {
 
     Dialogs.FileDialog {
         id: exportDialogId
-        title: "Export to " + fileTypeExportComboBox.currentText
+        title: qsTr("Export to ") + fileTypeExportComboBox.currentText
         selectExisting: false
         onAccepted: {
             screenCaptureManagerId.filename = fileUrl
@@ -552,7 +552,7 @@ Item {
         id: paperSizeModel
 
         ListElement {
-            name: "Letter"
+            name: qsTr("Letter")
             width: 8.5
             height: 11
             units: "in"
@@ -563,7 +563,7 @@ Item {
         }
 
         ListElement {
-            name: "Legal"
+            name: qsTr("Legal")
             width: 8.5
             height: 14
             units: "in"
@@ -574,7 +574,7 @@ Item {
         }
 
         ListElement {
-            name: "A4"
+            name: qsTr("A4")
             width: 8.26772
             height: 11.6929
             units: "in"
@@ -585,7 +585,7 @@ Item {
         }
 
         ListElement {
-            name: "Custom Size"
+            name: qsTr("Custom Size")
             width: 8.5
             height: 11
             units: "in"

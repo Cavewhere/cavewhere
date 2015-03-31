@@ -23,7 +23,7 @@ FloatingGroupBox {
 
     signal activateDPIInteraction
 
-    title: "Image Info"
+    title: qsTr("Image Info")
 
     Row {
         spacing: 5
@@ -36,7 +36,7 @@ FloatingGroupBox {
 
         LabelWithHelp {
             id: labelId
-            text: "Image Resolution"
+            text: qsTr("Image Resolution")
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -55,13 +55,13 @@ FloatingGroupBox {
                         if(note !== null && note.parentTrip() !== null) {
                             tripName = note.parentTrip().name
                         }
-                        return "<b>Propagate resolution</b> for each note in " + tripName
+                        return qsTr("<b>Propagate resolution</b> for each note in ") + tripName
                     }
                     onTriggered: note.propagateResolutionNotesInTrip();
                 }
 
                 Controls.MenuItem {
-                    text: "<b>Reset</b> to original"
+                    text: qsTr("<b>Reset</b> to original")
                     onTriggered: note.resetImageResolution()
                 }
             }

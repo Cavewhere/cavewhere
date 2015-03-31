@@ -26,7 +26,7 @@ Item {
             anchors.margins: 5
 
             GroupBox {
-                title: "Azimuth"
+                title: qsTr("Azimuth")
                 Item {
                     width: columnLayoutId.maxWidth
                     height: azimuthSettingsId.height
@@ -40,7 +40,7 @@ Item {
             }
 
             GroupBox {
-                title: "Vertical Angle"
+                title: qsTr("Vertical Angle")
 
                 Item {
                     width: columnLayoutId.maxWidth
@@ -55,7 +55,7 @@ Item {
             }
 
             GroupBox {
-                title: "Projection"
+                title: qsTr("Projection")
 
                 Item {
                     width: columnLayoutId.maxWidth

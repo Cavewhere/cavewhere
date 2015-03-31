@@ -11,7 +11,7 @@ GroupBox {
     property alias bottomMargin: bottomId.value
     property string unit: ""
 
-    title: "Margins - inches"
+    title: qsTr("Margins - inches")
 
     function setDefaultLeft(margin) {
         leftId.value = margin
@@ -51,7 +51,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: topId
-                text: "Top"
+                text: qsTr("Top")
                 unit: groupBoxId.unit
             }
 
@@ -59,13 +59,13 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: leftId
-                text: "Left"
+                text: qsTr("Left")
                 unit: groupBoxId.unit
             }
 
             PaperMarginSpinBox {
                 id: allId
-                text: "All"
+                text: qsTr("All")
                 unit: groupBoxId.unit
 
                 onValueChanged: {
@@ -78,7 +78,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: rightId
-                text: "Right"
+                text: qsTr("Right")
                 unit: groupBoxId.unit
             }
 
@@ -86,7 +86,7 @@ GroupBox {
 
             PaperMarginSpinBox {
                 id: bottomId
-                text: "Bottom"
+                text: qsTr("Bottom")
                 unit: groupBoxId.unit
             }
 

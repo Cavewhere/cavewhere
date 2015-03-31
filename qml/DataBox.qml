@@ -74,7 +74,7 @@ Item {
         id: rightClickMenu
 
         Controls.MenuItem {
-            text: "Remove Chunk"
+            text: qsTr("Remove Chunk")
             onTriggered: {
                 surveyChunk.parentTrip.removeChunk(surveyChunk)
             }

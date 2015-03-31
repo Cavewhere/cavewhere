@@ -16,7 +16,7 @@ IconButton {
 
     iconSource: "qrc:icons/addNotes.png"
     sourceSize: mainToolBar.iconSize
-    text: "Load"
+    text: qsTr("Load")
 
     onClicked: {
         fileDialog.open();
@@ -24,8 +24,8 @@ IconButton {
 
     FileDialog {
         id: fileDialog;
-        nameFilters: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
-        title: "Load Images"
+        nameFilters: qsTr("Images (*.png *.jpg *.jpeg *.jp2 *.tiff)")
+        title: qsTr("Load Images")
         selectMultiple: true
         onAccepted: {
             buttonId.filesSelected(fileDialog.fileUrls)

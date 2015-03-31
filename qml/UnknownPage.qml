@@ -19,7 +19,7 @@ Item {
             anchors.centerIn: parent
 
             Text {
-                text: "Unknown page!"
+                text: qsTr("Unknown page!")
                 font.pointSize: 50
                 Layout.alignment: Qt.AlignHCenter
             }
@@ -39,7 +39,7 @@ Item {
 
             LinkText {
                 Layout.alignment: Qt.AlignHCenter
-                text: "Back"
+                text: qsTr("Back")
                 onClicked: {
                     rootData.pageSelectionModel.back()
                 }

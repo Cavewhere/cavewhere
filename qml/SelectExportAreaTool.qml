@@ -55,7 +55,7 @@ Item {
         id: toolButtonId
         anchors.top: parent.top
         anchors.right: parent.right
-        text: "Select Area"
+        text: qsTr("Select Area")
         enabled: true
 
         onClicked: {
@@ -85,7 +85,7 @@ Item {
                 name: "CAN_DONE_STATE"
                 PropertyChanges {
                     target: toolButtonId
-                    text: "Done"
+                    text: qsTr("Done")
                     enabled: true
                     onClicked: {
                         var caputerRect = Qt.rect(selectionRectangleId.x,

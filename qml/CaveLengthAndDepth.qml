@@ -13,14 +13,14 @@ Column {
 
     CaveLengthComponent {
         id: caveLengthId
-        text: "Length:"
+        text: qsTr("Length:")
         unitValue: currentCave !== null ? currentCave.length : null
         unitModel: ["m", "km", "ft", "mi"]
     }
 
     CaveLengthComponent {
         id: caveDepth
-        text: "Depth:"
+        text: qsTr("Depth:")
         unitValue: currentCave !== null ? currentCave.depth : null
         unitModel: ["m", "ft"]
     }

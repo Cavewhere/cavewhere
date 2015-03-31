@@ -13,7 +13,7 @@ BaseNoteLeadInteraction {
 
     HelpBox {
         id: stationHelpBox
-        text: "Click to add a lead"
+        text: qsTr("Click to add a lead")
     }
 }
 

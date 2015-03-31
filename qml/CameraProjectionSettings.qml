@@ -21,7 +21,7 @@ ColumnLayout {
         id: fieldOfViewRowLayout
         visible: viewer.perspectiveProjection.enabled
         LabelWithHelp {
-            text: "Field of View"
+            text: qsTr("Field of View")
             helpArea: fieldOfViewId
         }
 
@@ -35,7 +35,7 @@ ColumnLayout {
         }
 
         Text {
-            text: "°"
+            text: qsTr("°")
         }
 
         NumberAnimation {

@@ -42,13 +42,13 @@ Item {
             LabelWithHelp {
                 id: scaleLabelId
                 helpArea: scaleHelp
-                text: "Scale"
+                text: qsTr("Scale")
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             TitledRectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                title: "On Paper"
+                title: qsTr("On Paper")
                 UnitValueInput {
                     id: onPaperLengthInput
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -61,12 +61,12 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "="
+                text: qsTr("=")
             }
 
             TitledRectangle {
                 anchors.verticalCenter: parent.verticalCenter
-                title: "In Cave"
+                title: qsTr("In Cave")
                 UnitValueInput {
                     id: inCaveLengthInput
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -81,7 +81,7 @@ Item {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "="
+            text: qsTr("=")
         }
 
         Text {
@@ -93,10 +93,10 @@ Item {
 
         Text {
             id: errorText
-            color: "red"
+            color: qsTr("red")
             anchors.verticalCenter: parent.verticalCenter
             visible: false
-            text: "Weird scaling units"
+            text: qsTr("Weird scaling units")
             font.italic: true
             font.bold: true
         }

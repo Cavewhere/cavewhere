@@ -17,7 +17,7 @@ MouseArea {
     Menu {
         id: rightClickMenu
         MenuItem {
-            text: "Remove " + styleData.value.name
+            text: qsTr("Remove ") + styleData.value.name
 
             onTriggered: {
                 var pos = rightClickMouseArea.mapToItem(removeChallenge.parent,

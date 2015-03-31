@@ -217,7 +217,7 @@ Rectangle {
 
                 Button {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Okay"
+                    text: qsTr("Okay")
                     onClicked: {
                         imageValidator.clearErrorMessage()
                     }

@@ -57,7 +57,7 @@ PointItem {
 
                     CheckBox {
                         id: checkBox
-                        text: "Completed"
+                        text: qsTr("Completed")
                         checked: lead.completed
                         onCheckedChanged: lead.completed = checked
 
@@ -80,7 +80,7 @@ PointItem {
                     }
 
                     LinkText {
-                        text: "Notes"
+                        text: qsTr("Notes")
                         onClicked: linkGenerator.gotoScrap(scrap)
 
 

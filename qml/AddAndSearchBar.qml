@@ -26,7 +26,7 @@ RowLayout {
 //    Controls.TextField {
 //        id: searchBox
 
-//        placeholderText: "Filter..."
+//        placeholderText: qsTr("Filter...")
 //        inputMethodHints: Qt.ImhNoPredictiveText
 
 //        Layout.alignment: Qt.AlignRight

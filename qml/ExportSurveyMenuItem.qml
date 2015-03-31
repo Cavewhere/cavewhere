@@ -16,7 +16,7 @@ MenuItem {
 
     text: {
         if(currentText.length !== 0) {
-            return prefixText + " - " + currentText
+            return prefixText + qsTr(" - ") + currentText
         }
         return prefixText
     }

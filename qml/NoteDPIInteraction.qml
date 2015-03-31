@@ -13,7 +13,7 @@ DrawLengthInteraction {
 
     property ImageResolution imageResolution
 
-    doneTextLabel: "<b>Length on the paper</b>"
+    doneTextLabel: qsTr("<b>Length on the paper</b>")
     defaultLengthUnit: Units.Inches
 
     onDoneButtonPressed: {

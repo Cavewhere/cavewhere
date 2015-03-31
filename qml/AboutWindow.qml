@@ -12,7 +12,7 @@ Window {
     id: aboutWindow
     width: 350
     height: columnId.height + 20
-    title: "About"
+    title: qsTr("About")
     color: "#E8E8E8"
     visible: true
 
@@ -31,13 +31,13 @@ Window {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "Version: " + version
+            text: qsTr("Version: ") + version
         }
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: {
-                return "Copyright 2013 Philip Schuchardt"
+                return qsTr("Copyright 2013 Philip Schuchardt")
             }
         }
     }

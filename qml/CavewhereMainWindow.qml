@@ -69,7 +69,7 @@ ApplicationWindow {
                 case Loader.Error:
                     return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
                 case Loader.Loading:
-                    return "Loading"
+                    return qsTr("Loading")
                 }
                 return "";
             }

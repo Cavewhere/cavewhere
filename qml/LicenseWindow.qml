@@ -9,7 +9,7 @@ Window {
     height: 600
     visible: !license.hasReadLicenseAgreement
     color: "#E8E8E8"
-    title: "License Agreement"
+    title: qsTr("License Agreement")
 
     modality: Qt.WindowModal
 
@@ -37,7 +37,7 @@ Window {
             anchors.right: parent.right
 
             Button {
-                text: "Close Cavewhere"
+                text: qsTr("Close Cavewhere")
                 onClicked: {
                     license.hasReadLicenseAgreement = false
                     Qt.quit()
@@ -45,7 +45,7 @@ Window {
             }
 
             Button {
-                text: "Accept"
+                text: qsTr("Accept")
                 onClicked: {
                     license.hasReadLicenseAgreement = true
                     window.close()

@@ -18,7 +18,7 @@ Rectangle {
         Text {
             id: textId
             Layout.alignment: Qt.AlignHCenter
-            text: "Top"
+            text: qsTr("Top")
         }
 
         RowLayout {

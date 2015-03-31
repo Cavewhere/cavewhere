@@ -21,10 +21,10 @@ MenuBar {
     signal openAboutWindow;
 
     Menu {
-        title: "File"
+        title: qsTr("File")
 
         MenuItem {
-            text: "New"
+            text: qsTr("New")
             shortcut: "Ctrl+N"
             onTriggered:{
 //                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
@@ -35,7 +35,7 @@ MenuBar {
         }
 
         MenuItem {
-            text: "Open"
+            text: qsTr("Open")
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
@@ -46,7 +46,7 @@ MenuBar {
         MenuSeparator {}
 
         MenuItem {
-            text: "Save"
+            text: qsTr("Save")
             shortcut: "Ctrl+S"
             onTriggered: {
                 if(!project.temporaryProject) {
@@ -59,7 +59,7 @@ MenuBar {
 
         MenuItem {
             id: saveAsMenuItem
-            text: "Save As"
+            text: qsTr("Save As")
             onTriggered:{
                 console.log("Open file dialog:" + saveAsFileDialog)
                 saveAsFileDialog.open()
@@ -69,12 +69,12 @@ MenuBar {
         MenuSeparator {}
 
         MenuItem {
-            text: "About Cavewhere"
+            text: qsTr("About Cavewhere")
             onTriggered: openAboutWindow();
         }
 
         MenuItem {
-            text: "Quit"
+            text: qsTr("Quit")
             shortcut: "Ctrl+Q"
             onTriggered: Qt.quit()
         }

@@ -30,7 +30,7 @@ RowLayout {
 
         LabelWithHelp {
             id: scaleLabelId
-            text: "Scale"
+            text: qsTr("Scale")
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -49,7 +49,7 @@ RowLayout {
                 Text {
                     id: onPaperId
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "On Paper"
+                    text: qsTr("On Paper")
                 }
 
                 UnitValueInput {
@@ -65,7 +65,7 @@ RowLayout {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "="
+            text: qsTr("=")
         }
 
         Rectangle {
@@ -83,7 +83,7 @@ RowLayout {
                 Text {
                     id: inCaveId
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "In Cave"
+                    text: qsTr("In Cave")
                 }
 
                 UnitValueInput {
@@ -101,14 +101,14 @@ RowLayout {
 
     Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: "="
+        text: qsTr("=")
     }
 
     Text {
         id: scaleText
         anchors.verticalCenter: parent.verticalCenter
         visible: !errorText.visible
-        text: "1:" + Utils.fixed(1 / scaleValue, 1)
+        text: qsTr("1:") + Utils.fixed(1 / scaleValue, 1)
     }
 
     Text {
@@ -116,7 +116,7 @@ RowLayout {
         color: "red"
         anchors.verticalCenter: parent.verticalCenter
         visible: false
-        text: "Weird scaling units"
+        text: qsTr("Weird scaling units")
         font.italic: true
         font.bold: true
     }
