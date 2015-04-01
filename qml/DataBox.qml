@@ -26,6 +26,7 @@ Item {
     signal rightClick(var mouse);
     signal enteredPressed();
     signal deletePressed();
+    signal tabPressed();
 
     //    signal rightClicked(int index)
     //    signal splitOn(int index)
@@ -48,6 +49,7 @@ Item {
 
     function handleTab(eventKey) {
         if(eventKey.key === Qt.Key_Tab) {
+            tabPressed();
             surveyChunkView.tab(rowIndex, dataRole)
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {

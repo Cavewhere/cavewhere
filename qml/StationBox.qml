@@ -69,7 +69,7 @@ DataBox {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#444444"
-            text: "Press Enter"
+            text: "Press Tab"
             font.pixelSize: 10
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -90,7 +90,7 @@ DataBox {
             PropertyChanges {
                 target: stationBox
 
-                onEnteredPressed: {
+                onTabPressed: {
                     commitAutoStation()
                 }
 
