@@ -20,11 +20,10 @@
 const QString cwCavernTask::Survex3dExtension = ".3d";
 
 cwCavernTask::cwCavernTask(QObject *parent) :
-    cwTask(parent)
+    cwTask(parent),
+    CavernProcess(nullptr)
 {
-    CavernProcess = new QProcess(this);
-    connect(CavernProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(cavernFinished(int,QProcess::ExitStatus)));
-    connect(CavernProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
+
 }
 
 /**
@@ -57,6 +56,16 @@ QString cwCavernTask::output3dFileName() const {
          done();
          return;
      }
+
+     CavernProcess = new QProcess();
+
+     //Set the process's working directory
+     QFileInfo survexFileInfo(SurvexFileName);
+     QString workingDirectory = survexFileInfo.absoluteDir().absolutePath();
+     CavernProcess->setWorkingDirectory(workingDirectory);
+
+//     connect(CavernProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(cavernFinished(int,QProcess::ExitStatus)));
+     connect(CavernProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
 
      QString inputFile = survexFileName();
      QString outputFile = inputFile + Survex3dExtension;
@@ -92,6 +101,11 @@ QString cwCavernTask::output3dFileName() const {
      arguments.append(inputFile);
 
      CavernProcess->start(cavernPathName, arguments);
+     CavernProcess->waitForFinished();
+
+     delete CavernProcess;
+
+     done();
  }
 
 
@@ -109,26 +123,21 @@ QString cwCavernTask::survexFileName() const {
 void cwCavernTask::privateSetSurvexFile(QString survexFile) {
     QWriteLocker locker(&SurvexFileNameLocker);
     SurvexFileName = survexFile;
-
-    //Set the process's working directory
-    QFileInfo survexFileInfo(SurvexFileName);
-    QString workingDirectory = survexFileInfo.absoluteDir().absolutePath();
-    CavernProcess->setWorkingDirectory(workingDirectory);
 }
 
 /**
   \brief Called when cavern has finished
   */
-void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus) {
-    //qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
-//    qDebug() << CavernProcess->readAllStandardOutput();
-    if(exitStatus == QProcess::CrashExit || exitCode > 0) {
-        //Errors in cavern
-        qDebug() << "Cavern has crashed!" << CavernProcess->readAllStandardOutput();
-        stop();
-    }
-    done();
-}
+//void cwCavernTask::cavernFinished(int exitCode, QProcess::ExitStatus exitStatus) {
+//    qDebug() << "Cavern has finish, outputfile:" << output3dFileName();
+////    qDebug() << CavernProcess->readAllStandardOutput();
+//    if(exitStatus == QProcess::CrashExit || exitCode > 0) {
+//        //Errors in cavern
+//        qDebug() << "Cavern has crashed!" << CavernProcess->readAllStandardOutput();
+//        stop();
+//    }
+//    done();
+//}
 
 /**
 * @brief cwCavernTask::processError

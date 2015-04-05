@@ -15,7 +15,6 @@
 //Qt includes
 #include <QDebug>
 #include <QWindow>
-#include <QThread>
 
 //Std includes
 #include <math.h>
@@ -61,6 +60,7 @@ void cwTextureUploadTask::loadMipmapsFromDisk()
     if(!isDivisibleBy4(firstLevelSize)) {
         //Regenerate the mipmaps
         cwAddImageTask addImageTask;
+        addImageTask.setUsingThreadPool(false);
         addImageTask.setDatabaseFilename(ProjectFilename);
         addImageTask.regenerateMipmapsOn(Image);
         addImageTask.start();

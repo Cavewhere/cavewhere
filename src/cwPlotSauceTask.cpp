@@ -22,9 +22,9 @@ const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
 cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
-    PlotSauceProcess = new QProcess(this);
-    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
-    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+
+//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
+
 }
 
 /**
@@ -67,6 +67,9 @@ void cwPlotSauceTask::runTask() {
         return;
     }
 
+    PlotSauceProcess = new QProcess(this);
+    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
 
@@ -99,6 +102,11 @@ void cwPlotSauceTask::runTask() {
     arguments.append(outputFile);
 
     PlotSauceProcess->start(plotSaucePath, arguments);
+    PlotSauceProcess->waitForFinished();
+
+    delete PlotSauceProcess;
+
+    done();
 }
 
 /**

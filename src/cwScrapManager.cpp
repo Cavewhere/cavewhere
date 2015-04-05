@@ -24,14 +24,10 @@
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
 
-//Qt includes
-#include <QThread>
-
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     //    Region(nullptr),
     LinePlotManager(nullptr),
-    TriangulateThread(new QThread(this)),
     TriangulateTask(new cwTriangulateTask()),
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(nullptr),
@@ -39,8 +35,6 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
-    TriangulateTask->setThread(TriangulateThread);
-
     connect(TriangulateTask, SIGNAL(finished()), SLOT(taskFinished()));
     connect(TriangulateTask, &cwTriangulateTask::shouldRerun, this, &cwScrapManager::rerunDirtyScraps);
 
@@ -49,8 +43,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 cwScrapManager::~cwScrapManager()
 {
     TriangulateTask->stop();
-    TriangulateThread->quit();
-    TriangulateThread->wait();
+    TriangulateTask->waitToFinish();
 }
 
 /**

@@ -26,20 +26,14 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     Region = nullptr;
     GLLinePlot = nullptr;
 
-    LinePlotThread = new QThread(this);
-    LinePlotThread->start();
-
     LinePlotTask = new cwLinePlotTask();
-    LinePlotTask->setThread(LinePlotThread);
     connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(runSurvex())); //So the task is rerun
     connect(LinePlotTask, SIGNAL(finished()), SLOT(updateLinePlot()));
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
     LinePlotTask->stop();
-
-    QMetaObject::invokeMethod(LinePlotThread, "quit");
-    LinePlotThread->wait();
+    LinePlotTask->waitToFinish();
 
     delete LinePlotTask;
 }

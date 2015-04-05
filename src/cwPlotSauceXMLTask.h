@@ -43,7 +43,7 @@ private:
     cwStationPositionLookup StationPositions;
 
     //For extracting the gunzip data
-    cwGunZipReader* GunZipReader;
+//    cwGunZipReader* GunZipReader;
 
     Q_INVOKABLE void privateSetPlotSauceXMLFile(QString inputFile);
 

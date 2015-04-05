@@ -54,8 +54,6 @@ private slots:
     void compassMessages(QString message);
 
 private:
-    QThread* ImportThread;
-
     QPointer<cwCavingRegion> CavingRegion;
     QPointer<QUndoStack> UndoStack;
 

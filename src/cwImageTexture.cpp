@@ -17,8 +17,6 @@
 #include <QVector2D>
 #include <QWindow>
 
-QThread* cwImageTexture::TextureLoadingThread = nullptr;
-
 /**
 
   */
@@ -29,10 +27,6 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     TextureId(0),
     TextureUploadTask(nullptr)
 {
-    if(TextureLoadingThread == nullptr) {
-        TextureLoadingThread = new QThread();
-        TextureLoadingThread->start(QThread::LowPriority);
-    }
 }
 
 /**
@@ -192,7 +186,6 @@ void cwImageTexture::startLoadingImage()
 
         if(TextureUploadTask == nullptr) {
             TextureUploadTask = new cwTextureUploadTask();
-            TextureUploadTask->setThread(TextureLoadingThread);
 
             connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::markAsDirty);
             connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::textureUploaded);

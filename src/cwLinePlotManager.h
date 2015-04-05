@@ -21,7 +21,6 @@ class cwGLLinePlot;
 
 //Qt includes
 #include <QObject>
-#include <QThread>
 
 class cwLinePlotManager : public QObject
 {
@@ -44,7 +43,6 @@ private:
     cwCavingRegion* Region; //The main
 
     cwLinePlotTask* LinePlotTask;
-    QThread* LinePlotThread;
 
     cwGLLinePlot* GLLinePlot;
 
