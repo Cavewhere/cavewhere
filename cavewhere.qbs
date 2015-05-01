@@ -19,7 +19,8 @@ Project {
         "plotsauce/plotsauce.qbs",
         "QMath3d/QMath3d.qbs",
         "protobuf/protobuf.qbs",
-        "zlib/zlib.qbs"
+        "zlib/zlib.qbs",
+        "installer/installer.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]
@@ -41,7 +42,6 @@ Project {
             submodules: [ "core",
                 "gui",
                 "widgets",
-                "script",
                 "quick",
                 "sql",
                 "opengl",
@@ -58,7 +58,7 @@ Project {
 
 //        Depends { name: "icns-out" }
 
-        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
+//        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
         cpp.includePaths: [
             "src",
@@ -129,11 +129,17 @@ Project {
             cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"\"")
         }
 
-        cpp.infoPlistFile: "Info.plist"
+//        cpp.infoPlistFile: "Info.plist"
         cpp.minimumOsxVersion: "10.7"
 
         Group {
-            fileTagsFilter: ["application", "applicationbundle"]
+            fileTagsFilter: ["bundle"]
+            qbs.install: true
+        }
+
+        Group {
+            fileTagsFilter: ["application"]
+            qbs.installDir: qbs.targetOS.contains("darwin") ? "Cavewhere.app/Contents/MacOS" : ""
             qbs.install: true
         }
 
@@ -338,7 +344,7 @@ Project {
         Rule {
             id: protoCompiler
             inputs: ["proto"]
-            usings: ["application"]
+            inputsFromDependencies: ["application"]
             multiplex: true
 
             outputArtifacts: {

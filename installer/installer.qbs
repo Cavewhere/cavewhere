@@ -4,39 +4,22 @@ import qbs.TextFile
 Project {
     name: "installer"
 
-    readonly property string installDir: "../../build-cavewhere-" +
-                                         profile.replace("qtc_", "") + "-" + qbs.buildVariant + "/" +
-                                         profile + "-" + qbs.buildVariant + "/" +
-                                         "install-root"
+    readonly property string installDir: qbs.installRoot
 
     qbsSearchPaths: ["../qbsModules"]
 
     Product {
         name: "cavewhere-install"
         type: "deployedApplication"
+        builtByDefault: false
 
         property var qt: qtApp.Qt.core.binPath
 
-        Group {
-            name: "Windows Cavewhere Executable"
-            fileTags: ["qtApplication"]
-            condition: qbs.targetOS.contains("windows")
-            files: [
-                project.installDir + "/Cavewhere.exe"
-            ]
-        }
-
-        Group {
-            name: "Mac Cavewhere Bundle"
-            fileTags: ["qtApplication"]
-            condition: qbs.targetOS.contains("osx")
-            files: [
-                project.installDir + "/Cavewhere.app"
-            ]
-        }
+        Depends { name: "Cavewhere" }
 
         Rule {
-            inputs: ["qtApplication"]
+            multiplex: true
+            inputsFromDependencies: ["installable"]
 
             Artifact {
                 filePath: ["sauce"]
@@ -48,15 +31,40 @@ Project {
                 var deploymentApp = "";
                 var args = [];
                 var description = "";
+
+//                print(JSON.stringify(inputs));
+
                 if(targetOS.contains("windows")) {
                     deploymentApp = "windeployqt.exe"
                     args = ["--qmldir",
                             product.sourceDirectory + "/" + project.installDir + "/qml",
-                            input.filePath]
+                            inputs.application[0].filePath]
                 } else if(targetOS.contains("osx")) {
                     deploymentApp = "macdeployqt"
-                    args = [input.filePath,
-                            "-qmldir=" + product.sourceDirectory + "/" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml",
+
+                    var bundlePath = ""
+
+                    //Find the bundle
+                    for(var i = 0; i < inputs.installable.length; i++) {
+                        print(JSON.stringify(inputs.installable[i].fileTags))
+                        print(inputs.installable[i].fileTags.indexOf("bundle"))
+                        if(inputs.installable[i].fileTags.indexOf("bundle") != -1) {
+                            //Found the bundle
+                            var inp = inputs.installable[i];
+                            print("Inp:" + JSON.stringify(inp))
+                            bundlePath = project.installDir + "/" + inp.fileName;
+                            break;
+                        }
+                    }
+
+                    print("BundlePath:" + bundlePath)
+
+                    if(bundlePath == "") {
+                        throw "Bundle not found";
+                    }
+
+                    args = [bundlePath,
+                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml",
                             ]
                 }
 
@@ -64,6 +72,7 @@ Project {
                 cmd.arguments = args
                 cmd.description = "running " + deploymentApp
                 return cmd
+                //return null
             }
         }
     }
@@ -71,6 +80,7 @@ Project {
     Product {
         name: "Mac Installer"
         type: "shellInstaller"
+        builtByDefault: false
         condition: qbs.targetOS.contains("osx")
 
         property var qtLibPath: qtApp.Qt.core.libPath
@@ -89,7 +99,7 @@ Project {
 
         Rule {
             inputs: ["shell"]
-            usings: ["deployedApplication"]
+            inputsFromDependencies: ["deployedApplication"]
             multiplex: true
 
             Artifact {
@@ -102,7 +112,7 @@ Project {
                 cmd.arguments = [product.version,
                                  product.qtLibPath]
 
-                cmd.workingDirectory = product.sourceDirectory + "/" + project.installDir
+                cmd.workingDirectory = project.installDir
                 cmd.description = "running " + inputs.shell[0].filePath
                 return cmd
             }
@@ -112,6 +122,7 @@ Project {
     Product {
         name: "Windows Installer"
         type: "innoInstaller"
+        builtByDefault: false
         condition: qbs.targetOS.contains("windows")
 
         readonly property string version: Git.productVersion
@@ -129,7 +140,7 @@ Project {
 
         Rule {
             inputs: ["innoOriginal"]
-            usings: ["deployedApplication"]
+            inputsFormDependencies: ["deployedApplication"]
             multiplex: true
 
             Artifact {
