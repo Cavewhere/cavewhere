@@ -20,7 +20,8 @@ Project {
         "QMath3d/QMath3d.qbs",
         "protobuf/protobuf.qbs",
         "zlib/zlib.qbs",
-        "installer/installer.qbs"
+        "installer/installer.qbs",
+        "dewalls/dewalls.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]

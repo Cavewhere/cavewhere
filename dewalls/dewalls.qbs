@@ -1,0 +1,38 @@
+import qbs 1.0
+
+Project {
+    name: "dewalls"
+
+    StaticLibrary {
+        name: "dewalls"
+        Depends { name: "cpp" }
+
+        Depends { name: "Qt"; submodules: ["core"] }
+
+        cpp.includePaths: ["src"]
+
+        files: [
+            "main.cpp",
+            "src/*.cpp",
+            "src/*.h",
+        ]
+    }
+
+    CppApplication {
+        name: "dewalls-test"
+        consoleApplication: true
+        type: "application"
+
+        Depends { name: "cpp" }
+
+        Depends { name: "Qt"; submodules: ["core"] }
+
+        cpp.includePaths: ["src"]
+
+        files: [
+            "main.cpp",
+            "src/*.cpp",
+            "src/*.h",
+        ]
+    }
+}
