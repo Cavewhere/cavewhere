@@ -13,7 +13,6 @@ class SegmentImpl;
 class Segment;
 
 typedef QSharedPointer<SegmentImpl> SegmentPtr;
-typedef QSharedPointer<QObject> QObjectPtr;
 
 /**
  * @brief The data that's implicitly shared by Segment instances
@@ -23,11 +22,11 @@ class SegmentImpl
 public:
     friend class Segment;
 
-    SegmentImpl(QString value, QObjectPtr source, int startLine, int startCol);
+    SegmentImpl(QString value, QString source, int startLine, int startCol);
 protected:
-    SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QObjectPtr source,
+    SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QString source,
             int startLine, int startCol);
-    SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QObjectPtr source,
+    SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QString source,
             int startLine, int startCol, int endLine, int endCol);
 private:
     SegmentImpl() = delete;
@@ -37,7 +36,7 @@ private:
     SegmentPtr _sourceSegment;
     int _sourceIndex;
     QString _value;
-    QObjectPtr _source;
+    QString _source;
     int _startLine;
     int _startCol;
     int _endLine;
@@ -59,13 +58,13 @@ private:
 class Segment
 {
 public:
-    Segment(QString value, QObjectPtr source, int startLine, int startCol);
+    Segment(QString value, QString source, int startLine, int startCol);
     Segment(Segment&& other);
 
     Segment sourceSegment() const;
     int sourceIndex() const;
     QString value() const;
-    QObjectPtr source() const;
+    QString source() const;
     int startLine() const;
     int startCol() const;
     int endLine() const;
@@ -74,6 +73,7 @@ public:
     int length() const;
     bool isEmpty() const;
     const QChar at(int index) const;
+    Segment atAsSegment(int index) const;
     Segment mid(int position, int n = -1) const;
     Segment left(int n) const;
     Segment right(int n) const;
@@ -166,7 +166,7 @@ inline QString Segment::value() const
     return _impl->_value;
 }
 
-inline QObjectPtr Segment::source() const
+inline QString Segment::source() const
 {
     return _impl->_source;
 }
@@ -204,6 +204,11 @@ inline bool Segment::isEmpty() const
 inline const QChar Segment::at(int i) const
 {
     return _impl->_value.at(i);
+}
+
+inline Segment Segment::atAsSegment(int i) const
+{
+    return mid(i, i == length() ? 0 : 1);
 }
 
 inline Segment Segment::left(int n) const

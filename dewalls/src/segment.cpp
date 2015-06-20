@@ -4,7 +4,7 @@
 
 namespace dewalls {
 
-SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QObjectPtr source,
+SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QString source,
             int startLine, int startCol, int endLine, int endCol)
     : _sourceSegment(sourceSegment),
       _sourceIndex(sourceIndex),
@@ -18,7 +18,7 @@ SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString valu
 
 }
 
-SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QObjectPtr source,
+SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString value, QString source,
             int startLine, int startCol)
     : _sourceSegment(sourceSegment),
       _sourceIndex(sourceIndex),
@@ -45,7 +45,7 @@ SegmentImpl::SegmentImpl(SegmentPtr sourceSegment, int sourceIndex, QString valu
     }
 }
 
-SegmentImpl::SegmentImpl(QString value, QObjectPtr source, int startLine, int startCol)
+SegmentImpl::SegmentImpl(QString value, QString source, int startLine, int startCol)
     : SegmentImpl(SegmentPtr(), -1, value, source, startLine, startCol)
 {
 
@@ -57,7 +57,7 @@ Segment::Segment(SegmentPtr impl)
 
 }
 
-Segment::Segment(QString value, QObjectPtr source, int startLine, int startCol)
+Segment::Segment(QString value, QString source, int startLine, int startCol)
     : Segment(SegmentPtr(new SegmentImpl(value, source, startLine, startCol)))
 {
 

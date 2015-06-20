@@ -31,6 +31,9 @@ public:
     UnitizedDouble<T>& operator -=(const UnitizedDouble<T>& rhs);
     UnitizedDouble<T>& operator *=(const double& rhs);
     UnitizedDouble<T>& operator /=(const double& rhs);
+    UnitizedDouble<T>& operator %=(const UnitizedDouble<T>& rhs);
+
+    QString toString() const;
 
     friend std::ostream& operator<<(std::ostream& os, const UnitizedDouble<T>& obj)
     {
@@ -99,6 +102,49 @@ inline UnitizedDouble<T>& UnitizedDouble<T>::operator /=(const double& rhs)
 }
 
 template<class T>
+inline UnitizedDouble<T>& UnitizedDouble<T>::operator %=(const UnitizedDouble<T>& rhs)
+{
+    _quantity = fmod(_quantity, rhs.get(_unit));
+    return *this;
+}
+
+template<class T>
+inline bool operator ==(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return lhs.get(lhs.unit()) == rhs.get(lhs.unit());
+}
+
+template<class T>
+inline bool operator !=(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return !operator ==(lhs, rhs);
+}
+
+template<class T>
+inline bool operator < (const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return lhs.get(lhs.unit()) < rhs.get(lhs.unit());
+}
+
+template<class T>
+inline bool operator > (const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return operator < (rhs, lhs);
+}
+
+template<class T>
+inline bool operator <=(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return !operator > (rhs, lhs);
+}
+
+template<class T>
+inline bool operator >=(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return !operator < (rhs, lhs);
+}
+
+template<class T>
 inline UnitizedDouble<T> operator +(UnitizedDouble<T> lhs, const UnitizedDouble<T>& rhs)
 {
     lhs += rhs;
@@ -139,6 +185,19 @@ inline UnitizedDouble<T> operator /(double lhs, const UnitizedDouble<T>& rhs)
 }
 
 template<class T>
+inline double operator / (const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
+{
+    return lhs.get(lhs.unit()) / rhs.get(lhs.unit());
+}
+
+template<class T>
+inline UnitizedDouble<T> operator %(UnitizedDouble<T> lhs, const UnitizedDouble<T>& rhs)
+{
+    lhs %= rhs;
+    return lhs;
+}
+
+template<class T>
 inline UnitizedDouble<T>::UnitizedDouble(double quantity, const Unit<T> *unit):
     _unit(unit),
     _quantity(quantity)
@@ -162,6 +221,12 @@ template<class T>
 inline UnitizedDouble<T> UnitizedDouble<T>::in(const Unit<T> *unit) const
 {
     return UnitizedDouble<T>(get(unit), unit);
+}
+
+template<class T>
+inline QString UnitizedDouble<T>::toString() const
+{
+    return QString("%1").arg(_quantity) + " " + _unit->name();
 }
 
 } // namespace dewalls

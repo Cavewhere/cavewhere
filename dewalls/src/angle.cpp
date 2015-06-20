@@ -2,7 +2,7 @@
 #include "defaultunit.h"
 #include "percentgrade.h"
 
-const long double PI = acos(-1.0L);
+const long double PI = acosl(-1.0L);
 
 namespace dewalls {
 

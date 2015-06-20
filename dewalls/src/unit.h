@@ -34,7 +34,6 @@ inline std::ostream& operator<<(std::ostream& os, const Unit<T>& unit)
     return os << unit.name().toStdString();
 }
 
-
 template<class T>
 inline Unit<T>::Unit(QString name, const T *type) :
     _name(name),
