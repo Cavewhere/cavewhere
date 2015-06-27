@@ -2,6 +2,9 @@
 
 namespace dewalls {
 
+const QRegExp whitespaceRx("\\s+");
+const QRegExp nonwhitespaceRx("\\S+");
+
 LineParser::LineParser(Segment line)
     : _line(line),
       _i(0),
@@ -25,6 +28,17 @@ void LineParser::addExpected(const SegmentParseExpectedException& expected)
     {
         _expectedItems |= expected.expectedItems();
     }
+}
+
+SegmentParseExpectedException LineParser::allExpected()
+{
+    if (!_expectedItems.isEmpty())
+    {
+        return SegmentParseExpectedException(
+                    _line.atAsSegment(_i), _expectedItems);
+    }
+    return SegmentParseExpectedException(
+                _line.atAsSegment(_i), "<UNKNOWN>");
 }
 
 void LineParser::throwAllExpected()
@@ -103,6 +117,62 @@ Segment LineParser::expect(QRegExp &rx, std::initializer_list<QString> expectedI
     return _line.mid(start, rx.matchedLength());
 }
 
+Segment LineParser::whitespace()
+{
+    return expect(whitespaceRx, {"<WHITESPACE>"});
+}
+
+bool LineParser::maybeWhitespace()
+{
+    return maybe([&]() { this->whitespace(); } );
+}
+
+Segment LineParser::nonwhitespace()
+{
+    return expect(nonwhitespaceRx, {"<NONWHITESPACE>"});
+}
+
+const QRegExp LineParser::unsignedDoubleLiteralRx("\\d+(\\.\\d*)?|\\.\\d+");
+
+double LineParser::unsignedDoubleLiteral()
+{
+    return expect(unsignedDoubleLiteralRx, {"<UNSIGNED_DOUBLE_LITERAL>"}).value().toDouble();
+}
+
+QHash<QChar, double> createSignSignums()
+{
+    QHash<QChar, double> signSignums;
+    signSignums['-'] = -1.0;
+    signSignums['+'] = 1.0;
+    return signSignums;
+}
+
+const QHash<QChar, double> LineParser::signSignums = createSignSignums();
+
+double LineParser::doubleLiteral()
+{
+    double signum;
+    if (!maybe(signum, [this]() { return this->oneOfMap(signSignums); } ))
+    {
+        signum = 1.0;
+    }
+    return signum * unsignedDoubleLiteral();
+}
+
+void LineParser::endOfLine()
+{
+    if (_i != _line.length())
+    {
+        throw SegmentParseExpectedException(_line.atAsSegment(_i), "<END_OF_LINE>");
+    }
+}
+
+Segment LineParser::remaining()
+{
+    Segment result = _line.mid(_i);
+    _i = _line.length();
+    return result;
+}
 
 } // namespace dewalls
 

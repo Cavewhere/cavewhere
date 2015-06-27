@@ -2,6 +2,7 @@
 #define DEWALLS_VARIANCEOVERRIDE_H
 
 #include <QString>
+#include <QSharedPointer>
 #include "unitizeddouble.h"
 #include "length.h"
 
@@ -24,8 +25,8 @@ public:
     virtual VarianceOverrideType type() const = 0;
     virtual QString toString() const = 0;
 
-    static FloatedVarianceOverride * const FLOATED;
-    static FloatedTraverseVarianceOverride * const FLOATED_TRAVERSE;
+    static const QSharedPointer<VarianceOverride> FLOATED;
+    static const QSharedPointer<VarianceOverride> FLOATED_TRAVERSE;
 
 protected:
     inline VarianceOverride()

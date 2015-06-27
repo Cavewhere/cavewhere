@@ -16,6 +16,7 @@
 #include "varianceoverride.h"
 #include "wallsvisitor.h"
 #include "cardinaldirection.h"
+#include "wallslineparser.h"
 
 using namespace std;
 using namespace dewalls;
@@ -98,7 +99,7 @@ int main(int argc, char *argv[]) {
 
     cout << cap(rx, segment4, 1).underlineInContext().toStdString() << endl;
 
-    LineParser parser(Segment("hello weird world", "fakefile.txt", 2, 0));
+    WallsLineParser parser(Segment("hello weird world", "fakefile.txt", 2, 0));
 
     try {
         parser.expect("hello ");
@@ -110,15 +111,31 @@ int main(int argc, char *argv[]) {
         cout << ex.message().toStdString() << endl;
     }
 
-    VarianceOverride *v = new RMSError(ULength(4, m));
+    typedef QSharedPointer<VarianceOverride> VarianceOverridePtr;
+
+    VarianceOverridePtr v = VarianceOverridePtr(new RMSError(ULength(4, m)));
 
     cout << v->toString().toStdString() << endl;
 
-    delete v;
+    v.clear();
 
     v = VarianceOverride::FLOATED_TRAVERSE;
 
     cout << v->toString().toStdString() << endl;
 
     quadrantTest();
+
+    parser = WallsLineParser(Segment("123.456 -123.456m -123i14.5", "fakefile.txt", 2, 0));
+
+    try {
+        cout << parser.length(Length::ft) << endl;
+        parser.expect(' ');
+        cout << parser.length(Length::ft) << endl;
+        parser.expect(' ');
+        cout << parser.length(Length::ft) << endl;
+    }
+    catch (const SegmentParseException& ex)
+    {
+        cout << ex.message().toStdString() << endl;
+    }
 }

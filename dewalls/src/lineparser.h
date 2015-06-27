@@ -6,8 +6,10 @@
 #include <QChar>
 #include <QSet>
 #include <QHash>
+#include <QPair>
 #include "segmentparseexpectedexception.h"
 #include <initializer_list>
+#include <functional>
 
 namespace dewalls {
 
@@ -18,6 +20,7 @@ public:
 
     void addExpected(const SegmentParseExpectedException& ex);
 
+    SegmentParseExpectedException allExpected();
     void throwAllExpected();
     void throwAllExpected(const SegmentParseExpectedException& finalEx);
 
@@ -26,11 +29,28 @@ public:
     Segment expect(const QRegExp& rx, std::initializer_list<QString> expectedItems);
     Segment expect(QRegExp& rx, std::initializer_list<QString> expectedItems);
 
-    template<typename V>
-    V oneOf(QHash<QChar, V> map);
+    template<typename F>
+    QChar expectChar(F charPredicate, std::initializer_list<QString> expectedItems);
+
+    Segment whitespace();
+    Segment nonwhitespace();
+
+    bool maybeWhitespace();
+
+    static const QRegExp unsignedDoubleLiteralRx;
+    double unsignedDoubleLiteral();
+
+    static const QHash<QChar, double> signSignums;
+    double doubleLiteral();
 
     template<typename V>
-    V oneOfLowercase(QHash<QChar, V> map);
+    V oneOfMap(QHash<QChar, V> map);
+
+    template<typename V>
+    V oneOfMap(QHash<QChar, V> map, V elseValue);
+
+    template<typename V>
+    V oneOfList(QList<QPair<QString, V>> list, Qt::CaseSensitivity cs = Qt::CaseSensitive);
 
     template<typename F>
     void throwAllExpected(F production);
@@ -42,10 +62,10 @@ public:
     void oneOf(F production, Args... args);
 
     template<typename R, typename F>
-    void oneOf(R& result, F production);
+    void oneOfR(R& result, F production);
 
     template<typename R, typename F, typename... Args>
-    void oneOf(R& result, F production, Args... args);
+    void oneOfR(R& result, F production, Args... args);
 
     template<typename F>
     void oneOfWithLookahead(F production);
@@ -58,6 +78,10 @@ public:
 
     template<typename R, typename F>
     bool maybe(R& result, F production);
+
+    void endOfLine();
+
+    Segment remaining();
 
 protected:
     Segment _line;
@@ -112,7 +136,7 @@ void LineParser::oneOf(F production, Args... args)
 }
 
 template<typename R, typename F>
-void LineParser::oneOf(R& result, F production)
+void LineParser::oneOfR(R& result, F production)
 {
     try
     {
@@ -125,7 +149,7 @@ void LineParser::oneOf(R& result, F production)
 }
 
 template<typename R, typename F, typename... Args>
-void LineParser::oneOf(R& result, F production, Args... args)
+void LineParser::oneOfR(R& result, F production, Args... args)
 {
     int start = _i;
     try
@@ -139,7 +163,7 @@ void LineParser::oneOf(R& result, F production, Args... args)
             throwAllExpected(ex);
         }
         addExpected(ex);
-        oneOf(result, args...);
+        oneOfR(result, args...);
     }
 }
 
@@ -173,7 +197,7 @@ void LineParser::oneOfWithLookahead(F production, Args... args)
 }
 
 template<typename V>
-V LineParser::oneOf(QHash<QChar, V> map)
+V LineParser::oneOfMap(QHash<QChar, V> map)
 {
     QChar c;
     if (_i >= _line.length() || !map.contains(c = _line.at(_i)))
@@ -190,20 +214,33 @@ V LineParser::oneOf(QHash<QChar, V> map)
 }
 
 template<typename V>
-V LineParser::oneOfLowercase(QHash<QChar, V> map)
+V LineParser::oneOfMap(QHash<QChar, V> map, V elseValue)
 {
-    QChar c;
-    if (_i >= _line.length() || !map.contains(c = _line.at(_i).toLower()))
+    if (_i >= _line.length())
     {
-        QSet<QString> expectedItems;
-        for (QChar exp : map.keys())
-        {
-            expectedItems << QString(exp);
-        }
-        throw SegmentParseExpectedException(_line.atAsSegment(_i), expectedItems);
+        return elseValue;
     }
-    _i++;
-    return map[c];
+    QChar c = _line.at(_i);
+    if (map.contains(c))
+    {
+        _i++;
+        return map[c];
+    }
+    return elseValue;
+}
+
+template<typename V>
+V LineParser::oneOfList(QList<QPair<QString, V>> list, Qt::CaseSensitivity cs)
+{
+    QPair<QString, V> pair;
+    foreach(pair, list)
+    {
+        if (maybe([&]() { return this->expect(pair.first, cs);} ))
+        {
+            return pair.second;
+        }
+    }
+    throw allExpected();
 }
 
 template<typename F>
@@ -244,6 +281,18 @@ bool LineParser::maybe(R& result, F production)
         addExpected(ex);
         return false;
     }
+}
+
+template<typename F>
+QChar LineParser::expectChar(F charPredicate, std::initializer_list<QString> expectedItems)
+{
+    QChar c;
+    if (_i >= _line.length() || !charPredicate(c = _line.at(_i)))
+    {
+        throw SegmentParseExpectedException(_line.atAsSegment(_i), expectedItems);
+    }
+    _i++;
+    return c;
 }
 
 } // namespace dewalls

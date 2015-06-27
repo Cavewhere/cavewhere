@@ -2,12 +2,6 @@
 
 namespace dewalls {
 
-SegmentParseException::SegmentParseException(Segment segment)
-    : _segment(segment)
-{
-
-}
-
 QString SegmentParseException::message() const
 {
     return detailMessage() + QString(" (in %1, line %2, column %3):\n%4").arg(

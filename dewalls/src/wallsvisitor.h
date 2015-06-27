@@ -3,9 +3,11 @@
 
 #include <QString>
 #include <QStringList>
+#include <QSharedPointer>
 #include "length.h"
 #include "angle.h"
 #include "unitizeddouble.h"
+#include "varianceoverride.h"
 
 namespace dewalls {
 
@@ -14,6 +16,7 @@ class WallsVisitor
 public:
     typedef UnitizedDouble<Length> ULength;
     typedef UnitizedDouble<Angle> UAngle;
+    typedef QSharedPointer<VarianceOverride> VarianceOverridePtr;
 
     virtual void beginFile( QString source );
     virtual void endFile( QString source );
@@ -46,8 +49,8 @@ public:
     virtual void visitDown( ULength down );
     virtual void visitLrudFacingAngle( UAngle facingAngle );
     virtual void visitCFlag( );
-    virtual void visitHorizontalVarianceOverride( VarianceOverride *variance );
-    virtual void visitVerticalVarianceOverride( VarianceOverride *variance );
+    virtual void visitHorizontalVarianceOverride( VarianceOverridePtr variance );
+    virtual void visitVerticalVarianceOverride( VarianceOverridePtr variance );
     virtual void visitInlineSegment( QString segment );
     virtual void visitInlineNote( QString note );
     virtual void visitInlineComment( QString string );

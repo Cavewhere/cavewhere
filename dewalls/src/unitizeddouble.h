@@ -10,6 +10,7 @@ template<class T>
 class UnitizedDouble
 {
 public:
+    UnitizedDouble();
     UnitizedDouble(double quantity, const Unit<T> *unit);
     UnitizedDouble(UnitizedDouble&& other);
 
@@ -41,14 +42,13 @@ public:
     }
 
 private:
-    UnitizedDouble();
-
     const Unit<T> *_unit;
     double _quantity;
 };
 
 template<class T>
 inline UnitizedDouble<T>::UnitizedDouble()
+    : _unit(NULL)
 {
 
 }

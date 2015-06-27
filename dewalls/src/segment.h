@@ -58,6 +58,7 @@ private:
 class Segment
 {
 public:
+    Segment();
     Segment(QString value, QString source, int startLine, int startCol);
     Segment(Segment&& other);
 
@@ -118,8 +119,6 @@ public:
 protected:
     Segment(SegmentPtr impl);
 private:
-    Segment() = delete;
-
     SegmentPtr _impl;
 };
 
@@ -138,6 +137,11 @@ inline int lastIndexIn(QRegExp& rx, const Segment& segment, int offset = -1, QRe
 inline Segment cap(QRegExp& rx, const Segment& segment, int nth = 0)
 {
     return segment.mid(rx.pos(nth), rx.cap(nth).length());
+}
+
+inline Segment::Segment()
+{
+
 }
 
 inline Segment::Segment(Segment&& other)

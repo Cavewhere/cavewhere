@@ -16,6 +16,7 @@ public:
     static const Unit<Angle> * const rad;
     static const Unit<Angle> * const gradians;
     static const Unit<Angle> * const grad;
+    static const Unit<Angle> * const milsNATO;
     static const Unit<Angle> * const percentGrade;
     static const Unit<Angle> * const percent;
 private:
