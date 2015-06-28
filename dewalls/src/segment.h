@@ -140,6 +140,7 @@ inline Segment cap(QRegExp& rx, const Segment& segment, int nth = 0)
 }
 
 inline Segment::Segment()
+    : Segment(QString(), QString(), 0, 0)
 {
 
 }

@@ -2,6 +2,7 @@
 #define DEWALLS_SEGMENTPARSEEXPECTEDEXCEPTION_H
 
 #include <QSet>
+#include <QList>
 #include "segmentparseexception.h"
 #include <initializer_list>
 
@@ -11,15 +12,15 @@ class SegmentParseExpectedException : public SegmentParseException
 {
 public:
     SegmentParseExpectedException(Segment segment, QString expectedItem);
-    SegmentParseExpectedException(Segment segment, QSet<QString> expectedItems);
+    SegmentParseExpectedException(Segment segment, QList<QString> expectedItems);
     SegmentParseExpectedException(Segment segment, std::initializer_list<QString> expectedItems);
-    QSet<QString> expectedItems() const;
+    QList<QString> expectedItems() const;
     virtual QString detailMessage() const;
 private:
-    QSet<QString> _expectedItems;
+    QList<QString> _expectedItems;
 };
 
-inline QSet<QString> SegmentParseExpectedException::expectedItems() const
+inline QList<QString> SegmentParseExpectedException::expectedItems() const
 {
     return _expectedItems;
 }

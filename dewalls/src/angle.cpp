@@ -18,6 +18,7 @@ Angle::Angle():
     addUnit(degrees);
     addUnit(radians);
     addUnit(gradians);
+    addUnit(milsNATO);
     addUnit(percentGrade);
 }
 

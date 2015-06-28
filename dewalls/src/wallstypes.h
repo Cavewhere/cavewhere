@@ -2,6 +2,7 @@
 #define WALLSTYPES_H
 
 #include <QString>
+#include <QHash>
 
 namespace dewalls
 {
@@ -17,18 +18,28 @@ QString applyCaseType(CaseType, const QString& s);
 
 enum class CtElement
 {
-    D = 0,
-    A = 1,
-    V = 2
+    D = 'D',
+    A = 'A',
+    V = 'V'
 };
+
+inline uint qHash(CtElement key, uint seed = 0)
+{
+    return uint(static_cast<char>(key)) ^ seed;
+}
 
 enum class LrudElement
 {
-    L = 0,
-    R = 1,
-    U = 2,
-    D = 3
+    L = 'L',
+    R = 'R',
+    U = 'U',
+    D = 'D'
 };
+
+inline uint qHash(const LrudElement& key, uint seed = 0)
+{
+    return uint(static_cast<char>(key)) ^ seed;
+}
 
 enum class LrudType
 {
@@ -40,10 +51,15 @@ enum class LrudType
 
 enum class RectElement
 {
-    E = 0,
-    N = 1,
-    U = 2
+    E = 'E',
+    N = 'N',
+    U = 'U'
 };
+
+inline uint qHash(const RectElement& key, uint seed = 0)
+{
+    return uint(static_cast<char>(key)) ^ seed;
+}
 
 enum class TapingMethodElement
 {

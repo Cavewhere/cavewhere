@@ -16,7 +16,7 @@
 #include "varianceoverride.h"
 #include "wallsvisitor.h"
 #include "cardinaldirection.h"
-#include "wallslineparser.h"
+#include "wallsparser.h"
 
 using namespace std;
 using namespace dewalls;
@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 
     cout << cap(rx, segment4, 1).underlineInContext().toStdString() << endl;
 
-    WallsLineParser parser(Segment("hello weird world", "fakefile.txt", 2, 0));
+    WallsParser parser(Segment("hello weird world", "fakefile.txt", 2, 0));
 
     try {
         parser.expect("hello ");
@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
 
     quadrantTest();
 
-    parser = WallsLineParser(Segment("123.456 -123.456m -123i14.5", "fakefile.txt", 2, 0));
+    parser = WallsParser(Segment("123.456 -123.456m -123i14.5", "fakefile.txt", 2, 0));
 
     try {
         cout << parser.length(Length::ft) << endl;
@@ -133,6 +133,33 @@ int main(int argc, char *argv[]) {
         cout << parser.length(Length::ft) << endl;
         parser.expect(' ');
         cout << parser.length(Length::ft) << endl;
+    }
+    catch (const SegmentParseException& ex)
+    {
+        cout << ex.message().toStdString() << endl;
+    }
+
+    parser = WallsParser(Segment("#units ct feet save lrud=fb:lurd incab=2.3h", "fakefile.txt", 2, 0));
+
+    PrintingWallsVisitor visitor;
+    parser.setVisitor(&visitor);
+
+    try
+    {
+        try
+        {
+            parser.unitsLine();
+        }
+        catch (const SegmentParseExpectedException& ex)
+        {
+            parser.throwAllExpected(ex);
+        }
+
+        cout << *(parser.units()->d_unit) << endl;
+    }
+    catch (const SegmentParseExpectedException& ex)
+    {
+        cout << ex.message().toStdString() << endl;
     }
     catch (const SegmentParseException& ex)
     {
