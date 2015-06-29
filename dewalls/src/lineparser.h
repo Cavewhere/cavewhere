@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QHash>
 #include <QPair>
+#include <QList>
 #include <QStringList>
 #include "segmentparseexpectedexception.h"
 #include <initializer_list>
@@ -152,7 +153,6 @@ protected:
     int _i;
     int _expectedIndex;
     QStringList _expectedItems;
-    QSet<QString> _expectedItemsSet;
 };
 
 template<typename F>

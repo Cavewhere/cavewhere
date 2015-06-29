@@ -1,4 +1,5 @@
 #include "segmentparseexpectedexception.h"
+#include <QStringList>
 
 namespace dewalls {
 
@@ -21,13 +22,25 @@ SegmentParseExpectedException::SegmentParseExpectedException(Segment segment, st
 
 QString SegmentParseExpectedException::detailMessage() const
 {
-    if (_expectedItems.size() == 1)
+    QSet<QString> uniq;
+    QStringList uniqList;
+
+    foreach (QString item, _expectedItems)
     {
-        return QString("Expected \"%1\"").arg(_expectedItems.first());
+        if (!uniq.contains(item))
+        {
+            uniq << item;
+            uniqList << item;
+        }
+    }
+
+    if (uniqList.size() == 1)
+    {
+        return QString("Expected \"%1\"").arg(uniqList.first());
     }
 
     QString result("Expected one of:\n");
-    for (QString item : _expectedItems)
+    foreach (QString item, uniqList)
     {
         result += "  " + item + "\n";
     }

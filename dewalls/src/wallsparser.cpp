@@ -219,7 +219,7 @@ QList<QPair<QString, int>> createPrefixDirectives()
     return result;
 }
 
-QHash<QString, OwnProduction> createUnitsOptionMap()
+QHash<QString, OwnProduction> WallsParser::createUnitsOptionMap()
 {
     QHash<QString, OwnProduction> result;
     result["save"] = &WallsParser::save;
@@ -289,7 +289,7 @@ const QList<QPair<QString, LrudType>> WallsParser::lrudTypes = createLrudTypes()
 const QList<QPair<QString, QList<TapingMethodElement>>> WallsParser::tapingMethods = createTapingMethods();
 const QList<QPair<QString, int>> WallsParser::prefixDirectives = createPrefixDirectives();
 
-const QHash<QString, OwnProduction> WallsParser::unitsOptionMap = createUnitsOptionMap();
+const QHash<QString, OwnProduction> WallsParser::unitsOptionMap = WallsParser::createUnitsOptionMap();
 
 const QRegExp WallsParser::notSemicolon("[^;]+");
 const QRegExp WallsParser::unitsOptionRx("[a-zA-Z_0-9/]*");

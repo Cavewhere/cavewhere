@@ -77,37 +77,78 @@ public:
     template<typename T>
     QList<T> elementChars(QHash<QChar, T> elements, QSet<T> requiredElements);
 
+    void beginBlockCommentLine();
+    void endBlockCommentLine();
+    void insideBlockCommentLine();
+
+    void segmentLine();
+    void prefixLine();
+    void noteLine();
+    void flagLine();
+    void symbolLine();
+    void dateLine();
+    void unitsLine();
+
+private:
+    static double approx(double val);
+
+    static QHash<QString, OwnProduction> createUnitsOptionMap();
+
+    static const QList<QPair<QString, LengthUnit>> lengthUnits;
+    static const QList<QPair<QString, AngleUnit>> azmUnits;
+    static const QList<QPair<QString, AngleUnit>> incUnits;
+    static const LengthUnitSuffixMap lengthUnitSuffixes;
+    static const AngleUnitSuffixMap azmUnitSuffixes;
+    static const AngleUnitSuffixMap incUnitSuffixes;
+    static const CardinalDirectionCharMap cardinalDirections;
+    static const CardinalDirectionCharMap northSouth;
+    static const CardinalDirectionCharMap eastWest;
+    static const QHash<QChar, QChar> escapedChars;
+    static const QHash<QChar, CtElement> ctElements;
+    static const QSet<CtElement> requiredCtElements;
+    static const QHash<QChar, RectElement> rectElements;
+    static const QSet<RectElement> requiredRectElements;
+    static const QHash<QChar, LrudElement> lrudElements;
+    static const QSet<LrudElement> requiredLrudElements;
+    static const QList<QPair<QString, bool>> correctedValues;
+    static const QList<QPair<QString, CaseType>> caseTypes;
+    static const QList<QPair<QString, LrudType>> lrudTypes;
+    static const QList<QPair<QString, QList<TapingMethodElement>>> tapingMethods;
+    static const QList<QPair<QString, int>> prefixDirectives;
+
+    static const QRegExp notSemicolon;
+    static const QRegExp unitsOptionRx;
+    static const QRegExp macroNameRx;
+    static const QRegExp stationRx;
+    static const QRegExp prefixRx;
+
+    static const QRegExp optionalRx;
+    static const QRegExp optionalStationRx;
+
+    static const QRegExp isoDateRx;
+    static const QRegExp usDateRx1;
+    static const QRegExp usDateRx2;
+
+    static const QHash<QString, OwnProduction> unitsOptionMap;
+
     void replaceMacros();
     QString movePastEndQuote();
     QString replaceMacro();
 
-    void beginBlockCommentLine();
-    void endBlockCommentLine();
-    void insideBlockCommentLine();
     QString untilComment(std::initializer_list<QString> expectedItems);
 
-    void segmentLine();
     QString segmentDirective();
-
-    void prefixLine();
     void prefixDirective();
-
-    void noteLine();
     void noteDirective();
 
-    void flagLine();
     void flagDirective();
     QString slashPrefixedFlag();
 
-    void symbolLine();
-
-    void dateLine();
     void dateDirective();
     QDate isoDate();
     QDate usDate1();
     QDate usDate2();
 
-    void unitsLine();
     void unitsOptions();
     void unitsOption();
     void macroOption();
@@ -155,46 +196,6 @@ public:
 
     void inlineCommentOrEndOfLine();
     void inlineComment();
-
-private:
-    static double approx(double val);
-
-    static const QList<QPair<QString, LengthUnit>> lengthUnits;
-    static const QList<QPair<QString, AngleUnit>> azmUnits;
-    static const QList<QPair<QString, AngleUnit>> incUnits;
-    static const LengthUnitSuffixMap lengthUnitSuffixes;
-    static const AngleUnitSuffixMap azmUnitSuffixes;
-    static const AngleUnitSuffixMap incUnitSuffixes;
-    static const CardinalDirectionCharMap cardinalDirections;
-    static const CardinalDirectionCharMap northSouth;
-    static const CardinalDirectionCharMap eastWest;
-    static const QHash<QChar, QChar> escapedChars;
-    static const QHash<QChar, CtElement> ctElements;
-    static const QSet<CtElement> requiredCtElements;
-    static const QHash<QChar, RectElement> rectElements;
-    static const QSet<RectElement> requiredRectElements;
-    static const QHash<QChar, LrudElement> lrudElements;
-    static const QSet<LrudElement> requiredLrudElements;
-    static const QList<QPair<QString, bool>> correctedValues;
-    static const QList<QPair<QString, CaseType>> caseTypes;
-    static const QList<QPair<QString, LrudType>> lrudTypes;
-    static const QList<QPair<QString, QList<TapingMethodElement>>> tapingMethods;
-    static const QList<QPair<QString, int>> prefixDirectives;
-
-    static const QRegExp notSemicolon;
-    static const QRegExp unitsOptionRx;
-    static const QRegExp macroNameRx;
-    static const QRegExp stationRx;
-    static const QRegExp prefixRx;
-
-    static const QRegExp optionalRx;
-    static const QRegExp optionalStationRx;
-
-    static const QRegExp isoDateRx;
-    static const QRegExp usDateRx1;
-    static const QRegExp usDateRx2;
-
-    static const QHash<QString, OwnProduction> unitsOptionMap;
 
     WallsVisitor* _visitor;
     bool _inBlockComment;

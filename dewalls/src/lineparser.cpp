@@ -15,8 +15,7 @@ LineParser::LineParser(Segment line)
     : _line(line),
       _i(0),
       _expectedIndex(0),
-      _expectedItems(QStringList()),
-      _expectedItemsSet(QSet<QString>())
+      _expectedItems(QStringList())
 {
 
 }
@@ -27,7 +26,6 @@ void LineParser::reset(Segment newLine)
     _i = 0;
     _expectedIndex = 0;
     _expectedItems.clear();
-    _expectedItemsSet.clear();
 }
 
 void LineParser::addExpected(const SegmentParseExpectedException& expected)
@@ -38,19 +36,11 @@ void LineParser::addExpected(const SegmentParseExpectedException& expected)
     if (index > _expectedIndex)
     {
         _expectedItems.clear();
-        _expectedItemsSet.clear();
         _expectedIndex = index;
     }
     if (index == _expectedIndex)
     {
-        foreach (QString expectedItem, expected.expectedItems())
-        {
-            if (!_expectedItemsSet.contains(expectedItem))
-            {
-                _expectedItems << expectedItem;
-                _expectedItemsSet << expectedItem;
-            }
-        }
+        _expectedItems << expected.expectedItems();
     }
 }
 
