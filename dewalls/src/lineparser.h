@@ -22,7 +22,7 @@ public:
     LineParser();
     LineParser(Segment line);
 
-    void reset(Segment newLine);
+    virtual void reset(Segment newLine);
 
     void addExpected(const SegmentParseExpectedException& ex);
 

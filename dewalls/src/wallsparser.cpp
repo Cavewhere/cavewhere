@@ -224,7 +224,7 @@ QHash<QString, OwnProduction> WallsParser::createUnitsOptionMap()
     QHash<QString, OwnProduction> result;
     result["save"] = &WallsParser::save;
     result["restore"] = &WallsParser::restore;
-    result["reset"] = &WallsParser::reset;
+    result["reset"] = &WallsParser::reset_;
     result["m"] = &WallsParser::meters;
     result["meters"] = &WallsParser::meters;
     result["f"] = &WallsParser::feet;
@@ -267,6 +267,23 @@ QHash<QString, OwnProduction> WallsParser::createUnitsOptionMap()
     return result;
 }
 
+QHash<QString, OwnProduction> WallsParser::createDirectivesMap()
+{
+    QHash<QString, OwnProduction> result;
+    result["#units"] = result["#u"] = &WallsParser::unitsLine;
+    result["#flag"] = result["#f"] = &WallsParser::flagLine;
+    result["#fix"] = &WallsParser::fixLine;
+    result["#note"] = &WallsParser::noteLine;
+    result["#symbol"] = result["#sym"] = &WallsParser::symbolLine;
+    result["#segment"] = result["#seg"] = result["#s"] = &WallsParser::segmentLine;
+    result["#date"] = &WallsParser::dateLine;
+    result["#["] = &WallsParser::beginBlockCommentLine;
+    result["#]"] = &WallsParser::endBlockCommentLine;
+    result["#prefix1"] = result["#prefix2"] =
+            result["#prefix3"] = result["#prefix"] = &WallsParser::prefixLine;
+    return result;
+}
+
 const QList<QPair<QString, LengthUnit>> WallsParser::lengthUnits = createLengthUnits();
 const QList<QPair<QString, AngleUnit>> WallsParser::azmUnits = createAzmUnits();
 const QList<QPair<QString, AngleUnit>> WallsParser::incUnits = createIncUnits();
@@ -290,6 +307,7 @@ const QList<QPair<QString, QList<TapingMethodElement>>> WallsParser::tapingMetho
 const QList<QPair<QString, int>> WallsParser::prefixDirectives = createPrefixDirectives();
 
 const QHash<QString, OwnProduction> WallsParser::unitsOptionMap = WallsParser::createUnitsOptionMap();
+const QHash<QString, OwnProduction> WallsParser::directivesMap = WallsParser::createDirectivesMap();
 
 const QRegExp WallsParser::notSemicolon("[^;]+");
 const QRegExp WallsParser::unitsOptionRx("[a-zA-Z_0-9/]*");
@@ -303,6 +321,8 @@ const QRegExp WallsParser::optionalStationRx("-+");
 const QRegExp WallsParser::isoDateRx("\\d{4}-\\d{2}-\\d{2}");
 const QRegExp WallsParser::usDateRx1("\\d{2}-\\d{2}-\\d{2,4}");
 const QRegExp WallsParser::usDateRx2("\\d{2}/\\d{2}/\\d{2,4}");
+
+const QRegExp WallsParser::directiveRx("#([][]|[a-zA-Z0-9]+)");
 
 double WallsParser::approx(double val)
 {
@@ -524,7 +544,7 @@ UAngle WallsParser::inclination(AngleUnit defaultUnit)
     bool hasSignum = maybe(signum, [this]() { return this->oneOfMap(signSignums); } );
     UAngle angle = unsignedInclination(defaultUnit);
 
-    if (!hasSignum)
+    if (hasSignum)
     {
         if (angle.get(angle.unit()) == 0.0)
         {
@@ -604,6 +624,35 @@ QString WallsParser::movePastEndQuote()
     return _line.value().mid(start, _i);
 }
 
+void WallsParser::parseLine()
+{
+    maybeWhitespace();
+
+    if (_inBlockComment)
+    {
+        throwAllExpected([&]() {
+            this->oneOfWithLookahead([&]() { this->endBlockCommentLine(); },
+            [&]() { this->insideBlockCommentLine(); });
+        });
+    }
+    else
+    {
+        throwAllExpected([&]() { this->oneOf([&]() { this->comment(); },
+            [&]() { this->directiveLine(); },
+            [&]() { this->vectorLine(); });
+        });
+    }
+}
+
+void WallsParser::directiveLine()
+{
+    int start = _i;
+    OwnProduction directive = oneOfMapLowercase(directiveRx, directivesMap);
+    _i = start;
+    replaceMacros();
+    (this->*directive)();
+}
+
 QString WallsParser::replaceMacro()
 {
     _i += 2;
@@ -613,7 +662,7 @@ QString WallsParser::replaceMacro()
         QChar c = _line.at(_i++);
         if (c == ')')
         {
-            Segment macroName = _line.mid(start, _i - 1);
+            Segment macroName = _line.mid(start, _i - 1 - start);
             if (!_macros.contains(macroName.value()))
             {
                 throw SegmentParseException(macroName, "macro not defined");
@@ -622,7 +671,7 @@ QString WallsParser::replaceMacro()
         }
         else if (c.isSpace())
         {
-            throw SegmentParseExpectedException(_line.atAsSegment(_i), "<NONWHITESPACE>");
+            throw SegmentParseExpectedException(_line.atAsSegment(_i - 1), "<NONWHITESPACE>");
         }
     }
     throw SegmentParseExpectedException(_line.atAsSegment(_i), std::initializer_list<QString>{"<NON_WHITESPACE>", ")"});
@@ -640,17 +689,17 @@ void WallsParser::replaceMacros()
         switch(c.toLatin1())
         {
         case '"':
-            newLine.append(movePastEndQuote());
+            newLine += movePastEndQuote();
             break;
         case '$':
             if (_i + 1 < _line.length() && _line.at(_i + 1) == '(')
             {
                 replaced = true;
-                newLine.append(replaceMacro());
+                newLine += replaceMacro();
                 break;
             }
         default:
-            newLine.append(c);
+            newLine += c;
             _i++;
             break;
         }
@@ -939,7 +988,7 @@ void WallsParser::restore()
     _units = _stack.pop();
 }
 
-void WallsParser::reset()
+void WallsParser::reset_()
 {
     _units = QSharedPointer<WallsUnits>(new WallsUnits());
 }
@@ -1209,10 +1258,554 @@ void WallsParser::flag()
     _units->flag = flag;
 }
 
+void WallsParser::vectorLine()
+{
+    maybeWhitespace();
+    fromStation();
+    try
+    {
+        whitespace();
+        afterFromStation();
+        _visitor->endVectorLine();
+    }
+    catch (const SegmentParseExpectedException& ex)
+    {
+        _visitor->abortVectorLine();
+        throw ex;
+    }
+    catch (const SegmentParseException& ex)
+    {
+        _visitor->abortVectorLine();
+        throw ex;
+    }
+}
+
+void WallsParser::fromStation()
+{
+    QString from = expect(stationRx, {"<STATION NAME>"}).value();
+    if (optionalStationRx.indexIn(from) >= 0) {
+        from.clear();
+    }
+    _visitor->beginVectorLine();
+    _visitor->visitFrom(from);
+}
+
+void WallsParser::afterFromStation()
+{
+    oneOf([&]() {
+        this->toStation();
+        this->whitespace();
+        this->afterToStation();
+    }, [&]() {
+        this->lruds();
+        this->afterLruds();
+    });
+}
+
+void WallsParser::toStation()
+{
+    QString to = expect(stationRx, {"<STATION NAME>"}).value();
+    if (optionalStationRx.indexIn(to) >= 0)
+    {
+        to.clear();
+    }
+    _visitor->visitTo(to);
+}
+
+void WallsParser::afterToStation()
+{
+    int k = 0;
+    if (_units->vectorType == VectorType::RECT)
+    {
+        foreach(RectElement elem, _units->rectOrder)
+        {
+            if (k++ > 0)
+            {
+                whitespace();
+            }
+            rectElement(elem);
+        }
+    }
+    else
+    {
+        foreach(CtElement elem, _units->ctOrder)
+        {
+            if (k++ > 0)
+            {
+                whitespace();
+            }
+            ctElement(elem);
+        }
+    }
+    foreach(TapingMethodElement elem, _units->tape)
+    {
+        if (!maybeWhitespace())
+        {
+            break;
+        }
+        if (!maybe([&]() { this->tapingMethodElement(elem); }))
+        {
+            break;
+        }
+    }
+    maybeWhitespace();
+    afterVectorMeasurements();
+}
+
+void WallsParser::rectElement(RectElement elem)
+{
+    switch(elem) {
+    case RectElement::E:
+        east();
+        break;
+    case RectElement::N:
+        north();
+        break;
+    case RectElement::U:
+        rectUp();
+        break;
+    }
+}
+
+void WallsParser::east()
+{
+    _visitor->visitEast(length(_units->d_unit));
+}
+
+void WallsParser::north()
+{
+    _visitor->visitNorth(length(_units->d_unit));
+}
+
+void WallsParser::rectUp()
+{
+    _visitor->visitRectUp(length(_units->d_unit));
+}
+
+void WallsParser::ctElement(CtElement elem)
+{
+    switch(elem)
+    {
+    case CtElement::D:
+        distance();
+        break;
+    case CtElement::A:
+        azimuth();
+        break;
+    case CtElement::V:
+        inclination();
+        break;
+    }
+}
+
+void WallsParser::distance()
+{
+    _visitor->visitDistance(unsignedLength(_units->d_unit));
+}
+
+void WallsParser::azimuth()
+{
+    UAngle fsAzm;
+    if (optional(fsAzm, [&]() { return this->azimuth(_units->a_unit); }))
+    {
+        _visitor->visitFrontsightAzimuth(fsAzm);
+    }
+    if (maybeChar('/'))
+    {
+        UAngle bsAzm;
+        if (optional(bsAzm, [&]() { return this->azimuth(_units->a_unit); }))
+        {
+            _visitor->visitBacksightAzimuth(bsAzm);
+        }
+    }
+}
+
+void WallsParser::inclination()
+{
+    UAngle fsInc;
+    if (optional(fsInc, [&]() { return this->inclination(_units->v_unit); }))
+    {
+        _visitor->visitFrontsightInclination(fsInc);
+    }
+    if (maybeChar('/'))
+    {
+        UAngle bsInc;
+        if (optional(bsInc, [&]() { return this->inclination(_units->vb_unit); }))
+        {
+            _visitor->visitBacksightInclination(bsInc);
+        }
+    }
+}
+
+void WallsParser::tapingMethodElement(TapingMethodElement elem)
+{
+    switch(elem)
+    {
+    case TapingMethodElement::InstrumentHeight:
+        instrumentHeight();
+        break;
+    case TapingMethodElement::TargetHeight:
+        targetHeight();
+        break;
+    }
+}
+
+void WallsParser::instrumentHeight()
+{
+    ULength ih;
+    if (optional(ih, [&]() { return this->length(_units->s_unit); }))
+    {
+        _visitor->visitInstrumentHeight(ih);
+    }
+}
+
+void WallsParser::targetHeight()
+{
+    ULength th;
+    if (optional(th, [&]() { return this->length(_units->s_unit); }))
+    {
+        _visitor->visitTargetHeight(th);
+    }
+}
+
+void WallsParser::lrudElement(LrudElement elem)
+{
+    switch(elem)
+    {
+    case LrudElement::L:
+        left();
+        break;
+    case LrudElement::R:
+        right();
+        break;
+    case LrudElement::U:
+        up();
+        break;
+    case LrudElement::D:
+        down();
+        break;
+    }
+}
+
+void WallsParser::left()
+{
+    ULength left;
+    if (optional(left, [&]() { return this->unsignedLength(_units->s_unit); }))
+    {
+        _visitor->visitLeft(left);
+    }
+}
+
+void WallsParser::right()
+{
+    ULength right;
+    if (optional(right, [&]() { return this->unsignedLength(_units->s_unit); }))
+    {
+        _visitor->visitRight(right);
+    }
+}
+
+void WallsParser::up()
+{
+    ULength up;
+    if (optional(up, [&]() { return this->unsignedLength(_units->s_unit); }))
+    {
+        _visitor->visitUp(up);
+    }
+}
+
+void WallsParser::down()
+{
+    ULength down;
+    if (optional(down, [&]() { return this->unsignedLength(_units->s_unit); }))
+    {
+        _visitor->visitDown(down);
+    }
+}
+
+void WallsParser::afterVectorMeasurements()
+{
+    if (maybe([&]() { return this->varianceOverrides(); }))
+    {
+        maybeWhitespace();
+    }
+    afterVectorVarianceOverrides();
+}
+
+void WallsParser::varianceOverrides()
+{
+    expect('(');
+    maybeWhitespace();
+    VarianceOverridePtr horizontal = varianceOverride(_units->d_unit);
+    _visitor->visitHorizontalVarianceOverride(horizontal);
+    maybeWhitespace();
+    if (maybeChar(','))
+    {
+        maybeWhitespace();
+        VarianceOverridePtr vertical = varianceOverride(_units->d_unit);
+        if (horizontal.isNull() && vertical.isNull())
+        {
+            throw allExpected();
+        }
+        _visitor->visitVerticalVarianceOverride(vertical);
+    }
+    else
+    {
+        _visitor->visitVerticalVarianceOverride(horizontal);
+    }
+    expect(')');
+}
+
+void WallsParser::afterVectorVarianceOverrides()
+{
+    if (maybe([&]() { this->lruds(); }))
+    {
+        maybeWhitespace();
+    }
+    afterLruds();
+}
+
+void WallsParser::lruds()
+{
+    oneOfWithLookahead([&]() {
+        this->expect('<');
+        this->lrudContent();
+        this->expect('>');
+    }, [&]() {
+        this->expect('*');
+        this->lrudContent();
+        this->expect('*');
+    });
+}
+
+void WallsParser::lrudContent()
+{
+    oneOfWithLookahead([&]() {
+        this->commaDelimLrudContent();
+    }, [&]() {
+        this->whitespaceDelimLrudContent();
+    });
+}
+
+void WallsParser::commaDelimLrudContent()
+{
+    maybeWhitespace();
+    int m = 0;
+    foreach(LrudElement elem, _units->lrud_order)
+    {
+        if (m++ > 0)
+        {
+            maybeWhitespace();
+            expect(',');
+            maybeWhitespace();
+        }
+        lrudElement(elem);
+    }
+    maybeWhitespace();
+    afterRequiredCommaDelimLrudMeasurements();
+}
+
+void WallsParser::whitespaceDelimLrudContent()
+{
+    maybeWhitespace();
+    int m = 0;
+    foreach(LrudElement elem, _units->lrud_order)
+    {
+        if (m++ > 0)
+        {
+            whitespace();
+        }
+        lrudElement(elem);
+    }
+    maybeWhitespace();
+    afterRequiredWhitespaceDelimLrudMeasurements();
+}
+
+void WallsParser::afterRequiredCommaDelimLrudMeasurements()
+{
+    if (maybeChar(','))
+    {
+        maybeWhitespace();
+        oneOf([&]() {
+            this->lrudFacingAngle();
+            this->maybeWhitespace();
+            if (this->maybeChar(','))
+            {
+                this->maybeWhitespace();
+                this->lrudCFlag();
+            }
+        }, [&]() { this->lrudCFlag(); });
+    }
+}
+
+void WallsParser::afterRequiredWhitespaceDelimLrudMeasurements()
+{
+    maybe([&]() {
+        this->oneOf([&]() {
+            this->lrudFacingAngle();
+            if (this->maybeWhitespace())
+            {
+                maybe([&]() { this->lrudCFlag(); });
+            }
+        },
+        [&]() { this->lrudCFlag(); });
+    });
+}
+
+void WallsParser::lrudFacingAngle()
+{
+    _visitor->visitLrudFacingAngle(azimuth(_units->a_unit));
+}
+
+void WallsParser::lrudCFlag()
+{
+    expect('c', Qt::CaseInsensitive);
+}
+
+void WallsParser::afterLruds()
+{
+    if (maybe([&]() { this->inlineDirective(); }))
+    {
+        maybeWhitespace();
+    }
+    inlineCommentOrEndOfLine();
+}
+
+void WallsParser::inlineDirective()
+{
+    // currently this is the only directive that can be on a vector line
+    inlineSegmentDirective();
+}
+
+void WallsParser::inlineSegmentDirective()
+{
+    _visitor->visitInlineSegment(segmentDirective());
+}
+
+void WallsParser::fixLine()
+{
+    maybeWhitespace();
+    expect("#fix", Qt::CaseInsensitive);
+    whitespace();
+    fixedStation();
+    try
+    {
+        whitespace();
+        afterFixedStation();
+        _visitor->endFixLine();
+    }
+    catch (const SegmentParseExpectedException& ex)
+    {
+        _visitor->abortFixLine();
+        throw ex;
+    }
+    catch (const SegmentParseException& ex)
+    {
+        _visitor->abortFixLine();
+        throw ex;
+    }
+}
+
+void WallsParser::fixedStation()
+{
+    QString fixed = expect(stationRx, {"<STATION NAME>"}).value();
+    _visitor->beginFixLine();
+    _visitor->visitFixedStation(fixed);
+}
+
+void WallsParser::afterFixedStation()
+{
+    int k = 0;
+    foreach(RectElement elem, _units->rectOrder)
+    {
+        if (k++ > 0)
+        {
+            whitespace();
+        }
+        fixRectElement(elem);
+    }
+    if (maybeWhitespace())
+    {
+        afterFixMeasurements();
+    }
+}
+
+void WallsParser::fixRectElement(RectElement elem)
+{
+    switch(elem)
+    {
+    case RectElement::E:
+        fixEast();
+        break;
+    case RectElement::N:
+        fixNorth();
+        break;
+    case RectElement::U:
+        fixUp();
+        break;
+    }
+}
+
+void WallsParser::fixEast()
+{
+    oneOf([&]() { this->_visitor->visitEast(this->length(this->_units->d_unit)); },
+    [&]() { this->_visitor->visitLongitude(this->longitude()); });
+}
+
+void WallsParser::fixNorth()
+{
+    oneOf([&]() { this->_visitor->visitNorth(this->length(this->_units->d_unit)); },
+    [&]() { this->_visitor->visitLatitude(this->latitude()); });
+}
+
+void WallsParser::fixUp()
+{
+    _visitor->visitRectUp(length(_units->d_unit));
+}
+
+void WallsParser::afterFixMeasurements()
+{
+    if (maybe([&]() { this->varianceOverrides(); }))
+    {
+        maybeWhitespace();
+    }
+    afterFixVarianceOverrides();
+}
+
+void WallsParser::afterFixVarianceOverrides()
+{
+    if (maybe([&]() { this->inlineNote(); }))
+    {
+        maybeWhitespace();
+    }
+    afterFixInlineNote();
+}
+
+void WallsParser::inlineNote()
+{
+    expect('/');
+    _visitor->visitInlineNote(escapedText([](QChar c) { return c != ';' && c != '#'; }, {"<NOTE>"}));
+}
+
+void WallsParser::afterFixInlineNote()
+{
+    if (maybe([&]() { this->inlineDirective(); }))
+    {
+        maybeWhitespace();
+    }
+    inlineCommentOrEndOfLine();
+}
+
 void WallsParser::inlineCommentOrEndOfLine()
 {
     oneOf([&]() { this->inlineComment(); },
     [&]() { this->endOfLine(); });
+}
+
+void WallsParser::comment()
+{
+    expect(';');
+    _visitor->visitCommentLine(remaining().value());
 }
 
 void WallsParser::inlineComment()

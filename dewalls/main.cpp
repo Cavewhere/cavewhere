@@ -42,6 +42,41 @@ void quadrantTest()
     cout << quadrant(East, North, UnitizedDouble<Angle>(110.0, Angle::deg)) << endl;
 }
 
+void parseLine(WallsParser& parser, QString line)
+{
+    static int lineNumber = 1;
+
+    std::cout << std::endl << std::endl << line.toStdString() << std::endl;
+
+    parser.reset(Segment(line, "fakefile.txt", lineNumber++, 0));
+
+    try
+    {
+        parser.parseLine();
+    }
+    catch (const SegmentParseExpectedException& ex)
+    {
+        cout << ex.message().toStdString() << endl;
+    }
+    catch (const SegmentParseException& ex)
+    {
+        cout << ex.message().toStdString() << endl;
+    }
+}
+
+QString toString(QHash<QString, QString> h)
+{
+    QString result('[');
+    foreach(QString key, h.keys())
+    {
+        if (result.length() > 1) {
+            result += ", ";
+        }
+        result += QString("%1 => %2").arg(key, h[key]);
+    }
+    return result + ']';
+}
+
 int main(int argc, char *argv[]) {
     typedef UnitizedDouble<Length> ULength;
     typedef UnitizedDouble<Angle> UAngle;
@@ -139,30 +174,91 @@ int main(int argc, char *argv[]) {
         cout << ex.message().toStdString() << endl;
     }
 
-    parser = WallsParser(Segment("#units ct feet save lrud=fb:lurd incab=2.3h", "fakefile.txt", 2, 0));
-
     PrintingWallsVisitor visitor;
     parser.setVisitor(&visitor);
 
-    try
-    {
-        try
-        {
-            parser.unitsLine();
-        }
-        catch (const SegmentParseExpectedException& ex)
-        {
-            parser.throwAllExpected(ex);
-        }
+    parseLine(parser, "#units ct feet save lrud=fb:lurd incab=2.3h");
+    parseLine(parser, "A*1 B1 350i4 41 +25/-6 *2, --, 4,5,C*#Seg /some/really/cool segment;4, 5>");
+    parseLine(parser, "A*1 B1 350 N200mW +25 (*) *2, 3, 4,5,C*#Seg blah;4, 5>");
+    parseLine(parser, "#u tape=it");
+    parseLine(parser, "A1 B1 350 41 +25 15 16 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>");
 
-        cout << *(parser.units()->d_unit) << endl;
-    }
-    catch (const SegmentParseExpectedException& ex)
-    {
-        cout << ex.message().toStdString() << endl;
-    }
-    catch (const SegmentParseException& ex)
-    {
-        cout << ex.message().toStdString() << endl;
-    }
+    parseLine( parser , "A*1 B1 350i4 41 +25/-6 *2, --, 4,5,C*#Seg /some/really/cool segment;4, 5>" );
+    parseLine( parser , "A*1 B1 350 41 +25 *2, 3, 4,5,C*#Q /some/really/cool segment;4, 5>" );
+    parseLine( parser , "A*1 B1 350 41 +25 *2, 3 4,5,C*;4, 5>" );
+    parseLine( parser , "A*1 B1 350 41 +25 *2 3 4 5 C*;4, 5>" );
+    parseLine( parser , "A*1 B1 350 41 +25 *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 B1 350 41:20 +25 (?,) *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 *2,3,4,5*" );
+    parseLine( parser , "A*1 B1 350 N41gW +25 (*) *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 B1 350 N41gW +25 ;(*) *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 B1 350 N41gW +25 (*) *2, 3, 4m,3f,50g,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 B1 350 N200gW +25 (*) *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 B1 350 N200mS +25 (*) *2, 3, 4,5,C*#Seg blah;4, 5>" );
+    parseLine( parser , "A*1 *2,3,4,*" );
+    parseLine( parser , "A1, <bash <2,3,4,5>" );
+    parseLine( parser , "A1 <bash <2,3,4,5>" );
+    parseLine( parser , "A1 b<ash <2,3,4,5>" );
+    parseLine( parser , "A1 B1 350 41 +25 (3, 5) <2, 3, 4,5> okay>< weird #Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 <2, 3, 4,5>#Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 (3;, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 (3, 5) <2, 3,4,5 *#Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 (3, 5) hello <2, 3,4,5 *#Seg blah;4, 5>" );
+
+    parseLine( parser , "#u tape=it" );
+    parseLine( parser , "A1 B1 350 41 +25 15 16 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+    parseLine( parser , "A1 B1 350 41 +25 15 16 17 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+
+    parseLine( parser , "   #flag /This is a test" );
+    parseLine( parser , "   #flag AB30 /This is a test" );
+    parseLine( parser , "   #f" );
+    parseLine( parser , "   #f AB30 CY5 /This is a test" );
+    //parseLine( parser , "   #u prefix1=A prefix2=CR case=lower" );
+    parseLine( parser , "   #u prefix1=A case=lower" );
+    parseLine( parser , "  #prefix2 CR    ;test" );
+
+    parseLine( parser , "   #symbol aslkjb;lkj aslkjasdf a; asdflaksjdf" );
+    parseLine( parser , "   #sym ; asdlkfjasldf" );
+
+    parseLine( parser , "    \tA1 B:B1 350 41 +25 15 16 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+    parseLine( parser , " FR::A1 B:B1 350 41 +25 15 16 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+    parseLine( parser , "   #seg /hello/world  blah;comment" );
+
+    parseLine( parser , "   #note FR::A1  blah\\n\" hello\\n hello;comment" );
+
+    parseLine( parser , "#date 2015-01-16" );
+    parseLine( parser , "#date 01-16-2005" );
+    parseLine( parser , "#date 01-16-05" );
+    parseLine( parser , "#date 01/16/05" );
+    parseLine( parser , "#date 01/16/1905" );
+
+    parseLine( parser , "  #[ this is a test" );
+    parseLine( parser , "  blah" );
+    parseLine( parser , "  blah" );
+    parseLine( parser , "  #segment /hello/world" );
+    parseLine( parser , "  ;#]" );
+    parseLine( parser , "  #segment /hello/world" );
+    parseLine( parser , "  #]" );
+
+    parseLine( parser , " FR::A1 B:B1 350 41 +25 15 16 (3, 5) <2, 3,4,5 >#Seg blah;4, 5>" );
+
+    parseLine( parser , " #fox" );
+    parseLine( parser , " #fix GPS9 620765 3461243 123 (R5,?) /Bat Cave Entrance" );
+    parseLine( parser , " #FIX A1 W97:43:52.5 N31:16:45 323f /Entrance #s /hello/world;dms with ft elevations" );
+
+    parseLine( parser , "#uNits $hello=\"er=vad order=NUE\"" );
+
+    parseLine( parser , "#u ord$(hello)" );
+
+//    System.out.println( parser.units.ctOrder );
+//    System.out.println( parser.units.rectOrder );
+
+    parseLine( parser , "#u ord$(hel lo)" );
+    parseLine( parser , "#u ord$(hello" );
+
+    parseLine( parser , "#u o=dav" );
+
+    parseLine( parser , "a - 350 20 +5 *1,2,3,4*" );
+    parseLine( parser , "- a 350 20 +5 *1,2,3,4*" );
 }

@@ -38,6 +38,7 @@ public:
     void setVisitor(WallsVisitor* visitor);
 
     QSharedPointer<WallsUnits> units() const;
+    QHash<QString, QString> macros() const;
 
     ULength unsignedLengthInches();
     ULength unsignedLengthNonInches(LengthUnit defaultUnit);
@@ -77,10 +78,13 @@ public:
     template<typename T>
     QList<T> elementChars(QHash<QChar, T> elements, QSet<T> requiredElements);
 
+    void parseLine();
+
     void beginBlockCommentLine();
     void endBlockCommentLine();
     void insideBlockCommentLine();
 
+    void directiveLine();
     void segmentLine();
     void prefixLine();
     void noteLine();
@@ -88,11 +92,13 @@ public:
     void symbolLine();
     void dateLine();
     void unitsLine();
+    void vectorLine();
 
 private:
     static double approx(double val);
 
     static QHash<QString, OwnProduction> createUnitsOptionMap();
+    static QHash<QString, OwnProduction> createDirectivesMap();
 
     static const QList<QPair<QString, LengthUnit>> lengthUnits;
     static const QList<QPair<QString, AngleUnit>> azmUnits;
@@ -118,6 +124,7 @@ private:
 
     static const QRegExp notSemicolon;
     static const QRegExp unitsOptionRx;
+    static const QRegExp directiveRx;
     static const QRegExp macroNameRx;
     static const QRegExp stationRx;
     static const QRegExp prefixRx;
@@ -130,6 +137,7 @@ private:
     static const QRegExp usDateRx2;
 
     static const QHash<QString, OwnProduction> unitsOptionMap;
+    static const QHash<QString, OwnProduction> directivesMap;
 
     void replaceMacros();
     QString movePastEndQuote();
@@ -154,7 +162,7 @@ private:
     void macroOption();
     void save();
     void restore();
-    void reset();
+    void reset_();
     void meters();
     void feet();
     void ct();
@@ -194,6 +202,53 @@ private:
     void uv();
     void flag();
 
+    void fromStation();
+    void afterFromStation();
+    void toStation();
+    void afterToStation();
+    void rectElement(RectElement elem);
+    void east();
+    void north();
+    void rectUp();
+    void ctElement(CtElement elem);
+    void distance();
+    void azimuth();
+    void inclination();
+    void tapingMethodElement(TapingMethodElement elem);
+    void instrumentHeight();
+    void targetHeight();
+    void lrudElement(LrudElement elem);
+    void left();
+    void right();
+    void up();
+    void down();
+    void afterVectorMeasurements();
+    void varianceOverrides();
+    void afterVectorVarianceOverrides();
+    void lruds();
+    void lrudContent();
+    void commaDelimLrudContent();
+    void whitespaceDelimLrudContent();
+    void afterRequiredCommaDelimLrudMeasurements();
+    void afterRequiredWhitespaceDelimLrudMeasurements();
+    void lrudFacingAngle();
+    void lrudCFlag();
+    void afterLruds();
+    void inlineDirective();
+    void inlineSegmentDirective();
+    void fixLine();
+    void fixedStation();
+    void afterFixedStation();
+    void fixRectElement(RectElement elem);
+    void fixEast();
+    void fixNorth();
+    void fixUp();
+    void afterFixMeasurements();
+    void afterFixVarianceOverrides();
+    void inlineNote();
+    void afterFixInlineNote();
+    void comment();
+
     void inlineCommentOrEndOfLine();
     void inlineComment();
 
@@ -219,6 +274,11 @@ inline QSharedPointer<WallsUnits> WallsParser::units() const
     return _units;
 }
 
+inline QHash<QString, QString> WallsParser::macros() const
+{
+    return _macros;
+}
+
 template<typename F>
 QChar WallsParser::escapedChar(F charPredicate, std::initializer_list<QString> expectedItems)
 {
@@ -237,7 +297,7 @@ QString WallsParser::escapedText(F charPredicate, std::initializer_list<QString>
 template<typename R, typename F>
 bool WallsParser::optional(R& result, F production)
 {
-    if (maybe([&]() { return this->expect(optionalPattern); }))
+    if (maybe([&]() { return this->expect(optionalRx, {"-", "--"}); }))
     {
         return false;
     }
@@ -253,7 +313,7 @@ QList<T> WallsParser::elementChars(QHash<QChar, T> elements, QSet<T> requiredEle
     {
         T element;
         if (requiredElements.isEmpty()) {
-            if (!maybe([&]() { this->oneOfMap(elements); }))
+            if (!maybe(element, [&]() { return this->oneOfMap(elements); }))
             {
                 break;
             }
