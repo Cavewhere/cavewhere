@@ -91,15 +91,15 @@ void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& dist
     inc = uatan2(up, ne).in(v_unit);
 }
 
-void WallsUnits::applyCorrections(ULength& dist, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
+void WallsUnits::applyHeightCorrections(ULength& dist, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
 {
     if (!inch.isZero() || ih.isNonzero() || th.isNonzero())
     {
-        UAngle inc = avgInc(fsInc, bsInc);
+        UAngle inc = avgInc(fsInc + incv, bsInc + incvb);
         if (inc.isValid() && !isVertical(inc))
         {
-            ULength ne = ucos(inc) * dist;
-            ULength u = usin(inc) * dist;
+            ULength ne = ucos(inc) * (dist + incd);
+            ULength u = usin(inc) * (dist + incd);
 
             u += inch;
             if (ih.isValid()) u += ih;
@@ -108,9 +108,9 @@ void WallsUnits::applyCorrections(ULength& dist, UAngle& fsInc, UAngle& bsInc, U
             UAngle dinc = uatan2(u, ne) - inc;
 
             fsInc += dinc;
-            bsInc += typevb_corrected ? dinc : -dinc;
+            bsInc += (typevb_corrected ? dinc : -dinc);
 
-            dist = usqrt(usq(ne) + usq(u));
+            dist = usqrt(usq(ne) + usq(u)) - incd;
         }
     }
 }

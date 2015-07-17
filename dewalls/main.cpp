@@ -266,4 +266,21 @@ int main(int argc, char *argv[]) {
     ULength lb;
 
     cout << (la + lb) << endl;
+
+    WallsUnits units;
+    units.typeab_corrected = true;
+    units.typevb_corrected = true;
+    units.inch = ULength(1, Length::in);
+    units.incv = UAngle(30, Angle::deg);
+    units.incd = ULength(1, Length::ft);
+
+    ULength dist(20, Length::ft);
+    UAngle fsInc(35, Angle::deg);
+    UAngle bsInc(33, Angle::deg);
+
+    units.applyHeightCorrections(dist, fsInc, bsInc, ULength(-5, Length::in), ULength());
+
+    cout << "dist:  " << dist << endl;
+    cout << "fsInc: " << fsInc << endl;
+    cout << "bsInc: " << bsInc << endl;
 }
