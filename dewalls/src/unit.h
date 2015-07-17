@@ -57,7 +57,7 @@ inline const T *Unit<T>::type() const
 template<class T>
 inline double Unit<T>::convert(double quantity, const Unit<T> *toUnit) const
 {
-    return _type->convert(quantity, this, toUnit);
+    return toUnit ? _type->convert(quantity, this, toUnit) : NAN;
 }
 
 }

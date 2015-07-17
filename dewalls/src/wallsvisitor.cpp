@@ -251,5 +251,207 @@ void PrintingWallsVisitor::visitFixedStation( QString station )
     cout << "  fixed station:" << station.toStdString() << endl;
 }
 
+void CapturingWallsVisitor::beginFile( QString source )
+{
+}
+
+void CapturingWallsVisitor::endFile( QString source )
+{
+}
+
+void CapturingWallsVisitor::beginVectorLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::abortVectorLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::endVectorLine( )
+{
+}
+
+void CapturingWallsVisitor::beginFixLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::abortFixLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::endFixLine( )
+{
+}
+
+void CapturingWallsVisitor::beginUnitsLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::abortUnitsLine( )
+{
+    clear();
+}
+
+void CapturingWallsVisitor::endUnitsLine( )
+{
+}
+
+void CapturingWallsVisitor::visitFrom( QString _from )
+{
+    from = _from;
+}
+
+void CapturingWallsVisitor::visitTo( QString _to )
+{
+    to = _to;
+}
+
+void CapturingWallsVisitor::visitDistance( ULength distance )
+{
+    this->distance = distance;
+}
+
+void CapturingWallsVisitor::visitFrontsightAzimuth( UAngle fsAzimuth )
+{
+    frontsightAzimuth = fsAzimuth;
+}
+
+void CapturingWallsVisitor::visitBacksightAzimuth( UAngle bsAzimuth )
+{
+    backsightAzimuth = bsAzimuth;
+}
+
+void CapturingWallsVisitor::visitFrontsightInclination( UAngle fsInclination )
+{
+    frontsightInclination = fsInclination;
+}
+
+void CapturingWallsVisitor::visitBacksightInclination( UAngle bsInclination )
+{
+    backsightInclination = bsInclination;
+}
+
+void CapturingWallsVisitor::visitNorth( ULength _north )
+{
+    north = _north;
+}
+
+void CapturingWallsVisitor::visitLatitude( UAngle _latitude )
+{
+    latitude = _latitude;
+}
+
+void CapturingWallsVisitor::visitEast( ULength _east )
+{
+    east = _east;
+}
+
+void CapturingWallsVisitor::visitLongitude( UAngle _longitude )
+{
+    longitude = _longitude;
+}
+
+void CapturingWallsVisitor::visitRectUp( ULength up )
+{
+    rectUp = up;
+}
+
+void CapturingWallsVisitor::visitInstrumentHeight( ULength _instrumentHeight )
+{
+    instrumentHeight = _instrumentHeight;
+}
+
+void CapturingWallsVisitor::visitTargetHeight( ULength _targetHeight )
+{
+    targetHeight = _targetHeight;
+}
+
+void CapturingWallsVisitor::visitLeft( ULength _left )
+{
+    left = _left;
+}
+
+void CapturingWallsVisitor::visitRight( ULength _right )
+{
+    right = _right;
+}
+
+void CapturingWallsVisitor::visitUp( ULength _up )
+{
+    up = _up;
+}
+
+void CapturingWallsVisitor::visitDown( ULength _down )
+{
+    down = _down;
+}
+
+void CapturingWallsVisitor::visitLrudFacingAngle( UAngle facingAngle )
+{
+    lrudFacingAngle = facingAngle;
+}
+
+void CapturingWallsVisitor::visitCFlag( )
+{
+    cflag = true;
+}
+
+void CapturingWallsVisitor::visitHorizontalVarianceOverride( VarianceOverridePtr variance )
+{
+    horizontalVarianceOverride = variance;
+}
+
+void CapturingWallsVisitor::visitVerticalVarianceOverride( VarianceOverridePtr variance )
+{
+    verticalVarianceOverride = variance;
+}
+
+void CapturingWallsVisitor::visitInlineSegment( QString segment )
+{
+    inlineSegment = segment;
+}
+
+void CapturingWallsVisitor::visitInlineNote( QString note )
+{
+    inlineNote = note;
+}
+
+void CapturingWallsVisitor::visitInlineComment( QString comment )
+{
+    inlineComment = comment;
+}
+
+void CapturingWallsVisitor::visitCommentLine( QString _comment )
+{
+    comment = _comment;
+}
+
+void CapturingWallsVisitor::visitFlaggedStations( QString _flag , QStringList stations )
+{
+    flag = _flag;
+    flaggedStations = stations;
+}
+
+void CapturingWallsVisitor::visitBlockCommentLine( QString comment )
+{
+    blockCommentLine = comment;
+}
+
+void CapturingWallsVisitor::visitNoteLine( QString station , QString _note )
+{
+    note = _note;
+    notedStation = station;
+}
+
+void CapturingWallsVisitor::visitFixedStation( QString station )
+{
+    fixedStation = station;
+}
+
 } // namespace dewalls
 

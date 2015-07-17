@@ -17,6 +17,11 @@ public:
     const Unit<T> *unit() const;
     double get(const Unit<T> *toUnit) const;
     UnitizedDouble<T> in(const Unit<T> *unit) const;
+    inline bool isValid() const { return _unit != NULL; }
+    inline void clear() { _unit = NULL; }
+
+    inline bool isZero() const { return _unit && _quantity == 0.0; }
+    inline bool isNonzero() const { return _unit && _quantity != 0.0; }
 
     friend void swap(UnitizedDouble<T>& first, UnitizedDouble<T>& second)
     {
@@ -31,6 +36,7 @@ public:
     UnitizedDouble<T>  operator -();
     UnitizedDouble<T>& operator -=(const UnitizedDouble<T>& rhs);
     UnitizedDouble<T>& operator *=(const double& rhs);
+    UnitizedDouble<T>& operator *=(const UnitizedDouble<T>& rhs);
     UnitizedDouble<T>& operator /=(const double& rhs);
     UnitizedDouble<T>& operator %=(const UnitizedDouble<T>& rhs);
 
@@ -38,7 +44,7 @@ public:
 
     friend std::ostream& operator<<(std::ostream& os, const UnitizedDouble<T>& obj)
     {
-        return os << obj._quantity << ' ' << *obj._unit;
+        return os << obj.toString().toStdString();
     }
 
 private:
@@ -70,7 +76,8 @@ inline UnitizedDouble<T>& UnitizedDouble<T>::operator =(UnitizedDouble<T> other)
 template<class T>
 inline UnitizedDouble<T>& UnitizedDouble<T>::operator +=(const UnitizedDouble<T>& rhs)
 {
-    _quantity += rhs.get(_unit);
+    if (!rhs._unit) _unit = NULL;
+    else if (_unit) _quantity += rhs.get(_unit);
     return *this;
 }
 
@@ -83,7 +90,8 @@ inline UnitizedDouble<T> UnitizedDouble<T>::operator -()
 template<class T>
 inline UnitizedDouble<T>& UnitizedDouble<T>::operator -=(const UnitizedDouble<T>& rhs)
 {
-    _quantity -= rhs.get(_unit);
+    if (!rhs._unit) _unit = NULL;
+    else if (_unit) _quantity -= rhs.get(_unit);
     return *this;
 }
 
@@ -91,6 +99,14 @@ template<class T>
 inline UnitizedDouble<T>& UnitizedDouble<T>::operator *=(const double& rhs)
 {
     _quantity *= rhs;
+    return *this;
+}
+
+template<class T>
+inline UnitizedDouble<T>& UnitizedDouble<T>::operator *=(const UnitizedDouble<T>& rhs)
+{
+    if (!rhs._unit) _unit = NULL;
+    else if (_unit) _quantity *= rhs.get(_unit);
     return *this;
 }
 
@@ -104,14 +120,16 @@ inline UnitizedDouble<T>& UnitizedDouble<T>::operator /=(const double& rhs)
 template<class T>
 inline UnitizedDouble<T>& UnitizedDouble<T>::operator %=(const UnitizedDouble<T>& rhs)
 {
-    _quantity = fmod(_quantity, rhs.get(_unit));
+    if (!rhs._unit) _unit = NULL;
+    else if (_unit) _quantity = fmod(_quantity, rhs.get(_unit));
     return *this;
 }
 
 template<class T>
 inline bool operator ==(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
 {
-    return lhs.get(lhs.unit()) == rhs.get(lhs.unit());
+    return lhs.unit() ? rhs.unit() && lhs.get(lhs.unit()) == rhs.get(lhs.unit())
+                      : !rhs.unit();
 }
 
 template<class T>
@@ -123,7 +141,7 @@ inline bool operator !=(const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& r
 template<class T>
 inline bool operator < (const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
 {
-    return lhs.get(lhs.unit()) < rhs.get(lhs.unit());
+    return lhs.unit() && lhs.get(lhs.unit()) < rhs.get(lhs.unit());
 }
 
 template<class T>
@@ -172,6 +190,13 @@ inline UnitizedDouble<T> operator *(double lhs, const UnitizedDouble<T>& rhs)
 }
 
 template<class T>
+inline UnitizedDouble<T> operator *(UnitizedDouble<T> lhs, const UnitizedDouble<T>& rhs)
+{
+    lhs *= rhs;
+    return lhs;
+}
+
+template<class T>
 inline UnitizedDouble<T> operator /(UnitizedDouble<T> lhs, const double& rhs)
 {
     lhs /= rhs;
@@ -181,13 +206,15 @@ inline UnitizedDouble<T> operator /(UnitizedDouble<T> lhs, const double& rhs)
 template<class T>
 inline UnitizedDouble<T> operator /(double lhs, const UnitizedDouble<T>& rhs)
 {
-    return UnitizedDouble<T>(lhs / rhs.get(rhs.unit()), rhs.unit());
+    return rhs.unit() ? UnitizedDouble<T>(lhs / rhs.get(rhs.unit()), rhs.unit())
+                      : UnitizedDouble<T>();
 }
 
 template<class T>
 inline double operator / (const UnitizedDouble<T>& lhs, const UnitizedDouble<T>& rhs)
 {
-    return lhs.get(lhs.unit()) / rhs.get(lhs.unit());
+    return lhs.unit() && rhs.unit() ? lhs.get(lhs.unit()) / rhs.get(lhs.unit())
+                                    : NAN;
 }
 
 template<class T>
@@ -214,7 +241,7 @@ inline const Unit<T> *UnitizedDouble<T>::unit() const
 template<class T>
 inline double UnitizedDouble<T>::get(const Unit<T> *toUnit) const
 {
-    return _unit->convert(_quantity, toUnit);
+    return _unit ? _unit->convert(_quantity, toUnit) : NAN;
 }
 
 template<class T>
@@ -226,6 +253,7 @@ inline UnitizedDouble<T> UnitizedDouble<T>::in(const Unit<T> *unit) const
 template<class T>
 inline QString UnitizedDouble<T>::toString() const
 {
+    if (!_unit) return "<no value>";
     return QString("%1").arg(_quantity) + " " + _unit->name();
 }
 

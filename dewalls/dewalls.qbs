@@ -25,7 +25,7 @@ Project {
 
         Depends { name: "cpp" }
 
-        Depends { name: "Qt"; submodules: ["core"] }
+        Depends { name: "Qt"; submodules: ["core", "testlib"] }
 
         cpp.includePaths: ["src"]
 

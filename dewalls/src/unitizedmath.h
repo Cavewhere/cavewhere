@@ -36,6 +36,20 @@ inline UnitizedDouble<Angle> uatan2(double y, double x) {
     return UnitizedDouble<Angle>(atan2(y, x), Angle::radians);
 }
 
+inline UnitizedDouble<Angle> uatan2(UnitizedDouble<Length> y, UnitizedDouble<Length> x) {
+    return UnitizedDouble<Angle>(atan2(y.get(y.unit()), x.get(y.unit())), Angle::radians);
+}
+
+template<class T>
+inline UnitizedDouble<T> usqrt(UnitizedDouble<T> x) {
+    return UnitizedDouble<T>(sqrt(x.get(x.unit())), x.unit());
+}
+
+template<class T>
+inline UnitizedDouble<T> uabs(UnitizedDouble<T> x) {
+    return UnitizedDouble<T>(abs(x.get(x.unit())), x.unit());
+}
+
 }
 
 #endif // UNITIZEDMATH_H

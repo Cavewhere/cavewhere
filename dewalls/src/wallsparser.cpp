@@ -926,12 +926,12 @@ void WallsParser::unitsLine()
         unitsOptions();
         _visitor->endUnitsLine();
     }
-    catch (const SegmentParseExpectedException ex)
+    catch (const SegmentParseExpectedException& ex)
     {
         _visitor->abortUnitsLine();
         throw ex;
     }
-    catch (const SegmentParseException ex)
+    catch (const SegmentParseException& ex)
     {
         _visitor->abortUnitsLine();
         throw ex;

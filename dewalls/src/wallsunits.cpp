@@ -1,4 +1,5 @@
 #include "wallsunits.h"
+#include "unitizedmath.h"
 
 namespace dewalls {
 
@@ -78,6 +79,67 @@ QString WallsUnits::processStationName(QString name)
         name.prepend(':').prepend(prefix[i]);
     }
     return name;
+}
+
+void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& distance, UAngle& azm, UAngle& inc) const
+{
+    ULength ne2 = north * north + east * east;
+    ULength ne = usqrt(ne2);
+
+    distance = usqrt(ne2 + up * up).in(d_unit);
+    azm = uatan2(east, north).in(a_unit);
+    inc = uatan2(up, ne).in(v_unit);
+}
+
+void WallsUnits::applyCorrections(ULength& dist, UAngle& fsAzm, UAngle& bsAzm, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
+{
+    if (!inch.isZero() || ih.isNonzero() || th.isNonzero())
+    {
+        UAngle inc = avgInc(fsInc, bsInc);
+        if (!inc.isValid())
+        {
+            return;
+        }
+        if (!isVertical(inc))
+        {
+            ULength ne = ucos(inc) * dist;
+            ULength u = usin(inc) * dist;
+
+            u += inch;
+            if (ih.isValid()) u += ih;
+            if (th.isValid()) u -= th;
+
+            UAngle dinc = uatan2(u, ne) - inc;
+
+            fsInc += dinc;
+            bsInc += typevb_corrected ? dinc : -dinc;
+
+            dist = usqrt(ne * ne + u * u);
+        }
+    }
+}
+
+UAngle WallsUnits::avgInc(UAngle fsInc, UAngle bsInc) const
+{
+    if (!typevb_corrected)
+    {
+        bsInc = -bsInc;
+    }
+    if (!fsInc.isValid())
+    {
+        return bsInc;
+    }
+    else if (!bsInc.isValid())
+    {
+        return fsInc;
+    }
+
+    return (fsInc + bsInc) * 0.5;
+}
+
+bool WallsUnits::isVertical(UAngle angle) const
+{
+    return abs(abs(angle.get(Angle::degrees)) - 90.0) < 0.0001;
 }
 
 } // namespace dewalls

@@ -10,6 +10,7 @@
 #include "length.h"
 #include "angle.h"
 #include "wallstypes.h"
+#include "math.h"
 
 namespace dewalls {
 
@@ -62,6 +63,11 @@ public:
 
     void setPrefix(int index, QString newPrefix);
     QString processStationName(QString name);
+
+    void rectToCt(ULength north, ULength east, ULength up, ULength& distance, UAngle& azm, UAngle& inc) const;
+    void applyCorrections(ULength& dist, UAngle& fsAzm, UAngle& bsAzm, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const;
+    UAngle avgInc(UAngle fsInc, UAngle bsInc) const;
+    bool isVertical(UAngle angle) const;
 };
 
 } // namespace dewalls
