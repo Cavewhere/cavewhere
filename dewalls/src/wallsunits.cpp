@@ -93,20 +93,23 @@ void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& dist
 
 void WallsUnits::applyHeightCorrections(ULength& dist, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
 {
-    if (!inch.isZero() || ih.isNonzero() || th.isNonzero())
+    if (inch.isNonzero() || ih.isNonzero() || th.isNonzero())
     {
         UAngle inc = avgInc(fsInc + incv, bsInc + incvb);
         if (inc.isValid() && !isVertical(inc))
         {
+            // horizontal offset before height correction
             ULength ne = ucos(inc) * (dist + incd);
+            // vertical offset before height correction
             ULength u = usin(inc) * (dist + incd);
 
             u += inch;
             if (ih.isValid()) u += ih;
             if (th.isValid()) u -= th;
 
+            // adjust fsInc/bsInc so that their new avg
+            // is the corrected inclination
             UAngle dinc = uatan2(u, ne) - inc;
-
             fsInc += dinc;
             bsInc += (typevb_corrected ? dinc : -dinc);
 
