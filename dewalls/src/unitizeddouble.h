@@ -36,7 +36,6 @@ public:
     UnitizedDouble<T>  operator -();
     UnitizedDouble<T>& operator -=(const UnitizedDouble<T>& rhs);
     UnitizedDouble<T>& operator *=(const double& rhs);
-    UnitizedDouble<T>& operator *=(const UnitizedDouble<T>& rhs);
     UnitizedDouble<T>& operator /=(const double& rhs);
     UnitizedDouble<T>& operator %=(const UnitizedDouble<T>& rhs);
 
@@ -99,14 +98,6 @@ template<class T>
 inline UnitizedDouble<T>& UnitizedDouble<T>::operator *=(const double& rhs)
 {
     _quantity *= rhs;
-    return *this;
-}
-
-template<class T>
-inline UnitizedDouble<T>& UnitizedDouble<T>::operator *=(const UnitizedDouble<T>& rhs)
-{
-    if (!rhs._unit) _unit = NULL;
-    else if (_unit) _quantity *= rhs.get(_unit);
     return *this;
 }
 
@@ -187,13 +178,6 @@ template<class T>
 inline UnitizedDouble<T> operator *(double lhs, const UnitizedDouble<T>& rhs)
 {
     return rhs * lhs;
-}
-
-template<class T>
-inline UnitizedDouble<T> operator *(UnitizedDouble<T> lhs, const UnitizedDouble<T>& rhs)
-{
-    lhs *= rhs;
-    return lhs;
 }
 
 template<class T>

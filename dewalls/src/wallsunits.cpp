@@ -83,24 +83,20 @@ QString WallsUnits::processStationName(QString name)
 
 void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& distance, UAngle& azm, UAngle& inc) const
 {
-    ULength ne2 = north * north + east * east;
+    ULength ne2 = usq(north) + usq(east);
     ULength ne = usqrt(ne2);
 
-    distance = usqrt(ne2 + up * up).in(d_unit);
+    distance = usqrt(ne2 + usq(up)).in(d_unit);
     azm = uatan2(east, north).in(a_unit);
     inc = uatan2(up, ne).in(v_unit);
 }
 
-void WallsUnits::applyCorrections(ULength& dist, UAngle& fsAzm, UAngle& bsAzm, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
+void WallsUnits::applyCorrections(ULength& dist, UAngle& fsInc, UAngle& bsInc, ULength ih, ULength th) const
 {
     if (!inch.isZero() || ih.isNonzero() || th.isNonzero())
     {
         UAngle inc = avgInc(fsInc, bsInc);
-        if (!inc.isValid())
-        {
-            return;
-        }
-        if (!isVertical(inc))
+        if (inc.isValid() && !isVertical(inc))
         {
             ULength ne = ucos(inc) * dist;
             ULength u = usin(inc) * dist;
@@ -114,7 +110,7 @@ void WallsUnits::applyCorrections(ULength& dist, UAngle& fsAzm, UAngle& bsAzm, U
             fsInc += dinc;
             bsInc += typevb_corrected ? dinc : -dinc;
 
-            dist = usqrt(ne * ne + u * u);
+            dist = usqrt(usq(ne) + usq(u));
         }
     }
 }
