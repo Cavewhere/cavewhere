@@ -17,7 +17,6 @@
 #include "wallsvisitor.h"
 #include "cardinaldirection.h"
 #include "wallsparser.h"
-#include "optional.h"
 
 using namespace std;
 using namespace dewalls;
@@ -263,10 +262,8 @@ int main(int argc, char *argv[]) {
     parseLine( parser , "a - 350 20 +5 *1,2,3,4*" );
     parseLine( parser , "- a 350 20 +5 *1,2,3,4*" );
 
-    Optional<ULength> oa = ULength(2.0, Length::m);
-    Optional<ULength> ob;
+    ULength la(2, Length::m);
+    ULength lb;
 
-    cout << *oa->unit() << endl;
-    cout << 2.0 * oa << endl;
-    cout << ((oa + ob).hasValue() ? "true" : "false") << endl;
+    cout << (la + lb) << endl;
 }
