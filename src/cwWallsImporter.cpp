@@ -27,9 +27,9 @@ cwUnits::LengthUnit cwUnit(const Unit<Length>* dewallsUnit)
 class WallsImporterVisitor : public CapturingWallsVisitor
 {
 public:
-    WallsImporterVisitor(WallsParser* parser, cwStationRenamer* stationRenamer, QString tripNamePrefix)
+    WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
         : Parser(parser),
-          StationRenamer(stationRenamer),
+          Importer(importer),
           TripNamePrefix(tripNamePrefix),
           Trips(QList<cwTrip*>()),
           CurrentTrip(NULL)
@@ -70,7 +70,7 @@ public:
     {
         ensureValidTrip();
 
-        cwStation fromStation = StationRenamer->createStation(Parser->units()->processStationName(from));
+        cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
 
         LengthUnit d_unit = Parser->units()->d_unit;
 
@@ -79,15 +79,15 @@ public:
         if (Parser->units()->vectorType == VectorType::RECT)
         {
             Parser->units()->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
-            std::cout << "Converted RECT shot:" << std::endl;
-            std::cout << "  distance: " << distance << std::endl;
-            std::cout << "  azm:      " << frontsightAzimuth << std::endl;
-            std::cout << "  inc:      " << frontsightInclination << std::endl;
+            // rect correction is not supported so it's added here.
+            // decl doesn't apply to rect lines, so it's pre-subtracted here so that when the trip declination
+            // is added back, the result agrees with the Walls data.
+            frontsightAzimuth += Parser->units()->rect - Parser->units()->decl;
         }
 
         if (distance.isValid())
         {
-            cwStation toStation = StationRenamer->createStation(Parser->units()->processStationName(to));
+            cwStation toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
             cwShot shot;
 
             // apply Walls corrections that Cavewhere doesn't support
@@ -160,24 +160,26 @@ public:
         else
         {
             lrudStation = &fromStation;
-
-            // TODO I think the following may be causing segfaults.
-            // How do you put a station by itself in a trip?
-
-//            if (CurrentTrip->chunks().isEmpty() ||
-//                CurrentTrip->chunks().last()->stations().last().name() != fromStation.name())
-//            {
-//                CurrentTrip->addNewChunk();
-//                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-//                lastChunk->stations() << fromStation;
-//                lrudStation = &fromStation;
-//            }
-//            else
-//            {
-//                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-//                lrudStation = &lastChunk->stations().last();
-//            }
         }
+
+        // save the latest LRUDs associated with each station so that we can apply them in the end
+        if (Parser->units()->date.isValid())
+        {
+            if (!Importer->StationDates.contains(lrudStation->name()) ||
+                Parser->units()->date >= Importer->StationDates[lrudStation->name()]) {
+                Importer->StationDates[lrudStation->name()] = Parser->units()->date;
+                Importer->StationMap[lrudStation->name()] = *lrudStation;
+            }
+        }
+        else if (!Importer->StationDates.contains(lrudStation->name()))
+        {
+            Importer->StationMap[lrudStation->name()] = *lrudStation;
+        }
+
+        left += Parser->units()->incs;
+        right += Parser->units()->incs;
+        up += Parser->units()->incs;
+        down += Parser->units()->incs;
 
         if (left.isValid())
         {
@@ -244,12 +246,12 @@ public:
         CurrentTrip = NULL;
     }
 
-    inline QList<cwTrip*> trips() { return Trips; }
+    inline QList<cwTrip*> trips() const { return Trips; }
 
 private:
     WallsUnits priorUnits;
     WallsParser* Parser;
-    cwStationRenamer* StationRenamer;
+    cwWallsImporter* Importer;
     QString TripNamePrefix;
     QList<cwTrip*> Trips;
     cwTrip* CurrentTrip;
@@ -267,6 +269,8 @@ void cwWallsImporter::runTask()
     Length::init();
     Angle::init();
 
+    StationMap.clear();
+
     Caves.clear();
     Caves.append(cwCave());
     cwCave* cave = &Caves.last();
@@ -282,6 +286,19 @@ void cwWallsImporter::runTask()
 
     foreach (cwTrip* trip, trips)
     {
+        // apply StationMap replacements to support Walls' station-LRUD lines
+        foreach (cwSurveyChunk* chunk, trip->chunks())
+        {
+            for (int i = 0; i < chunk->stationCount(); i++)
+            {
+                QString name = chunk->stations()[i].name();
+                if (StationMap.contains(name))
+                {
+                    chunk->setStation(StationMap[name], i);
+                }
+            }
+        }
+
         cave->addTrip(trip);
     }
 
@@ -323,7 +340,7 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     QString justFilename = filename.mid(std::max(0, filename.lastIndexOf('/') + 1));
 
     WallsParser parser;
-    WallsImporterVisitor visitor(&parser, &StationRenamer, justFilename + '-');
+    WallsImporterVisitor visitor(&parser, this, justFilename + '-');
     parser.setVisitor(&visitor);
 
     bool failed = false;

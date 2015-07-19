@@ -12,6 +12,8 @@
 #include <QStringList>
 class QFile;
 
+class WallsImporterVisitor;
+
 class cwWallsImporter : public cwTask
 {
     Q_OBJECT
@@ -22,6 +24,8 @@ public:
 
     QList<cwCave> caves() const;
 
+    friend class WallsImporterVisitor;
+
 protected:
     void runTask();
     bool verifyFileExists(QString filename);
@@ -31,6 +35,8 @@ private:
     QStringList WallsDataFiles;
     QList<cwCave> Caves;
     cwStationRenamer StationRenamer;
+    QHash<QString, QDate> StationDates;
+    QHash<QString, cwStation> StationMap; // used to apply station-only LRUD lines
 };
 
 /**
