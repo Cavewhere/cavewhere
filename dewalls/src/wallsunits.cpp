@@ -37,6 +37,7 @@ WallsUnits::WallsUnits()
       case_(CaseType::Mixed),
       lrud(LrudType::From),
       lrud_order(QList<LrudElement>({LrudElement::L, LrudElement::R, LrudElement::U, LrudElement::D})),
+      tape(QList<TapingMethodElement>({TapingMethodElement::InstrumentHeight, TapingMethodElement::TargetHeight})),
       flag(QString()),
       prefix(QStringList()),
       date(QDate()),
@@ -84,7 +85,7 @@ QString WallsUnits::processStationName(QString name)
 void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& distance, UAngle& azm, UAngle& inc) const
 {
     ULength ne2 = usq(north) + usq(east);
-    ULength ne = usqrt(ne2);
+    ULength ne = usqrt(ne2); // horizontal offset
 
     distance = usqrt(ne2 + usq(up)).in(d_unit);
     azm = uatan2(east, north).in(a_unit);

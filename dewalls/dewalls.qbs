@@ -6,13 +6,16 @@ Project {
     StaticLibrary {
         name: "dewalls"
         Depends { name: "cpp" }
-
         Depends { name: "Qt"; submodules: ["core"] }
 
         cpp.includePaths: ["src"]
 
+        Export {
+            Depends { name: "cpp" }
+            cpp.includePaths: ["src"]
+        }
+
         files: [
-            "main.cpp",
             "src/*.cpp",
             "src/*.h",
         ]

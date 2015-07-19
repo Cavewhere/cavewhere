@@ -102,8 +102,20 @@ Item {
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
+            },
+            State {
+                name: "IMPORT_WALLS"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Import from Walls"
+                    nameFilters: ["Walls (*.srv)"]
+                    selectExisting: true
+                    selectMultiple: true
+                    onAccepted: {
+                        importManager.importWallsDataFile(fileUrls);
+                    }
+                }
             }
-
 
         ]
     }
@@ -191,6 +203,14 @@ Item {
                     text: "Compass (.dat)"
                     onTriggered: {
                         fileDialogItem.state = "IMPORT_COMPASS"
+                        fileDialog.open()
+                    }
+                }
+
+                Controls.MenuItem {
+                    text: "Walls (.srv)"
+                    onTriggered: {
+                        fileDialogItem.state = "IMPORT_WALLS"
                         fileDialog.open()
                     }
                 }

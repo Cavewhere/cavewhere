@@ -94,58 +94,62 @@ public:
     void unitsLine();
     void vectorLine();
 
+    QString combineSegments(QString base, Segment offset);
+
+    WallsParser& operator=(const WallsParser& rhs);
+
 private:
     static double approx(double val);
 
     static QHash<QString, OwnProduction> createUnitsOptionMap();
     static QHash<QString, OwnProduction> createDirectivesMap();
 
-    static const QList<QPair<QString, LengthUnit>> lengthUnits;
-    static const QList<QPair<QString, AngleUnit>> azmUnits;
-    static const QList<QPair<QString, AngleUnit>> incUnits;
-    static const LengthUnitSuffixMap lengthUnitSuffixes;
-    static const AngleUnitSuffixMap azmUnitSuffixes;
-    static const AngleUnitSuffixMap incUnitSuffixes;
-    static const CardinalDirectionCharMap cardinalDirections;
-    static const CardinalDirectionCharMap northSouth;
-    static const CardinalDirectionCharMap eastWest;
-    static const QHash<QChar, QChar> escapedChars;
-    static const QHash<QChar, CtElement> ctElements;
-    static const QSet<CtElement> requiredCtElements;
-    static const QHash<QChar, RectElement> rectElements;
-    static const QSet<RectElement> requiredRectElements;
-    static const QHash<QChar, LrudElement> lrudElements;
-    static const QSet<LrudElement> requiredLrudElements;
-    static const QList<QPair<QString, bool>> correctedValues;
-    static const QList<QPair<QString, CaseType>> caseTypes;
-    static const QList<QPair<QString, LrudType>> lrudTypes;
-    static const QList<QPair<QString, QList<TapingMethodElement>>> tapingMethods;
-    static const QList<QPair<QString, int>> prefixDirectives;
+    const QList<QPair<QString, LengthUnit>> lengthUnits;
+    const QList<QPair<QString, AngleUnit>> azmUnits;
+    const QList<QPair<QString, AngleUnit>> incUnits;
+    const LengthUnitSuffixMap lengthUnitSuffixes;
+    const AngleUnitSuffixMap azmUnitSuffixes;
+    const AngleUnitSuffixMap incUnitSuffixes;
+    const CardinalDirectionCharMap cardinalDirections;
+    const CardinalDirectionCharMap northSouth;
+    const CardinalDirectionCharMap eastWest;
+    const QHash<QChar, QChar> escapedChars;
+    const QHash<QChar, CtElement> ctElements;
+    const QSet<CtElement> requiredCtElements;
+    const QHash<QChar, RectElement> rectElements;
+    const QSet<RectElement> requiredRectElements;
+    const QHash<QChar, LrudElement> lrudElements;
+    const QSet<LrudElement> requiredLrudElements;
+    const QList<QPair<QString, bool>> correctedValues;
+    const QList<QPair<QString, CaseType>> caseTypes;
+    const QList<QPair<QString, LrudType>> lrudTypes;
+    const QList<QPair<QString, QList<TapingMethodElement>>> tapingMethods;
+    const QList<QPair<QString, int>> prefixDirectives;
 
-    static const QRegExp notSemicolon;
-    static const QRegExp unitsOptionRx;
-    static const QRegExp directiveRx;
-    static const QRegExp macroNameRx;
-    static const QRegExp stationRx;
-    static const QRegExp prefixRx;
+    const QRegExp notSemicolon;
+    const QRegExp unitsOptionRx;
+    const QRegExp directiveRx;
+    const QRegExp macroNameRx;
+    const QRegExp stationRx;
+    const QRegExp prefixRx;
 
-    static const QRegExp optionalRx;
-    static const QRegExp optionalStationRx;
+    const QRegExp optionalRx;
+    const QRegExp optionalStationRx;
 
-    static const QRegExp isoDateRx;
-    static const QRegExp usDateRx1;
-    static const QRegExp usDateRx2;
+    const QRegExp isoDateRx;
+    const QRegExp usDateRx1;
+    const QRegExp usDateRx2;
 
-    static const QHash<QString, OwnProduction> unitsOptionMap;
-    static const QHash<QString, OwnProduction> directivesMap;
+    const QHash<QString, OwnProduction> unitsOptionMap;
+    const QHash<QString, OwnProduction> directivesMap;
 
     void replaceMacros();
     QString movePastEndQuote();
     QString replaceMacro();
 
-    QString untilComment(std::initializer_list<QString> expectedItems);
+    Segment untilComment(std::initializer_list<QString> expectedItems);
 
-    QString segmentDirective();
+    Segment segmentDirective();
     void prefixDirective();
     void noteDirective();
 

@@ -284,46 +284,6 @@ QHash<QString, OwnProduction> WallsParser::createDirectivesMap()
     return result;
 }
 
-const QList<QPair<QString, LengthUnit>> WallsParser::lengthUnits = createLengthUnits();
-const QList<QPair<QString, AngleUnit>> WallsParser::azmUnits = createAzmUnits();
-const QList<QPair<QString, AngleUnit>> WallsParser::incUnits = createIncUnits();
-const LengthUnitSuffixMap WallsParser::lengthUnitSuffixes = createLengthUnitSuffixes();
-const AngleUnitSuffixMap WallsParser::azmUnitSuffixes = createAzmUnitSuffixes();
-const AngleUnitSuffixMap WallsParser::incUnitSuffixes = createIncUnitSuffixes();
-const CardinalDirectionCharMap WallsParser::cardinalDirections = createCardinalDirections();
-const CardinalDirectionCharMap WallsParser::northSouth = createNorthSouth();
-const CardinalDirectionCharMap WallsParser::eastWest = createEastWest();
-const QHash<QChar, QChar> WallsParser::escapedChars = createEscapedChars();
-const QHash<QChar, CtElement> WallsParser::ctElements = createCtElements();
-const QSet<CtElement> WallsParser::requiredCtElements({CtElement::D, CtElement::A});
-const QHash<QChar, RectElement> WallsParser::rectElements = createRectElements();
-const QSet<RectElement> WallsParser::requiredRectElements({RectElement::E, RectElement::N});
-const QHash<QChar, LrudElement> WallsParser::lrudElements = createLrudElements();
-const QSet<LrudElement> WallsParser::requiredLrudElements({LrudElement::L, LrudElement::R, LrudElement::U, LrudElement::D});
-const QList<QPair<QString, bool>> WallsParser::correctedValues = createCorrectedValues();
-const QList<QPair<QString, CaseType>> WallsParser::caseTypes = createCaseTypes();
-const QList<QPair<QString, LrudType>> WallsParser::lrudTypes = createLrudTypes();
-const QList<QPair<QString, QList<TapingMethodElement>>> WallsParser::tapingMethods = createTapingMethods();
-const QList<QPair<QString, int>> WallsParser::prefixDirectives = createPrefixDirectives();
-
-const QHash<QString, OwnProduction> WallsParser::unitsOptionMap = WallsParser::createUnitsOptionMap();
-const QHash<QString, OwnProduction> WallsParser::directivesMap = WallsParser::createDirectivesMap();
-
-const QRegExp WallsParser::notSemicolon("[^;]+");
-const QRegExp WallsParser::unitsOptionRx("[a-zA-Z_0-9/]*");
-const QRegExp WallsParser::macroNameRx("[^()=;,# \t]*");
-const QRegExp WallsParser::stationRx("[^<*;,#/ \t][^;,#/ \t]{0,7}");
-const QRegExp WallsParser::prefixRx("[^:;,#/ \t]+");
-
-const QRegExp WallsParser::optionalRx("--+");
-const QRegExp WallsParser::optionalStationRx("-+");
-
-const QRegExp WallsParser::isoDateRx("\\d{4}-\\d{2}-\\d{2}");
-const QRegExp WallsParser::usDateRx1("\\d{2}-\\d{2}-\\d{2,4}");
-const QRegExp WallsParser::usDateRx2("\\d{2}/\\d{2}/\\d{2,4}");
-
-const QRegExp WallsParser::directiveRx("#([][]|[a-zA-Z0-9]+)");
-
 double WallsParser::approx(double val)
 {
     return floor(val * 1e6) * 1e-6;
@@ -341,9 +301,57 @@ WallsParser::WallsParser(Segment segment)
       _inBlockComment(false),
       _units(QSharedPointer<WallsUnits>(new WallsUnits())),
       _stack(QStack<QSharedPointer<WallsUnits>>()),
-      _macros(QHash<QString, QString>())
+      _macros(QHash<QString, QString>()),
+    lengthUnits(createLengthUnits()),
+    azmUnits(createAzmUnits()),
+    incUnits(createIncUnits()),
+    lengthUnitSuffixes(createLengthUnitSuffixes()),
+    azmUnitSuffixes(createAzmUnitSuffixes()),
+    incUnitSuffixes(createIncUnitSuffixes()),
+    cardinalDirections(createCardinalDirections()),
+    northSouth(createNorthSouth()),
+    eastWest(createEastWest()),
+    escapedChars(createEscapedChars()),
+    ctElements(createCtElements()),
+    requiredCtElements({CtElement::D, CtElement::A}),
+    rectElements(createRectElements()),
+    requiredRectElements({RectElement::E, RectElement::N}),
+    lrudElements(createLrudElements()),
+    requiredLrudElements({LrudElement::L, LrudElement::R, LrudElement::U, LrudElement::D}),
+    correctedValues(createCorrectedValues()),
+    caseTypes(createCaseTypes()),
+    lrudTypes(createLrudTypes()),
+    tapingMethods(createTapingMethods()),
+    prefixDirectives(createPrefixDirectives()),
+    unitsOptionMap(createUnitsOptionMap()),
+    directivesMap(createDirectivesMap()),
+    notSemicolon(QRegExp("[^;]+")),
+    unitsOptionRx(QRegExp("[a-zA-Z_0-9/]*")),
+    macroNameRx(QRegExp("[^()=,,# \t]*")),
+    stationRx(QRegExp("[^<*,,#/ \t][^,,#/ \t]{0,7}")),
+    prefixRx(QRegExp("[^:,,#/ \t]+")),
+    optionalRx(QRegExp("--+")),
+    optionalStationRx(QRegExp("-+")),
+    isoDateRx(QRegExp("\\d{4}-\\d{2}-\\d{2}")),
+    usDateRx1(QRegExp("\\d{2}-\\d{2}-\\d{2,4}")),
+    usDateRx2(QRegExp("\\d{2}/\\d{2}/\\d{2,4}")),
+    directiveRx(QRegExp("#([][]|[a-zA-Z0-9]+)"))
 {
 
+}
+
+WallsParser& WallsParser::operator =(const WallsParser& rhs)
+{
+    _visitor = rhs._visitor;
+    _inBlockComment = rhs._inBlockComment;
+    _units = QSharedPointer<WallsUnits>(new WallsUnits(*rhs._units));
+    _stack.clear();
+    foreach (QSharedPointer<WallsUnits> stackItem, rhs._stack)
+    {
+        _stack.push(QSharedPointer<WallsUnits>(new WallsUnits(*stackItem)));
+    }
+    _macros = rhs._macros;
+    return *this;
 }
 
 ULength WallsParser::unsignedLengthInches()
@@ -628,6 +636,11 @@ void WallsParser::parseLine()
 {
     maybeWhitespace();
 
+    if (isAtEnd())
+    {
+        return;
+    }
+
     if (_inBlockComment)
     {
         throwAllExpected([&]() {
@@ -734,20 +747,20 @@ void WallsParser::insideBlockCommentLine()
     _visitor->visitBlockCommentLine(remaining().value());
 }
 
-QString WallsParser::untilComment(std::initializer_list<QString> expectedItems)
+Segment WallsParser::untilComment(std::initializer_list<QString> expectedItems)
 {
-    return expect(notSemicolon, expectedItems).value();
+    return expect(notSemicolon, expectedItems);
 }
 
 void WallsParser::segmentLine()
 {
     maybeWhitespace();
-    _units->segment = segmentDirective();
+    _units->segment = combineSegments(_units->segment, segmentDirective());
     maybeWhitespace();
     inlineCommentOrEndOfLine();
 }
 
-QString WallsParser::segmentDirective()
+Segment WallsParser::segmentDirective()
 {
     oneOf([&]() { this->expect("#segment", Qt::CaseInsensitive); },
     [&]() { this->expect("#seg", Qt::CaseInsensitive); },
@@ -755,11 +768,40 @@ QString WallsParser::segmentDirective()
 
     if (maybeWhitespace())
     {
-        QString result;
+        Segment result;
         maybe(result, [&]() { return this->untilComment({"<SEGMENT>"}); });
         return result;
     }
-    return QString();
+    return _line.mid(_i, 0);
+}
+
+QString WallsParser::combineSegments(QString base, Segment offset)
+{
+    if (offset.value().startsWith('/'))
+    {
+        return offset.value();
+    }
+
+    QStringList baseParts = base.split("/", QString::SkipEmptyParts);
+    QList<Segment> offsetParts = offset.split("/", QString::SkipEmptyParts);
+
+    foreach (Segment part, offsetParts)
+    {
+        if (part.value() == "..")
+        {
+            if (baseParts.isEmpty())
+            {
+                throw new SegmentParseException(part, "already at root segment, can't go up");
+            }
+            baseParts.removeLast();
+        }
+        else if (part.value() != ".")
+        {
+            baseParts << part.value();
+        }
+    }
+
+    return '/' + baseParts.join('/');
 }
 
 void WallsParser::prefixLine()

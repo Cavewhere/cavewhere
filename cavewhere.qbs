@@ -51,6 +51,7 @@ Project {
         }
         Depends { name: "QMath3d" }
         Depends { name: "squish" }
+        Depends { name: "dewalls" }
         Depends { name: "plotsauce" }
         Depends { name: "protoc" }
         Depends { name: "protobuf" }
@@ -222,7 +223,7 @@ Project {
             name: "DocumentationFiles"
             files: [
                 "docs/FileFormatDocumentation.txt",
-                "LICENSE.txt"
+                "LICENSE.txt",
             ]
         }
 

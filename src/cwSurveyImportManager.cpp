@@ -9,7 +9,12 @@
 #include "cwSurveyImportManager.h"
 #include "cwImportSurvexDialog.h"
 #include "cwCompassImporter.h"
+#include "cwWallsImporter.h"
 #include "cwCavingRegion.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwShot.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -20,11 +25,16 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
     ImportThread(new QThread()),
     CavingRegion(nullptr),
-    CompassImporter(new cwCompassImporter())
+    CompassImporter(new cwCompassImporter()),
+    WallsImporter(new cwWallsImporter())
 {
     CompassImporter->setThread(ImportThread);
     connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
     connect(CompassImporter, &cwCompassImporter::statusMessage, this, &cwSurveyImportManager::compassMessages);
+
+    WallsImporter->setThread(ImportThread);
+    connect(WallsImporter, &cwWallsImporter::finished, this, &cwSurveyImportManager::wallsImporterFinished);
+    connect(WallsImporter, &cwWallsImporter::statusMessage, this, &cwSurveyImportManager::wallsMessages);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()
@@ -33,6 +43,7 @@ cwSurveyImportManager::~cwSurveyImportManager()
     ImportThread->wait();
     ImportThread->deleteLater();
     CompassImporter->deleteLater();
+    WallsImporter->deleteLater();
 }
 
 void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
@@ -107,6 +118,61 @@ void cwSurveyImportManager::compassImporterFinished()
 void cwSurveyImportManager::compassMessages(QString message)
 {
     qDebug() << "Compass Importer:" << message;
+}
+
+/**
+ * @brief cwSurveyImportManager::importWallsDataFile
+ *
+ * Open a walls file to import
+ */
+void cwSurveyImportManager::importWallsDataFile(QList<QUrl> filenames)
+{
+    QStringList dataFiles = urlsToStringList(filenames);
+
+    if(WallsImporter->isReady()) {
+        WallsImporter->setWallsDataFiles(dataFiles + QueuedWallsFile);
+        WallsImporter->start();
+    } else if(WallsImporter->isRunning()) {
+        QueuedWallsFile.append(dataFiles);
+    }
+}
+
+/**
+ * @brief cwSurveyImportManager::wallsImporterFinished
+ *
+ * Called when the walls importer has finished running
+ */
+void cwSurveyImportManager::wallsImporterFinished()
+{
+    Q_ASSERT(WallsImporter->isReady());
+
+    UndoStack->beginMacro("Walls Import");
+
+    //Add new caves
+    foreach(cwCave cave, WallsImporter->caves()) {
+        cwCave* newCave = new cwCave(cave); //Copy the caves
+        CavingRegion->addCave(newCave);
+    }
+
+    UndoStack->endMacro();
+
+    if(!QueuedWallsFile.isEmpty()) {
+        //Rerun the walls data file with the queued walls files
+        WallsImporter->setWallsDataFiles(QueuedWallsFile);
+        WallsImporter->start();
+    }
+}
+
+/**
+ * @brief cwSurveyImportManager::wallsMessages
+ * @param message
+ *
+ * Reports messages
+ * TODO: Make this report to the gui, in a meaning full way
+ */
+void cwSurveyImportManager::wallsMessages(QString message)
+{
+    qDebug() << "Walls Importer:" << message;
 }
 
 /**

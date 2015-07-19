@@ -19,6 +19,7 @@
 //Our includes
 class cwCavingRegion;
 class cwCompassImporter;
+class cwWallsImporter;
 
 /**
     This class allows qml to import data
@@ -42,6 +43,7 @@ public:
 
     Q_INVOKABLE void importSurvex();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
+    Q_INVOKABLE void importWallsDataFile(QList<QUrl> filenames);
 
 signals:
     void cavingRegionChanged();
@@ -51,7 +53,9 @@ public slots:
 
 private slots:
     void compassImporterFinished();
+    void wallsImporterFinished();
     void compassMessages(QString message);
+    void wallsMessages(QString message);
 
 private:
     QThread* ImportThread;
@@ -61,6 +65,9 @@ private:
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
+
+    QStringList QueuedWallsFile;
+    cwWallsImporter* WallsImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
 };

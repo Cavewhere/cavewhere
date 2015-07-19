@@ -11,6 +11,7 @@
 #include <QRegExp>
 #include <QHash>
 #include <QChar>
+#include <QFile>
 #include <cmath>
 #include "lineparser.h"
 #include "varianceoverride.h"
@@ -78,6 +79,61 @@ QString toString(QHash<QString, QString> h)
 }
 
 int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        cout << "Usage: dewalls <.srv file>" << endl;
+        return 0;
+    }
+
+    QString filename = QString::fromLatin1(argv[1]);
+
+    cout << "Parsing file: " << filename.toStdString() << endl;
+
+    QFile file(filename);
+    file.open(QFile::ReadOnly);
+
+    WallsParser parser2;
+    PrintingWallsVisitor printingVisitor;
+    parser2.setVisitor(&printingVisitor);
+
+    int lineNumber = 0;
+    while (!file.atEnd())
+    {
+        QString line = file.readLine();
+        if (file.error() != QFile::NoError)
+        {
+            cerr << QString("Error reading from file %1 at line %2: %3")
+                               .arg(filename)
+                               .arg(lineNumber)
+                               .arg(file.errorString()).toStdString() << endl;
+            return 1;
+        }
+
+        parser2.reset(Segment(line, filename, lineNumber, 0));
+
+        try
+        {
+            parser2.parseLine();
+        }
+        catch (const SegmentParseExpectedException& ex)
+        {
+            cerr << ex.message().toStdString() << endl;
+            return 2;
+        }
+        catch (const SegmentParseException& ex)
+        {
+            cerr << ex.message().toStdString() << endl;
+            return 2;
+        }
+
+        lineNumber++;
+    }
+
+    file.close();
+
+    if (3 > 2) {
+        return 0;
+    }
+
     typedef UnitizedDouble<Length> ULength;
     typedef UnitizedDouble<Angle> UAngle;
 

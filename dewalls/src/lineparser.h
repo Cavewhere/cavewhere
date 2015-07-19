@@ -24,6 +24,8 @@ public:
 
     virtual void reset(Segment newLine);
 
+    bool isAtEnd() const;
+
     void addExpected(const SegmentParseExpectedException& ex);
 
     SegmentParseExpectedException allExpected();

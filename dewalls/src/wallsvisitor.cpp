@@ -37,13 +37,14 @@ void WallsVisitor::visitLrudFacingAngle( UAngle facingAngle ){}
 void WallsVisitor::visitCFlag( ){}
 void WallsVisitor::visitHorizontalVarianceOverride( VarianceOverridePtr variance ){}
 void WallsVisitor::visitVerticalVarianceOverride( VarianceOverridePtr variance ){}
-void WallsVisitor::visitInlineSegment( QString segment ){}
+void WallsVisitor::visitInlineSegment( Segment segment ){}
 void WallsVisitor::visitInlineNote( QString note ){}
 void WallsVisitor::visitInlineComment( QString string ){}
 void WallsVisitor::visitCommentLine( QString comment ){}
 void WallsVisitor::visitFlaggedStations( QString flag , QStringList stations ){}
 void WallsVisitor::visitBlockCommentLine( QString string ){}
 void WallsVisitor::visitNoteLine( QString station , QString note ){}
+void WallsVisitor::visitDateLine( QDate date ){}
 void WallsVisitor::visitFixedStation( QString string ){}
 
 void PrintingWallsVisitor::beginFile( QString source )
@@ -211,7 +212,7 @@ void PrintingWallsVisitor::visitVerticalVarianceOverride( VarianceOverridePtr va
     cout << "  v:            " << variance->toString().toStdString() << endl;
 }
 
-void PrintingWallsVisitor::visitInlineSegment( QString segment )
+void PrintingWallsVisitor::visitInlineSegment( Segment segment )
 {
     cout << "  segment:      " << segment.toStdString() << endl;
 }
@@ -244,6 +245,11 @@ void PrintingWallsVisitor::visitBlockCommentLine( QString comment )
 void PrintingWallsVisitor::visitNoteLine( QString station , QString note )
 {
     cout << "note: " << station.toStdString() << ": " << note.toStdString() << endl;
+}
+
+void PrintingWallsVisitor::visitDateLine( QDate date )
+{
+    cout << "date: " << date.toString().toStdString() << endl;
 }
 
 void PrintingWallsVisitor::visitFixedStation( QString station )
@@ -411,7 +417,7 @@ void CapturingWallsVisitor::visitVerticalVarianceOverride( VarianceOverridePtr v
     verticalVarianceOverride = variance;
 }
 
-void CapturingWallsVisitor::visitInlineSegment( QString segment )
+void CapturingWallsVisitor::visitInlineSegment( Segment segment )
 {
     inlineSegment = segment;
 }
@@ -448,10 +454,63 @@ void CapturingWallsVisitor::visitNoteLine( QString station , QString _note )
     notedStation = station;
 }
 
+void CapturingWallsVisitor::visitDateLine( QDate _date )
+{
+    date = _date;
+}
+
 void CapturingWallsVisitor::visitFixedStation( QString station )
 {
     fixedStation = station;
 }
+
+MultiWallsVisitor::MultiWallsVisitor(QList<WallsVisitor*> visitors)
+    : _visitors(visitors)
+{
+}
+
+void MultiWallsVisitor::beginFile( QString source ){  multicast(&WallsVisitor::beginFile, source); }
+void MultiWallsVisitor::endFile( QString source ){  multicast(&WallsVisitor::endFile, source); }
+void MultiWallsVisitor::beginVectorLine( ){  multicast(&WallsVisitor::beginVectorLine); }
+void MultiWallsVisitor::abortVectorLine( ){  multicast(&WallsVisitor::endVectorLine); }
+void MultiWallsVisitor::endVectorLine( ){  multicast(&WallsVisitor::endVectorLine); }
+void MultiWallsVisitor::beginFixLine( ){  multicast(&WallsVisitor::beginFixLine); }
+void MultiWallsVisitor::abortFixLine( ){  multicast(&WallsVisitor::abortFixLine); }
+void MultiWallsVisitor::endFixLine( ){  multicast(&WallsVisitor::endFixLine); }
+void MultiWallsVisitor::beginUnitsLine( ){  multicast(&WallsVisitor::beginUnitsLine); }
+void MultiWallsVisitor::abortUnitsLine( ){  multicast(&WallsVisitor::abortUnitsLine); }
+void MultiWallsVisitor::endUnitsLine( ){  multicast(&WallsVisitor::endUnitsLine); }
+void MultiWallsVisitor::visitFrom( QString from ){  multicast(&WallsVisitor::visitFrom, from ); }
+void MultiWallsVisitor::visitTo( QString to ){  multicast(&WallsVisitor::visitTo, to); }
+void MultiWallsVisitor::visitDistance( ULength distance ){  multicast(&WallsVisitor::visitDistance, distance); }
+void MultiWallsVisitor::visitFrontsightAzimuth( UAngle fsAzimuth ){  multicast(&WallsVisitor::visitFrontsightAzimuth, fsAzimuth); }
+void MultiWallsVisitor::visitBacksightAzimuth( UAngle bsAzimuth ){  multicast(&WallsVisitor::visitBacksightAzimuth, bsAzimuth); }
+void MultiWallsVisitor::visitFrontsightInclination( UAngle fsInclination ){  multicast(&WallsVisitor::visitFrontsightInclination, fsInclination); }
+void MultiWallsVisitor::visitBacksightInclination( UAngle bsInclination ){  multicast(&WallsVisitor::visitBacksightInclination, bsInclination); }
+void MultiWallsVisitor::visitNorth( ULength north ){  multicast(&WallsVisitor::visitNorth, north); }
+void MultiWallsVisitor::visitLatitude( UAngle latitude ){  multicast(&WallsVisitor::visitLatitude, latitude); }
+void MultiWallsVisitor::visitEast( ULength east ){  multicast(&WallsVisitor::visitEast, east); }
+void MultiWallsVisitor::visitLongitude( UAngle longitude ){  multicast(&WallsVisitor::visitLongitude, longitude); }
+void MultiWallsVisitor::visitRectUp( ULength up ){  multicast(&WallsVisitor::visitRectUp, up); }
+void MultiWallsVisitor::visitInstrumentHeight( ULength instrumentHeight ){  multicast(&WallsVisitor::visitInstrumentHeight, instrumentHeight); }
+void MultiWallsVisitor::visitTargetHeight( ULength targetHeight ){  multicast(&WallsVisitor::visitTargetHeight, targetHeight); }
+void MultiWallsVisitor::visitLeft( ULength left ){  multicast(&WallsVisitor::visitLeft, left); }
+void MultiWallsVisitor::visitRight( ULength right ){  multicast(&WallsVisitor::visitRight, right); }
+void MultiWallsVisitor::visitUp( ULength up ){  multicast(&WallsVisitor::visitUp, up); }
+void MultiWallsVisitor::visitDown( ULength down ){  multicast(&WallsVisitor::visitDown, down); }
+void MultiWallsVisitor::visitLrudFacingAngle( UAngle facingAngle ){  multicast(&WallsVisitor::visitLrudFacingAngle, facingAngle); }
+void MultiWallsVisitor::visitCFlag( ){  multicast(&WallsVisitor::visitCFlag); }
+void MultiWallsVisitor::visitHorizontalVarianceOverride( VarianceOverridePtr variance ){  multicast(&WallsVisitor::visitHorizontalVarianceOverride, variance); }
+void MultiWallsVisitor::visitVerticalVarianceOverride( VarianceOverridePtr variance ){  multicast(&WallsVisitor::visitVerticalVarianceOverride, variance); }
+void MultiWallsVisitor::visitInlineSegment( Segment segment ){  multicast(&WallsVisitor::visitInlineSegment, segment); }
+void MultiWallsVisitor::visitInlineNote( QString note ){  multicast(&WallsVisitor::visitInlineNote, note); }
+void MultiWallsVisitor::visitInlineComment( QString string ){  multicast(&WallsVisitor::visitInlineComment, string); }
+void MultiWallsVisitor::visitCommentLine( QString comment ){  multicast(&WallsVisitor::visitCommentLine, comment); }
+void MultiWallsVisitor::visitFlaggedStations( QString flag , QStringList stations ){  multicast(&WallsVisitor::visitFlaggedStations, flag, stations); }
+void MultiWallsVisitor::visitBlockCommentLine( QString string ){  multicast(&WallsVisitor::visitBlockCommentLine, string); }
+void MultiWallsVisitor::visitNoteLine( QString station , QString note ){  multicast(&WallsVisitor::visitNoteLine, station, note); }
+void MultiWallsVisitor::visitDateLine( QDate date ){  multicast(&WallsVisitor::visitDateLine, date); }
+void MultiWallsVisitor::visitFixedStation( QString string ){  multicast(&WallsVisitor::visitFixedStation, string); }
 
 } // namespace dewalls
 

@@ -28,6 +28,11 @@ void LineParser::reset(Segment newLine)
     _expectedItems.clear();
 }
 
+bool LineParser::isAtEnd() const
+{
+    return _i == _line.length();
+}
+
 void LineParser::addExpected(const SegmentParseExpectedException& expected)
 {
     int index = std::max(expected.segment().sourceIndex(), 0) -
