@@ -86,9 +86,14 @@ void WallsUnits::rectToCt(ULength north, ULength east, ULength up, ULength& dist
 {
     ULength ne2 = usq(north) + usq(east);
     ULength ne = usqrt(ne2); // horizontal offset
+    if (!up.isValid()) up = ULength(0, Length::m());
 
     distance = usqrt(ne2 + usq(up)).in(d_unit);
     azm = uatan2(east, north).in(a_unit);
+    if (azm < UAngle(0, Angle::degrees()))
+    {
+        azm += UAngle(360.0, Angle::degrees());
+    }
     inc = uatan2(up, ne).in(v_unit);
 }
 

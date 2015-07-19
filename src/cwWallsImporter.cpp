@@ -76,6 +76,15 @@ public:
 
         cwStation* lrudStation;
 
+        if (Parser->units()->vectorType == VectorType::RECT)
+        {
+            Parser->units()->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
+            std::cout << "Converted RECT shot:" << std::endl;
+            std::cout << "  distance: " << distance << std::endl;
+            std::cout << "  azm:      " << frontsightAzimuth << std::endl;
+            std::cout << "  inc:      " << frontsightInclination << std::endl;
+        }
+
         if (distance.isValid())
         {
             cwStation toStation = StationRenamer->createStation(Parser->units()->processStationName(to));
@@ -96,10 +105,18 @@ public:
             if (frontsightInclination.isValid())
             {
                 shot.setClino(frontsightInclination.get(Angle::degrees()));
+                if (shot.clino() == 90.0)
+                {
+                    shot.setClinoState(cwClinoStates::Up);
+                }
+                else if (shot.clino() == -90.0)
+                {
+                    shot.setClinoState(cwClinoStates::Down);
+                }
             }
             else
             {
-                shot.setBackClinoState(cwClinoStates::Empty);
+                shot.setClinoState(cwClinoStates::Empty);
             }
             if (backsightAzimuth.isValid())
             {
@@ -112,12 +129,19 @@ public:
             if (backsightInclination.isValid())
             {
                 shot.setBackClino(backsightInclination.get(Angle::degrees()));
+                if (shot.backClino() == 90.0)
+                {
+                    shot.setBackClinoState(cwClinoStates::Up);
+                }
+                else if (shot.backClino() == -90.0)
+                {
+                    shot.setBackClinoState(cwClinoStates::Down);
+                }
             }
             else
             {
                 shot.setBackClinoState(cwClinoStates::Empty);
             }
-
 
             // TODO: exclude length flag/segment
 
