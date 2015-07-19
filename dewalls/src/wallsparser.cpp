@@ -16,13 +16,13 @@ QList<QPair<QString, LengthUnit>> createLengthUnits()
 {
     typedef QPair<QString, LengthUnit> Pair;
     QList<Pair> result;
-    result << Pair("meters", Length::meters);
-    result << Pair("meter", Length::meters);
-    result << Pair("m", Length::meters);
-    result << Pair("feet", Length::feet);
-    result << Pair("foot", Length::feet);
-    result << Pair("ft", Length::feet);
-    result << Pair("f", Length::feet);
+    result << Pair("meters", Length::meters());
+    result << Pair("meter", Length::meters());
+    result << Pair("m", Length::meters());
+    result << Pair("feet", Length::feet());
+    result << Pair("foot", Length::feet());
+    result << Pair("ft", Length::feet());
+    result << Pair("f", Length::feet());
     return result;
 }
 
@@ -30,17 +30,17 @@ QList<QPair<QString, AngleUnit>> createAzmUnits()
 {
     typedef QPair<QString, AngleUnit> Pair;
     QList<Pair> result;
-    result << Pair("degrees", Angle::degrees);
-    result << Pair("degree", Angle::degrees);
-    result << Pair("deg", Angle::degrees);
-    result << Pair("d", Angle::degrees);
-    result << Pair("mills", Angle::milsNATO);
-    result << Pair("mils", Angle::milsNATO);
-    result << Pair("mil", Angle::milsNATO);
-    result << Pair("m", Angle::milsNATO);
-    result << Pair("grads", Angle::gradians);
-    result << Pair("grad", Angle::gradians);
-    result << Pair("g", Angle::gradians);
+    result << Pair("degrees", Angle::degrees());
+    result << Pair("degree", Angle::degrees());
+    result << Pair("deg", Angle::degrees());
+    result << Pair("d", Angle::degrees());
+    result << Pair("mills", Angle::milsNATO());
+    result << Pair("mils", Angle::milsNATO());
+    result << Pair("mil", Angle::milsNATO());
+    result << Pair("m", Angle::milsNATO());
+    result << Pair("grads", Angle::gradians());
+    result << Pair("grad", Angle::gradians());
+    result << Pair("g", Angle::gradians());
     return result;
 }
 
@@ -48,47 +48,47 @@ QList<QPair<QString, AngleUnit>> createIncUnits()
 {
     typedef QPair<QString, AngleUnit> Pair;
     QList<Pair> result;
-    result << Pair("degrees", Angle::degrees);
-    result << Pair("degree", Angle::degrees);
-    result << Pair("deg", Angle::degrees);
-    result << Pair("d", Angle::degrees);
-    result << Pair("mills", Angle::milsNATO);
-    result << Pair("mils", Angle::milsNATO);
-    result << Pair("mil", Angle::milsNATO);
-    result << Pair("m", Angle::milsNATO);
-    result << Pair("grads", Angle::gradians);
-    result << Pair("grad", Angle::gradians);
-    result << Pair("g", Angle::gradians);
-    result << Pair("percent", Angle::percentGrade);
-    result << Pair("p", Angle::percentGrade);
+    result << Pair("degrees", Angle::degrees());
+    result << Pair("degree", Angle::degrees());
+    result << Pair("deg", Angle::degrees());
+    result << Pair("d", Angle::degrees());
+    result << Pair("mills", Angle::milsNATO());
+    result << Pair("mils", Angle::milsNATO());
+    result << Pair("mil", Angle::milsNATO());
+    result << Pair("m", Angle::milsNATO());
+    result << Pair("grads", Angle::gradians());
+    result << Pair("grad", Angle::gradians());
+    result << Pair("g", Angle::gradians());
+    result << Pair("percent", Angle::percentGrade());
+    result << Pair("p", Angle::percentGrade());
     return result;
 }
 
 LengthUnitSuffixMap createLengthUnitSuffixes()
 {
     LengthUnitSuffixMap result;
-    result['m'] = result['M'] = Length::meters;
-    result['f'] = result['F'] = Length::feet;
-    result['i'] = result['I'] = Length::inches;
+    result['m'] = result['M'] = Length::meters();
+    result['f'] = result['F'] = Length::feet();
+    result['i'] = result['I'] = Length::inches();
     return result;
 }
 
 AngleUnitSuffixMap createAzmUnitSuffixes()
 {
     AngleUnitSuffixMap result;
-    result['d'] = result['D'] = Angle::degrees;
-    result['g'] = result['G'] = Angle::gradians;
-    result['m'] = result['M'] = Angle::milsNATO;
+    result['d'] = result['D'] = Angle::degrees();
+    result['g'] = result['G'] = Angle::gradians();
+    result['m'] = result['M'] = Angle::milsNATO();
     return result;
 }
 
 AngleUnitSuffixMap createIncUnitSuffixes()
 {
     AngleUnitSuffixMap result;
-    result['d'] = result['D'] = Angle::degrees;
-    result['g'] = result['G'] = Angle::gradians;
-    result['m'] = result['M'] = Angle::milsNATO;
-    result['p'] = result['P'] = Angle::percentGrade;
+    result['d'] = result['D'] = Angle::degrees();
+    result['g'] = result['G'] = Angle::gradians();
+    result['m'] = result['M'] = Angle::milsNATO();
+    result['p'] = result['P'] = Angle::percentGrade();
     return result;
 }
 
@@ -358,17 +358,17 @@ ULength WallsParser::unsignedLengthInches()
 {
     expect('i', Qt::CaseInsensitive);
     double inches = unsignedDoubleLiteral();
-    return ULength(inches, Length::in);
+    return ULength(inches, Length::in());
 }
 
 ULength WallsParser::unsignedLengthNonInches(LengthUnit defaultUnit)
 {
     double value = unsignedDoubleLiteral();
     LengthUnit unit = oneOfMap(lengthUnitSuffixes, defaultUnit);
-    if (unit == Length::inches)
+    if (unit == Length::inches())
     {
         double inches = unsignedDoubleLiteral();
-        return ULength(value * 12 + inches, Length::inches);
+        return ULength(value * 12 + inches, Length::inches());
     }
     return ULength(value, unit);
 }
@@ -410,7 +410,7 @@ UAngle WallsParser::unsignedAngle(AngleUnitSuffixMap unitSuffixes, AngleUnit def
         }
         return UAngle((hasValue   ? value 		     : 0) +
                       (hasMinutes ? minutes / 60.0   : 0) +
-                      (hasSeconds ? seconds / 3600.0 : 0), Angle::degrees);
+                      (hasSeconds ? seconds / 3600.0 : 0), Angle::degrees());
     }
     else if (!hasValue)
     {
@@ -438,7 +438,7 @@ UAngle WallsParser::unsignedDmsAngle()
     }
     return UAngle((hasDegrees ? degrees 	     : 0) +
                   (hasMinutes ? minutes / 60.0   : 0) +
-                  (hasSeconds ? seconds / 3600.0 : 0), Angle::degrees);
+                  (hasSeconds ? seconds / 3600.0 : 0), Angle::degrees());
 }
 
 UAngle WallsParser::latitude()
@@ -447,7 +447,7 @@ UAngle WallsParser::latitude()
     CardinalDirection::CardinalDirection side = oneOfMap(northSouth);
     UAngle latitude = unsignedDmsAngle();
 
-    if (approx(latitude.get(Angle::degrees)) > 90.0)
+    if (approx(latitude.get(Angle::degrees())) > 90.0)
     {
         throw SegmentParseException(_line.mid(start, _i), "latitude out of range");
     }
@@ -465,7 +465,7 @@ UAngle WallsParser::longitude()
     CardinalDirection::CardinalDirection side = oneOfMap(eastWest);
     UAngle longitude = unsignedDmsAngle();
 
-    if (approx(longitude.get(Angle::degrees)) > 180.0)
+    if (approx(longitude.get(Angle::degrees())) > 180.0)
     {
         throw SegmentParseException(_line.mid(start, _i), "longitude out of range");
     }
@@ -483,7 +483,7 @@ UAngle WallsParser::nonQuadrantAzimuth(AngleUnit defaultUnit)
 
     UAngle result = unsignedAngle(azmUnitSuffixes, defaultUnit);
 
-    if (approx(result.get(Angle::degrees)) > 360.0)
+    if (approx(result.get(Angle::degrees())) > 360.0)
     {
         throw SegmentParseException(_line.mid(start, _i), "azimuth out of range");
     }
@@ -499,7 +499,7 @@ UAngle WallsParser::quadrantAzimuth(AngleUnit defaultUnit)
     UAngle angle;
     if (maybe(angle, [&]() { return this->nonQuadrantAzimuth(defaultUnit); }))
     {
-        if (approx(angle.get(Angle::degrees)) > 90.0)
+        if (approx(angle.get(Angle::degrees())) > 90.0)
         {
             throw SegmentParseException(_line.mid(start, _i), "azimuth out of range");
         }
@@ -537,7 +537,7 @@ UAngle WallsParser::unsignedInclination(AngleUnit defaultUnit)
     int start = _i;
     UAngle result = unsignedAngle(incUnitSuffixes, defaultUnit);
 
-    if (approx(result.get(Angle::degrees)) > 90.0)
+    if (approx(result.get(Angle::degrees())) > 90.0)
     {
         throw SegmentParseException(_line.mid(start, _i), "inclination out of range");
     }
@@ -1037,12 +1037,12 @@ void WallsParser::reset_()
 
 void WallsParser::meters()
 {
-    _units->d_unit = _units->s_unit = Length::meters;
+    _units->d_unit = _units->s_unit = Length::meters();
 }
 
 void WallsParser::feet()
 {
-    _units->d_unit = _units->s_unit = Length::feet;
+    _units->d_unit = _units->s_unit = Length::feet();
 }
 
 void WallsParser::ct()

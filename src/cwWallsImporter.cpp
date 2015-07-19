@@ -21,7 +21,7 @@ typedef const Unit<Angle>* AngleUnit;
 
 cwUnits::LengthUnit cwUnit(const Unit<Length>* dewallsUnit)
 {
-    return dewallsUnit == Length::feet ? cwUnits::Feet : cwUnits::Meters;
+    return dewallsUnit == Length::feet() ? cwUnits::Feet : cwUnits::Meters;
 }
 
 class WallsImporterVisitor : public CapturingWallsVisitor
@@ -52,11 +52,11 @@ public:
             CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units()->typeab_corrected);
             CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units()->typevb_corrected);
             CurrentTrip->calibrations()->setTapeCalibration(Parser->units()->incd.get(d_unit));
-            CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units()->inca.get(Angle::degrees));
-            CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units()->incv.get(Angle::degrees));
-            CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units()->incab.get(Angle::degrees));
-            CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units()->incvb.get(Angle::degrees));
-            CurrentTrip->calibrations()->setDeclination(Parser->units()->decl.get(Angle::degrees));
+            CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units()->inca.get(Angle::degrees()));
+            CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units()->incv.get(Angle::degrees()));
+            CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units()->incab.get(Angle::degrees()));
+            CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units()->incvb.get(Angle::degrees()));
+            CurrentTrip->calibrations()->setDeclination(Parser->units()->decl.get(Angle::degrees()));
         }
     }
 
@@ -87,7 +87,7 @@ public:
             shot.setDistance(distance.get(d_unit));
             if (frontsightAzimuth.isValid())
             {
-                shot.setCompass(frontsightAzimuth.get(Angle::degrees));
+                shot.setCompass(frontsightAzimuth.get(Angle::degrees()));
             }
             else
             {
@@ -95,7 +95,7 @@ public:
             }
             if (frontsightInclination.isValid())
             {
-                shot.setClino(frontsightInclination.get(Angle::degrees));
+                shot.setClino(frontsightInclination.get(Angle::degrees()));
             }
             else
             {
@@ -103,7 +103,7 @@ public:
             }
             if (backsightAzimuth.isValid())
             {
-                shot.setBackCompass(backsightAzimuth.get(Angle::degrees));
+                shot.setBackCompass(backsightAzimuth.get(Angle::degrees()));
             }
             else
             {
@@ -111,7 +111,7 @@ public:
             }
             if (backsightInclination.isValid())
             {
-                shot.setBackClino(backsightInclination.get(Angle::degrees));
+                shot.setBackClino(backsightInclination.get(Angle::degrees()));
             }
             else
             {
@@ -135,19 +135,24 @@ public:
         }
         else
         {
-            if (CurrentTrip->chunks().isEmpty() ||
-                CurrentTrip->chunks().last()->stations().last().name() != fromStation.name())
-            {
-                CurrentTrip->addNewChunk();
-                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-                lastChunk->stations() << fromStation;
-                lrudStation = &fromStation;
-            }
-            else
-            {
-                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-                lrudStation = &lastChunk->stations().last();
-            }
+            lrudStation = &fromStation;
+
+            // TODO I think the following may be causing segfaults.
+            // How do you put a station by itself in a trip?
+
+//            if (CurrentTrip->chunks().isEmpty() ||
+//                CurrentTrip->chunks().last()->stations().last().name() != fromStation.name())
+//            {
+//                CurrentTrip->addNewChunk();
+//                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+//                lastChunk->stations() << fromStation;
+//                lrudStation = &fromStation;
+//            }
+//            else
+//            {
+//                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+//                lrudStation = &lastChunk->stations().last();
+//            }
         }
 
         if (left.isValid())
@@ -217,6 +222,9 @@ cwWallsImporter::cwWallsImporter(QObject *parent) :
 
 void cwWallsImporter::runTask()
 {
+    Length::init();
+    Angle::init();
+
     Caves.clear();
     Caves.append(cwCave());
     cwCave* cave = &Caves.last();
@@ -278,6 +286,8 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     MultiWallsVisitor multiVisitor(QList<WallsVisitor*>({&printingVisitor, &visitor}));
     parser.setVisitor(&multiVisitor);
 
+    bool failed = false;
+
     int lineNumber = 0;
     while (!file.atEnd())
     {
@@ -288,7 +298,8 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
                                .arg(filename)
                                .arg(lineNumber)
                                .arg(file.errorString()));
-            return false;
+            failed = true;
+            break;
         }
 
         parser.reset(Segment(line, filename, lineNumber, 0));
@@ -300,12 +311,14 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
         catch (const SegmentParseExpectedException& ex)
         {
             emit statusMessage(ex.message());
-            return false;
+            failed = true;
+            break;
         }
         catch (const SegmentParseException& ex)
         {
             emit statusMessage(ex.message());
-            return false;
+            failed = true;
+            break;
         }
 
         lineNumber++;
@@ -313,7 +326,17 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
 
     file.close();
 
-    tripsOut << visitor.trips();
+    if (!failed)
+    {
+        tripsOut << visitor.trips();
+    }
+    else
+    {
+        foreach (cwTrip* trip, visitor.trips())
+        {
+            delete trip;
+        }
+    }
 
-    return true;
+    return !failed;
 }

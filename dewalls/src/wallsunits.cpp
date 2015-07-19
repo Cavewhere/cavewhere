@@ -12,22 +12,22 @@ WallsUnits::WallsUnits()
     : vectorType(VectorType::CT),
       ctOrder(QList<CtElement>({CtElement::D, CtElement::A, CtElement::V})),
       rectOrder(QList<RectElement>({RectElement::E, RectElement::N, RectElement::U})),
-      d_unit(Length::meters),
-      s_unit(Length::meters),
-      a_unit(Angle::degrees),
-      ab_unit(Angle::degrees),
-      v_unit(Angle::degrees),
-      vb_unit(Angle::degrees),
-      decl(UAngle(0.0, Angle::degrees)),
-      grid(UAngle(0.0, Angle::degrees)),
-      rect(UAngle(0.0, Angle::degrees)),
-      incd(ULength(0.0, Length::meters)),
-      inca(UAngle(0.0, Angle::degrees)),
-      incab(UAngle(0.0, Angle::degrees)),
-      incv(UAngle(0.0, Angle::degrees)),
-      incvb(UAngle(0.0, Angle::degrees)),
-      incs(ULength(0.0, Length::meters)),
-      inch(ULength(0.0, Length::meters)),
+      d_unit(Length::meters()),
+      s_unit(Length::meters()),
+      a_unit(Angle::degrees()),
+      ab_unit(Angle::degrees()),
+      v_unit(Angle::degrees()),
+      vb_unit(Angle::degrees()),
+      decl(UAngle(0.0, Angle::degrees())),
+      grid(UAngle(0.0, Angle::degrees())),
+      rect(UAngle(0.0, Angle::degrees())),
+      incd(ULength(0.0, Length::meters())),
+      inca(UAngle(0.0, Angle::degrees())),
+      incab(UAngle(0.0, Angle::degrees())),
+      incv(UAngle(0.0, Angle::degrees())),
+      incvb(UAngle(0.0, Angle::degrees())),
+      incs(ULength(0.0, Length::meters())),
+      inch(ULength(0.0, Length::meters())),
       typeab_corrected(false),
       typeab_tolerance(NAN),
       typeab_no_average(false),
@@ -139,7 +139,7 @@ UAngle WallsUnits::avgInc(UAngle fsInc, UAngle bsInc) const
 
 bool WallsUnits::isVertical(UAngle angle) const
 {
-    return abs(abs(angle.get(Angle::degrees)) - 90.0) < 0.0001;
+    return abs(abs(angle.get(Angle::degrees())) - 90.0) < 0.0001;
 }
 
 } // namespace dewalls

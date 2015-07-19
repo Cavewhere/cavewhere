@@ -1,39 +1,37 @@
 #include "length.h"
 #include "defaultunit.h"
+#include <QReadWriteLock>
+#include <QReadLocker>
 
 namespace dewalls {
 
-Length::Length():
-    UnitType<Length>("length")
+Length::Length()
+    : UnitType<Length>("length")
 {
-    auto meters 		= new DefaultUnit<Length>("m", this, 1.0L, 1.0L);
-    auto centimeters 	= new DefaultUnit<Length>("cm", this, 0.001L, meters);
-    auto kilometers 	= new DefaultUnit<Length>("km", this, 1000.0L, meters);
-    auto feet   		= new DefaultUnit<Length>("ft", this, 0.3048L, 1.0L / 0.3048L);
-    auto yards   		= new DefaultUnit<Length>("yd", this, 3.0L, feet);
-    auto inches			= new DefaultUnit<Length>("in", this, 1.0L / 12.0L, feet);
+    _meters = new DefaultUnit<Length>("m", this, 1.0L, 1.0L);
+    _centimeters = new DefaultUnit<Length>("cm", this, 0.001L, _meters);
+    _kilometers = new DefaultUnit<Length>("km", this, 1000.0L, _meters);
+    _feet = new DefaultUnit<Length>("ft", this, 0.3048L, 1.0L / 0.3048L);
+    _yards = new DefaultUnit<Length>("yd", this, 3.0L, _feet);
+    _inches = new DefaultUnit<Length>("in", this, 1.0L / 12.0L, _feet);
 
-    addUnit(meters);
-    addUnit(centimeters);
-    addUnit(kilometers);
-    addUnit(feet);
-    addUnit(yards);
-    addUnit(inches);
+    addUnit(_meters);
+    addUnit(_centimeters);
+    addUnit(_kilometers);
+    addUnit(_feet);
+    addUnit(_yards);
+    addUnit(_inches);
 }
 
-const Length * const Length::type = new Length();
-const Unit<Length> * const Length::meters = Length::type->unit("m");
-const Unit<Length> * const Length::m = Length::meters;
-const Unit<Length> * const Length::centimeters = Length::type->unit("cm");
-const Unit<Length> * const Length::cm = Length::centimeters;
-const Unit<Length> * const Length::kilometers = Length::type->unit("km");
-const Unit<Length> * const Length::km = Length::kilometers;
-const Unit<Length> * const Length::feet = Length::type->unit("ft");
-const Unit<Length> * const Length::ft = Length::feet;
-const Unit<Length> * const Length::yards = Length::type->unit("yd");
-const Unit<Length> * const Length::yd = Length::yards;
-const Unit<Length> * const Length::inches = Length::type->unit("in");
-const Unit<Length> * const Length::in = Length::inches;
+QSharedPointer<Length> Length::_type = QSharedPointer<Length>();
+
+void Length::init()
+{
+    if (_type.isNull())
+    {
+        _type = QSharedPointer<Length>(new Length());
+    }
+}
 
 } // namespace dewalls
 

@@ -22,7 +22,7 @@ CardinalDirection opposite(CardinalDirection d)
 
 UnitizedDouble<Angle> angle(CardinalDirection d)
 {
-    return UnitizedDouble<Angle>(90 * d, Angle::deg);
+    return UnitizedDouble<Angle>(90 * d, Angle::deg());
 }
 
 CardinalDirection fromChar(char c)
@@ -60,9 +60,9 @@ UnitizedDouble<Angle> nonnorm_quadrant(CardinalDirection from, CardinalDirection
 
 UnitizedDouble<Angle> quadrant(CardinalDirection from, CardinalDirection to, UnitizedDouble<Angle> rotation)
 {
-    UnitizedDouble<Angle> result = nonnorm_quadrant(from, to, rotation) % UnitizedDouble<Angle>(360.0, Angle::deg);
+    UnitizedDouble<Angle> result = nonnorm_quadrant(from, to, rotation) % UnitizedDouble<Angle>(360.0, Angle::deg());
     if (result < angle(North)) {
-        result += UnitizedDouble<Angle>(360.0, Angle::deg);
+        result += UnitizedDouble<Angle>(360.0, Angle::deg());
     }
     return result;
 }
