@@ -213,11 +213,28 @@ public:
         }
     }
 
+    virtual void beginUnitsLine()
+    {
+        priorUnits = *Parser->units();
+    }
+
     virtual void endUnitsLine()
     {
-        // when the next vector or fix line sees that
-        // CurrentTrip is null, it will create a new one
-        CurrentTrip = NULL;
+        if (Parser->units()->d_unit != priorUnits.d_unit ||
+            Parser->units()->date != priorUnits.date ||
+            Parser->units()->decl != priorUnits.decl ||
+            Parser->units()->incd != priorUnits.incd ||
+            Parser->units()->inca != priorUnits.inca ||
+            Parser->units()->incab != priorUnits.incab ||
+            Parser->units()->incv != priorUnits.incv ||
+            Parser->units()->incvb != priorUnits.incvb ||
+            Parser->units()->typeab_corrected != priorUnits.typeab_corrected ||
+            Parser->units()->typevb_corrected != priorUnits.typevb_corrected)
+        {
+            // when the next vector or fix line sees that
+            // CurrentTrip is null, it will create a new one
+            CurrentTrip = NULL;
+        }
     }
 
     virtual void visitDateLine()
@@ -230,6 +247,7 @@ public:
     inline QList<cwTrip*> trips() { return Trips; }
 
 private:
+    WallsUnits priorUnits;
     WallsParser* Parser;
     cwStationRenamer* StationRenamer;
     QString TripNamePrefix;
