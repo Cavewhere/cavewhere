@@ -8,21 +8,21 @@
 
 namespace dewalls {
 
-enum VarianceOverrideType
-{
-    FLOATED = 0,
-    FLOATED_TRAVERSE = 1,
-    LENGTH_OVERRIDE = 2,
-    RMS_ERROR = 3
-};
-
 class FloatedVarianceOverride;
 class FloatedTraverseVarianceOverride;
 
 class VarianceOverride
 {
 public:
-    virtual VarianceOverrideType type() const = 0;
+    enum class Type
+    {
+        FLOATED = 0,
+        FLOATED_TRAVERSE = 1,
+        LENGTH_OVERRIDE = 2,
+        RMS_ERROR = 3
+    };
+
+    virtual Type type() const = 0;
     virtual QString toString() const = 0;
 
     static const QSharedPointer<VarianceOverride> FLOATED;
@@ -42,9 +42,9 @@ public:
     {
     }
 
-    inline virtual VarianceOverrideType type() const
+    inline virtual Type type() const
     {
-        return VarianceOverrideType::FLOATED;
+        return Type::FLOATED;
     }
 
     inline virtual QString toString() const
@@ -61,9 +61,9 @@ public:
     {
     }
 
-    inline virtual VarianceOverrideType type() const
+    inline virtual Type type() const
     {
-        return VarianceOverrideType::FLOATED_TRAVERSE;
+        return Type::FLOATED_TRAVERSE;
     }
 
     inline virtual QString toString() const
@@ -81,9 +81,9 @@ public:
     {
     }
 
-    inline virtual VarianceOverrideType type() const
+    inline virtual Type type() const
     {
-        return VarianceOverrideType::LENGTH_OVERRIDE;
+        return Type::LENGTH_OVERRIDE;
     }
 
     inline virtual QString toString() const
@@ -112,9 +112,9 @@ public:
     {
     }
 
-    inline virtual VarianceOverrideType type() const
+    inline virtual Type type() const
     {
-        return VarianceOverrideType::RMS_ERROR;
+        return Type::RMS_ERROR;
     }
 
     inline virtual QString toString() const
