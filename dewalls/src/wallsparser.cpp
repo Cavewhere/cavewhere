@@ -570,7 +570,8 @@ VarianceOverridePtr WallsParser::varianceOverride(LengthUnit defaultUnit)
            [&]() { return this->floatedVectorVarianceOverride(); },
            [&]() { return this->floatedTraverseVarianceOverride(); },
            [&]() { return this->lengthVarianceOverride(defaultUnit); },
-           [&]() { return this->rmsErrorVarianceOverride(defaultUnit); });
+           [&]() { return this->rmsErrorVarianceOverride(defaultUnit); },
+           [&]() { return VarianceOverridePtr(NULL); });
     return result;
 }
 

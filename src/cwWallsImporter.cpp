@@ -282,9 +282,7 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
 
     WallsParser parser;
     WallsImporterVisitor visitor(&parser, &StationRenamer, justFilename + '-');
-    PrintingWallsVisitor printingVisitor;
-    MultiWallsVisitor multiVisitor(QList<WallsVisitor*>({&printingVisitor, &visitor}));
-    parser.setVisitor(&multiVisitor);
+    parser.setVisitor(&visitor);
 
     bool failed = false;
 
