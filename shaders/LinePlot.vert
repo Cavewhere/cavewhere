@@ -18,4 +18,5 @@ void main(void)
 {
     depth = (vVertex.z - MinZValue) / (MaxZValue - MinZValue); //Normalize the z value
     gl_Position = ModelViewProjectionMatrix * vec4(vVertex, 1.0);
+    gl_Position.z -= 1e-4;
 }
