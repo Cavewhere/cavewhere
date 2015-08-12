@@ -29,6 +29,20 @@ Item {
         id: importManager
         cavingRegion: iconBar.currentRegion
         undoStack: rootData.undoStack
+        onMessageAdded: {
+            messageListDialog.messages = messageListDialog.messages.concat([message]);
+            messageListDialog.visible = true
+        }
+        onMessagesCleared: messageListDialog.messages = []
+    }
+
+    MessageListDialog {
+        visible: false
+        modality: Qt.NonModal
+        id: messageListDialog
+        width: 600
+        height: 400
+        font: importManager.messageListFont
     }
 
     Item {
@@ -99,6 +113,7 @@ Item {
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
+                        messageListDialog.title = "Compass Import"
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
@@ -112,6 +127,7 @@ Item {
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
+                        messageListDialog.title = "Walls Import";
                         importManager.importWallsDataFile(fileUrls);
                     }
                 }

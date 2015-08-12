@@ -15,6 +15,8 @@
 #include <QPointer>
 #include <QList>
 #include <QUrl>
+#include <QFont>
+#include <QFontDatabase>
 
 //Our includes
 class cwCavingRegion;
@@ -30,6 +32,7 @@ class cwSurveyImportManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(QFont messageListFont MEMBER MessageListFont)
 
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);
@@ -48,6 +51,8 @@ public:
 signals:
     void cavingRegionChanged();
     void undoStackChanged();
+    void messageAdded(const QString &message);
+    void messagesCleared();
     
 public slots:
 
@@ -70,6 +75,8 @@ private:
     cwWallsImporter* WallsImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
+
+    QFont MessageListFont;
 };
 
 

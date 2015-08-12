@@ -349,6 +349,7 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     while (!file.atEnd())
     {
         QString line = file.readLine();
+        line = line.trimmed();
         if (file.error() != QFile::NoError)
         {
             emit statusMessage(QString("Error reading from file %1 at line %2: %3")
@@ -367,13 +368,13 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
         }
         catch (const SegmentParseExpectedException& ex)
         {
-            emit statusMessage(ex.message());
+            emit statusMessage("Error: " + ex.message());
             failed = true;
             break;
         }
         catch (const SegmentParseException& ex)
         {
-            emit statusMessage(ex.message());
+            emit statusMessage("Error: " + ex.message());
             failed = true;
             break;
         }
@@ -386,9 +387,11 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     if (!failed)
     {
         tripsOut << visitor.trips();
+        emit statusMessage(QString("Parsed file %1").arg(filename));
     }
     else
     {
+        emit statusMessage(QString("Skipping file %1 due to errors").arg(filename));
         foreach (cwTrip* trip, visitor.trips())
         {
             delete trip;

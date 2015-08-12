@@ -26,7 +26,8 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     ImportThread(new QThread()),
     CavingRegion(nullptr),
     CompassImporter(new cwCompassImporter()),
-    WallsImporter(new cwWallsImporter())
+    WallsImporter(new cwWallsImporter()),
+    MessageListFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
 {
     CompassImporter->setThread(ImportThread);
     connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
@@ -76,6 +77,7 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
 
     if(CompassImporter->isReady()) {
         CompassImporter->setCompassDataFiles(dataFiles + QueuedCompassFile);
+        emit messagesCleared();
         CompassImporter->start();
     } else if(CompassImporter->isRunning()) {
         QueuedCompassFile.append(dataFiles);
@@ -118,6 +120,7 @@ void cwSurveyImportManager::compassImporterFinished()
 void cwSurveyImportManager::compassMessages(QString message)
 {
     qDebug() << "Compass Importer:" << message;
+    emit messageAdded(message);
 }
 
 /**
@@ -131,6 +134,7 @@ void cwSurveyImportManager::importWallsDataFile(QList<QUrl> filenames)
 
     if(WallsImporter->isReady()) {
         WallsImporter->setWallsDataFiles(dataFiles + QueuedWallsFile);
+        emit messagesCleared();
         WallsImporter->start();
     } else if(WallsImporter->isRunning()) {
         QueuedWallsFile.append(dataFiles);
@@ -173,6 +177,7 @@ void cwSurveyImportManager::wallsImporterFinished()
 void cwSurveyImportManager::wallsMessages(QString message)
 {
     qDebug() << "Walls Importer:" << message;
+    emit messageAdded(message);
 }
 
 /**
