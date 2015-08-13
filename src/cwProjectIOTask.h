@@ -28,6 +28,8 @@ public:
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
 
+    static bool canConnect(QString filename);
+    bool canConnect() const;
 
 protected:
     //For database access

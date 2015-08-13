@@ -67,6 +67,9 @@ void cwRegionLoadTask::runTask() {
             qDebug() << "Couldn't load from any format!";
             stop();
         }
+    } else {
+        qDebug() << "Couldn't connect to database";
+        stop();
     }
 
     if(isRunning()) {

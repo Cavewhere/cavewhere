@@ -64,6 +64,7 @@ QObject *cwSortFilterProxyModel::source() const
 void cwSortFilterProxyModel::setSource(QObject *source)
 {
     setSourceModel(qobject_cast<QAbstractItemModel *>(source));
+    setFilterRole(FilterRoleName);
 }
 
 QByteArray cwSortFilterProxyModel::sortRole() const
@@ -88,6 +89,7 @@ QByteArray cwSortFilterProxyModel::filterRole() const
 
 void cwSortFilterProxyModel::setFilterRole(const QByteArray &role)
 {
+    FilterRoleName = role;
     QSortFilterProxyModel::setFilterRole(roleKey(role));
 }
 

@@ -2,6 +2,8 @@ import QtQuick 2.0
 
 /**
   This shows a dialog in cavewhere
+
+  This shuold probably be removed
   */
 Rectangle {
 

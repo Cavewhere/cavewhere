@@ -101,6 +101,9 @@ protected:
     int roleKey(const QByteArray &role) const;
     QHash<int, QByteArray> roleNames() const;
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const;
+
+private:
+    QByteArray FilterRoleName;
 };
 
 #endif // SORTFILTERPROXYMODEL_H

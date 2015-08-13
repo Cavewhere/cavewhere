@@ -19,6 +19,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
+#include "cwMetaCaveSaveTask.h"
 
 //Qt includes
 #include <QDir>
@@ -96,11 +97,7 @@ void cwProject::createTempProjectFile() {
 
   The schema simple,
   Tables:
-  1. CavingRegion
-  2. Images
-
-  Columns CavingRegion:
-  id | gunzipCompressedXML
+  1. Cached Mimmap Images
 
   Columns Images:
   id | type | shouldDelete | data
@@ -208,6 +205,12 @@ void cwProject::save() {
   Save the project, writes all files to the project
   */
 void cwProject::privateSave() {
+    //Save to meta-cave format
+    cwMetaCaveSaveTask* metaCaveSaveTask = new cwMetaCaveSaveTask();
+
+    //Save Geometry Cache
+
+
     cwRegionSaveTask* saveTask = new cwRegionSaveTask();
     connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
     connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
@@ -231,7 +234,7 @@ void cwProject::privateSave() {
  *
  * If the filenameUrl isn't a url, this just returns filenameUrl
  */
-QString cwProject::convertFromURL(QString filenameUrl) const
+QString cwProject::convertFromURL(QString filenameUrl)
 {
     QUrl fileUrl(filenameUrl);
     if(fileUrl.isValid() && fileUrl.isLocalFile()) {
@@ -328,21 +331,34 @@ void cwProject::loadFile(QString filename) {
 
     if(filename.isEmpty()) { return; }
 
+
     filename = convertFromURL(filename);
 
-    //Load the region task
-    cwRegionLoadTask* loadTask = new cwRegionLoadTask();
-    connect(loadTask, &cwRegionLoadTask::finishedLoading,
-            this, &cwProject::updateRegionData);
+    if(cwProjectIOTask::canConnect(filename)) {
+        //Load the old version of the file, version 1
 
-    loadTask->setThread(LoadSaveThread);
+        //Load the region task
+        cwRegionLoadTask* loadTask = new cwRegionLoadTask();
+        connect(loadTask, &cwRegionLoadTask::finishedLoading,
+                this, &cwProject::updateRegionDataVersion1);
 
-    //Set the data for the project
-    loadTask->setDatabaseFilename(filename);
+        loadTask->setThread(LoadSaveThread);
 
-    //Start the save thread
-    loadTask->start();
+        //Set the data for the project
+        loadTask->setDatabaseFilename(filename);
 
+        //Start the save thread
+        loadTask->start();
+
+        ProjectVersion = Version_1;
+
+    } else {
+        //Load the new version of the file, version 2
+        ProjectVersion = Version_2;
+
+    }
+
+    emit versionChanged();
 }
 
 /**
@@ -350,7 +366,7 @@ void cwProject::loadFile(QString filename) {
 
   This should only be called by cwRegionLoadTask
   */
-void cwProject::updateRegionData() {
+void cwProject::updateRegionDataVersion1() {
     TempProject = false;
 
     cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
@@ -360,6 +376,9 @@ void cwProject::updateRegionData() {
 
     //Copy the data from the loaded region
     loadTask->copyRegionTo(*Region);
+
+    //Ask the user to convert, Must be hand
+    emit tryToConvertFromVersion1toVersion2();
 
     emit temporaryProjectChanged();
 }
@@ -597,6 +616,20 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
             QString("dotsPerMeter INTEGER,") + //The resolution of the image
             QString("imageData BLOB)"); //The blob that stores the image data
     createTable(database, imageTableQuery);
+}
+
+/**
+ * @brief cwProject::cacheFilename
+ * @return Returns the filename of the project's cache file.
+ *
+ * The cache file holds processed data, like the line plot, scrap geometry, and compressed
+ * images.
+ */
+QString cwProject::cacheFilename() const
+{
+    QString name = filename();
+    QFileInfo info(name);
+    return info.baseName() + ".cwCache";
 }
 
 /**

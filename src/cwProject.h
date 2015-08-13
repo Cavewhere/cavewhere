@@ -38,8 +38,16 @@ Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(bool temporaryProject READ isTemporaryProject NOTIFY temporaryProjectChanged)
+    Q_PROPERTY(Version version READ version NOTIFY versionChanged)
+
+    Q_ENUMS(Version)
 
 public:
+    enum Version {
+        Version_1, //Single sqlite database with protobuffer (read-only)
+        Version_2, //JSON metacave format
+    };
+
     cwProject(QObject* parent = nullptr);
     ~cwProject();
 
@@ -66,13 +74,20 @@ public:
     static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);
 
     static void createDefaultSchema(const QSqlDatabase& database);
+    QString cacheFilename() const;
 
     bool isTemporaryProject() const;
+
+    Version version() const;
+
+    static QString convertFromURL(QString fileUrl);
 
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
     void temporaryProjectChanged();
+    void versionChanged();
+    void tryToConvertFromVersion1toVersion2();
 
 public slots:
      void loadFile(QString filename);
@@ -83,6 +98,7 @@ private:
     bool TempProject;
     QString ProjectFile;
     QSqlDatabase ProjectDatabase;
+    Version ProjectVersion; //!<
 
     //The region that this project looks after
     cwCavingRegion* Region;
@@ -106,9 +122,10 @@ private:
 
      void privateSave();
 
-     QString convertFromURL(QString fileUrl) const;
+
+
 private slots:
-    void updateRegionData();
+    void updateRegionDataVersion1();
     void startDeleteImageTask();
     void deleteImageTask();
 
@@ -126,8 +143,6 @@ inline QUndoStack *cwProject::undoStack() const
     return UndoStack;
 }
 
-
-
 /**
   \brief Returns the open project path
 
@@ -142,6 +157,14 @@ inline QString cwProject::filename() const {
   */
 inline bool cwProject::isTemporaryProject() const {
     return TempProject;
+}
+
+/**
+* @brief cwProject::version
+* @return The major version for the cavewhere format
+*/
+inline cwProject::Version cwProject::version() const {
+    return ProjectVersion;
 }
 
 #endif // CWXMLPROJECT_H

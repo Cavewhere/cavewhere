@@ -28,6 +28,28 @@ cwProjectIOTask::cwProjectIOTask(QObject* parent) :
 }
 
 /**
+ * Returns true if the io task can connect to the sqlite database with the given filename.
+ * False if it can't connect to the database
+ */
+bool cwProjectIOTask::canConnect(QString filename)
+{
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", "TestConnection");
+    database.setDatabaseName(filename);
+    bool connected = database.open();
+    database.close();
+    return connected;
+}
+
+/**
+ * Returns true if the io task can connect to the sqlite database with the DatabaseFilename.
+ * False if it can't connect to the database
+ */
+bool cwProjectIOTask::canConnect() const
+{
+    return canConnect(databaseFilename());
+}
+
+/**
   This connects to a mysql database
 
   This is a helper function to all runTask() in the subclasses

@@ -29,14 +29,13 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
-    menuBar: FileButtonAndMenu {
+    menuBar: fileMenuButton.menuBar
+
+
+    FileButtonAndMenu {
         id: fileMenuButton
 
-//        terrainRenderer: terrainRendererId
-//        dataPage: loadAboutWindowId.item.dataPage //dataMainPageId
         mainContentLoader: loadMainContentsId
-        saveAsFileDialog: saveAsFileDialogId
-        loadFileDialog: loadFileDialogId
 
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
@@ -83,25 +82,7 @@ ApplicationWindow {
         }
     }
 
-    FileDialog {
-        id: saveAsFileDialogId
-        nameFilters: ["Cavewhere Project (*.cw)"]
-        title: "Save Cavewhere Project As"
-        selectExisting: false
-        onAccepted: {
-            project.saveAs(fileUrl)
-        }
-    }
 
-    FileDialog {
-        id: loadFileDialogId
-        nameFilters: ["Cavewhere File (*.cw)"]
-        onAccepted: {
-            rootData.pageSelectionModel.clearHistory();
-            rootData.pageSelectionModel.gotoPageByName(null, "View")
-            rootData.project.loadFile(fileUrl)
-        }
-    }
 
     //There's only one shadow input text editor for the cavewhere program
     //This make the input creation much faster for any thing that needs an editor
@@ -110,12 +91,10 @@ ApplicationWindow {
         id: globalShadowTextInput
     }
 
-    //All the dialogs in cavewher are parented under this item.
-    GlobalDialogHandler {
-        id: globalDialogHandler
-    }
-
-
+    //All the dialogs in cavewhere are parented under this item.
+//    GlobalDialogHandler {
+//        id: globalDialogHandler
+//    }
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindow
