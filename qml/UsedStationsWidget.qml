@@ -46,7 +46,6 @@ Rectangle {
                 id: usedStationsModel;
                 cave: currentCave != null ? currentCave : null
                 listenToChanges: parent.visible
-                threaded: true
             }
         }
     }

@@ -25,7 +25,6 @@
 #include <QPixmapCache>
 #include <QMessageBox>
 #include <QDebug>
-#include <QThread>
 
 
 const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
@@ -35,14 +34,10 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
     Region(region),
     Model(new cwSurvexImporterModel(this)),
     Importer(new cwSurvexImporter()),
-    SurvexSelectionModel(new QItemSelectionModel(Model, this)),
-    ImportThread(new QThread(this))
+    SurvexSelectionModel(new QItemSelectionModel(Model, this))
 {
     setupUi(this);
     setupTypeComboBox();
-
-    //Move the importer to another thread
-    Importer->setThread(ImportThread);
 
     //Connect the importer up
     connect(Importer, SIGNAL(finished()), SLOT(importerFinishedRunning()));
@@ -68,10 +63,7 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
 
 cwImportSurvexDialog::~cwImportSurvexDialog() {
     Importer->stop();
-
-    ImportThread->quit();
-    ImportThread->wait();
-
+    Importer->waitToFinish();
     delete Importer;
 }
 
@@ -316,8 +308,8 @@ void cwImportSurvexDialog::import() {
   All the data has been parsed out of the importer
   */
 void cwImportSurvexDialog::importerFinishedRunning() {
-    //Move the importer back to this thread
-    Importer->setThread(thread(), Qt::BlockingQueuedConnection);
+//    //Move the importer back to this thread
+//    Importer->setThread(thread(), Qt::BlockingQueuedConnection);
 
     //Get the importer's data
     Model->setSurvexData(Importer->data());
@@ -334,9 +326,6 @@ void cwImportSurvexDialog::importerFinishedRunning() {
     //Update the error / warning label at the bottom
     updateImportWarningLabel();
 
-    //shut down the thread
-    ImportThread->quit();
-
     show();
 }
 
@@ -344,6 +333,6 @@ void cwImportSurvexDialog::importerFinishedRunning() {
   \brief Called if the importer has been canceled by the user
   */
 void cwImportSurvexDialog::importerCanceled() {
-    ImportThread->quit();
+    Importer->waitToFinish();
     close();
 }

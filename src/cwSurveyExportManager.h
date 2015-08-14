@@ -11,7 +11,6 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
-class QThread;
 
 //Our includes
 class cwCave;
@@ -72,9 +71,6 @@ private:
     QPointer<cwTrip> Trip; //!<
     QPointer<cwCave> Cave; //!<
     QPointer<cwCavingRegion> CavingRegion; //!<
-
-    //The thread that the exporting runs on
-    QThread* ExportThread;
 
     void updateCaveActions(const QModelIndex& index);
     void updateTripActions(const QModelIndex& index);

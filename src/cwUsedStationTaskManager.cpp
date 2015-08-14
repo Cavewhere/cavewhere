@@ -12,15 +12,9 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 
-//Qt includes
-#include <QThread>
-
 cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
     QObject(parent),
-    Cave(nullptr),
-    Threaded(false),
-    Thread(nullptr)
-
+    Cave(nullptr)
 {
     Task = new cwUsedStationsTask();
     connect(Task, SIGNAL(shouldRerun()), SLOT(calculateUsedStations()));
@@ -29,12 +23,7 @@ cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
 
 cwUsedStationTaskManager::~cwUsedStationTaskManager() {
     Task->stop();
-
-    if(threaded()) {
-        Thread->quit(); //Quit the event loop
-        Thread->wait(); //wait to finish
-    }
-
+    Task->waitToFinish();
     delete Task;
 }
 
@@ -326,37 +315,6 @@ void cwUsedStationTaskManager::disconnectChunk(cwSurveyChunk *chunk)
 cwCave* cwUsedStationTaskManager::cave() {
     return Cave;
 }
-
-/**
-* @brief cwUsedStationTaskManager::setThreaded
-* @param threaded - If the manager should use a seperate thread to calculate the used stations, true
-* if it uses a seperate thread and false if it uses the current thread
-*/
-void cwUsedStationTaskManager::setThreaded(bool threaded) {
-    if(Threaded != threaded) {
-        Threaded = threaded;
-
-        if(Threaded) {
-            //Creating the thread
-            Q_ASSERT(Thread == nullptr);
-            Thread = new QThread(this);
-            Thread->start();
-
-            Task->setThread(Thread);
-        } else {
-            Task->setThread(QThread::currentThread());
-
-            Thread->quit();
-            Thread->wait();
-
-            Thread->deleteLater();
-            Thread = nullptr;
-        }
-
-        emit threadedChanged();
-    }
-}
-
 
 /**
 * @brief cwUsedStationTaskManager::trip

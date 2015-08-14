@@ -64,7 +64,6 @@ private:
     bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
 
-    static QThread* TextureLoadingThread;
     cwTextureUploadTask* TextureUploadTask;
 
     void deleteLoadNoteTask();

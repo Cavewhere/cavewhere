@@ -22,7 +22,6 @@ class cwTaskManagerModel;
 //Qt includes
 #include <QSqlDatabase>
 #include <QDir>
-#include <QThread>
 #include <QMap>
 #include <QHash>
 #include <QPointer>
@@ -75,6 +74,7 @@ public:
 
     static void createDefaultSchema(const QSqlDatabase& database);
     QString cacheFilename() const;
+    QString cacheFilename(QString filename) const;
 
     bool isTemporaryProject() const;
 
@@ -102,9 +102,6 @@ private:
 
     //The region that this project looks after
     cwCavingRegion* Region;
-
-    //For loading images from the disk into this project
-    QThread* LoadSaveThread;
 
     //The undo stack
     QUndoStack* UndoStack;

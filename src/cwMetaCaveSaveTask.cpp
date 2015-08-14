@@ -34,6 +34,7 @@
 
 //Qt includes
 #include <QFile>
+#include <QJsonDocument>
 
 cwMetaCaveSaveTask::cwMetaCaveSaveTask()
 {
@@ -42,8 +43,22 @@ cwMetaCaveSaveTask::cwMetaCaveSaveTask()
 
 void cwMetaCaveSaveTask::runTask()
 {
+    QVariantMap regionMap = saveRegion();
+
+    QJsonDocument jsonDocument = QJsonDocument::fromVariant(regionMap);
+
     QFile file(databaseFilename());
-    file.open(QFile::ReadOnly);
+    bool okay = file.open(QFile::WriteOnly);
+    if(!okay) {
+        qDebug() << "Failed to open " << databaseFilename() << "for writting:" << file.errorString();
+        stop();
+        done();
+        return;
+    }
+
+    file.write(jsonDocument.toJson(QJsonDocument::Indented));
+    file.close();
+    done();
 }
 
 /**

@@ -9,7 +9,6 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QQmlContext>
-#include <QThread>
 #include <QQuickView>
 #include <QModelIndex>
 #include <QWidget>

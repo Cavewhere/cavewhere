@@ -42,16 +42,10 @@ cwProject::cwProject(QObject* parent) :
     UndoStack(new QUndoStack(this))
 {
     newProject();
-
-    //Create a new thread
-    LoadSaveThread = new QThread(this);
-    LoadSaveThread->start();
 }
 
 cwProject::~cwProject()
 {
-    LoadSaveThread->quit();
-    LoadSaveThread->wait();
 }
 
 /**
@@ -79,7 +73,7 @@ void cwProject::createTempProjectFile() {
 
     //Create and open a new database connection
     ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
-    ProjectDatabase.setDatabaseName(ProjectFile);
+    ProjectDatabase.setDatabaseName(cacheFilename());
     bool couldOpen = ProjectDatabase.open();
     if(!couldOpen) {
         qDebug() << "Couldn't open temp project file: " << ProjectFile;
@@ -207,22 +201,26 @@ void cwProject::save() {
 void cwProject::privateSave() {
     //Save to meta-cave format
     cwMetaCaveSaveTask* metaCaveSaveTask = new cwMetaCaveSaveTask();
+    connect(metaCaveSaveTask, SIGNAL(finished()), metaCaveSaveTask, SLOT(deleteLater()));
+    connect(metaCaveSaveTask, SIGNAL(stopped()), metaCaveSaveTask, SLOT(deleteLater()));
+    metaCaveSaveTask->setCavingRegion(*Region);
+    metaCaveSaveTask->setDatabaseFilename(ProjectFile);
+    metaCaveSaveTask->start();
 
     //Save Geometry Cache
 
 
-    cwRegionSaveTask* saveTask = new cwRegionSaveTask();
-    connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
-    connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
-    saveTask->setThread(LoadSaveThread);
+//    cwRegionSaveTask* saveTask = new cwRegionSaveTask();
+//    connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
+//    connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
 
-    //Set the data for the project
-    qDebug() << "Saving project to:" << ProjectFile;
-    saveTask->setCavingRegion(*Region);
-    saveTask->setDatabaseFilename(ProjectFile);
+//    //Set the data for the project
+//    qDebug() << "Saving project to:" << ProjectFile;
+//    saveTask->setCavingRegion(*Region);
+//    saveTask->setDatabaseFilename(ProjectFile);
 
-    //Start the save thread
-    saveTask->start();
+//    //Start the save thread
+//    saveTask->start();
 }
 
 /**
@@ -269,15 +267,25 @@ void cwProject::saveAs(QString newFilename){
         }
     }
 
+    QString newCacheFilename = cacheFilename(newFilename);
+
+    if(QFileInfo(newCacheFilename).exists()) {
+        bool couldRemove = QFile::remove(newCacheFilename);
+        if(!couldRemove) {
+            qDebug() << "Couldn't remove cavewhere cache" << couldRemove;
+            return;
+        }
+    }
+
     //Copy the old file to the new location
-    bool couldCopy = QFile::copy(filename(), newFilename);
+    bool couldCopy = QFile::copy(cacheFilename(), newCacheFilename);
     if(!couldCopy) {
-        qDebug() << "Couldn't copy " << filename() << "to" << newFilename;
+        qDebug() << "Couldn't copy " << cacheFilename() << "to" << newCacheFilename;
         return;
     }
 
     if(isTemporaryProject()) {
-        QFile::remove(filename());
+        QFile::remove(cacheFilename());
     }
 
     //Update the project filename
@@ -342,8 +350,6 @@ void cwProject::loadFile(QString filename) {
         connect(loadTask, &cwRegionLoadTask::finishedLoading,
                 this, &cwProject::updateRegionDataVersion1);
 
-        loadTask->setThread(LoadSaveThread);
-
         //Set the data for the project
         loadTask->setDatabaseFilename(filename);
 
@@ -396,8 +402,6 @@ void cwProject::startDeleteImageTask()
 
     cwAddImageTask* task = static_cast<cwAddImageTask*>(sender());
     connect(task, &cwTask::threadChanged, this, &cwProject::deleteImageTask);
-
-    task->setThread(thread());
 }
 
 /**
@@ -448,7 +452,6 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
         connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
         connect(addImageTask, &cwTask::finished, this, &cwProject::startDeleteImageTask);
         connect(addImageTask, &cwTask::stopped, this, &cwProject::startDeleteImageTask);
-        addImageTask->setThread(LoadSaveThread);
 
         //Set the project path
         addImageTask->setDatabaseFilename(filename());
@@ -627,9 +630,20 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
  */
 QString cwProject::cacheFilename() const
 {
-    QString name = filename();
-    QFileInfo info(name);
-    return info.baseName() + ".cwCache";
+    return cacheFilename(filename());
+}
+
+/**
+ * @brief cwProject::cacheFilename
+ * @return Returns the cache filename from filename
+ *
+ * The cache file holds processed data, like the line plot, scrap geometry, and compressed
+ * images.
+ */
+QString cwProject::cacheFilename(QString filename) const
+{
+    QFileInfo info(filename);
+    return info.absoluteDir().path() + QString("/") + info.baseName() + ".cwCache";
 }
 
 /**
