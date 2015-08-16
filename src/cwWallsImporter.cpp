@@ -342,6 +342,9 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     WallsParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename + '-');
     parser.setVisitor(&visitor);
+//    PrintingWallsVisitor printingVisitor;
+//    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
+//    parser.setVisitor(&multiVisitor);
 
     bool failed = false;
 
@@ -360,11 +363,9 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
             break;
         }
 
-        parser.reset(Segment(line, filename, lineNumber, 0));
-
         try
         {
-            parser.parseLine();
+            parser.parseLine(Segment(line, filename, lineNumber, 0));
         }
         catch (const SegmentParseExpectedException& ex)
         {
