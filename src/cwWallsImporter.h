@@ -6,13 +6,50 @@
 #include "cwCave.h"
 #include "cwStationRenamer.h"
 #include "wallsvisitor.h"
+#include "wallsunits.h"
 
 //Qt include
+#include <QObject>
 #include <QRegExp>
 #include <QStringList>
 class QFile;
 
-class WallsImporterVisitor;
+namespace dewalls {
+    class WallsParser;
+}
+
+using namespace dewalls;
+
+class cwWallsImporter;
+
+class WallsImporterVisitor : public QObject, public CapturingWallsVisitor
+{
+    Q_OBJECT
+
+public:
+    WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix);
+
+    void ensureValidTrip();
+    virtual void endFixLine();
+    virtual void endVectorLine();
+    virtual void beginUnitsLine();
+    virtual void endUnitsLine();
+    virtual void visitDateLine();
+    virtual void warn( QString message );
+    inline QList<cwTrip*> trips() const { return Trips; }
+
+signals:
+    void warning( QString message );
+
+private:
+    WallsUnits priorUnits;
+    WallsParser* Parser;
+    cwWallsImporter* Importer;
+    QString TripNamePrefix;
+    QList<cwTrip*> Trips;
+    cwTrip* CurrentTrip;
+    cwSurveyChunk* CurrentChunk;
+};
 
 class cwWallsImporter : public cwTask
 {
@@ -25,6 +62,9 @@ public:
     QList<cwCave> caves() const;
 
     friend class WallsImporterVisitor;
+
+public slots:
+    void warning(QString message);
 
 protected:
     void runTask();

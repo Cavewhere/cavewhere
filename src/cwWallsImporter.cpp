@@ -24,244 +24,239 @@ cwUnits::LengthUnit cwUnit(const Unit<Length>* dewallsUnit)
     return dewallsUnit == Length::feet() ? cwUnits::Feet : cwUnits::Meters;
 }
 
-class WallsImporterVisitor : public CapturingWallsVisitor
+WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
+    : Parser(parser),
+      Importer(importer),
+      TripNamePrefix(tripNamePrefix),
+      Trips(QList<cwTrip*>()),
+      CurrentTrip(NULL)
 {
-public:
-    WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
-        : Parser(parser),
-          Importer(importer),
-          TripNamePrefix(tripNamePrefix),
-          Trips(QList<cwTrip*>()),
-          CurrentTrip(NULL)
+
+}
+
+void WallsImporterVisitor::ensureValidTrip()
+{
+    if (!CurrentTrip)
     {
-
-    }
-
-    void ensureValidTrip()
-    {
-        if (!CurrentTrip)
-        {
-            CurrentTrip = new cwTrip();
-            Trips << CurrentTrip;
-            CurrentTrip->setName(QString("%1%2").arg(TripNamePrefix).arg(Trips.size()));
-            CurrentTrip->setDate(Parser->units()->date);
-
-            LengthUnit d_unit = Parser->units()->d_unit;
-
-            CurrentTrip->calibrations()->setDistanceUnit(cwUnit(d_unit));
-            CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units()->typeab_corrected);
-            CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units()->typevb_corrected);
-            CurrentTrip->calibrations()->setTapeCalibration(Parser->units()->incd.get(d_unit));
-            CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units()->inca.get(Angle::degrees()));
-            CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units()->incv.get(Angle::degrees()));
-            CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units()->incab.get(Angle::degrees()));
-            CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units()->incvb.get(Angle::degrees()));
-            CurrentTrip->calibrations()->setDeclination(Parser->units()->decl.get(Angle::degrees()));
-        }
-    }
-
-    virtual void endFixLine()
-    {
-        ensureValidTrip();
-        // TODO
-    }
-
-    virtual void endVectorLine()
-    {
-        ensureValidTrip();
-
-        cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
+        CurrentTrip = new cwTrip();
+        Trips << CurrentTrip;
+        CurrentTrip->setName(QString("%1%2").arg(TripNamePrefix).arg(Trips.size()));
+        CurrentTrip->setDate(Parser->units()->date);
 
         LengthUnit d_unit = Parser->units()->d_unit;
 
-        cwStation* lrudStation;
+        CurrentTrip->calibrations()->setDistanceUnit(cwUnit(d_unit));
+        CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units()->typeab_corrected);
+        CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units()->typevb_corrected);
+        CurrentTrip->calibrations()->setTapeCalibration(Parser->units()->incd.get(d_unit));
+        CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units()->inca.get(Angle::degrees()));
+        CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units()->incv.get(Angle::degrees()));
+        CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units()->incab.get(Angle::degrees()));
+        CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units()->incvb.get(Angle::degrees()));
+        CurrentTrip->calibrations()->setDeclination(Parser->units()->decl.get(Angle::degrees()));
+    }
+}
 
-        if (Parser->units()->vectorType == VectorType::RECT)
+void WallsImporterVisitor::endFixLine()
+{
+    ensureValidTrip();
+    // TODO
+}
+
+void WallsImporterVisitor::endVectorLine()
+{
+    ensureValidTrip();
+
+    cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
+
+    LengthUnit d_unit = Parser->units()->d_unit;
+
+    cwStation* lrudStation;
+
+    if (Parser->units()->vectorType == VectorType::RECT)
+    {
+        Parser->units()->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
+        // rect correction is not supported so it's added here.
+        // decl doesn't apply to rect lines, so it's pre-subtracted here so that when the trip declination
+        // is added back, the result agrees with the Walls data.
+        frontsightAzimuth += Parser->units()->rect - Parser->units()->decl;
+    }
+
+    if (distance.isValid())
+    {
+        cwStation toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
+        cwShot shot;
+
+        // apply Walls corrections that Cavewhere doesn't support
+        Parser->units()->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
+
+        shot.setDistance(distance.get(d_unit));
+        if (frontsightAzimuth.isValid())
         {
-            Parser->units()->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
-            // rect correction is not supported so it's added here.
-            // decl doesn't apply to rect lines, so it's pre-subtracted here so that when the trip declination
-            // is added back, the result agrees with the Walls data.
-            frontsightAzimuth += Parser->units()->rect - Parser->units()->decl;
+            shot.setCompass(frontsightAzimuth.get(Angle::degrees()));
         }
-
-        if (distance.isValid())
+        else
         {
-            cwStation toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
-            cwShot shot;
-
-            // apply Walls corrections that Cavewhere doesn't support
-            Parser->units()->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
-
-            shot.setDistance(distance.get(d_unit));
-            if (frontsightAzimuth.isValid())
+            shot.setCompassState(cwCompassStates::Empty);
+        }
+        if (frontsightInclination.isValid())
+        {
+            shot.setClino(frontsightInclination.get(Angle::degrees()));
+            if (shot.clino() == 90.0)
             {
-                shot.setCompass(frontsightAzimuth.get(Angle::degrees()));
+                shot.setClinoState(cwClinoStates::Up);
             }
-            else
+            else if (shot.clino() == -90.0)
             {
-                shot.setCompassState(cwCompassStates::Empty);
-            }
-            if (frontsightInclination.isValid())
-            {
-                shot.setClino(frontsightInclination.get(Angle::degrees()));
-                if (shot.clino() == 90.0)
-                {
-                    shot.setClinoState(cwClinoStates::Up);
-                }
-                else if (shot.clino() == -90.0)
-                {
-                    shot.setClinoState(cwClinoStates::Down);
-                }
-            }
-            else
-            {
-                shot.setClinoState(cwClinoStates::Empty);
-            }
-            if (backsightAzimuth.isValid())
-            {
-                shot.setBackCompass(backsightAzimuth.get(Angle::degrees()));
-            }
-            else
-            {
-                shot.setBackCompassState(cwCompassStates::Empty);
-            }
-            if (backsightInclination.isValid())
-            {
-                shot.setBackClino(backsightInclination.get(Angle::degrees()));
-                if (shot.backClino() == 90.0)
-                {
-                    shot.setBackClinoState(cwClinoStates::Up);
-                }
-                else if (shot.backClino() == -90.0)
-                {
-                    shot.setBackClinoState(cwClinoStates::Down);
-                }
-            }
-            else
-            {
-                shot.setBackClinoState(cwClinoStates::Empty);
-            }
-
-            // TODO: exclude length flag/segment
-
-            CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
-
-            lrudStation = Parser->units()->lrud == LrudType::From ||
-                    Parser->units()->lrud == LrudType::FB ?
-                        &fromStation : &toStation;
-
-            if(!CurrentTrip->chunks().isEmpty()) {
-                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-                int secondToLastStation = lastChunk->stationCount() - 2;
-                lastChunk->setStation(fromStation, secondToLastStation);
+                shot.setClinoState(cwClinoStates::Down);
             }
         }
         else
         {
-            lrudStation = &fromStation;
+            shot.setClinoState(cwClinoStates::Empty);
         }
-
-        // save the latest LRUDs associated with each station so that we can apply them in the end
-        if (Parser->units()->date.isValid())
+        if (backsightAzimuth.isValid())
         {
-            if (!Importer->StationDates.contains(lrudStation->name()) ||
-                Parser->units()->date >= Importer->StationDates[lrudStation->name()]) {
-                Importer->StationDates[lrudStation->name()] = Parser->units()->date;
-                Importer->StationMap[lrudStation->name()] = *lrudStation;
+            shot.setBackCompass(backsightAzimuth.get(Angle::degrees()));
+        }
+        else
+        {
+            shot.setBackCompassState(cwCompassStates::Empty);
+        }
+        if (backsightInclination.isValid())
+        {
+            shot.setBackClino(backsightInclination.get(Angle::degrees()));
+            if (shot.backClino() == 90.0)
+            {
+                shot.setBackClinoState(cwClinoStates::Up);
+            }
+            else if (shot.backClino() == -90.0)
+            {
+                shot.setBackClinoState(cwClinoStates::Down);
             }
         }
-        else if (!Importer->StationDates.contains(lrudStation->name()))
+        else
         {
+            shot.setBackClinoState(cwClinoStates::Empty);
+        }
+
+        // TODO: exclude length flag/segment
+
+        CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
+
+        lrudStation = Parser->units()->lrud == LrudType::From ||
+                Parser->units()->lrud == LrudType::FB ?
+                    &fromStation : &toStation;
+
+        if(!CurrentTrip->chunks().isEmpty()) {
+            cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+            int secondToLastStation = lastChunk->stationCount() - 2;
+            lastChunk->setStation(fromStation, secondToLastStation);
+        }
+    }
+    else
+    {
+        lrudStation = &fromStation;
+    }
+
+    // save the latest LRUDs associated with each station so that we can apply them in the end
+    if (Parser->units()->date.isValid())
+    {
+        if (!Importer->StationDates.contains(lrudStation->name()) ||
+            Parser->units()->date >= Importer->StationDates[lrudStation->name()]) {
+            Importer->StationDates[lrudStation->name()] = Parser->units()->date;
             Importer->StationMap[lrudStation->name()] = *lrudStation;
         }
-
-        left += Parser->units()->incs;
-        right += Parser->units()->incs;
-        up += Parser->units()->incs;
-        down += Parser->units()->incs;
-
-        if (left.isValid())
-        {
-            lrudStation->setLeft(left.get(d_unit));
-        }
-        else
-        {
-            lrudStation->setLeftInputState(cwDistanceStates::Empty);
-        }
-        if (right.isValid())
-        {
-            lrudStation->setRight(right.get(d_unit));
-        }
-        else
-        {
-            lrudStation->setRightInputState(cwDistanceStates::Empty);
-        }
-        if (up.isValid())
-        {
-            lrudStation->setUp(up.get(d_unit));
-        }
-        else
-        {
-            lrudStation->setUpInputState(cwDistanceStates::Empty);
-        }
-        if (down.isValid())
-        {
-            lrudStation->setDown(down.get(d_unit));
-        }
-        else
-        {
-            lrudStation->setDownInputState(cwDistanceStates::Empty);
-        }
     }
-
-    virtual void beginUnitsLine()
+    else if (!Importer->StationDates.contains(lrudStation->name()))
     {
-        priorUnits = *Parser->units();
+        Importer->StationMap[lrudStation->name()] = *lrudStation;
     }
 
-    virtual void endUnitsLine()
+    left += Parser->units()->incs;
+    right += Parser->units()->incs;
+    up += Parser->units()->incs;
+    down += Parser->units()->incs;
+
+    if (left.isValid())
     {
-        if (Parser->units()->d_unit != priorUnits.d_unit ||
-            Parser->units()->date != priorUnits.date ||
-            Parser->units()->decl != priorUnits.decl ||
-            Parser->units()->incd != priorUnits.incd ||
-            Parser->units()->inca != priorUnits.inca ||
-            Parser->units()->incab != priorUnits.incab ||
-            Parser->units()->incv != priorUnits.incv ||
-            Parser->units()->incvb != priorUnits.incvb ||
-            Parser->units()->typeab_corrected != priorUnits.typeab_corrected ||
-            Parser->units()->typevb_corrected != priorUnits.typevb_corrected)
-        {
-            // when the next vector or fix line sees that
-            // CurrentTrip is null, it will create a new one
-            CurrentTrip = NULL;
-        }
+        lrudStation->setLeft(left.get(d_unit));
     }
+    else
+    {
+        lrudStation->setLeftInputState(cwDistanceStates::Empty);
+    }
+    if (right.isValid())
+    {
+        lrudStation->setRight(right.get(d_unit));
+    }
+    else
+    {
+        lrudStation->setRightInputState(cwDistanceStates::Empty);
+    }
+    if (up.isValid())
+    {
+        lrudStation->setUp(up.get(d_unit));
+    }
+    else
+    {
+        lrudStation->setUpInputState(cwDistanceStates::Empty);
+    }
+    if (down.isValid())
+    {
+        lrudStation->setDown(down.get(d_unit));
+    }
+    else
+    {
+        lrudStation->setDownInputState(cwDistanceStates::Empty);
+    }
+}
 
-    virtual void visitDateLine()
+void WallsImporterVisitor::beginUnitsLine()
+{
+    priorUnits = *Parser->units();
+}
+
+void WallsImporterVisitor::endUnitsLine()
+{
+    if (Parser->units()->d_unit != priorUnits.d_unit ||
+        Parser->units()->date != priorUnits.date ||
+        Parser->units()->decl != priorUnits.decl ||
+        Parser->units()->incd != priorUnits.incd ||
+        Parser->units()->inca != priorUnits.inca ||
+        Parser->units()->incab != priorUnits.incab ||
+        Parser->units()->incv != priorUnits.incv ||
+        Parser->units()->incvb != priorUnits.incvb ||
+        Parser->units()->typeab_corrected != priorUnits.typeab_corrected ||
+        Parser->units()->typevb_corrected != priorUnits.typevb_corrected)
     {
         // when the next vector or fix line sees that
         // CurrentTrip is null, it will create a new one
         CurrentTrip = NULL;
     }
+}
 
-    inline QList<cwTrip*> trips() const { return Trips; }
+void WallsImporterVisitor::visitDateLine()
+{
+    // when the next vector or fix line sees that
+    // CurrentTrip is null, it will create a new one
+    CurrentTrip = NULL;
+}
 
-private:
-    WallsUnits priorUnits;
-    WallsParser* Parser;
-    cwWallsImporter* Importer;
-    QString TripNamePrefix;
-    QList<cwTrip*> Trips;
-    cwTrip* CurrentTrip;
-    cwSurveyChunk* CurrentChunk;
-};
+void WallsImporterVisitor::warn( QString message )
+{
+    emit warning(message);
+}
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTask(parent)
 {
 
+}
+
+void cwWallsImporter::warning(QString message)
+{
+    emit statusMessage("WARNING: " + message);
 }
 
 void cwWallsImporter::runTask()
@@ -342,6 +337,8 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     WallsParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename + '-');
     parser.setVisitor(&visitor);
+
+    QObject::connect(&visitor, &WallsImporterVisitor::warning, this, &cwWallsImporter::warning);
 //    PrintingWallsVisitor printingVisitor;
 //    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
 //    parser.setVisitor(&multiVisitor);
