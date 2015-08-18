@@ -40,7 +40,7 @@ void WallsImporterVisitor::ensureValidTrip()
     {
         CurrentTrip = new cwTrip();
         Trips << CurrentTrip;
-        CurrentTrip->setName(QString("%1%2").arg(TripNamePrefix).arg(Trips.size()));
+        CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
         CurrentTrip->setDate(Parser->units()->date);
 
         LengthUnit d_unit = Parser->units()->d_unit;
@@ -335,7 +335,7 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     QString justFilename = filename.mid(std::max(0, filename.lastIndexOf('/') + 1));
 
     WallsParser parser;
-    WallsImporterVisitor visitor(&parser, this, justFilename + '-');
+    WallsImporterVisitor visitor(&parser, this, justFilename);
     parser.setVisitor(&visitor);
 
     QObject::connect(&visitor, &WallsImporterVisitor::warning, this, &cwWallsImporter::warning);
@@ -344,6 +344,8 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
 //    parser.setVisitor(&multiVisitor);
 
     bool failed = false;
+
+    QString tripName;
 
     int lineNumber = 0;
     while (!file.atEnd())
@@ -363,6 +365,11 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
         try
         {
             parser.parseLine(Segment(line, filename, lineNumber, 0));
+
+            if (lineNumber == 0 && !visitor.comment.isEmpty())
+            {
+                tripName = visitor.comment;
+            }
         }
         catch (const SegmentParseExpectedException& ex)
         {
@@ -384,6 +391,16 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
 
     if (!failed)
     {
+        if (!tripName.isEmpty())
+        {
+            int i = 0;
+            foreach (cwTrip* trip, visitor.trips())
+            {
+                if (i == 0) trip->setName(tripName);
+                else trip->setName(QString("%1 (%2)").arg(tripName).arg(++i));
+            }
+        }
+
         tripsOut << visitor.trips();
         emit statusMessage(QString("Parsed file %1").arg(filename));
     }
