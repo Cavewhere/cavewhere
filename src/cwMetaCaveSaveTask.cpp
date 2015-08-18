@@ -50,7 +50,7 @@ void cwMetaCaveSaveTask::runTask()
     QFile file(databaseFilename());
     bool okay = file.open(QFile::WriteOnly);
     if(!okay) {
-        qDebug() << "Failed to open " << databaseFilename() << "for writting:" << file.errorString();
+        qDebug() << "Failed to open " << databaseFilename() << "for writing:" << file.errorString();
         stop();
         done();
         return;

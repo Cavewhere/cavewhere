@@ -39,6 +39,9 @@ public:
     void setCompleted(bool compeleted);
     bool completed() const;
 
+    bool operator==(const cwLead &other) const;
+    bool operator!=(const cwLead &other) const;
+
 private:
     QSharedDataPointer<cwLeadData> data;
 };

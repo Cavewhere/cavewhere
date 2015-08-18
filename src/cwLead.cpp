@@ -115,3 +115,28 @@ bool cwLead::completed() const
     return data->Completed;
 }
 
+/**
+ * @brief cwLead::operator ==
+ * @param other lead that will be compared to this lead
+ * @return True if all elements in this lead are the same as other lead, false if there is any
+ * differances
+ */
+bool cwLead::operator==(const cwLead &other) const
+{
+    return positionOnNote() == other.positionOnNote() &&
+            desciption() == other.desciption() &&
+            size() == other.size() &&
+            completed() == other.completed();
+}
+
+/**
+ * @brief cwLead::operator !=
+ * @param other
+ * @return False if all elements in this lead are the same as other lead, true if there is any
+ * differances
+ */
+bool cwLead::operator!=(const cwLead &other) const
+{
+    return !operator==(other);
+}
+

@@ -36,7 +36,7 @@ public:
     void setMipmaps(QList<int> mipmapFiles);
     QList<int> mipmaps() const;
 
-    int numberOfMipmapLevels();
+    int numberOfMipmapLevels() const;
 
     void setIcon(int icon);
     int icon() const;
@@ -45,7 +45,7 @@ public:
     int original() const;
 
     void setOriginalFilename(QString relativePath);
-    QString relativePath() const;
+    QString originalFilename() const;
 
     void setOriginalChecksum(QByteArray sha1);
     QByteArray originalChecksum() const;

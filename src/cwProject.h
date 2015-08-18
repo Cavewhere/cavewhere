@@ -109,6 +109,8 @@ private:
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
 
+    static QAtomicInt ConnectionCounter;
+
     void createTempProjectFile();
     void createDefaultSchema();
 
@@ -117,9 +119,7 @@ private:
 
     void setFilename(QString newFilename);
 
-     void privateSave();
-
-
+    void privateSave();
 
 private slots:
     void updateRegionDataVersion1();

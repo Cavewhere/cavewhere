@@ -60,7 +60,7 @@ GroupBox {
                     id: lengthUnits
                     unitModel: {
                         if(calibration !== null) {
-                            return calibration.supportedUnits;
+                            return calibration.supportedDinstanceUnits;
                         } else {
                             return null
                         }

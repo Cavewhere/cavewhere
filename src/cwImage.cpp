@@ -77,7 +77,7 @@ cwImage::~cwImage()
 /**
   Get's the number of mipmaps
   */
- int cwImage::numberOfMipmapLevels() {
+ int cwImage::numberOfMipmapLevels() const {
     return Data->Mipmaps.size();
 }
 
@@ -188,7 +188,7 @@ cwImage::~cwImage()
  * @brief cwImage::relativePath
  * @return relativePath of the original image to the project file
  */
- QString cwImage::relativePath() const
+ QString cwImage::originalFilename() const
 {
      return Data->OriginalRelativePath;
  }

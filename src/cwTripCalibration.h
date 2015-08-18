@@ -28,9 +28,11 @@ class cwTripCalibration : public QObject
     Q_PROPERTY(double backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
     Q_PROPERTY(double declination READ declination WRITE setDeclination NOTIFY declinationChanged)
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
-    Q_PROPERTY(QStringList supportedUnits READ supportedUnits NOTIFY supportedUnitsChanged)
+    Q_PROPERTY(QStringList supportedDistanceUnits READ supportedDistanceUnits NOTIFY supportedUnitsChanged)
     Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
     Q_PROPERTY(bool backSights READ hasBackSights WRITE setBackSights NOTIFY backSightsChanged)
+
+
 
 public:
     explicit cwTripCalibration(QObject *parent = 0);
@@ -71,7 +73,7 @@ public:
     void setFrontSights(bool hasFrontSights);
 
 
-    QStringList supportedUnits() const;
+    QStringList supportedDistanceUnits() const;
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
     Q_INVOKABLE int mapToSupportUnit(int lengthUnit);

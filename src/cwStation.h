@@ -91,8 +91,6 @@ private:
         double Right;
         double Up;
         double Down;
-
-//        QVector3D Position;
     };
 
     QSharedDataPointer<PrivateData> Data;

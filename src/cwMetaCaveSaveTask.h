@@ -40,6 +40,7 @@ public:
 protected:
     void runTask();
 
+private:
     QVariantMap saveRegion();
     QVariantMap saveCave(const cwCave* cave);
     QVariantMap saveTrip(const cwTrip* trip);

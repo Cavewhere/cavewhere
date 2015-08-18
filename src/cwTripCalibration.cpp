@@ -134,10 +134,14 @@ void cwTripCalibration::setDistanceUnit(cwUnits::LengthUnit unit) {
 /**
     Gets supported units that the trip calibration supports
 */
-QStringList cwTripCalibration::supportedUnits() const {
+QStringList cwTripCalibration::supportedDistanceUnits() const {
     QStringList list;
-    list.append("m");
+    list.append("in");
     list.append("ft");
+    list.append("yd");
+    list.append("m");
+    list.append("km");
+    list.append("mi");
     return list;
 }
 

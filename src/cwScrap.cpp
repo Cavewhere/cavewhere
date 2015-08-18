@@ -346,7 +346,7 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
     case LeadUnits:
         return parentNote()->parentTrip()->calibrations()->distanceUnit();
     case LeadSupportedUnits:
-        return parentNote()->parentTrip()->calibrations()->supportedUnits();
+        return parentNote()->parentTrip()->calibrations()->supportedDistanceUnits();
     case LeadCompleted:
         return lead.completed();
     default:

@@ -32,6 +32,8 @@
 #include <QFileDialog>
 #include <QSettings>
 
+QAtomicInt cwProject::ConnectionCounter;
+
 /**
   By default, a project is open to a temporary directory
   */
@@ -69,36 +71,22 @@ void cwProject::createTempProjectFile() {
     setFilename(projectFile);
     TempProject = true;
 
-    qDebug() << "Creating temp files:" << ProjectFile;
+//    qDebug() << "Creating temp files:" << ProjectFile;
 
     //Create and open a new database connection
-    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
-    ProjectDatabase.setDatabaseName(cacheFilename());
-    bool couldOpen = ProjectDatabase.open();
+    int connectionName = ConnectionCounter.fetchAndAddAcquire(1);
+    QSqlDatabase projectDatabase = QSqlDatabase::addDatabase("QSQLITE", QString("ProjectConnection-%1").arg(connectionName));
+    projectDatabase.setDatabaseName(cacheFilename());
+    bool couldOpen = projectDatabase.open();
     if(!couldOpen) {
         qDebug() << "Couldn't open temp project file: " << ProjectFile;
         return;
     }
 
     //Create default schema
-    createDefaultSchema();
+    createDefaultSchema(projectDatabase);
 
     emit temporaryProjectChanged();
-}
-
-/**
-  \brief This creates the default empty schema for the project
-
-  The schema simple,
-  Tables:
-  1. Cached Mimmap Images
-
-  Columns Images:
-  id | type | shouldDelete | data
-
-  */
-void cwProject::createDefaultSchema() {
-    createDefaultSchema(ProjectDatabase);
 }
 
 /**
@@ -572,8 +560,14 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool wi
 }
 
 /**
- * @brief cwProject::createDefaultSchema
- * @param database
+  \brief This creates the default empty schema for the project
+
+  The schema simple,
+  Tables:
+  1. Cached Mimmap Images
+
+  Columns Images:
+  id | type | shouldDelete | data
  */
 void cwProject::createDefaultSchema(const QSqlDatabase &database)
 {

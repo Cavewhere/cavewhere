@@ -24,6 +24,9 @@ public:
     void setJobs(QStringList jobs);
     QStringList jobs() const;
 
+    bool operator==(const cwTeamMember& other) const;
+    bool operator!=(const cwTeamMember& other) const;
+
 private:
     QString Name;
     QStringList Jobs;

@@ -40,6 +40,16 @@ public:
         DotsPerMeter = 2
     };
 
+    // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
+    enum AngleUnit {
+        Degrees = 0,
+        Minutes = 1,
+        Seconds = 2,
+        Gradians = 3,
+        Mils = 4,
+        PercentGrade = 5
+    };
+
     static double convert(double value,
                           cwUnits::LengthUnit from,
                           cwUnits::LengthUnit to);
@@ -54,9 +64,18 @@ public:
     static QString unitName(cwUnits::ImageResolutionUnit unit);
     static cwUnits::ImageResolutionUnit toImageResolutionUnit(QString unitString);
 
+    static double convert(double value,
+                          cwUnits::AngleUnit from,
+                          cwUnits::AngleUnit to);
+    static QStringList angleUnitNames();
+    static QString unitName(cwUnits::AngleUnit unit);
+    static cwUnits::AngleUnit toAngleUnit(QString unitString);
+
+
 private:
     static double LengthUnitsToMeters[Miles + 1];
     static double ResolutionUnitToDotPerMeters[DotsPerMeter + 1];
+    static double AngleUnitToDegrees[PercentGrade + 1];
 
     static double convert(double value, double fromFactor, double toFactor);
 

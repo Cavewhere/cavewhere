@@ -28,3 +28,26 @@ void cwTeamMember::setName(QString name) {
 void cwTeamMember::setJobs(QStringList roles)  {
     Jobs = roles;
 }
+
+/**
+ * @brief cwTeamMember::operator ==
+ * @param other
+ * @return True if other has the same name and jobs as this team member. False
+ * if they aren't the same
+ */
+bool cwTeamMember::operator==(const cwTeamMember &other) const
+{
+    return Name == other.Name &&
+            Jobs == other.Jobs;
+}
+
+/**
+ * @brief cwTeamMember::operator !=
+ * @param other
+ * @return False if other has the same name and jobs as this team member. True
+ * if they aren't the same
+ */
+bool cwTeamMember::operator!=(const cwTeamMember &other) const
+{
+    return !operator==(other);
+}
