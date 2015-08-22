@@ -150,8 +150,11 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
         return Kilometers;
     } else if(unitString == "mi") {
         return Miles;
+    } else if(unitString == "unitless") {
+        return LengthUnitless;
     }
-    return LengthUnitless;
+
+    throw QString("Invalid length unitString:") + unitString;
 }
 
 /**
@@ -218,10 +221,9 @@ cwUnits::ImageResolutionUnit cwUnits::toImageResolutionUnit(QString unitString)
         return DotsPerCentimeter;
     } else if(unitString == "Dots per meter") {
         return DotsPerMeter;
-    } else {
-        qDebug() << "This is a BUG! Can't convert " << unitString << " to image resolution, returning dots per inch";
-        return DotsPerInch;
     }
+
+    throw QString("Invalid image resolution unitString:") + unitString;
 }
 
 /**
@@ -363,8 +365,7 @@ cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
         return PercentGrade;
     }
 
-    qDebug() << "This is a BUG! Can't convert " << unitString << " to angle, returning degrees";
-    return Degrees;
+    throw QString("Invalid angle unitString:") + unitString;
 }
 
 

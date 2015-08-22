@@ -131,8 +131,8 @@ void cwMetaCaveLoadTask::loadTrip(const QVariantMap &map, cwTrip *trip)
 
     loadTripCalibration(map, trip->calibrations());
 
-
-
+    QVariantList survey = map.value("survey").toList();
+    loadSurvey(survey, trip);
 }
 
 /**
@@ -148,8 +148,44 @@ void cwMetaCaveLoadTask::loadTripCalibration(const QVariantMap &map, cwTripCalib
     hasProperty(map, "angleUnit", "trip");
     hasProperty(map, "backsightsCorrected", "trip");
 
+    cwUnits::LengthUnit distanceUnit = cwUnits::toLengthUnit(map.value("distUnit").toString());
+    tripCalibration->setDistanceUnit(distanceUnit);
 
+    cwUnits::AngleUnit angleUnit = cwUnits::toAngleUnit(map.value("angleUnit").toString());
+    tripCalibration->setFrontCompassUnit(angleUnit);
+    tripCalibration->setFrontClinoUnit(angleUnit);
+    tripCalibration->setBackCompassUnit(angleUnit);
+    tripCalibration->setBackClinoUnit(angleUnit);
 
+    bool backsightCorrected = map.value("backsightsCorrected").toBool();
+    if(backsightCorrected) {
+        tripCalibration->setCorrectedClinoBacksight(true);
+        tripCalibration->setCorrectedCompassBacksight(true);
+    }
+
+    loadOptionalData(map, "declination", tripCalibration, "declination", 0.0);
+    loadOptionalData(map, "azmFsUnit", tripCalibration, "frontCompassUnit", cwUnits::Degrees);
+    loadOptionalData(map, "azmBsUnit", tripCalibration, "backCompassUnit", cwUnits::Degrees);
+    loadOptionalData(map, "incFsUnit", tripCalibration, "frontClinoUnit", cwUnits::Degrees);
+    loadOptionalData(map, "incBsUnit", tripCalibration, "backClinoUnit", cwUnits::Degrees);
+    loadOptionalData(map, "distCorrection", tripCalibration, "tapeCalibration", 0.0);
+    loadOptionalData(map, "azmFsCorrection", tripCalibration, "frontCompassCalibration", 0.0);
+    loadOptionalData(map, "azmBsCorrection", tripCalibration, "backCompassCalibration", 0.0);
+    loadOptionalData(map, "incFsCorrection", tripCalibration, "frontClinoCalibration", 0.0);
+    loadOptionalData(map, "incBsCorrection", tripCalibration, "backClinoCalibration", 0.0);
+}
+
+/**
+ * @brief cwMetaCaveLoadTask::loadSurvey
+ * @param surveyList - The list of stations and shots from the json
+ * @param trip - The trip where the stations and shots will be added to
+ *
+ * This will load shot and station data from the surveyList into the trip.
+ */
+void cwMetaCaveLoadTask::loadSurvey(const QVariantList &surveyList, cwTrip *trip)
+{
+    Q_UNUSED(surveyList);
+    Q_UNUSED(trip);
 }
 
 /**
@@ -159,8 +195,27 @@ void cwMetaCaveLoadTask::loadTripCalibration(const QVariantMap &map, cwTripCalib
  */
 void cwMetaCaveLoadTask::loadTeam(const QVariantMap &map, cwTeam *team)
 {
-    Q_UNUSED(map);
-    Q_UNUSED(team);
+    for(auto iter = map.begin(); iter != map.end(); iter++) {
+        QString memberName = iter.key();
+        QStringList roles;
+
+        QVariantMap memberMap = iter.value().toMap();
+
+        QVariant rolesVariant = memberMap.value("roles");
+        if(rolesVariant.canConvert<QVariantList>()) {
+            QVariantList roleList = rolesVariant.toList();
+            foreach(QVariant role, roleList) {
+                roles.append(role.toString());
+            }
+        } else {
+            roles.append(rolesVariant.toString());
+        }
+
+        cwTeamMember teamMember;
+        teamMember.setName(memberName);
+        teamMember.setJobs(roles);
+        team->addTeamMember(teamMember);
+    }
 }
 
 /**
@@ -177,3 +232,24 @@ void cwMetaCaveLoadTask::hasProperty(const QVariantMap &map, QString property, Q
     }
 }
 
+/**
+ * @brief cwMetaCaveLoadTask::loadOptionalData
+ * @param map
+ * @param property
+ * @param object
+ * @param objectProperty
+ * @param defaultValue
+ */
+void cwMetaCaveLoadTask::loadOptionalData(const QVariantMap &map,
+                                          QString property,
+                                          QObject *object,
+                                          QByteArray objectProperty,
+                                          QVariant defaultValue) const
+{
+    if(map.contains(property)) {
+        QVariant value = map.value(property);
+        object->setProperty(objectProperty.constData(), value);
+    } else if(defaultValue != QVariant()) {
+        object->setProperty(objectProperty.constData(), defaultValue);
+    }
+}

@@ -31,8 +31,10 @@ class cwTripCalibration : public QObject
     Q_PROPERTY(QStringList supportedDistanceUnits READ supportedDistanceUnits NOTIFY supportedUnitsChanged)
     Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
     Q_PROPERTY(bool backSights READ hasBackSights WRITE setBackSights NOTIFY backSightsChanged)
-
-
+    Q_PROPERTY(cwUnits::AngleUnit frontCompassUnit READ frontCompassUnit WRITE setFrontCompassUnit NOTIFY frontCompassUnitChanged)
+    Q_PROPERTY(cwUnits::AngleUnit frontClinoUnit READ frontClinoUnit WRITE setFrontClinoUnit NOTIFY frontClinoUnitChanged)
+    Q_PROPERTY(cwUnits::AngleUnit backCompassUnit READ backCompassUnit WRITE setBackCompassUnit NOTIFY backCompassUnitChanged)
+    Q_PROPERTY(cwUnits::AngleUnit backClinoUnit READ backClinoUnit WRITE setBackClinoUnit NOTIFY backClinoUnitChanged)
 
 public:
     explicit cwTripCalibration(QObject *parent = 0);
@@ -72,6 +74,17 @@ public:
     bool hasFrontSights() const;
     void setFrontSights(bool hasFrontSights);
 
+    cwUnits::AngleUnit frontCompassUnit() const;
+    void setFrontCompassUnit(cwUnits::AngleUnit frontCompassUnit);
+
+    cwUnits::AngleUnit frontClinoUnit() const;
+    void setFrontClinoUnit(cwUnits::AngleUnit frontClinoUnit);
+
+    cwUnits::AngleUnit backCompassUnit() const;
+    void setBackCompassUnit(cwUnits::AngleUnit backCompassUnit);
+
+    cwUnits::AngleUnit backClinoUnit() const;
+    void setBackClinoUnit(cwUnits::AngleUnit backClinoUnit);
 
     QStringList supportedDistanceUnits() const;
 
@@ -92,6 +105,10 @@ signals:
     void frontSightsChanged();
     void backSightsChanged();
     void calibrationsChanged(); //Emited when ever any of calibrations have changed
+    void frontCompassUnitChanged();
+    void frontClinoUnitChanged();
+    void backCompassUnitChanged();
+    void backClinoUnitChanged();
 
 public slots:
 
@@ -107,6 +124,10 @@ private:
     cwUnits::LengthUnit DistanceUnit;
     bool BackSights; //!<
     bool FrontSights; //!<
+    cwUnits::AngleUnit FrontCompassUnit; //!<
+    cwUnits::AngleUnit FrontClinoUnit; //!<
+    cwUnits::AngleUnit BackCompassUnit; //!<
+    cwUnits::AngleUnit BackClinoUnit; //!<
 
     cwTripCalibration& copy(const cwTripCalibration& object);
 };
@@ -161,5 +182,33 @@ inline bool cwTripCalibration::hasBackSights() const {
     return BackSights;
 }
 
+/**
+Gets the frontsite compass unit
+*/
+inline cwUnits::AngleUnit cwTripCalibration::frontCompassUnit() const {
+    return FrontCompassUnit;
+}
+
+/**
+Gets the frontsite clino unit
+*/
+inline cwUnits::AngleUnit cwTripCalibration::frontClinoUnit() const {
+    return FrontClinoUnit;
+}
+
+/**
+* Gets the backsite compasses unit
+*/
+inline cwUnits::AngleUnit cwTripCalibration::backCompassUnit() const {
+    return BackCompassUnit;
+}
+
+/**
+* @brief cwTripCalibration::backClinoUnit
+* @return
+*/
+inline cwUnits::AngleUnit cwTripCalibration::backClinoUnit() const {
+    return BackClinoUnit;
+}
 
 #endif // CWTRIPCALIBRATION_H

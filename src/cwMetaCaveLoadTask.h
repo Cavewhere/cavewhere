@@ -20,6 +20,10 @@ class cwSurveyChunk;
 class cwStation;
 class cwShot;
 
+//Qt includes
+#include <QVariant>
+#include <QVariantList>
+
 class cwMetaCaveLoadTask : public cwRegionIOTask
 {
 public:
@@ -35,6 +39,7 @@ private:
 //    void loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel& protoNoteModel,
 //                             cwSurveyNoteModel* noteModel);
     void loadTripCalibration(const QVariantMap& map, cwTripCalibration* tripCalibration);
+    void loadSurvey(const QVariantList& surveyList, cwTrip* trip);
 //    void loadSurveyChunk(const CavewhereProto::SurveyChunk& protoChunk,
 //                         cwSurveyChunk* chunk);
     void loadTeam(const QVariantMap& map, cwTeam* team);
@@ -68,6 +73,12 @@ private:
 //    QStringList loadStringList(const QtProto::QStringList& protoStringList);
 
     void hasProperty(const QVariantMap& map, QString property, QString structureLocation = QString()) const;
+
+    void loadOptionalData(const QVariantMap& map,
+                          QString property,
+                          QObject* object,
+                          QByteArray objectProperty,
+                          QVariant defaultValue = QVariant()) const;
 
 };
 

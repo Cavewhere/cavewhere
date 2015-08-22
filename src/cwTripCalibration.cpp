@@ -197,3 +197,42 @@ void cwTripCalibration::setBackSights(bool backSights) {
     }
 }
 
+/**
+* Sets the frontsite compass unit
+*/
+void cwTripCalibration::setFrontCompassUnit(cwUnits::AngleUnit frontCompassUnit) {
+    if(FrontCompassUnit != frontCompassUnit) {
+        FrontCompassUnit = frontCompassUnit;
+        emit frontCompassUnitChanged();
+    }
+}
+
+/**
+* Sets the frontsite clino unit
+*/
+void cwTripCalibration::setFrontClinoUnit(cwUnits::AngleUnit frontClinoUnit) {
+    if(FrontClinoUnit != frontClinoUnit) {
+        FrontClinoUnit = frontClinoUnit;
+        emit frontClinoUnitChanged();
+    }
+}
+
+/**
+* Sets the backsite compass unit
+*/
+void cwTripCalibration::setBackCompassUnit(cwUnits::AngleUnit backCompassUnit) {
+    if(BackCompassUnit != backCompassUnit) {
+        BackCompassUnit = backCompassUnit;
+        emit backCompassUnitChanged();
+    }
+}
+
+/**
+* Sets the backsite compass
+*/
+void cwTripCalibration::setBackClinoUnit(cwUnits::AngleUnit backClinoUnit) {
+    if(BackClinoUnit != backClinoUnit) {
+        BackClinoUnit = backClinoUnit;
+        emit backClinoUnitChanged();
+    }
+}
