@@ -10,13 +10,12 @@
 #define CWSTATIONRENAMER_H
 
 //Our includes
-class cwCave;
-class cwSurveyChunk;
 #include "cwStation.h"
 
 //Qt includes
 #include <QString>
-#include <QPointer>
+#include <QHash>
+#include <QSet>
 
 /**
  * @brief The cwStationRenamer class
@@ -29,25 +28,16 @@ class cwStationRenamer
 public:
     cwStationRenamer();
 
-    void setCave(cwCave* cave);
-    cwCave* cave() const;
-
     cwStation createStation(QString stationName);
-
-    void renameInvalidStations();
 
     void clear();
 
 private:
-    QHash<QString, QString> InvalidToValidStations;
-    QHash<QString, QString> ValidToInvalidStations;
-    QSet<QString> ValidStations;
+    QHash<QString, QString> OriginalToRenamedStations;
+    QHash<QString, QString> RenamedToOriginalStations;
+    QSet<QString> UpperCaseRenamedStations;
 
-    QPointer<cwCave> Cave;
-
-    void renameInvalidStationsInChunk(cwSurveyChunk* chunk,
-                                      int stationIndex,
-                                      const QRegExp& removeInvalidCharsRegex);
+    static const QRegExp InvalidCharRegExp;
 };
 
 #endif // CWSTATIONRENAMER_H
