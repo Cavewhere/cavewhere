@@ -44,16 +44,12 @@ void cwCompassImporter::runTask()
         CurrentFileGood = true;
         CurrentTrip = nullptr;
         LineCount = 0;
-        StationRenamer.setCave(CurrentCave);
 
         //Make sure file is good
         verifyCompassDataFileExists();
 
         //Parse the current file
         parseFile();
-
-        //Fix invalid station names
-        StationRenamer.renameInvalidStations();
 
         if(!CurrentFileGood) {
             //Parsing error in the last cave, remove it from list

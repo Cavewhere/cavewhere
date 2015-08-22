@@ -7,104 +7,66 @@
 
 //Our includes
 #include "cwStationRenamer.h"
-#include "cwCave.h"
-#include "cwTrip.h"
-#include "cwSurveyChunk.h"
-#include "cwStationValidator.h"
-
-//Qt includes
-#include <QUuid>
 
 cwStationRenamer::cwStationRenamer()
 {
 }
 
-/**
- * @brief cwStationRenamer::setCave
- * @param cave
- *
- * Sets the cave where the invalid station will live.
- */
-void cwStationRenamer::setCave(cwCave *cave)
-{
-    if(Cave != cave) {
-        Cave = cave;
-        clear();
-    }
-}
+const QRegExp cwStationRenamer::InvalidCharRegExp("[^-_a-zA-Z0-9]");
 
 /**
- * @brief cwStationRenamer::cave
- * @return Returns the cave
+ * @brief cwStationRenamer::createStation creates a new station based upon the
+ * given originalName.
+ * @param originalName the name of the station in the original data (e.g.
+ * Compass or Walls import)
+ * @return a cwStation with originalName if it is valid, and otherwise with all
+ * invalid chars in originalName replaced with _ and a _1, _2, etc. at the end
+ * if necessary to disambiguate.  Since input formats are case-sensitive but
+ * Cavewhere is not, if for instance the data contain LD40 and ld40, one will be
+ * given a number suffix so that Cavewhere doesn't consider them the same.
+ * So for example, with the following stations:
+ *   LD40
+ *   ld40
+ *   FR:W$B
+ *   FR:W%B
+ *   FR:w%B
+ * The created station names would be:
+ *   LD40
+ *   ld40_1
+ *   FR_W_B
+ *   FR_W_B_1
+ *   FR_w_B_2
  */
-cwCave *cwStationRenamer::cave() const
+cwStation cwStationRenamer::createStation(QString originalName)
 {
-    return Cave;
-}
+    QString newName = OriginalToRenamedStations.value(originalName);
 
-/**
- * @brief cwStationRenamer::createStation
- * @param stationName
- * @return A station with a valid name.
- *
- * If stationName is invalid (see cwStationValidator), this will create a station with a station
- * name generated from uuid. This will most likely be a unique number for the station. The
- * chance of collision is extremely small, look up uuid for more details. Once all the stations
- * have been added to the cave, call renameInvalidStations(). This will try to keep the original
- * invalid name, without conflicting with valid names.  This class will keep track of valid names
- * when creating the station through this function.
- *
- * If the cave is null, this will assert.
- */
-cwStation cwStationRenamer::createStation(QString stationName)
-{
-    Q_ASSERT(!Cave.isNull());
+    if(newName.isEmpty()) {
+        newName = originalName;
 
-    if(cwStation::nameIsValid(stationName)) {
-        ValidStations.insert(stationName);
-        return cwStation(stationName);
-    } else {
-        QString validName = InvalidToValidStations.value(stationName);
+        // replace invalid chars with "_"
+        // e.g. FR:WB$ -> FR_WB_
+        newName.replace(InvalidCharRegExp, "_");
 
-        if(validName.isEmpty()) {
-            QUuid uuid = QUuid::createUuid();
-            QString uuidString = uuid.toString();
-            QStringRef removeBracets = QStringRef(&uuidString, 1, uuidString.size() - 2);
-            validName = removeBracets.toString();
-            Q_ASSERT(cwStation::nameIsValid(validName));
-
-            InvalidToValidStations.insert(stationName, validName);
-            ValidToInvalidStations.insert(validName, stationName);
+        // if uppercase of new name already exists try adding _1, _2, etc.
+        // until that doesn't exist
+        if (UpperCaseRenamedStations.contains(newName.toUpper())) {
+            int num = 1;
+            QString numberedName;
+            do {
+                numberedName = QString("%1_%2").arg(newName).arg(num);
+            } while (UpperCaseRenamedStations.contains(numberedName.toUpper()));
+            newName = numberedName;
         }
 
-        return cwStation(validName);
+        Q_ASSERT(cwStation::nameIsValid(newName));
+
+        UpperCaseRenamedStations << newName.toUpper();
+        OriginalToRenamedStations.insert(originalName, newName);
+        RenamedToOriginalStations.insert(newName, originalName);
     }
-}
 
-/**
- * @brief cwStationRenamer::renameInvalidStations
- *
- * This will go through the cave (see setCave) and rename invalid station names with valid ones.
- *
- * Invalid characters will be remove from the invalid stations. The new station will be checked
- * agianst the validStations list. If it exist in this list, '_' will be appended to the name
- * until it's unique.
- *
- * If the cave is null, this will assert.
- */
-void cwStationRenamer::renameInvalidStations()
-{
-    Q_ASSERT(!Cave.isNull());
-
-    QRegExp removeInvalidCharsRegex = cwStationValidator::invalidCharactersRegex();
-
-    foreach(cwTrip* trip, Cave->trips()) {
-        foreach(cwSurveyChunk* chunk, trip->chunks()) {
-            for(int i = 0; i < chunk->stations().size(); i++) {
-                renameInvalidStationsInChunk(chunk, i, removeInvalidCharsRegex);
-            }
-        }
-    }
+    return cwStation(newName);
 }
 
 /**
@@ -114,48 +76,7 @@ void cwStationRenamer::renameInvalidStations()
  */
 void cwStationRenamer::clear()
 {
-    InvalidToValidStations.clear();
-    ValidToInvalidStations.clear();
-    ValidStations.clear();
-}
-
-/**
- * @brief cwStationRenamer::renameInvalidStationsInChunk
- * @param chunk
- * @param stationIndex
- *
- * This is a helper function to renameInvalidStations()
- */
-void cwStationRenamer::renameInvalidStationsInChunk(cwSurveyChunk *chunk,
-                                                    int stationIndex,
-                                                    const QRegExp& removeInvalidCharsRegex)
-{
-    cwStation station = chunk->stations().at(stationIndex);
-    if(ValidToInvalidStations.contains(station.name())) {
-        QString invalidName = ValidToInvalidStations.value(station.name());
-        QString validName;
-        if(cwStation::nameIsValid(invalidName)) {
-            //This name has been update with a valid name, so just use as the valid name
-            validName = invalidName;
-        } else {
-            //Remove all invalid characters
-            invalidName.remove(removeInvalidCharsRegex);
-
-            //Append '_' until the invalidName is valid
-            while(ValidStations.contains(invalidName)) {
-                invalidName.append("_");
-                Q_ASSERT(cwStation::nameIsValid(invalidName)); //Make sure we're generating a valid name
-            }
-
-            //ValidStation doesn't contain invalidName;
-            validName = invalidName;
-            ValidStations.insert(validName);
-            ValidToInvalidStations.insert(station.name(), validName);
-        }
-
-        //Update the station
-        Q_ASSERT(cwStation::nameIsValid(validName));
-        station.setName(validName);
-        chunk->setStation(station, stationIndex);
-    }
+    OriginalToRenamedStations.clear();
+    RenamedToOriginalStations.clear();
+    UpperCaseRenamedStations.clear();
 }
