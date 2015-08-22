@@ -17,6 +17,7 @@ cwTripLengthTask::cwTripLengthTask(QObject *parent) :
     Trip(nullptr),
     Length(0.0)
 {
+    setUsingThreadPool(false);
 }
 
 /**
