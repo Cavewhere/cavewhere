@@ -29,12 +29,13 @@ class WallsImporterVisitor : public QObject, public CapturingWallsVisitor
 public:
     WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix);
 
+    void clearTrip();
     void ensureValidTrip();
     virtual void endFixLine();
     virtual void endVectorLine();
     virtual void beginUnitsLine();
     virtual void endUnitsLine();
-    virtual void visitDateLine();
+    virtual void visitDateLine(QDate date);
     virtual void warn( QString message );
     inline QList<cwTrip*> trips() const { return Trips; }
 

@@ -29,9 +29,18 @@ WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter*
       Importer(importer),
       TripNamePrefix(tripNamePrefix),
       Trips(QList<cwTrip*>()),
-      CurrentTrip(NULL)
+      CurrentTrip(nullptr)
 {
 
+}
+
+void WallsImporterVisitor::clearTrip()
+{
+    if (CurrentTrip && (Trips.isEmpty() || Trips.last() != CurrentTrip))
+    {
+        delete CurrentTrip;
+    }
+    CurrentTrip = nullptr;
 }
 
 void WallsImporterVisitor::ensureValidTrip()
@@ -39,9 +48,8 @@ void WallsImporterVisitor::ensureValidTrip()
     if (!CurrentTrip)
     {
         CurrentTrip = new cwTrip();
-        Trips << CurrentTrip;
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
-        CurrentTrip->setDate(Parser->units()->date);
+        CurrentTrip->setDate(Parser->date());
 
         LengthUnit d_unit = Parser->units()->d_unit;
 
@@ -66,6 +74,7 @@ void WallsImporterVisitor::endFixLine()
 void WallsImporterVisitor::endVectorLine()
 {
     ensureValidTrip();
+    if (Trips.isEmpty() || Trips.last() != CurrentTrip) Trips << CurrentTrip;
 
     cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
     cwStation toStation;
@@ -161,11 +170,11 @@ void WallsImporterVisitor::endVectorLine()
     }
 
     // save the latest LRUDs associated with each station so that we can apply them in the end
-    if (Parser->units()->date.isValid())
+    if (Parser->date().isValid())
     {
         if (!Importer->StationDates.contains(lrudStation->name()) ||
-            Parser->units()->date >= Importer->StationDates[lrudStation->name()]) {
-            Importer->StationDates[lrudStation->name()] = Parser->units()->date;
+            Parser->date() >= Importer->StationDates[lrudStation->name()]) {
+            Importer->StationDates[lrudStation->name()] = Parser->date();
             Importer->StationMap[lrudStation->name()] = *lrudStation;
         }
     }
@@ -221,7 +230,6 @@ void WallsImporterVisitor::beginUnitsLine()
 void WallsImporterVisitor::endUnitsLine()
 {
     if (Parser->units()->d_unit != priorUnits.d_unit ||
-        Parser->units()->date != priorUnits.date ||
         Parser->units()->decl != priorUnits.decl ||
         Parser->units()->incd != priorUnits.incd ||
         Parser->units()->inca != priorUnits.inca ||
@@ -233,15 +241,15 @@ void WallsImporterVisitor::endUnitsLine()
     {
         // when the next vector or fix line sees that
         // CurrentTrip is null, it will create a new one
-        CurrentTrip = NULL;
+        clearTrip();
     }
 }
 
-void WallsImporterVisitor::visitDateLine()
+void WallsImporterVisitor::visitDateLine(QDate date)
 {
     // when the next vector or fix line sees that
     // CurrentTrip is null, it will create a new one
-    CurrentTrip = NULL;
+    clearTrip();
 }
 
 void WallsImporterVisitor::warn( QString message )
