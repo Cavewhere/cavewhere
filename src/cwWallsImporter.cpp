@@ -68,6 +68,7 @@ void WallsImporterVisitor::endVectorLine()
     ensureValidTrip();
 
     cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
+    cwStation toStation;
 
     LengthUnit d_unit = Parser->units()->d_unit;
 
@@ -84,7 +85,7 @@ void WallsImporterVisitor::endVectorLine()
 
     if (distance.isValid())
     {
-        cwStation toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
+        toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
         cwShot shot;
 
         // apply Walls corrections that Cavewhere doesn't support
