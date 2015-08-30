@@ -35,7 +35,7 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
 
     WallsImporter->setThread(ImportThread);
     connect(WallsImporter, &cwWallsImporter::finished, this, &cwSurveyImportManager::wallsImporterFinished);
-    connect(WallsImporter, &cwWallsImporter::statusMessage, this, &cwSurveyImportManager::wallsMessages);
+    connect(WallsImporter, &cwWallsImporter::message, this, &cwSurveyImportManager::wallsMessages);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()
@@ -120,7 +120,7 @@ void cwSurveyImportManager::compassImporterFinished()
 void cwSurveyImportManager::compassMessages(QString message)
 {
     qDebug() << "Compass Importer:" << message;
-    emit messageAdded(message);
+//    emit messageAdded(message);
 }
 
 /**
@@ -174,10 +174,11 @@ void cwSurveyImportManager::wallsImporterFinished()
  * Reports messages
  * TODO: Make this report to the gui, in a meaning full way
  */
-void cwSurveyImportManager::wallsMessages(QString message)
+void cwSurveyImportManager::wallsMessages(QString severity, QString message, QString source,
+                   int startLine, int startColumn, int endLine, int endColumn)
 {
     qDebug() << "Walls Importer:" << message;
-    emit messageAdded(message);
+    emit messageAdded(severity, message, source, startLine, startColumn, endLine, endColumn);
 }
 
 /**

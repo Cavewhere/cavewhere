@@ -257,6 +257,11 @@ void WallsImporterVisitor::warn( QString message )
     emit warning(message);
 }
 
+void WallsImporterVisitor::message(WallsMessage message)
+{
+    Importer->emitMessage(message);
+}
+
 cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTask(parent)
 {
@@ -266,6 +271,39 @@ cwWallsImporter::cwWallsImporter(QObject *parent) :
 void cwWallsImporter::warning(QString message)
 {
     emit statusMessage("WARNING: " + message);
+}
+
+void cwWallsImporter::emitMessage(WallsMessage _message)
+{
+    QString severity;
+    switch(_message.severity) {
+    case WallsMessage::Info:
+        severity = "info";
+        break;
+    case WallsMessage::Warning:
+        severity = "warning";
+        break;
+    case WallsMessage::Error:
+        severity = "error";
+        break;
+    }
+
+    emit message(severity, _message.message, _message.source,
+                 _message.startLine, _message.startColumn,
+                 _message.endLine, _message.endColumn);
+}
+
+void cwWallsImporter::emitMessage(const SegmentParseExpectedException &ex) {
+    emit message("error", ex.detailMessage() + '\n' + ex.segment().underlineInContext(),
+                 ex.segment().source(),
+                 ex.segment().startLine(), ex.segment().startCol(),
+                 ex.segment().endLine(), ex.segment().endCol());
+}
+
+void cwWallsImporter::emitMessage(const SegmentParseException &ex) {
+    emit message("error", ex.detailMessage(), ex.segment().source(),
+                 ex.segment().startLine(), ex.segment().startCol(),
+                 ex.segment().endLine(), ex.segment().endCol());
 }
 
 void cwWallsImporter::runTask()
@@ -382,13 +420,13 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
         }
         catch (const SegmentParseExpectedException& ex)
         {
-            emit statusMessage("Error: " + ex.message());
+            emitMessage(ex);
             failed = true;
             break;
         }
         catch (const SegmentParseException& ex)
         {
-            emit statusMessage("Error: " + ex.message());
+            emitMessage(ex);
             failed = true;
             break;
         }

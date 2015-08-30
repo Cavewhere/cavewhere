@@ -51,7 +51,7 @@ public:
 signals:
     void cavingRegionChanged();
     void undoStackChanged();
-    void messageAdded(const QString &message);
+    void messageAdded(QString severity, QString message, QString source, int startLine, int startColumn, int endLine, int endColumn);
     void messagesCleared();
     
 public slots:
@@ -60,7 +60,8 @@ private slots:
     void compassImporterFinished();
     void wallsImporterFinished();
     void compassMessages(QString message);
-    void wallsMessages(QString message);
+    void wallsMessages(QString severity, QString message, QString source,
+                       int startLine, int startColumn, int endLine, int endColumn);
 
 private:
     QThread* ImportThread;

@@ -16,6 +16,8 @@ class QFile;
 
 namespace dewalls {
     class WallsParser;
+    class SegmentParseExpectedException;
+    class SegmentParseException;
 }
 
 using namespace dewalls;
@@ -36,11 +38,12 @@ public:
     virtual void beginUnitsLine();
     virtual void endUnitsLine();
     virtual void visitDateLine(QDate date);
-    virtual void warn( QString message );
+    virtual void warn(QString message);
+    virtual void message(WallsMessage message);
     inline QList<cwTrip*> trips() const { return Trips; }
 
 signals:
-    void warning( QString message );
+    void warning(QString message);
 
 private:
     WallsUnits priorUnits;
@@ -64,10 +67,17 @@ public:
 
     friend class WallsImporterVisitor;
 
+signals:
+    void message(QString severity, QString message, QString source,
+                 int startLine, int startColumn, int endLine, int endColumn);
+
 public slots:
     void warning(QString message);
 
 protected:
+    void emitMessage(const SegmentParseExpectedException& exception);
+    void emitMessage(const SegmentParseException& exception);
+    void emitMessage(WallsMessage message);
     void runTask();
     bool verifyFileExists(QString filename);
     bool parseFile(QString filename, QList<cwTrip*>& tripsOut);

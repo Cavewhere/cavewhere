@@ -30,17 +30,25 @@ Item {
         cavingRegion: iconBar.currentRegion
         undoStack: rootData.undoStack
         onMessageAdded: {
-            messageListDialog.messages = messageListDialog.messages.concat([message]);
-            messageListDialog.visible = true
+            messageListDialog.visible = true;
+            messageListDialog.messages.append({
+                                                  severity: severity,
+                                                  message: message,
+                                                  lineCount: message.split('\n').length,
+                                                  source: source,
+                                                  startLine: startLine + 1,
+                                                  startColumn: startColumn + 1
+                                              });
+            messageListDialog.scrollToBottom();
         }
-        onMessagesCleared: messageListDialog.messages = []
+        onMessagesCleared: messageListDialog.messages.clear()
     }
 
     MessageListDialog {
         visible: false
         modality: Qt.NonModal
         id: messageListDialog
-        width: 600
+        width: 730
         height: 400
         font: importManager.messageListFont
     }
