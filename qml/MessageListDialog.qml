@@ -7,7 +7,6 @@ Dialog {
     id: messageListDialog
     property alias messages: messagesModel
     property font font: {family: 'Helvetica'}
-    property int lineHeight: 18
 
     ListModel {
         id: messagesModel
@@ -38,8 +37,8 @@ Dialog {
                 delegate: Item {
                     Image {
                         anchors.centerIn: parent
-                        width: messageListDialog.lineHeight - 2
-                        height: messageListDialog.lineHeight - 2
+                        width: 14
+                        height: 14
                         source: (styleData.value && iconSources[styleData.value.toLowerCase()]) || ''
                     }
                 }
@@ -48,16 +47,6 @@ Dialog {
                 role: "message"
                 title: "Message"
                 width: 400
-                delegate: Text {
-                    text: styleData.value
-                    color: styleData.textColor
-                    elide: Text.ElideRight
-                    clip: true
-                    anchors.centerIn: parent
-                    verticalAlignment: Text.AlignVCenter
-                    lineHeightMode: Text.FixedHeight
-                    lineHeight: messageListDialog.lineHeight
-                }
             }
             TableViewColumn {
                 role: "source"
