@@ -1,6 +1,7 @@
 import QtQuick 2.0
-import QtQuick.Controls 1.2
+import QtQuick.Controls 1.4
 import QtQuick.Dialogs 1.2
+import QtQuick.Layouts 1.2
 
 Dialog {
     id: messageListDialog
@@ -23,77 +24,90 @@ Dialog {
         flickable.contentY = flickable.contentHeight - flickable.height
     }
 
-    contentItem: TableView {
-        id: messagesTable
-        TableViewColumn {
-            role: "severity"
-            title: ""
-            width: 25
-            delegate: Item {
-                Image {
+    contentItem: SplitView {
+        anchors.fill: parent
+        orientation: Qt.Vertical
+        resizing: true
+        TableView {
+            id: messagesTable
+            Layout.fillHeight: true
+            TableViewColumn {
+                role: "severity"
+                title: ""
+                width: 25
+                delegate: Item {
+                    Image {
+                        anchors.centerIn: parent
+                        width: messageListDialog.lineHeight - 2
+                        height: messageListDialog.lineHeight - 2
+                        source: (styleData.value && iconSources[styleData.value.toLowerCase()]) || ''
+                    }
+                }
+            }
+            TableViewColumn {
+                role: "message"
+                title: "Message"
+                width: 400
+                delegate: Text {
+                    text: styleData.value
+                    color: styleData.textColor
+                    elide: Text.ElideRight
+                    clip: true
                     anchors.centerIn: parent
-                    width: messageListDialog.lineHeight - 2
-                    height: messageListDialog.lineHeight - 2
-                    source: (styleData.value && iconSources[styleData.value.toLowerCase()]) || ''
+                    verticalAlignment: Text.AlignVCenter
+                    lineHeightMode: Text.FixedHeight
+                    lineHeight: messageListDialog.lineHeight
+                }
+            }
+            TableViewColumn {
+                role: "source"
+                title: "File"
+                width: 185
+            }
+            TableViewColumn {
+                role: "startLine"
+                title: "Line"
+                width: 40
+                delegate: Text {
+                    text: styleData.value
+                    anchors.centerIn: parent
+                    elide: Text.ElideRight
+                    color: styleData.textColor
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+            TableViewColumn {
+                role: "startColumn"
+                title: "Col"
+                width: 40
+                delegate: Text {
+                    text: styleData.value
+                    color: styleData.textColor
+                    elide: Text.ElideRight
+                    anchors.centerIn: parent
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+            model: messagesModel
+        }
+        TextArea {
+            id: messageDetailTextArea
+            readOnly: true
+            font: messageListDialog.font
+
+            Connections {
+                target: messagesTable.selection
+                onSelectionChanged: {
+                    var selectionText = ''
+                    messagesTable.selection.forEach(function(rowIndex) {
+                        var row = messagesModel.get(rowIndex)
+                        if (row && row.message) selectionText += row.message
+                    })
+                    messageDetailTextArea.text = selectionText
                 }
             }
         }
-        TableViewColumn {
-            role: "message"
-            title: "Message"
-            width: 400
-            delegate: Text {
-                text: styleData.value
-                color: styleData.textColor
-                elide: Text.ElideRight
-                clip: true
-                font: messageListDialog.font
-                anchors.centerIn: parent
-                verticalAlignment: Text.AlignVCenter
-                lineHeightMode: Text.FixedHeight
-                lineHeight: messageListDialog.lineHeight
-            }
-        }
-        TableViewColumn {
-            role: "source"
-            title: "File"
-            width: 185
-        }
-        TableViewColumn {
-            role: "startLine"
-            title: "Line"
-            width: 40
-            delegate: Text {
-                text: styleData.value
-                anchors.centerIn: parent
-                elide: Text.ElideRight
-                color: styleData.textColor
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignRight
-            }
-        }
-        TableViewColumn {
-            role: "startColumn"
-            title: "Col"
-            width: 40
-            delegate: Text {
-                text: styleData.value
-                color: styleData.textColor
-                elide: Text.ElideRight
-                anchors.centerIn: parent
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignRight
-            }
-        }
-        rowDelegate: Rectangle {
-            width: childrenRect.width
-            height: {
-                var row = messagesModel.get(styleData.row)
-                return ((row && row.lineCount) || 1) * messageListDialog.lineHeight
-            }
-            color: styleData.selected ? '#00d' : styleData.alternate ? '#eee' : 'white'
-        }
-        model: messagesModel
     }
 }
-
