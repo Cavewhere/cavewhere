@@ -47,6 +47,16 @@ Dialog {
                 role: "message"
                 title: "Message"
                 width: 400
+                delegate: Text {
+                    text: {
+                        var firstNewline = styleData.value.indexOf('\n')
+                        return firstNewline >= 0 ? styleData.value.substring(0, firstNewline) : styleData.value
+                    }
+                    elide: Text.ElideRight
+                    color: styleData.textColor
+                    clip: true
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
             TableViewColumn {
                 role: "source"
