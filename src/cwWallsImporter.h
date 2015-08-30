@@ -39,12 +39,8 @@ public:
     virtual void beginUnitsLine();
     virtual void endUnitsLine();
     virtual void visitDateLine(QDate date);
-    virtual void warn(QString message);
     virtual void message(WallsMessage message);
     inline QList<cwTrip*> trips() const { return Trips; }
-
-signals:
-    void warning(QString message);
 
 private:
     WallsUnits priorUnits;
@@ -71,9 +67,6 @@ public:
 signals:
     void message(QString severity, QString message, QString source,
                  int startLine, int startColumn, int endLine, int endColumn);
-
-public slots:
-    void warning(QString message);
 
 protected:
     void emitMessage(const SegmentParseExpectedException& exception);

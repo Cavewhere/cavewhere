@@ -252,11 +252,6 @@ void WallsImporterVisitor::visitDateLine(QDate date)
     clearTrip();
 }
 
-void WallsImporterVisitor::warn( QString message )
-{
-    emit warning(message);
-}
-
 void WallsImporterVisitor::message(WallsMessage message)
 {
     Importer->emitMessage(message);
@@ -266,11 +261,6 @@ cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTask(parent)
 {
 
-}
-
-void cwWallsImporter::warning(QString message)
-{
-    emit statusMessage("WARNING: " + message);
 }
 
 void cwWallsImporter::emitMessage(WallsMessage _message)
@@ -384,7 +374,6 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     WallsImporterVisitor visitor(&parser, this, justFilename);
     parser.setVisitor(&visitor);
 
-    QObject::connect(&visitor, &WallsImporterVisitor::warning, this, &cwWallsImporter::warning);
 //    PrintingWallsVisitor printingVisitor;
 //    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
 //    parser.setVisitor(&multiVisitor);
