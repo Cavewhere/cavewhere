@@ -187,6 +187,8 @@ Rectangle {
                     LinkText {
                         visible: styleData.column === 0
                         text: styleData.value.name
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         onClicked: {
                             rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                                                                        tripPageName(styleData.value));
@@ -196,11 +198,15 @@ Rectangle {
 
                     Text {
                         visible: styleData.column === 1
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
                     }
 
                     Text {
                         visible: styleData.column === 2
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: {
                             if(usedStationTaskManager.usedStations.length > 0) {
                                 return usedStationTaskManager.usedStations[0]
@@ -211,6 +217,8 @@ Rectangle {
 
                     Text {
                         visible: styleData.column === 3
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: {
                             var unit = ""
                             switch(styleData.value.calibration.distanceUnit) {
