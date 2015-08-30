@@ -44,16 +44,12 @@ void cwCompassImporter::runTask()
         CurrentFileGood = true;
         CurrentTrip = nullptr;
         LineCount = 0;
-        StationRenamer.setCave(CurrentCave);
 
         //Make sure file is good
         verifyCompassDataFileExists();
 
         //Parse the current file
         parseFile();
-
-        //Fix invalid station names
-        StationRenamer.renameInvalidStations();
 
         if(!CurrentFileGood) {
             //Parsing error in the last cave, remove it from list
@@ -311,7 +307,7 @@ void cwCompassImporter::parseSurveyTeam(QFile *file)
     }
 
     QString surveyTeam = file->readLine();
-    surveyTeam = surveyTeamLabel.trimmed();
+    surveyTeam = surveyTeam.trimmed();
 
     LineCount++;
     if(!isFileGood(file, "survey team")) { return; }
@@ -323,7 +319,14 @@ void cwCompassImporter::parseSurveyTeam(QFile *file)
         surveyTeam.resize(100);
     }
 
-    QStringList teamList = surveyTeam.split(" ", QString::SkipEmptyParts);
+    QRegExp delimiter;
+    if (surveyTeam.contains(';')) {
+        delimiter = QRegExp("\\s*;\\s*");
+    } else {
+        delimiter = QRegExp("\\s\\s+|\\s*,\\s*");
+    }
+
+    QStringList teamList = surveyTeam.split(delimiter, QString::SkipEmptyParts);
     if(!teamList.isEmpty()) {
         cwTeam* team = new cwTeam();
 
