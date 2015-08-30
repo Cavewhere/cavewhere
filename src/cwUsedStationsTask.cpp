@@ -68,17 +68,11 @@ void cwUsedStationsTask::runTask() {
   This is a threaded helper function to createSplitStationNames
   */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation station) {
-    QRegExp splitStationsReg("((?:[a-z]|[A-Z])*)(\\d*\\w*)");
-    if(splitStationsReg.exactMatch(station.name())) {
-        QString surveyName = splitStationsReg.cap(1).toUpper();
-        QString stationName = splitStationsReg.cap(2);
-
-        cwUsedStationsTask::SplitStationName splitStation(surveyName, stationName);
-        return splitStation;
-    } else {
-        qDebug() << "Can't match: " << station.name() << LOCATION;
-    }
-    return cwUsedStationsTask::SplitStationName();
+    QRegExp namePartRegExp("\\d+\\D*$");
+    int index = std::max(namePartRegExp.indexIn(station.name()), 0);
+    QString surveyName = station.name().left(index).toUpper();
+    QString stationName = station.name().mid(index);
+    return cwUsedStationsTask::SplitStationName(surveyName, stationName);
 }
 
 /**
