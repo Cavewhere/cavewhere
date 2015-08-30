@@ -4,6 +4,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwCave.h"
+#include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
 #include "wallsvisitor.h"
 #include "wallsunits.h"
