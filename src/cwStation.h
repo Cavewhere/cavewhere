@@ -25,7 +25,6 @@ public:
         RightRole,
         UpRole,
         DownRole
-//        PositionRole
     };
 
     cwStation();
@@ -64,9 +63,6 @@ public:
     bool setDown(double down);
     void setDownInputState(cwDistanceStates::State state);
 
-//    QVector3D position() const;
-//    void setPosition(QVector3D position); //This is set by the loop closer
-
     bool isValid() const { return !Data->Name.isEmpty(); }
 
     bool operator ==(const cwStation& station) const;
@@ -94,6 +90,8 @@ private:
     };
 
     QSharedDataPointer<PrivateData> Data;
+
+//    QVariantMap Data;
 
     bool checkLRUDValue(double value) const;
     bool setStringValue(double& setValue, cwDistanceStates::State& state, QString value);

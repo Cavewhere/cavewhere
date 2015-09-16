@@ -101,6 +101,7 @@
 #include "cwLeadsSortFilterProxyModel.h"
 #include "cwLinkBarModel.h"
 #include "cwFormatConverterModel.h"
+#include "cwUnitValueList.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -109,6 +110,10 @@
 #include <QDebug>
 #include <QUndoStack>
 #include <QThread>
+#include <QMetaType>
+#include <QJSValue>
+
+
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -126,7 +131,11 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
     qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+    qRegisterMetaType<cwUnitValueList>("cwUnitValueList");
 
+    QMetaType::registerConverter(&cwUnitValueList::toString);
+    QMetaType::registerConverter<QString, cwUnitValueList>(&cwUnitValueList::fromString);
+    QMetaType::registerConverter(&cwUnitValueList::toList);
 
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");

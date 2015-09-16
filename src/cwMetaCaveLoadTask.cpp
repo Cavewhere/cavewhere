@@ -184,8 +184,28 @@ void cwMetaCaveLoadTask::loadTripCalibration(const QVariantMap &map, cwTripCalib
  */
 void cwMetaCaveLoadTask::loadSurvey(const QVariantList &surveyList, cwTrip *trip)
 {
-    Q_UNUSED(surveyList);
     Q_UNUSED(trip);
+
+    for(int i = 0; i < surveyList.size(); i++) {
+        const QVariantMap& stationShot = surveyList.at(i).toMap();
+        Q_UNUSED(stationShot)
+
+        switch(i % 2) {
+        case 0:
+
+//            createStation(surveyList.at(i));
+            break;
+        case 1:
+
+            break;
+        }
+    }
+
+
+
+
+
+
 }
 
 /**

@@ -158,6 +158,22 @@ cwUnits::LengthUnit cwUnits::toLengthUnit(QString unitString) {
 }
 
 /**
+ * @brief cwUnits::canConvertLengthUnit
+ * @param unitString - The unit string, for example "ft" will return true, where as "asentu" return false
+ * @return True if toLengthUnit() will work and false if it'll fail
+ */
+bool cwUnits::canConvertLengthUnit(QString unitString)
+{
+    try {
+        toLengthUnit(unitString);
+    } catch (QString error) {
+        Q_UNUSED(error);
+        return false;
+    }
+    return true;
+}
+
+/**
  * @brief cwUnits::convert
  * @param value - The value in sum resolution
  * @param from - The units of the value
@@ -213,18 +229,41 @@ QString cwUnits::unitName(cwUnits::ImageResolutionUnit unit)
     }
 }
 
+/**
+ * @brief cwUnits::toImageResolutionUnit
+ * @param unitString
+ * @return The enumurated type for the image resolution from unitString
+ */
 cwUnits::ImageResolutionUnit cwUnits::toImageResolutionUnit(QString unitString)
 {
-    if(unitString == "Dots per inch") {
+    unitString = unitString.toLower();
+    if(unitString == "dots per inch") {
         return DotsPerInch;
-    } else if(unitString == "Dots per centimeter") {
+    } else if(unitString == "dots per centimeter") {
         return DotsPerCentimeter;
-    } else if(unitString == "Dots per meter") {
+    } else if(unitString == "dots per meter") {
         return DotsPerMeter;
     }
 
     throw QString("Invalid image resolution unitString:") + unitString;
 }
+
+/**
+ * @brief cwUnits::canConvertResolutionUnit
+ * @param unitString - The unit string, for example "Dots per inch" will return true, where as "asentu" return false
+ * @return True if toImageResolutionUnit() will work and false if it'll fail
+ */
+bool cwUnits::canConvertResolutionUnit(QString unitString)
+{
+    try {
+        toImageResolutionUnit(unitString);
+    } catch (QString error) {
+        Q_UNUSED(error);
+        return false;
+    }
+    return true;
+}
+
 
 /**
  * @brief cwUnits::convert
@@ -327,6 +366,8 @@ cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
     unitString = unitString.toLower();
     if(unitString == "deg") {
         return Degrees;
+    } else if(unitString == "degs") {
+        return Degrees;
     } else if(unitString == "°") {
         return Degrees;
     } else if(unitString == "degrees") {
@@ -335,6 +376,8 @@ cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
         return Degrees;
     } else if(unitString == "min") {
         return Minutes;
+    } else if(unitString == "mins") {
+        return Minutes;
     } else if(unitString == "'") {
         return Minutes;
     } else if(unitString == "minute") {
@@ -342,6 +385,8 @@ cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
     } else if(unitString == "minutes") {
         return Minutes;
     } else if(unitString == "sec") {
+        return Seconds;
+    } else if(unitString == "secs") {
         return Seconds;
     } else if(unitString == "\"") {
         return Seconds;
@@ -366,6 +411,69 @@ cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
     }
 
     throw QString("Invalid angle unitString:") + unitString;
+}
+
+/**
+ * @brief cwUnits::canConvertResolutionUnit
+ * @param unitString - The unit string, for example "degrees" will return true, where as "asentu" return false
+ * @return True if toAngleUnit() will work and false if it'll fails
+ */
+bool cwUnits::canConvertAngleUnit(QString unitString)
+{
+    try {
+        toAngleUnit(unitString);
+    } catch (QString error) {
+        Q_UNUSED(error);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * @brief cwUnits::toUnitAndType
+ * @param unitString
+ * @return param - unit - The unit that that's guess'ed, will be cwUnits::LengthUnit, cwUnits::AngleUnit, cwUnits::ImageResolutionUnit
+ * @return param - type - The unit's type, see cwUnits::UnitType
+ *
+ * This attempts to convert a string to unit and type of unit. If this fails to guess unit, this
+ * throws and exception.
+ */
+void cwUnits::toUnitAndType(QString unitString, int* unit, cwUnits::UnitType* type)
+{
+    if(cwUnits::canConvertLengthUnit(unitString)) {
+        *unit = cwUnits::toLengthUnit(unitString);
+        *type = cwUnits::LengthUnitType;
+    } else if(cwUnits::canConvertAngleUnit(unitString)) {
+        *unit = cwUnits::toAngleUnit(unitString);
+        *type = cwUnits::AngleUnitType;
+    } else if(cwUnits::canConvertResolutionUnit(unitString)) {
+        *unit = cwUnits::toImageResolutionUnit(unitString);
+        *type = cwUnits::ImageResolutionUnitType;
+    } else {
+        *unit = -1;
+        *type = cwUnits::InvalidUnitType;
+        throw QString("Can't convert unitString");
+    }
+}
+
+/**
+ * @brief cwUnits::toString
+ * @param unit - The unit
+ * @param type - The type of unit, see cwUnits::UnitType
+ * @return The string version of unit
+ */
+QString cwUnits::toString(int unit, cwUnits::UnitType type)
+{
+    switch(type) {
+    case LengthUnitType:
+        return unitName((LengthUnit)unit);
+    case AngleUnitType:
+        return unitName((AngleUnit)unit);
+    case ImageResolutionUnitType:
+        return unitName((ImageResolutionUnit)unit);
+    default:
+        return QString("");
+    }
 }
 
 

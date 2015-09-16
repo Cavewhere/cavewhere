@@ -20,6 +20,13 @@ class cwUnits : public QObject
 
     Q_ENUMS(LengthUnit ImageResolutionUnit)
 public:
+    enum UnitType {
+        InvalidUnitType,
+        LengthUnitType,
+        ImageResolutionUnitType,
+        AngleUnitType
+    };
+
     // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
     enum LengthUnit {
         Inches = 0,       //!< Inches
@@ -56,6 +63,7 @@ public:
     static QStringList lengthUnitNames();
     static QString unitName(cwUnits::LengthUnit unit);
     static cwUnits::LengthUnit toLengthUnit(QString unitString);
+    static bool canConvertLengthUnit(QString unitString);
 
     static double convert(double value,
                           cwUnits::ImageResolutionUnit from,
@@ -63,6 +71,7 @@ public:
     static QStringList imageResolutionUnitNames();
     static QString unitName(cwUnits::ImageResolutionUnit unit);
     static cwUnits::ImageResolutionUnit toImageResolutionUnit(QString unitString);
+    static bool canConvertResolutionUnit(QString unitString);
 
     static double convert(double value,
                           cwUnits::AngleUnit from,
@@ -70,6 +79,10 @@ public:
     static QStringList angleUnitNames();
     static QString unitName(cwUnits::AngleUnit unit);
     static cwUnits::AngleUnit toAngleUnit(QString unitString);
+    static bool canConvertAngleUnit(QString unitString);
+
+    static void toUnitAndType(QString unitString, int *unit, UnitType *type);
+    static QString toString(int unit, UnitType type);
 
 
 private:

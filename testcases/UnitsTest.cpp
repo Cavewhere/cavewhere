@@ -45,7 +45,12 @@ TEST_CASE("Distance units string convertion", "[units]") {
 
     foreach(QString unitName, cwUnits::lengthUnitNames()) {
         CHECK(unitName == cwUnits::unitName(cwUnits::toLengthUnit(unitName)));
+        CHECK(cwUnits::canConvertLengthUnit(unitName) == true);
     }
+
+    CHECK(cwUnits::canConvertLengthUnit("") == false);
+    CHECK(cwUnits::canConvertLengthUnit("aeou") == false);
+    CHECK(cwUnits::canConvertLengthUnit("234") == false);
 }
 
 TEST_CASE("Angle units can be convert between each other", "[units]") {
@@ -70,8 +75,13 @@ TEST_CASE("Angle units string convertion", "[units]") {
     CHECK(cwUnits::unitName(cwUnits::Mils) == "mils");
 
     foreach(QString unitName, cwUnits::angleUnitNames()) {
+        CHECK(cwUnits::canConvertAngleUnit(unitName) == true);
         CHECK(unitName == cwUnits::unitName(cwUnits::toAngleUnit(unitName)));
     }
+
+    CHECK(cwUnits::canConvertAngleUnit("") == false);
+    CHECK(cwUnits::canConvertAngleUnit("aeou") == false);
+    CHECK(cwUnits::canConvertAngleUnit("234") == false);
 }
 
 TEST_CASE("Vertical Angle units can be convert between each other", "[units]") {
@@ -109,7 +119,40 @@ TEST_CASE("Image Resolution units string convertion", "[units]") {
     CHECK(cwUnits::unitName(cwUnits::DotsPerMeter) == "Dots per meter");
 
     foreach(QString unitName, cwUnits::imageResolutionUnitNames()) {
+        CHECK(cwUnits::canConvertResolutionUnit(unitName) == true);
         CHECK(unitName == cwUnits::unitName(cwUnits::toImageResolutionUnit(unitName)));
     }
+
+    CHECK(cwUnits::canConvertResolutionUnit("") == false);
+    CHECK(cwUnits::canConvertResolutionUnit("aeou") == false);
+    CHECK(cwUnits::canConvertResolutionUnit("234") == false);
+}
+
+TEST_CASE("Convert string to unit and unit type", "[units]") {
+    int unit;
+    cwUnits::UnitType type;
+
+    foreach(QString unitName, cwUnits::imageResolutionUnitNames()) {
+        cwUnits::toUnitAndType(unitName, &unit, &type);
+
+        CHECK(unit == cwUnits::toImageResolutionUnit(unitName));
+        CHECK(type == cwUnits::ImageResolutionUnitType);
+    }
+
+    foreach(QString unitName, cwUnits::angleUnitNames()) {
+        cwUnits::toUnitAndType(unitName, &unit, &type);
+
+        CHECK(unit == cwUnits::toAngleUnit(unitName));
+        CHECK(type == cwUnits::AngleUnitType);
+    }
+
+    foreach(QString unitName, cwUnits::lengthUnitNames()) {
+        cwUnits::toUnitAndType(unitName, &unit, &type);
+
+        CHECK(unit == cwUnits::toLengthUnit(unitName));
+        CHECK(type == cwUnits::LengthUnitType);
+    }
+
+    CHECK_THROWS(cwUnits::toUnitAndType("Bad unit!!!", &unit, &type));
 }
 

@@ -74,9 +74,6 @@ void cwStation::setData(QVariant data, DataRoles role) {
     case DownRole:
         setDown(data.toString());
         break;
-//    case PositionRole:
-//        setPosition(data.value<QVector3D>());
-//        break;
     }
 }
 
@@ -95,8 +92,6 @@ QVariant cwStation::data(DataRoles role) const {
         return up();
     case DownRole:
         return down();
-//    case PositionRole:
-//        return position();
     }
     return QVariant();
 }
