@@ -23,7 +23,21 @@ class ValueUnit;
 /**
  * @brief The cwUnitValueList class
  *
- * This does not store a list of cwUnitValue object's.
+ * This does not store a list of cwUnitValue object's. This class stores a list of values and units
+ * that make up a measurement. For example, "10ft 5in" could be passed to this classes constructor.
+ * The constructor will create a cwUnitValueList of [10, "ft", 5, "in"]. This class allows for easy
+ * conversion to a single unit using value(). This class can easily be converted to and from QVariantList
+ * and QString. QVariant can automatically convert to and from this class using the following:
+ *
+ *  QMetaType::registerConverter(&cwUnitValueList::toString);
+ *  QMetaType::registerConverter<QString, cwUnitValueList>(&cwUnitValueList::fromString);
+ *  QMetaType::registerConverter(&cwUnitValueList::toList);
+ *
+ * The code above allows the cwUnitValueList to be converted to QVariantList, or QString when stored
+ * in a QVariant. This code default is run in cwQMLRegiester.cpp
+ *
+ * If cwUnitValueList is invalid, this returns false.
+ *
  */
 class cwUnitValueList
 {

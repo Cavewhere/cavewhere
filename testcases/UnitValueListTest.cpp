@@ -128,6 +128,7 @@ TEST_CASE("Valid String to cwUnitValueList", "[unitValueList]") {
 TEST_CASE("Invalid string to cwUnitValueList", "[unitValueList]") {
 
     QStringList invalidStrings;
+    invalidStrings.append("");
     invalidStrings.append("1ft2");
     invalidStrings.append("2ft3in");
     invalidStrings.append("6aoeu");

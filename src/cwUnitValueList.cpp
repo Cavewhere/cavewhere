@@ -50,6 +50,10 @@ cwUnitValueList::cwUnitValueList() : data(new cwUnitValueListData)
 /**
  * @brief cwUnitValueList::cwUnitValueList
  * @param listUnitAndValues
+ *
+ * This will convert a string to cwUnitValueList. If the string is invalid (units are wrong, double
+ * numbers, strange characters) this will save the invalid text. The invalid text will be return in
+ * the toString.
  */
 cwUnitValueList::cwUnitValueList(const QString &listUnitAndValues) : data(new cwUnitValueListData)
 {   
@@ -157,6 +161,13 @@ cwUnitValueList::cwUnitValueList(const cwUnitValueList &rhs) : data(rhs.data)
 
 }
 
+/**
+ * @brief cwUnitValueList::operator =
+ * @param rhs
+ * @return A copy of this object
+ *
+ * This class uses QSharedData
+ */
 cwUnitValueList &cwUnitValueList::operator=(const cwUnitValueList &rhs)
 {
     if (this != &rhs)
@@ -220,7 +231,8 @@ bool cwUnitValueList::operator ==(const cwUnitValueList &other)
 /**
  * @brief cwUnitValueList::value
  * @param unit
- * @return
+ * @return Returns the value of the list toUnit. If the list doesn't have a unit, the defaultFromUnit
+ * is used
  */
 double cwUnitValueList::value(cwUnits::LengthUnit defaultFromUnit, cwUnits::LengthUnit toUnit) const
 {
@@ -231,7 +243,8 @@ double cwUnitValueList::value(cwUnits::LengthUnit defaultFromUnit, cwUnits::Leng
 /**
  * @brief cwUnitValueList::value
  * @param unit
- * @return
+ * @return Returns the value of the list toUnit. If the list doesn't have a unit, the defaultFromUnit
+ * is used
  */
 double cwUnitValueList::value(cwUnits::ImageResolutionUnit defaultFromUnit, cwUnits::ImageResolutionUnit toUnit) const
 {
@@ -241,8 +254,10 @@ double cwUnitValueList::value(cwUnits::ImageResolutionUnit defaultFromUnit, cwUn
 
 /**
  * @brief cwUnitValueList::value
+ * @param defaultFromUnit
  * @param unit
- * @return
+ * @return Returns the value of the list toUnit. If the list doesn't have a unit, the defaultFromUnit
+ * is used
  */
 double cwUnitValueList::value(cwUnits::AngleUnit defaultFromUnit, cwUnits::AngleUnit toUnit) const
 {
@@ -252,7 +267,10 @@ double cwUnitValueList::value(cwUnits::AngleUnit defaultFromUnit, cwUnits::Angle
 
 /**
  * @brief cwUnitValueList::type
- * @return Return's the type of
+ * @return Return's the type of unit value list. See cwUnits::UnitType for details
+ *
+ * This type is useful for this class to covert the value to a different singler unit. For example
+ * "5ft 1in" to meters.
  */
 cwUnits::UnitType cwUnitValueList::type() const
 {
@@ -265,7 +283,7 @@ cwUnits::UnitType cwUnitValueList::type() const
  */
 bool cwUnitValueList::isValid() const
 {
-    return data->InvalidString.isEmpty();
+    return data->InvalidString.isEmpty() && !data->ValuesAndUnits.isEmpty();
 }
 
 /**
