@@ -65,7 +65,7 @@ public:
 
     bool isValid() const;
 
-    bool sameIntervalPointer(const cwShot& other) const;
+    bool sameInternalPointer(const cwShot& other) const;
 
 private:
     enum ValidState {
@@ -176,7 +176,7 @@ inline void cwShot::setDistanceIncluded(bool includeDistance)
 /**
   This return's true if the other shot has the same intertal point as this shot
   */
-inline bool cwShot::sameIntervalPointer(const cwShot& other) const {
+inline bool cwShot::sameInternalPointer(const cwShot& other) const {
     return Data == other.Data;
 }
 

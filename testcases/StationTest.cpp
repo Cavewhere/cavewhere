@@ -34,7 +34,7 @@ TEST_CASE("Station can be created and data can be changed", "[station]") {
         CHECK(stationName.name() == name);
     }
 
-    SECTION("Stations can have there data changed") {
+    SECTION("Stations can have thier data changed") {
         bool stationNameOkay = station.setName("a2");
         station.setLeft(1.0);
         station.setRight(2.0);
