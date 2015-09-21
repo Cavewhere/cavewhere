@@ -131,7 +131,7 @@ Item {
                 PropertyChanges {
                     target: fileDialog
                     title: "Import from Walls"
-                    nameFilters: ["Walls (*.srv)"]
+                    nameFilters: ["Walls (*.srv *.SRV)"]
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
