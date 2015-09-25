@@ -13,7 +13,8 @@ CavewhereApp {
     Group {
         name: "testcases"
         files: [
-            "*.cpp"
+            "*.cpp",
+            "*.h"
         ]
     }
 
