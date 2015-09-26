@@ -21,6 +21,7 @@ class SurveyChunkSignalerSlotHelper : public QObject
     Q_PROPERTY(QObject* tripNameChanged READ tripNameChanged CONSTANT)
     Q_PROPERTY(QObject* chunkSender READ chunkSender CONSTANT)
     Q_PROPERTY(BeginEndPair chunkStationAddedIndexes READ chunkStationAddedIndexes CONSTANT)
+    Q_PROPERTY(QObject* calibrationSender READ calibrationSender CONSTANT)
 
 public:
     explicit SurveyChunkSignalerSlotHelper(QObject *parent = 0);
@@ -28,6 +29,7 @@ public:
     QObject* caveNameChanged() const;
     QObject* tripNameChanged() const;
     QObject* chunkSender() const;
+    QObject* calibrationSender() const;
     BeginEndPair chunkStationAddedIndexes() const;
 
 signals:
@@ -37,12 +39,14 @@ public slots:
     //Cave
     void caveNameChangedCalled();
     void tripNameChangedCalled();
+    void calibrationChangedCalled();
     void chunkStationAdded(int begin, int end);
 
 private:
     QObject* CaveNameChanged; //!<
     QObject* TripNameChanged; //!<
     QObject* ChunkSender; //!<
+    QObject* CalibrationSender;
     BeginEndPair StationAddedIndexes; //!<
 };
 
@@ -77,4 +81,13 @@ inline QObject* SurveyChunkSignalerSlotHelper::chunkSender() const {
 inline BeginEndPair SurveyChunkSignalerSlotHelper::chunkStationAddedIndexes() const {
     return StationAddedIndexes;
 }
+
+/**
+* @brief SurveyChunkSignalerSlotHelper::calibrationSender
+* @return
+*/
+inline QObject* SurveyChunkSignalerSlotHelper::calibrationSender() const {
+    return CalibrationSender;
+}
+
 #endif // SURVEYCHUNKSIGNALERSLOTHELPER_H

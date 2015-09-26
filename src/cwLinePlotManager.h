@@ -18,10 +18,12 @@ class cwScrap;
 class cwStationReference;
 #include "cwLinePlotTask.h"
 class cwGLLinePlot;
+class cwSurveyChunkSignaler;
 
 //Qt includes
 #include <QObject>
 #include <QThread>
+#include <QPointer>
 
 class cwLinePlotManager : public QObject
 {
@@ -43,34 +45,25 @@ signals:
 public slots:
 
 private:
-    cwCavingRegion* Region; //The main
+    QPointer<cwCavingRegion> Region; //The main
 
     cwLinePlotTask* LinePlotTask;
     QThread* LinePlotThread;
 
     cwGLLinePlot* GLLinePlot;
 
+    cwSurveyChunkSignaler* SurveySignaler;
+
     void connectCaves(cwCavingRegion* region);
-    void connectCave(cwCave* cave);
-    void connectTrips(cwCave* cave);
-    void connectTrip(cwTrip* trip);
-    void connectChunks(cwTrip* trip);
-    void connectChunk(cwSurveyChunk* chunk);
 
     void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 
     void setCaveStationLookupAsStale(bool isStale);
 
 private slots:
-    void regionDestroyed(QObject* region);
     void runSurvex();
 
     void updateLinePlot();
-
-    void connectAddedCaves(int beginIndex, int endIndex);
-    void connectAddedTrips(int beginIndex, int endIndex);
-    void connectAddedChunks(int beginIndex, int endIndex);
-
 };
 
 #endif // CWLINEPLOTMANAGER_H

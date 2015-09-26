@@ -29,6 +29,11 @@ void SurveyChunkSignalerSlotHelper::tripNameChangedCalled()
     TripNameChanged = sender();
 }
 
+void SurveyChunkSignalerSlotHelper::calibrationChangedCalled()
+{
+    CalibrationSender = sender();
+}
+
 void SurveyChunkSignalerSlotHelper::chunkStationAdded(int begin, int end)
 {
     ChunkSender = sender();

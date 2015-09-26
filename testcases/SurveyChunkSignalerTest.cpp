@@ -13,6 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QPair>
@@ -108,6 +109,14 @@ TEST_CASE( "Connection are created between senders and recievers", "[SurveyChunk
 
         CHECK(slotHelper.chunkSender() == chunk2);
         CHECK(slotHelper.chunkStationAddedIndexes() == BeginEndPair(2,2));
+    }
+
+    SECTION("Add calibration connections") {
+        signaler.addConnectionToTripCalibrations(SIGNAL(calibrationsChanged()), &slotHelper, SLOT(calibrationChangedCalled()));
+
+        trip1->calibrations()->setTapeCalibration(20.0);
+
+        CHECK(slotHelper.calibrationSender() == trip1->calibrations());
     }
 }
 

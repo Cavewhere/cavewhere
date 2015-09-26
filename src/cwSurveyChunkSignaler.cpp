@@ -11,6 +11,7 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwTripCalibration.h"
 
 cwSurveyChunkSignaler::cwSurveyChunkSignaler(QObject *parent) : QObject(parent)
 {
@@ -59,8 +60,10 @@ void cwSurveyChunkSignaler::addConnectionToCaves(const char *signal, QObject *re
 
     Q_ASSERT(!CaveConnections.contains(connection));
 
-    foreach(cwCave* cave, Region->caves()) {
-        connection.connect(cave);
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            connection.connect(cave);
+        }
     }
 
     CaveConnections.append(connection);
@@ -83,13 +86,32 @@ void cwSurveyChunkSignaler::addConnectionToTrips(const char *signal,
 
     Q_ASSERT(!TripConnections.contains(connection));
 
-    foreach(cwCave* cave, Region->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            connection.connect(trip);
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                connection.connect(trip);
+            }
         }
     }
 
     TripConnections.append(connection);
+}
+
+void cwSurveyChunkSignaler::addConnectionToTripCalibrations(const char *signal, QObject *reciever, const char *slot)
+{
+    Connection connection(signal, reciever, slot);
+
+    Q_ASSERT(!TripCalibrationConnections.contains(connection));
+
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                connection.connect(trip->calibrations());
+            }
+        }
+    }
+
+    TripCalibrationConnections.append(connection);
 }
 
 /**
@@ -107,10 +129,12 @@ void cwSurveyChunkSignaler::addConnectionToChunks(const char *signal, QObject *r
 
     Q_ASSERT(!ChunkConnections.contains(connection));
 
-    foreach(cwCave* cave, Region->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwSurveyChunk* chunk, trip->chunks()) {
-                connection.connect(chunk);
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                foreach(cwSurveyChunk* chunk, trip->chunks()) {
+                    connection.connect(chunk);
+                }
             }
         }
     }
@@ -158,6 +182,7 @@ void cwSurveyChunkSignaler::connectTrip(cwTrip* trip) {
     connect(trip, &cwTrip::chunksInserted, this, &cwSurveyChunkSignaler::connectAddedChunks);
     connect(trip, &cwTrip::chunksAboutToBeRemoved, this, &cwSurveyChunkSignaler::disconnectRemovedChunks);
     connectAll(trip, TripConnections); //Connect to all user added connections
+    connectAll(trip->calibrations(), TripCalibrationConnections);
     connectChunks(trip);
 }
 
