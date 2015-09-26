@@ -190,6 +190,8 @@ void cwTrip::removeChunks(int begin, int end) {
     begin = qMax(0, begin);
     end = qMin(end, numberOfChunks());
 
+    emit chunksAboutToBeRemoved(begin, end);
+
     for(int i = end; i >= begin; i--) {
         Chunks.at(i)->deleteLater();
         Chunks.removeAt(i);

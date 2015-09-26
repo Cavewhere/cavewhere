@@ -33,6 +33,8 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
+    void waitToFinish();
+
 signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);

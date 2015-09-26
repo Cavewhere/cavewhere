@@ -650,23 +650,23 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     switch (role) {
     case StationNameRole:
         station.setName(dataString);
-        dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     case StationLeftRole:
         station.setLeft(dataString);
-        dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     case StationRightRole:
         station.setRight(dataString);
-        dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     case StationUpRole:
         station.setUp(dataString);
-        dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     case StationDownRole:
         station.setDown(dataString);
-        dataChanged(role, index);
+        emit dataChanged(role, index);
         break;
     default:
         qDebug() << "Can't find role:" << role << LOCATION;
@@ -694,6 +694,7 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     case ShotDistanceRole:
         shot.setDistance(data.toString());
         emit dataChanged(role, index);
+        break;
     case ShotDistanceIncludedRole:
         shot.setDistanceIncluded(data.toBool());
         emit dataChanged(role, index);

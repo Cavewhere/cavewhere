@@ -59,11 +59,24 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     //Connect all sub data
     connectCaves(Region);
+
+    runSurvex();
 }
 
 void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
     GLLinePlot = linePlot;
     updateLinePlot();
+}
+
+/**
+ * @brief cwLinePlotManager::waitToFinish
+ *
+ * Will cause the LinePlotManager to block until the underlying task is finished. This is useful
+ * for unit testing.
+ */
+void cwLinePlotManager::waitToFinish()
+{
+    LinePlotTask->waitToFinish();
 }
 
 /**
@@ -248,16 +261,14 @@ void cwLinePlotManager::regionDestroyed(QObject* region) {
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != nullptr) {
-//        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
 //            qDebug() << "Running the task";
-            //qDebug() << "\tSetting data!" << LinePlotTask->status();
             setCaveStationLookupAsStale(true);
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-            qDebug() << "Restart plot task";
+//            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
@@ -268,7 +279,6 @@ void cwLinePlotManager::runSurvex() {
   line region
   */
 void cwLinePlotManager::updateLinePlot() {
-    if(GLLinePlot == nullptr) { return; }
     if(!LinePlotTask->isReady()) { return; }
     if(Region == nullptr) { return; }
 
@@ -300,8 +310,10 @@ void cwLinePlotManager::updateLinePlot() {
     }
 
     //Update the 3D plot
-    GLLinePlot->setPoints(resultData.stationPositions());
-    GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    if(GLLinePlot != nullptr) {
+        GLLinePlot->setPoints(resultData.stationPositions());
+        GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    }
 
     //Mark all caves as up todate
     setCaveStationLookupAsStale(false);
