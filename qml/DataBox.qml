@@ -19,6 +19,7 @@ Item {
     property SurveyChunkView surveyChunkView;
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
+    property var error;
 
     property int rowIndex: -1
     property int dataRole
@@ -154,6 +155,70 @@ Item {
     }
 
     Rectangle {
+        id: errorBorder
+        anchors.fill: parent
+        anchors.margins: 0
+        border.width: 2
+        border.color: {
+            if(typeof(error) != "undefined") {
+                switch(error.type) {
+                case SurveyChunkError.Fatal:
+                    return "red"
+                case SurveyChunkError.Warning:
+                    return "yellow"
+                default:
+                    break;
+                }
+            }
+            return "black"
+        }
+        color: "#00000000"
+        visible: typeof(error) != "undefined" && error.type !== SurveyChunkError.Unknown;
+
+        Button {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 2
+            iconSource: {
+                if(typeof(error) != "undefined") {
+                    switch(error.type) {
+                    case SurveyChunkError.Fatal:
+                        return "qrc:icons/stopSignError.png"
+                    case SurveyChunkError.Warning:
+                        return "qrc:icons/warning.png"
+                    default:
+                        break;
+                    }
+                }
+                return "";
+            }
+            iconSize: Qt.size(10, 10);
+            radius: 0
+
+            onClicked: {
+                errorQuoteBox.visible = true
+            }
+        }
+
+        QuoteBox {
+            id: errorQuoteBox
+            z: 10
+
+            parent: rootQMLItem
+
+            visible: false
+            pointAtObject: parent
+            pointAtObjectPosition: Qt.point(parent.width - 10, parent.height)
+            triangleEdge: Qt.TopEdge
+//            triangleOffset: 1.0
+
+            Text {
+                text: "There was as error";
+            }
+        }
+    }
+
+    Rectangle {
         id: interalHighlight
         border.color: "black"
         anchors.fill: parent
@@ -162,6 +227,8 @@ Item {
         color: "#00000000"
         visible: dataBox.focus || editor.isEditting
     }
+
+
 
     DoubleClickTextInput {
         id: editor
