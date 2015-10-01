@@ -8,6 +8,7 @@
 import QtQuick 2.0
 import Cavewhere 1.0
 import QtQuick.Controls 1.2 as Controls;
+import QtQuick.Layouts 1.1
 import "Navigation.js" as NavigationHandler
 
 Item {
@@ -19,7 +20,7 @@ Item {
     property SurveyChunkView surveyChunkView;
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
-    property var error;
+    property var errors;
 
     property int rowIndex: -1
     property int dataRole
@@ -60,6 +61,28 @@ Item {
         }
     }
 
+    function errorImageSource(error) {
+        switch(error.type) {
+        case SurveyChunkError.Fatal:
+            return "qrc:icons/stopSignError.png";
+        case SurveyChunkError.Warning:
+            return "qrc:icons/warning.png"
+        default:
+            return "";
+        }
+    }
+
+    function errorBorderColor(error) {
+        switch(error.type) {
+        case SurveyChunkError.Fatal:
+            return "red";
+        case SurveyChunkError.Warning:
+            return "yellow"
+        default:
+            return "black";
+        }
+    }
+
     onEnteredPressed: {
         editor.openEditor()
     }
@@ -73,6 +96,26 @@ Item {
         rightClickMenu.popup();
     }
 
+    onErrorsChanged: {
+        console.log("Errors changed!" + errors)
+
+        var color = ""
+        var iconSource = ""
+        for(var errorIndex in errors) {
+            var error = errors[errorIndex]
+            color = errorBorderColor(error);
+            iconSource = errorImageSource(error);
+            if(error.type === SurveyChunkError.Fatal) {
+                    break;
+            }
+        }
+
+        errorBorder.border.color = color
+        errorIcon.source = iconSource
+    }
+
+
+
     Controls.Menu {
         id: rightClickMenu
 
@@ -82,17 +125,17 @@ Item {
                 surveyChunk.parentTrip.removeChunk(surveyChunk)
             }
 
-//            onContainsMouseChanged: {
-//                var lastStationIndex = surveyChunk.stationCount() - 1;
-//                var lastShotIndex = surveyChunk.shotCount() - 1;
+            //            onContainsMouseChanged: {
+            //                var lastStationIndex = surveyChunk.stationCount() - 1;
+            //                var lastShotIndex = surveyChunk.shotCount() - 1;
 
-//                if(containsMouse) {
-//                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
-//                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
-//                } else {
-//                    surveyChunkView.hideRemoveBoxs();
-//                }
-//            }
+            //                if(containsMouse) {
+            //                    surveyChunkView.showRemoveBoxsOnStations(0, lastStationIndex);
+            //                    surveyChunkView.showRemoveBoxsOnShots(0, lastShotIndex);
+            //                } else {
+            //                    surveyChunkView.hideRemoveBoxs();
+            //                }
+            //            }
         }
     }
 
@@ -149,7 +192,7 @@ Item {
     Rectangle {
         id: border
         anchors.fill: parent
-        border.color: "lightgray"
+        border.color:  "lightgray"
         color: "#00000000"
         border.width: 1
     }
@@ -159,44 +202,23 @@ Item {
         anchors.fill: parent
         anchors.margins: 0
         border.width: 2
-        border.color: {
-            if(typeof(error) != "undefined") {
-                switch(error.type) {
-                case SurveyChunkError.Fatal:
-                    return "red"
-                case SurveyChunkError.Warning:
-                    return "yellow"
-                default:
-                    break;
-                }
-            }
-            return "black"
-        }
         color: "#00000000"
-        visible: typeof(error) != "undefined" && error.type !== SurveyChunkError.Unknown;
+        visible: typeof(errors) != "undefined" && errors.length > 0
 
-        Button {
+        Image {
+            id: errorIcon
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: 2
-            iconSource: {
-                if(typeof(error) != "undefined") {
-                    switch(error.type) {
-                    case SurveyChunkError.Fatal:
-                        return "qrc:icons/stopSignError.png"
-                    case SurveyChunkError.Warning:
-                        return "qrc:icons/warning.png"
-                    default:
-                        break;
-                    }
-                }
-                return "";
-            }
-            iconSize: Qt.size(10, 10);
-            radius: 0
+            source: ""
+            sourceSize: Qt.size(10, 10);
+            //            iconSize: Qt.size(10, 10);
+            //            radius: 0
 
-            onClicked: {
-                errorQuoteBox.visible = true
+            MouseArea {
+                id: errorIconMouseArea
+                hoverEnabled: true
+                anchors.fill: parent
             }
         }
 
@@ -204,16 +226,27 @@ Item {
             id: errorQuoteBox
             z: 10
 
-            parent: rootQMLItem
+            parent: mainContentId //dataBox.parent
 
-            visible: false
-            pointAtObject: parent
-            pointAtObjectPosition: Qt.point(parent.width - 10, parent.height)
+            visible: errorIconMouseArea.containsMouse
+            pointAtObject: errorIcon
+            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
             triangleEdge: Qt.TopEdge
-//            triangleOffset: 1.0
+            //            triangleOffset: 1.0
 
-            Text {
-                text: "There was as error";
+            ColumnLayout {
+                Repeater {
+                    model: errors
+                    delegate: RowLayout {
+                        Image {
+                            source: errorImageSource(errors[index])
+                        }
+
+                        Text {
+                            text: errors[index].message
+                        }
+                    }
+                }
             }
         }
     }

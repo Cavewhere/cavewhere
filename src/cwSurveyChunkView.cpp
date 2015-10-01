@@ -1465,6 +1465,17 @@ void cwSurveyChunkView::updateDimensions() {
     setHeight(rect.height());
 }
 
+void cwSurveyChunkView::updateData(QQuickItem *item, cwSurveyChunk::DataRole role, int index)
+{
+    Q_ASSERT(item != nullptr);
+
+    QVariant data = SurveyChunk->data(role, index);
+    item->setProperty("dataValue", data);
+
+    QVariantList errors = SurveyChunk->errors(role, index);
+    item->setProperty("errors", errors);
+}
+
 /**
   \brief Updates the view's shot data.
 
@@ -1484,8 +1495,7 @@ void cwSurveyChunkView::updateDimensions() {
 void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) {
     if(index < 0 || index >= ShotRows.size()) { return; }
 
-    QQuickItem* shotItem;
-    const char* propertyName = "dataValue";
+    QQuickItem* shotItem = nullptr;
 
     switch(role) {
     case cwSurveyChunk::ShotDistanceRole:
@@ -1494,8 +1504,8 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) 
         break;
     case cwSurveyChunk::ShotDistanceIncludedRole:
         shotItem = ShotRows[index].distance();
-        propertyName = "distanceIncluded";
-        break;
+        shotItem->setProperty("distanceIncluded", SurveyChunk->data(role, index));
+        return;
     case cwSurveyChunk::ShotCompassRole:
         shotItem = ShotRows[index].frontCompass();
         break;
@@ -1512,8 +1522,7 @@ void cwSurveyChunkView::updateShotData(cwSurveyChunk::DataRole role, int index) 
         return;
     }
 
-    QVariant data = SurveyChunk->data(role, index);
-    shotItem->setProperty(propertyName, data);
+    updateData(shotItem, role, index);
 }
 
 /**
@@ -1558,8 +1567,7 @@ void cwSurveyChunkView::updateStationData(cwSurveyChunk::DataRole role, int inde
         return;
     }
 
-    QVariant data = SurveyChunk->data(role, index);
-    stationItem->setProperty("dataValue", data);
+    updateData(stationItem, role, index);
 }
 
 /**

@@ -720,6 +720,72 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     }
 }
 
+/**
+ * @brief cwSurveyChunk::checkForError
+ * @param role - The role that will be checked
+ * @param index - The index o
+ */
+void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
+{
+    QList<cwSurveyChunkError> errors;
+
+    switch(role) {
+    case StationNameRole: {
+        QList<cwShot> shotsToCheck;
+        shotsToCheck.append(Shots.at(index));
+
+        int previousShotIndex = index - 1;
+        if(previousShotIndex > 0) {
+            shotsToCheck.append(Shots.at(previousShotIndex));
+        }
+
+        bool error = false;
+        foreach(cwShot shot, shotsToCheck) {
+            if(shot.isValid()) {
+                error = true;
+            }
+        }
+
+        if(error) {
+            cwSurveyChunkError chunkError;
+            chunkError.setError(cwSurveyChunkError::MissingData);
+            chunkError.setType(cwSurveyChunkError::Fatal);
+            chunkError.setMessage(QString("Station name is empty"));
+
+            errors.append(chunkError);
+            break;
+        }
+    }
+    case StationLeftRole:
+        break;
+    case StationRightRole:
+        break;
+    case StationUpRole:
+        break;
+    case StationDownRole:
+        break;
+    case ShotDistanceRole:
+        break;
+    case ShotDistanceIncludedRole:
+        break;
+    case ShotCompassRole:
+        break;
+    case ShotBackCompassRole:
+        break;
+    case ShotClinoRole:
+        break;
+    case ShotBackClinoRole:
+        break;
+    }
+
+    ErrorKey key(index, role);
+    foreach(cwSurveyChunkError error, errors) {
+        if(!Errors.contains(key, error)) {
+            Errors.insert(key, error);
+        }
+    }
+}
+
 
 /**
   \brief Set's the chunk data based on a role
@@ -732,6 +798,38 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
     } else {
         qDebug() << "Can't find role:" << role << LOCATION;
     }
+}
+
+/**
+ * @brief cwSurveyChunk::error
+ * @param role
+ * @param index
+ * @return Returns the error at index with role.
+ */
+QVariantList cwSurveyChunk::errors(cwSurveyChunk::DataRole role, int index) const
+{
+    Q_UNUSED(role);
+    Q_UNUSED(index);
+
+    QVariantList errorList;
+
+    auto foundErrors = Errors.values(ErrorKey(index, role));
+    foreach(cwSurveyChunkError error, foundErrors) {
+        errorList.append(QVariant::fromValue(error));
+    }
+
+    cwSurveyChunkError allwaysError;
+    allwaysError.setType(cwSurveyChunkError::Fatal);
+    allwaysError.setMessage("Sauce");
+
+    cwSurveyChunkError allwaysError2;
+    allwaysError2.setType(cwSurveyChunkError::Warning);
+    allwaysError2.setMessage("Warning Sauce");
+
+    errorList.append(QVariant::fromValue(allwaysError));
+    errorList.append(QVariant::fromValue(allwaysError2));
+
+    return errorList;
 }
 
 /**
@@ -845,6 +943,19 @@ QList<int> cwSurveyChunk::indicesOfStation(QString stationName) const {
         }
     }
     return indices;
+}
+
+/**
+* @brief cwSurveyChunk::setConnectedState
+* @param connectedState - Connected means that the survey chunk is connect to the cave
+* Disconnected means that it's not connected to the cave
+* Unknown means that connection hasn't been calculated
+*/
+void cwSurveyChunk::setConnectedState(ConnectedState connectedState) {
+    if(IsConnectedState != connectedState) {
+        IsConnectedState = connectedState;
+        emit connectedStateChanged();
+    }
 }
 
 

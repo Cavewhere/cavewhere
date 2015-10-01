@@ -220,6 +220,7 @@ private:
     void updateIndexes(int index);
     void updateDimensions();
 
+    void updateData(QQuickItem* item, cwSurveyChunk::DataRole role, int index);
     void updateShotData(cwSurveyChunk::DataRole role, int index);
     void updateStationData(cwSurveyChunk::DataRole role, int index);
     void updateStationRowData(int index);

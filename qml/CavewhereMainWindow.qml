@@ -24,10 +24,7 @@ ApplicationWindow {
 
     LicenseWindow { }
 
-    Item {
-        id: rootQMLItem
-        anchors.fill: parent
-    }
+
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
@@ -116,6 +113,10 @@ ApplicationWindow {
     }
 
 
+    Item {
+        id: rootQMLItem
+        anchors.fill: parent
+    }
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindow

@@ -12,6 +12,7 @@
 //#include "cwStationReference.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwSurveyChunkError.h"
 class cwTrip;
 class cwCave;
 
@@ -23,9 +24,10 @@ class cwCave;
 
 class cwSurveyChunk : public QObject {
     Q_OBJECT
-    Q_ENUMS(DataRole)
+    Q_ENUMS(DataRole ConnectedState)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
+    Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
 
 public:
     enum Direction {
@@ -45,6 +47,12 @@ public:
         ShotBackCompassRole,
         ShotClinoRole,
         ShotBackClinoRole
+    };
+
+    enum ConnectedState {
+        Connected,
+        Disconnected,
+        Unknown
     };
 
     cwSurveyChunk(QObject *parent = 0);
@@ -75,6 +83,9 @@ public:
 
     Q_INVOKABLE bool isStationAndShotsEmpty() const;
 
+    ConnectedState connectedState() const;
+    void setConnectedState(ConnectedState connectedState);
+
 signals:
     void parentTripChanged();
 
@@ -85,6 +96,10 @@ signals:
     void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
+
+    void connectedChanged();
+
+    void connectedStateChanged();
 
 public slots:
     int stationCount() const;
@@ -115,11 +130,34 @@ public slots:
     QVariant data(DataRole role, int index) const;
     void setData(DataRole role, int index, QVariant data);
 
+    QVariantList errors(DataRole role, int index) const;
+
 private:
+    class ErrorKey {
+    public:
+
+        ErrorKey() : Index(-1), Role(StationNameRole) {}
+        ErrorKey(int index, DataRole role) : Index(index), Role(role) {}
+
+        bool operator <(const ErrorKey other) const {
+            if(Index == other.Index) {
+                return Role < other.Role;
+            }
+            return Index < other.Index;
+        }
+
+        int Index;
+        DataRole Role;
+    };
+
     QList<cwStation> Stations;
     QList<cwShot> Shots;
+
+    QMultiMap<ErrorKey, cwSurveyChunkError> Errors; //An index of errors for the stations and shots
+
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
+    ConnectedState IsConnectedState; //!<
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
@@ -136,6 +174,8 @@ private:
 
     void setStationData(DataRole role, int index, const QVariant &data);
     void setShotData(DataRole role, int index, const QVariant &data);
+
+    void checkForError(DataRole role, int index);
 
 };
 
@@ -164,6 +204,15 @@ inline QList<cwStation> cwSurveyChunk::stations() const {
   */
 inline QList<cwShot> cwSurveyChunk::shots() const {
     return Shots;
+}
+
+
+/**
+* @brief cwSurveyChunk::connectedState
+* @return
+*/
+inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
+    return IsConnectedState;
 }
 
 
