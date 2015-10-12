@@ -75,9 +75,9 @@ Item {
     function errorBorderColor(error) {
         switch(error.type) {
         case SurveyChunkError.Fatal:
-            return "red";
+            return "#960800";
         case SurveyChunkError.Warning:
-            return "yellow"
+            return "#FF7600"
         default:
             return "black";
         }
@@ -101,17 +101,25 @@ Item {
 
         var color = ""
         var iconSource = ""
+        var errorsVisible = false;
         for(var errorIndex in errors) {
             var error = errors[errorIndex]
+
+            if(!error.suppressed) {
+                errorsVisible = true;
+            }
+
             color = errorBorderColor(error);
             iconSource = errorImageSource(error);
             if(error.type === SurveyChunkError.Fatal) {
-                    break;
+                break;
             }
+
         }
 
+        errorBorder.shouldBeVisible = errorsVisible
         errorBorder.border.color = color
-        errorIcon.source = iconSource
+        errorIcon.iconSource = iconSource
     }
 
 
@@ -199,53 +207,73 @@ Item {
 
     Rectangle {
         id: errorBorder
-        anchors.fill: parent
-        anchors.margins: 0
-        border.width: 2
-        color: "#00000000"
-        visible: typeof(errors) != "undefined" && errors.length > 0
+        property bool shouldBeVisible: false
 
-        Image {
+        anchors.fill: parent
+        anchors.margins: 1
+        border.width: 1
+        color: "#00000000"
+        visible: shouldBeVisible || errorIcon.troggled
+//        visible: typeof(errors) != "undefined" && errors.length > 0
+
+        Button {
             id: errorIcon
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: 2
-            source: ""
-            sourceSize: Qt.size(10, 10);
-            //            iconSize: Qt.size(10, 10);
-            //            radius: 0
-
-            MouseArea {
-                id: errorIconMouseArea
-                hoverEnabled: true
-                anchors.fill: parent
-            }
+            iconSource: ""
+            checkable: true
+            iconSize: Qt.size(10, 10);
+            globalClickToUncheck: true
+            radius: 0
         }
 
         QuoteBox {
             id: errorQuoteBox
             z: 10
 
-            parent: mainContentId //dataBox.parent
+            parent: rootPopupItem
 
-            visible: errorIconMouseArea.containsMouse
+//            visible: errorIconMouseArea.containsMouse
+            visible: errorIcon.troggled //false
             pointAtObject: errorIcon
             pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
             triangleEdge: Qt.TopEdge
             //            triangleOffset: 1.0
 
+            onVisibleChanged: {
+                console.log("Visible changed:" + visible)
+            }
+
             ColumnLayout {
                 Repeater {
+                    id: repeaterId
                     model: errors
-                    delegate: RowLayout {
+                    delegate:
+                        RowLayout {
+
                         Image {
                             source: errorImageSource(errors[index])
                         }
 
+                        Controls.CheckBox {
+                            checked: errors[index].suppressed
+                            onCheckedChanged: {
+                                //SuppressWarning
+                                if(errors[index].suppressed !== checked) {
+                                    surveyChunk.setSuppressWarning(dataRole, rowIndex, errors[index], checked);
+                                    console.log("Checked", checked);
+                                }
+                            }
+                            visible: errors[index].type === SurveyChunkError.Warning
+                        }
+
                         Text {
                             text: errors[index].message
+                            font.strikeout: errors[index].suppressed
                         }
                     }
+
                 }
             }
         }

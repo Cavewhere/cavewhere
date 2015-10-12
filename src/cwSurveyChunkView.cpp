@@ -1472,7 +1472,7 @@ void cwSurveyChunkView::updateData(QQuickItem *item, cwSurveyChunk::DataRole rol
     QVariant data = SurveyChunk->data(role, index);
     item->setProperty("dataValue", data);
 
-    QVariantList errors = SurveyChunk->errors(role, index);
+    QVariantList errors = SurveyChunk->errorsAt(role, index);
     item->setProperty("errors", errors);
 }
 

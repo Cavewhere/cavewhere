@@ -222,5 +222,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSortFilterProxyModel>("Cavewhere", 1, 0, "SortFilterProxyModel");
     qmlRegisterType<cwLeadsSortFilterProxyModel>("Cavewhere", 1, 0, "LeadsSortFilterProxyModel");
     qmlRegisterType<cwLinkBarModel>("Cavewhere", 1, 0, "LinkBarModel");
-    qmlRegisterUncreatableType<cwSurveyChunkError>("Cavewhere", 1, 0, "SurveyChunkError", "Should only be created by cwSurveyChunk");
+    qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "Error", "Should only be created by cwSurveyChunk");
 }

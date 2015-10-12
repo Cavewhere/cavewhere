@@ -111,6 +111,11 @@ void cwSurveyChunk::appendNewShot() {
             Shots.append(cwShot());
             emit shotsAdded(0, 0);
         }
+
+        checkForStationError(Stations.size() - 2);
+        checkForStationError(Stations.size() - 1);
+        checkForShotError(Shots.size() - 1);
+
         return;
     }
 
@@ -147,6 +152,7 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
     int firstIndex = Stations.size();
     if(Stations.empty()) {
         Stations.append(fromStation);
+        checkForStationError(Stations.size() - 2);
     }
 
     index = Shots.size();
@@ -156,6 +162,9 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
     index = Stations.size();
     Stations.append(toStation);
     emit stationsAdded(firstIndex, index);
+
+    checkForStationError(Stations.size() - 1);
+    checkForShotError(Shots.size() - 1);
 }
 
 /**
@@ -199,6 +208,9 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     emit stationsRemoved(stationIndex, stationEnd);
     emit shotsRemoved(shotIndex, shotEnd);
 
+    //Check for errors
+    updateErrorIndexes();
+
     //Append a new last station
     appendNewShot();
 
@@ -234,6 +246,8 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
 
     emit stationsAdded(stationIndex, stationIndex);
     emit shotsAdded(shotIndex, shotIndex);
+
+    updateErrorIndexes();
 }
 
 /**
@@ -259,6 +273,8 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
 
     Shots.insert(shotIndex, cwShot());
     emit shotsAdded(shotIndex, shotIndex);
+
+    updateErrorIndexes();
 }
 
 
@@ -327,6 +343,9 @@ void cwSurveyChunk::removeStation(int stationIndex, Direction shot) {
 
     //Remove them
     remove(stationIndex, shotIndex);
+
+    //Refresh all the errors
+    updateErrorIndexes();
 }
 
 /**
@@ -361,6 +380,9 @@ void cwSurveyChunk::removeShot(int shotIndex, Direction station) {
 
     //Remove them
     remove(stationIndex, shotIndex);
+
+    //Refresh all the errors
+    updateErrorIndexes();
 }
 
 /**
@@ -481,6 +503,8 @@ void cwSurveyChunk::setStation(cwStation station, int index){
     dataChanged(StationRightRole, index);
     dataChanged(StationUpRole, index);
     dataChanged(StationDownRole, index);
+
+    checkForStationError(index);
 }
 
 /**
@@ -671,6 +695,9 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
     default:
         qDebug() << "Can't find role:" << role << LOCATION;
     }
+
+    checkForError(role, index);
+
 }
 
 /**
@@ -718,6 +745,9 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
     default:
         qDebug() << "Can't find role:" << role << LOCATION;
     }
+
+    checkForError(role, index);
+
 }
 
 /**
@@ -727,64 +757,143 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
  */
 void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 {
-    QList<cwSurveyChunkError> errors;
+    QList<cwError> errors;
 
-    switch(role) {
-    case StationNameRole: {
-        QList<cwShot> shotsToCheck;
-        shotsToCheck.append(Shots.at(index));
+    //For testing
+    cwError allwaysError;
+    allwaysError.setType(cwError::Fatal);
+    allwaysError.setError(cwError::DataNotValid);
+    allwaysError.setMessage("Sauce");
 
-        int previousShotIndex = index - 1;
-        if(previousShotIndex > 0) {
-            shotsToCheck.append(Shots.at(previousShotIndex));
-        }
+    cwError allwaysError2;
+    allwaysError2.setType(cwError::Warning);
+    allwaysError2.setError(cwError::DataDuplicated);
+    allwaysError2.setMessage("Warning Sauce");
 
-        bool error = false;
-        foreach(cwShot shot, shotsToCheck) {
-            if(shot.isValid()) {
-                error = true;
-            }
-        }
+//    errors.append(allwaysError);
+    errors.append(allwaysError2);
 
-        if(error) {
-            cwSurveyChunkError chunkError;
-            chunkError.setError(cwSurveyChunkError::MissingData);
-            chunkError.setType(cwSurveyChunkError::Fatal);
-            chunkError.setMessage(QString("Station name is empty"));
+//    switch(role) {
+//    case StationNameRole: {
+//        QList<cwShot> shotsToCheck;
+//        shotsToCheck.append(Shots.at(index));
 
-            errors.append(chunkError);
-            break;
-        }
-    }
-    case StationLeftRole:
-        break;
-    case StationRightRole:
-        break;
-    case StationUpRole:
-        break;
-    case StationDownRole:
-        break;
-    case ShotDistanceRole:
-        break;
-    case ShotDistanceIncludedRole:
-        break;
-    case ShotCompassRole:
-        break;
-    case ShotBackCompassRole:
-        break;
-    case ShotClinoRole:
-        break;
-    case ShotBackClinoRole:
-        break;
-    }
+//        int previousShotIndex = index - 1;
+//        if(previousShotIndex > 0) {
+//            shotsToCheck.append(Shots.at(previousShotIndex));
+//        }
+
+//        bool error = false;
+//        foreach(cwShot shot, shotsToCheck) {
+//            if(shot.isValid()) {
+//                error = true;
+//            }
+//        }
+
+//        if(error) {
+//            cwSurveyChunkError chunkError;
+//            chunkError.setError(cwSurveyChunkError::MissingData);
+//            chunkError.setType(cwSurveyChunkError::Fatal);
+//            chunkError.setMessage(QString("Station name is empty"));
+
+//            errors.append(chunkError);
+//            break;
+//        }
+//    }
+//    case StationLeftRole:
+//        break;
+//    case StationRightRole:
+//        break;
+//    case StationUpRole:
+//        break;
+//    case StationDownRole:
+//        break;
+//    case ShotDistanceRole:
+//        break;
+//    case ShotDistanceIncludedRole:
+//        break;
+//    case ShotCompassRole:
+//        break;
+//    case ShotBackCompassRole:
+//        break;
+//    case ShotClinoRole:
+//        break;
+//    case ShotBackClinoRole:
+//        break;
+//    }
 
     ErrorKey key(index, role);
-    foreach(cwSurveyChunkError error, errors) {
+    foreach(cwError error, errors) {
         if(!Errors.contains(key, error)) {
             Errors.insert(key, error);
+            errorsChanged();
         }
     }
 }
+
+/**
+ * @brief cwSurveyChunk::checkForStationError
+ * @param index
+ */
+void cwSurveyChunk::checkForStationError(int index)
+{
+    Q_ASSERT(index >= 0);
+    Q_ASSERT(index < Stations.size());
+    checkForError(StationNameRole, index);
+    checkForError(StationLeftRole, index);
+    checkForError(StationRightRole, index);
+    checkForError(StationUpRole, index);
+    checkForError(StationDownRole, index);
+}
+
+/**
+ * @brief cwSurveyChunk::checkForShotError
+ * @param index
+ */
+void cwSurveyChunk::checkForShotError(int index)
+{
+    Q_ASSERT(index >= 0);
+    Q_ASSERT(index < Shots.size());
+    checkForError(ShotDistanceRole, index);
+    checkForError(ShotDistanceIncludedRole, index);
+    checkForError(ShotCompassRole, index);
+    checkForError(ShotBackCompassRole, index);
+    checkForError(ShotClinoRole, index);
+    checkForError(ShotBackClinoRole, index);
+}
+
+/**
+ * @brief cwSurveyChunk::updateErrorIndexes
+ */
+void cwSurveyChunk::updateErrorIndexes()
+{
+    //Clears the error list for the chunk, and goes through and updates all the errors
+    Errors.clear();
+
+    for(int i = 0; i < Shots.size(); i++) {
+        checkForShotError(i);
+    }
+
+    for(int i = 0; i < Stations.size(); i++) {
+        checkForShotError(i);
+    }
+}
+
+///**
+// * @brief cwSurveyChunk::errorCount
+// * @param type
+// * @return
+// */
+//int cwSurveyChunk::errorCount(cwSurveyChunkError::ErrorType type) const
+//{
+//    int numberOfWarnings = 0;
+//    foreach(cwSurveyChunkError error, Errors.values()) {
+//        if(error.type() == type) {
+//            numberOfWarnings++;
+//        }
+//    }
+//    return numberOfWarnings;
+//}
 
 
 /**
@@ -801,12 +910,29 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
 }
 
 /**
+ * @brief cwSurveyChunk::errors
+ * @return Returns all the errors in the survey chunk
+ */
+QVariantList cwSurveyChunk::errors() const
+{
+    QList<cwError> currentErrors = Errors.values();
+    QVariantList errorList;
+    errorList.reserve(currentErrors.size());
+
+    foreach(cwError error, currentErrors) {
+        errorList.append(QVariant::fromValue(error));
+    }
+
+    return errorList;
+}
+
+/**
  * @brief cwSurveyChunk::error
  * @param role
  * @param index
  * @return Returns the error at index with role.
  */
-QVariantList cwSurveyChunk::errors(cwSurveyChunk::DataRole role, int index) const
+QVariantList cwSurveyChunk::errorsAt(cwSurveyChunk::DataRole role, int index) const
 {
     Q_UNUSED(role);
     Q_UNUSED(index);
@@ -814,22 +940,39 @@ QVariantList cwSurveyChunk::errors(cwSurveyChunk::DataRole role, int index) cons
     QVariantList errorList;
 
     auto foundErrors = Errors.values(ErrorKey(index, role));
-    foreach(cwSurveyChunkError error, foundErrors) {
+    foreach(cwError error, foundErrors) {
         errorList.append(QVariant::fromValue(error));
     }
 
-    cwSurveyChunkError allwaysError;
-    allwaysError.setType(cwSurveyChunkError::Fatal);
-    allwaysError.setMessage("Sauce");
-
-    cwSurveyChunkError allwaysError2;
-    allwaysError2.setType(cwSurveyChunkError::Warning);
-    allwaysError2.setMessage("Warning Sauce");
-
-    errorList.append(QVariant::fromValue(allwaysError));
-    errorList.append(QVariant::fromValue(allwaysError2));
-
     return errorList;
+}
+
+/**
+ * @brief cwSurveyChunk::setSuppressWarning
+ * @param role
+ * @param index
+ * @param warning
+ * @param suppress
+ *
+ * This will find the warning in role and index and suppress it. It is not possible to suppress fatal
+ * errors. If the warning doesn't exist, this does nothing.
+ */
+void cwSurveyChunk::setSuppressWarning(cwSurveyChunk::DataRole role,
+                                       int index,
+                                       cwError warning,
+                                       bool suppress)
+{
+    Q_UNUSED(role)
+    Q_UNUSED(index)
+    Q_UNUSED(warning)
+    Q_UNUSED(suppress)
+
+    ErrorKey key(index, role);
+    if(Errors.contains(key, warning)) {
+        Errors.find(key, warning).value().setSupressed(suppress);
+        emit dataChanged(role, index);
+        emit errorsChanged();
+    }
 }
 
 /**
@@ -958,4 +1101,19 @@ void cwSurveyChunk::setConnectedState(ConnectedState connectedState) {
     }
 }
 
+///**
+//* @brief cwSurveyChunk::warningCount
+//* @return
+//*/
+//int cwSurveyChunk::warningCount() const {
+//    return errorCount(cwSurveyChunkError::Warning);
+//}
+
+///**
+//* @brief cwSurveyChunk::fatalErrorCount
+//* @return
+//*/
+//int cwSurveyChunk::fatalErrorCount() const {
+//    return errorCount(cwSurveyChunkError::Fatal);
+//}
 

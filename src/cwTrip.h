@@ -11,6 +11,7 @@
 //Our includes
 #include "cwUnits.h"
 #include "cwStation.h"
+#include "cwError.h"
 class cwSurveyChunk;
 class cwCave;
 class cwTeam;
@@ -37,7 +38,8 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
     Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
     Q_PROPERTY(int numberOfChunks READ numberOfChunks NOTIFY numberOfChunksChanged)
-    Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)
+    Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)  
+
 
 public:
     explicit cwTrip(QObject *parent = 0);
