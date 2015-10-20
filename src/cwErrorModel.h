@@ -33,7 +33,7 @@ signals:
 public slots:
 
 private:
-    QHash<QObject*, QList<cwError>> Database; //List of errors for each parent
+    QHash<const QObject*, QList<cwError>> Database; //List of errors for each parent
 
     void emitErrorChanged(const QObject* parent);
 };

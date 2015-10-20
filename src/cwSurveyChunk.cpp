@@ -762,12 +762,12 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
     //For testing
     cwError allwaysError;
     allwaysError.setType(cwError::Fatal);
-    allwaysError.setError(cwError::DataNotValid);
+//    allwaysError.setError(cwError::DataNotValid);
     allwaysError.setMessage("Sauce");
 
     cwError allwaysError2;
     allwaysError2.setType(cwError::Warning);
-    allwaysError2.setError(cwError::DataDuplicated);
+//    allwaysError2.setError(cwError::DataDuplicated);
     allwaysError2.setMessage("Warning Sauce");
 
 //    errors.append(allwaysError);

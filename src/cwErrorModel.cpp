@@ -92,12 +92,12 @@ QVariantList cwErrorModel::errors(const QObject *parent) const
 {
     QVariantList errorListToReturn;
 
-    if(Database.contains(error.parent())) {
+    if(Database.contains(parent)) {
         //Just replace the error with the new one
-        const QList<cwError>& errorList = Database[error.parent()];
+        const QList<cwError>& errorList = Database[parent];
 
         foreach(cwError error, errorList) {
-            errorListToReturn.append(error);
+            errorListToReturn.append(QVariant::fromValue(error));
         }
 
         foreach(QObject* children, parent->children()) {
@@ -116,23 +116,27 @@ QVariantList cwErrorModel::errors(const QObject *parent) const
  */
 QVariantList cwErrorModel::errors(const QObject *parent, int index) const
 {
-    if(Database.contains(error.parent())) {
+    if(Database.contains(parent)) {
         //Just replace the error with the new one
-        const QList<cwError>& errorList = Database[error.parent()];
+        const QList<cwError>& errorList = Database[parent];
+
+        QVariantList errorsToReturn;
 
         cwError findError;
+        findError.setIndex(index);
 
-        std::upper_bound(errorList.begin(), errorList.end(), findError, &errorLessThan);
+        auto upperIter = std::upper_bound(errorList.begin(), errorList.end(), findError, &errorLessThan);
+        auto lowerIter = std::lower_bound(errorList.begin(), errorList.end(), findError, &errorLessThan);
 
-
-        foreach(cwError error, errorList) {
-            errorListToReturn.append(error);
+        while(lowerIter != upperIter && lowerIter != errorList.end()) {
+            cwError currentError = *lowerIter;
+            errorsToReturn.append(QVariant::fromValue(currentError));
+            lowerIter++;
         }
 
-        foreach(QObject* children, parent->children()) {
-            errorListToReturn.append(errors(children));
-        }
+        return errorsToReturn;
     }
+    return QVariantList();
 }
 
 /**
@@ -141,7 +145,7 @@ QVariantList cwErrorModel::errors(const QObject *parent, int index) const
  */
 void cwErrorModel::emitErrorChanged(const QObject *parent)
 {
-    QObject* nextParent = parent;
+    const QObject* nextParent = parent;
     while(nextParent != nullptr) {
         emit errorsChanged(nextParent);
         nextParent = nextParent->parent();

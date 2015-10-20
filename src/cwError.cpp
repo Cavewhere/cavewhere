@@ -6,7 +6,11 @@
 **************************************************************************/
 
 
+//Our includes
 #include "cwError.h"
+
+//Qt includes
+#include <QPointer>
 
 class cwErrorData : public QSharedData
 {
@@ -127,7 +131,7 @@ void cwError::setErrorTypeId(int errorId) {
 * @return The parent that this error is referancing
 */
 QObject* cwError::parent() const {
-    return Parent;
+    return data->Parent;
 }
 
 /**
@@ -135,10 +139,7 @@ QObject* cwError::parent() const {
 * @param parent
 */
 void cwError::setParent(QObject* parent) {
-    if(Parent != parent) {
-        Parent = parent;
-        emit parentChanged();
-    }
+    data->Parent = parent;
 }
 
 /**
@@ -146,7 +147,7 @@ void cwError::setParent(QObject* parent) {
 * @return
 */
 int cwError::index() const {
-    return Index;
+    return data->Index;
 }
 
 /**
@@ -154,8 +155,5 @@ int cwError::index() const {
 * @param index
 */
 void cwError::setIndex(int index) {
-    if(Index != index) {
-        Index = index;
-        emit indexChanged();
-    }
+    data->Index = index;
 }

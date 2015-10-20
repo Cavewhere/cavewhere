@@ -17,11 +17,10 @@ class cwErrorData;
 class cwError
 {
     Q_GADGET
-    Q_ENUMS(Error ErrorType)
+    Q_ENUMS(ErrorType)
 
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
-    Q_PROPERTY(Error error READ error WRITE setError)
-    Q_PROPERTY(int index READ index WRITE setIndex NOTIFY indexChanged)
+    Q_PROPERTY(int index READ index WRITE setIndex)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
     Q_PROPERTY(QString message READ message WRITE setMessage)
     Q_PROPERTY(QObject* parent READ parent WRITE setParent)
@@ -62,6 +61,6 @@ private:
     QSharedDataPointer<cwErrorData> data;
 };
 
-Q_DECLARE_METATYPE(cwSurveyChunkError)
+Q_DECLARE_METATYPE(cwError)
 
 #endif // CWSURVEYCHUNKERROR_H
