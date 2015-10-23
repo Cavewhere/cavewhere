@@ -142,27 +142,8 @@ public slots:
     void setSuppressWarning(DataRole role, int index, cwError warning, bool suppress);
 
 private:
-    class ErrorKey {
-    public:
-
-        ErrorKey() : Index(-1), Role(StationNameRole) {}
-        ErrorKey(int index, DataRole role) : Index(index), Role(role) {}
-
-        bool operator <(const ErrorKey other) const {
-            if(Index == other.Index) {
-                return Role < other.Role;
-            }
-            return Index < other.Index;
-        }
-
-        int Index;
-        DataRole Role;
-    };
-
     QList<cwStation> Stations;
     QList<cwShot> Shots;
-
-    QMultiMap<ErrorKey, cwError> Errors; //An index of errors for the stations and shots
 
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
@@ -187,7 +168,8 @@ private:
     void checkForError(DataRole role, int index);
     void checkForStationError(int index);
     void checkForShotError(int index);
-    void updateErrorIndexes();
+    void updateErrors();
+    void clearErrors();
 
 
 //    int errorCount(cwSurveyChunkError::ErrorType type) const;

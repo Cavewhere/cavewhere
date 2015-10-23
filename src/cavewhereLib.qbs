@@ -9,8 +9,10 @@ import qbs.File
   This library prevents building cavewhere source twice when building object
   files for the application and for the testcases.
   */
-StaticLibrary {
+DynamicLibrary {
     id: applicationId
+
+    name: "cavewhere-lib"
 
     readonly property string gitVersion: Git.productVersion
     readonly property string installPrefix: {
@@ -20,7 +22,6 @@ StaticLibrary {
         return ""
     }
 
-    name: "cavewhere-lib"
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -45,6 +46,20 @@ StaticLibrary {
 
 //        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
+    Group {
+        fileTagsFilter: ["dynamiclibrary"]
+        qbs.installDir: "lib/" + (qbs.targetOS.contains("darwin") ? product.name + ".framework/Versions/A" : "")
+        qbs.install: true
+    }
+
+    Group {
+        fileTagsFilter: ["bundle"]
+        qbs.installDir: "lib"
+        qbs.install: true
+    }
+
+    cpp.installNamePrefix: qbs.installRoot + "/lib"
+
     cpp.includePaths: [
         ".",
         "utils",
@@ -52,23 +67,23 @@ StaticLibrary {
         buildDirectory + "/versionInfo"
     ]
 
-//    Properties {
-//        condition: qbs.targetOS.contains("osx")
+    Properties {
+        condition: qbs.targetOS.contains("osx")
 
-//        cpp.dynamicLibraries: [
-//            "c++"
-//        ]
+        cpp.dynamicLibraries: [
+            "c++"
+        ]
 
-//        cpp.frameworks: [
-//            "OpenGL"
-//        ]
-//    }
+        cpp.frameworks: [
+            "OpenGL"
+        ]
+    }
 
     Properties {
         condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
         cpp.cxxFlags: [
-//            "-stdlib=libc++", //Needed for protoc
-//            "-std=c++11", //For c++11 support
+            "-stdlib=libc++", //Needed for protoc
+            "-std=c++11", //For c++11 support
             "-Werror" //Treat warnings as errors
         ]
     }

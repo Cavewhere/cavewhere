@@ -17,7 +17,9 @@ class cwErrorData : public QSharedData
 public:
     cwErrorData() :
         Type(cwError::NoError),
-        ErrorId(0),
+        ErrorId(-1),
+        Index(-1),
+        Role(-1),
         Suppressed(false)
     {
 
@@ -26,6 +28,7 @@ public:
     cwError::ErrorType Type;
     int ErrorId; //!<
     int Index; //!<
+    int Role; //!<
     bool Suppressed;
     QString Message;
     QPointer<QObject> Parent; //!<
@@ -105,7 +108,21 @@ bool cwError::operator==(const cwError &other) const
 {
     return data->ErrorId == other.data->ErrorId &&
             data->Type == other.data->Type &&
-            data->Parent == other.data->Parent;
+            data->Role == other.data->Role &&
+            data->Index == other.data->Index &&
+            data->Parent == other.data->Parent &&
+            data->Suppressed == other.data->Suppressed &&
+            data->Message == other.data->Message;
+}
+
+/**
+ * @brief cwError::operator !=
+ * @param error
+ * @return
+ */
+bool cwError::operator!=(const cwError &error) const
+{
+    return !operator==(error);
 }
 
 /**
@@ -156,4 +173,20 @@ int cwError::index() const {
 */
 void cwError::setIndex(int index) {
     data->Index = index;
+}
+
+/**
+* @brief cwError::role
+* @return
+*/
+int cwError::role() const {
+    return data->Role;
+}
+
+/**
+* @brief cwError::setRole
+* @param role
+*/
+void cwError::setRole(int role) {
+    data->Role = role;
 }

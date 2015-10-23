@@ -5,12 +5,28 @@
 **
 **************************************************************************/
 
-
+//Our includes
 #include "cwErrorModel.h"
+
+//Qt includes
+#include <QDebug>
 
 cwErrorModel::cwErrorModel(QObject *parent) : QObject(parent)
 {
 
+}
+
+bool errorLessThan(const cwError &left, const cwError &right) {
+    if(left.index() == right.index()) {
+        if(left.role() == right.role()) {
+            if(left.errorTypeId() == right.errorTypeId()) {
+                return left.type() < right.type();
+            }
+            return left.errorTypeId() < right.errorTypeId();
+        }
+        return left.role() < right.role();
+    }
+    return left.index() < right.index();
 }
 
 /**
@@ -19,13 +35,20 @@ cwErrorModel::cwErrorModel(QObject *parent) : QObject(parent)
  * @param right
  * @return
  */
-bool errorLessThan(const cwError& left, const cwError& right) {
+bool errorLessThanIndexRole(const cwError& left, const cwError& right) {
     if(left.index() == right.index()) {
-        if(left.errorTypeId() == right.errorTypeId()) {
-            return left.type() < right.type();
-        }
-        return left.errorTypeId() < right.errorTypeId();
+        return left.role() < right.role();
     }
+    return left.index() < right.index();
+}
+
+/**
+ * @brief errorLessThan
+ * @param left
+ * @param right
+ * @return
+ */
+bool errorLessThanIndex(const cwError &left, const cwError &right) {
     return left.index() < right.index();
 }
 
@@ -41,11 +64,8 @@ void cwErrorModel::addError(const cwError &error)
     if(Database.contains(error.parent())) {
         //Just replace the error with the new one
         QList<cwError>& errorList = Database[error.parent()];
-        auto iter = std::lower_bound(errorList.begin(), errorList.end(), error, &errorLessThan);
-        if(*iter == error) {
-            //Found existing error, update it in the list
-            *iter = error;
-        } else {
+        auto iter = std::lower_bound(errorList.begin(), errorList.end(), error, &errorLessThan);        
+        if(iter == errorList.end() || *iter != error) {
             //Insert into the sorted list
             errorList.insert(iter, error);
         }
@@ -53,8 +73,10 @@ void cwErrorModel::addError(const cwError &error)
         QList<cwError> errors;
         errors.append(error);
         Database.insert(error.parent(), errors);
+        Parents.insert(error.parent());
     }
 
+    emit errorsChanged(error.parent(), error.index(), error.role());
     emitErrorChanged(error.parent());
 }
 
@@ -81,6 +103,24 @@ void cwErrorModel::removeError(const cwError &error)
 
         emitErrorChanged(error.parent());
     }
+}
+
+/**
+ * @brief cwErrorModel::removeErrorsFor
+ * @param parent
+ */
+void cwErrorModel::removeErrorsFor(QObject *parent)
+{
+    Database.remove(parent);
+}
+
+/**
+ * @brief cwErrorModel::addParent
+ * @param parent
+ */
+void cwErrorModel::addParent(const QObject *parent)
+{
+    Parents.insert(parent);
 }
 
 /**
@@ -116,17 +156,37 @@ QVariantList cwErrorModel::errors(const QObject *parent) const
  */
 QVariantList cwErrorModel::errors(const QObject *parent, int index) const
 {
+    return errors(parent, index, -1);
+}
+
+/**
+ * @brief cwErrorModel::errors
+ * @param parent
+ * @param index
+ * @param role
+ * @return
+ */
+QVariantList cwErrorModel::errors(const QObject *parent, int index, int role) const
+{
     if(Database.contains(parent)) {
         //Just replace the error with the new one
         const QList<cwError>& errorList = Database[parent];
 
         QVariantList errorsToReturn;
 
+        if(errorList.isEmpty()) {
+            return errorsToReturn;
+        }
+
         cwError findError;
         findError.setIndex(index);
+        findError.setRole(role);
 
-        auto upperIter = std::upper_bound(errorList.begin(), errorList.end(), findError, &errorLessThan);
-        auto lowerIter = std::lower_bound(errorList.begin(), errorList.end(), findError, &errorLessThan);
+        //Pick a less than function for the sorted list search, based if role is valid or not
+        auto lessThan = role != -1 ? &errorLessThanIndexRole : &errorLessThanIndex;
+
+        auto upperIter = std::upper_bound(errorList.begin(), errorList.end(), findError, lessThan);
+        auto lowerIter = std::lower_bound(errorList.begin(), errorList.end(), findError, lessThan);
 
         while(lowerIter != upperIter && lowerIter != errorList.end()) {
             cwError currentError = *lowerIter;
@@ -143,11 +203,13 @@ QVariantList cwErrorModel::errors(const QObject *parent, int index) const
  * @brief cwErrorModel::emitErrorChanged
  * @param parent
  */
-void cwErrorModel::emitErrorChanged(const QObject *parent)
+void cwErrorModel::emitErrorChanged(QObject *parent)
 {
-    const QObject* nextParent = parent;
+    QObject* nextParent = parent;
     while(nextParent != nullptr) {
-        emit errorsChanged(nextParent);
+        if(Parents.contains(nextParent)) {
+            emit parentErrorsChanged(nextParent);
+        }
         nextParent = nextParent->parent();
     }
 }

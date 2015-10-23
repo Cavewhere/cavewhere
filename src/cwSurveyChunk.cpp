@@ -12,6 +12,7 @@
 #include "cwTrip.h"
 #include "cwCave.h"
 #include "cwDebug.h"
+#include "cwErrorModel.h"
 
 //Qt includes
 #include <QHash>
@@ -67,9 +68,27 @@ int cwSurveyChunk::stationCount() const {
   */
 void cwSurveyChunk::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
+
+        //Clear errors from previous parent
+        cwCave* tripsParentCave = (trip == nullptr ? nullptr : trip->parentCave());
+        if(tripsParentCave != parentCave()) {
+            //This assumes that the error model is located in the parent cave
+            clearErrors();
+        }
+
+        if(ParentTrip != nullptr) {
+            disconnect(ParentTrip, &cwTrip::parentCaveChanged, this, &cwSurveyChunk::updateErrors);
+        }
+
         ParentTrip = trip;
         setParent(trip);
-        //        updateStationsWithNewCave();
+
+        if(ParentTrip != nullptr) {
+            connect(ParentTrip, &cwTrip::parentCaveChanged, this, &cwSurveyChunk::updateErrors);
+        }
+
+        updateErrors();
+
         emit parentTripChanged();
     }
 }
@@ -152,7 +171,7 @@ void cwSurveyChunk::appendShot(cwStation fromStation, cwStation toStation, cwSho
     int firstIndex = Stations.size();
     if(Stations.empty()) {
         Stations.append(fromStation);
-        checkForStationError(Stations.size() - 2);
+        checkForStationError(Stations.size() - 1);
     }
 
     index = Shots.size();
@@ -209,7 +228,7 @@ cwSurveyChunk* cwSurveyChunk::splitAtStation(int stationIndex) {
     emit shotsRemoved(shotIndex, shotEnd);
 
     //Check for errors
-    updateErrorIndexes();
+    updateErrors();
 
     //Append a new last station
     appendNewShot();
@@ -247,7 +266,7 @@ void cwSurveyChunk::insertStation(int stationIndex, Direction direction) {
     emit stationsAdded(stationIndex, stationIndex);
     emit shotsAdded(shotIndex, shotIndex);
 
-    updateErrorIndexes();
+    updateErrors();
 }
 
 /**
@@ -274,7 +293,7 @@ void cwSurveyChunk::insertShot(int shotIndex, Direction direction) {
     Shots.insert(shotIndex, cwShot());
     emit shotsAdded(shotIndex, shotIndex);
 
-    updateErrorIndexes();
+    updateErrors();
 }
 
 
@@ -345,7 +364,7 @@ void cwSurveyChunk::removeStation(int stationIndex, Direction shot) {
     remove(stationIndex, shotIndex);
 
     //Refresh all the errors
-    updateErrorIndexes();
+    updateErrors();
 }
 
 /**
@@ -382,7 +401,7 @@ void cwSurveyChunk::removeShot(int shotIndex, Direction station) {
     remove(stationIndex, shotIndex);
 
     //Refresh all the errors
-    updateErrorIndexes();
+    updateErrors();
 }
 
 /**
@@ -757,6 +776,9 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
  */
 void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 {
+    Q_UNUSED(role)
+    Q_UNUSED(index)
+
     QList<cwError> errors;
 
     //For testing
@@ -764,11 +786,13 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
     allwaysError.setType(cwError::Fatal);
 //    allwaysError.setError(cwError::DataNotValid);
     allwaysError.setMessage("Sauce");
+    allwaysError.setParent(this);
 
     cwError allwaysError2;
     allwaysError2.setType(cwError::Warning);
 //    allwaysError2.setError(cwError::DataDuplicated);
     allwaysError2.setMessage("Warning Sauce");
+    allwaysError2.setParent(this);
 
 //    errors.append(allwaysError);
     errors.append(allwaysError2);
@@ -822,11 +846,17 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 //        break;
 //    }
 
-    ErrorKey key(index, role);
-    foreach(cwError error, errors) {
-        if(!Errors.contains(key, error)) {
-            Errors.insert(key, error);
-            errorsChanged();
+//    ErrorKey key(index, role);
+//    foreach(cwError error, errors) {
+//        if(!Errors.contains(key, error)) {
+//            Errors.insert(key, error);
+//            errorsChanged();
+//        }
+//    }
+
+    if(parentCave() != nullptr) {
+        foreach(cwError error, errors) {
+            parentCave()->errorModel()->addError(error);
         }
     }
 }
@@ -865,17 +895,29 @@ void cwSurveyChunk::checkForShotError(int index)
 /**
  * @brief cwSurveyChunk::updateErrorIndexes
  */
-void cwSurveyChunk::updateErrorIndexes()
+void cwSurveyChunk::updateErrors()
 {
-    //Clears the error list for the chunk, and goes through and updates all the errors
-    Errors.clear();
+    clearErrors();
 
     for(int i = 0; i < Shots.size(); i++) {
         checkForShotError(i);
     }
 
     for(int i = 0; i < Stations.size(); i++) {
-        checkForShotError(i);
+        checkForStationError(i);
+    }
+}
+
+/**
+ * @brief cwSurveyChunk::clearErrors
+ * Clears the error list for the chunk, and goes through and updates all the errors
+ *
+ * If the parentTrip and cave isn't set, this does nothing
+ */
+void cwSurveyChunk::clearErrors()
+{
+    if(parentCave() != nullptr) {
+        parentCave()->errorModel()->removeErrorsFor(this);
     }
 }
 
@@ -915,15 +957,11 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
  */
 QVariantList cwSurveyChunk::errors() const
 {
-    QList<cwError> currentErrors = Errors.values();
-    QVariantList errorList;
-    errorList.reserve(currentErrors.size());
-
-    foreach(cwError error, currentErrors) {
-        errorList.append(QVariant::fromValue(error));
+    if(parentCave() != nullptr) {
+        return parentCave()->errorModel()->errors(this);
     }
 
-    return errorList;
+    return QVariantList();
 }
 
 /**
@@ -934,17 +972,11 @@ QVariantList cwSurveyChunk::errors() const
  */
 QVariantList cwSurveyChunk::errorsAt(cwSurveyChunk::DataRole role, int index) const
 {
-    Q_UNUSED(role);
-    Q_UNUSED(index);
 
-    QVariantList errorList;
-
-    auto foundErrors = Errors.values(ErrorKey(index, role));
-    foreach(cwError error, foundErrors) {
-        errorList.append(QVariant::fromValue(error));
+    if(parentCave() != nullptr) {
+        return parentCave()->errorModel()->errors(this, index, role);
     }
-
-    return errorList;
+    return QVariantList();
 }
 
 /**
@@ -967,12 +999,12 @@ void cwSurveyChunk::setSuppressWarning(cwSurveyChunk::DataRole role,
     Q_UNUSED(warning)
     Q_UNUSED(suppress)
 
-    ErrorKey key(index, role);
-    if(Errors.contains(key, warning)) {
-        Errors.find(key, warning).value().setSupressed(suppress);
-        emit dataChanged(role, index);
-        emit errorsChanged();
-    }
+//    ErrorKey key(index, role);
+//    if(Errors.contains(key, warning)) {
+//        Errors.find(key, warning).value().setSupressed(suppress);
+//        emit dataChanged(role, index);
+//        emit errorsChanged();
+//    }
 }
 
 /**

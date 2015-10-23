@@ -95,6 +95,7 @@ signals:
     void calibrationChanged();
     void notesChanged();
     void numberOfChunksChanged();
+    void parentCaveChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);

@@ -104,6 +104,8 @@ private slots:
     void splitOnStation(int index);
     void splitOnShot(int index);
 
+    void updateErrors(const QObject* parent, int index, int role);
+
 private:
 
     class Row {

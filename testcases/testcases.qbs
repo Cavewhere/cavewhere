@@ -10,6 +10,8 @@ CavewhereApp {
     name: "cavewhere-test"
     consoleApplication: true
 
+    Depends { name: "Qt"; submodules: ["test"] }
+
     Group {
         name: "testcases"
         files: [

@@ -11,6 +11,7 @@
 //Our include
 class cwTrip;
 class cwLength;
+class cwErrorModel;
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
@@ -31,6 +32,11 @@ class cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
+    Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+
+
+
+
 
     Q_ENUMS(Roles)
 public:
@@ -48,6 +54,8 @@ public:
 
     cwLength* length() const;
     cwLength* depth() const;
+
+    cwErrorModel* errorModel() const;
 
     int tripCount() const;
     cwTrip* trip(int index) const;
@@ -83,20 +91,22 @@ signals:
 
     void stationPositionPositionChanged();
 
-protected:
+private:
     QList<cwTrip*> Trips;
     QString Name;
 
     cwLength* Length;
     cwLength* Depth;
 
+    cwErrorModel* ErrorModel; //!<
+
     cwStationPositionLookup StationPositionModel;
     bool StationPositionModelStale;
 
-    virtual void setUndoStackForChildren();
-private:
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();
+
+    virtual void setUndoStackForChildren();
 
 ////////////////////// Undo Redo commands ///////////////////////////////////
     class NameCommand : public QUndoCommand {
@@ -210,6 +220,17 @@ inline cwStationPositionLookup cwCave::stationPositionLookup() const
     return StationPositionModel;
 }
 
+/**
+* @brief cwCave::errorModel
+* @return Returns the error model, the database of current errors for the cave.
+*
+* These are errors that are created by the user and should fixed by the user. The
+* error model doesn't report bugs in cavewhere. For example the error model will have
+* store errors like a survey leg isn't corrected to the rest of the cave.
+*/
+inline cwErrorModel* cwCave::errorModel() const {
+    return ErrorModel;
+}
 
 
 

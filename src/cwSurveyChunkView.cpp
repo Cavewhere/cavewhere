@@ -16,6 +16,8 @@
 #include "cwValidator.h"
 #include "cwSurveyChunkTrimmer.h"
 #include "cwTrip.h"
+#include "cwCave.h"
+#include "cwErrorModel.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -545,6 +547,9 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
         connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
 
+        Q_ASSERT(SurveyChunk->parentCave() != nullptr);
+        connect(SurveyChunk->parentCave()->errorModel(), &cwErrorModel::errorsChanged, this, &cwSurveyChunkView::updateErrors);
+
         emit modelChanged();
     }
 }
@@ -689,6 +694,19 @@ void cwSurveyChunkView::splitOnShot(int /*index*/) {
 
 
 
+}
+
+/**
+ * @brief cwSurveyChunkView::updateErrors
+ * @param parent
+ * @param index
+ * @param role
+ */
+void cwSurveyChunkView::updateErrors(const QObject *parent, int index, int role)
+{
+    if(parent == this) {
+        updateData((cwSurveyChunk::DataRole)role, index);
+    }
 }
 
 

@@ -380,6 +380,7 @@ void cwTrip::setParentCave(cwCave* parentCave) {
         setParent(parentCave);
 
         Notes->setParentCave(ParentCave);
+        emit parentCaveChanged();
     }
 }
 

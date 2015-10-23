@@ -29,10 +29,10 @@ Item {
                 for(var errorIndex in errors) {
                     var error = errors[errorIndex]
                     switch(error.type) {
-                    case SurveyChunkError.Fatal:
+                    case Error.Fatal:
                         numErrors++;
                         break;
-                    case SurveyChunkError.Warning:
+                    case Error.Warning:
                         if(!error.suppressed) {
                             numWarnings++;
                         }

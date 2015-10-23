@@ -10,11 +10,13 @@
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwLength.h"
+#include "cwErrorModel.h"
 
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
+    ErrorModel(new cwErrorModel(this)),
     StationPositionModelStale(false)
 {
     Length->setUnit(cwUnits::Meters);
@@ -31,7 +33,9 @@ cwCave::cwCave(const cwCave& object) :
     QAbstractListModel(nullptr),
     cwUndoer(),
     Length(new cwLength(this)),
-    Depth(new cwLength(this))
+    Depth(new cwLength(this)),
+    ErrorModel(new cwErrorModel(this)),
+    StationPositionModelStale(false)
 {
     Copy(object);
 }
