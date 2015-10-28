@@ -65,6 +65,7 @@ void cwTrip::Copy(const cwTrip& object)
         cwSurveyChunk* newChunk = new cwSurveyChunk(*objectsChunk);
         newChunk->setParent(this);
         newChunk->setParentTrip(this);
+        newChunk->errorModel()->setParentModel(ErrorModel);
         Chunks.append(newChunk);
     }
     emit chunksInserted(0, object.Chunks.size() - 1);
