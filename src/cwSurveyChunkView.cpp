@@ -960,6 +960,7 @@ cwSurveyChunkView::StationRow::StationRow(cwSurveyChunkView* view, int rowIndex)
                             components->lrudValidator());
 
     foreach(QQuickItem* item, items()) {
+        Q_ASSERT(item != nullptr); //If this fails there's probably a qml error in databox
         item->setProperty("rowIndex", rowIndex);
         item->setProperty("surveyChunk", QVariant::fromValue(view->model()));
         item->setProperty("surveyChunkView", QVariant::fromValue(view));
