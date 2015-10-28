@@ -154,7 +154,6 @@ Rectangle {
                 //            anchors.top: parent.top
                 //            anchors.bottom: parent.bottom
 
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Issues"; width: 38}
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; width: 100 }
@@ -187,57 +186,39 @@ Rectangle {
                     }
 
                     Item {
-                        width: rowLayout.width + 2
-                        height: rowLayout.height + 2
+                        visible: styleData.column === 0
+
+                        anchors.fill: parent
 
                         RowLayout {
                             id: rowLayout
-                            visible: styleData.column === 0
                             spacing: 1
-                            anchors.centerIn: parent
 
-                            Image {
-                                source: "qrc:icons/stopSignError.png"
-                                sourceSize: Qt.size(16, 16)
-                                visible: styleData.value.errorModel.fatalCount > 0
+                            ErrorIconBar {
+                                errorModel: styleData.value.errorModel
                             }
 
-                            Image {
-                                source: "qrc:icons/warning.png"
-                                sourceSize: Qt.size(16, 16)
-                                visible: styleData.value.errorModel.warningCount > 0
-                            }
+                            LinkText {
+                                text: styleData.value.name
+                                elide: Text.ElideRight
 
-                            Image {
-                                source: "qrc:icons/good.png"
-                                sourceSize: Qt.size(16, 16)
-                                visible: styleData.value.errorModel.warningCount === 0 &&
-                                         styleData.value.errorModel.fatalCount === 0
+                                onClicked: {
+                                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                               tripPageName(styleData.value));
+                                }
                             }
                         }
                     }
-
-                    LinkText {
-                        visible: styleData.column === 1
-                        text: styleData.value.name
-                        elide: Text.ElideRight
-                        anchors.fill: parent
-                        onClicked: {
-                            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                       tripPageName(styleData.value));
-                        }
-                    }
-
 
                     Text {
-                        visible: styleData.column === 2
+                        visible: styleData.column === 1
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
                     }
 
                     Text {
-                        visible: styleData.column === 3
+                        visible: styleData.column === 2
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: {
@@ -249,7 +230,7 @@ Rectangle {
                     }
 
                     Text {
-                        visible: styleData.column === 4
+                        visible: styleData.column === 3
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: {

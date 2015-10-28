@@ -81,12 +81,27 @@ Rectangle {
                         }
                     }
 
-                    LinkText {
+                    Item {
                         visible: styleData.column === 0
-                        text: styleData.value.name
-                        onClicked: {
-                            rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                       cavePageName(styleData.value));
+
+                        anchors.fill: parent
+
+                        RowLayout {
+                            id: rowLayout
+                            spacing: 1
+
+                            ErrorIconBar {
+                                errorModel: styleData.value.errorModel
+                            }
+
+                            LinkText {
+                                visible: styleData.column === 0
+                                text: styleData.value.name
+                                onClicked: {
+                                    rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                               cavePageName(styleData.value));
+                                }
+                            }
                         }
                     }
 

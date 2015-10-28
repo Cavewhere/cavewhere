@@ -80,6 +80,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
         cwTrip* newTrip = new cwTrip(*trip); //Deep copy of the trip
         newTrip->setParent(this);
         newTrip->setParentCave(this);
+        newTrip->errorModel()->setParentModel(ErrorModel);
         Trips.append(newTrip);
     }
 
@@ -273,6 +274,7 @@ void cwCave::InsertRemoveTrip::insertTrips() {
         int index = BeginIndex + i;
         cave->Trips.insert(index, Trips[i]);
         Trips[i]->setParentCave(cave);
+        Trips[i]->errorModel()->setParentModel(cave->errorModel());
 //        cave->errorModel()->addParent(Trips[i]);
     }
 
@@ -292,6 +294,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
         int index = BeginIndex + i;
         cave->Trips.removeAt(index);
         Trips[i]->setParentCave(nullptr);
+        Trips[i]->errorModel()->setParentModel(nullptr);
     }
 
     OwnsTrips = true;
