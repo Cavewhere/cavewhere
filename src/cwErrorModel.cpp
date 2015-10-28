@@ -5,8 +5,9 @@
 **
 **************************************************************************/
 
-
+//Our includes
 #include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 cwErrorModel::cwErrorModel(QObject *parent) :
     QObject(parent),

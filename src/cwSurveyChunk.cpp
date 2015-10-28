@@ -13,6 +13,7 @@
 #include "cwCave.h"
 #include "cwDebug.h"
 #include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QHash>

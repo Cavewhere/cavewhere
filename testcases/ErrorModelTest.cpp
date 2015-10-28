@@ -17,6 +17,7 @@
 //Our includes
 #include "cwError.h"
 #include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 TEST_CASE("Fatal and warning count changing changing") {
 

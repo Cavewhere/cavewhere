@@ -101,6 +101,7 @@
 #include "cwLeadsSortFilterProxyModel.h"
 #include "cwLinkBarModel.h"
 #include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 //Qt registeration
 #include <QQuickView>

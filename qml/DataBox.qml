@@ -241,54 +241,55 @@ Item {
             radius: 0
         }
 
-//        QuoteBox {
-//            id: errorQuoteBox
-//            z: 10
+        QuoteBox {
+            id: errorQuoteBox
+            z: 10
 
-//            parent: rootPopupItem
+            parent: rootPopupItem
 
-////            visible: errorIconMouseArea.containsMouse
-//            visible: errorIcon.troggled //false
-//            pointAtObject: errorIcon
-//            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
-//            triangleEdge: Qt.TopEdge
-//            //            triangleOffset: 1.0
+//            visible: errorIconMouseArea.containsMouse
+            visible: errorIcon.troggled //false
+            pointAtObject: errorIcon
+            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
+            triangleEdge: Qt.TopEdge
+            //            triangleOffset: 1.0
 
-//            onVisibleChanged: {
-//                console.log("Visible changed:" + visible)
-//            }
+            onVisibleChanged: {
+                console.log("Visible changed:" + visible)
+            }
 
-//            ColumnLayout {
-//                Repeater {
-//                    id: repeaterId
-//                    model: errors
-//                    delegate:
-//                        RowLayout {
+            ColumnLayout {
+                Repeater {
+                    id: repeaterId
+                    model: errorModel === null ? 0 : errorModel.errors
+                    delegate:
+                        RowLayout {
 
-//                        Image {
-//                            source: errorImageSource(errors[index])
-//                        }
+                        Image {
+                            source: errorImageSource(type)
+                        }
 
-//                        Controls.CheckBox {
-//                            checked: errors[index].suppressed
-//                            onCheckedChanged: {
-//                                //SuppressWarning
-//                                if(errors[index].suppressed !== checked) {
-//                                    surveyChunk.setSuppressWarning(errors[index], checked);
-//                                }
-//                            }
-//                            visible: errors[index].type === CwError.Warning
-//                        }
+                        Controls.CheckBox {
+                            checked: suppressed
+                            onCheckedChanged: {
+                                //SuppressWarning
+                                if(suppressed !== checked) {
+                                    suppressed = checked
+                                    errorModel.errors.setData(index, suppressed, "suppressed")
+                                }
+                            }
+                            visible: type === CwError.Warning
+                        }
 
-//                        Text {
-//                            text: errors[index].message
-//                            font.strikeout: errors[index].suppressed
-//                        }
-//                    }
+                        Text {
+                            text: message
+                            font.strikeout: suppressed
+                        }
+                    }
 
-//                }
-//            }
-//        }
+                }
+            }
+        }
 
     }
 

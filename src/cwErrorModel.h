@@ -6,19 +6,15 @@
 **
 **************************************************************************/
 
-#ifndef CWERRORLISTMODEL_H
-#define CWERRORLISTMODEL_H
+#ifndef CWERRORMODEL_H
+#define CWERRORMODEL_H
 
 //Qt includes
 #include <QAbstractListModel>
 
-//Qt QML trick lib
-#include <QQmlGadgetListModel>
-
 //Our includes
 #include "cwError.h"
-
-typedef QQmlGadgetListModel<cwError> cwErrorListModel;
+class cwErrorListModel;
 
 class cwErrorModel : public QObject
 {
@@ -72,4 +68,4 @@ private slots:
 
 
 
-#endif // CWERRORLISTMODEL_H
+#endif // CWERRORMODEL_H

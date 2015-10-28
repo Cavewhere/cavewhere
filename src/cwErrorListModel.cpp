@@ -8,7 +8,8 @@
 
 #include "cwErrorListModel.h"
 
-cwErrorListModel::cwErrorListModel()
+cwErrorListModel::cwErrorListModel(QObject *parent)
+    : QQmlGadgetListModel<cwError>(parent)
 {
 
 }

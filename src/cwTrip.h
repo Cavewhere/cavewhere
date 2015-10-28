@@ -43,12 +43,6 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
-
-
-
-
-
-
 public:
     explicit cwTrip(QObject *parent = 0);
     cwTrip(const cwTrip& object);

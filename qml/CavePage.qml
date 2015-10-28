@@ -154,6 +154,7 @@ Rectangle {
                 //            anchors.top: parent.top
                 //            anchors.bottom: parent.bottom
 
+                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Issues"; width: 38}
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
                 Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; width: 100 }
@@ -161,6 +162,7 @@ Rectangle {
 
                 itemDelegate:
                     Item {
+                    clip: true
 
                     Connections {
                         target: tableViewId
@@ -184,8 +186,39 @@ Rectangle {
                         onlyLargestRange: true
                     }
 
+                    Item {
+                        width: rowLayout.width + 2
+                        height: rowLayout.height + 2
+
+                        RowLayout {
+                            id: rowLayout
+                            visible: styleData.column === 0
+                            spacing: 1
+                            anchors.centerIn: parent
+
+                            Image {
+                                source: "qrc:icons/stopSignError.png"
+                                sourceSize: Qt.size(16, 16)
+                                visible: styleData.value.errorModel.fatalCount > 0
+                            }
+
+                            Image {
+                                source: "qrc:icons/warning.png"
+                                sourceSize: Qt.size(16, 16)
+                                visible: styleData.value.errorModel.warningCount > 0
+                            }
+
+                            Image {
+                                source: "qrc:icons/good.png"
+                                sourceSize: Qt.size(16, 16)
+                                visible: styleData.value.errorModel.warningCount === 0 &&
+                                         styleData.value.errorModel.fatalCount === 0
+                            }
+                        }
+                    }
+
                     LinkText {
-                        visible: styleData.column === 0
+                        visible: styleData.column === 1
                         text: styleData.value.name
                         elide: Text.ElideRight
                         anchors.fill: parent
@@ -197,14 +230,14 @@ Rectangle {
 
 
                     Text {
-                        visible: styleData.column === 1
+                        visible: styleData.column === 2
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
                     }
 
                     Text {
-                        visible: styleData.column === 2
+                        visible: styleData.column === 3
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: {
@@ -216,7 +249,7 @@ Rectangle {
                     }
 
                     Text {
-                        visible: styleData.column === 3
+                        visible: styleData.column === 4
                         elide: Text.ElideRight
                         anchors.fill: parent
                         text: {

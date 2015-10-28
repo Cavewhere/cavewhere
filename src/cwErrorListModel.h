@@ -9,12 +9,17 @@
 #ifndef CWERRORLISTMODEL_H
 #define CWERRORLISTMODEL_H
 
-#include <QObject>
+//Qt includes
+#include <QQmlGadgetListModel>
 
-class cwErrorListModel
+//Our inculdes
+#include "cwError.h"
+
+class cwErrorListModel : public QQmlGadgetListModel<cwError>
 {
+    Q_OBJECT
 public:
-    cwErrorListModel();
+    cwErrorListModel(QObject* parent = nullptr);
 };
 
 #endif // CWERRORLISTMODEL_H

@@ -14,12 +14,12 @@ Item {
     implicitWidth: borderRectangle.width
     implicitHeight: borderRectangle.height
 
+    visible: false
+
     Rectangle {
         id: borderRectangle
 
         border.width: 1
-//        border.color: "#930100"
-//        color: "#FAB8B9"
         radius: 3
         width: layoutId.width + 20
         height: layoutId.height + 10
@@ -114,7 +114,8 @@ Item {
         State {
             name: "ErrorsAndWarnings"
             when: _numErrors > 0 && _numWarnings > 0
-            extend: "hasErrors"
+            extend: "hasError"
+
 
             PropertyChanges {
                 target: errorText
