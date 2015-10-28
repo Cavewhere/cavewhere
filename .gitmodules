@@ -18,4 +18,4 @@
 	url = git@github.com:Cavewhere/squish.git
 [submodule "lib-qt-qml-tricks"]
 	path = lib-qt-qml-tricks
-	url = ./lib-qt-qml-tricks
+	url = git@github.com:Cavewhere/lib-qt-qml-tricks.git

@@ -10,12 +10,13 @@
 
 //Our includes
 #include "cwError.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QSignalSpy>
 #include <QQmlGadgetListModel>
 
-void checkError(const cwError& error, QQmlGadgetListModel<cwError>& model, int idx) {
+void checkError(const cwError& error, cwErrorListModel& model, int idx) {
     REQUIRE(idx >= 0);
     REQUIRE(idx < model.count());
 
@@ -30,7 +31,7 @@ void checkError(const cwError& error, QQmlGadgetListModel<cwError>& model, int i
 }
 
 TEST_CASE("Basic QML Gadget List operations") {
-    QQmlGadgetListModel<cwError> model;
+    cwErrorListModel model;
 
     CHECK(model.isEmpty() == true);
 
@@ -227,11 +228,55 @@ TEST_CASE("Basic QML Gadget List operations") {
                 model.setData(model.index(i), true, model.roleForName("suppressed"));
 
                 CHECK(model.data(model.index(i), model.roleForName("suppressed")) == QVariant(true));
+                CHECK(model.data(i, "suppressed") == true);
                 CHECK(model.at(i).suppressed() == true);
+
+
+                int errorTypeId = i*5;
+                model.setData(i, errorTypeId, "errorTypeId");
+
+                CHECK(model.data(model.index(i), model.roleForName("errorTypeId")) == errorTypeId);
+                CHECK(model.data(i, "errorTypeId") == errorTypeId);
+                CHECK(model.at(i).errorTypeId() == errorTypeId);
             }
 
-            CHECK(dataChangedSpy.count() == size);
+            CHECK(dataChangedSpy.count() == size * 2);
             CHECK(dataChangedSpy.first().last().value<QVector<int>>().first() == model.roleForName("suppressed"));
+        }
+
+        SECTION("Check Replace") {
+            QSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
+
+            cwError replaceError;
+            replaceError.setMessage("Replace error 1");
+            replaceError.setType(cwError::Warning);
+
+            SECTION("C++ replace") {
+                model.replace(2, replaceError);
+
+                CHECK(model.at(2) == replaceError);
+                REQUIRE(dataChangedSpy.count() == 1);
+
+                auto roles = dataChangedSpy.first().last().value<QVector<int>>();
+                REQUIRE(roles.size() == model.roleNames().size()); //Changes to all 4 properties
+
+                foreach(int role, roles) {
+                    CHECK(model.roleNames().contains(role) == true);
+                }
+            }
+
+            SECTION("QML replace") {
+                model.replace(2, QVariant::fromValue(replaceError));
+
+                CHECK(model.at(2) == replaceError);
+                REQUIRE(dataChangedSpy.count() == 1);
+                auto roles = dataChangedSpy.first().last().value<QVector<int>>();
+                REQUIRE(roles.size() == model.roleNames().size()); //Changes to all 4 properties
+
+                foreach(int role, roles) {
+                    CHECK(model.roleNames().contains(role) == true);
+                }
+            }
         }
 
         SECTION("roleNames") {
