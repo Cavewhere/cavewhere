@@ -109,33 +109,33 @@ Item {
         rightClickMenu.popup();
     }
 
-//    onErrorsChanged: {
-//        console.log("Errors changed!" + errors)
+    //    onErrorsChanged: {
+    //        console.log("Errors changed!" + errors)
 
-//        var color = ""
-//        var iconSource = ""
-//        var errorsVisible = false;
-//        for(var errorIndex in errors) {
-//            var error = errors[errorIndex]
+    //        var color = ""
+    //        var iconSource = ""
+    //        var errorsVisible = false;
+    //        for(var errorIndex in errors) {
+    //            var error = errors[errorIndex]
 
-////            console.log("Error:" + error)
+    ////            console.log("Error:" + error)
 
-//            if(!error.suppressed) {
-//                errorsVisible = true;
-//            }
+    //            if(!error.suppressed) {
+    //                errorsVisible = true;
+    //            }
 
-//            color = errorBorderColor(error);
-//            iconSource = errorImageSource(error);
-//            if(error.type === CwError.Fatal) {
-//                break;
-//            }
+    //            color = errorBorderColor(error);
+    //            iconSource = errorImageSource(error);
+    //            if(error.type === CwError.Fatal) {
+    //                break;
+    //            }
 
-//        }
+    //        }
 
-//        errorBorder.shouldBeVisible = errorsVisible
-//        errorBorder.border.color = color
-//        errorIcon.iconSource = iconSource
-//    }
+    //        errorBorder.shouldBeVisible = errorsVisible
+    //        errorBorder.border.color = color
+    //        errorIcon.iconSource = iconSource
+    //    }
 
     Controls.Menu {
         id: rightClickMenu
@@ -241,56 +241,10 @@ Item {
             radius: 0
         }
 
-        QuoteBox {
-            id: errorQuoteBox
-            z: 10
-
-            parent: rootPopupItem
-
-//            visible: errorIconMouseArea.containsMouse
-            visible: errorIcon.troggled //false
-            pointAtObject: errorIcon
-            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
-            triangleEdge: Qt.TopEdge
-            //            triangleOffset: 1.0
-
-            onVisibleChanged: {
-                console.log("Visible changed:" + visible)
-            }
-
-            ColumnLayout {
-                Repeater {
-                    id: repeaterId
-                    model: errorModel === null ? 0 : errorModel.errors
-                    delegate:
-                        RowLayout {
-
-                        Image {
-                            source: errorImageSource(type)
-                        }
-
-                        Controls.CheckBox {
-                            checked: suppressed
-                            onCheckedChanged: {
-                                //SuppressWarning
-                                if(suppressed !== checked) {
-                                    suppressed = checked
-                                    errorModel.errors.setData(index, suppressed, "suppressed")
-                                }
-                            }
-                            visible: type === CwError.Warning
-                        }
-
-                        Text {
-                            text: message
-                            font.strikeout: suppressed
-                        }
-                    }
-
-                }
-            }
+        ErrorListQuoteBox {
+            visible: errorIcon.troggled
+            errors:  errorModel !== null ? errorModel.errors : null
         }
-
     }
 
     Rectangle {
