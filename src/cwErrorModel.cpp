@@ -5,212 +5,169 @@
 **
 **************************************************************************/
 
-//Our includes
+
 #include "cwErrorModel.h"
 
-//Qt includes
-#include <QDebug>
-
-cwErrorModel::cwErrorModel(QObject *parent) : QObject(parent)
+cwErrorModel::cwErrorModel(QObject *parent) :
+    QObject(parent),
+    FatalCount(0),
+    WarningCount(0),
+    FatalWaringCountUptoDate(false),
+    Errors(new cwErrorListModel(this)),
+    Parent(nullptr)
 {
+    connect(Errors, SIGNAL(countChanged()), this, SLOT(makeCountDirty()));
+    connect(Errors, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)), this, SLOT(checkForCountChanged(QModelIndex,QModelIndex,QVector<int>)));
+}
+
+void cwErrorModel::setParentModel(cwErrorModel *parent)
+{
+    if(Parent != parent) {
+        if(Parent != nullptr) {
+            Parent->removeChildModel(this);
+        }
+
+        Parent = parent;
+
+        if(Parent != nullptr) {
+            Parent->addChildModel(this);
+        }
+
+        makeCountDirty();
+    }
+}
+
+cwErrorModel *cwErrorModel::parentModel() const
+{
+    return Parent;
+}
+
+/**
+ * @brief cwErrorModel::addChildModel
+ * @param model
+ */
+void cwErrorModel::addChildModel(cwErrorModel *model)
+{
+    Q_ASSERT(!ChildModels.contains(model));
+
+    ChildModels.append(model);
+
+    connect(model, SIGNAL(fatalCountChanged()), this, SLOT(makeFatalDirty()));
+    connect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
+
+    makeCountDirty();
+}
+
+void cwErrorModel::removeChildModel(cwErrorModel *model)
+{
+    Q_ASSERT(ChildModels.contains(model));
+
+    ChildModels.removeOne(model);
+
+    disconnect(model, SIGNAL(fatalCountChanged()), this, SLOT(makeFatalDirty()));
+    disconnect(model, SIGNAL(warningCountChanged()), this, SLOT(makeWarningDirty()));
+
+    makeCountDirty();
+}
+
+void cwErrorModel::makeCountDirty()
+{
+    makeFatalDirty();
+    makeWarningDirty();
 
 }
 
-bool errorLessThan(const cwError &left, const cwError &right) {
-    if(left.index() == right.index()) {
-        if(left.role() == right.role()) {
-            if(left.errorTypeId() == right.errorTypeId()) {
-                return left.type() < right.type();
+void cwErrorModel::makeFatalDirty()
+{
+    FatalWaringCountUptoDate = false;
+    emit fatalCountChanged();
+}
+
+void cwErrorModel::makeWarningDirty()
+{
+    FatalWaringCountUptoDate = false;
+    emit warningCountChanged();
+}
+
+/**
+ * @brief cwErrorModel::checkForWarning
+ * @param topLeft
+ * @param bottomRight
+ * @param roles
+ */
+void cwErrorModel::checkForCountChanged(QModelIndex topLeft, QModelIndex bottomRight, QVector<int> roles)
+{
+    Q_UNUSED(topLeft);
+    Q_UNUSED(bottomRight);
+    foreach(int role, roles) {
+        if(Errors->roleForName("suppressed") == role ||
+                Errors->roleForName("type") == role)
+        {
+
+            makeCountDirty();
+        }
+    }
+}
+
+/**
+ * @brief cwErrorModel::updateFatalAndWarningCount
+ */
+void cwErrorModel::updateFatalAndWarningCount() const
+{
+    FatalCount = 0;
+    WarningCount = 0;
+
+    for(int i = 0; i < Errors->count(); i++) {
+        cwError error = Errors->at(i);
+        switch(error.type()) {
+        case cwError::Fatal:
+            FatalCount++;
+            break;
+        case cwError::Warning:
+            if(!error.suppressed()) {
+                WarningCount++;
             }
-            return left.errorTypeId() < right.errorTypeId();
-        }
-        return left.role() < right.role();
-    }
-    return left.index() < right.index();
-}
-
-/**
- * @brief errorLessThan
- * @param left
- * @param right
- * @return
- */
-bool errorLessThanIndexRole(const cwError& left, const cwError& right) {
-    if(left.index() == right.index()) {
-        return left.role() < right.role();
-    }
-    return left.index() < right.index();
-}
-
-/**
- * @brief errorLessThan
- * @param left
- * @param right
- * @return
- */
-bool errorLessThanIndex(const cwError &left, const cwError &right) {
-    return left.index() < right.index();
-}
-
-/**
- * @brief cwErrorManager::addError
- * @param error - Adds the error to the model
- */
-void cwErrorModel::addError(const cwError &error)
-{
-    Q_ASSERT(error.parent() != nullptr); //You need to set the parent for the error
-
-    //Parent object exists
-    if(Database.contains(error.parent())) {
-        //Just replace the error with the new one
-        QList<cwError>& errorList = Database[error.parent()];
-        auto iter = std::lower_bound(errorList.begin(), errorList.end(), error, &errorLessThan);        
-        if(iter == errorList.end() || *iter != error) {
-            //Insert into the sorted list
-            errorList.insert(iter, error);
-        }
-    } else {
-        QList<cwError> errors;
-        errors.append(error);
-        Database.insert(error.parent(), errors);
-        Parents.insert(error.parent());
-    }
-
-    emit errorsChanged(error.parent(), error.index(), error.role());
-    emitErrorChanged(error.parent());
-}
-
-/**
- * @brief cwErrorModel::removeError
- * @param error - Removes an error from the model
- */
-void cwErrorModel::removeError(const cwError &error)
-{
-    Q_ASSERT(error.parent() != nullptr);
-
-    if(Database.contains(error.parent())) {
-        //Just replace the error with the new one
-        QList<cwError>& errorList = Database[error.parent()];
-        auto iter = std::lower_bound(errorList.begin(), errorList.end(), error, &errorLessThan);
-        if(*iter == error) {
-            //Found existing error, update it in the list
-            errorList.erase(iter);
-        }
-
-        if(errorList.isEmpty()) {
-            Database.remove(error.parent());
-        }
-
-        emitErrorChanged(error.parent());
-    }
-}
-
-/**
- * @brief cwErrorModel::removeErrorsFor
- * @param parent
- */
-void cwErrorModel::removeErrorsFor(QObject *parent)
-{
-    Database.remove(parent);
-}
-
-/**
- * @brief cwErrorModel::addParent
- * @param parent
- */
-void cwErrorModel::addParent(const QObject *parent)
-{
-    Parents.insert(parent);
-}
-
-/**
- * @brief cwErrorModel::errors
- * @param parent
- * @return Returns all the errors for the parent and it's children
- */
-QVariantList cwErrorModel::errors(const QObject *parent) const
-{
-    QVariantList errorListToReturn;
-
-    if(Database.contains(parent)) {
-        //Just replace the error with the new one
-        const QList<cwError>& errorList = Database[parent];
-
-        foreach(cwError error, errorList) {
-            errorListToReturn.append(QVariant::fromValue(error));
-        }
-
-        foreach(QObject* children, parent->children()) {
-            errorListToReturn.append(errors(children));
+            break;
+        default:
+            break;
         }
     }
 
-    return errorListToReturn;
-}
-
-/**
- * @brief cwErrorModel::errors
- * @param parent
- * @param index
- * @return
- */
-QVariantList cwErrorModel::errors(const QObject *parent, int index) const
-{
-    return errors(parent, index, -1);
-}
-
-/**
- * @brief cwErrorModel::errors
- * @param parent
- * @param index
- * @param role
- * @return
- */
-QVariantList cwErrorModel::errors(const QObject *parent, int index, int role) const
-{
-    if(Database.contains(parent)) {
-        //Just replace the error with the new one
-        const QList<cwError>& errorList = Database[parent];
-
-        QVariantList errorsToReturn;
-
-        if(errorList.isEmpty()) {
-            return errorsToReturn;
-        }
-
-        cwError findError;
-        findError.setIndex(index);
-        findError.setRole(role);
-
-        //Pick a less than function for the sorted list search, based if role is valid or not
-        auto lessThan = role != -1 ? &errorLessThanIndexRole : &errorLessThanIndex;
-
-        auto upperIter = std::upper_bound(errorList.begin(), errorList.end(), findError, lessThan);
-        auto lowerIter = std::lower_bound(errorList.begin(), errorList.end(), findError, lessThan);
-
-        while(lowerIter != upperIter && lowerIter != errorList.end()) {
-            cwError currentError = *lowerIter;
-            errorsToReturn.append(QVariant::fromValue(currentError));
-            lowerIter++;
-        }
-
-        return errorsToReturn;
+    foreach(cwErrorModel* child, ChildModels) {
+        FatalCount += child->fatalCount();
+        WarningCount += child->warningCount();
     }
-    return QVariantList();
+
+    FatalWaringCountUptoDate = true;
 }
 
 /**
- * @brief cwErrorModel::emitErrorChanged
- * @param parent
- */
-void cwErrorModel::emitErrorChanged(QObject *parent)
-{
-    QObject* nextParent = parent;
-    while(nextParent != nullptr) {
-        if(Parents.contains(nextParent)) {
-            emit parentErrorsChanged(nextParent);
-        }
-        nextParent = nextParent->parent();
+* @brief cwErrorListModel::fatalCount
+* @return
+*/
+int cwErrorModel::fatalCount() const {
+    if(!FatalWaringCountUptoDate) {
+        updateFatalAndWarningCount();
     }
+    return FatalCount;
 }
 
+
+/**
+* @brief cwErrorListModel::warningCount
+* @return
+*/
+int cwErrorModel::warningCount() const {
+    if(!FatalWaringCountUptoDate) {
+        updateFatalAndWarningCount();
+    }
+    return WarningCount;
+}
+
+/**
+* @brief cwErrorListModel::errors
+* @return
+*/
+cwErrorListModel* cwErrorModel::errors() const {
+    return Errors;
+}

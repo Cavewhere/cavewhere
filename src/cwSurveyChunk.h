@@ -13,6 +13,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwError.h"
+class cwErrorModel;
 class cwTrip;
 class cwCave;
 
@@ -28,7 +29,7 @@ class cwSurveyChunk : public QObject {
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
     Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
-    Q_PROPERTY(QVariantList errors READ errors NOTIFY errorsChanged)
+    Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
 public:
     enum Direction {
@@ -88,8 +89,7 @@ public:
     ConnectedState connectedState() const;
     void setConnectedState(ConnectedState connectedState);
 
-    int warningCount() const;
-    int fatalErrorCount() const;
+    cwErrorModel* errorModel() const;
 
 signals:
     void parentTripChanged();
@@ -106,7 +106,7 @@ signals:
 
     void connectedStateChanged();
 
-    void errorsChanged();
+    void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
 
 public slots:
     int stationCount() const;
@@ -137,13 +137,35 @@ public slots:
     QVariant data(DataRole role, int index) const;
     void setData(DataRole role, int index, QVariant data);
 
-    QVariantList errors() const;
-    QVariantList errorsAt(DataRole role, int index) const;
-    void setSuppressWarning(DataRole role, int index, cwError warning, bool suppress);
+//    QVariantList errors() const;
+    cwErrorModel* errorsAt(int index, DataRole role) const;
+//    void setSuppressWarning(cwError warning, bool suppress);
 
 private:
+    class CellIndex {
+
+    public:
+        CellIndex() : Index(-1), Role(-1) {}
+        CellIndex(int index, int role) : Index(index), Role(role) {}
+
+        bool operator<(const CellIndex& other) const {
+            if(Index == other.Index) {
+                return Role < other.Role;
+            }
+            return Index < other.Index;
+        }
+
+    private:
+        int Index;
+        int Role;
+    };
+
     QList<cwStation> Stations;
     QList<cwShot> Shots;
+
+    cwErrorModel* ErrorModel;
+    QMap<CellIndex, cwErrorModel*> CellErrorModels;
+
 
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
@@ -212,5 +234,13 @@ inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
     return IsConnectedState;
 }
 
+
+/**
+* @brief cwSurveyChunk::errorModel
+* @return
+*/
+inline cwErrorModel* cwSurveyChunk::errorModel() const {
+    return ErrorModel;
+}
 
 #endif // CWSurveyChunk_H

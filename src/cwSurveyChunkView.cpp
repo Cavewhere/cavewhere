@@ -546,9 +546,11 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
         connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
         connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
         connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
+        connect(SurveyChunk, SIGNAL(errorsChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
 
-        Q_ASSERT(SurveyChunk->parentCave() != nullptr);
-        connect(SurveyChunk->parentCave()->errorModel(), &cwErrorModel::errorsChanged, this, &cwSurveyChunkView::updateErrors);
+
+//        Q_ASSERT(SurveyChunk->parentCave() != nullptr);
+//        connect(SurveyChunk->parentCave()->errorModel(), &cwErrorModel::errorsChanged, this, &cwSurveyChunkView::updateErrors);
 
         emit modelChanged();
     }
@@ -1490,8 +1492,8 @@ void cwSurveyChunkView::updateData(QQuickItem *item, cwSurveyChunk::DataRole rol
     QVariant data = SurveyChunk->data(role, index);
     item->setProperty("dataValue", data);
 
-    QVariantList errors = SurveyChunk->errorsAt(role, index);
-    item->setProperty("errors", errors);
+    cwErrorModel* errorModel = SurveyChunk->errorsAt(index, role);
+    item->setProperty("errorModel", QVariant::fromValue(errorModel));
 }
 
 /**

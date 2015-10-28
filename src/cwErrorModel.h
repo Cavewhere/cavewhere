@@ -1,3 +1,4 @@
+
 /**************************************************************************
 **
 **    Copyright (C) 2015 by Philip Schuchardt
@@ -5,46 +6,70 @@
 **
 **************************************************************************/
 
+#ifndef CWERRORLISTMODEL_H
+#define CWERRORLISTMODEL_H
 
-#ifndef CWERRORMANAGER_H
-#define CWERRORMANAGER_H
-
-#include <QObject>
-#include <QHash>
-#include <QSet>
+//Qt includes
 #include <QAbstractListModel>
 
-//Our include
+//Qt QML trick lib
+#include <QQmlGadgetListModel>
+
+//Our includes
 #include "cwError.h"
+
+typedef QQmlGadgetListModel<cwError> cwErrorListModel;
 
 class cwErrorModel : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(int fatalCount READ fatalCount NOTIFY fatalCountChanged)
+    Q_PROPERTY(int warningCount READ warningCount NOTIFY warningCountChanged)
+    Q_PROPERTY(cwErrorListModel* errors READ errors CONSTANT)
+
 public:
-    explicit cwErrorModel(QObject *parent = 0);
+    cwErrorModel(QObject* parent = nullptr);
 
-    void addError(const cwError& error);
-    void removeError(const cwError& error);
-    void removeErrorsFor(QObject* parent);
+    int fatalCount() const;
+    int warningCount() const;
 
-    void addParent(const QObject* parent);
+    void setParentModel(cwErrorModel* parent);
+    cwErrorModel *parentModel() const;
 
-    QVariantList errors(const QObject* parent) const;
-    QVariantList errors(const QObject* parent, int index) const;
-    QVariantList errors(const QObject* parent, int index, int role) const;
+    cwErrorListModel* errors() const;
 
 signals:
-    void parentErrorsChanged(QObject* parent);
-    void errorsChanged(QObject* parent, int index, int role);
-
-public slots:
+    void fatalCountChanged();
+    void warningCountChanged();
 
 private:
-    QHash<const QObject*, QList<cwError>> Database; //List of errors for each parent
-    QSet<const QObject*> Parents;
+    mutable int FatalCount; //!< Cached values for FatalCount
+    mutable int WarningCount; //!< Cached values for WaringCount
 
-    void emitErrorChanged(QObject* parent);
+    mutable bool FatalWaringCountUptoDate;
+
+    cwErrorListModel* Errors;
+    QList<cwErrorModel*> ChildModels;
+
+    cwErrorModel* Parent;
+
+    void addChildModel(cwErrorModel* model);
+    void removeChildModel(cwErrorModel* model);
+
+    void updateFatalAndWarningCount() const;
+private slots:
+    void makeCountDirty();
+    void makeFatalDirty();
+    void makeWarningDirty();
+    void checkForCountChanged(QModelIndex topLeft, QModelIndex bottomRight, QVector<int> roles);
 
 };
 
-#endif // CWERRORMANAGER_H
+
+
+
+
+
+
+#endif // CWERRORLISTMODEL_H

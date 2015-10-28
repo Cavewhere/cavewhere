@@ -20,7 +20,7 @@ Item {
     property SurveyChunkView surveyChunkView;
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
-    property var errors;
+    property ErrorModel errorModel: null
 
     property int rowIndex: -1
     property int dataRole
@@ -43,6 +43,7 @@ Item {
     //        dataTextInput.validator = dataValidator;
     //    }
 
+
     function deletePressedHandler() {
         dataValue = '';
         editor.openEditor();
@@ -61,25 +62,37 @@ Item {
         }
     }
 
-    function errorImageSource(error) {
-        switch(error.type) {
-        case SurveyChunkError.Fatal:
+    function errorImageSource(errorType) {
+        switch(errorType) {
+        case CwError.Fatal:
             return "qrc:icons/stopSignError.png";
-        case SurveyChunkError.Warning:
+        case CwError.Warning:
             return "qrc:icons/warning.png"
         default:
             return "";
         }
     }
 
-    function errorBorderColor(error) {
-        switch(error.type) {
-        case SurveyChunkError.Fatal:
+    function errorBorderColor(errorType) {
+        switch(errorType) {
+        case CwError.Fatal:
             return "#960800";
-        case SurveyChunkError.Warning:
+        case CwError.Warning:
             return "#FF7600"
         default:
             return "black";
+        }
+    }
+
+    function errorAppearance(func) {
+        if(errorModel !== null) {
+            if(errorModel.fatalCount > 0) {
+                return func(CwError.Fatal);
+            } else if(errorModel.warningCount > 0) {
+                return func(CwError.Warning);
+            }
+        } else {
+            return ""
         }
     }
 
@@ -96,33 +109,33 @@ Item {
         rightClickMenu.popup();
     }
 
-    onErrorsChanged: {
-        console.log("Errors changed!" + errors)
+//    onErrorsChanged: {
+//        console.log("Errors changed!" + errors)
 
-        var color = ""
-        var iconSource = ""
-        var errorsVisible = false;
-        for(var errorIndex in errors) {
-            var error = errors[errorIndex]
+//        var color = ""
+//        var iconSource = ""
+//        var errorsVisible = false;
+//        for(var errorIndex in errors) {
+//            var error = errors[errorIndex]
 
-            if(!error.suppressed) {
-                errorsVisible = true;
-            }
+////            console.log("Error:" + error)
 
-            color = errorBorderColor(error);
-            iconSource = errorImageSource(error);
-            if(error.type === SurveyChunkError.Fatal) {
-                break;
-            }
+//            if(!error.suppressed) {
+//                errorsVisible = true;
+//            }
 
-        }
+//            color = errorBorderColor(error);
+//            iconSource = errorImageSource(error);
+//            if(error.type === CwError.Fatal) {
+//                break;
+//            }
 
-        errorBorder.shouldBeVisible = errorsVisible
-        errorBorder.border.color = color
-        errorIcon.iconSource = iconSource
-    }
+//        }
 
-
+//        errorBorder.shouldBeVisible = errorsVisible
+//        errorBorder.border.color = color
+//        errorIcon.iconSource = iconSource
+//    }
 
     Controls.Menu {
         id: rightClickMenu
@@ -207,76 +220,76 @@ Item {
 
     Rectangle {
         id: errorBorder
-        property bool shouldBeVisible: false
+        property bool shouldBeVisible: errorModel !== null && (errorModel.fatalCount > 0 || errorModel.warningCount > 0)
 
         anchors.fill: parent
         anchors.margins: 1
         border.width: 1
+        border.color: errorAppearance(errorBorderColor)
         color: "#00000000"
         visible: shouldBeVisible || errorIcon.troggled
-//        visible: typeof(errors) != "undefined" && errors.length > 0
 
         Button {
             id: errorIcon
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: 2
-            iconSource: ""
+            iconSource: errorAppearance(errorImageSource)
             checkable: true
             iconSize: Qt.size(10, 10);
             globalClickToUncheck: true
             radius: 0
         }
 
-        QuoteBox {
-            id: errorQuoteBox
-            z: 10
+//        QuoteBox {
+//            id: errorQuoteBox
+//            z: 10
 
-            parent: rootPopupItem
+//            parent: rootPopupItem
 
-//            visible: errorIconMouseArea.containsMouse
-            visible: errorIcon.troggled //false
-            pointAtObject: errorIcon
-            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
-            triangleEdge: Qt.TopEdge
-            //            triangleOffset: 1.0
+////            visible: errorIconMouseArea.containsMouse
+//            visible: errorIcon.troggled //false
+//            pointAtObject: errorIcon
+//            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
+//            triangleEdge: Qt.TopEdge
+//            //            triangleOffset: 1.0
 
-            onVisibleChanged: {
-                console.log("Visible changed:" + visible)
-            }
+//            onVisibleChanged: {
+//                console.log("Visible changed:" + visible)
+//            }
 
-            ColumnLayout {
-                Repeater {
-                    id: repeaterId
-                    model: errors
-                    delegate:
-                        RowLayout {
+//            ColumnLayout {
+//                Repeater {
+//                    id: repeaterId
+//                    model: errors
+//                    delegate:
+//                        RowLayout {
 
-                        Image {
-                            source: errorImageSource(errors[index])
-                        }
+//                        Image {
+//                            source: errorImageSource(errors[index])
+//                        }
 
-                        Controls.CheckBox {
-                            checked: errors[index].suppressed
-                            onCheckedChanged: {
-                                //SuppressWarning
-                                if(errors[index].suppressed !== checked) {
-                                    surveyChunk.setSuppressWarning(dataRole, rowIndex, errors[index], checked);
-                                    console.log("Checked", checked);
-                                }
-                            }
-                            visible: errors[index].type === SurveyChunkError.Warning
-                        }
+//                        Controls.CheckBox {
+//                            checked: errors[index].suppressed
+//                            onCheckedChanged: {
+//                                //SuppressWarning
+//                                if(errors[index].suppressed !== checked) {
+//                                    surveyChunk.setSuppressWarning(errors[index], checked);
+//                                }
+//                            }
+//                            visible: errors[index].type === CwError.Warning
+//                        }
 
-                        Text {
-                            text: errors[index].message
-                            font.strikeout: errors[index].suppressed
-                        }
-                    }
+//                        Text {
+//                            text: errors[index].message
+//                            font.strikeout: errors[index].suppressed
+//                        }
+//                    }
 
-                }
-            }
-        }
+//                }
+//            }
+//        }
+
     }
 
     Rectangle {

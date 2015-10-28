@@ -32,11 +32,9 @@ class cwError
     Q_ENUMS(ErrorType)
 
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
-    Q_PROPERTY(int index READ index WRITE setIndex)
-    Q_PROPERTY(int role READ role WRITE setRole)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
     Q_PROPERTY(QString message READ message WRITE setMessage)
-    Q_PROPERTY(QObject* parent READ parent WRITE setParent)
+    Q_PROPERTY(ErrorType type READ type WRITE setType)
 
 public:
     enum ErrorType {
@@ -53,12 +51,6 @@ public:
     ErrorType type() const;
     void setType(ErrorType type);
 
-    int index() const;
-    void setIndex(int index);
-
-    int role() const;
-    void setRole(int role);
-
     int errorTypeId() const;
     void setErrorTypeId(int errorTypeId);
 
@@ -67,9 +59,6 @@ public:
 
     QString message() const;
     void setMessage(QString message);
-
-    QObject* parent() const;
-    void setParent(QObject* parent);
 
     bool operator==(const cwError& error) const;
     bool operator!=(const cwError& error) const;

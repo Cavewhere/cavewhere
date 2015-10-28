@@ -143,50 +143,50 @@ void cwError::setErrorTypeId(int errorId) {
     data->ErrorId = errorId;
 }
 
-/**
-* @brief cwError::parent
-* @return The parent that this error is referancing
-*/
-QObject* cwError::parent() const {
-    return data->Parent;
-}
+///**
+//* @brief cwError::parent
+//* @return The parent that this error is referancing
+//*/
+//QObject* cwError::parent() const {
+//    return data->Parent;
+//}
 
-/**
-* @brief cwError::setParent
-* @param parent
-*/
-void cwError::setParent(QObject* parent) {
-    data->Parent = parent;
-}
+///**
+//* @brief cwError::setParent
+//* @param parent
+//*/
+//void cwError::setParent(QObject* parent) {
+//    data->Parent = parent;
+//}
 
-/**
-* @brief cwError::index
-* @return
-*/
-int cwError::index() const {
-    return data->Index;
-}
+///**
+//* @brief cwError::index
+//* @return
+//*/
+//int cwError::index() const {
+//    return data->Index;
+//}
 
-/**
-* @brief cwError::setIndex
-* @param index
-*/
-void cwError::setIndex(int index) {
-    data->Index = index;
-}
+///**
+//* @brief cwError::setIndex
+//* @param index
+//*/
+//void cwError::setIndex(int index) {
+//    data->Index = index;
+//}
 
-/**
-* @brief cwError::role
-* @return
-*/
-int cwError::role() const {
-    return data->Role;
-}
+///**
+//* @brief cwError::role
+//* @return
+//*/
+//int cwError::role() const {
+//    return data->Role;
+//}
 
-/**
-* @brief cwError::setRole
-* @param role
-*/
-void cwError::setRole(int role) {
-    data->Role = role;
-}
+///**
+//* @brief cwError::setRole
+//* @param role
+//*/
+//void cwError::setRole(int role) {
+//    data->Role = role;
+//}

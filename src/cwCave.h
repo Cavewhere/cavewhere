@@ -35,9 +35,6 @@ class cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
 
-
-
-
     Q_ENUMS(Roles)
 public:
     enum Roles {

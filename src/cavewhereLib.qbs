@@ -41,6 +41,7 @@ DynamicLibrary {
     Depends { name: "protobuf" }
     Depends { name: "z" }
     Depends { name: "Git" }
+    Depends { name: "sdk-utilities" }
 
 //        Depends { name: "icns-out" }
 

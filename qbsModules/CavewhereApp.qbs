@@ -35,6 +35,7 @@ Application {
     }
     Depends { name: "cavewhere-lib" }
     Depends { name: "QMath3d" }
+    Depends { name: "sdk-utilities" }
 
 //        Depends { name: "icns-out" }
 

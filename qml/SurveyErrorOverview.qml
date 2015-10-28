@@ -8,45 +8,11 @@ Item {
     property Trip trip: null
 
     property var _chunkToWatch: [] //Array of chunks to watch
-    property int _numWarnings: 0
-    property int _numErrors: 0
+    property int _numWarnings: trip.errorModel.warningCount
+    property int _numErrors: trip.errorModel.fatalCount
 
     implicitWidth: borderRectangle.width
     implicitHeight: borderRectangle.height
-
-//    visible: false
-
-    function updateWarningAndErrors() {
-        var numWarnings = 0;
-        var numErrors = 0;
-
-        if(trip != null) {
-
-            for(var i = 0; i < trip.numberOfChunks; i++) {
-                var chunk = trip.chunk(i);
-                var errors = chunk.errors;
-
-                for(var errorIndex in errors) {
-                    var error = errors[errorIndex]
-                    switch(error.type) {
-                    case Error.Fatal:
-                        numErrors++;
-                        break;
-                    case Error.Warning:
-                        if(!error.suppressed) {
-                            numWarnings++;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-
-        _numWarnings = numWarnings;
-        _numErrors = numErrors;
-    }
-
-    onTripChanged: updateWarningAndErrors()
 
     Rectangle {
         id: borderRectangle
@@ -80,33 +46,6 @@ Item {
         }
 
 
-    }
-
-    Connections {
-        target: trip
-        onNumberOfChunksChanged: {
-            //Disconnect old chunks
-            for(var i in _chunkToWatch) {
-                var chunk = _chunkToWatch[i]
-                chunk.errorsChanged.disconnect(updateWarningAndErrors)
-            }
-
-            //Clear the chunks to watch
-            _chunkToWatch = [];
-
-            //Go through all the chunks
-            for(var i = 0; i < trip.numberOfChunks; i++) {
-                var chunk =  trip.chunk(i);
-                chunk.errorsChanged.connect(updateWarningAndErrors)
-                _chunkToWatch.push(chunk)
-            }
-
-            updateWarningAndErrors()
-        }
-    }
-
-    onStateChanged: {
-        console.log("State:" + state)
     }
 
     states: [

@@ -24,6 +24,8 @@ cwCave::cwCave(QObject* parent) :
 
     Length->setUpdateValue(true);
     Depth->setUpdateValue(true);
+
+//    ErrorModel->addParent(this);
 }
 
 /**
@@ -271,6 +273,7 @@ void cwCave::InsertRemoveTrip::insertTrips() {
         int index = BeginIndex + i;
         cave->Trips.insert(index, Trips[i]);
         Trips[i]->setParentCave(cave);
+//        cave->errorModel()->addParent(Trips[i]);
     }
 
     OwnsTrips = false;

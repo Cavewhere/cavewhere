@@ -12,6 +12,7 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
+#include "cwErrorModel.h"
 
 //Qt includes
 #include <QMap>
@@ -25,6 +26,7 @@ cwTrip::cwTrip(QObject *parent) :
     Calibration = new cwTripCalibration(this);
     Date = QDate::currentDate();
     Notes = new cwSurveyNoteModel(this);
+    ErrorModel = new cwErrorModel(this);
 
     Notes->setParentTrip(this);
 }
@@ -48,6 +50,8 @@ void cwTrip::Copy(const cwTrip& object)
     //Copy the notes model
     Notes = new cwSurveyNoteModel(*(object.Notes));
     Notes->setParentTrip(this);
+
+    ErrorModel = new cwErrorModel(this);
 
     //Remove all the originals
     int lastChunkIndex = Chunks.size() - 1;
@@ -213,7 +217,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
 
     //Make this own the chunk
     chunk->setParentTrip(this);
-
+    chunk->errorModel()->setParentModel(errorModel());
     Chunks.insert(row, chunk);
 
     emit chunksInserted(row, row);

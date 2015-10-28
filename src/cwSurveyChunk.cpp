@@ -23,6 +23,7 @@
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
+    ErrorModel(new cwErrorModel(this)),
     ParentTrip(nullptr)
 {
 
@@ -35,6 +36,7 @@ cwSurveyChunk::cwSurveyChunk(QObject * parent) :
   */
 cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
     QObject(),
+    ErrorModel(new cwErrorModel(this)),
     ParentTrip(nullptr)
 {
 
@@ -786,16 +788,29 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
     allwaysError.setType(cwError::Fatal);
 //    allwaysError.setError(cwError::DataNotValid);
     allwaysError.setMessage("Sauce");
-    allwaysError.setParent(this);
+//    allwaysError.setParent(this);
+//    allwaysError.setIndex(index);
+//    allwaysError.setRole(role);
 
     cwError allwaysError2;
     allwaysError2.setType(cwError::Warning);
 //    allwaysError2.setError(cwError::DataDuplicated);
     allwaysError2.setMessage("Warning Sauce");
-    allwaysError2.setParent(this);
+//    allwaysError2.setParent(this);
+//    allwaysError2.setIndex(index);
+//    allwaysError2.setRole(role);
 
-//    errors.append(allwaysError);
+    errors.append(allwaysError);
     errors.append(allwaysError2);
+
+    if(!CellErrorModels.contains(CellIndex(index, role))) {
+        cwErrorModel* cellModel = new cwErrorModel(ErrorModel);
+        cellModel->setParentModel(ErrorModel);
+        cellModel->errors()->append(errors);
+        CellErrorModels.insert(CellIndex(index, role), cellModel);
+        emit errorsChanged(role, index);
+    }
+
 
 //    switch(role) {
 //    case StationNameRole: {
@@ -854,11 +869,11 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 //        }
 //    }
 
-    if(parentCave() != nullptr) {
-        foreach(cwError error, errors) {
-            parentCave()->errorModel()->addError(error);
-        }
-    }
+//    if(parentCave() != nullptr) {
+//        foreach(cwError error, errors) {
+//            parentCave()->errorModel()->addError(error);
+//        }
+//    }
 }
 
 /**
@@ -916,9 +931,7 @@ void cwSurveyChunk::updateErrors()
  */
 void cwSurveyChunk::clearErrors()
 {
-    if(parentCave() != nullptr) {
-        parentCave()->errorModel()->removeErrorsFor(this);
-    }
+    ErrorModel->errors()->clear();
 }
 
 ///**
@@ -951,18 +964,18 @@ void cwSurveyChunk::setData(DataRole role, int index, QVariant data) {
     }
 }
 
-/**
- * @brief cwSurveyChunk::errors
- * @return Returns all the errors in the survey chunk
- */
-QVariantList cwSurveyChunk::errors() const
-{
-    if(parentCave() != nullptr) {
-        return parentCave()->errorModel()->errors(this);
-    }
+///**
+// * @brief cwSurveyChunk::errors
+// * @return Returns all the errors in the survey chunk
+// */
+//cwErrorModel* cwSurveyChunk::errors() const
+//{
+////    if(parentCave() != nullptr) {
+////        return parentCave()->errorModel()->errors(this);
+////    }
 
-    return QVariantList();
-}
+//    return QVariantList();
+//}
 
 /**
  * @brief cwSurveyChunk::error
@@ -970,42 +983,31 @@ QVariantList cwSurveyChunk::errors() const
  * @param index
  * @return Returns the error at index with role.
  */
-QVariantList cwSurveyChunk::errorsAt(cwSurveyChunk::DataRole role, int index) const
+cwErrorModel* cwSurveyChunk::errorsAt(int index, cwSurveyChunk::DataRole role) const
 {
-
-    if(parentCave() != nullptr) {
-        return parentCave()->errorModel()->errors(this, index, role);
-    }
-    return QVariantList();
+    return CellErrorModels.value(CellIndex(index, role), nullptr);
 }
 
-/**
- * @brief cwSurveyChunk::setSuppressWarning
- * @param role
- * @param index
- * @param warning
- * @param suppress
- *
- * This will find the warning in role and index and suppress it. It is not possible to suppress fatal
- * errors. If the warning doesn't exist, this does nothing.
- */
-void cwSurveyChunk::setSuppressWarning(cwSurveyChunk::DataRole role,
-                                       int index,
-                                       cwError warning,
-                                       bool suppress)
-{
-    Q_UNUSED(role)
-    Q_UNUSED(index)
-    Q_UNUSED(warning)
-    Q_UNUSED(suppress)
-
-//    ErrorKey key(index, role);
-//    if(Errors.contains(key, warning)) {
-//        Errors.find(key, warning).value().setSupressed(suppress);
-//        emit dataChanged(role, index);
-//        emit errorsChanged();
-//    }
-}
+///**
+// * @brief cwSurveyChunk::setSuppressWarning
+// * @param role
+// * @param index
+// * @param warning
+// * @param suppress
+// *
+// * This will find the warning in role and index and suppress it. It is not possible to suppress fatal
+// * errors. If the warning doesn't exist, this does nothing.
+// */
+//void cwSurveyChunk::setSuppressWarning(
+//                                       cwError warning,
+//                                       bool suppress)
+//{
+//    Q_UNUSED(warning);
+//    Q_UNUSED(suppress);
+////    if(parentCave() != nullptr) {
+////        return parentCave()->errorModel()->setSuppressForError(warning, suppress);
+////    }
+//}
 
 /**
   \brief Removes a station and a shot from the chunk
