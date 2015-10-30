@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QAbstractListModel>
+#include <QPointer>
 
 //Our includes
 #include "cwError.h"
@@ -26,6 +27,7 @@ class cwErrorModel : public QObject
 
 public:
     cwErrorModel(QObject* parent = nullptr);
+    virtual ~cwErrorModel();
 
     int fatalCount() const;
     int warningCount() const;
@@ -34,6 +36,8 @@ public:
     cwErrorModel *parentModel() const;
 
     cwErrorListModel* errors() const;
+
+    QList<cwErrorModel*> childModels() const;
 
 signals:
     void fatalCountChanged();
@@ -48,7 +52,7 @@ private:
     cwErrorListModel* Errors;
     QList<cwErrorModel*> ChildModels;
 
-    cwErrorModel* Parent;
+    QPointer<cwErrorModel> Parent;
 
     void addChildModel(cwErrorModel* model);
     void removeChildModel(cwErrorModel* model);

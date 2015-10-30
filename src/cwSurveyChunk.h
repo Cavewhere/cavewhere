@@ -141,6 +141,7 @@ public slots:
     cwErrorModel* errorsAt(int index, DataRole role) const;
 //    void setSuppressWarning(cwError warning, bool suppress);
 
+
 private:
     class CellIndex {
 
@@ -187,12 +188,21 @@ private:
     void setStationData(DataRole role, int index, const QVariant &data);
     void setShotData(DataRole role, int index, const QVariant &data);
 
+    void checkForErrorOnDataChanged(DataRole role, int index);
     void checkForError(DataRole role, int index);
     void checkForStationError(int index);
     void checkForShotError(int index);
-    void updateErrors();
+    QList<cwError> checkLRUDError(cwSurveyChunk::DataRole role, int index) const;
+    QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
+    QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
+    bool isShotDataEmpty(int index) const;
+    bool isStationDataEmpty(int index) const;
     void clearErrors();
+    void updateErrors();
 
+private slots:
+    void updateCompassErrors();
+    void updateClinoErrors();
 
 //    int errorCount(cwSurveyChunkError::ErrorType type) const;
 

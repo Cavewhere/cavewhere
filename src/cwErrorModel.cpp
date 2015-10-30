@@ -21,6 +21,14 @@ cwErrorModel::cwErrorModel(QObject *parent) :
     connect(Errors, SIGNAL(dataChanged(QModelIndex,QModelIndex,QVector<int>)), this, SLOT(checkForCountChanged(QModelIndex,QModelIndex,QVector<int>)));
 }
 
+/**
+ * @brief cwErrorModel::~cwErrorModel
+ */
+cwErrorModel::~cwErrorModel()
+{
+    setParentModel(nullptr);
+}
+
 void cwErrorModel::setParentModel(cwErrorModel *parent)
 {
     if(Parent != parent) {
@@ -171,4 +179,13 @@ int cwErrorModel::warningCount() const {
 */
 cwErrorListModel* cwErrorModel::errors() const {
     return Errors;
+}
+
+/**
+ * @brief cwErrorModel::childModels
+ * @return
+ */
+QList<cwErrorModel *> cwErrorModel::childModels() const
+{
+    return ChildModels;
 }

@@ -14,6 +14,10 @@
 #include "cwDebug.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwCompassValidator.h"
+#include "cwDistanceValidator.h"
+#include "cwClinoValidator.h"
+#include "cwTripCalibration.h"
 
 //Qt includes
 #include <QHash>
@@ -21,6 +25,9 @@
 #include <QVariant>
 #include <QSet>
 #include <QRegExp>
+
+//Std includes
+#include <math.h>
 
 cwSurveyChunk::cwSurveyChunk(QObject * parent) :
     QObject(parent),
@@ -71,26 +78,25 @@ int cwSurveyChunk::stationCount() const {
   */
 void cwSurveyChunk::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
-
-        //Clear errors from previous parent
-        cwCave* tripsParentCave = (trip == nullptr ? nullptr : trip->parentCave());
-        if(tripsParentCave != parentCave()) {
-            //This assumes that the error model is located in the parent cave
-            clearErrors();
-        }
-
         if(ParentTrip != nullptr) {
-            disconnect(ParentTrip, &cwTrip::parentCaveChanged, this, &cwSurveyChunk::updateErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassBacksightChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
         }
 
         ParentTrip = trip;
         setParent(trip);
 
         if(ParentTrip != nullptr) {
-            connect(ParentTrip, &cwTrip::parentCaveChanged, this, &cwSurveyChunk::updateErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassBacksightChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
         }
 
-        updateErrors();
+        updateClinoErrors();
+        updateCompassErrors();
 
         emit parentTripChanged();
     }
@@ -718,7 +724,7 @@ void cwSurveyChunk::setStationData(cwSurveyChunk::DataRole role, int index, cons
         qDebug() << "Can't find role:" << role << LOCATION;
     }
 
-    checkForError(role, index);
+    checkForErrorOnDataChanged(role, index);
 
 }
 
@@ -768,8 +774,76 @@ void cwSurveyChunk::setShotData(cwSurveyChunk::DataRole role, int index, const Q
         qDebug() << "Can't find role:" << role << LOCATION;
     }
 
+    checkForErrorOnDataChanged(role, index);
+}
+
+void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int index)
+{
     checkForError(role, index);
 
+    //Check dependent boxes
+    switch(role) {
+    case StationNameRole:
+        checkForError(StationLeftRole, index);
+        checkForError(StationRightRole, index);
+        checkForError(StationUpRole, index);
+        checkForError(StationDownRole, index);
+
+        //Previous shot
+        checkForError(ShotDistanceRole, index - 1);
+        checkForError(ShotCompassRole, index - 1);
+        checkForError(ShotBackCompassRole, index - 1);
+        checkForError(ShotClinoRole, index - 1);
+        checkForError(ShotBackClinoRole, index - 1);
+
+        //Next shot
+        checkForError(ShotDistanceRole, index);
+        checkForError(ShotCompassRole, index);
+        checkForError(ShotBackCompassRole, index);
+        checkForError(ShotClinoRole, index);
+        checkForError(ShotBackClinoRole, index);
+    case StationLeftRole:
+        //No dependancy
+        break;
+    case StationRightRole:
+        //No dependancy
+        break;
+    case StationUpRole:
+        //No dependancy
+        break;
+    case StationDownRole:
+        //No dependancy
+        break;
+    case ShotDistanceRole:
+        checkForError(StationNameRole, index);
+        checkForError(StationNameRole, index + 1);
+        break;
+    case ShotDistanceIncludedRole:
+        //No dependancy
+        break;
+    case ShotCompassRole:
+        checkForError(ShotBackCompassRole, index);
+        checkForError(StationNameRole, index);
+        checkForError(StationNameRole, index + 1);
+        break;
+    case ShotBackCompassRole:
+        checkForError(ShotCompassRole, index);
+        checkForError(StationNameRole, index);
+        checkForError(StationNameRole, index + 1);
+        break;
+    case ShotClinoRole:
+        checkForError(ShotBackClinoRole, index);
+        checkForError(StationNameRole, index);
+        checkForError(StationNameRole, index + 1);
+        break;
+    case ShotBackClinoRole:
+        checkForError(ShotClinoRole, index);
+        checkForError(StationNameRole, index);
+        checkForError(StationNameRole, index + 1);
+        break;
+    default:
+        break;
+    }
 }
 
 /**
@@ -784,97 +858,87 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
 
     QList<cwError> errors;
 
-    //For testing
-    cwError allwaysError;
-    allwaysError.setType(cwError::Fatal);
-//    allwaysError.setError(cwError::DataNotValid);
-    allwaysError.setMessage("Sauce");
-//    allwaysError.setParent(this);
-//    allwaysError.setIndex(index);
-//    allwaysError.setRole(role);
+    switch(role) {
+    case StationNameRole: {
 
-    cwError allwaysError2;
-    allwaysError2.setType(cwError::Warning);
-//    allwaysError2.setError(cwError::DataDuplicated);
-    allwaysError2.setMessage("Warning Sauce");
-//    allwaysError2.setParent(this);
-//    allwaysError2.setIndex(index);
-//    allwaysError2.setRole(role);
+        QString stationName = data(StationNameRole, index).toString();
 
-    errors.append(allwaysError);
-    errors.append(allwaysError2);
+        if(stationName.isEmpty()) {
+            if(!isStationAndShotsEmpty()) {
 
-    if(!CellErrorModels.contains(CellIndex(index, role))) {
-        cwErrorModel* cellModel = new cwErrorModel(ErrorModel);
+                if(!(isShotDataEmpty(index) &&
+                        isShotDataEmpty(index - 1) &&
+                        isStationDataEmpty(index)))
+                {
+                    //Station needs to have
+                    cwError error;
+                    error.setMessage("Missing station name");
+                    error.setType(cwError::Fatal);
+                    errors.append(error);
+                }
+            }
+        }
+
+        break;
+    }
+    case StationLeftRole:
+    case StationRightRole:
+    case StationUpRole:
+    case StationDownRole:
+        errors = checkLRUDError(role, index);
+        break;
+    case ShotDistanceIncludedRole:
+        break;
+    case ShotDistanceRole:
+    case ShotCompassRole:
+    case ShotBackCompassRole:
+    case ShotClinoRole:
+    case ShotBackClinoRole:
+        errors = checkDataError(role, index);
+        break;
+    }
+
+    CellIndex cellIndex = CellIndex(index, role);
+    cwErrorModel* cellModel = nullptr;
+    if(!CellErrorModels.contains(cellIndex) && !errors.isEmpty()) {
+        cellModel = new cwErrorModel(ErrorModel);
         cellModel->setParentModel(ErrorModel);
-        cellModel->errors()->append(errors);
-        CellErrorModels.insert(CellIndex(index, role), cellModel);
-        emit errorsChanged(role, index);
+        CellErrorModels.insert(cellIndex, cellModel);
+    } else {
+        cellModel = CellErrorModels.value(cellIndex, nullptr);
+    }
+
+    if(cellModel != nullptr) {
+        if(errors.isEmpty()) {
+            //Delete the cellModel and clear it from the database of errors
+            cellModel->setParentModel(nullptr);
+            cellModel->deleteLater();
+            CellErrorModels.remove(cellIndex);
+        }  else {
+            //Clear the previous errors
+            if(cellModel->errors()->toList() != errors) {
+                cellModel->errors()->clear();
+                cellModel->errors()->append(errors);
+                emit errorsChanged(role, index);
+            }
+        }
     }
 
 
-//    switch(role) {
-//    case StationNameRole: {
-//        QList<cwShot> shotsToCheck;
-//        shotsToCheck.append(Shots.at(index));
 
-//        int previousShotIndex = index - 1;
-//        if(previousShotIndex > 0) {
-//            shotsToCheck.append(Shots.at(previousShotIndex));
-//        }
+    //    ErrorKey key(index, role);
+    //    foreach(cwError error, errors) {
+    //        if(!Errors.contains(key, error)) {
+    //            Errors.insert(key, error);
+    //            errorsChanged();
+    //        }
+    //    }
 
-//        bool error = false;
-//        foreach(cwShot shot, shotsToCheck) {
-//            if(shot.isValid()) {
-//                error = true;
-//            }
-//        }
-
-//        if(error) {
-//            cwSurveyChunkError chunkError;
-//            chunkError.setError(cwSurveyChunkError::MissingData);
-//            chunkError.setType(cwSurveyChunkError::Fatal);
-//            chunkError.setMessage(QString("Station name is empty"));
-
-//            errors.append(chunkError);
-//            break;
-//        }
-//    }
-//    case StationLeftRole:
-//        break;
-//    case StationRightRole:
-//        break;
-//    case StationUpRole:
-//        break;
-//    case StationDownRole:
-//        break;
-//    case ShotDistanceRole:
-//        break;
-//    case ShotDistanceIncludedRole:
-//        break;
-//    case ShotCompassRole:
-//        break;
-//    case ShotBackCompassRole:
-//        break;
-//    case ShotClinoRole:
-//        break;
-//    case ShotBackClinoRole:
-//        break;
-//    }
-
-//    ErrorKey key(index, role);
-//    foreach(cwError error, errors) {
-//        if(!Errors.contains(key, error)) {
-//            Errors.insert(key, error);
-//            errorsChanged();
-//        }
-//    }
-
-//    if(parentCave() != nullptr) {
-//        foreach(cwError error, errors) {
-//            parentCave()->errorModel()->addError(error);
-//        }
-//    }
+    //    if(parentCave() != nullptr) {
+    //        foreach(cwError error, errors) {
+    //            parentCave()->errorModel()->addError(error);
+    //        }
+    //    }
 }
 
 /**
@@ -909,6 +973,222 @@ void cwSurveyChunk::checkForShotError(int index)
 }
 
 /**
+ * @brief cwSurveyChunk::checkLRUDError
+ * @param role
+ * @param index
+ * @return The list of errors when checking LRUD data
+ */
+QList<cwError> cwSurveyChunk::checkLRUDError(cwSurveyChunk::DataRole role, int index) const
+{
+    QList<cwError> errors;
+
+    QString direction;
+    switch(role) {
+    case StationLeftRole:
+        direction = "left";
+        break;
+    case StationRightRole:
+        direction = "right";
+        break;
+    case StationUpRole:
+        direction = "up";
+        break;
+    case StationDownRole:
+        direction = "down";
+        break;
+    default:
+        Q_ASSERT(false); //Should never get here, you're using this function wrong
+    }
+
+    QString stationName = data(cwSurveyChunk::StationNameRole, index).toString();
+
+    QVariant value = data(role, index);
+    if(value.isNull() && !stationName.isEmpty()) {
+        //No data is set
+        cwError error;
+        error.setType(cwError::Warning);
+        error.setMessage(QString("Missing \"%1\" for station \"%2\"").arg(direction).arg(stationName));
+        errors.append(error);
+    } else if(!value.isNull()) {
+        //The LRUD data isn't a number
+        bool okay;
+        value.toDouble(&okay);
+        if(!okay) {
+            QString valueString = value.toString();
+
+            cwError error;
+            error.setType(cwError::Fatal);
+            error.setMessage(QString("The \"%1\" value (\"%2\") isn't a number for station \"%3\"").arg(direction).arg(valueString).arg(stationName));
+            errors.append(error);
+        }
+    }
+
+    return errors;
+}
+
+/**
+ * @brief cwSurveyChunk::checkDataError
+ * @param roleName
+ * @param variant
+ * @param validator
+ * @return
+ */
+QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
+{
+    QList<cwError> errors;
+
+    cwValidator* validatorPtr = nullptr;
+    QString roleName;
+    QVariant value = data(role, index);
+    QVariant backSiteValue;
+
+    switch(role) {
+    case ShotDistanceRole:
+        roleName = "distance";
+        validatorPtr = new cwDistanceValidator();
+        break;
+    case ShotCompassRole:
+        roleName = "compass";
+        validatorPtr = new cwCompassValidator();
+        backSiteValue = data(ShotBackCompassRole, index);
+        errors.append(checkWithTolerance(ShotCompassRole, ShotBackCompassRole, index));
+        break;
+    case ShotBackCompassRole:
+        roleName = "backsite compass";
+        validatorPtr = new cwCompassValidator();
+        backSiteValue = data(ShotCompassRole, index);
+        break;
+    case ShotClinoRole:
+        roleName = "clino";
+        validatorPtr = new cwClinoValidator();
+        backSiteValue = data(ShotBackClinoRole, index);
+        errors.append(checkWithTolerance(ShotClinoRole, ShotBackClinoRole, index));
+        break;
+    case ShotBackClinoRole:
+        roleName = "backsite clino";
+        validatorPtr = new cwClinoValidator();
+        backSiteValue = data(ShotClinoRole, index);
+        break;
+    default:
+        Q_ASSERT(false); //Bug!!!! Shouldn't get herer
+        break;
+    }
+
+    QString fromStation = data(StationNameRole, index).toString();
+    QString toStation = data(StationNameRole, index + 1).toString();
+
+    QScopedPointer<cwValidator> validator(validatorPtr);
+
+    if(!fromStation.isEmpty() && !toStation.isEmpty() && value.isNull()) {
+        //Data should have a value
+        cwError error;
+
+        if(backSiteValue.isNull()) {
+            error.setType(cwError::Fatal);
+        } else {
+            error.setType(cwError::Warning);
+        }
+
+        error.setMessage(QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
+        errors.append(error);
+    } else if(value.isNull()) {
+        int pos = 0;
+        QString valueString = value.toString();
+        QValidator::State state = validator->validate(valueString, pos);
+        if(state != QValidator::Acceptable) {
+            //Data in the field is bad...
+            cwError error;
+            error.setMessage(validator->errorText());
+            error.setType(cwError::Fatal);
+            errors.append(error);
+        }
+    }
+
+    return errors;
+}
+
+/**
+ * @brief cwSurveyChunk::checkWithTolerance
+ * @param frontSightRole - frontsite role
+ * @param backSightRole - backsite role
+ * @param index - The index
+ * @param tolerance - The tolerance of the errro
+ * @param units - For formatting the error message
+ * @return Returns errors if the back and frontsite don't agree within tolerance
+ */
+QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSightRole,
+                                                 cwSurveyChunk::DataRole backSightRole,
+                                                 int index,
+                                                 double tolerance,
+                                                 QString units) const
+{
+    QList<cwError> errors;
+
+    bool okay;
+    double frontSight = data(frontSightRole, index).toDouble(&okay);
+
+    if(!okay) { return errors; }
+
+    double backSight = data(backSightRole, index).toDouble(&okay);
+    if(!okay) { return errors; }
+
+    //Correct the backSight
+    switch(frontSightRole) {
+    case ShotCompassRole:
+        if(parentTrip() == nullptr || (parentTrip() != nullptr && !parentTrip()->calibrations()->hasCorrectedCompassBacksight())) {
+            backSight = fmod(backSight + 180.0, 360.0);
+        }
+        break;
+    case ShotClinoRole:
+        if(parentTrip() == nullptr || (parentTrip() != nullptr && !parentTrip()->calibrations()->hasCorrectedClinoBacksight())) {
+            backSight = backSight * -1.0;
+        }
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
+    }
+
+    double differance = fabs(frontSight - backSight);
+    if(differance > tolerance) {
+        cwError error;
+        error.setMessage(QString("Frontsight and backsight differs by %1%2").arg(differance).arg(units));
+        error.setType(cwError::Warning);
+        errors.append(error);
+    }
+
+    return errors;
+}
+
+/**
+ * @brief cwSurveyChunk::shotDataEmpty
+ * @param index
+ * @return True if all the shot data's empty at index, otherwise false
+ */
+bool cwSurveyChunk::isShotDataEmpty(int index) const
+{
+    return data(ShotDistanceRole, index).isNull() &&
+            data(ShotCompassRole, index).isNull() &&
+            data(ShotBackCompassRole, index).isNull() &&
+            data(ShotClinoRole, index).isNull() &&
+            data(ShotBackClinoRole, index).isNull();
+}
+
+/**
+ * @brief cwSurveyChunk::stationDataEmpty
+ * @param index
+ * @return True if all the station's data is empty, otherwise false. This excludes the station name
+ */
+bool cwSurveyChunk::isStationDataEmpty(int index) const
+{
+    return data(StationLeftRole, index).isNull() &&
+            data(StationRightRole, index).isNull() &&
+            data(StationUpRole, index).isNull() &&
+            data(StationDownRole, index).isNull();
+}
+
+
+/**
  * @brief cwSurveyChunk::updateErrorIndexes
  */
 void cwSurveyChunk::updateErrors()
@@ -921,6 +1201,32 @@ void cwSurveyChunk::updateErrors()
 
     for(int i = 0; i < Stations.size(); i++) {
         checkForStationError(i);
+    }
+}
+
+/**
+ * @brief cwSurveyChunk::updateCompassErrors
+ *
+ * This is called when the calibration, using correct compass change, this is used to update
+ * the off by 2 degree errors
+ */
+void cwSurveyChunk::updateCompassErrors()
+{
+   for(int i = 0; i < shotCount(); i++) {
+       checkForError(ShotCompassRole, i);
+   }
+}
+
+/**
+ * @brief cwSurveyChunk::updateClinoErrors
+ *
+ * This is called when the calibration, using correct compass change, this is used to update
+ * the off by 2 degree errors
+ */
+void cwSurveyChunk::updateClinoErrors()
+{
+    for(int i = 0; i < shotCount(); i++) {
+        checkForError(ShotClinoRole, i);
     }
 }
 
