@@ -1117,7 +1117,7 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
 
     QScopedPointer<cwValidator> validator(validatorPtr);
 
-    if(!fromStation.isEmpty() && !toStation.isEmpty() && value.isNull() && !clinoHasDownOrUp(role, index)) {
+    if(!fromStation.isEmpty() && !toStation.isEmpty() && value.isNull() && !isClinoDownOrUp(role, index)) {
 
         //Data should have a value
         cwError error;
@@ -1130,7 +1130,7 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
 
         error.setMessage(QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
         errors.append(error);
-    } else if(value.isNull()) {
+    } else if(!value.isNull()) {
         int pos = 0;
         QString valueString = value.toString();
         QValidator::State state = validator->validate(valueString, pos);
@@ -1141,6 +1141,8 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
             error.setType(cwError::Fatal);
             errors.append(error);
         }
+
+        errors.append(checkClinoMixingType(role, index));
     }
 
     return errors;
@@ -1200,6 +1202,54 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
 }
 
 /**
+ * @brief cwSurveyChunk::checkMixingType
+ * @param role
+ * @param index
+ * @return The fatal error if the clino reading mix type. Mix type occures when using Up|Down and
+ * number for front and backsight of the clino. We need only Up and Down or Numbers for clino, not
+ * both at the same time. This always return an empty list if role isn't a ShotClinoRole
+ */
+QList<cwError> cwSurveyChunk::checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const
+{
+    QList<cwError> errors;
+
+    if(parentTrip() != nullptr &&
+            !(parentTrip()->calibrations()->hasFrontSights() &&
+              parentTrip()->calibrations()->hasBackSights()))
+    {
+        //Doesn't have backsight or front sight
+        return QList<cwError>();
+    }
+
+    //Only ShotClinoRole
+    if(role == ShotClinoRole) {
+        QString clino = data(ShotClinoRole, index).toString();
+        QString backClino = data(ShotBackClinoRole, index).toString();
+
+        if(!clino.isEmpty() && !backClino.isEmpty()) {
+
+            bool clinoOkay;
+            bool backClinoOkay;
+
+            clino.toDouble(&clinoOkay);
+            backClino.toDouble(&backClinoOkay);
+
+            if(!((clinoOkay && backClinoOkay) ||
+                 (isClinoDownOrUpHelper(ShotClinoRole, index) && isClinoDownOrUpHelper(ShotBackClinoRole, index))))
+            {
+                //Mixing types
+                cwError error;
+                error.setType(cwError::Fatal);
+                error.setMessage(QString("You are mixing types. Frontsight and backsight must both be Up or Down, or both numbers"));
+                errors.append(error);
+            }
+        }
+    }
+
+    return errors;
+}
+
+/**
  * @brief cwSurveyChunk::shotDataEmpty
  * @param index
  * @return True if all the shot data's empty at index, otherwise false
@@ -1252,7 +1302,7 @@ void cwSurveyChunk::updateErrors()
  * Otherwise it always return false. This checks the clino readings to see if a down or up exists.
  * This helps prevent warnings and errors when using Down or Up keywords
  */
-bool cwSurveyChunk::clinoHasDownOrUp(cwSurveyChunk::DataRole role, int index) const
+bool cwSurveyChunk::isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const
 {
     switch(role) {
     case ShotCompassRole:
@@ -1264,10 +1314,19 @@ bool cwSurveyChunk::clinoHasDownOrUp(cwSurveyChunk::DataRole role, int index) co
         return false;
     }
 
-    QString clino = data(ShotClinoRole, index).toString().toLower();
-    QString backClino = data(ShotBackClinoRole, index).toString().toLower();
+    return isClinoDownOrUpHelper(ShotClinoRole, index) || isClinoDownOrUpHelper(ShotBackClinoRole, index);
+}
 
-    return clino.contains("up") || clino.contains("down") || backClino.contains("up") || backClino.contains("down");
+/**
+ * @brief cwSurveyChunk::isClinoDownOrUpHelper
+ * @param role
+ * @param index
+ * @return
+ */
+bool cwSurveyChunk::isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const
+{
+    QString value = data(role, index).toString().toLower();
+    return value.compare("up") == 0 || value.compare("down") == 0;
 }
 
 /**

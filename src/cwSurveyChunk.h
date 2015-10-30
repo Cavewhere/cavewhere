@@ -195,11 +195,13 @@ private:
     QList<cwError> checkLRUDError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
+    QList<cwError> checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const;
     bool isShotDataEmpty(int index) const;
     bool isStationDataEmpty(int index) const;
     void clearErrors();
     void updateErrors();
-    bool clinoHasDownOrUp(cwSurveyChunk::DataRole role, int index) const;
+    bool isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const;
+    bool isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const;
 
 private slots:
     void updateCompassErrors();
