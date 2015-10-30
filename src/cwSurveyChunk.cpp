@@ -83,6 +83,10 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
                        this, &cwSurveyChunk::updateCompassErrors);
             disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
                        this, &cwSurveyChunk::updateClinoErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::frontSightsChanged,
+                       this, &cwSurveyChunk::updateCompassClinoErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::backSightsChanged,
+                       this, &cwSurveyChunk::updateCompassClinoErrors);
         }
 
         ParentTrip = trip;
@@ -93,6 +97,10 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
                        this, &cwSurveyChunk::updateCompassErrors);
             connect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
                        this, &cwSurveyChunk::updateClinoErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::frontSightsChanged,
+                    this, &cwSurveyChunk::updateCompassClinoErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::backSightsChanged,
+                       this, &cwSurveyChunk::updateCompassClinoErrors);
         }
 
         updateClinoErrors();
@@ -833,11 +841,15 @@ void cwSurveyChunk::checkForErrorOnDataChanged(cwSurveyChunk::DataRole role, int
         break;
     case ShotClinoRole:
         checkForError(ShotBackClinoRole, index);
+        checkForError(ShotCompassRole, index);
+        checkForError(ShotBackCompassRole, index);
         checkForError(StationNameRole, index);
         checkForError(StationNameRole, index + 1);
         break;
     case ShotBackClinoRole:
         checkForError(ShotClinoRole, index);
+        checkForError(ShotCompassRole, index);
+        checkForError(ShotBackCompassRole, index);
         checkForError(StationNameRole, index);
         checkForError(StationNameRole, index + 1);
         break;
@@ -1037,6 +1049,32 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
 {
     QList<cwError> errors;
 
+    if(parentTrip() != nullptr) {
+        if(!parentTrip()->calibrations()->hasFrontSights()) {
+            //Front sights are disabled
+            switch(role) {
+            case ShotCompassRole:
+                return errors; //No errors generated fro this role
+            case ShotClinoRole:
+                return errors; //No errors generated fro this role
+            default:
+                break;
+            }
+        }
+
+        if(!parentTrip()->calibrations()->hasBackSights()) {
+            //Backsights sights are disabled
+            switch(role) {
+            case ShotBackCompassRole:
+                return errors; //No errors generated fro this role
+            case ShotBackClinoRole:
+                return errors; //No errors generated fro this role
+            default:
+                break;
+            }
+        }
+    }
+
     cwValidator* validatorPtr = nullptr;
     QString roleName;
     QVariant value = data(role, index);
@@ -1079,7 +1117,8 @@ QList<cwError> cwSurveyChunk::checkDataError(DataRole role, int index) const
 
     QScopedPointer<cwValidator> validator(validatorPtr);
 
-    if(!fromStation.isEmpty() && !toStation.isEmpty() && value.isNull()) {
+    if(!fromStation.isEmpty() && !toStation.isEmpty() && value.isNull() && !clinoHasDownOrUp(role, index)) {
+
         //Data should have a value
         cwError error;
 
@@ -1205,6 +1244,33 @@ void cwSurveyChunk::updateErrors()
 }
 
 /**
+ * @brief cwSurveyChunk::clinoHasDownOrUp
+ * @param role
+ * @param index
+ *
+ * This function only works if role is ShotCompassRole, ShotBackCompassRole, ShotClinoRole or ShotBackClinoRole.
+ * Otherwise it always return false. This checks the clino readings to see if a down or up exists.
+ * This helps prevent warnings and errors when using Down or Up keywords
+ */
+bool cwSurveyChunk::clinoHasDownOrUp(cwSurveyChunk::DataRole role, int index) const
+{
+    switch(role) {
+    case ShotCompassRole:
+    case ShotClinoRole:
+    case ShotBackCompassRole:
+    case ShotBackClinoRole:
+        break;
+    default:
+        return false;
+    }
+
+    QString clino = data(ShotClinoRole, index).toString().toLower();
+    QString backClino = data(ShotBackClinoRole, index).toString().toLower();
+
+    return clino.contains("up") || clino.contains("down") || backClino.contains("up") || backClino.contains("down");
+}
+
+/**
  * @brief cwSurveyChunk::updateCompassErrors
  *
  * This is called when the calibration, using correct compass change, this is used to update
@@ -1228,6 +1294,19 @@ void cwSurveyChunk::updateClinoErrors()
     for(int i = 0; i < shotCount(); i++) {
         checkForError(ShotClinoRole, i);
     }
+}
+
+/**
+ * @brief cwSurveyChunk::updateCompassClinoErrors
+ */
+void cwSurveyChunk::updateCompassClinoErrors()
+{
+   for(int i = 0; i < shotCount(); i++) {
+       checkForError(ShotCompassRole, i);
+       checkForError(ShotBackCompassRole, i);
+       checkForError(ShotClinoRole, i);
+       checkForError(ShotBackClinoRole, i);
+   }
 }
 
 /**

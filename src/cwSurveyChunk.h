@@ -199,10 +199,12 @@ private:
     bool isStationDataEmpty(int index) const;
     void clearErrors();
     void updateErrors();
+    bool clinoHasDownOrUp(cwSurveyChunk::DataRole role, int index) const;
 
 private slots:
     void updateCompassErrors();
     void updateClinoErrors();
+    void updateCompassClinoErrors();
 
 //    int errorCount(cwSurveyChunkError::ErrorType type) const;
 
