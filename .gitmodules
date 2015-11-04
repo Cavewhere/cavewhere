@@ -18,4 +18,4 @@
 	url = git@github.com:Cavewhere/squish.git
 [submodule "dewalls"]
 	path = dewalls
-	url = git@github.com:jedwards1211/dewalls
+	url = git@github.com:Cavewhere/dewalls

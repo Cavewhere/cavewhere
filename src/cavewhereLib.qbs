@@ -9,7 +9,7 @@ import qbs.File
   This library prevents building cavewhere source twice when building object
   files for the application and for the testcases.
   */
-StaticLibrary {
+DynamicLibrary {
     id: applicationId
 
     readonly property string gitVersion: Git.productVersion
@@ -53,17 +53,17 @@ StaticLibrary {
         buildDirectory + "/versionInfo"
     ]
 
-//    Properties {
-//        condition: qbs.targetOS.contains("osx")
+    Properties {
+        condition: qbs.targetOS.contains("osx")
 
-//        cpp.dynamicLibraries: [
-//            "c++"
-//        ]
+        cpp.dynamicLibraries: [
+            "c++"
+        ]
 
-//        cpp.frameworks: [
-//            "OpenGL"
-//        ]
-//    }
+        cpp.frameworks: [
+            "OpenGL"
+        ]
+    }
 
     Properties {
         condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")

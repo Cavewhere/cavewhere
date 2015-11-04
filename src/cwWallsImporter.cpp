@@ -247,6 +247,8 @@ void WallsImporterVisitor::endUnitsLine()
 
 void WallsImporterVisitor::visitDateLine(QDate date)
 {
+    Q_UNUSED(date)
+
     // when the next vector or fix line sees that
     // CurrentTrip is null, it will create a new one
     clearTrip();
