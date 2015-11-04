@@ -19,12 +19,30 @@
 #include "cwScrap.h"
 #include "cwDebug.h"
 #include "cwLength.h"
+#include "cwSurveyChunkSignaler.h"
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
 {
     Region = nullptr;
     GLLinePlot = nullptr;
+
+    SurveySignaler = new cwSurveyChunkSignaler(this);
+
+    SurveySignaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToCaves(SIGNAL(nameChanged()), this, SLOT(runSurvex()));
+
+    SurveySignaler->addConnectionToTrips(SIGNAL(chunksInserted(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToTrips(SIGNAL(chunksRemoved(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToTripCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
+
+    SurveySignaler->addConnectionToChunks(SIGNAL(shotsAdded(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(shotsRemoved(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SLOT(runSurvex()));
 
     LinePlotThread = new QThread(this);
     LinePlotThread->start();
@@ -52,18 +70,31 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     if(Region == nullptr) { return; }
 
     //Connect all signal from the region
-    connect(Region, SIGNAL(destroyed(QObject*)), SLOT(regionDestroyed(QObject*)));
     connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
-    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(connectAddedCaves(int,int)));
     connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
+
+    SurveySignaler->setRegion(Region);
 
     //Connect all sub data
     connectCaves(Region);
+
+    runSurvex();
 }
 
 void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
     GLLinePlot = linePlot;
     updateLinePlot();
+}
+
+/**
+ * @brief cwLinePlotManager::waitToFinish
+ *
+ * Will cause the LinePlotManager to block until the underlying task is finished. This is useful
+ * for unit testing.
+ */
+void cwLinePlotManager::waitToFinish()
+{
+    LinePlotTask->waitToFinish();
 }
 
 /**
@@ -74,7 +105,6 @@ void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
 
     for(int i = 0; i < region->caveCount(); i++) {
         cwCave* cave = region->cave(i);
-        connectCave(cave);
 
         if(cave->isStationPositionLookupStale()) {
             caveIsStale = true;
@@ -84,60 +114,6 @@ void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
     if(caveIsStale) {
         runSurvex();
     }
-}
-
-/**
-  \brief Connects a cave
-  */
-void cwLinePlotManager::connectCave(cwCave* cave) {
-    connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(runSurvex()));
-    connect(cave, SIGNAL(insertedTrips(int,int)), SLOT(connectAddedTrips(int,int)));
-    connect(cave, SIGNAL(removedTrips(int,int)), SLOT(runSurvex()));
-    connect(cave, SIGNAL(nameChanged()), SLOT(runSurvex()));
-    connectTrips(cave);
-}
-
-/**
-  \brief Connects all the trips in the cave to this object
-  */
-void cwLinePlotManager::connectTrips(cwCave* cave) {
-    for(int i = 0; i < cave->tripCount(); i++) {
-        cwTrip* trip = cave->trip(i);
-        connectTrip(trip);
-    }
-}
-
-/**
-  \brief Connects a trip
-  */
-void cwLinePlotManager::connectTrip(cwTrip* trip) {
-    connect(trip, SIGNAL(chunksInserted(int,int)), SLOT(runSurvex()));
-    connect(trip, SIGNAL(chunksInserted(int,int)), SLOT(connectAddedChunks(int,int)));
-    connect(trip, SIGNAL(chunksRemoved(int,int)), SLOT(runSurvex()));
-    connect(trip, SIGNAL(nameChanged()), SLOT(runSurvex()));
-    connect(trip->calibrations(), SIGNAL(calibrationsChanged()), SLOT(runSurvex()));
-    connectChunks(trip);
-}
-
-/**
-  \brief Connects all the trips in the chunk to this object
-  */
-void cwLinePlotManager::connectChunks(cwTrip* trip) {
-    for(int i = 0; i < trip->numberOfChunks(); i++) {
-        cwSurveyChunk* chunk = trip->chunk(i);
-        connectChunk(chunk);
-    }
-}
-
-/**
-  \brief Connects as chunk
-  */
-void cwLinePlotManager::connectChunk(cwSurveyChunk* chunk) {
-    connect(chunk, SIGNAL(shotsAdded(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(shotsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(stationsAdded(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(stationsRemoved(int,int)), SLOT(runSurvex()));
-    connect(chunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(runSurvex()));
 }
 
 /**
@@ -198,66 +174,20 @@ void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
     }
 }
 
-/**
-  \brief Called when the region adds more caves
-  */
-void cwLinePlotManager::connectAddedCaves(int beginIndex, int endIndex) {
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwCave* cave = Region->cave(i);
-        connectCave(cave);
-    }
-}
-
-/**
-  \brief Called when the cave adds more trips
-  */
-void cwLinePlotManager::connectAddedTrips(int beginIndex, int endIndex) {
-    Q_ASSERT(qobject_cast<cwCave*>(sender()) != nullptr);
-    cwCave* cave = static_cast<cwCave*>(sender());
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwTrip* trip = cave->trip(i);
-        connectTrip(trip);
-    }
-}
-
-/**
-  \brief Called when the trip adds more chunks
-  */
-void cwLinePlotManager::connectAddedChunks(int beginIndex, int endIndex) {
-    Q_ASSERT(qobject_cast<cwTrip*>(sender()) != nullptr);
-    cwTrip* trip = static_cast<cwTrip*>(sender());
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwSurveyChunk* chunk = trip->chunk(i);
-        connectChunk(chunk);
-    }
-}
-
-/**
-  \brief The region is going to be destroyed
-
-  Prevent a stall pointer
-  */
-void cwLinePlotManager::regionDestroyed(QObject* region) {
-    if(region == Region) {
-        Region = nullptr;
-    }
-}
 
 /**
   \brief Run the line plot task
   */
 void cwLinePlotManager::runSurvex() {
     if(Region != nullptr) {
-//        qDebug() << "----Run survex----" << LinePlotTask->status();
         if(LinePlotTask->isReady()) {
 //            qDebug() << "Running the task";
-            //qDebug() << "\tSetting data!" << LinePlotTask->status();
             setCaveStationLookupAsStale(true);
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-            qDebug() << "Restart plot task";
+//            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }
@@ -268,7 +198,6 @@ void cwLinePlotManager::runSurvex() {
   line region
   */
 void cwLinePlotManager::updateLinePlot() {
-    if(GLLinePlot == nullptr) { return; }
     if(!LinePlotTask->isReady()) { return; }
     if(Region == nullptr) { return; }
 
@@ -300,8 +229,10 @@ void cwLinePlotManager::updateLinePlot() {
     }
 
     //Update the 3D plot
-    GLLinePlot->setPoints(resultData.stationPositions());
-    GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    if(GLLinePlot != nullptr) {
+        GLLinePlot->setPoints(resultData.stationPositions());
+        GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    }
 
     //Mark all caves as up todate
     setCaveStationLookupAsStale(false);

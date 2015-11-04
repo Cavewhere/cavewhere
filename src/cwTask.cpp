@@ -19,11 +19,15 @@
 #include <QDebug>
 
 cwTask::cwTask(QObject *parent) :
-    QObject(parent)
+    QObject(parent),
+    StatusLocker(QReadWriteLock::Recursive)
 {
     NumberOfSteps = 0;
     CurrentStatus = Ready;
     ParentTask = nullptr;
+    NeedsRestart = false;
+
+
 }
 
 /**
@@ -151,14 +155,19 @@ void cwTask::start() {
 
   */
 void cwTask::restart() {
-    if(!isReady()) {
-        QWriteLocker locker(&StatusLocker);
 
+    StatusLocker.lockForWrite();
+
+    if(CurrentStatus != Ready) {
         //Stop the tasks, and it's children
         privateStop();
 
         CurrentStatus = Restart;
+        NeedsRestart = true;
+        StatusLocker.unlock();
+
     } else {
+        StatusLocker.unlock();
         start();
     }
 }
@@ -170,7 +179,7 @@ void cwTask::restart() {
   */
 void cwTask::setNumberOfSteps(int steps) {
     QWriteLocker locker(&NumberOfStepsLocker);
-//    qDebug() << "Setting the number of steps:" << steps << NumberOfSteps;
+    //    qDebug() << "Setting the number of steps:" << steps << NumberOfSteps;
     if(steps != NumberOfSteps) {
         NumberOfSteps = steps;
         emit numberOfStepsChanged(steps);
@@ -223,6 +232,8 @@ void cwTask::done() {
         CurrentStatus = Ready;
         emit finished();
     }
+
+    WaitToFinishCondition.wakeAll();
 }
 
 /**
@@ -231,6 +242,7 @@ void cwTask::done() {
   THIS should only be called from start()
   */
 void cwTask::startOnCurrentThread() {
+
     if(!isParentsRunning()) {
         //Parent task aren't running
         stop(); //Stop
@@ -238,17 +250,20 @@ void cwTask::startOnCurrentThread() {
         return;
     }
 
-    Status currentStatus = status();
-    Q_ASSERT(currentStatus != Running); //The thread should definitally not me running here
-    if(currentStatus == Stopped) {
-        emit stopped();
-        return; //This has stopped
-    }
-
     {
-        //Make sure we are preparing to start
         QWriteLocker locker(&StatusLocker);
+
+        Q_ASSERT(CurrentStatus != Running); //The thread should definitally not me running here
+
+        if(CurrentStatus != PreparingToStart) {
+            done();
+            return;
+        }
+
+        //Make sure we are preparing to start
         CurrentStatus = Running;
+
+        NeedsRestart = false;
     }
 
     //Set the progress to zero
@@ -276,6 +291,7 @@ void cwTask::changeThreads(QThread* thread) {
   calling this function
   */
 void cwTask::privateStop() {
+    QWriteLocker locker(&StatusLocker);
     if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
         CurrentStatus = Stopped;
 
@@ -305,6 +321,12 @@ bool cwTask::isParentsRunning() {
     return true;
 }
 
+bool cwTask::needsRestart() const
+{
+    QReadLocker locker(&StatusLocker);
+    return NeedsRestart;
+}
+
 /**
 * @brief cwTask::setName
 * @param name - The new name of the task
@@ -316,6 +338,28 @@ void cwTask::setName(QString name) {
     if(Name != name) {
         Name = name;
         emit nameChanged();
+    }
+}
+
+/**
+ * @brief cwTask::waitToFinish
+ * @param time
+ *
+ * This waits for the task to finish successfully, (this will wait for the task to restart)
+ */
+void cwTask::waitToFinish(unsigned long time)
+{
+    //Put this in a loop because this allows the task to restart
+    while(needsRestart()) {
+        QCoreApplication::processEvents();
+    }
+
+    while(!isReady() || needsRestart()) {
+        WaitToFinishLocker.lock();
+        WaitToFinishCondition.wait(&WaitToFinishLocker, time);
+        WaitToFinishLocker.unlock();
+
+        QCoreApplication::processEvents(); //Allows the task to signal for a restart
     }
 }
 

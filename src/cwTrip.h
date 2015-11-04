@@ -87,6 +87,7 @@ signals:
     void nameChanged();
     void dateChanged(QDate date);
     void chunksInserted(int begin, int end);
+    void chunksAboutToBeRemoved(int begin, int end);
     void chunksRemoved(int begin, int end);
     void teamChanged();
     void calibrationChanged();
