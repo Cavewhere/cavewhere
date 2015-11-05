@@ -10,12 +10,23 @@ CavewhereApp {
     name: "cavewhere-test"
     consoleApplication: true
 
+    Depends { name: "dewalls" }
+
     Group {
         name: "testcases"
         files: [
             "*.cpp",
             "*.h"
         ]
+    }
+
+    Group {
+        name: "dewalls testcases"
+        files: [
+            "../dewalls/test/*.cpp",
+            "../dewalls/test/*.h"
+        ]
+        excludeFiles: "../dewalls/test/dewallstests.cpp"
     }
 
     Group {

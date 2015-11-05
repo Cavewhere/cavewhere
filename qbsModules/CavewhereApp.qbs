@@ -70,6 +70,14 @@ Application {
 
     Properties {
         condition: qbs.targetOS.contains("linux")
+        cpp.cxxFlags: [
+            "-std=c++11", //For c++11 support
+            "-Werror" //Treat warnings as errors
+        ]
+    }
+
+    Properties {
+        condition: qbs.targetOS.contains("linux")
         cpp.dynamicLibraries: [
             "GL"
         ]
