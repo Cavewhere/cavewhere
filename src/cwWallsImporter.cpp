@@ -78,6 +78,7 @@ void WallsImporterVisitor::endVectorLine()
 
     cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
     cwStation toStation;
+    cwShot shot;
 
     LengthUnit d_unit = Parser->units()->d_unit;
 
@@ -95,7 +96,6 @@ void WallsImporterVisitor::endVectorLine()
     if (distance.isValid())
     {
         toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
-        cwShot shot;
 
         // apply Walls corrections that Cavewhere doesn't support
         Parser->units()->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
@@ -152,35 +152,13 @@ void WallsImporterVisitor::endVectorLine()
 
         // TODO: exclude length flag/segment
 
-        CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
-
         lrudStation = Parser->units()->lrud == LrudType::From ||
                 Parser->units()->lrud == LrudType::FB ?
                     &fromStation : &toStation;
-
-        if(!CurrentTrip->chunks().isEmpty()) {
-            cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-            int secondToLastStation = lastChunk->stationCount() - 2;
-            lastChunk->setStation(fromStation, secondToLastStation);
-        }
     }
     else
     {
         lrudStation = &fromStation;
-    }
-
-    // save the latest LRUDs associated with each station so that we can apply them in the end
-    if (Parser->date().isValid())
-    {
-        if (!Importer->StationDates.contains(lrudStation->name()) ||
-            Parser->date() >= Importer->StationDates[lrudStation->name()]) {
-            Importer->StationDates[lrudStation->name()] = Parser->date();
-            Importer->StationMap[lrudStation->name()] = *lrudStation;
-        }
-    }
-    else if (!Importer->StationDates.contains(lrudStation->name()))
-    {
-        Importer->StationMap[lrudStation->name()] = *lrudStation;
     }
 
     left += Parser->units()->incs;
@@ -219,6 +197,25 @@ void WallsImporterVisitor::endVectorLine()
     else
     {
         lrudStation->setDownInputState(cwDistanceStates::Empty);
+    }
+
+    // save the latest LRUDs associated with each station so that we can apply them in the end
+    if (Parser->date().isValid())
+    {
+        if (!Importer->StationDates.contains(lrudStation->name()) ||
+            Parser->date() >= Importer->StationDates[lrudStation->name()]) {
+            Importer->StationDates[lrudStation->name()] = Parser->date();
+            Importer->StationMap[lrudStation->name()] = *lrudStation;
+        }
+    }
+    else if (!Importer->StationDates.contains(lrudStation->name()))
+    {
+        Importer->StationMap[lrudStation->name()] = *lrudStation;
+    }
+
+    if (distance.isValid())
+    {
+        CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
     }
 }
 
@@ -382,6 +379,7 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
     bool failed = false;
 
     QString tripName;
+    QStringList surveyors;
 
     int lineNumber = 0;
     while (!file.atEnd())
@@ -405,6 +403,10 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
             if (lineNumber == 0 && !visitor.comment.isEmpty())
             {
                 tripName = visitor.comment;
+            }
+            else if (lineNumber == 1 && !visitor.comment.isEmpty())
+            {
+                surveyors = visitor.comment.trimmed().split(QRegExp("\\s*;\\s*"));
             }
         }
         catch (const SegmentParseExpectedException& ex)
@@ -434,6 +436,17 @@ bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
             {
                 if (i == 0) trip->setName(tripName);
                 else trip->setName(QString("%1 (%2)").arg(tripName).arg(++i));
+            }
+        }
+        if (!surveyors.isEmpty())
+        {
+            foreach (cwTrip* trip, visitor.trips())
+            {
+                cwTeam* team = new cwTeam(trip);
+                foreach (QString surveyor, surveyors) {
+                    team->addTeamMember(cwTeamMember(surveyor, QStringList()));
+                }
+                trip->setTeam(team);
             }
         }
 
