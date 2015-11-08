@@ -23,6 +23,7 @@ Project {
         "protobuf/protobuf.qbs",
         "zlib/zlib.qbs",
         "installer/installer.qbs",
+        "dewalls/dewalls.qbs",
         "testcases/testcases.qbs"
     ]
 

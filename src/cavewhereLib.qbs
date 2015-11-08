@@ -40,6 +40,7 @@ StaticLibrary {
     Depends { name: "protobuf" }
     Depends { name: "z" }
     Depends { name: "Git" }
+    Depends { name: "dewalls" }
 
 //        Depends { name: "icns-out" }
 
