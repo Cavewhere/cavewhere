@@ -34,11 +34,6 @@ Application {
             "concurrent" ]
     }
     Depends { name: "cavewhere-lib" }
-    Depends { name: "QMath3d" }
-
-//        Depends { name: "icns-out" }
-
-//        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
 
     cpp.includePaths: [
         applicationId.prefix + "src",
