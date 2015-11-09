@@ -153,8 +153,8 @@ void cwSurveyImportManager::wallsImporterFinished()
     UndoStack->beginMacro("Walls Import");
 
     //Add new caves
-    foreach(cwCave cave, WallsImporter->caves()) {
-        cwCave* newCave = new cwCave(cave); //Copy the caves
+    foreach(cwCave* cave, WallsImporter->caves()) {
+        cwCave* newCave = new cwCave(*cave); //Copy the caves
         CavingRegion->addCave(newCave);
     }
 

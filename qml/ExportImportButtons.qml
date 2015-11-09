@@ -131,7 +131,7 @@ Item {
                 PropertyChanges {
                     target: fileDialog
                     title: "Import from Walls"
-                    nameFilters: ["Walls (*.srv)"]
+                    nameFilters: ["Walls Projects (*.wpj)", "Walls Survey files (*.srv)"]
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
@@ -232,7 +232,7 @@ Item {
                 }
 
                 Controls.MenuItem {
-                    text: "Walls (.srv)"
+                    text: "Walls (.srv, .wpj)"
                     onTriggered: {
                         fileDialogItem.state = "IMPORT_WALLS"
                         fileDialog.open()

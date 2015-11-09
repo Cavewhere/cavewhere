@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QFileInfo>
+#include <QDir>
 
 using namespace dewalls;
 
@@ -302,33 +303,49 @@ void cwWallsImporter::runTask()
     StationMap.clear();
 
     Caves.clear();
-    Caves.append(cwCave());
-    cwCave* cave = &Caves.last();
-    cave->setName("Walls Import");
 
     QList<cwTrip*> trips;
 
     foreach(QString filename, WallsDataFiles)
     {
-        parseFile(filename, trips);
+        if (filename.endsWith(".srv", Qt::CaseInsensitive))
+        {
+            parseSrvFile(filename, trips);
+        }
+        else if (filename.endsWith(".wpj", Qt::CaseInsensitive))
+        {
+            parseWpjFile(filename, Caves);
+        }
     }
 
-    foreach (cwTrip* trip, trips)
-    {
-        // apply StationMap replacements to support Walls' station-LRUD lines
-        foreach (cwSurveyChunk* chunk, trip->chunks())
+    if (!trips.isEmpty()) {
+        Caves.append(new cwCave());
+        cwCave* cave = Caves.last();
+        cave->setName("Walls .SRV Files");
+
+        foreach (cwTrip* trip, trips)
         {
-            for (int i = 0; i < chunk->stationCount(); i++)
+            cave->addTrip(trip);
+        }
+    }
+
+    foreach (cwCave* cave, Caves)
+    {
+        foreach (cwTrip* trip, cave->trips())
+        {
+            // apply StationMap replacements to support Walls' station-LRUD lines
+            foreach (cwSurveyChunk* chunk, trip->chunks())
             {
-                QString name = chunk->stations()[i].name();
-                if (StationMap.contains(name))
+                for (int i = 0; i < chunk->stationCount(); i++)
                 {
-                    chunk->setStation(StationMap[name], i);
+                    QString name = chunk->stations()[i].name();
+                    if (StationMap.contains(name))
+                    {
+                        chunk->setStation(StationMap[name], i);
+                    }
                 }
             }
         }
-
-        cave->addTrip(trip);
     }
 
     done();
@@ -352,7 +369,117 @@ bool cwWallsImporter::verifyFileExists(QString filename)
     return true;
 }
 
-bool cwWallsImporter::parseFile(QString filename, QList<cwTrip*>& tripsOut)
+bool cwWallsImporter::parseWpjFile(QString wpjFile, QList<cwCave*> &cavesOut)
+{
+    if (!verifyFileExists(wpjFile))
+    {
+        return false;
+    }
+
+    QFile file(wpjFile);
+    QDir dir(wpjFile);
+    dir.cdUp();
+
+    if (!file.open(QFile::ReadOnly))
+    {
+        emit statusMessage(QString("I couldn't open %1").arg(wpjFile));
+        return false;
+    }
+
+    QList<cwCave*> caves;
+    QString tripName;
+    cwCave* currentCave;
+
+    bool failed = false;
+
+    int lineNumber = 0;
+    while (!file.atEnd())
+    {
+        QString line = file.readLine();
+        line = line.trimmed();
+        if (file.error() != QFile::NoError)
+        {
+            emit statusMessage(QString("Error reading from file %1 at line %2: %3")
+                               .arg(wpjFile)
+                               .arg(lineNumber)
+                               .arg(file.errorString()));
+            failed = true;
+            break;
+        }
+
+        QRegExp bookRegExp(   "^\\s*\\.BOOK\\s+(\\S.*)$"  , Qt::CaseInsensitive);
+        QRegExp surveyRegExp( "^\\s*\\.SURVEY\\s+(\\S.*)$", Qt::CaseInsensitive);
+        QRegExp nameRegExp(   "^\\s*\\.NAME\\s+(\\S.*)$"  , Qt::CaseInsensitive);
+        QRegExp endBookRegExp("^\\s*\\.ENDBOOK\\s*$"      , Qt::CaseInsensitive);
+
+        if (bookRegExp.indexIn(line) >= 0)
+        {
+            currentCave = new cwCave();
+            currentCave->setName(bookRegExp.cap(1).trimmed());
+            caves << currentCave;
+        }
+        else if (endBookRegExp.indexIn(line) >= 0)
+        {
+            currentCave = nullptr;
+        }
+        else if (surveyRegExp.indexIn(line) >= 0)
+        {
+            if (!currentCave)
+            {
+                emit message("error", ".SURVEY must occur inside a .BOOK", wpjFile,
+                             lineNumber, 0,
+                             lineNumber, 1);
+            }
+            else
+            {
+                tripName = surveyRegExp.cap(1).trimmed();
+            }
+        }
+        else if (nameRegExp.indexIn(line) >= 0)
+        {
+            QString name = nameRegExp.cap(1).trimmed();
+            if (!tripName.isNull())
+            {
+                QString srvFile = dir.filePath(name + ".srv");
+                if (!verifyFileExists(srvFile)) {
+                    emit message("error", QString("Missing file: %1").arg(srvFile), wpjFile,
+                                 lineNumber, surveyRegExp.pos(1),
+                                 lineNumber, surveyRegExp.pos(1) + srvFile.length());
+                }
+                else
+                {
+                    QList<cwTrip*> trips;
+                    parseSrvFile(srvFile, trips);
+                    foreach(cwTrip* trip, trips)
+                    {
+                        trip->setName(tripName);
+                        currentCave->addTrip(trip);
+                    }
+                }
+                tripName.clear();
+            }
+            else if (!currentCave)
+            {
+                emit message("error", ".NAME must occur inside a .BOOK", wpjFile,
+                             lineNumber, 0,
+                             lineNumber, 1);
+            }
+        }
+
+        lineNumber++;
+    }
+
+    file.close();
+
+    if (!failed)
+    {
+        cavesOut << caves;
+    }
+
+    return !failed;
+}
+
+bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTrip*>& tripsOut)
 {
     if (!verifyFileExists(filename))
     {

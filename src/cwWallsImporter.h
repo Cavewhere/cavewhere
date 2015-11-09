@@ -60,7 +60,7 @@ public:
 
     void setWallsDataFiles(QStringList filename);
 
-    QList<cwCave> caves() const;
+    QList<cwCave*> caves() const;
 
     friend class WallsImporterVisitor;
 
@@ -74,11 +74,12 @@ protected:
     void emitMessage(WallsMessage message);
     void runTask();
     bool verifyFileExists(QString filename);
-    bool parseFile(QString filename, QList<cwTrip*>& tripsOut);
+    bool parseWpjFile(QString filename, QList<cwCave*>& cavesOut);
+    bool parseSrvFile(QString filename, QList<cwTrip*>& tripsOut);
 
 private:
     QStringList WallsDataFiles;
-    QList<cwCave> Caves;
+    QList<cwCave*> Caves;
     cwStationRenamer StationRenamer;
     QHash<QString, QDate> StationDates;
     QHash<QString, cwStation> StationMap; // used to apply station-only LRUD lines
@@ -93,7 +94,7 @@ inline void cwWallsImporter::setWallsDataFiles(QStringList filenames)
     WallsDataFiles = filenames;
 }
 
-inline QList<cwCave> cwWallsImporter::caves() const
+inline QList<cwCave*> cwWallsImporter::caves() const
 {
     return Caves;
 }
