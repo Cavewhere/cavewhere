@@ -32,6 +32,8 @@
 //Std includes
 #include <math.h>
 
+const double cwSurveyChunkView::ErrorOffset = 25;
+
 cwSurveyChunkView::cwSurveyChunkView(QQuickItem* parent) :
     QQuickItem(parent),
     SurveyChunk(nullptr),
@@ -56,14 +58,14 @@ cwSurveyChunkView::~cwSurveyChunkView() {
 /**
   \brief Get's the elements height
   */
-float cwSurveyChunkView::elementHeight() { return 40; }
+double cwSurveyChunkView::elementHeight() { return 40; }
 
 /**
   \brief Estimates the height of the view with numberElements
   */
-float cwSurveyChunkView::heightHint(int numberElements) {
-    const int buffer = 10;
-    return (numberElements + 1) * (elementHeight() + 2) - 2 + buffer; //Plus 1 for the title
+double cwSurveyChunkView::heightHint(int numberElements) {
+    const int buffer = 1 + cwSurveyChunkView::ErrorOffset;
+    return (numberElements + 1) * (elementHeight() - 1) + buffer; //Plus 1 for the title
 }
 
 /**
@@ -537,18 +539,20 @@ void cwSurveyChunkView::setModel(cwSurveyChunk* chunk) {
 
         SurveyChunk = chunk;
 
-        clear();
-        addStations(0, SurveyChunk->stationCount() - 1);
-        addShots(0, SurveyChunk->shotCount() - 1);
+        if(SurveyChunk != nullptr) {
+            clear();
+            addStations(0, SurveyChunk->stationCount() - 1);
+            addShots(0, SurveyChunk->shotCount() - 1);
 
-        connect(SurveyChunk, SIGNAL(shotsAdded(int,int)), SLOT(addShots(int,int)));
-        connect(SurveyChunk, SIGNAL(stationsAdded(int,int)), SLOT(addStations(int,int)));
-        connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
-        connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
-        connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
-        connect(SurveyChunk, SIGNAL(errorsChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
+            connect(SurveyChunk, SIGNAL(shotsAdded(int,int)), SLOT(addShots(int,int)));
+            connect(SurveyChunk, SIGNAL(stationsAdded(int,int)), SLOT(addStations(int,int)));
+            connect(SurveyChunk, SIGNAL(shotsRemoved(int,int)), SLOT(removeShots(int,int)));
+            connect(SurveyChunk, SIGNAL(stationsRemoved(int,int)), SLOT(removeStations(int,int)));
+            connect(SurveyChunk, SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
+            connect(SurveyChunk, SIGNAL(errorsChanged(cwSurveyChunk::DataRole,int)), SLOT(updateData(cwSurveyChunk::DataRole, int)));
 
-
+            ErrorItem->setProperty("chunk", QVariant::fromValue(SurveyChunk));
+        }
 //        Q_ASSERT(SurveyChunk->parentCave() != nullptr);
 //        connect(SurveyChunk->parentCave()->errorModel(), &cwErrorModel::errorsChanged, this, &cwSurveyChunkView::updateErrors);
 
@@ -595,6 +599,27 @@ QRectF cwSurveyChunkView::boundingRectangle() {
     QRectF childrenBounds = childrenRect();
     childrenBounds.setHeight(heightHint(StationRows.size()));
     return childrenBounds;
+}
+
+QRectF cwSurveyChunkView::dataBoxBoundingBox() const {
+    double borderWidth = 1;
+    double widthNumberItems = 8;
+    double heightNumberItems = StationRows.size();
+    double extraWidth = borderWidth * widthNumberItems;
+//    double extraHeight = borderWidth * heightNumberItems;
+
+    double width = StationTitle->width() +
+            DistanceTitle->width() +
+            AzimuthTitle->width() +
+            ClinoTitle->width() +
+            LeftTitle->width() +
+            RightTitle->width() +
+            UpTitle->width() +
+            DownTitle->width()
+            -extraWidth;
+
+    double height = heightHint(heightNumberItems); //- extraHeight;
+    return QRectF(0, 0, width, height);
 }
 
 /**
@@ -902,7 +927,7 @@ void cwSurveyChunkView::createTitlebar() {
     UpTitle->setProperty("height", elementHeight());
     DownTitle->setProperty("height", elementHeight());
 
-    StationTitle->setPosition(QPointF(0, 0));
+    StationTitle->setPosition(QPointF(0, cwSurveyChunkView::ErrorOffset));
     DistanceTitle->setX(mapRectFromItem(StationTitle, StationTitle->boundingRect()).right() - 1);
     DistanceTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).center().y() + 1);
     AzimuthTitle->setX(mapRectFromItem(DistanceTitle, DistanceTitle->boundingRect()).right() - 1);
@@ -918,6 +943,8 @@ void cwSurveyChunkView::createTitlebar() {
     DownTitle->setX(mapRectFromItem(UpTitle, UpTitle->boundingRect()).right() - 1);
     DownTitle->setY(mapRectFromItem(StationTitle, StationTitle->boundingRect()).top() + 1);
 
+    ErrorItem = qobject_cast<QQuickItem*>(QMLComponents->errorDelegate()->create());
+    ErrorItem->setParentItem(this);
 }
 
 /**
@@ -1479,7 +1506,7 @@ QQuickItem *cwSurveyChunkView::previousTabFromLeft(int rowIndex) {
 void cwSurveyChunkView::updateDimensions() {
     if(!interfaceValid()) { return; }
 
-    QRectF rect = boundingRectangle();
+    QRectF rect = dataBoxBoundingBox();
 //    qDebug() << "BoundingRect:" << rect.height() << height();
 
     setWidth(rect.width());

@@ -91,9 +91,8 @@ Item {
             } else if(errorModel.warningCount > 0) {
                 return func(CwError.Warning);
             }
-        } else {
-            return ""
         }
+        return ""
     }
 
     onEnteredPressed: {

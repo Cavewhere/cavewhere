@@ -25,15 +25,16 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
 {
     QQmlEngine* engine = context->engine();
 
-    Delegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
+    DataBoxDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
     StationDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/StationBox.qml", this);
     TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
     FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
     BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
     ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/ShotDistanceDataBox.qml", this);
+    ErrorDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/SurveyChunkErrorDelegate.qml", this);
 
     //Print error if there are any
-    cwDebug::printErrors(Delegate);
+    cwDebug::printErrors(DataBoxDelegate);
     cwDebug::printErrors(StationDelegate);
     cwDebug::printErrors(TitleDelegate);
     cwDebug::printErrors(FrontSiteDelegate);

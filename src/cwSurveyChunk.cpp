@@ -935,22 +935,6 @@ void cwSurveyChunk::checkForError(cwSurveyChunk::DataRole role, int index)
             }
         }
     }
-
-
-
-    //    ErrorKey key(index, role);
-    //    foreach(cwError error, errors) {
-    //        if(!Errors.contains(key, error)) {
-    //            Errors.insert(key, error);
-    //            errorsChanged();
-    //        }
-    //    }
-
-    //    if(parentCave() != nullptr) {
-    //        foreach(cwError error, errors) {
-    //            parentCave()->errorModel()->addError(error);
-    //        }
-    //    }
 }
 
 /**

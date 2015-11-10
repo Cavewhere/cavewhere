@@ -49,8 +49,8 @@ public:
 
     QRectF boundingRectangle();
 
-    static float elementHeight();
-    static float heightHint(int numberElements);
+    static double elementHeight();
+    static double heightHint(int numberElements);
 
     void setNavigationBelow(const cwSurveyChunkView* below);
     void setNavigationAbove(const cwSurveyChunkView* above);
@@ -191,6 +191,9 @@ private:
     QQuickItem* RightTitle;
     QQuickItem* UpTitle;
     QQuickItem* DownTitle;
+    QQuickItem* ErrorItem;
+
+    static const double ErrorOffset;
 
 //    QMenu* RightClickMenu;
 
@@ -251,6 +254,7 @@ private:
     void removeBoxVisible(bool visible, StationRow row);
     void removeBoxVisible(bool visible, ShotRow row);
 
+    QRectF dataBoxBoundingBox() const;
 };
 
 Q_DECLARE_METATYPE(cwSurveyChunkView*)

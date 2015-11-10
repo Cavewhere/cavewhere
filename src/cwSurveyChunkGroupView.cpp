@@ -285,6 +285,16 @@ void cwSurveyChunkGroupView::DeleteChunkView(int index) {
 }
 
 /**
+ * @brief cwSurveyChunkGroupView::spacing
+ *
+ * Returns the spacing between survey chunk group views
+ */
+double cwSurveyChunkGroupView::spacing() const
+{
+    return 1; //1 pixels
+}
+
+/**
   \brief Sets the focus for a view at index
 
   This will cause a view to become focused
@@ -509,22 +519,22 @@ void cwSurveyChunkGroupView::forceAllocateChunk(int chunkIndex, int allocatedChu
 /**
   Updates the surveychunkview's position at index
   */
-void cwSurveyChunkGroupView::UpdatePosition(int index) {
+//void cwSurveyChunkGroupView::UpdatePosition(int index) {
 
-    int previousIndex = index - 1;
-    if(previousIndex < 0) {
-        ChunkViews[index]->setPosition(QPointF(0.0f, 0.0f));
-        return;
-    }
+//    int previousIndex = index - 1;
+//    if(previousIndex < 0) {
+//        ChunkViews[index]->setPosition(QPointF(0.0f, 0.0f));
+//        return;
+//    }
 
-    cwSurveyChunkView* previousView = ChunkViews[previousIndex];
-    //const float buffer = 10.0;
-    float x = 0.0f;
-    float y = mapRectFromItem(previousView, previousView->boundingRectangle()).bottom(); //height(); // + buffer;
+//    cwSurveyChunkView* previousView = ChunkViews[previousIndex];
+//    //const float buffer = 10.0;
+//    float x = 0.0f;
+//    float y = mapRectFromItem(previousView, previousView->boundingRectangle()).bottom() + spacing(); //height(); // + buffer;
 
-    cwSurveyChunkView* view = ChunkViews[index];
-    view->setPosition(QPointF(x, y));
-}
+//    cwSurveyChunkView* view = ChunkViews[index];
+//    view->setPosition(QPointF(x, y));
+//}
 
 /**
   \brief Updates the ChunkBoundingRects and ChunkYPosition between and include the index
@@ -543,7 +553,7 @@ void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
     int beforeIndex = beginIndex - 1;
     if(beforeIndex >= 0) {
         QRectF beforeRect = ChunkBoundingRects[beforeIndex];
-        yOffset = beforeRect.bottom();
+        yOffset = beforeRect.bottom() + spacing();
     } else {
         yOffset = 0;
     }
@@ -556,13 +566,13 @@ void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
         ChunkBoundingRects[i].setHeight(height);
         ChunkBoundingRects[i].setWidth(1);
         ChunkBoundingRects[i].moveTop(yOffset);
-        yOffset = ChunkBoundingRects[i].bottom();
+        yOffset = ChunkBoundingRects[i].bottom() + spacing();
     }
 
     //Update the reminding chunks below
     for(int i = endIndex + 1; i < ChunkBoundingRects.size(); i++) {
         ChunkBoundingRects[i].moveTop(yOffset);
-        yOffset = ChunkBoundingRects[i].bottom();
+        yOffset = ChunkBoundingRects[i].bottom() + spacing();
     }
 
     //Update the positions off all the visible elements

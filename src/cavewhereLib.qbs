@@ -10,7 +10,6 @@ import qbs.File
   files for the application and for the testcases.
   */
 DynamicLibrary {
-    id: applicationId
 
     name: "cavewhere-lib"
 
