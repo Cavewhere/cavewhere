@@ -3,17 +3,25 @@ import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
 Rectangle {
+    id: delegateId
     property SurveyChunk chunk;
 
     z: 1
     width: parent !== null ? parent.width + 2 : 0
     height: parent !== null ? parent.height : 0
-    border.color: "red"
+    border.color: "#7E0000"
     border.width: 1
     color: "#00000000"
+    visible: chunk !== null ? chunk.errorModel.errors.count > 0 : false
 
-    visible: {
-        chunk !== null ? chunk.errorModel.errors.count > 0 : false
+
+    Rectangle {
+        color: "#F6A8AA"
+        parent: delegateId.parent
+        width: delegateId.width
+        height: delegateId.height
+        z: -1
+        visible: delegateId.visible
     }
 
     RowLayout {
@@ -27,8 +35,15 @@ Rectangle {
         }
 
         Text {
-
-            text: "This leg isn't connected to the cave!"
+            id: textId
+            text: {
+                if(chunk !== null) {
+                    if(chunk.errorModel.errors.count > 0) {
+                        return chunk.errorModel.errors.getFirst().message
+                    }
+                }
+                return ""
+            }
         }
     }
 }

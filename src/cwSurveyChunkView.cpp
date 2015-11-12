@@ -32,7 +32,7 @@
 //Std includes
 #include <math.h>
 
-const double cwSurveyChunkView::ErrorOffset = 25;
+const double cwSurveyChunkView::ErrorOffset = 25; //Making this number small will prevent SurveyErrorBox from appearing
 
 cwSurveyChunkView::cwSurveyChunkView(QQuickItem* parent) :
     QQuickItem(parent),

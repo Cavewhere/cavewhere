@@ -199,14 +199,13 @@ Item {
         }
 
         visible: surveyChunk !== null && surveyChunk.isStationRole(dataRole)
-
     }
 
     Rectangle {
         id: backgroundShot
+        property bool offsetColor: rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isShotRole(dataRole)
         anchors.fill: parent
-        color: "#DDF2FF"
-        visible: rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isShotRole(dataRole)
+        color: offsetColor ? "#DDF2FF" : "white"
     }
 
     Rectangle {
