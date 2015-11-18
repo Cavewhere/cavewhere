@@ -22,9 +22,6 @@ const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
 cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
-
-//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
-
 }
 
 /**
@@ -33,9 +30,7 @@ cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
   This function is thread safe
 */
 void cwPlotSauceTask::setSurvex3DFile(QString inputFile) {
-    //Thread safe way to set the data for the task
-    QMetaObject::invokeMethod(this, "privateSetSurvex3DFile",
-                              Q_ARG(QString, inputFile));
+    privateSetSurvex3DFile(inputFile);
 }
 
 /**
@@ -67,7 +62,7 @@ void cwPlotSauceTask::runTask() {
         return;
     }
 
-    PlotSauceProcess = new QProcess(this);
+    PlotSauceProcess = new QProcess();
     connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
 
     QString inputFile = survex3DFilename();

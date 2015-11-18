@@ -27,8 +27,7 @@ cwPlotSauceXMLTask::cwPlotSauceXMLTask(QObject *parent) :
   \brief Sets the input file for the task to parse
   */
 void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
-    QMetaObject::invokeMethod(this, "privateSetPlotSauceXMLFile",
-                              Q_ARG(QString, inputFile));
+    privateSetPlotSauceXMLFile(inputFile);
 }
 
 
