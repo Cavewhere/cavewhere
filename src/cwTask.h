@@ -13,6 +13,7 @@
 #include <QReadWriteLock>
 #include <QTimer>
 #include <QRunnable>
+#include <QWaitCondition>
 
 /**
   \brief A member functions in the class are thread safe
@@ -53,8 +54,7 @@ public:
     void setName(QString name);
 
     void run();
-
-    void waitToFinish();
+    void waitToFinish(unsigned long time = ULONG_MAX);
 
     //Do not move this to a slot!!! You will break things
     //TODO: figure out why this is bad...
@@ -91,11 +91,14 @@ private:
     mutable QReadWriteLock StatusLocker;
     mutable QReadWriteLock ProgressLocker;
     mutable QReadWriteLock NameLocker;
+    QMutex WaitToFinishLocker;
+    QWaitCondition WaitToFinishCondition;
 
     int NumberOfSteps;
     int Progress; //!<
 
     Status CurrentStatus;
+    bool NeedsRestart;
 
     QList<cwTask*> ChildTasks;
     cwTask* ParentTask;
@@ -104,8 +107,11 @@ private:
 
     bool UsingThreadPool;
 
+
     void privateStop();
     bool isParentsRunning();
+
+    bool needsRestart() const;
 
 private:
     Q_INVOKABLE void startOnCurrentThread();

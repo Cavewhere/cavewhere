@@ -113,7 +113,11 @@ void cwPlotSauceXMLTask::ParseStationXML(QDomNode station) {
         zString = extractString(ZElement);
     }
 
-    if(stationName.isEmpty() || xString.isEmpty() || yString.isEmpty() || zString.isEmpty()) {
+    if(stationName.isEmpty()) {
+        return;
+    }
+
+    if(xString.isEmpty() || yString.isEmpty() || zString.isEmpty()) {
         qWarning() << "Can't extract data for " << stationName << "at" << xString << yString << zString;
         return;
     }

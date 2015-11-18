@@ -24,10 +24,7 @@ ApplicationWindow {
 
     LicenseWindow { }
 
-    Item {
-        id: rootQMLItem
-        anchors.fill: parent
-    }
+
 
     menuBar: fileMenuButton.menuBar
 
@@ -91,10 +88,14 @@ ApplicationWindow {
         id: globalShadowTextInput
     }
 
-    //All the dialogs in cavewhere are parented under this item.
-//    GlobalDialogHandler {
+    //All the dialogs in cavewhere are parented under this item. This prevents
+    //mouse clicks outside of the dialog
 //        id: globalDialogHandler
 //    }
+    Item {
+        id: rootPopupItem
+        anchors.fill: parent
+    }
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindow

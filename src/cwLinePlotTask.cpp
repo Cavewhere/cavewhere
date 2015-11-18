@@ -22,6 +22,7 @@
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwStationValidator.h"
+#include "cwErrorModel.h"
 
 //Qt includes
 #include <QDebug>
@@ -85,6 +86,8 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
 //    connect(CenterlineGeometryTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
 //    connect(CenterlineGeometryTask, SIGNAL(stopped()), SLOT(done()));
 
+    UnconnectedSurveyChunkTask = new cwFindUnconnectedSurveyChunksTask();
+    UnconnectedSurveyChunkTask->setParentTask(this);
 }
 
 cwLinePlotTask::~cwLinePlotTask()
@@ -134,16 +137,23 @@ void cwLinePlotTask::runTask() {
     //Clear the previous results
     Result.clear();
 
-    //Initilize the cave station lookup, from previous run
-    initializeCaveStationLookups();
+    try {
 
-    Time.start();
-    exportData();
+        //Check for errors
+        checkForErrors();
 
-    runCavern();
+        //Change all the cave names, such that survex can handle them correctly
+        encodeCaveNames();
+        //Initilize the cave station lookup, from previous run
+        initializeCaveStationLookups();
 
-    convertToXML();
+        Time.start();
+        exportData();
 
+    } catch(QString) {
+        done();
+        return;
+    }
     readXML();
 
     generateCenterlineGeometry();
@@ -276,16 +286,37 @@ void cwLinePlotTask::updateDepthLength()
         //Get the region's caves
         cwLinePlotGeometryTask::LengthAndDepth lengthAndDepth = caveLengthAndDepth.at(i);
 
-        //Get extrenal cave pointer
-        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
-
-        if(!Result.Caves.contains(externalCave)) {
-            Result.Caves[externalCave] = LinePlotCaveData();
-        }
-
-        LinePlotCaveData& caveData = Result.Caves[externalCave];
+        LinePlotCaveData& caveData = createLinePlotCaveDataAt(i);
         caveData.setLength(lengthAndDepth.length());
         caveData.setDepth(lengthAndDepth.depth());
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::checkForErrors
+ */
+void cwLinePlotTask::checkForErrors()
+{
+    for(int i = 0; i < Region->caveCount(); i++) {
+        cwCave* cave = Region->cave(i);
+        UnconnectedSurveyChunkTask->setCave(cave);
+        UnconnectedSurveyChunkTask->start();
+        auto errorResults = UnconnectedSurveyChunkTask->results();
+        if(errorResults.size() > 0) {
+            LinePlotCaveData& caveData = createLinePlotCaveDataAt(i);
+            caveData.setUnconnectedChunkError(errorResults);
+        }
+    }
+
+    for(int i = 0; i < Region->caveCount(); i++) {
+        cwCave* cave = Region->cave(i);
+        if(cave->errorModel()->fatalCount() > 0) {
+            throw QString("Found error in cave");
+        }
+    }
+
+    if(!Result.Caves.isEmpty()) {
+        throw QString("Found error in caves");
     }
 }
 
@@ -379,6 +410,24 @@ void cwLinePlotTask::indexStations()
     for(int i = 0; i < Region->caveCount() && isRunning(); i++) {
         TripLookups[i] = StationTripScrapLookup(Region->cave(i));
     }
+}
+
+/**
+ * @brief cwLinePlotTask::createLinePlotCaveDataAt
+ * Creates LinePlotCaveData at index (if it doesn't already exist) and returns it
+ */
+cwLinePlotTask::LinePlotCaveData &cwLinePlotTask::createLinePlotCaveDataAt(int index)
+{
+    //Get extrenal cave pointer
+    cwCave* externalCave = RegionOriginalPointers.Caves.at(index).Cave;
+
+    if(!Result.Caves.contains(externalCave)) {
+        Result.Caves[externalCave] = LinePlotCaveData();
+    }
+
+    LinePlotCaveData& caveData = Result.Caves[externalCave];
+
+    return caveData;
 }
 
 /**

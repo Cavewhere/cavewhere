@@ -18,9 +18,12 @@ class cwScrap;
 class cwStationReference;
 #include "cwLinePlotTask.h"
 class cwGLLinePlot;
+class cwSurveyChunkSignaler;
+class cwErrorListModel;
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 
 class cwLinePlotManager : public QObject
 {
@@ -32,6 +35,8 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
+    void waitToFinish();
+
 signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
@@ -40,33 +45,27 @@ signals:
 public slots:
 
 private:
-    cwCavingRegion* Region; //The main
+    QPointer<cwCavingRegion> Region; //The main
+    QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
     cwLinePlotTask* LinePlotTask;
 
     cwGLLinePlot* GLLinePlot;
 
+    cwSurveyChunkSignaler* SurveySignaler;
+
     void connectCaves(cwCavingRegion* region);
-    void connectCave(cwCave* cave);
-    void connectTrips(cwCave* cave);
-    void connectTrip(cwTrip* trip);
-    void connectChunks(cwTrip* trip);
-    void connectChunk(cwSurveyChunk* chunk);
 
     void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 
     void setCaveStationLookupAsStale(bool isStale);
+    void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
+    void clearUnconnectedChunkErrors();
 
 private slots:
-    void regionDestroyed(QObject* region);
     void runSurvex();
 
     void updateLinePlot();
-
-    void connectAddedCaves(int beginIndex, int endIndex);
-    void connectAddedTrips(int beginIndex, int endIndex);
-    void connectAddedChunks(int beginIndex, int endIndex);
-
 };
 
 #endif // CWLINEPLOTMANAGER_H

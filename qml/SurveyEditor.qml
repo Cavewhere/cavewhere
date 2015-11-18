@@ -134,6 +134,10 @@ Item {
                     text: "Data"
                 }
 
+                SurveyErrorOverview {
+                    trip: currentTrip
+                }
+
                 SurveyChunkGroupView {
                     id: view
 

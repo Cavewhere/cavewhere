@@ -1,13 +1,10 @@
 import QtQuick 2.0
 
-Item {
+MouseArea {
     anchors.fill: parent
-
-    MouseArea {
-        anchors.fill: parent
-        onPressed: mouse.accepted = true
-        onWheel: wheel.accepted = true
-        enabled: false
-        visible: enabled
-    }
+    onPressed: mouse.accepted = true
+    onWheel: wheel.accepted = true
+    enabled: false
+    visible: enabled
 }
+

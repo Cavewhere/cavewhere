@@ -14,7 +14,6 @@ import qbs.File
 Application {
     id: applicationId
 
-    readonly property string gitVersion: Git.productVersion
     readonly property string installPrefix: {
         if(qbs.targetOS.contains("osx")) {
             return name + ".app/Contents/MacOS/"
@@ -34,13 +33,9 @@ Application {
             "xml",
             "concurrent" ]
     }
+    Depends { name: "cavewhere-lib" }
     Depends { name: "QMath3d" }
-    Depends { name: "squish" }
-    Depends { name: "plotsauce" }
-    Depends { name: "protoc" }
-    Depends { name: "protobuf" }
-    Depends { name: "z" }
-    Depends { name: "Git" }
+    Depends { name: "sdk-utilities" }
 
 //        Depends { name: "icns-out" }
 
@@ -97,23 +92,6 @@ Application {
         ]
     }
 
-    cpp.defines:[
-        "TRILIBRARY",
-        "ANSI_DECLARATORS"
-    ]
-
-    Properties {
-        //This property is set so we can debug QML will in the application in
-        //debug mode.
-        condition: qbs.buildVariant == "debug"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "\"")
-        .concat("CW_DEBUG")
-    }
-
-    Properties {
-        condition: qbs.buildVariant == "release"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"\"")
-    }
 
 //        cpp.infoPlistFile: "Info.plist"
     cpp.minimumOsxVersion: "10.7"
@@ -127,27 +105,6 @@ Application {
         fileTagsFilter: ["application"]
         qbs.installDir: qbs.targetOS.contains("darwin") ? "Cavewhere.app/Contents/MacOS" : ""
         qbs.install: true
-    }
-
-    Group {
-        name: "ProtoFiles"
-
-        files: [
-            applicationId.prefix + "src/cavewhere.proto",
-            applicationId.prefix + "src/qt.proto"
-        ]
-
-        fileTags: ["proto"]
-    }
-
-    Group {
-        name: "cppFiles"
-        files: [
-            applicationId.prefix + "src/*.cpp",
-            applicationId.prefix + "src/*.h",
-            applicationId.prefix + "src/utils/*.cpp",
-            applicationId.prefix + "src/utils/*.h"
-        ]
     }
 
     Group {
@@ -186,14 +143,6 @@ Application {
     }
 
     Group {
-        name: "uiForms"
-        files: [
-            applicationId.prefix + "src/cwImportSurvexDialog.ui",
-            applicationId.prefix + "src/cwTaskProgressDialog.ui"
-        ]
-    }
-
-    Group {
         name: "packageCreatorScripts"
 
         files: [
@@ -222,13 +171,6 @@ Application {
         name: "qrcFiles"
         files: [
             applicationId.prefix + "resources.qrc"
-        ]
-    }
-
-    Group {
-        name: "metacave Docs"
-        files: [
-            applicationId.prefix + "metacave/README.md"
         ]
     }
 
@@ -389,31 +331,4 @@ Application {
             return commands;
         }
     }
-
-    Transformer {
-        id: cavewhereVersionGenerator
-
-        Artifact {
-            fileTags: ["hpp"]
-            filePath: "versionInfo/cavewhereVersion.h"
-        }
-
-        prepare: {
-            var cmd = new JavaScriptCommand();
-            cmd.description = "generating version info in" + output.filePath;
-
-            //Use git to query the version
-            cmd.cavewhereVersion = product.gitVersion
-
-            cmd.sourceCode = function() {
-                var all = "#ifndef cavewhereVersion_H\n #define cavewhereVersion_H\n static const QString CavewhereVersion = \"" + cavewhereVersion + "\";\n #endif\n\n";
-                var file = new TextFile(output.filePath, TextFile.WriteOnly);
-                file.write(all);
-                file.close();
-            }
-            return cmd;
-        }
-    }
-
-
 }

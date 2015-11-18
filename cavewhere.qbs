@@ -15,6 +15,7 @@ Project {
     }
 
     references: [
+        "src/cavewhereLib.qbs",
         "survex/survex.qbs",
         "squish/squish.qbs",
         "plotsauce/plotsauce.qbs",
@@ -22,7 +23,8 @@ Project {
         "protobuf/protobuf.qbs",
         "zlib/zlib.qbs",
         "installer/installer.qbs",
-        "testcases/testcases.qbs"
+        "testcases/testcases.qbs",
+        "lib-qt-qml-tricks/QtQmlTricks.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]
@@ -30,7 +32,7 @@ Project {
     CavewhereApp {
         name: "Cavewhere"
 
-        Group {
+	Group {
             name: "main"
             files: "main.cpp"
         }
