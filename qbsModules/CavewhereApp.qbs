@@ -223,8 +223,8 @@ Application {
             Qt.core.binPath + "/icudt*.dll",
 
             //Redistrobution libraries for vs2010 32bit
-            "c:/windows/system32/MSVCR100.DLL",
-            "c:/windows/system32/MSVCP100.DLL"
+            "c:/windows/system32/MSVCR120.DLL",
+            "c:/windows/system32/MSVCP120.DLL"
         ]
 
     }
