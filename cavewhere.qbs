@@ -41,7 +41,6 @@ Project {
             submodules: [ "core",
                 "gui",
                 "widgets",
-                "script",
                 "quick",
                 "sql",
                 "opengl",
@@ -281,9 +280,9 @@ Project {
                 Qt.core.binPath + "/icuuc*.dll",
                 Qt.core.binPath + "/icudt*.dll",
 
-                //Redistrobution libraries for vs2010 32bit
-                "c:/windows/system32/MSVCR100.DLL",
-                "c:/windows/system32/MSVCP100.DLL"
+                //Redistrobution libraries for vs2013 32bit
+                "c:/windows/system32/MSVCR120.DLL",
+                "c:/windows/system32/MSVCP120.DLL"
             ]
 
         }

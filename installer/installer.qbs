@@ -4,8 +4,8 @@ import qbs.TextFile
 Project {
     name: "installer"
 
-    readonly property string installDir: "../../build-cavewhere-" +
-                                         profile.replace("qtc_", "") + "-" + qbs.buildVariant + "/" +
+    readonly property string installDir: "../../build-cavewhere-Desktop" +
+                                         "-" + qbs.buildVariant + "/" +
                                          profile + "-" + qbs.buildVariant + "/" +
                                          "install-root"
 

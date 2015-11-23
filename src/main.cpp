@@ -48,6 +48,7 @@ QUrl mainWindowSourcePath() {
 int main(int argc, char *argv[])
 {
     cwApplication a(argc, argv);
+    a.setAttribute(Qt::AA_UseDesktopOpenGL);
 
     cwRootData* rootData = new cwRootData();
 
