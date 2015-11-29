@@ -113,7 +113,7 @@ QSet<QString> cwFindUnconnectedSurveyChunksTask::chunkToStationNameSet(cwSurveyC
 {
     QSet<QString> stationNameSet;
     for(int i = 0; i < chunk->stationCount(); i++) {
-        QString name = chunk->data(cwSurveyChunk::StationNameRole, i).toString();
+        QString name = chunk->data(cwSurveyChunk::StationNameRole, i).toString().toUpper();
         if(!name.isEmpty()) {
             stationNameSet.insert(name);
         }
@@ -179,7 +179,7 @@ void cwFindUnconnectedSurveyChunksTask::addFirstChunkAsConnected()
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
             if(chunk->isValid()) {
                 for(int i = 0; i < chunk->stationCount(); i++) {
-                   QString stationName = chunk->data(cwSurveyChunk::StationNameRole, i).toString();
+                   QString stationName = chunk->data(cwSurveyChunk::StationNameRole, i).toString().toUpper();
                    if(!stationName.isEmpty()) {
                        //Found the first survey chunk that has a valid station name
                        insertChunkToConnected(chunk);
