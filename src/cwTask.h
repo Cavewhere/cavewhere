@@ -8,6 +8,7 @@
 #ifndef CWTASK_H
 #define CWTASK_H
 
+//Qt includes
 #include <QMutex>
 #include <QObject>
 #include <QReadWriteLock>
@@ -15,11 +16,14 @@
 #include <QRunnable>
 #include <QWaitCondition>
 
+//Our includes
+#include "cwGlobals.h"
+
 /**
   \brief A member functions in the class are thread safe
   */
 
-class cwTask : public QObject, public QRunnable
+class CAVEWHERE_LIB_EXPORT cwTask : public QObject, public QRunnable
 {
     Q_OBJECT
 

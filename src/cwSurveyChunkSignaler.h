@@ -18,6 +18,7 @@ class cwCavingRegion;
 class cwCave;
 class cwTrip;
 class cwSurveyChunk;
+#include "cwGlobals.h"
 
 /**
  * @brief The cwSurveyChunkSignaler class
@@ -28,7 +29,7 @@ class cwSurveyChunk;
  * will setup a signal slot connection between caves, trips, or chunks in the caving region. Recieving
  * slot can use QObject::sender() to figure out what object emited the signal.
  */
-class cwSurveyChunkSignaler : public QObject
+class CAVEWHERE_LIB_EXPORT cwSurveyChunkSignaler : public QObject
 {
     Q_OBJECT
 

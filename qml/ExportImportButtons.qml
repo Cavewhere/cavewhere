@@ -29,6 +29,28 @@ Item {
         id: importManager
         cavingRegion: iconBar.currentRegion
         undoStack: rootData.undoStack
+        onMessageAdded: {
+            messageListDialog.visible = true;
+            messageListDialog.messages.append({
+                                                  severity: severity,
+                                                  message: message,
+                                                  lineCount: message.split('\n').length,
+                                                  source: source,
+                                                  startLine: startLine + 1,
+                                                  startColumn: startColumn + 1
+                                              });
+            messageListDialog.scrollToBottom();
+        }
+        onMessagesCleared: messageListDialog.messages.clear()
+    }
+
+    MessageListDialog {
+        visible: false
+        modality: Qt.NonModal
+        id: messageListDialog
+        width: 730
+        height: 400
+        font: importManager.messageListFont
     }
 
     Item {
@@ -99,11 +121,25 @@ Item {
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
+                        messageListDialog.title = "Compass Import"
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
+            },
+            State {
+                name: "IMPORT_WALLS"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Import from Walls"
+                    nameFilters: ["Walls (*.srv *.SRV)"]
+                    selectExisting: true
+                    selectMultiple: true
+                    onAccepted: {
+                        messageListDialog.title = "Walls Import";
+                        importManager.importWallsDataFile(fileUrls);
+                    }
+                }
             }
-
 
         ]
     }
@@ -191,6 +227,14 @@ Item {
                     text: "Compass (.dat)"
                     onTriggered: {
                         fileDialogItem.state = "IMPORT_COMPASS"
+                        fileDialog.open()
+                    }
+                }
+
+                Controls.MenuItem {
+                    text: "Walls (.srv)"
+                    onTriggered: {
+                        fileDialogItem.state = "IMPORT_WALLS"
                         fileDialog.open()
                     }
                 }

@@ -9,10 +9,13 @@
 #ifndef CWSURVEYCHUNKERROR_H
 #define CWSURVEYCHUNKERROR_H
 
+//Qt includes
 #include <QSharedDataPointer>
 #include <QObject>
 
+//Our includes
 class cwErrorData;
+#include "cwGlobals.h"
 
 /**
  * @brief The cwError class
@@ -26,7 +29,7 @@ class cwErrorData;
  *
  * Also see cwErrorModel.
  */
-class cwError
+class CAVEWHERE_LIB_EXPORT cwError
 {
     Q_GADGET
     Q_ENUMS(ErrorType)

@@ -15,6 +15,7 @@ class cwErrorModel;
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QObject>
@@ -26,7 +27,7 @@ class cwErrorModel;
 #include <QVariant>
 #include <QAbstractListModel>
 
-class cwCave : public QAbstractListModel, public cwUndoer
+class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
 {
     Q_OBJECT
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)

@@ -13,7 +13,10 @@
 class QQuickView;
 class QQmlApplicationEngine;
 
-class cwQMLReload : public QObject
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwQMLReload : public QObject
 {
     Q_OBJECT
 

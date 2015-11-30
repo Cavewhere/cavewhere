@@ -62,6 +62,53 @@ TEST_CASE("Test the find unconnected survey chunks") {
         CHECK(task->results().isEmpty() == true);
     }
 
+    SECTION("The connection should be made, even if the station name case are different") {
+        cwSurveyChunk* chunk1 = new cwSurveyChunk();
+        trip->addChunk(chunk1);
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        trip->addChunk(chunk2);
+
+        QList<cwStation> withCapitals;
+        QList<cwStation> withoutCapitals;
+
+        for(int i = 0; i < stations.size(); i++) {
+            cwStation stationA;
+            stationA = stations.at(i);
+            stationA.setName(QString("A") + stationA.name());
+
+            cwStation stationB;
+            stationB = stations.at(i);
+            stationB.setName(QString("b") + stationB.name());
+
+            withCapitals.append(stationA);
+            withoutCapitals.append(stationB);
+        }
+
+        for(int i = 0; i < 10; i++) {
+            chunk1->appendShot(withCapitals.at(i), withCapitals.at(i+1), shot);
+        }
+
+        for(int i = 0; i < 10; i++) {
+            chunk2->appendShot(withoutCapitals.at(i), withoutCapitals.at(i+1), shot);
+        }
+
+        task->setCave(cave);
+        task->start();
+        task->waitToFinish();
+
+        CHECK(task->results().size() == 1);
+
+        cwStation newCaptical = withoutCapitals.first();
+        newCaptical.setName(newCaptical.name().toUpper());
+
+        chunk1->appendShot(chunk1->stations().last(), newCaptical, shot);
+
+        task->start();
+        task->waitToFinish();
+        CHECK(task->results().size() == 0);
+    }
+
     SECTION("Two chunk's that aren't connected") {
 
         cwSurveyChunk* chunk1 = new cwSurveyChunk();

@@ -18,6 +18,7 @@ class QQuickView;
 class QQmlApplicationEngine;
 
 //Our includes
+#include "cwGlobals.h"
 class cwRegionTreeModel;
 class cwCavingRegion;
 class cwLinePlotManager;
@@ -40,7 +41,7 @@ class cwPageSelectionModel;
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
 #endif
 
-class cwRootData : public QObject
+class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 {
     Q_OBJECT
 

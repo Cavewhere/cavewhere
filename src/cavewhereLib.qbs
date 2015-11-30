@@ -40,6 +40,7 @@ DynamicLibrary {
     Depends { name: "protobuf" }
     Depends { name: "z" }
     Depends { name: "Git" }
+    Depends { name: "dewalls" }
     Depends { name: "sdk-utilities" }
 
 //        Depends { name: "icns-out" }
@@ -48,17 +49,16 @@ DynamicLibrary {
 
     Group {
         fileTagsFilter: ["dynamiclibrary"]
-        qbs.installDir: "lib/" + (qbs.targetOS.contains("darwin") ? product.name + ".framework/Versions/A" : "")
+        qbs.installDir: (qbs.targetOS.contains("darwin") ? product.name + ".framework/Versions/A" : "")
         qbs.install: true
     }
 
     Group {
         fileTagsFilter: ["bundle"]
-        qbs.installDir: "lib"
         qbs.install: true
     }
 
-    cpp.installNamePrefix: qbs.installRoot + "/lib"
+    cpp.installNamePrefix: qbs.installRoot
 
     cpp.includePaths: [
         ".",
@@ -80,9 +80,17 @@ DynamicLibrary {
     }
 
     Properties {
-        condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
+        condition: qbs.targetOS.contains("osx")
         cpp.cxxFlags: [
             "-stdlib=libc++", //Needed for protoc
+            "-std=c++11", //For c++11 support
+            "-Werror" //Treat warnings as errors
+        ]
+    }
+
+    Properties {
+        condition: qbs.targetOS.contains("linux")
+        cpp.cxxFlags: [
             "-std=c++11", //For c++11 support
             "-Werror" //Treat warnings as errors
         ]
@@ -106,27 +114,28 @@ DynamicLibrary {
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 
-//        cpp.dynamicLibraries: [
-//            "OpenGL32"
-//        ]
+        cpp.dynamicLibraries: [
+            "OpenGL32"
+        ]
+
     }
 
-    cpp.defines:[
-        "TRILIBRARY",
-        "ANSI_DECLARATORS"
-    ]
+    cpp.defines: {
+        var base = ["TRILIBRARY",
+                    "ANSI_DECLARATORS"];
 
-    Properties {
-        //This property is set so we can debug QML will in the application in
-        //debug mode.
-        condition: qbs.buildVariant == "debug"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "/.." + "\"")
-        .concat("CW_DEBUG")
-    }
+        if(qbs.buildVariant == "debug") {
+            base = base.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "/.." + "\"");
+            base = base.concat("CW_DEBUG");
+        } else if(qbs.buildVariant == "release") {
+            base = base.concat("CAVEWHERE_SOURCE_DIR=\"\"");
+        }
 
-    Properties {
-        condition: qbs.buildVariant == "release"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"\"")
+        if(qbs.targetOS.contains("windows")) {
+            base = base.concat('CAVEWHERE_LIB')
+        }
+
+        return base;
     }
 
 //        cpp.infoPlistFile: "Info.plist"

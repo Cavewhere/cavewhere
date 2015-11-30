@@ -14,8 +14,9 @@
 
 //Our inculdes
 #include "cwError.h"
+#include "cwGlobals.h"
 
-class cwErrorListModel : public QQmlGadgetListModel<cwError>
+class CAVEWHERE_LIB_EXPORT cwErrorListModel : public QQmlGadgetListModel<cwError>
 {
     Q_OBJECT
 public:

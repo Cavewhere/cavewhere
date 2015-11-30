@@ -11,6 +11,7 @@ CavewhereApp {
     consoleApplication: true
 
     Depends { name: "Qt"; submodules: ["test"] }
+    Depends { name: "dewalls" }
 
     Group {
         name: "testcases"
@@ -18,6 +19,15 @@ CavewhereApp {
             "*.cpp",
             "*.h"
         ]
+    }
+
+    Group {
+        name: "dewalls testcases"
+        files: [
+            "../dewalls/test/*.cpp",
+            "../dewalls/test/*.h"
+        ]
+        excludeFiles: "../dewalls/test/dewallstests.cpp"
     }
 
     Group {

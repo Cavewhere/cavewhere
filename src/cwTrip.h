@@ -12,6 +12,8 @@
 #include "cwUnits.h"
 #include "cwStation.h"
 #include "cwError.h"
+#include "cwGlobals.h"
+#include "cwUndoer.h"
 class cwSurveyChunk;
 class cwCave;
 class cwTeam;
@@ -19,7 +21,6 @@ class cwTripCalibration;
 class cwSurveyNoteModel;
 class cwShot;
 class cwErrorModel;
-#include "cwUndoer.h"
 
 //Qt include
 #include <QObject>
@@ -30,7 +31,7 @@ class cwErrorModel;
 #include <QUndoCommand>
 
 
-class cwTrip : public QObject, public cwUndoer
+class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 {
     Q_OBJECT
 

@@ -24,6 +24,7 @@ Project {
         "zlib/zlib.qbs",
         "installer/installer.qbs",
         "testcases/testcases.qbs",
+        "dewalls/dewalls.qbs",
         "lib-qt-qml-tricks/QtQmlTricks.qbs"
     ]
 

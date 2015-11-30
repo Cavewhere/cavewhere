@@ -19,6 +19,9 @@
 [submodule "metacave"]
 	path = metacave
 	url = git@github.com:Cavewhere/metacave.git
+[submodule "dewalls"]
+	path = dewalls
+	url = git@github.com:Cavewhere/dewalls
 [submodule "lib-qt-qml-tricks"]
 	path = lib-qt-qml-tricks
 	url = git@github.com:Cavewhere/lib-qt-qml-tricks.git

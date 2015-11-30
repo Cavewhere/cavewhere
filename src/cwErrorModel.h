@@ -15,9 +15,10 @@
 
 //Our includes
 #include "cwError.h"
+#include "cwGlobals.h"
 class cwErrorListModel;
 
-class cwErrorModel : public QObject
+class CAVEWHERE_LIB_EXPORT cwErrorModel : public QObject
 {
     Q_OBJECT
 

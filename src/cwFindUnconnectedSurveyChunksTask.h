@@ -12,6 +12,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwError.h"
+#include "cwGlobals.h"
 class cwCave;
 class cwSurveyChunk;
 
@@ -26,7 +27,7 @@ class cwSurveyChunk;
  * This returns a list of unconnected survey chunks. A unconnected survey chunk is a survey leg
  * that is floating in the cave, and isn't connected to the rest of the cave
  */
-class cwFindUnconnectedSurveyChunksTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwFindUnconnectedSurveyChunksTask : public cwTask
 {
     Q_OBJECT
 

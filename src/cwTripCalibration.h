@@ -11,11 +11,12 @@
 //Qt includes
 #include <QObject>
 #include <QStringList>
+#include "cwGlobals.h"
 
 //Our includes
 #include "cwUnits.h"
 
-class cwTripCalibration : public QObject
+class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 {
     Q_OBJECT
 
