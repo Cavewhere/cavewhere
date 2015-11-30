@@ -13,6 +13,7 @@
 class cwCavingRegion;
 class cwLinePlotGeometryTask;
 #include "cwStationPositionLookup.h"
+#include "cwFindUnconnectedSurveyChunksTask.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
 class cwPlotSauceTask;
@@ -20,6 +21,7 @@ class cwPlotSauceXMLTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
+
 
 //Qt includes
 #include <QTemporaryFile>
@@ -40,10 +42,12 @@ public:
         void setDepth(double depth);
         void setLength(double length);
         void setStationPositions(cwStationPositionLookup positionLookup);
+        void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results);
 
         double depth() const;
         double length() const;
         cwStationPositionLookup stationPositions() const;
+        QList<cwFindUnconnectedSurveyChunksTask::Result> unconnectedChunkError() const;
 
         bool hasDepthLengthChanged() const;
         bool hasStationPositionsChanged() const;
@@ -52,6 +56,7 @@ public:
         bool DepthLengthChanged;
         double Depth;
         double Length;
+        QList<cwFindUnconnectedSurveyChunksTask::Result> UnconnectedChunksErrors;
 
         bool StationPostionsChanged;
         cwStationPositionLookup Lookup;
@@ -193,6 +198,7 @@ private:
     cwPlotSauceTask* PlotSauceTask;
     cwPlotSauceXMLTask* PlotSauceParseTask;
     cwLinePlotGeometryTask* CenterlineGeometryTask;
+    cwFindUnconnectedSurveyChunksTask* UnconnectedSurveyChunkTask;
 
     //What's returned
     LinePlotResultData Result;
@@ -200,10 +206,12 @@ private:
     //For performance testing
     QTime Time;
 
+    void checkForErrors();
     void encodeCaveNames();
     void initializeCaveStationLookups();
     void setStationAsChanged(int caveIndex, QString stationName);
     void indexStations();
+    LinePlotCaveData& createLinePlotCaveDataAt(int index);
 
     QVector<cwStationPositionLookup> splitLookupByCave(const cwStationPositionLookup& stationPostions);
     void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations);
@@ -371,6 +379,15 @@ inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPosit
 }
 
 /**
+ * @brief cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError
+ * @param results - Sets the results for chunks that aren't connect to the cave
+ */
+inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results)
+{
+    UnconnectedChunksErrors = results;
+}
+
+/**
  * @brief cwLinePlotTask::LinePlotCaveData::depth
  * @return The depth of the cave
  */
@@ -395,6 +412,16 @@ inline double cwLinePlotTask::LinePlotCaveData::length() const
 inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
 {
     return Lookup;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::unconnectedChunkError
+ * @return Returns the errors for unconnected chunk. Unconnected chunk are survey legs that aren't
+ * connected to the cave.
+ */
+inline QList<cwFindUnconnectedSurveyChunksTask::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
+{
+    return UnconnectedChunksErrors;
 }
 
 /**

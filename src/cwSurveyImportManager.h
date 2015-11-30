@@ -32,7 +32,7 @@ class cwSurveyImportManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
-    Q_PROPERTY(QFont messageListFont MEMBER MessageListFont)
+    Q_PROPERTY(QFont messageListFont MEMBER MessageListFont CONSTANT)
 
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);

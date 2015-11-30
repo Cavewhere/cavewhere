@@ -9,12 +9,16 @@
 #ifndef CWAPPLICATION_H
 #define CWAPPLICATION_H
 
+//Qt includes
 #include <QApplication>
 #include <QEvent>
 #include <QMetaEnum>
 #include <QDebug>
 
-class cwApplication : public QApplication
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwApplication : public QApplication
 {
     Q_OBJECT
 public:

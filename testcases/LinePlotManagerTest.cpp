@@ -16,6 +16,8 @@
 #include "cwSurveyChunk.h"
 #include "cwLength.h"
 #include "cwTripCalibration.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QThread>
@@ -57,6 +59,7 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
         CHECK(cave->depth()->value() == 0.0);
         CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
         CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+        CHECK(cave->errorModel()->fatalCount() == 0);
 
 
         SECTION("Setting station name data should re-run line plot") {
@@ -286,5 +289,58 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
             }
         }
     }
+
+    /*
+     * If this section fails, the line plot manager isn't reporting unconnected chunks. An
+     * unconnected chunk is a survey leg that isn't connected to the rest of the cave. This will prevent
+     * survex from running correctly.
+     */
+    SECTION("LinePlotManager should report unconnected chunk errors") {
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        trip->addChunk(chunk2);
+
+        plotManager->setRegion(&region);
+        plotManager->waitToFinish();
+
+        REQUIRE(chunk2->errorModel()->fatalCount() == 0);
+        REQUIRE(cave->errorModel()->fatalCount() == 0);
+
+        SECTION("Add on unconnect chunk") {
+            //Not connected to a1 and a2
+            cwStation a3("a3");
+            cwStation a4("a4");
+            cwShot shot2;
+            shot2.setDistance("20.0");
+            shot2.setCompass("40.0");
+            shot2.setClino("2.0");
+
+            chunk2->appendShot(a3, a4, shot2);
+
+            plotManager->waitToFinish();
+
+            REQUIRE(chunk2->errorModel()->fatalCount() == 1);
+            CHECK(chunk2->errorModel()->errors()->first().message() == QString("Survey leg isn't connect to the cave"));
+        }
+
+        SECTION("Append new shot that's unconnected") {
+            //Not connected to a1 and a2
+            chunk2->appendNewShot();
+            chunk2->setData(cwSurveyChunk::StationNameRole, 0, "a5");
+
+            plotManager->waitToFinish();
+
+            REQUIRE(chunk2->errorModel()->fatalCount() == 1);
+            CHECK(chunk2->errorModel()->errors()->first().message() == QString("Survey leg isn't connect to the cave"));
+
+            SECTION("Connect the chunk") {
+                chunk2->setData(cwSurveyChunk::StationNameRole, 0, "a2");
+
+                plotManager->waitToFinish();
+
+                REQUIRE(chunk2->errorModel()->errors()->count() == 0);
+            }
+        }
+    }
 }
+
 

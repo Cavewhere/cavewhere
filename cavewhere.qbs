@@ -23,8 +23,9 @@ Project {
         "protobuf/protobuf.qbs",
         "zlib/zlib.qbs",
         "installer/installer.qbs",
+        "testcases/testcases.qbs",
         "dewalls/dewalls.qbs",
-        "testcases/testcases.qbs"
+        "lib-qt-qml-tricks/QtQmlTricks.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]

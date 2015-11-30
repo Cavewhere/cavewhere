@@ -16,16 +16,18 @@ class cwSurveyChunk;
 class cwShot;
 class cwScrap;
 class cwStationReference;
-#include "cwLinePlotTask.h"
 class cwGLLinePlot;
 class cwSurveyChunkSignaler;
+class cwErrorListModel;
+#include "cwLinePlotTask.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QObject>
 #include <QThread>
 #include <QPointer>
 
-class cwLinePlotManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
 {
     Q_OBJECT
 public:
@@ -46,6 +48,7 @@ public slots:
 
 private:
     QPointer<cwCavingRegion> Region; //The main
+    QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
     cwLinePlotTask* LinePlotTask;
     QThread* LinePlotThread;
@@ -59,6 +62,8 @@ private:
     void validateResultsData(cwLinePlotTask::LinePlotResultData& results);
 
     void setCaveStationLookupAsStale(bool isStale);
+    void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
+    void clearUnconnectedChunkErrors();
 
 private slots:
     void runSurvex();

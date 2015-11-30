@@ -14,11 +14,12 @@ class cwStation;
 class cwStationReference;
 class cwValidator;
 #include "cwReadingStates.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QSharedDataPointer>
 
-class cwShot
+class CAVEWHERE_LIB_EXPORT cwShot
 {
 
 public:

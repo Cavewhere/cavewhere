@@ -44,6 +44,7 @@ public:
     QQmlComponent* frontClinoDelegate() const;
     QQmlComponent* backClinoDelegate() const;
     QQmlComponent* removeDataDelegate() const;
+    QQmlComponent* errorDelegate() const;
 
     cwValidator* stationValidator() const;
     cwValidator* lrudValidator() const;
@@ -56,13 +57,14 @@ signals:
 public slots:
 
 private:
-    QQmlComponent* Delegate;
+    QQmlComponent* DataBoxDelegate;
     QQmlComponent* StationDelegate;
     QQmlComponent* TitleDelegate;
     QQmlComponent* FrontSiteDelegate;
     QQmlComponent* BackSiteDelegate;
     QQmlComponent* ShotDistanceDelegate;
     QQmlComponent* RemoveDataDelegate;
+    QQmlComponent* ErrorDelegate;
 
     cwStationValidator* StationValidator;
     cwDistanceValidator* DistanceValidator;
@@ -81,19 +83,19 @@ inline QQmlComponent* cwSurveyChunkViewComponents::stationDelegate() const {
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::leftDelegate() const {
-    return Delegate;
+    return DataBoxDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::rightDelegate() const {
-    return Delegate;
+    return DataBoxDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::upDelegate() const {
-    return Delegate;
+    return DataBoxDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::downDelegate() const {
-    return Delegate;
+    return DataBoxDelegate;
 }
 
 inline QQmlComponent* cwSurveyChunkViewComponents::distanceDelegate() const {
@@ -116,6 +118,10 @@ inline QQmlComponent* cwSurveyChunkViewComponents::backClinoDelegate() const {
     return BackSiteDelegate;
 }
 
+inline QQmlComponent *cwSurveyChunkViewComponents::errorDelegate() const
+{
+    return ErrorDelegate;
+}
 
 inline cwValidator *cwSurveyChunkViewComponents::stationValidator() const {
     return StationValidator;

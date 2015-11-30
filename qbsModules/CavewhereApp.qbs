@@ -34,6 +34,7 @@ Application {
             "concurrent" ]
     }
     Depends { name: "cavewhere-lib" }
+    Depends { name: "sdk-utilities" }
 
     cpp.includePaths: [
         applicationId.prefix + "src",
@@ -199,6 +200,7 @@ Application {
             Qt.core.binPath + "/Qt5Widgetsd.dll",
             Qt.core.binPath + "/Qt5Networkd.dll",
             Qt.core.binPath + "/Qt5Xmld.dll",
+            Qt.core.binPath + "/Qt5Testd.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
             Qt.core.binPath + "/icudt*.dll"
@@ -220,13 +222,14 @@ Application {
             Qt.core.binPath + "/Qt5Widgets.dll",
             Qt.core.binPath + "/Qt5Network.dll",
             Qt.core.binPath + "/Qt5Xml.dll",
+            Qt.core.binPath + "/Qt5Test.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
             Qt.core.binPath + "/icudt*.dll",
 
             //Redistrobution libraries for vs2010 32bit
-            "c:/windows/system32/MSVCR100.DLL",
-            "c:/windows/system32/MSVCP100.DLL"
+            "c:/windows/system32/MSVCR120.DLL",
+            "c:/windows/system32/MSVCP120.DLL"
         ]
 
     }

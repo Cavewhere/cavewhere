@@ -11,7 +11,10 @@
 //Qt includes
 #include <QString>
 
-class cwGlobalDirectory
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwGlobalDirectory
 {
 public:
     cwGlobalDirectory();

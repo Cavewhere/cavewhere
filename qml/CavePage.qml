@@ -161,6 +161,7 @@ Rectangle {
 
                 itemDelegate:
                     Item {
+                    clip: true
 
                     Connections {
                         target: tableViewId
@@ -184,17 +185,30 @@ Rectangle {
                         onlyLargestRange: true
                     }
 
-                    LinkText {
+                    Item {
                         visible: styleData.column === 0
-                        text: styleData.value.name
-                        elide: Text.ElideRight
+
                         anchors.fill: parent
-                        onClicked: {
-                            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                       tripPageName(styleData.value));
+
+                        RowLayout {
+                            id: rowLayout
+                            spacing: 1
+
+                            ErrorIconBar {
+                                errorModel: styleData.value.errorModel
+                            }
+
+                            LinkText {
+                                text: styleData.value.name
+                                elide: Text.ElideRight
+
+                                onClicked: {
+                                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                               tripPageName(styleData.value));
+                                }
+                            }
                         }
                     }
-
 
                     Text {
                         visible: styleData.column === 1

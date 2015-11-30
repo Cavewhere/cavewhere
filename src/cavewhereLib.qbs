@@ -10,7 +10,8 @@ import qbs.File
   files for the application and for the testcases.
   */
 DynamicLibrary {
-    id: applicationId
+
+    name: "cavewhere-lib"
 
     readonly property string gitVersion: Git.productVersion
     readonly property string installPrefix: {
@@ -20,7 +21,6 @@ DynamicLibrary {
         return ""
     }
 
-    name: "cavewhere-lib"
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -41,10 +41,24 @@ DynamicLibrary {
     Depends { name: "z" }
     Depends { name: "Git" }
     Depends { name: "dewalls" }
+    Depends { name: "sdk-utilities" }
 
 //        Depends { name: "icns-out" }
 
 //        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
+
+    Group {
+        fileTagsFilter: ["dynamiclibrary"]
+        qbs.installDir: (qbs.targetOS.contains("darwin") ? product.name + ".framework/Versions/A" : "")
+        qbs.install: true
+    }
+
+    Group {
+        fileTagsFilter: ["bundle"]
+        qbs.install: true
+    }
+
+    cpp.installNamePrefix: qbs.installRoot
 
     cpp.includePaths: [
         ".",
@@ -82,20 +96,6 @@ DynamicLibrary {
         ]
     }
 
-    Group {
-        condition: qbs.targetOS.contains("osx")
-        fileTagsFilter: ["dynamiclibrary"]
-        qbs.installDir: "lib/" + (qbs.targetOS.contains("osx") ? product.name + ".framework/Versions/A" : "")
-        qbs.install: true
-    }
-
-    Group {
-        condition: qbs.targetOS.contains("osx")
-        fileTagsFilter: ["bundle"]
-        qbs.installDir: "lib"
-        qbs.install: true
-    }
-
 //    Properties {
 //        condition: qbs.targetOS.contains("linux")
 //        cpp.dynamicLibraries: [
@@ -114,27 +114,28 @@ DynamicLibrary {
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 
-//        cpp.dynamicLibraries: [
-//            "OpenGL32"
-//        ]
+        cpp.dynamicLibraries: [
+            "OpenGL32"
+        ]
+
     }
 
-    cpp.defines:[
-        "TRILIBRARY",
-        "ANSI_DECLARATORS"
-    ]
+    cpp.defines: {
+        var base = ["TRILIBRARY",
+                    "ANSI_DECLARATORS"];
 
-    Properties {
-        //This property is set so we can debug QML will in the application in
-        //debug mode.
-        condition: qbs.buildVariant == "debug"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "/.." + "\"")
-        .concat("CW_DEBUG")
-    }
+        if(qbs.buildVariant == "debug") {
+            base = base.concat("CAVEWHERE_SOURCE_DIR=\"" + sourceDirectory + "/.." + "\"");
+            base = base.concat("CW_DEBUG");
+        } else if(qbs.buildVariant == "release") {
+            base = base.concat("CAVEWHERE_SOURCE_DIR=\"\"");
+        }
 
-    Properties {
-        condition: qbs.buildVariant == "release"
-        cpp.defines: outer.concat("CAVEWHERE_SOURCE_DIR=\"\"")
+        if(qbs.targetOS.contains("windows")) {
+            base = base.concat('CAVEWHERE_LIB')
+        }
+
+        return base;
     }
 
 //        cpp.infoPlistFile: "Info.plist"
