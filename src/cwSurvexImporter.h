@@ -14,7 +14,7 @@
 #include <QList>
 #include <QStringList>
 #include <QMap>
-#include "cwTask.h"
+#include "cwTreeDataImporter.h"
 #include <QFile>
 
 //Our includes
@@ -24,7 +24,7 @@ class cwSurvexGlobalData;
 class cwSurveyChunk;
 class cwShot;
 
-class cwSurvexImporter : public cwTask
+class cwSurvexImporter : public cwTreeDataImporter
 {
 Q_OBJECT
 

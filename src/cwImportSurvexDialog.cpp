@@ -9,6 +9,7 @@
 #include "cwImportSurvexDialog.h"
 #include "cwSurvexImporterModel.h"
 #include "cwSurvexImporter.h"
+#include "cwTreeDataImporter.h"
 #include "cwGlobalIcons.h"
 #include "cwSurvexBlockData.h"
 #include "cwSurvexGlobalData.h"
@@ -19,8 +20,6 @@
 
 //Qt includes
 #include <QFileSystemModel>
-#include <QSettings>
-#include <QFileDialog>
 #include <QItemSelectionModel>
 #include <QPixmapCache>
 #include <QMessageBox>
@@ -28,13 +27,11 @@
 #include <QThread>
 
 
-const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
-
-cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent) :
+cwImportSurvexDialog::cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
     Region(region),
     Model(new cwSurvexImporterModel(this)),
-    Importer(new cwSurvexImporter()),
+    Importer(importer),
     SurvexSelectionModel(new QItemSelectionModel(Model, this)),
     ImportThread(new QThread(this))
 {
@@ -84,23 +81,12 @@ void cwImportSurvexDialog::open() {
         box.exec();
         return;
     }
-
-    QSettings settings;
-    QString lastFile = settings.value(ImportSurvexKey).toString();
-
-    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Survex", lastFile, "Survex *.svx");
-    if(QFileInfo(filename).exists()) {
-        setSurvexFile(filename);
-    }
 }
 
 /**
   \brief The survex file that'll be opened
   */
 void cwImportSurvexDialog::setSurvexFile(QString filename) {
-    QSettings settings;
-    settings.setValue(ImportSurvexKey, filename);
-
     //The root filename
     FullFilename = filename;
 

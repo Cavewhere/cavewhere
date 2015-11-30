@@ -27,7 +27,7 @@
 #include "math.h"
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
-    cwTask(parent),
+    cwTreeDataImporter(parent),
     RootBlock(new cwSurvexBlockData(this)),
     CurrentBlock(nullptr),
     GlobalData(new cwSurvexGlobalData(this)),

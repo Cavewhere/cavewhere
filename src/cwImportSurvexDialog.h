@@ -12,7 +12,7 @@
 #include "ui_cwImportSurvexDialog.h"
 #include "cwUndoer.h"
 class cwSurvexImporterModel;
-class cwSurvexImporter;
+class cwTreeDataImporter;
 class cwCavingRegion;
 
 //Qt includes
@@ -29,7 +29,7 @@ class cwImportSurvexDialog :
     Q_OBJECT
 
 public:
-    explicit cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent = 0);
+    explicit cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
     virtual ~cwImportSurvexDialog();
 
     void open();
@@ -42,8 +42,6 @@ protected:
     void resizeEvent(QResizeEvent *event);
 
 private:
-    static const QString ImportSurvexKey;
-
     enum TypeItem {
         Invalid = -1,
         NoImportItem,
@@ -58,7 +56,7 @@ private:
     //Data stuff
     QString FullFilename;
     cwSurvexImporterModel* Model;
-    cwSurvexImporter* Importer;
+    cwTreeDataImporter* Importer;
     QItemSelectionModel* SurvexSelectionModel;
 
     //For threading ithe importer

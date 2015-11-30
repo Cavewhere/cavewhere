@@ -8,6 +8,7 @@
 //Our includes
 #include "cwSurveyImportManager.h"
 #include "cwImportSurvexDialog.h"
+#include "cwSurvexImporter.h"
 #include "cwCompassImporter.h"
 #include "cwWallsImporter.h"
 #include "cwCavingRegion.h"
@@ -55,15 +56,25 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
     }
 }
 
+const QString cwSurveyImportManager::ImportSurvexKey = "LastImportSurvexFile";
+
 /**
   \brief Opens the survex importer dialog
   */
 void cwSurveyImportManager::importSurvex() {
 
-    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(cavingRegion());
-    survexImportDialog->setUndoStack(UndoStack);
-    survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    survexImportDialog->open();
+    QSettings settings;
+    QString lastFile = settings.value(ImportSurvexKey).toString();
+    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Survex", lastFile, "Survex *.svx");
+
+    if (QFileInfo(filename).exists()) {
+        settings.setValue(ImportSurvexKey, filename);
+        cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(new cwSurvexImporter(), cavingRegion());
+        survexImportDialog->setUndoStack(UndoStack);
+        survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        survexImportDialog->open();
+        survexImportDialog->setSurvexFile(filename);
+    }
 }
 
 /**

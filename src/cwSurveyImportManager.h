@@ -64,6 +64,8 @@ private slots:
                        int startLine, int startColumn, int endLine, int endColumn);
 
 private:
+    static const QString ImportSurvexKey;
+
     QThread* ImportThread;
 
     QPointer<cwCavingRegion> CavingRegion;
