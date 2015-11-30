@@ -12,6 +12,7 @@
 #include "cwTask.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+#include "cwGlobals.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
@@ -33,7 +34,7 @@ class QUndoStack;
 
   The file format is create
   */
-class cwProject :  public QObject{
+class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)

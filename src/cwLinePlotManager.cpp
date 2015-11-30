@@ -20,6 +20,9 @@
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwSurveyChunkSignaler.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
+
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     QObject(parent)
@@ -174,6 +177,39 @@ void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
     }
 }
 
+/**
+ * @brief cwLinePlotManager::updateUnconnectedChunkErrors
+ *
+ * This will clear all the survey chunk errors and add survey chunk error's that exist. Currently
+ * the only errors that is added to the whole survey chunk, are unconnected survey chunk error.
+ */
+void cwLinePlotManager::updateUnconnectedChunkErrors(cwCave* cave,
+                                                     const cwLinePlotTask::LinePlotCaveData& caveData)
+{
+
+    //Append unconnected errors
+    if(caveData.unconnectedChunkError().size() > 0) {
+        foreach(auto errorResult, caveData.unconnectedChunkError()) {
+            cwErrorModel* model = cave->trip(errorResult.TripIndex)->chunk(errorResult.SurveyChunkIndex)->errorModel();
+            model->errors()->append(errorResult.Error);
+            UnconnectedChunks.append(model->errors());
+        }
+    }
+}
+
+/**
+ * @brief cwLinePlotManager::clearUnconnectedChunkErrors
+ *
+ * This goes throught all clears all the connected cwSurveyChunk
+ */
+void cwLinePlotManager::clearUnconnectedChunkErrors()
+{
+    foreach(auto errorList, UnconnectedChunks) {
+        errorList->clear();
+    }
+    UnconnectedChunks.clear();
+}
+
 
 /**
   \brief Run the line plot task
@@ -201,6 +237,9 @@ void cwLinePlotManager::updateLinePlot() {
     if(!LinePlotTask->isReady()) { return; }
     if(Region == nullptr) { return; }
 
+    //Clear all the unconnected chunk errors from the previous run
+    clearUnconnectedChunkErrors();
+
     cwLinePlotTask::LinePlotResultData resultData = LinePlotTask->linePlotData();
 
     //Validate all the objects in resultData, remove any that were delete before the task was over
@@ -213,6 +252,8 @@ void cwLinePlotManager::updateLinePlot() {
         iter.next();
         cwCave* cave = iter.key();
         cwLinePlotTask::LinePlotCaveData caveData = iter.value();
+
+        updateUnconnectedChunkErrors(cave, caveData);
 
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());

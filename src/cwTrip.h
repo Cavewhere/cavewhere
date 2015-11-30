@@ -11,13 +11,16 @@
 //Our includes
 #include "cwUnits.h"
 #include "cwStation.h"
+#include "cwError.h"
+#include "cwGlobals.h"
+#include "cwUndoer.h"
 class cwSurveyChunk;
 class cwCave;
 class cwTeam;
 class cwTripCalibration;
 class cwSurveyNoteModel;
 class cwShot;
-#include "cwUndoer.h"
+class cwErrorModel;
 
 //Qt include
 #include <QObject>
@@ -28,7 +31,7 @@ class cwShot;
 #include <QUndoCommand>
 
 
-class cwTrip : public QObject, public cwUndoer
+class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 {
     Q_OBJECT
 
@@ -37,7 +40,9 @@ class cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
     Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
     Q_PROPERTY(int numberOfChunks READ numberOfChunks NOTIFY numberOfChunksChanged)
-    Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)
+    Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)  
+    Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
+    Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -83,6 +88,7 @@ public:
 
     void stationPositionModelUpdated();
 
+    cwErrorModel* errorModel() const;
 signals:
     void nameChanged();
     void dateChanged(QDate date);
@@ -93,6 +99,7 @@ signals:
     void calibrationChanged();
     void notesChanged();
     void numberOfChunksChanged();
+    void parentCaveChanged();
 
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
@@ -106,6 +113,7 @@ protected:
     cwTripCalibration* Calibration;
     cwCave* ParentCave;
     cwSurveyNoteModel* Notes;
+    cwErrorModel* ErrorModel; //!<
 
     //Units
 
@@ -191,5 +199,12 @@ inline cwSurveyNoteModel* cwTrip::notes() const {
     return Notes;
 }
 
+/**
+* @brief class::errorModel
+* @return
+*/
+inline cwErrorModel* cwTrip::errorModel() const {
+    return ErrorModel;
+}
 
 #endif // CWSURVERYCHUNKGROUP_H

@@ -349,6 +349,8 @@ void cwTask::setName(QString name) {
  */
 void cwTask::waitToFinish(unsigned long time)
 {
+    QCoreApplication::processEvents();
+
     //Put this in a loop because this allows the task to restart
     while(needsRestart()) {
         QCoreApplication::processEvents();
@@ -361,6 +363,10 @@ void cwTask::waitToFinish(unsigned long time)
 
         QCoreApplication::processEvents(); //Allows the task to signal for a restart
     }
+
+    QCoreApplication::processEvents();
+
+    Q_ASSERT(isReady());
 }
 
 /**

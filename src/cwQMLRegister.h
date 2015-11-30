@@ -8,7 +8,10 @@
 #ifndef CWQMLREGISTER_H
 #define CWQMLREGISTER_H
 
-class cwQMLRegister
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwQMLRegister
 {
 public:
     cwQMLRegister();

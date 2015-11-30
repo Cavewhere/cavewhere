@@ -99,7 +99,7 @@ private:
     //Enables the corret station shot interaction
     cwSurveyChunkTrimmer* ChunkTrimmer;
 
-    void UpdatePosition(int index);
+//    void UpdatePosition(int index);
     void updateActiveChunkViews();
     void updateContentArea(int beginIndex, int endIndex);
 
@@ -107,7 +107,7 @@ private:
     void CreateChunkView(int index);
     void DeleteChunkView(int index);
 
-
+    double spacing() const;
 
     void updateAboveBelowAndPosition(int index);
 

@@ -36,7 +36,7 @@ ShadowRectangle {
     color: style.errorBackground
 
     MouseArea {
-        parent: rootQMLItem
+        parent: rootPopupItem
         anchors.fill: parent
 
         visible: removeChallenge.visible

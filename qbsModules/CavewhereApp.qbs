@@ -34,11 +34,7 @@ Application {
             "concurrent" ]
     }
     Depends { name: "cavewhere-lib" }
-    Depends { name: "QMath3d" }
-
-//        Depends { name: "icns-out" }
-
-//        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
+    Depends { name: "sdk-utilities" }
 
     cpp.includePaths: [
         applicationId.prefix + "src",
@@ -63,6 +59,14 @@ Application {
         condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
         cpp.cxxFlags: [
             "-stdlib=libc++", //Needed for protoc
+            "-std=c++11", //For c++11 support
+            "-Werror" //Treat warnings as errors
+        ]
+    }
+
+    Properties {
+        condition: qbs.targetOS.contains("linux")
+        cpp.cxxFlags: [
             "-std=c++11", //For c++11 support
             "-Werror" //Treat warnings as errors
         ]
@@ -196,6 +200,7 @@ Application {
             Qt.core.binPath + "/Qt5Widgetsd.dll",
             Qt.core.binPath + "/Qt5Networkd.dll",
             Qt.core.binPath + "/Qt5Xmld.dll",
+            Qt.core.binPath + "/Qt5Testd.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
             Qt.core.binPath + "/icudt*.dll"
@@ -217,13 +222,14 @@ Application {
             Qt.core.binPath + "/Qt5Widgets.dll",
             Qt.core.binPath + "/Qt5Network.dll",
             Qt.core.binPath + "/Qt5Xml.dll",
+            Qt.core.binPath + "/Qt5Test.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
             Qt.core.binPath + "/icudt*.dll",
 
             //Redistrobution libraries for vs2010 32bit
-            "c:/windows/system32/MSVCR100.DLL",
-            "c:/windows/system32/MSVCP100.DLL"
+            "c:/windows/system32/MSVCR120.DLL",
+            "c:/windows/system32/MSVCP120.DLL"
         ]
 
     }

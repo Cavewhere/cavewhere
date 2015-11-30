@@ -100,6 +100,8 @@
 #include "cwSortFilterProxyModel.h"
 #include "cwLeadsSortFilterProxyModel.h"
 #include "cwLinkBarModel.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -222,4 +224,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSortFilterProxyModel>("Cavewhere", 1, 0, "SortFilterProxyModel");
     qmlRegisterType<cwLeadsSortFilterProxyModel>("Cavewhere", 1, 0, "LeadsSortFilterProxyModel");
     qmlRegisterType<cwLinkBarModel>("Cavewhere", 1, 0, "LinkBarModel");
+    qmlRegisterType<cwErrorModel>("Cavewhere", 1, 0, "ErrorModel");
+    qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
+    qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
 }
