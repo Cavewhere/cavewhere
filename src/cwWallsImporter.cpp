@@ -371,7 +371,7 @@ cwSurvexBlockData* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
         result->IncludeDistance = true;
 
         QList<cwTripPtr> trips;
-        if (!parseSrvFile(survey->absolutePath(), trips)) {
+        if (!parseSrvFile(survey, trips)) {
             // jump to catch block
             throw std::exception();
         }
@@ -467,8 +467,10 @@ bool cwWallsImporter::verifyFileExists(QString filename)
     return true;
 }
 
-bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut)
+bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOut)
 {
+    QString filename = survey->absolutePath();
+
     if (!verifyFileExists(filename))
     {
         return false;
@@ -486,6 +488,17 @@ bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut)
     WallsParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename);
     parser.setVisitor(&visitor);
+
+    foreach (Segment options, survey->allOptions()) {
+        try {
+            parser.parseUnitsOptions(options);
+        }
+        catch (const SegmentParseException& ex)
+        {
+            emitMessage(ex);
+            return false;
+        }
+    }
 
 //    PrintingWallsVisitor printingVisitor;
 //    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
@@ -523,12 +536,6 @@ bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut)
             {
                 surveyors = visitor.comment.trimmed().split(QRegExp("\\s*;\\s*"));
             }
-        }
-        catch (const SegmentParseExpectedException& ex)
-        {
-            emitMessage(ex);
-            failed = true;
-            break;
         }
         catch (const SegmentParseException& ex)
         {

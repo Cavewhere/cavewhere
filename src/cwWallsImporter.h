@@ -83,7 +83,7 @@ public slots:
 
 protected:
     bool verifyFileExists(QString filename);
-    bool parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut);
+    bool parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOut);
 
 private:
     virtual void runTask();
