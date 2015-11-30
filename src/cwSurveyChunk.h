@@ -13,6 +13,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwError.h"
+#include "cwGlobals.h"
 class cwErrorModel;
 class cwTrip;
 class cwCave;
@@ -23,7 +24,7 @@ class cwCave;
 //#include <QDeclarativeListProperty>
 #include <QVariant>
 
-class cwSurveyChunk : public QObject {
+class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     Q_OBJECT
     Q_ENUMS(DataRole ConnectedState)
 

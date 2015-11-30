@@ -15,8 +15,9 @@
 //Our includes
 #include "cwReadingStates.h"
 #include "cwDistanceValidator.h"
+#include "cwGlobals.h"
 
-class cwStation {
+class CAVEWHERE_LIB_EXPORT cwStation {
 
 public:
     enum DataRoles {

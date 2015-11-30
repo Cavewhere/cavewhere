@@ -140,7 +140,7 @@ Project {
 
         Rule {
             inputs: ["innoOriginal"]
-            inputsFormDependencies: ["deployedApplication"]
+            inputsFromDependencies: ["deployedApplication"]
             multiplex: true
 
             Artifact {
@@ -162,7 +162,7 @@ Project {
 #define MyAppPublisher "Cavewhere"\n\
 #define MyAppURL "http://www.cavewhere.com"\n\
 #define MyAppExeName "Cavewhere.exe"\n\
-#define releaseDirectory "' + product.sourceDirectory + "/" + project.installDir + '"\n\n' +
+#define releaseDirectory "' + project.installDir + '"\n\n' +
 innoInputFile
 
                     var outputHandle = TextFile(output.filePath, TextFile.WriteOnly)

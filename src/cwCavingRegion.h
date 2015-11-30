@@ -19,8 +19,9 @@
 //Our includes
 class cwCave;
 #include "cwUndoer.h"
+#include "cwGlobals.h"
 
-class cwCavingRegion : public QAbstractListModel, public cwUndoer
+class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
 {
     Q_OBJECT
 

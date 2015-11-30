@@ -15,8 +15,9 @@
 
 //Our includes
 #include "cwProject.h"
+#include "cwGlobals.h"
 
-class cwOpenFileEventHandler : public QObject
+class CAVEWHERE_LIB_EXPORT cwOpenFileEventHandler : public QObject
 {
     Q_OBJECT
 public:

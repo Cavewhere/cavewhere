@@ -12,13 +12,16 @@
 #include <QUndoStack>
 #include <QSet>
 
+//Our includes
+#include "cwGlobals.h"
+
 /**
   \brief This allows objects to undo themselves and have
   access to the undoStack.
 
   See the Undo Framework in Qt docs for details
   */
-class cwUndoer
+class CAVEWHERE_LIB_EXPORT cwUndoer
 {
 public:
     QUndoStack* undoStack() const;
