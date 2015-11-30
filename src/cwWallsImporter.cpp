@@ -8,6 +8,9 @@
 #include "cwShot.h"
 #include "cwLength.h"
 #include "wallsparser.h"
+#include "wallsprojectparser.h"
+#include "cwSurvexGlobalData.h"
+#include "cwSurvexBlockData.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -29,26 +32,22 @@ WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter*
     : Parser(parser),
       Importer(importer),
       TripNamePrefix(tripNamePrefix),
-      Trips(QList<cwTrip*>()),
-      CurrentTrip(nullptr)
+      Trips(QList<cwTripPtr>()),
+      CurrentTrip()
 {
 
 }
 
 void WallsImporterVisitor::clearTrip()
 {
-    if (CurrentTrip && (Trips.isEmpty() || Trips.last() != CurrentTrip))
-    {
-        delete CurrentTrip;
-    }
-    CurrentTrip = nullptr;
+    CurrentTrip.clear();
 }
 
 void WallsImporterVisitor::ensureValidTrip()
 {
-    if (!CurrentTrip)
+    if (CurrentTrip.isNull())
     {
-        CurrentTrip = new cwTrip();
+        CurrentTrip = cwTripPtr(new cwTrip());
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
         CurrentTrip->setDate(Parser->date());
 
@@ -257,9 +256,125 @@ void WallsImporterVisitor::message(WallsMessage message)
 }
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
-    cwTask(parent)
+    cwTreeDataImporter(parent),
+    GlobalData(new cwSurvexGlobalData(this))
 {
+}
 
+
+void cwWallsImporter::runTask() {
+    importWalls(RootFilename);
+    done();
+}
+
+/**
+  \brief Returns true if errors have accured.
+  \returns The list of errors
+  */
+bool cwWallsImporter::hasErrors() {
+    return !Errors.isEmpty();
+}
+
+/**
+  \brief Gets the errors of the importer
+  \return Returns the errors if any.  Will be empty if HasErrors() returns false
+  */
+QStringList cwWallsImporter::errors() {
+    return Errors;
+}
+
+/**
+  \brief Clears all the current data in the object
+  */
+void cwWallsImporter::clear() {
+    Errors.clear();
+}
+
+void cwWallsImporter::importWalls(QString filename) {
+    clear();
+
+    WallsProjectParser projParser;
+    QObject::connect(&projParser, &WallsProjectParser::message, this,
+                     static_cast<void (cwWallsImporter::*)(QString, QString, QString, int, int, int, int)>(
+                         &cwWallsImporter::emitMessage));
+
+    WpjBookPtr rootBook = projParser.parseFile(filename);
+    cwSurvexBlockData* rootBlock = convertEntry(rootBook);
+    if (rootBlock != nullptr) {
+        QList<cwSurvexBlockData*> blocks;
+        blocks << rootBlock;
+        GlobalData->setBlocks(blocks);
+    }
+
+    // TODO
+}
+
+cwSurvexBlockData* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
+    if (entry.isNull()) {
+        return nullptr;
+    }
+    if (entry->isBook()) {
+        return convertBook(entry.staticCast<WpjBook>());
+    }
+    else if (entry->isSurvey()) {
+        return convertSurvey(entry);
+    }
+    return nullptr;
+}
+
+cwSurvexBlockData* cwWallsImporter::convertBook(WpjBookPtr book) {
+    cwSurvexBlockData* result = new cwSurvexBlockData();
+
+    try {
+        result->setName(book->Title);
+        foreach (WpjEntryPtr child, book->Children) {
+            cwSurvexBlockData* childBlock = convertEntry(child);
+            if (childBlock) {
+                result->addChildBlock(childBlock);
+            }
+        }
+
+        return result;
+    }
+    catch (...) {
+        delete result;
+        return nullptr;
+    }
+}
+
+cwSurvexBlockData* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
+    cwSurvexBlockData* result = new cwSurvexBlockData();
+
+    try {
+        result->setName(survey->Title);
+        result->IncludeDistance = true;
+
+        QList<cwTripPtr> trips;
+        if (!parseSrvFile(survey->absolutePath(), trips)) {
+            // jump to catch block
+            throw std::exception();
+        }
+
+        if (!trips.isEmpty()) {
+            *result->calibration() = *trips[0]->calibrations();
+        }
+
+        foreach (cwTripPtr trip, trips) {
+            foreach (cwSurveyChunk* chunk, trip->chunks()) {
+                result->addChunk(new cwSurveyChunk(*chunk));
+            }
+
+            foreach (cwTeamMember member, trip->team()->teamMembers()) {
+                result->team()->addTeamMember(member);
+            }
+        }
+
+        return result;
+    }
+    catch (...) {
+        delete result;
+        return nullptr;
+    }
 }
 
 void cwWallsImporter::emitMessage(WallsMessage _message)
@@ -277,78 +392,40 @@ void cwWallsImporter::emitMessage(WallsMessage _message)
         break;
     }
 
-    emit message(severity, _message.message, _message.source,
-                 _message.startLine, _message.startColumn,
-                 _message.endLine, _message.endColumn);
+    emitMessage(severity, _message.message, _message.source,
+                _message.startLine, _message.startColumn, _message.endLine, _message.endColumn);
 }
 
-void cwWallsImporter::emitMessage(const SegmentParseExpectedException &ex) {
-    emit message("error", ex.detailMessage() + '\n' + ex.segment().underlineInContext(),
-                 ex.segment().source(),
-                 ex.segment().startLine(), ex.segment().startCol(),
-                 ex.segment().endLine(), ex.segment().endCol());
+void cwWallsImporter::emitMessage(QString severity, QString _message, QString source,
+                                  int startLine, int startColumn, int endLine, int endColumn)
+{
+    addError(severity, _message, source, startLine, startColumn, endLine, endColumn);
+    emit message(severity, _message, source, startLine, startColumn, endLine, endColumn);
 }
 
 void cwWallsImporter::emitMessage(const SegmentParseException &ex) {
-    emit message("error", ex.detailMessage(), ex.segment().source(),
-                 ex.segment().startLine(), ex.segment().startCol(),
-                 ex.segment().endLine(), ex.segment().endCol());
+    emitMessage("error", ex.detailMessage(), ex.segment().source(),
+                ex.segment().startLine(), ex.segment().startCol(), ex.segment().endLine(), ex.segment().endCol());
 }
 
-void cwWallsImporter::runTask()
+void cwWallsImporter::addError(QString severity, QString message, QString source,
+                               int startLine, int startColumn, int endLine, int endColumn)
 {
-    Length::init();
-    Angle::init();
+    Q_UNUSED(endLine);
+    Q_UNUSED(endColumn);
 
-    StationMap.clear();
-
-    Caves.clear();
-
-    QList<cwTrip*> trips;
-
-    foreach(QString filename, WallsDataFiles)
-    {
-        if (filename.endsWith(".srv", Qt::CaseInsensitive))
-        {
-            parseSrvFile(filename, trips);
-        }
-        else if (filename.endsWith(".wpj", Qt::CaseInsensitive))
-        {
-            parseWpjFile(filename, Caves);
-        }
+    if (source.isNull()) {
+        Errors << QString("%1: %2").arg(severity, message);
     }
-
-    if (!trips.isEmpty()) {
-        Caves.append(new cwCave());
-        cwCave* cave = Caves.last();
-        cave->setName("Walls .SRV Files");
-
-        foreach (cwTrip* trip, trips)
-        {
-            cave->addTrip(trip);
-        }
+    else if (startLine < 0) {
+        Errors << QString("%1: %2 (%3)").arg(severity, message, source);
     }
-
-    foreach (cwCave* cave, Caves)
-    {
-        foreach (cwTrip* trip, cave->trips())
-        {
-            // apply StationMap replacements to support Walls' station-LRUD lines
-            foreach (cwSurveyChunk* chunk, trip->chunks())
-            {
-                for (int i = 0; i < chunk->stationCount(); i++)
-                {
-                    QString name = chunk->stations()[i].name();
-                    if (StationMap.contains(name))
-                    {
-                        chunk->setStation(StationMap[name], i);
-                    }
-                }
-            }
-        }
+    else if (startColumn < 0) {
+        Errors << QString("%1: %2 (%3, line %4)").arg(severity, message).arg(source).arg(startLine + 1);
     }
-
-    done();
+    else {
+        Errors << QString("%1: %2 (%3, line %4, col %5)").arg(severity, message).arg(source).arg(startLine + 1).arg(startColumn + 1);
+    }
 }
 
 bool cwWallsImporter::verifyFileExists(QString filename)
@@ -369,117 +446,7 @@ bool cwWallsImporter::verifyFileExists(QString filename)
     return true;
 }
 
-bool cwWallsImporter::parseWpjFile(QString wpjFile, QList<cwCave*> &cavesOut)
-{
-    if (!verifyFileExists(wpjFile))
-    {
-        return false;
-    }
-
-    QFile file(wpjFile);
-    QDir dir(wpjFile);
-    dir.cdUp();
-
-    if (!file.open(QFile::ReadOnly))
-    {
-        emit statusMessage(QString("I couldn't open %1").arg(wpjFile));
-        return false;
-    }
-
-    QList<cwCave*> caves;
-    QString tripName;
-    cwCave* currentCave;
-
-    bool failed = false;
-
-    int lineNumber = 0;
-    while (!file.atEnd())
-    {
-        QString line = file.readLine();
-        line = line.trimmed();
-        if (file.error() != QFile::NoError)
-        {
-            emit statusMessage(QString("Error reading from file %1 at line %2: %3")
-                               .arg(wpjFile)
-                               .arg(lineNumber)
-                               .arg(file.errorString()));
-            failed = true;
-            break;
-        }
-
-        QRegExp bookRegExp(   "^\\s*\\.BOOK\\s+(\\S.*)$"  , Qt::CaseInsensitive);
-        QRegExp surveyRegExp( "^\\s*\\.SURVEY\\s+(\\S.*)$", Qt::CaseInsensitive);
-        QRegExp nameRegExp(   "^\\s*\\.NAME\\s+(\\S.*)$"  , Qt::CaseInsensitive);
-        QRegExp endBookRegExp("^\\s*\\.ENDBOOK\\s*$"      , Qt::CaseInsensitive);
-
-        if (bookRegExp.indexIn(line) >= 0)
-        {
-            currentCave = new cwCave();
-            currentCave->setName(bookRegExp.cap(1).trimmed());
-            caves << currentCave;
-        }
-        else if (endBookRegExp.indexIn(line) >= 0)
-        {
-            currentCave = nullptr;
-        }
-        else if (surveyRegExp.indexIn(line) >= 0)
-        {
-            if (!currentCave)
-            {
-                emit message("error", ".SURVEY must occur inside a .BOOK", wpjFile,
-                             lineNumber, 0,
-                             lineNumber, 1);
-            }
-            else
-            {
-                tripName = surveyRegExp.cap(1).trimmed();
-            }
-        }
-        else if (nameRegExp.indexIn(line) >= 0)
-        {
-            QString name = nameRegExp.cap(1).trimmed();
-            if (!tripName.isNull())
-            {
-                QString srvFile = dir.filePath(name + ".srv");
-                if (!verifyFileExists(srvFile)) {
-                    emit message("error", QString("Missing file: %1").arg(srvFile), wpjFile,
-                                 lineNumber, surveyRegExp.pos(1),
-                                 lineNumber, surveyRegExp.pos(1) + srvFile.length());
-                }
-                else
-                {
-                    QList<cwTrip*> trips;
-                    parseSrvFile(srvFile, trips);
-                    foreach(cwTrip* trip, trips)
-                    {
-                        trip->setName(tripName);
-                        currentCave->addTrip(trip);
-                    }
-                }
-                tripName.clear();
-            }
-            else if (!currentCave)
-            {
-                emit message("error", ".NAME must occur inside a .BOOK", wpjFile,
-                             lineNumber, 0,
-                             lineNumber, 1);
-            }
-        }
-
-        lineNumber++;
-    }
-
-    file.close();
-
-    if (!failed)
-    {
-        cavesOut << caves;
-    }
-
-    return !failed;
-}
-
-bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTrip*>& tripsOut)
+bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut)
 {
     if (!verifyFileExists(filename))
     {
@@ -559,7 +526,7 @@ bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTrip*>& tripsOut)
         if (!tripName.isEmpty())
         {
             int i = 0;
-            foreach (cwTrip* trip, visitor.trips())
+            foreach (cwTripPtr trip, visitor.trips())
             {
                 if (i == 0) trip->setName(tripName);
                 else trip->setName(QString("%1 (%2)").arg(tripName).arg(++i));
@@ -567,9 +534,9 @@ bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTrip*>& tripsOut)
         }
         if (!surveyors.isEmpty())
         {
-            foreach (cwTrip* trip, visitor.trips())
+            foreach (cwTripPtr trip, visitor.trips())
             {
-                cwTeam* team = new cwTeam(trip);
+                cwTeam* team = new cwTeam(trip.data());
                 foreach (QString surveyor, surveyors) {
                     team->addTeamMember(cwTeamMember(surveyor, QStringList()));
                 }
@@ -583,10 +550,6 @@ bool cwWallsImporter::parseSrvFile(QString filename, QList<cwTrip*>& tripsOut)
     else
     {
         emit statusMessage(QString("Skipping file %1 due to errors").arg(filename));
-        foreach (cwTrip* trip, visitor.trips())
-        {
-            delete trip;
-        }
     }
 
     return !failed;

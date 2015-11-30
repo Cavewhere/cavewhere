@@ -2,18 +2,22 @@
 #define CWWALLSIMPORTER_H
 
 //Our includes
-#include "cwTask.h"
+#include "cwTreeDataImporter.h"
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
 #include "wallsvisitor.h"
 #include "wallsunits.h"
+#include "wallsprojectparser.h"
 
 //Qt include
 #include <QObject>
 #include <QRegExp>
 #include <QStringList>
 class QFile;
+
+class cwSurvexBlockData;
+class cwSurvexGlobalData;
 
 namespace dewalls {
     class WallsParser;
@@ -22,6 +26,8 @@ namespace dewalls {
 }
 
 using namespace dewalls;
+
+typedef QSharedPointer<cwTrip> cwTripPtr;
 
 class cwWallsImporter;
 
@@ -40,45 +46,64 @@ public:
     virtual void endUnitsLine();
     virtual void visitDateLine(QDate date);
     virtual void message(WallsMessage message);
-    inline QList<cwTrip*> trips() const { return Trips; }
+    inline QList<cwTripPtr> trips() const { return Trips; }
 
 private:
     WallsUnits priorUnits;
     WallsParser* Parser;
     cwWallsImporter* Importer;
     QString TripNamePrefix;
-    QList<cwTrip*> Trips;
-    cwTrip* CurrentTrip;
-    cwSurveyChunk* CurrentChunk;
+    QList<cwTripPtr> Trips;
+    cwTripPtr CurrentTrip;
 };
 
-class cwWallsImporter : public cwTask
+class cwWallsImporter : public cwTreeDataImporter
 {
     Q_OBJECT
 public:
     explicit cwWallsImporter(QObject *parent = 0);
 
-    void setWallsDataFiles(QStringList filename);
-
-    QList<cwCave*> caves() const;
-
     friend class WallsImporterVisitor;
+
+    bool hasErrors();
+    QStringList errors();
+
+    cwSurvexGlobalData* data();
 
 signals:
     void message(QString severity, QString message, QString source,
                  int startLine, int startColumn, int endLine, int endColumn);
 
-protected:
-    void emitMessage(const SegmentParseExpectedException& exception);
+public slots:
     void emitMessage(const SegmentParseException& exception);
+    void emitMessage(QString severity, QString message, QString source,
+                 int startLine, int startColumn, int endLine, int endColumn);
     void emitMessage(WallsMessage message);
-    void runTask();
+    void setSurvexFile(QString filename);
+
+protected:
     bool verifyFileExists(QString filename);
-    bool parseWpjFile(QString filename, QList<cwCave*>& cavesOut);
-    bool parseSrvFile(QString filename, QList<cwTrip*>& tripsOut);
+    bool parseSrvFile(QString filename, QList<cwTripPtr>& tripsOut);
 
 private:
-    QStringList WallsDataFiles;
+    virtual void runTask();
+    void importWalls(QString filename);
+    void clear();
+
+    cwSurvexBlockData* convertEntry(WpjEntryPtr entry);
+    cwSurvexBlockData* convertBook(WpjBookPtr book);
+    cwSurvexBlockData* convertSurvey(WpjEntryPtr survey);
+
+    void addError(QString severity, QString message, QString source = QString(),
+                 int startLine = -1, int startColumn = -1, int endLine = -1, int endColumn = -1);
+
+    QString RootFilename;
+
+
+    cwSurvexGlobalData* GlobalData;
+
+    QStringList Errors;
+
     QList<cwCave*> Caves;
     cwStationRenamer StationRenamer;
     QHash<QString, QDate> StationDates;
@@ -86,17 +111,17 @@ private:
 };
 
 /**
- * @brief cwWallsImporter::setWallsDataFiles
- * @param filenames - Sets the compass data file list
- */
-inline void cwWallsImporter::setWallsDataFiles(QStringList filenames)
-{
-    WallsDataFiles = filenames;
+  \brief Gets all the data from the importer
+  */
+inline cwSurvexGlobalData* cwWallsImporter::data() {
+    return GlobalData;
 }
 
-inline QList<cwCave*> cwWallsImporter::caves() const
-{
-    return Caves;
+/**
+  \brief Sets the root file for the survex
+  */
+inline void cwWallsImporter::setSurvexFile(QString filename) {
+    RootFilename = filename;
 }
 
 #endif // CWWALLSIMPORTER_H

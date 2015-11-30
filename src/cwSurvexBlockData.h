@@ -29,6 +29,7 @@ class cwSurvexBlockData : public QObject
     Q_OBJECT
 
     friend class cwSurvexImporter;
+    friend class cwWallsImporter;
     friend class cwSurvexGlobalData;
 
 public:
@@ -40,6 +41,8 @@ public:
     };
 
     cwSurvexBlockData(QObject* parent = 0);
+
+    void clear();
 
     int childBlockCount();
     cwSurvexBlockData* childBlock(int index);
@@ -112,8 +115,6 @@ private:
     void addLRUDChunk();
 
     void setParentBlock(cwSurvexBlockData* parentBlock);
-
-    void clear();
 
     bool isTrip() const;
 };

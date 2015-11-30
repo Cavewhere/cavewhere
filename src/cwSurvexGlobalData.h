@@ -23,12 +23,11 @@ class cwSurveyChunk;
 
 class cwSurvexGlobalData : public QObject
 {
-    friend class cwSurvexImporter;
-
 public:
     cwSurvexGlobalData(QObject* object);
 
     QList<cwSurvexBlockData*> blocks() const;
+    void setBlocks(QList<cwSurvexBlockData*> blocks);
 
     QList<cwCave*> caves();
     QStringList erros();
@@ -37,8 +36,6 @@ private:
     QList<cwSurvexBlockData*> RootBlocks;
 
     QStringList ImportErrors;
-
-    void setBlocks(QList<cwSurvexBlockData*> blocks);
 
     void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
 
