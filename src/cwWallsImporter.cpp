@@ -253,7 +253,7 @@ void WallsImporterVisitor::visitDateLine(QDate date)
 
 void WallsImporterVisitor::message(WallsMessage message)
 {
-    Importer->emitMessage(message);
+    Importer->addError(message);
 }
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
@@ -296,9 +296,7 @@ void cwWallsImporter::importWalls(QString filename) {
     clear();
 
     WallsProjectParser projParser;
-    QObject::connect(&projParser, &WallsProjectParser::message, this,
-                     static_cast<void (cwWallsImporter::*)(QString, QString, QString, int, int, int, int)>(
-                         &cwWallsImporter::emitMessage));
+    QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::emitMessage);
 
     WpjBookPtr rootBook = projParser.parseFile(filename);
     cwSurvexBlockData* rootBlock = convertEntry(rootBook);
@@ -308,8 +306,6 @@ void cwWallsImporter::importWalls(QString filename) {
         blocks << rootBlock;
         GlobalData->setBlocks(blocks);
     }
-
-    // TODO
 }
 
 void cwWallsImporter::applyLRUDs(cwSurvexBlockData* block) {
@@ -401,67 +397,29 @@ cwSurvexBlockData* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
 
 void cwWallsImporter::emitMessage(WallsMessage _message)
 {
-    QString severity;
-    switch(_message.severity) {
-    case WallsMessage::Info:
-        severity = "info";
-        break;
-    case WallsMessage::Warning:
-        severity = "warning";
-        break;
-    case WallsMessage::Error:
-        severity = "error";
-        break;
-    }
-
-    emitMessage(severity, _message.message, _message.source,
-                _message.startLine, _message.startColumn, _message.endLine, _message.endColumn);
+    addError(_message);
 }
 
-void cwWallsImporter::emitMessage(QString severity, QString _message, QString source,
-                                  int startLine, int startColumn, int endLine, int endColumn)
+void cwWallsImporter::addError(WallsMessage _message)
 {
-    addError(severity, _message, source, startLine, startColumn, endLine, endColumn);
-    emit message(severity, _message, source, startLine, startColumn, endLine, endColumn);
+    Errors << _message.toString();
+    emit message(_message);
 }
 
-void cwWallsImporter::emitMessage(const SegmentParseException &ex) {
-    emitMessage("error", ex.detailMessage(), ex.segment().source(),
-                ex.segment().startLine(), ex.segment().startCol(), ex.segment().endLine(), ex.segment().endCol());
-}
-
-void cwWallsImporter::addError(QString severity, QString message, QString source,
-                               int startLine, int startColumn, int endLine, int endColumn)
-{
-    Q_UNUSED(endLine);
-    Q_UNUSED(endColumn);
-
-    if (source.isNull()) {
-        Errors << QString("%1: %2").arg(severity, message);
-    }
-    else if (startLine < 0) {
-        Errors << QString("%1: %2 (%3)").arg(severity, message, source);
-    }
-    else if (startColumn < 0) {
-        Errors << QString("%1: %2 (%3, line %4)").arg(severity, message).arg(source).arg(startLine + 1);
-    }
-    else {
-        Errors << QString("%1: %2 (%3, line %4, col %5)").arg(severity, message).arg(source).arg(startLine + 1).arg(startColumn + 1);
-    }
-}
-
-bool cwWallsImporter::verifyFileExists(QString filename)
+bool cwWallsImporter::verifyFileExists(QString filename, Segment segment)
 {
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists()) {
-        //TODO: Fix error message
-        emit statusMessage(QString("I can't parse %1 because it does not exist!").arg(filename));
+        addError(WallsMessage("error",
+                                 QString("file doesn't exist: %1").arg(filename),
+                                 segment));
         return false;
     }
 
     if(!fileInfo.isReadable()) {
-        //TODO: Fix error message
-        emit statusMessage(QString("I can't parse %1 because it's not readable, change the permissions?").arg(filename));
+        addError(WallsMessage("error",
+                                 QString("file isn't readable: %1").arg(filename),
+                                 segment));
         return false;
     }
 
@@ -472,7 +430,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 {
     QString filename = survey->absolutePath();
 
-    if (!verifyFileExists(filename))
+    if (!verifyFileExists(filename, survey->Name))
     {
         return false;
     }
@@ -480,7 +438,9 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     QFile file(filename);
     if (!file.open(QFile::ReadOnly))
     {
-        emit statusMessage(QString("I couldn't open %1").arg(filename));
+        addError(WallsMessage("error",
+                              QString("couldn't open file %1: %2").arg(filename).arg(file.errorString()),
+                              survey->Name));
         return false;
     }
 
@@ -491,12 +451,13 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     parser.setVisitor(&visitor);
 
     foreach (Segment options, survey->allOptions()) {
-        try {
+        try
+        {
             parser.parseUnitsOptions(options);
         }
         catch (const SegmentParseException& ex)
         {
-            emitMessage(ex);
+            addError(WallsMessage(ex));
             return false;
         }
     }
@@ -517,10 +478,10 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         line = line.trimmed();
         if (file.error() != QFile::NoError)
         {
-            emit statusMessage(QString("Error reading from file %1 at line %2: %3")
-                               .arg(filename)
-                               .arg(lineNumber)
-                               .arg(file.errorString()));
+            addError(WallsMessage("error",
+                                  QString("failed to read from file: %1").arg(file.errorString()),
+                                  filename,
+                                  lineNumber));
             failed = true;
             break;
         }
@@ -540,7 +501,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         }
         catch (const SegmentParseException& ex)
         {
-            emitMessage(ex);
+            addError(WallsMessage(ex));
             failed = true;
             break;
         }

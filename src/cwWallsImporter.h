@@ -71,18 +71,14 @@ public:
     cwSurvexGlobalData* data();
 
 signals:
-    void message(QString severity, QString message, QString source,
-                 int startLine, int startColumn, int endLine, int endColumn);
+    void message(WallsMessage message);
 
 public slots:
-    void emitMessage(const SegmentParseException& exception);
-    void emitMessage(QString severity, QString message, QString source,
-                 int startLine, int startColumn, int endLine, int endColumn);
     void emitMessage(WallsMessage message);
     void setSurvexFile(QString filename);
 
 protected:
-    bool verifyFileExists(QString filename);
+    bool verifyFileExists(QString filename, Segment segment);
     bool parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOut);
 
 private:
@@ -96,11 +92,9 @@ private:
 
     void applyLRUDs(cwSurvexBlockData* block);
 
-    void addError(QString severity, QString message, QString source = QString(),
-                 int startLine = -1, int startColumn = -1, int endLine = -1, int endColumn = -1);
+    void addError(WallsMessage message);
 
     QString RootFilename;
-
 
     cwSurvexGlobalData* GlobalData;
 
