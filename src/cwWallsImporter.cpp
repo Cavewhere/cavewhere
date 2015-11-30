@@ -288,6 +288,7 @@ QStringList cwWallsImporter::errors() {
   */
 void cwWallsImporter::clear() {
     Errors.clear();
+    StationMap.clear();
 }
 
 void cwWallsImporter::importWalls(QString filename) {
@@ -301,12 +302,32 @@ void cwWallsImporter::importWalls(QString filename) {
     WpjBookPtr rootBook = projParser.parseFile(filename);
     cwSurvexBlockData* rootBlock = convertEntry(rootBook);
     if (rootBlock != nullptr) {
+        applyLRUDs(rootBlock);
         QList<cwSurvexBlockData*> blocks;
         blocks << rootBlock;
         GlobalData->setBlocks(blocks);
     }
 
     // TODO
+}
+
+void cwWallsImporter::applyLRUDs(cwSurvexBlockData* block) {
+    // apply StationMap replacements to support Walls' station-LRUD lines
+    foreach (cwSurveyChunk* chunk, block->chunks())
+    {
+        for (int i = 0; i < chunk->stationCount(); i++)
+        {
+            QString name = chunk->stations()[i].name();
+            if (StationMap.contains(name))
+            {
+                chunk->setStation(StationMap[name], i);
+            }
+        }
+    }
+    foreach (cwSurvexBlockData* childBlock, block->childBlocks())
+    {
+        applyLRUDs(childBlock);
+    }
 }
 
 cwSurvexBlockData* cwWallsImporter::convertEntry(WpjEntryPtr entry) {

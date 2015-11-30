@@ -94,6 +94,8 @@ private:
     cwSurvexBlockData* convertBook(WpjBookPtr book);
     cwSurvexBlockData* convertSurvey(WpjEntryPtr survey);
 
+    void applyLRUDs(cwSurvexBlockData* block);
+
     void addError(QString severity, QString message, QString source = QString(),
                  int startLine = -1, int startColumn = -1, int endLine = -1, int endColumn = -1);
 
