@@ -543,8 +543,8 @@ void cwLeadModel::setRegionTreeModel(cwRegionTreeModel* regionModel) {
         RegionTreeModel = regionModel;
 
         if(!RegionTreeModel.isNull()) {
-            connect(RegionTreeModel, &cwRegionTreeModel::rowsInserted, this, &cwLeadModel::insertScraps);
-            connect(RegionTreeModel, &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadModel::removeScraps);
+            connect(RegionTreeModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadModel::insertScraps);
+            connect(RegionTreeModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadModel::removeScraps);
         }
 
         fullModelReset();

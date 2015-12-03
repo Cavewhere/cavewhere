@@ -48,15 +48,15 @@ cwRegionTreeModel* cwLeadView::regionModel() const {
 void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
     if(RegionModel != regionModel) {
         if(!RegionModel.isNull()) {
-            disconnect(RegionModel, &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
-            disconnect(RegionModel, &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            disconnect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
+            disconnect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
         }
 
         RegionModel = regionModel;
 
         if(!RegionModel.isNull()) {
-            connect(RegionModel, &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
-            connect(RegionModel, &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+            connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
+            connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
         }
 
         emit regionModelChanged();

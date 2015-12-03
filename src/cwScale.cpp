@@ -20,6 +20,7 @@ cwScale::cwScale(QObject *parent) :
 }
 
 cwScale::cwScale(const cwScale &other) :
+    QObject(nullptr),
     ScaleNumerator(new cwLength(*(other.ScaleNumerator))),
     ScaleDenominator(new cwLength(*(other.ScaleDenominator)))
 {
