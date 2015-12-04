@@ -430,6 +430,11 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 {
     QString filename = survey->absolutePath();
 
+    if (filename.isEmpty())
+    {
+        return true;
+    }
+
     if (!verifyFileExists(filename, survey->Name))
     {
         return false;
