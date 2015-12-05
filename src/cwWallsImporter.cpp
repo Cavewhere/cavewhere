@@ -515,6 +515,10 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         lineNumber++;
     }
 
+    if (!survey->Title.isEmpty()) {
+        tripName = survey->Title;
+    }
+
     file.close();
 
     if (!failed)
