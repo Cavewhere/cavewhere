@@ -29,7 +29,12 @@ class cwImportSurvexDialog :
     Q_OBJECT
 
 public:
-    explicit cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
+    struct Names {
+        QString windowTitle;
+        QString errorsLabel;
+    };
+
+    explicit cwImportSurvexDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
     virtual ~cwImportSurvexDialog();
 
     void open();

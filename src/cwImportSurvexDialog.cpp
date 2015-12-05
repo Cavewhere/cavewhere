@@ -27,7 +27,7 @@
 #include <QThread>
 
 
-cwImportSurvexDialog::cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
+cwImportSurvexDialog::cwImportSurvexDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
     Region(region),
     Model(new cwSurvexImporterModel(this)),
@@ -35,6 +35,8 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavin
     SurvexSelectionModel(new QItemSelectionModel(Model, this)),
     ImportThread(new QThread(this))
 {
+    SurvexErrorsText = names.errorsLabel;
+
     setupUi(this);
     setupTypeComboBox();
 
@@ -60,7 +62,7 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwTreeDataImporter* importer, cwCavin
     SurvexErrorListView->setWordWrap(true);
     //SurvexErrorListView->setUniformItemSizes(true);
 
-    setWindowTitle("Survex Importer");
+    setWindowTitle(names.windowTitle);
 }
 
 cwImportSurvexDialog::~cwImportSurvexDialog() {
