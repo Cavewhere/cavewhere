@@ -76,29 +76,30 @@ void WallsImporterVisitor::endVectorLine()
     ensureValidTrip();
     if (Trips.isEmpty() || Trips.last() != CurrentTrip) Trips << CurrentTrip;
 
-    cwStation fromStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(from));
+    QSharedPointer<WallsUnits> units = Parser->units();
+
+    cwStation fromStation = Importer->StationRenamer.createStation(units->processStationName(from));
     cwStation toStation;
     cwShot shot;
 
-    LengthUnit d_unit = Parser->units()->d_unit;
+    LengthUnit d_unit = units->d_unit;
 
     cwStation* lrudStation;
 
-    if (Parser->units()->vectorType == VectorType::RECT)
+    if (units->vectorType == VectorType::RECT)
     {
-        Parser->units()->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
+        units->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
         // rect correction is not supported so it's added here.
         // decl doesn't apply to rect lines, so it's pre-subtracted here so that when the trip declination
         // is added back, the result agrees with the Walls data.
-        frontsightAzimuth += Parser->units()->rect - Parser->units()->decl;
+        frontsightAzimuth += units->rect - units->decl;
     }
-
-    if (distance.isValid())
+    else if (distance.isValid())
     {
-        toStation = Importer->StationRenamer.createStation(Parser->units()->processStationName(to));
+        toStation = Importer->StationRenamer.createStation(units->processStationName(to));
 
         // apply Walls corrections that Cavewhere doesn't support
-        Parser->units()->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
+        units->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
 
         shot.setDistance(distance.get(d_unit));
         if (frontsightAzimuth.isValid())
@@ -152,8 +153,8 @@ void WallsImporterVisitor::endVectorLine()
 
         // TODO: exclude length flag/segment
 
-        lrudStation = Parser->units()->lrud == LrudType::From ||
-                Parser->units()->lrud == LrudType::FB ?
+        lrudStation = units->lrud == LrudType::From ||
+                units->lrud == LrudType::FB ?
                     &fromStation : &toStation;
     }
     else
@@ -161,10 +162,10 @@ void WallsImporterVisitor::endVectorLine()
         lrudStation = &fromStation;
     }
 
-    left += Parser->units()->incs;
-    right += Parser->units()->incs;
-    up += Parser->units()->incs;
-    down += Parser->units()->incs;
+    left = units->correctLength(left, units->incs);
+    right += units->correctLength(right, units->incs);
+    up += units->correctLength(up, units->incs);
+    down += units->correctLength(down, units->incs);
 
     if (left.isValid())
     {
