@@ -25,7 +25,7 @@ typedef const Unit<Angle>* AngleUnit;
 
 cwUnits::LengthUnit cwUnit(const Unit<Length>* dewallsUnit)
 {
-    return dewallsUnit == Length::feet() ? cwUnits::Feet : cwUnits::Meters;
+    return dewallsUnit == Length::feet() ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
 }
 
 WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
@@ -57,17 +57,7 @@ void WallsImporterVisitor::ensureValidTrip()
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
         CurrentTrip->setDate(Parser->date());
 
-        LengthUnit dUnit = Parser->units().dUnit();
-
-        CurrentTrip->calibrations()->setDistanceUnit(cwUnit(dUnit));
-        CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units().typeabCorrected());
-        CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units().typevbCorrected());
-        CurrentTrip->calibrations()->setTapeCalibration(Parser->units().incd().get(dUnit));
-        CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units().inca().get(Angle::degrees()));
-        CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units().incv().get(Angle::degrees()));
-        CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units().incab().get(Angle::degrees()));
-        CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units().incvb().get(Angle::degrees()));
-        CurrentTrip->calibrations()->setDeclination(Parser->units().decl().get(Angle::degrees()));
+        cwWallsImporter::importCalibrations(Parser->units(), *CurrentTrip);
     }
 }
 
@@ -282,6 +272,21 @@ cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTreeDataImporter(parent),
     GlobalData(new cwSurvexGlobalData(this))
 {
+}
+
+void cwWallsImporter::importCalibrations(const WallsUnits units, cwTrip &trip)
+{
+    LengthUnit dUnit = units.dUnit();
+
+    trip.calibrations()->setDistanceUnit(cwUnit(dUnit));
+    trip.calibrations()->setCorrectedCompassBacksight(units.typeabCorrected());
+    trip.calibrations()->setCorrectedClinoBacksight(units.typevbCorrected());
+    trip.calibrations()->setTapeCalibration(units.incd().get(dUnit));
+    trip.calibrations()->setFrontCompassCalibration(units.inca().get(Angle::degrees()));
+    trip.calibrations()->setFrontClinoCalibration(units.incv().get(Angle::degrees()));
+    trip.calibrations()->setBackCompassCalibration(units.incab().get(Angle::degrees()));
+    trip.calibrations()->setBackClinoCalibration(units.incvb().get(Angle::degrees()));
+    trip.calibrations()->setDeclination(units.decl().get(Angle::degrees()));
 }
 
 

@@ -76,6 +76,8 @@ public:
 
     cwSurvexGlobalData* data();
 
+    static void importCalibrations(WallsUnits units, cwTrip& trip);
+
 signals:
     void message(WallsMessage message);
 
