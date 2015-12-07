@@ -7,7 +7,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwLength.h"
-#include "wallsparser.h"
+#include "wallssurveyparser.h"
 #include "wallsprojectparser.h"
 #include "cwSurvexGlobalData.h"
 #include "cwSurvexBlockData.h"
@@ -26,20 +26,20 @@ cwUnits::LengthUnit cwUnit(Length::Unit dewallsUnit)
     return dewallsUnit == Length::Feet ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
 }
 
-WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
+WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
     : Parser(parser),
       Importer(importer),
       TripNamePrefix(tripNamePrefix),
       Trips(QList<cwTripPtr>()),
       CurrentTrip()
 {
-    QObject::connect(parser, &WallsParser::parsedVector, this, &WallsImporterVisitor::parsedVector);
-    QObject::connect(parser, &WallsParser::parsedFixStation, this, &WallsImporterVisitor::parsedFixStation);
-    QObject::connect(parser, &WallsParser::parsedDate, this, &WallsImporterVisitor::parsedDate);
-    QObject::connect(parser, &WallsParser::willParseUnits, this, &WallsImporterVisitor::willParseUnits);
-    QObject::connect(parser, &WallsParser::parsedUnits, this, &WallsImporterVisitor::parsedUnits);
-    QObject::connect(parser, &WallsParser::parsedComment, this, &WallsImporterVisitor::parsedComment);
-    QObject::connect(parser, &WallsParser::message, this, &WallsImporterVisitor::message);
+    QObject::connect(parser, &WallsSurveyParser::parsedVector, this, &WallsImporterVisitor::parsedVector);
+    QObject::connect(parser, &WallsSurveyParser::parsedFixStation, this, &WallsImporterVisitor::parsedFixStation);
+    QObject::connect(parser, &WallsSurveyParser::parsedDate, this, &WallsImporterVisitor::parsedDate);
+    QObject::connect(parser, &WallsSurveyParser::willParseUnits, this, &WallsImporterVisitor::willParseUnits);
+    QObject::connect(parser, &WallsSurveyParser::parsedUnits, this, &WallsImporterVisitor::parsedUnits);
+    QObject::connect(parser, &WallsSurveyParser::parsedComment, this, &WallsImporterVisitor::parsedComment);
+    QObject::connect(parser, &WallsSurveyParser::message, this, &WallsImporterVisitor::message);
 }
 
 void WallsImporterVisitor::clearTrip()
@@ -476,7 +476,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
     QString justFilename = filename.mid(std::max(0, filename.lastIndexOf('/') + 1));
 
-    WallsParser parser;
+    WallsSurveyParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename);
 //    parser.setVisitor(&visitor);
 

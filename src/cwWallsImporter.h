@@ -21,7 +21,7 @@ class cwSurvexBlockData;
 class cwSurvexGlobalData;
 
 namespace dewalls {
-    class WallsParser;
+    class WallsSurveyParser;
     class SegmentParseExpectedException;
     class SegmentParseException;
 }
@@ -37,7 +37,7 @@ class WallsImporterVisitor : public QObject
     Q_OBJECT
 
 public:
-    WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix);
+    WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix);
 
     void clearTrip();
     void ensureValidTrip();
@@ -55,7 +55,7 @@ public slots:
 
 private:
     WallsUnits priorUnits;
-    WallsParser* Parser;
+    WallsSurveyParser* Parser;
     cwWallsImporter* Importer;
     QString Comment;
     QString TripNamePrefix;
