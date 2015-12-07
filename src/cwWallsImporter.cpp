@@ -35,7 +35,13 @@ WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter*
       Trips(QList<cwTripPtr>()),
       CurrentTrip()
 {
-
+    QObject::connect(parser, &WallsParser::parsedVector, this, &WallsImporterVisitor::parsedVector);
+    QObject::connect(parser, &WallsParser::parsedFixStation, this, &WallsImporterVisitor::parsedFixStation);
+    QObject::connect(parser, &WallsParser::parsedDate, this, &WallsImporterVisitor::parsedDate);
+    QObject::connect(parser, &WallsParser::willParseUnits, this, &WallsImporterVisitor::willParseUnits);
+    QObject::connect(parser, &WallsParser::parsedUnits, this, &WallsImporterVisitor::parsedUnits);
+    QObject::connect(parser, &WallsParser::parsedComment, this, &WallsImporterVisitor::parsedComment);
+    QObject::connect(parser, &WallsParser::message, this, &WallsImporterVisitor::message);
 }
 
 void WallsImporterVisitor::clearTrip()
@@ -51,68 +57,78 @@ void WallsImporterVisitor::ensureValidTrip()
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
         CurrentTrip->setDate(Parser->date());
 
-        LengthUnit d_unit = Parser->units()->d_unit;
+        LengthUnit dUnit = Parser->units().dUnit();
 
-        CurrentTrip->calibrations()->setDistanceUnit(cwUnit(d_unit));
-        CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units()->typeab_corrected);
-        CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units()->typevb_corrected);
-        CurrentTrip->calibrations()->setTapeCalibration(Parser->units()->incd.get(d_unit));
-        CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units()->inca.get(Angle::degrees()));
-        CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units()->incv.get(Angle::degrees()));
-        CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units()->incab.get(Angle::degrees()));
-        CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units()->incvb.get(Angle::degrees()));
-        CurrentTrip->calibrations()->setDeclination(Parser->units()->decl.get(Angle::degrees()));
+        CurrentTrip->calibrations()->setDistanceUnit(cwUnit(dUnit));
+        CurrentTrip->calibrations()->setCorrectedCompassBacksight(Parser->units().typeabCorrected());
+        CurrentTrip->calibrations()->setCorrectedClinoBacksight(Parser->units().typevbCorrected());
+        CurrentTrip->calibrations()->setTapeCalibration(Parser->units().incd().get(dUnit));
+        CurrentTrip->calibrations()->setFrontCompassCalibration(Parser->units().inca().get(Angle::degrees()));
+        CurrentTrip->calibrations()->setFrontClinoCalibration(Parser->units().incv().get(Angle::degrees()));
+        CurrentTrip->calibrations()->setBackCompassCalibration(Parser->units().incab().get(Angle::degrees()));
+        CurrentTrip->calibrations()->setBackClinoCalibration(Parser->units().incvb().get(Angle::degrees()));
+        CurrentTrip->calibrations()->setDeclination(Parser->units().decl().get(Angle::degrees()));
     }
 }
 
-void WallsImporterVisitor::endFixLine()
+void WallsImporterVisitor::parsedFixStation(FixStation station)
 {
+    Q_UNUSED(station);
     ensureValidTrip();
     // TODO
 }
 
-void WallsImporterVisitor::endVectorLine()
+void WallsImporterVisitor::parsedVector(Vector v)
 {
     ensureValidTrip();
     if (Trips.isEmpty() || Trips.last() != CurrentTrip) Trips << CurrentTrip;
 
-    QSharedPointer<WallsUnits> units = Parser->units();
+    WallsUnits units = Parser->units();
 
-    cwStation fromStation = Importer->StationRenamer.createStation(units->processStationName(from));
+    cwStation fromStation = Importer->StationRenamer.createStation(units.processStationName(v.from()));
     cwStation toStation;
     cwShot shot;
 
-    LengthUnit d_unit = units->d_unit;
+    LengthUnit dUnit = units.dUnit();
 
     cwStation* lrudStation;
 
-    if (units->vectorType == VectorType::RECT)
+    if (units.vectorType() == VectorType::RECT)
     {
-        units->rectToCt(north, east, rectUp, distance, frontsightAzimuth, frontsightInclination);
+        ULength distance;
+        UAngle frontAzimuth;
+        UAngle frontInclination;
+        units.rectToCt(v.north(), v.east(), v.rectUp(), distance, frontAzimuth, frontInclination);
         // rect correction is not supported so it's added here.
-        // decl doesn't apply to rect lines, so it's pre-subtracted here so that when the trip declination
+        // decl doesn't apply v.to() rect lines, so it's pre-subtracted here so that when the trip declination
         // is added back, the result agrees with the Walls data.
-        frontsightAzimuth += units->rect - units->decl;
+        frontAzimuth += units.rect() - units.decl();
+        v.setDistance(distance);
+        v.setFrontAzimuth(frontAzimuth);
+        v.setFrontInclination(frontInclination);
     }
-    else if (distance.isValid())
+    else if (v.distance().isValid())
     {
-        toStation = Importer->StationRenamer.createStation(units->processStationName(to));
+        toStation = Importer->StationRenamer.createStation(units.processStationName(v.to()));
 
         // apply Walls corrections that Cavewhere doesn't support
-        units->applyHeightCorrections(distance, frontsightInclination, backsightInclination, instrumentHeight, targetHeight);
+        ULength distance = v.distance();
+        UAngle frontInclination = v.frontInclination();
+        UAngle backInclination = v.backInclination();
+        units.applyHeightCorrections(distance, frontInclination, backInclination, v.instHeight(), v.targetHeight());
 
-        shot.setDistance(distance.get(d_unit));
-        if (frontsightAzimuth.isValid())
+        shot.setDistance(distance.get(dUnit));
+        if (v.frontAzimuth().isValid())
         {
-            shot.setCompass(frontsightAzimuth.get(Angle::degrees()));
+            shot.setCompass(v.frontAzimuth().get(Angle::degrees()));
         }
         else
         {
             shot.setCompassState(cwCompassStates::Empty);
         }
-        if (frontsightInclination.isValid())
+        if (frontInclination.isValid())
         {
-            shot.setClino(frontsightInclination.get(Angle::degrees()));
+            shot.setClino(frontInclination.get(Angle::degrees()));
             if (shot.clino() == 90.0)
             {
                 shot.setClinoState(cwClinoStates::Up);
@@ -126,17 +142,17 @@ void WallsImporterVisitor::endVectorLine()
         {
             shot.setClinoState(cwClinoStates::Empty);
         }
-        if (backsightAzimuth.isValid())
+        if (v.backAzimuth().isValid())
         {
-            shot.setBackCompass(backsightAzimuth.get(Angle::degrees()));
+            shot.setBackCompass(v.backAzimuth().get(Angle::degrees()));
         }
         else
         {
             shot.setBackCompassState(cwCompassStates::Empty);
         }
-        if (backsightInclination.isValid())
+        if (backInclination.isValid())
         {
-            shot.setBackClino(backsightInclination.get(Angle::degrees()));
+            shot.setBackClino(backInclination.get(Angle::degrees()));
             if (shot.backClino() == 90.0)
             {
                 shot.setBackClinoState(cwClinoStates::Up);
@@ -153,8 +169,8 @@ void WallsImporterVisitor::endVectorLine()
 
         // TODO: exclude length flag/segment
 
-        lrudStation = units->lrud == LrudType::From ||
-                units->lrud == LrudType::FB ?
+        lrudStation = units.lrud() == LrudType::From ||
+                units.lrud() == LrudType::FB ?
                     &fromStation : &toStation;
     }
     else
@@ -162,38 +178,38 @@ void WallsImporterVisitor::endVectorLine()
         lrudStation = &fromStation;
     }
 
-    left = units->correctLength(left, units->incs);
-    right += units->correctLength(right, units->incs);
-    up += units->correctLength(up, units->incs);
-    down += units->correctLength(down, units->incs);
+    v.left() = units.correctLength(v.left(), units.incs());
+    v.right() += units.correctLength(v.right(), units.incs());
+    v.up() += units.correctLength(v.up(), units.incs());
+    v.down() += units.correctLength(v.down(), units.incs());
 
-    if (left.isValid())
+    if (v.left().isValid())
     {
-        lrudStation->setLeft(left.get(d_unit));
+        lrudStation->setLeft(v.left().get(dUnit));
     }
     else
     {
         lrudStation->setLeftInputState(cwDistanceStates::Empty);
     }
-    if (right.isValid())
+    if (v.right().isValid())
     {
-        lrudStation->setRight(right.get(d_unit));
+        lrudStation->setRight(v.right().get(dUnit));
     }
     else
     {
         lrudStation->setRightInputState(cwDistanceStates::Empty);
     }
-    if (up.isValid())
+    if (v.up().isValid())
     {
-        lrudStation->setUp(up.get(d_unit));
+        lrudStation->setUp(v.up().get(dUnit));
     }
     else
     {
         lrudStation->setUpInputState(cwDistanceStates::Empty);
     }
-    if (down.isValid())
+    if (v.down().isValid())
     {
-        lrudStation->setDown(down.get(d_unit));
+        lrudStation->setDown(v.down().get(dUnit));
     }
     else
     {
@@ -214,28 +230,28 @@ void WallsImporterVisitor::endVectorLine()
         Importer->StationMap[lrudStation->name()] = *lrudStation;
     }
 
-    if (distance.isValid())
+    if (v.distance().isValid())
     {
         CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
     }
 }
 
-void WallsImporterVisitor::beginUnitsLine()
+void WallsImporterVisitor::willParseUnits()
 {
-    priorUnits = *Parser->units();
+    priorUnits = Parser->units();
 }
 
-void WallsImporterVisitor::endUnitsLine()
+void WallsImporterVisitor::parsedUnits()
 {
-    if (Parser->units()->d_unit != priorUnits.d_unit ||
-        Parser->units()->decl != priorUnits.decl ||
-        Parser->units()->incd != priorUnits.incd ||
-        Parser->units()->inca != priorUnits.inca ||
-        Parser->units()->incab != priorUnits.incab ||
-        Parser->units()->incv != priorUnits.incv ||
-        Parser->units()->incvb != priorUnits.incvb ||
-        Parser->units()->typeab_corrected != priorUnits.typeab_corrected ||
-        Parser->units()->typevb_corrected != priorUnits.typevb_corrected)
+    if (Parser->units().dUnit() != priorUnits.dUnit() ||
+        Parser->units().decl() != priorUnits.decl() ||
+        Parser->units().incd() != priorUnits.incd() ||
+        Parser->units().inca() != priorUnits.inca() ||
+        Parser->units().incab() != priorUnits.incab() ||
+        Parser->units().incv() != priorUnits.incv() ||
+        Parser->units().incvb() != priorUnits.incvb() ||
+        Parser->units().typeabCorrected() != priorUnits.typeabCorrected() ||
+        Parser->units().typevbCorrected() != priorUnits.typevbCorrected())
     {
         // when the next vector or fix line sees that
         // CurrentTrip is null, it will create a new one
@@ -243,13 +259,18 @@ void WallsImporterVisitor::endUnitsLine()
     }
 }
 
-void WallsImporterVisitor::visitDateLine(QDate date)
+void WallsImporterVisitor::parsedDate(QDate date)
 {
     Q_UNUSED(date);
 
     // when the next vector or fix line sees that
     // CurrentTrip is null, it will create a new one
     clearTrip();
+}
+
+void WallsImporterVisitor::parsedComment(QString comment)
+{
+    Comment = comment;
 }
 
 void WallsImporterVisitor::message(WallsMessage message)
@@ -454,7 +475,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
     WallsParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename);
-    parser.setVisitor(&visitor);
+//    parser.setVisitor(&visitor);
 
     foreach (Segment options, survey->allOptions()) {
         try
@@ -470,7 +491,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
 //    PrintingWallsVisitor printingVisitor;
 //    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
-//    parser.setVisitor(&multiVisitor);
+//    Parser->setVisitor(&multiVisitor);
 
     bool failed = false;
 
@@ -496,13 +517,13 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         {
             parser.parseLine(Segment(line, filename, lineNumber, 0));
 
-            if (lineNumber == 0 && !visitor.comment.isEmpty())
+            if (lineNumber == 0 && !visitor.comment().isEmpty())
             {
-                tripName = visitor.comment;
+                tripName = visitor.comment();
             }
-            else if (lineNumber == 1 && !visitor.comment.isEmpty())
+            else if (lineNumber == 1 && !visitor.comment().isEmpty())
             {
-                surveyors = visitor.comment.trimmed().split(QRegExp("\\s*;\\s*"));
+                surveyors = visitor.comment().trimmed().split(QRegExp("\\s*;\\s*"));
             }
         }
         catch (const SegmentParseException& ex)

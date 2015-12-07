@@ -6,9 +6,10 @@
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
-#include "wallsvisitor.h"
 #include "wallsunits.h"
 #include "wallsprojectparser.h"
+#include "fixstation.h"
+#include "vector.h"
 
 //Qt include
 #include <QObject>
@@ -31,7 +32,7 @@ typedef QSharedPointer<cwTrip> cwTripPtr;
 
 class cwWallsImporter;
 
-class WallsImporterVisitor : public QObject, public CapturingWallsVisitor
+class WallsImporterVisitor : public QObject
 {
     Q_OBJECT
 
@@ -40,18 +41,23 @@ public:
 
     void clearTrip();
     void ensureValidTrip();
-    virtual void endFixLine();
-    virtual void endVectorLine();
-    virtual void beginUnitsLine();
-    virtual void endUnitsLine();
-    virtual void visitDateLine(QDate date);
-    virtual void message(WallsMessage message);
     inline QList<cwTripPtr> trips() const { return Trips; }
+    inline QString comment() const { return Comment; }
+
+public slots:
+    void parsedFixStation(FixStation station);
+    void parsedVector(Vector vector);
+    void willParseUnits();
+    void parsedUnits();
+    void parsedDate(QDate date);
+    void parsedComment(QString comment);
+    void message(WallsMessage message);
 
 private:
     WallsUnits priorUnits;
     WallsParser* Parser;
     cwWallsImporter* Importer;
+    QString Comment;
     QString TripNamePrefix;
     QList<cwTripPtr> Trips;
     cwTripPtr CurrentTrip;
