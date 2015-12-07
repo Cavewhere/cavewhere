@@ -6,20 +6,18 @@
 
 typedef UnitizedDouble<Length> ULength;
 typedef UnitizedDouble<Angle> UAngle;
-typedef const Unit<Length>* LengthUnit;
-typedef const Unit<Angle>* AngleUnit;
 
 TEST_CASE( "importCalibrations", "[cwWallsImporter]" ) {
     WallsUnits units;
     cwTrip trip;
 
-    LengthUnit dUnit = Length::feet();
-    ULength incd(5, Length::meters());
-    UAngle inca(42, Angle::gradians());
-    UAngle incab(0.253, Angle::radians());
-    UAngle incv(36, Angle::percentGrade());
-    UAngle incvb(25, Angle::degrees());
-    UAngle decl(24, Angle::gradians());
+    Length::Unit dUnit = Length::Feet;
+    ULength incd(5, Length::Meters);
+    UAngle inca(42, Angle::Gradians);
+    UAngle incab(0.253, Angle::Radians);
+    UAngle incv(36, Angle::PercentGrade);
+    UAngle incvb(25, Angle::Degrees);
+    UAngle decl(24, Angle::Gradians);
 
     units.setDUnit(dUnit);
     units.setIncd(incd);
@@ -37,14 +35,14 @@ TEST_CASE( "importCalibrations", "[cwWallsImporter]" ) {
     CHECK( trip.calibrations()->hasCorrectedClinoBacksight() );
     CHECK( trip.calibrations()->distanceUnit() == cwUnits::LengthUnit::Feet );
     CHECK( trip.calibrations()->tapeCalibration() == incd.get(dUnit) );
-    CHECK( trip.calibrations()->frontCompassCalibration() == inca.get(Angle::degrees()) );
-    CHECK( trip.calibrations()->backCompassCalibration() == incab.get(Angle::degrees()) );
-    CHECK( trip.calibrations()->frontClinoCalibration() == incv.get(Angle::degrees()) );
-    CHECK( trip.calibrations()->backClinoCalibration() == incvb.get(Angle::degrees()) );
-    CHECK( trip.calibrations()->declination() == decl.get(Angle::degrees()) );
+    CHECK( trip.calibrations()->frontCompassCalibration() == inca.get(Angle::Degrees) );
+    CHECK( trip.calibrations()->backCompassCalibration() == incab.get(Angle::Degrees) );
+    CHECK( trip.calibrations()->frontClinoCalibration() == incv.get(Angle::Degrees) );
+    CHECK( trip.calibrations()->backClinoCalibration() == incvb.get(Angle::Degrees) );
+    CHECK( trip.calibrations()->declination() == decl.get(Angle::Degrees) );
 
-    incd = ULength(4, Length::feet());
-    dUnit = Length::meters();
+    incd = ULength(4, Length::Feet);
+    dUnit = Length::Meters;
     units.setDUnit(dUnit);
     units.setIncd(incd);
     cwWallsImporter::importCalibrations(units, trip);

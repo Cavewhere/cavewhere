@@ -20,12 +20,10 @@ using namespace dewalls;
 
 typedef UnitizedDouble<Length> ULength;
 typedef UnitizedDouble<Angle> UAngle;
-typedef const Unit<Length>* LengthUnit;
-typedef const Unit<Angle>* AngleUnit;
 
-cwUnits::LengthUnit cwUnit(const Unit<Length>* dewallsUnit)
+cwUnits::LengthUnit cwUnit(Length::Unit dewallsUnit)
 {
-    return dewallsUnit == Length::feet() ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
+    return dewallsUnit == Length::Feet ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
 }
 
 WallsImporterVisitor::WallsImporterVisitor(WallsParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
@@ -79,7 +77,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
     cwStation toStation;
     cwShot shot;
 
-    LengthUnit dUnit = units.dUnit();
+    Length::Unit dUnit = units.dUnit();
 
     cwStation* lrudStation;
 
@@ -110,7 +108,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
         shot.setDistance(distance.get(dUnit));
         if (v.frontAzimuth().isValid())
         {
-            shot.setCompass(v.frontAzimuth().get(Angle::degrees()));
+            shot.setCompass(v.frontAzimuth().get(Angle::Degrees));
         }
         else
         {
@@ -118,7 +116,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
         }
         if (frontInclination.isValid())
         {
-            shot.setClino(frontInclination.get(Angle::degrees()));
+            shot.setClino(frontInclination.get(Angle::Degrees));
             if (shot.clino() == 90.0)
             {
                 shot.setClinoState(cwClinoStates::Up);
@@ -134,7 +132,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
         }
         if (v.backAzimuth().isValid())
         {
-            shot.setBackCompass(v.backAzimuth().get(Angle::degrees()));
+            shot.setBackCompass(v.backAzimuth().get(Angle::Degrees));
         }
         else
         {
@@ -142,7 +140,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
         }
         if (backInclination.isValid())
         {
-            shot.setBackClino(backInclination.get(Angle::degrees()));
+            shot.setBackClino(backInclination.get(Angle::Degrees));
             if (shot.backClino() == 90.0)
             {
                 shot.setBackClinoState(cwClinoStates::Up);
@@ -276,17 +274,17 @@ cwWallsImporter::cwWallsImporter(QObject *parent) :
 
 void cwWallsImporter::importCalibrations(const WallsUnits units, cwTrip &trip)
 {
-    LengthUnit dUnit = units.dUnit();
+    Length::Unit dUnit = units.dUnit();
 
     trip.calibrations()->setDistanceUnit(cwUnit(dUnit));
     trip.calibrations()->setCorrectedCompassBacksight(units.typeabCorrected());
     trip.calibrations()->setCorrectedClinoBacksight(units.typevbCorrected());
     trip.calibrations()->setTapeCalibration(units.incd().get(dUnit));
-    trip.calibrations()->setFrontCompassCalibration(units.inca().get(Angle::degrees()));
-    trip.calibrations()->setFrontClinoCalibration(units.incv().get(Angle::degrees()));
-    trip.calibrations()->setBackCompassCalibration(units.incab().get(Angle::degrees()));
-    trip.calibrations()->setBackClinoCalibration(units.incvb().get(Angle::degrees()));
-    trip.calibrations()->setDeclination(units.decl().get(Angle::degrees()));
+    trip.calibrations()->setFrontCompassCalibration(units.inca().get(Angle::Degrees));
+    trip.calibrations()->setFrontClinoCalibration(units.incv().get(Angle::Degrees));
+    trip.calibrations()->setBackCompassCalibration(units.incab().get(Angle::Degrees));
+    trip.calibrations()->setBackClinoCalibration(units.incvb().get(Angle::Degrees));
+    trip.calibrations()->setDeclination(units.decl().get(Angle::Degrees));
 }
 
 
