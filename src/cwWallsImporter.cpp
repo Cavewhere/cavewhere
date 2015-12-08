@@ -16,6 +16,8 @@
 #include <QFileInfo>
 #include <QDir>
 
+#include <iostream>
+
 using namespace dewalls;
 
 typedef UnitizedDouble<Length> ULength;
@@ -71,7 +73,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
     ensureValidTrip();
     if (Trips.isEmpty() || Trips.last() != CurrentTrip) Trips << CurrentTrip;
 
-    WallsUnits units = Parser->units();
+    WallsUnits units = v.units();
 
     cwStation fromStation = Importer->StationRenamer.createStation(units.processStationName(v.from()));
     cwStation toStation;
@@ -83,17 +85,11 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     if (units.vectorType() == VectorType::RECT)
     {
-        ULength distance;
-        UAngle frontAzimuth;
-        UAngle frontInclination;
-        units.rectToCt(v.north(), v.east(), v.rectUp(), distance, frontAzimuth, frontInclination);
+        v.deriveCtFromRect();
         // rect correction is not supported so it's added here.
         // decl doesn't apply v.to() rect lines, so it's pre-subtracted here so that when the trip declination
         // is added back, the result agrees with the Walls data.
-        frontAzimuth += units.rect() - units.decl();
-        v.setDistance(distance);
-        v.setFrontAzimuth(frontAzimuth);
-        v.setFrontInclination(frontInclination);
+        v.setFrontAzimuth(v.frontAzimuth() + units.rect() - units.decl());
     }
     else if (v.distance().isValid())
     {
@@ -205,11 +201,11 @@ void WallsImporterVisitor::parsedVector(Vector v)
     }
 
     // save the latest LRUDs associated with each station so that we can apply them in the end
-    if (Parser->date().isValid())
+    if (v.date().isValid())
     {
         if (!Importer->StationDates.contains(lrudStation->name()) ||
-            Parser->date() >= Importer->StationDates[lrudStation->name()]) {
-            Importer->StationDates[lrudStation->name()] = Parser->date();
+            v.date() >= Importer->StationDates[lrudStation->name()]) {
+            Importer->StationDates[lrudStation->name()] = v.date();
             Importer->StationMap[lrudStation->name()] = *lrudStation;
         }
     }
