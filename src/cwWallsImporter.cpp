@@ -83,7 +83,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     cwStation* lrudStation;
 
-    if (units.vectorType() == VectorType::RECT)
+    if (units.vectorType() == VectorType::RECT && v.north().isValid())
     {
         v.deriveCtFromRect();
         // rect correction is not supported so it's added here.
@@ -91,7 +91,8 @@ void WallsImporterVisitor::parsedVector(Vector v)
         // is added back, the result agrees with the Walls data.
         v.setFrontAzimuth(v.frontAzimuth() + units.rect() - units.decl());
     }
-    else if (v.distance().isValid())
+
+    if (v.distance().isValid())
     {
         toStation = Importer->StationRenamer.createStation(units.processStationName(v.to()));
 
