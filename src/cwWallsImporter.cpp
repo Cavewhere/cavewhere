@@ -478,7 +478,6 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
     WallsSurveyParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename);
-//    parser.setVisitor(&visitor);
 
     foreach (Segment options, survey->allOptions()) {
         try
@@ -492,9 +491,11 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         }
     }
 
-//    PrintingWallsVisitor printingVisitor;
-//    MultiWallsVisitor multiVisitor({&printingVisitor, &visitor});
-//    Parser->setVisitor(&multiVisitor);
+    QStringList segment = survey->segment();
+    if (!segment.isEmpty()) {
+        parser.setSegment(segment);
+        parser.setRootSegment(segment);
+    }
 
     bool failed = false;
 
