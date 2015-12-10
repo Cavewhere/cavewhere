@@ -97,10 +97,10 @@ void WallsImporterVisitor::parsedVector(Vector v)
         toStation = Importer->StationRenamer.createStation(units.processStationName(v.to()));
 
         // apply Walls corrections that Cavewhere doesn't support
+        v.applyHeightCorrections();
         ULength distance = v.distance();
         UAngle frontInclination = v.frontInclination();
         UAngle backInclination = v.backInclination();
-        units.applyHeightCorrections(distance, frontInclination, backInclination, v.instHeight(), v.targetHeight());
 
         shot.setDistance(distance.get(dUnit));
         if (v.frontAzimuth().isValid())
