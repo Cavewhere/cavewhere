@@ -10,7 +10,7 @@
 
 //Our includes
 #include "cwStation.h"
-class cwSurvexGlobalData;
+#include "cwTreeImportData.h"
 
 class cwTreeDataImporter : public cwTask
 {
@@ -24,7 +24,7 @@ public:
 
     virtual QString lastImport();
 
-    virtual cwSurvexGlobalData* data();
+    virtual cwTreeImportData* data();
 
 public slots:
     virtual void setSurvexFile(QString filename);

@@ -1,5 +1,5 @@
 #include "cwTreeDataImporter.h"
-#include "cwSurvexGlobalData.h"
+#include "cwTreeImportData.h"
 
 cwTreeDataImporter::cwTreeDataImporter(QObject *parent) : cwTask(parent)
 {
@@ -21,7 +21,7 @@ QString cwTreeDataImporter::lastImport()
     return QString();
 }
 
-cwSurvexGlobalData* cwTreeDataImporter::data()
+cwTreeImportData* cwTreeDataImporter::data()
 {
     return nullptr;
 }

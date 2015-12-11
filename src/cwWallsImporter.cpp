@@ -9,8 +9,8 @@
 #include "cwLength.h"
 #include "wallssurveyparser.h"
 #include "wallsprojectparser.h"
-#include "cwSurvexGlobalData.h"
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportData.h"
+#include "cwTreeImportDataNode.h"
 
 //Qt includes
 #include <QFileInfo>
@@ -265,7 +265,7 @@ void WallsImporterVisitor::message(WallsMessage message)
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTreeDataImporter(parent),
-    GlobalData(new cwSurvexGlobalData(this))
+    GlobalData(new cwWallsImportData(this))
 {
 }
 
@@ -321,16 +321,16 @@ void cwWallsImporter::importWalls(QString filename) {
     QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::emitMessage);
 
     WpjBookPtr rootBook = projParser.parseFile(filename);
-    cwSurvexBlockData* rootBlock = convertEntry(rootBook);
+    cwTreeImportDataNode* rootBlock = convertEntry(rootBook);
     if (rootBlock != nullptr) {
         applyLRUDs(rootBlock);
-        QList<cwSurvexBlockData*> blocks;
+        QList<cwTreeImportDataNode*> blocks;
         blocks << rootBlock;
         GlobalData->setBlocks(blocks);
     }
 }
 
-void cwWallsImporter::applyLRUDs(cwSurvexBlockData* block) {
+void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
     // apply StationMap replacements to support Walls' station-LRUD lines
     foreach (cwSurveyChunk* chunk, block->chunks())
     {
@@ -343,13 +343,13 @@ void cwWallsImporter::applyLRUDs(cwSurvexBlockData* block) {
             }
         }
     }
-    foreach (cwSurvexBlockData* childBlock, block->childBlocks())
+    foreach (cwTreeImportDataNode* childBlock, block->childBlocks())
     {
         applyLRUDs(childBlock);
     }
 }
 
-cwSurvexBlockData* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
+cwTreeImportDataNode* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
     if (entry.isNull()) {
         return nullptr;
     }
@@ -362,13 +362,13 @@ cwSurvexBlockData* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
     return nullptr;
 }
 
-cwSurvexBlockData* cwWallsImporter::convertBook(WpjBookPtr book) {
-    cwSurvexBlockData* result = new cwSurvexBlockData();
+cwTreeImportDataNode* cwWallsImporter::convertBook(WpjBookPtr book) {
+    cwTreeImportDataNode* result = new cwTreeImportDataNode();
 
     try {
         result->setName(book->Title);
         foreach (WpjEntryPtr child, book->Children) {
-            cwSurvexBlockData* childBlock = convertEntry(child);
+            cwTreeImportDataNode* childBlock = convertEntry(child);
             if (childBlock) {
                 result->addChildBlock(childBlock);
             }
@@ -382,8 +382,8 @@ cwSurvexBlockData* cwWallsImporter::convertBook(WpjBookPtr book) {
     }
 }
 
-cwSurvexBlockData* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
-    cwSurvexBlockData* result = new cwSurvexBlockData();
+cwTreeImportDataNode* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
+    cwTreeImportDataNode* result = new cwTreeImportDataNode();
 
     try {
         result->setName(survey->Title);

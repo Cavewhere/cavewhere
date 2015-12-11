@@ -4,9 +4,8 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
-
 #include "cwSurvexGlobalData.h"
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
@@ -15,18 +14,9 @@
 #include "cwDebug.h"
 
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
-    QObject(parent)
+    cwTreeImportData(parent)
 {
 
-}
-
-void cwSurvexGlobalData::setBlocks(QList<cwSurvexBlockData*> blocks) {
-    foreach(cwSurvexBlockData* block, blocks) {
-        block->setParent(this);
-        block->setParentBlock(nullptr);
-    }
-
-    RootBlocks = blocks;
 }
 
 /**
@@ -34,7 +24,7 @@ void cwSurvexGlobalData::setBlocks(QList<cwSurvexBlockData*> blocks) {
   */
 QList<cwCave*> cwSurvexGlobalData::caves() {
     QList<cwCave*> caves;
-    foreach(cwSurvexBlockData* block, blocks()) {
+    foreach(cwTreeImportDataNode* block, blocks()) {
         cavesHelper(&caves, block, nullptr, nullptr);
     }
 
@@ -42,25 +32,17 @@ QList<cwCave*> cwSurvexGlobalData::caves() {
 }
 
 /**
-  \brief Get's the current errors
-  */
-QStringList cwSurvexGlobalData::erros() {
-    return QStringList();
-}
-
-
-/**
   \brief Helper function the caves function
   */
 void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
-                                     cwSurvexBlockData* currentBlock,
+                                     cwTreeImportDataNode* currentBlock,
                                      cwCave* currentCave,
                                      cwTrip* currentTrip) {
 
     switch(currentBlock->importType()) {
-    case cwSurvexBlockData::NoImport:
+    case cwTreeImportDataNode::NoImport:
         break;
-    case cwSurvexBlockData::Cave:
+    case cwTreeImportDataNode::Cave:
         currentCave = new cwCave(this);
 
         currentCave->setName(currentBlock->name());
@@ -71,7 +53,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         populateEquateMap(currentBlock);
 
         break;
-    case cwSurvexBlockData::Trip: {
+    case cwTreeImportDataNode::Trip: {
         currentTrip = new cwTrip(this);
 
         //Copy the name and date
@@ -101,12 +83,12 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
         //Adds the trip to the current cave
         currentCave->addTrip(currentTrip);
     }
-    case cwSurvexBlockData::Structure:
+    case cwTreeImportDataNode::Structure:
         break;
     }
 
     //Only import real data
-    if(currentBlock->importType() != cwSurvexBlockData::NoImport) {
+    if(currentBlock->importType() != cwTreeImportDataNode::NoImport) {
 
         //Make sure we have trip if there's chunks
         if(currentBlock->chunkCount() > 0 && currentTrip == nullptr) {
@@ -135,7 +117,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
     }
 
     //Recusive call
-    foreach(cwSurvexBlockData* childBlock, currentBlock->childBlocks()) {
+    foreach(cwTreeImportDataNode* childBlock, currentBlock->childBlocks()) {
         cavesHelper(caves, childBlock, currentCave, currentTrip);
     }
 }
@@ -148,14 +130,14 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
  * This will take the current block and see if any of the stations in chunk, are in any of the
  * parent's equates.  If the station is in the equate, then the station will be renamed.
  */
-void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData *chunkBlock)
+void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataNode *chunkBlock)
 {
-    cwSurvexBlockData* current = chunkBlock;
+    cwTreeImportDataNode* current = chunkBlock;
 
     //Move to block that has a name
     while(current != nullptr &&
           current->name().isEmpty() &&
-          current->importType() != cwSurvexBlockData::Cave)
+          current->importType() != cwTreeImportDataNode::Cave)
     {
         current = current->parentBlock();
     }
@@ -167,9 +149,9 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData
     QString stationPrefix;
 
     //Find the parent cave chuck block
-    cwSurvexBlockData* caveSurvexBlock = chunkBlock;
+    cwTreeImportDataNode* caveSurvexBlock = chunkBlock;
     while(caveSurvexBlock != nullptr) {
-        if(caveSurvexBlock->importType() == cwSurvexBlockData::Cave) {
+        if(caveSurvexBlock->importType() == cwTreeImportDataNode::Cave) {
             break;
         } else {
             if(!caveSurvexBlock->name().isEmpty()) {
@@ -255,7 +237,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwSurvexBlockData
  *
  * Because station name mangaling, sho
  */
-void cwSurvexGlobalData::fixDuplicatedStationInShot(cwSurveyChunk *chunk, cwSurvexBlockData* caveSurvexBlock)
+void cwSurvexGlobalData::fixDuplicatedStationInShot(cwSurveyChunk *chunk, cwTreeImportDataNode* caveSurvexBlock)
 {
     for(int i = 0; i < chunk->stationCount(); i+=2) {
         cwStation station1 = chunk->station(i);
@@ -275,7 +257,7 @@ void cwSurvexGlobalData::fixDuplicatedStationInShot(cwSurveyChunk *chunk, cwSurv
  *
  * This adds all the equate stations to the list
  */
-void cwSurvexGlobalData::populateEquateMap(cwSurvexBlockData *block)
+void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
 {
     foreach(QStringList equateList, block->EqualStations) {
         if(equateList.size() < 2) {
@@ -314,7 +296,7 @@ void cwSurvexGlobalData::populateEquateMap(cwSurvexBlockData *block)
  * @param oldStationName
  * @return This will add 'x' to the end oldStationName until it is unique to the cave
  */
-QString cwSurvexGlobalData::generateUniqueStationName(QString oldStationName, cwSurvexBlockData* caveSurvexBlock) const
+QString cwSurvexGlobalData::generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock) const
 {
     QString newStationName = oldStationName + "x";
     while(caveSurvexBlock->EquateMap.contains(newStationName)) {

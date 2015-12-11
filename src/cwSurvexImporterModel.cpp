@@ -7,8 +7,8 @@
 
 //Our includes
 #include "cwSurvexImporterModel.h"
-#include "cwSurvexGlobalData.h"
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwSurveyChunk.h"
 #include "cwShot.h"
 #include "cwGlobalIcons.h"
@@ -69,7 +69,7 @@ QVariant cwSurvexImporterModel::NameColumnDisplayData(const QModelIndex& index) 
     if(isShot(index)) {
 
 //        Q_ASSERT(dynamic_cast<cwSurvexBlockData*>(index.internalPointer()) != nullptr);
-        cwSurvexBlockData* parentBlock = static_cast<cwSurvexBlockData*>(index.internalPointer());
+        cwTreeImportDataNode* parentBlock = static_cast<cwTreeImportDataNode*>(index.internalPointer());
         int shotIndex = index.row() - parentBlock->childBlockCount();
 
         cwSurveyChunk* parentSurveyChunk = parentBlock->parentChunkOfShot(shotIndex);
@@ -100,7 +100,7 @@ QVariant cwSurvexImporterModel::NameColumnDisplayData(const QModelIndex& index) 
     }
 
     //This index is a block
-    cwSurvexBlockData* block = toBlockData(index);
+    cwTreeImportDataNode* block = toBlockData(index);
     if(block != nullptr) {
         if(block->name().isEmpty()) {
             return QVariant("Untitled");
@@ -117,30 +117,30 @@ QVariant cwSurvexImporterModel::NameColumnDisplayData(const QModelIndex& index) 
    */
 QVariant cwSurvexImporterModel::NameColumnIconData(const QModelIndex& index) const {
     //This index is a block
-    cwSurvexBlockData* block = toBlockData(index);
+    cwTreeImportDataNode* block = toBlockData(index);
     if(block != nullptr) {
         QPixmap icon;
 
         switch(block->importType()) {
-        case cwSurvexBlockData::NoImport:
+        case cwTreeImportDataNode::NoImport:
             if(!QPixmapCache::find(cwGlobalIcons::NoImport, &icon)) {
                 icon = QPixmap(cwGlobalIcons::NoImportFilename);
                 cwGlobalIcons::NoImport = QPixmapCache::insert(icon);
             }
             break;
-        case cwSurvexBlockData::Trip:
+        case cwTreeImportDataNode::Trip:
             if(!QPixmapCache::find(cwGlobalIcons::Trip, &icon)) {
                 icon = QPixmap(cwGlobalIcons::TripFilename);
                 cwGlobalIcons::Trip = QPixmapCache::insert(icon);
             }
             break;
-        case cwSurvexBlockData::Cave:
+        case cwTreeImportDataNode::Cave:
             if(!QPixmapCache::find(cwGlobalIcons::Cave, &icon)) {
                 icon = QPixmap(cwGlobalIcons::CaveFilename);
                 cwGlobalIcons::Cave = QPixmapCache::insert(icon);
             }
             break;
-        case cwSurvexBlockData::Structure:
+        case cwTreeImportDataNode::Structure:
             if(!QPixmapCache::find(cwGlobalIcons::Plus, &icon)) {
                 icon = QPixmap(cwGlobalIcons::PlusFilename);
                 cwGlobalIcons::Plus = QPixmapCache::insert(icon);
@@ -160,7 +160,7 @@ QModelIndex cwSurvexImporterModel::index ( int row, int /*column*/, const QModel
 
     if(!parent.isValid()) {
         //This is the root use the root data
-        QList<cwSurvexBlockData*> rootBlocks = GlobalData->blocks();
+        QList<cwTreeImportDataNode*> rootBlocks = GlobalData->blocks();
         if(row >= rootBlocks.size()) {
             return QModelIndex(); //Invalid index
         }
@@ -169,7 +169,7 @@ QModelIndex cwSurvexImporterModel::index ( int row, int /*column*/, const QModel
     }
 
     //This if the index
-    cwSurvexBlockData* parentBlock = toBlockData(parent);
+    cwTreeImportDataNode* parentBlock = toBlockData(parent);
     if(parentBlock != nullptr) {
         return createIndex(row, 0, parentBlock);
     }
@@ -188,8 +188,8 @@ QModelIndex cwSurvexImporterModel::parent ( const QModelIndex & index ) const {
     if(index.internalPointer() == nullptr) { return QModelIndex(); }
 
     //The grandparent's block
-    cwSurvexBlockData* parentBlock = static_cast<cwSurvexBlockData*>(index.internalPointer());
-    cwSurvexBlockData* grandparentBlock = parentBlock->parentBlock();
+    cwTreeImportDataNode* parentBlock = static_cast<cwTreeImportDataNode*>(index.internalPointer());
+    cwTreeImportDataNode* grandparentBlock = parentBlock->parentBlock();
     if(grandparentBlock == nullptr) {
         //In the GlobalData
         int row = GlobalData->blocks().indexOf(parentBlock);
@@ -207,7 +207,7 @@ int cwSurvexImporterModel::rowCount ( const QModelIndex & parent ) const {
     if(GlobalData == nullptr) { return 0; }
     if(parent == QModelIndex()) { return GlobalData->blocks().count(); }
 
-    cwSurvexBlockData* block = toBlockData(parent);
+    cwTreeImportDataNode* block = toBlockData(parent);
     if(block != nullptr) {
         return block->childBlockCount() + block->shotCount();
     }
@@ -218,7 +218,7 @@ int cwSurvexImporterModel::rowCount ( const QModelIndex & parent ) const {
 /**
   \brief Sets the data for the model
   */
-void cwSurvexImporterModel::setSurvexData(cwSurvexGlobalData* data) {
+void cwSurvexImporterModel::setSurvexData(cwTreeImportData* data) {
     beginResetModel();
     GlobalData = data;
     endResetModel();
@@ -226,7 +226,7 @@ void cwSurvexImporterModel::setSurvexData(cwSurvexGlobalData* data) {
     if(GlobalData == nullptr) { return; }
 
     //Go through the GlobalData and hook it up to this object
-    foreach(cwSurvexBlockData* block, GlobalData->blocks()) {
+    foreach(cwTreeImportDataNode* block, GlobalData->blocks()) {
         connectBlock(block);
     }
 }
@@ -234,11 +234,11 @@ void cwSurvexImporterModel::setSurvexData(cwSurvexGlobalData* data) {
 /**
   \brief A recusive function that connect block and it's sub blocks and shots to this model
   */
-void cwSurvexImporterModel::connectBlock(cwSurvexBlockData* block) {
+void cwSurvexImporterModel::connectBlock(cwTreeImportDataNode* block) {
     connect(block, SIGNAL(nameChanged()), SLOT(blockDataChanged()));
     connect(block, SIGNAL(importTypeChanged()), SLOT(blockDataChanged()));
 
-    foreach(cwSurvexBlockData* childBlock, block->childBlocks()) {
+    foreach(cwTreeImportDataNode* childBlock, block->childBlocks()) {
         connectBlock(childBlock);
     }
 }
@@ -250,7 +250,7 @@ bool cwSurvexImporterModel::isBlock(const QModelIndex &index) const {
     if(index.internalPointer() == nullptr) {
         return true;
     } else {
-        cwSurvexBlockData* block = static_cast<cwSurvexBlockData*>(index.internalPointer());
+        cwTreeImportDataNode* block = static_cast<cwTreeImportDataNode*>(index.internalPointer());
         return index.row() < block->childBlockCount();
     }
 }
@@ -270,11 +270,11 @@ bool cwSurvexImporterModel::isShot(const QModelIndex &index) const
 
   The point that's coming out of this function should not be delete or stored
   */
-cwSurvexBlockData* cwSurvexImporterModel::toBlockData(const QModelIndex& index) const {
+cwTreeImportDataNode* cwSurvexImporterModel::toBlockData(const QModelIndex& index) const {
     if(!index.isValid()) { return nullptr; }
 
     if(isBlock(index)) {
-        cwSurvexBlockData* block = static_cast<cwSurvexBlockData*>(index.internalPointer());
+        cwTreeImportDataNode* block = static_cast<cwTreeImportDataNode*>(index.internalPointer());
         if(block != nullptr) {
             return block->childBlock(index.row());
         } else {
@@ -291,12 +291,12 @@ cwSurvexBlockData* cwSurvexImporterModel::toBlockData(const QModelIndex& index) 
 
   If the block isn't part of the model, then this returns a invalid index
   */
-QModelIndex cwSurvexImporterModel::toIndex(cwSurvexBlockData* block) {
+QModelIndex cwSurvexImporterModel::toIndex(cwTreeImportDataNode* block) {
     if(block == nullptr) { return QModelIndex(); }
 
     //This is a root block
     int row;
-    cwSurvexBlockData* parentBlock = nullptr;
+    cwTreeImportDataNode* parentBlock = nullptr;
     if(block->parentBlock() == nullptr) {
         row = GlobalData->blocks().indexOf(block);
     } else {
@@ -318,8 +318,8 @@ QModelIndex cwSurvexImporterModel::toIndex(cwSurvexBlockData* block) {
   \brief Called when a block's data has changed
   */
 void cwSurvexImporterModel::blockDataChanged() {
-    Q_ASSERT(qobject_cast<cwSurvexBlockData*>(sender()) != nullptr);
-    cwSurvexBlockData* block = static_cast<cwSurvexBlockData*>(sender());
+    Q_ASSERT(qobject_cast<cwTreeImportDataNode*>(sender()) != nullptr);
+    cwTreeImportDataNode* block = static_cast<cwTreeImportDataNode*>(sender());
     QModelIndex blockIndex = toIndex(block);
     if(!blockIndex.isValid()) { return; }
     emit dataChanged(blockIndex, blockIndex);

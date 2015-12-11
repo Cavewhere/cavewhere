@@ -19,8 +19,7 @@
 
 //Our includes
 #include "cwStation.h"
-class cwSurvexBlockData;
-class cwSurvexGlobalData;
+#include "cwSurvexGlobalData.h"
 class cwSurveyChunk;
 class cwShot;
 
@@ -36,7 +35,7 @@ public:
 
     QString lastImport();
 
-    cwSurvexGlobalData* data();
+    cwTreeImportData* data();
 
 public slots:
     void setSurvexFile(QString filename);
@@ -113,8 +112,8 @@ private:
     QList<BeginEndState> BeginEndStateStack;
 
     //The data that'll be populated
-    cwSurvexBlockData* RootBlock; //All blocks are child of this object
-    cwSurvexBlockData* CurrentBlock; //The current block
+    cwTreeImportDataNode* RootBlock; //All blocks are child of this object
+    cwTreeImportDataNode* CurrentBlock; //The current block
     cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
 
     QStringList Errors;
@@ -189,8 +188,8 @@ private:
 /**
   \brief Gets all the data from the importer
   */
-inline cwSurvexGlobalData* cwSurvexImporter::data() {
-    return GlobalData;
+inline cwTreeImportData* cwSurvexImporter::data() {
+    return static_cast<cwTreeImportData*>(GlobalData);
 }
 
 /**

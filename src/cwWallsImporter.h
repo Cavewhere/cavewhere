@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTreeDataImporter.h"
+#include "cwWallsImportData.h"
 #include "cwCave.h"
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
@@ -17,8 +18,8 @@
 #include <QStringList>
 class QFile;
 
-class cwSurvexBlockData;
-class cwSurvexGlobalData;
+class cwTreeImportDataNode;
+class cwTreeImportData;
 
 namespace dewalls {
     class WallsSurveyParser;
@@ -74,7 +75,7 @@ public:
     bool hasErrors();
     QStringList errors();
 
-    cwSurvexGlobalData* data();
+    cwTreeImportData* data();
 
     static void importCalibrations(WallsUnits units, cwTrip& trip);
 
@@ -94,17 +95,17 @@ private:
     void importWalls(QString filename);
     void clear();
 
-    cwSurvexBlockData* convertEntry(WpjEntryPtr entry);
-    cwSurvexBlockData* convertBook(WpjBookPtr book);
-    cwSurvexBlockData* convertSurvey(WpjEntryPtr survey);
+    cwTreeImportDataNode* convertEntry(WpjEntryPtr entry);
+    cwTreeImportDataNode* convertBook(WpjBookPtr book);
+    cwTreeImportDataNode* convertSurvey(WpjEntryPtr survey);
 
-    void applyLRUDs(cwSurvexBlockData* block);
+    void applyLRUDs(cwTreeImportDataNode* block);
 
     void addError(WallsMessage message);
 
     QString RootFilename;
 
-    cwSurvexGlobalData* GlobalData;
+    cwWallsImportData* GlobalData;
 
     QStringList Errors;
 
@@ -117,7 +118,7 @@ private:
 /**
   \brief Gets all the data from the importer
   */
-inline cwSurvexGlobalData* cwWallsImporter::data() {
+inline cwTreeImportData* cwWallsImporter::data() {
     return GlobalData;
 }
 

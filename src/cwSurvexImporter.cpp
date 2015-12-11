@@ -9,7 +9,7 @@
 #include "cwSurvexImporter.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwSurvexGlobalData.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
@@ -28,7 +28,7 @@
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     cwTreeDataImporter(parent),
-    RootBlock(new cwSurvexBlockData(this)),
+    RootBlock(new cwTreeImportDataNode(this)),
     CurrentBlock(nullptr),
     GlobalData(new cwSurvexGlobalData(this)),
     CurrentState(FirstBegin)
@@ -226,7 +226,7 @@ void cwSurvexImporter::parseLine(QString line) {
         //BeginNames.append(exp.cap(1));
 
         //Create a new block
-        cwSurvexBlockData* newBlock = new cwSurvexBlockData();
+        cwTreeImportDataNode* newBlock = new cwTreeImportDataNode();
         QString blockName = exp.cap(1).trimmed();
         newBlock->setName(blockName);
 
@@ -268,7 +268,7 @@ void cwSurvexImporter::parseLine(QString line) {
                 //Update the LRUD before getting out of this block
                 updateLRUDForCurrentBlock();
 
-                cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
+                cwTreeImportDataNode* parentBlock = CurrentBlock->parentBlock();
                 if(parentBlock != nullptr) {
                     CurrentBlock = parentBlock;
                 }
@@ -614,7 +614,7 @@ void cwSurvexImporter::parsePassageData(QString line) {
 QString cwSurvexImporter::fullStationName(QString name) {
     if(name.isEmpty()) { return QString(); }
 
-    cwSurvexBlockData* current = CurrentBlock;
+    cwTreeImportDataNode* current = CurrentBlock;
     QLinkedList<QString> fullNameList;
 
     //While not the root element of the importer

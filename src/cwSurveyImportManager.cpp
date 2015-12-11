@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwSurveyImportManager.h"
-#include "cwImportSurvexDialog.h"
+#include "cwImportTreeDataDialog.h"
 #include "cwSurvexImporter.h"
 #include "cwCompassImporter.h"
 #include "cwWallsImporter.h"
@@ -64,8 +64,8 @@ void cwSurveyImportManager::importSurvex() {
 
     if (QFileInfo(filename).exists()) {
         settings.setValue(ImportSurvexKey, filename);
-        cwImportSurvexDialog::Names names{"Survex Importer", "Survex Errors"};
-        cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(names, new cwSurvexImporter(), cavingRegion());
+        cwImportTreeDataDialog::Names names{"Survex Importer", "Survex Errors"};
+        cwImportTreeDataDialog* survexImportDialog = new cwImportTreeDataDialog(names, new cwSurvexImporter(), cavingRegion());
         survexImportDialog->setUndoStack(UndoStack);
         survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         survexImportDialog->open();
@@ -141,8 +141,8 @@ void cwSurveyImportManager::importWalls() {
 
     if (QFileInfo(filename).exists()) {
         settings.setValue(ImportWallsKey, filename);
-        cwImportSurvexDialog::Names names{"Walls Importer", "Walls Errors"};
-        cwImportSurvexDialog* wallsImportDialog = new cwImportSurvexDialog(names, new cwWallsImporter(), cavingRegion());
+        cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
+        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
         wallsImportDialog->setUndoStack(UndoStack);
         wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         wallsImportDialog->open();

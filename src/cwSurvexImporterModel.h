@@ -9,8 +9,8 @@
 #define CWSURVEXIMPORTERMODEL_H
 
 //Our includes
-class cwSurvexGlobalData;
-class cwSurvexBlockData;
+class cwTreeImportData;
+class cwTreeImportDataNode;
 class cwShot;
 class cwSurveyChunk;
 
@@ -30,12 +30,12 @@ public:
     virtual QModelIndex parent ( const QModelIndex & index ) const;
     virtual int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
 
-    void setSurvexData(cwSurvexGlobalData* data);
+    void setSurvexData(cwTreeImportData* data);
 
-    cwSurvexBlockData* toBlockData(const QModelIndex& index) const;
-    cwSurveyChunk* surveyChunk(cwSurvexBlockData* parentBlock, int shotIndex);
+    cwTreeImportDataNode* toBlockData(const QModelIndex& index) const;
+    cwSurveyChunk* surveyChunk(cwTreeImportDataNode* parentBlock, int shotIndex);
 
-    QModelIndex toIndex(cwSurvexBlockData* block);
+    QModelIndex toIndex(cwTreeImportDataNode* block);
 
 signals:
 
@@ -54,13 +54,13 @@ private:
         Invalid
     };
 
-    cwSurvexGlobalData* GlobalData;
+    cwTreeImportData* GlobalData;
 
     QVariant NameColumnData(const QModelIndex & index, int role) const;
     QVariant NameColumnDisplayData(const QModelIndex& index) const;
     QVariant NameColumnIconData(const QModelIndex& index) const;
 
-    void connectBlock(cwSurvexBlockData* block);
+    void connectBlock(cwTreeImportDataNode* block);
 
     bool isBlock(const QModelIndex& index) const;
     bool isShot(const QModelIndex& index) const;

@@ -21,7 +21,7 @@ class QAction;
 #include <QItemSelection>
 #include <QDebug>
 
-class cwImportSurvexDialog :
+class cwImportTreeDataDialog :
         public QDialog,
         public cwUndoer,
         private Ui::cwImportSurvexDialog
@@ -34,8 +34,8 @@ public:
         QString errorsLabel;
     };
 
-    explicit cwImportSurvexDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
-    virtual ~cwImportSurvexDialog();
+    explicit cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
+    virtual ~cwImportTreeDataDialog();
 
     void open();
 
