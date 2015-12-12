@@ -27,7 +27,7 @@ public:
     virtual cwTreeImportData* data();
 
 public slots:
-    virtual void setSurvexFile(QString filename);
+    virtual void setInputFiles(QStringList filenames) = 0;
 
 protected:
     virtual void runTask();

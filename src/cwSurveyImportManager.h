@@ -46,6 +46,7 @@ public:
 
     Q_INVOKABLE void importSurvex();
     Q_INVOKABLE void importWalls();
+    Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
 
 signals:

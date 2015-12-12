@@ -36,7 +36,9 @@ cwSurvexImporter::cwSurvexImporter(QObject* parent) :
 }
 
 void cwSurvexImporter::runTask() {
-    importSurvex(RootFilename);
+    if (!RootFilenames.isEmpty()) {
+        importSurvex(RootFilenames[0]);
+    }
     done();
 }
 

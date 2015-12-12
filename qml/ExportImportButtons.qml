@@ -220,6 +220,11 @@ Item {
                     text: "Walls (.wpj)"
                     onTriggered: rootData.surveyImportManager.importWalls()
                 }
+
+                Controls.MenuItem {
+                    text: "Walls (.srv)"
+                    onTriggered: rootData.surveyImportManager.importWallsSrv()
+                }
             }
         }
     }

@@ -84,7 +84,7 @@ signals:
 
 public slots:
     void emitMessage(WallsMessage message);
-    void setSurvexFile(QString filename);
+    void setInputFiles(QStringList filenames);
 
 protected:
     bool verifyFileExists(QString filename, Segment segment);
@@ -92,7 +92,7 @@ protected:
 
 private:
     virtual void runTask();
-    void importWalls(QString filename);
+    void importWalls(QStringList filenames);
     void clear();
 
     cwTreeImportDataNode* convertEntry(WpjEntryPtr entry);
@@ -103,7 +103,7 @@ private:
 
     void addError(WallsMessage message);
 
-    QString RootFilename;
+    QStringList RootFilenames;
 
     cwWallsImportData* GlobalData;
 
@@ -125,8 +125,8 @@ inline cwTreeImportData* cwWallsImporter::data() {
 /**
   \brief Sets the root file for the survex
   */
-inline void cwWallsImporter::setSurvexFile(QString filename) {
-    RootFilename = filename;
+inline void cwWallsImporter::setInputFiles(QStringList filenames) {
+    RootFilenames = filenames;
 }
 
 #endif // CWWALLSIMPORTER_H

@@ -38,7 +38,7 @@ public:
     cwTreeImportData* data();
 
 public slots:
-    void setSurvexFile(QString filename);
+    void setInputFiles(QStringList filenames);
 
 protected:
     virtual void runTask();
@@ -100,7 +100,7 @@ private:
     };
 
     //Root filename
-    QString RootFilename;
+    QStringList RootFilenames;
 
     //File state to handle includes
     QList<Include> IncludeStack;
@@ -202,8 +202,8 @@ inline bool cwSurvexImporter::compare(QString s1, QString s2) const {
 /**
   \brief Sets the root file for the survex
   */
-inline void cwSurvexImporter::setSurvexFile(QString filename) {
-    RootFilename = filename;
+inline void cwSurvexImporter::setInputFiles(QStringList filenames) {
+    RootFilenames = filenames;
 }
 
 #endif // CWSURVEYIMPORTER_H

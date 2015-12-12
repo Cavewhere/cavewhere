@@ -69,7 +69,7 @@ void cwSurveyImportManager::importSurvex() {
         survexImportDialog->setUndoStack(UndoStack);
         survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         survexImportDialog->open();
-        survexImportDialog->setSurvexFile(filename);
+        survexImportDialog->setInputFiles(QStringList({filename}));
     }
 }
 
@@ -146,7 +146,23 @@ void cwSurveyImportManager::importWalls() {
         wallsImportDialog->setUndoStack(UndoStack);
         wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         wallsImportDialog->open();
-        wallsImportDialog->setSurvexFile(filename);
+        wallsImportDialog->setInputFiles(QStringList({filename}));
+    }
+}
+
+void cwSurveyImportManager::importWallsSrv() {
+    QSettings settings;
+    QString lastDir = settings.value(ImportWallsKey).toString();
+    QStringList filenames = QFileDialog::getOpenFileNames(nullptr, "Import Walls", lastDir, "Walls *.srv");
+
+    if (!filenames.isEmpty()) {
+        settings.setValue(ImportWallsKey, filenames[0]);
+        cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
+        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
+        wallsImportDialog->setUndoStack(UndoStack);
+        wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        wallsImportDialog->open();
+        wallsImportDialog->setInputFiles(filenames);
     }
 }
 

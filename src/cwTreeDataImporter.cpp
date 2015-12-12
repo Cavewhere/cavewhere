@@ -26,11 +26,6 @@ cwTreeImportData* cwTreeDataImporter::data()
     return nullptr;
 }
 
-void cwTreeDataImporter::setSurvexFile(QString filename)
-{
-    Q_UNUSED(filename);
-}
-
 void cwTreeDataImporter::runTask()
 {
 

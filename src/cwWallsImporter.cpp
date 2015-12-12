@@ -286,7 +286,7 @@ void cwWallsImporter::importCalibrations(const WallsUnits units, cwTrip &trip)
 
 
 void cwWallsImporter::runTask() {
-    importWalls(RootFilename);
+    importWalls(RootFilenames);
     done();
 }
 
@@ -314,20 +314,47 @@ void cwWallsImporter::clear() {
     StationMap.clear();
 }
 
-void cwWallsImporter::importWalls(QString filename) {
+void cwWallsImporter::importWalls(QStringList filenames) {
     clear();
 
-    WallsProjectParser projParser;
-    QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::emitMessage);
+    cwTreeImportDataNode* rootBlock = new cwTreeImportDataNode(nullptr);
 
-    WpjBookPtr rootBook = projParser.parseFile(filename);
-    cwTreeImportDataNode* rootBlock = convertEntry(rootBook);
-    if (rootBlock != nullptr) {
-        applyLRUDs(rootBlock);
-        QList<cwTreeImportDataNode*> blocks;
-        blocks << rootBlock;
-        GlobalData->setBlocks(blocks);
+    foreach(QString filename, filenames) {
+        cwTreeImportDataNode* block;
+        QFileInfo info(filename);
+        if (info.suffix().compare("srv", Qt::CaseInsensitive) == 0) {
+            WpjEntryPtr entry(new WpjEntry(WpjBookPtr(), info.baseName()));
+            entry->Path = info.absolutePath();
+            entry->Name = info.baseName();
+            block = convertSurvey(entry);
+        }
+        else {
+            WallsProjectParser projParser;
+            QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::emitMessage);
+
+            WpjBookPtr rootBook = projParser.parseFile(filename);
+            block = convertEntry(rootBook);
+        }
+        if (block != nullptr) {
+            applyLRUDs(block);
+            rootBlock->addChildBlock(block);
+        }
     }
+
+    QList<cwTreeImportDataNode*> blocks;
+    if (rootBlock->childBlockCount() == 1) {
+        rootBlock->childBlock(0)->setParent(nullptr);
+        blocks << rootBlock->childBlock(0);
+        delete rootBlock;
+        rootBlock = blocks[0];
+    }
+    else {
+        blocks << rootBlock;
+    }
+    if (rootBlock->name().isEmpty()) {
+        rootBlock->setName("Walls Import");
+    }
+    GlobalData->setBlocks(blocks);
 }
 
 void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {

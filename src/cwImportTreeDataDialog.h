@@ -40,7 +40,7 @@ public:
     void open();
 
 public slots:
-    void setSurvexFile(QString filename);
+    void setInputFiles(QStringList filenames);
 
 protected:
     void changeEvent(QEvent *e);

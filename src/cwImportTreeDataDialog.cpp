@@ -88,9 +88,9 @@ void cwImportTreeDataDialog::open() {
 /**
   \brief The survex file that'll be opened
   */
-void cwImportTreeDataDialog::setSurvexFile(QString filename) {
+void cwImportTreeDataDialog::setInputFiles(QStringList filenames) {
     //The root filename
-    FullFilename = filename;
+    FullFilename = filenames.isEmpty() ? "" : filenames[0];
 
     //Show a progress dialog
     cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog(this);
@@ -99,7 +99,7 @@ void cwImportTreeDataDialog::setSurvexFile(QString filename) {
     progressDialog->show();
 
     //Run the importer on another thread
-    QMetaObject::invokeMethod(Importer, "setSurvexFile", Q_ARG(QString, filename));
+    QMetaObject::invokeMethod(Importer, "setInputFiles", Q_ARG(QStringList, filenames));
     Importer->start();
 }
 
