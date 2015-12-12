@@ -7,8 +7,7 @@
 
 //Our includes
 #include "cwImportTreeDataDialog.h"
-#include "cwSurvexImporterModel.h"
-#include "cwSurvexImporter.h"
+#include "cwTreeDataImporterModel.h"
 #include "cwTreeDataImporter.h"
 #include "cwGlobalIcons.h"
 #include "cwTreeImportDataNode.h"
@@ -30,13 +29,11 @@
 cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
     Region(region),
-    Model(new cwSurvexImporterModel(this)),
+    Model(new cwTreeDataImporterModel(this)),
     Importer(importer),
     SurvexSelectionModel(new QItemSelectionModel(Model, this)),
     ImportThread(new QThread(this))
 {
-    SurvexErrorsText = names.errorsLabel;
-
     setupUi(this);
     setupTypeComboBox();
 
@@ -208,7 +205,7 @@ void cwImportTreeDataDialog::updateCurrentItem(QItemSelection selected, QItemSel
     if(selectedIndexes.size() == 1) {
         //Only one item selected
         QModelIndex index = selectedIndexes.first();
-        cwTreeImportDataNode* block = Model->toBlockData(index);
+        cwTreeImportDataNode* block = Model->toNode(index);
         if(block != nullptr) {
 
             //Set the index of the combo box
@@ -243,7 +240,7 @@ void cwImportTreeDataDialog::setType(int index) {
     QModelIndexList selectedIndexes = SurvexSelectionModel->selectedIndexes();
 
     foreach(QModelIndex currentIndex, selectedIndexes) {
-        cwTreeImportDataNode* block = Model->toBlockData(currentIndex);
+        cwTreeImportDataNode* block = Model->toNode(currentIndex);
 
         if(block != nullptr) {
             cwTreeImportDataNode::ImportType importType = (cwTreeImportDataNode::ImportType)typeItemToImportType((TypeItem)index);
@@ -308,7 +305,7 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
     Importer->setThread(thread(), Qt::BlockingQueuedConnection);
 
     //Get the importer's data
-    Model->setSurvexData(Importer->data());
+    Model->setTreeImportData(Importer->data());
 
     //Cutoff to long text
     QString cutOffText = FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());

@@ -65,7 +65,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
     loadFile(filename);
 
     //Add the rootBlocks to GlobalData
-    GlobalData->setBlocks(RootBlock->childBlocks());
+    GlobalData->setNodes(RootBlock->childNodes());
 
     saveLastImport(filename);
 
@@ -233,7 +233,7 @@ void cwSurvexImporter::parseLine(QString line) {
         newBlock->setName(blockName);
 
         //Add the block to the structure
-        CurrentBlock->addChildBlock(newBlock);
+        CurrentBlock->addChildNode(newBlock);
 
         //Copy the calibrations
         *(newBlock->calibration()) = *(CurrentBlock->calibration());
@@ -270,7 +270,7 @@ void cwSurvexImporter::parseLine(QString line) {
                 //Update the LRUD before getting out of this block
                 updateLRUDForCurrentBlock();
 
-                cwTreeImportDataNode* parentBlock = CurrentBlock->parentBlock();
+                cwTreeImportDataNode* parentBlock = CurrentBlock->parentNode();
                 if(parentBlock != nullptr) {
                     CurrentBlock = parentBlock;
                 }
@@ -620,12 +620,12 @@ QString cwSurvexImporter::fullStationName(QString name) {
     QLinkedList<QString> fullNameList;
 
     //While not the root element of the importer
-    while(current->parentBlock() != nullptr) {
+    while(current->parentNode() != nullptr) {
         QString blockName = current->name();
         if(!blockName.isEmpty()) {
             fullNameList.prepend(blockName);
         }
-        current = current->parentBlock();
+        current = current->parentNode();
     }
 
     QString fullName;

@@ -337,14 +337,14 @@ void cwWallsImporter::importWalls(QStringList filenames) {
         }
         if (block != nullptr) {
             applyLRUDs(block);
-            rootBlock->addChildBlock(block);
+            rootBlock->addChildNode(block);
         }
     }
 
     QList<cwTreeImportDataNode*> blocks;
-    if (rootBlock->childBlockCount() == 1) {
-        rootBlock->childBlock(0)->setParent(nullptr);
-        blocks << rootBlock->childBlock(0);
+    if (rootBlock->childNodeCount() == 1) {
+        rootBlock->childNode(0)->setParent(nullptr);
+        blocks << rootBlock->childNode(0);
         delete rootBlock;
         rootBlock = blocks[0];
     }
@@ -354,7 +354,7 @@ void cwWallsImporter::importWalls(QStringList filenames) {
     if (rootBlock->name().isEmpty()) {
         rootBlock->setName("Walls Import");
     }
-    GlobalData->setBlocks(blocks);
+    GlobalData->setNodes(blocks);
 }
 
 void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
@@ -370,7 +370,7 @@ void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
             }
         }
     }
-    foreach (cwTreeImportDataNode* childBlock, block->childBlocks())
+    foreach (cwTreeImportDataNode* childBlock, block->childNodes())
     {
         applyLRUDs(childBlock);
     }
@@ -397,7 +397,7 @@ cwTreeImportDataNode* cwWallsImporter::convertBook(WpjBookPtr book) {
         foreach (WpjEntryPtr child, book->Children) {
             cwTreeImportDataNode* childBlock = convertEntry(child);
             if (childBlock) {
-                result->addChildBlock(childBlock);
+                result->addChildNode(childBlock);
             }
         }
 

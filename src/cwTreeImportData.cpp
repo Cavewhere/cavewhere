@@ -19,18 +19,18 @@ cwTreeImportData::cwTreeImportData(QObject* parent) :
 
 }
 
-void cwTreeImportData::setBlocks(QList<cwTreeImportDataNode*> blocks) {
-    foreach(cwTreeImportDataNode* block, blocks) {
-        block->setParent(this);
-        block->setParentBlock(nullptr);
+void cwTreeImportData::setNodes(QList<cwTreeImportDataNode*> nodes) {
+    foreach(cwTreeImportDataNode* node, nodes) {
+        node->setParent(this);
+        node->setParentNode(nullptr);
     }
 
-    RootBlocks = blocks;
+    RootNodes = nodes;
 }
 
 /**
   \brief Get's the current errors
   */
-QStringList cwTreeImportData::erros() {
+QStringList cwTreeImportData::errors() {
     return QStringList();
 }

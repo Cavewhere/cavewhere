@@ -16,7 +16,7 @@ cwWallsImportData::cwWallsImportData(QObject* parent)
   */
 QList<cwCave*> cwWallsImportData::caves() {
     QList<cwCave*> caves;
-    foreach(cwTreeImportDataNode* block, blocks()) {
+    foreach(cwTreeImportDataNode* block, nodes()) {
         cavesHelper(&caves, block, nullptr, nullptr);
     }
 
@@ -103,7 +103,7 @@ void cwWallsImportData::cavesHelper(QList<cwCave*>* caves,
     }
 
     //Recusive call
-    foreach(cwTreeImportDataNode* childBlock, currentBlock->childBlocks()) {
+    foreach(cwTreeImportDataNode* childBlock, currentBlock->childNodes()) {
         cavesHelper(caves, childBlock, currentCave, currentTrip);
     }
 }

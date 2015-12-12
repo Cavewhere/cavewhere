@@ -14,7 +14,7 @@
 
 cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
     QObject(parent),
-    ParentBlock(nullptr),
+    ParentNode(nullptr),
     Type(NoImport),
     Team(new cwTeam(this)),
     Calibration(new cwTripCalibration(this)),
@@ -25,8 +25,8 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
 /**
   \brief Gets the survex block at index
   */
- cwTreeImportDataNode* cwTreeImportDataNode::childBlock(int index) {
-     return ChildBlocks[index];
+ cwTreeImportDataNode* cwTreeImportDataNode::childNode(int index) {
+     return ChildNodes[index];
  }
 
 /**
@@ -55,7 +55,7 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
          Type = type;
          emit importTypeChanged();
 
-         foreach(cwTreeImportDataNode* child, ChildBlocks) {
+         foreach(cwTreeImportDataNode* child, ChildNodes) {
              if(Type != NoImport) {
                  if(child->isTrip()) {
                      child->setImportType(Trip);
@@ -73,12 +73,12 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
    \brief Checks to see if this is a trip
    */
  bool cwTreeImportDataNode::isTrip() const {
-     cwTreeImportDataNode* parent = parentBlock();
+     cwTreeImportDataNode* parent = parentNode();
      while(parent != nullptr) {
          if(parent->importType() == Trip) {
              return false;
          }
-         parent = parent->parentBlock();
+         parent = parent->parentNode();
      }
 
      return !Chunks.isEmpty();
@@ -104,9 +104,9 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
  /**
    \brief Adds a child block to the data
    */
- void cwTreeImportDataNode::addChildBlock(cwTreeImportDataNode* blockData) {
-     blockData->ParentBlock = this;
-     ChildBlocks.append(blockData);
+ void cwTreeImportDataNode::addChildNode(cwTreeImportDataNode* blockData) {
+     blockData->ParentNode = this;
+     ChildNodes.append(blockData);
  }
 
  /**
@@ -133,7 +133,7 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
    */
  void cwTreeImportDataNode::clear() {
      Chunks.clear();
-     ChildBlocks.clear();
+     ChildNodes.clear();
  }
 
  /**

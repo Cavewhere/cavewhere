@@ -9,9 +9,9 @@
 #define CWIMPORTSURVEXDIALOG_H
 
 //Our includes
-#include "ui_cwImportSurvexDialog.h"
+#include "ui_cwImportTreeDataDialog.h"
 #include "cwUndoer.h"
-class cwSurvexImporterModel;
+class cwTreeDataImporterModel;
 class cwTreeDataImporter;
 class cwCavingRegion;
 
@@ -24,7 +24,7 @@ class QAction;
 class cwImportTreeDataDialog :
         public QDialog,
         public cwUndoer,
-        private Ui::cwImportSurvexDialog
+        private Ui::cwImportTreeDataDialog
 {
     Q_OBJECT
 
@@ -60,7 +60,7 @@ private:
 
     //Data stuff
     QString FullFilename;
-    cwSurvexImporterModel* Model;
+    cwTreeDataImporterModel* Model;
     cwTreeDataImporter* Importer;
     QItemSelectionModel* SurvexSelectionModel;
 

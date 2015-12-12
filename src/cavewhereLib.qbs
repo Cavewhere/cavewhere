@@ -165,8 +165,8 @@ DynamicLibrary {
     Group {
         name: "uiForms"
         files: [
-            "cwImportSurvexDialog.ui",
-            "cwTaskProgressDialog.ui"
+            "cwImportTreeDataDialog.ui",
+            "cwTaskProgressDialog.ui",
         ]
     }
 

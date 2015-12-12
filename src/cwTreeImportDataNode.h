@@ -45,13 +45,13 @@ public:
 
     void clear();
 
-    int childBlockCount();
-    cwTreeImportDataNode* childBlock(int index);
+    int childNodeCount();
+    cwTreeImportDataNode* childNode(int index);
 
     int chunkCount();
     cwSurveyChunk* chunk(int index);
 
-    cwTreeImportDataNode* parentBlock() const;
+    cwTreeImportDataNode* parentNode() const;
 
     void setName(QString name);
     QString name() const;
@@ -73,7 +73,7 @@ public:
     static QString importTypeToString(ImportType type);
 
     QList<cwSurveyChunk*> chunks();
-    QList<cwTreeImportDataNode*> childBlocks();
+    QList<cwTreeImportDataNode*> childNodes();
 
     int stationCount() const;
     cwStation station(int index) const;
@@ -93,10 +93,10 @@ signals:
 private:
     QList<cwSurveyChunk*> Chunks;
     QList<cwSurvexLRUDChunk> LRUDChunks;
-    QList<cwTreeImportDataNode*> ChildBlocks;
+    QList<cwTreeImportDataNode*> ChildNodes;
     QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
     QSet<QString> ExportStations; //Holds a station name that is exported for equates
-    cwTreeImportDataNode* ParentBlock;
+    cwTreeImportDataNode* ParentNode;
 
     //Mutible elements
     QString Name;
@@ -111,11 +111,11 @@ private:
     //For caves, used station names, and equating stations
     QMap<QString, QString> EquateMap;  //All stations get added to the map
 
-    void addChildBlock(cwTreeImportDataNode* blockData);
+    void addChildNode(cwTreeImportDataNode* blockData);
     void addChunk(cwSurveyChunk* chunk);
     void addLRUDChunk();
 
-    void setParentBlock(cwTreeImportDataNode* parentBlock);
+    void setParentNode(cwTreeImportDataNode* parentNode);
 
     bool isTrip() const;
 };
@@ -123,8 +123,8 @@ private:
 /**
   \brief Gets the number of child blocks
   */
-inline int cwTreeImportDataNode::childBlockCount() {
-    return ChildBlocks.size();
+inline int cwTreeImportDataNode::childNodeCount() {
+    return ChildNodes.size();
 }
 
 /**
@@ -160,22 +160,22 @@ inline QList<cwSurveyChunk*> cwTreeImportDataNode::chunks() {
 /**
   \brief Get's all the child blocks held by the this block
   */
-inline QList<cwTreeImportDataNode*> cwTreeImportDataNode::childBlocks() {
-    return ChildBlocks;
+inline QList<cwTreeImportDataNode*> cwTreeImportDataNode::childNodes() {
+    return ChildNodes;
 }
 
 /**
   \brief Get's the parent block
   */
-inline cwTreeImportDataNode* cwTreeImportDataNode::parentBlock() const {
-    return ParentBlock;
+inline cwTreeImportDataNode* cwTreeImportDataNode::parentNode() const {
+    return ParentNode;
 }
 
 /**
   \brief Set's the parent block
   */
-inline void cwTreeImportDataNode::setParentBlock(cwTreeImportDataNode* parentBlock) {
-    ParentBlock = parentBlock;
+inline void cwTreeImportDataNode::setParentNode(cwTreeImportDataNode* parentBlock) {
+    ParentNode = parentBlock;
 }
 
 inline cwTreeImportDataNode::ImportType cwTreeImportDataNode::importType() const {

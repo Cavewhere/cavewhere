@@ -26,19 +26,19 @@ class cwTreeImportData : public QObject
 public:
     cwTreeImportData(QObject* object);
 
-    QList<cwTreeImportDataNode*> blocks() const;
-    void setBlocks(QList<cwTreeImportDataNode*> blocks);
+    QList<cwTreeImportDataNode*> nodes() const;
+    void setNodes(QList<cwTreeImportDataNode*> nodes);
 
     virtual QList<cwCave*> caves() = 0;
-    QStringList erros();
+    QStringList errors();
 
 private:
-    QList<cwTreeImportDataNode*> RootBlocks;
+    QList<cwTreeImportDataNode*> RootNodes;
     QStringList ImportErrors;
 };
 
-inline QList<cwTreeImportDataNode*> cwTreeImportData::blocks() const {
-    return RootBlocks;
+inline QList<cwTreeImportDataNode*> cwTreeImportData::nodes() const {
+    return RootNodes;
 }
 
 

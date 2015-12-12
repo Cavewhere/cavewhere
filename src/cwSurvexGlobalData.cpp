@@ -24,7 +24,7 @@ cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
   */
 QList<cwCave*> cwSurvexGlobalData::caves() {
     QList<cwCave*> caves;
-    foreach(cwTreeImportDataNode* block, blocks()) {
+    foreach(cwTreeImportDataNode* block, nodes()) {
         cavesHelper(&caves, block, nullptr, nullptr);
     }
 
@@ -117,7 +117,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
     }
 
     //Recusive call
-    foreach(cwTreeImportDataNode* childBlock, currentBlock->childBlocks()) {
+    foreach(cwTreeImportDataNode* childBlock, currentBlock->childNodes()) {
         cavesHelper(caves, childBlock, currentCave, currentTrip);
     }
 }
@@ -139,7 +139,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
           current->name().isEmpty() &&
           current->importType() != cwTreeImportDataNode::Cave)
     {
-        current = current->parentBlock();
+        current = current->parentNode();
     }
 
     if(current != nullptr) {
@@ -159,7 +159,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
             }
         }
 
-        caveSurvexBlock = caveSurvexBlock->parentBlock();
+        caveSurvexBlock = caveSurvexBlock->parentNode();
     }
 
     //No cave block, just use the chunkblock, there's really only one trip
