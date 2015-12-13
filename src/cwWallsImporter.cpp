@@ -65,7 +65,9 @@ void WallsImporterVisitor::parsedFixStation(FixStation station)
 {
     Q_UNUSED(station);
     ensureValidTrip();
-    // TODO
+    if (Importer->shouldWarn(cwWallsImporter::CANT_IMPORT_FIX_STATIONS)) {
+        message(WallsMessage("warning", "This data contains #FIX stations, which can't currently be imported into Cavewhere"));
+    }
 }
 
 void WallsImporterVisitor::parsedVector(Vector v)
@@ -75,7 +77,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     WallsUnits units = v.units();
 
-    cwStation fromStation = Importer->StationRenamer.createStation(units.processStationName(v.from()));
+    cwStation fromStation = Importer->createStation(units.processStationName(v.from()));
     cwStation toStation;
     cwShot shot;
 
@@ -94,7 +96,7 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     if (v.distance().isValid())
     {
-        toStation = Importer->StationRenamer.createStation(units.processStationName(v.to()));
+        toStation = Importer->createStation(units.processStationName(v.to()));
 
         // apply Walls corrections that Cavewhere doesn't support
         v.applyHeightCorrections();
@@ -265,8 +267,28 @@ void WallsImporterVisitor::message(WallsMessage message)
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
     cwTreeDataImporter(parent),
-    GlobalData(new cwWallsImportData(this))
+    GlobalData(new cwWallsImportData(this)),
+    EmittedWarnings()
 {
+}
+
+bool cwWallsImporter::shouldWarn(WarningType type, bool condition)
+{
+    if (condition && !EmittedWarnings.contains(type)) {
+        EmittedWarnings << type;
+        return true;
+    }
+    return false;
+}
+
+cwStation cwWallsImporter::createStation(QString name)
+{
+    cwStation station = StationRenamer.createStation(name);
+    if (shouldWarn(STATION_RENAMED, name != station.name())) {
+        emitMessage(WallsMessage("warning",
+                             QString("Some stations in the imported data had to be renamed to comply with Cavewhere station name restrictions (for instance: %1 -> %2)").arg(name, station.name())));
+    }
+    return station;
 }
 
 void cwWallsImporter::importCalibrations(const WallsUnits units, cwTrip &trip)
@@ -379,6 +401,9 @@ void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
 cwTreeImportDataNode* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
     if (entry.isNull()) {
         return nullptr;
+    }
+    if (shouldWarn(CANT_IMPORT_REFS, !entry->reference().isNull())) {
+        emitMessage(WallsMessage("warning", "This data contains geographic references, which can't currently be imported into Cavewhere"));
     }
     if (entry->isBook()) {
         return convertBook(entry.staticCast<WpjBook>());

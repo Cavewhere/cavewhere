@@ -16,6 +16,7 @@
 #include <QObject>
 #include <QRegExp>
 #include <QStringList>
+#include <QSet>
 class QFile;
 
 class cwTreeImportDataNode;
@@ -68,6 +69,12 @@ class cwWallsImporter : public cwTreeDataImporter
 {
     Q_OBJECT
 public:
+    enum WarningType {
+        CANT_IMPORT_FIX_STATIONS = 1,
+        CANT_IMPORT_REFS = 2,
+        STATION_RENAMED = 3,
+    };
+
     explicit cwWallsImporter(QObject *parent = 0);
 
     friend class WallsImporterVisitor;
@@ -103,6 +110,8 @@ private:
 
     void addError(WallsMessage message);
 
+    cwStation createStation(QString name);
+
     QStringList RootFilenames;
 
     cwWallsImportData* GlobalData;
@@ -113,6 +122,10 @@ private:
     cwStationRenamer StationRenamer;
     QHash<QString, QDate> StationDates;
     QHash<QString, cwStation> StationMap; // used to apply station-only LRUD lines
+
+    QSet<WarningType> EmittedWarnings;
+
+    bool shouldWarn(WarningType type, bool condition = true);
 };
 
 /**
