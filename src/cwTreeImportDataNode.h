@@ -56,12 +56,6 @@ public:
     void setName(QString name);
     QString name() const;
 
-    void addToEquated(QStringList stationNames);
-    QStringList equatedStations(QString fullStationName) const;
-
-    void addExportStations(QStringList exportStations);
-    QStringList exportStations() const;
-
     void setDate(QDate date);
     QDate date() const;
 
@@ -92,10 +86,7 @@ signals:
 
 private:
     QList<cwSurveyChunk*> Chunks;
-    QList<cwSurvexLRUDChunk> LRUDChunks;
     QList<cwTreeImportDataNode*> ChildNodes;
-    QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
-    QSet<QString> ExportStations; //Holds a station name that is exported for equates
     cwTreeImportDataNode* ParentNode;
 
     //Mutible elements
@@ -108,12 +99,8 @@ private:
 
     bool IncludeDistance;
 
-    //For caves, used station names, and equating stations
-    QMap<QString, QString> EquateMap;  //All stations get added to the map
-
     void addChildNode(cwTreeImportDataNode* blockData);
     void addChunk(cwSurveyChunk* chunk);
-    void addLRUDChunk();
 
     void setParentNode(cwTreeImportDataNode* parentNode);
 
@@ -140,15 +127,6 @@ inline int cwTreeImportDataNode::chunkCount() {
 inline QString cwTreeImportDataNode::name() const {
     return Name;
 }
-
-/**
- * @brief cwSurvexBlockData::addToEquated
- * @param adds a list of stationNames that are equal to each other.
- */
-inline void cwTreeImportDataNode::addToEquated(QStringList stationNames) {
-    EqualStations.append(stationNames);
-}
-
 
 /**
   \brief Get's all the chunks held by the block
@@ -208,15 +186,6 @@ inline cwTeam* cwTreeImportDataNode::team() const {
   */
 inline cwTripCalibration* cwTreeImportDataNode::calibration() const {
     return Calibration;
-}
-
-/**
- * @brief cwSurvexBlockData::exportStations
- * @return All the export stations in this block
- */
-inline QStringList cwTreeImportDataNode::exportStations() const
-{
-    return QStringList(ExportStations.toList());
 }
 
 /**

@@ -22,6 +22,7 @@
 #include "cwSurvexGlobalData.h"
 class cwSurveyChunk;
 class cwShot;
+class cwSurvexNodeData;
 
 class cwSurvexImporter : public cwTreeDataImporter
 {
@@ -116,6 +117,8 @@ private:
     cwTreeImportDataNode* CurrentBlock; //The current block
     cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
 
+    cwSurvexNodeData* nodeData(cwTreeImportDataNode* node);
+
     QStringList Errors;
 
     State CurrentState;
@@ -204,6 +207,10 @@ inline bool cwSurvexImporter::compare(QString s1, QString s2) const {
   */
 inline void cwSurvexImporter::setInputFiles(QStringList filenames) {
     RootFilenames = filenames;
+}
+
+inline cwSurvexNodeData* cwSurvexImporter::nodeData(cwTreeImportDataNode* node) {
+    return GlobalData->nodeData(node);
 }
 
 #endif // CWSURVEYIMPORTER_H

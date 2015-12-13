@@ -118,15 +118,6 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
  }
 
  /**
-  * @brief cwSurvexBlockData::addLRUDChunk
-  * This creates a new LRUD chunk
-  */
- void cwTreeImportDataNode::addLRUDChunk()
- {
-     LRUDChunks.append(cwSurvexLRUDChunk());
- }
-
- /**
    \brief Clears the data from this object
 
    This will delete the block, if they're still owned by this object
@@ -197,36 +188,5 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
      }
      return -1;
  }
-
-
- /**
-  * @brief cwSurvexBlockData::equatedStations
-  * @return
-  */
- QStringList cwTreeImportDataNode::equatedStations(QString stationName) const
- {
-     QStringList equatedStations;
-     foreach(QStringList stations, EqualStations) {
-         if(stations.contains(stationName)) {
-             equatedStations.append(stations);
-         }
-     }
-
-     return equatedStations;
- }
-
- /**
-  * @brief cwSurvexBlockData::addExportStations
-  * @param exportStations
-  *
-  * Appends the export stations to the export station list
-  */
- void cwTreeImportDataNode::addExportStations(QStringList exportStations)
- {
-     foreach(QString station, exportStations) {
-         ExportStations.insert(station);
-     }
- }
-
 
 

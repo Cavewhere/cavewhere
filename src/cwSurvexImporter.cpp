@@ -14,6 +14,7 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurvexLRUDChunk.h"
+#include "cwSurvexNodeData.h"
 
 //Qt includes
 #include <QFile>
@@ -387,7 +388,7 @@ void cwSurvexImporter::parseDataFormat(QString line) {
         setCurrentDataEntryType(Normal);
     } else if(compare(dataFormatType, "passage")) {
         setCurrentDataEntryType(Passage);
-        CurrentBlock->addLRUDChunk();
+        nodeData(CurrentBlock)->addLRUDChunk();
     } else if(compare(dataFormatType, "nosurvey")) {
         setCurrentDataEntryType(NoSurvey);
     } else {
@@ -603,7 +604,7 @@ void cwSurvexImporter::parsePassageData(QString line) {
     station.setDown(extractData(data, Down));
 
     //Add the station to the current LRUD chunk
-    CurrentBlock->LRUDChunks.last().Stations.append(station);
+    nodeData(CurrentBlock)->LRUDChunks.last().Stations.append(station);
 }
 
 /**
@@ -886,7 +887,7 @@ void cwSurvexImporter::parseEquate(QString line)
         return;
     }
 
-    CurrentBlock->addToEquated(equalStations);
+    nodeData(CurrentBlock)->addToEquated(equalStations);
 }
 
 /**
@@ -898,7 +899,7 @@ void cwSurvexImporter::parseEquate(QString line)
 void cwSurvexImporter::parseExport(QString line)
 {
     QStringList stations = line.split(QRegExp("\\s+"));
-    CurrentBlock->addExportStations(stations);
+    nodeData(CurrentBlock)->addExportStations(stations);
 }
 
 /**
@@ -987,7 +988,7 @@ void cwSurvexImporter::runStats(QString filename) {
  */
 void cwSurvexImporter::updateLRUDForCurrentBlock() {
 
-    foreach(cwSurvexLRUDChunk lrudChunk, CurrentBlock->LRUDChunks) {
+    foreach(cwSurvexLRUDChunk lrudChunk, nodeData(CurrentBlock)->LRUDChunks) {
         QList<cwStation> stations = lrudChunk.Stations;
         for(int i = 0; i < stations.size(); i++) {
             int before = i - 1;

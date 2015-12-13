@@ -15,8 +15,10 @@ class cwTrip;
 class cwSurveyChunk;
 #include "cwStation.h"
 #include "cwUndoer.h"
+class cwSurvexNodeData;
 
 //Qt includes
+#include <QHash>
 #include <QObject>
 #include <QList>
 #include <QStringList>
@@ -28,14 +30,18 @@ public:
 
     QList<cwCave*> caves();
 
+    cwSurvexNodeData* nodeData(cwTreeImportDataNode* node);
+
 private:
+    QHash<cwTreeImportDataNode*, cwSurvexNodeData*> NodeData;
+
     void cavesHelper(QList<cwCave*>* caves, cwTreeImportDataNode* currentBlock, cwCave* currentCave, cwTrip* trip);
 
     void fixStationNames(cwSurveyChunk* chunk, cwTreeImportDataNode* currentBlock);
     void fixDuplicatedStationInShot(cwSurveyChunk* chunk, cwTreeImportDataNode* caveSurvexBlock);
 
     void populateEquateMap(cwTreeImportDataNode* block);
-    QString generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock) const;
+    QString generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock);
 };
 
 #endif // CWSURVEXGLOBALDATA_H

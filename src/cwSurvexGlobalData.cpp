@@ -12,11 +12,21 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwDebug.h"
+#include "cwSurvexNodeData.h"
 
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
-    cwTreeImportData(parent)
+    cwTreeImportData(parent), NodeData()
 {
 
+}
+
+cwSurvexNodeData* cwSurvexGlobalData::nodeData(cwTreeImportDataNode *node)
+{
+    if (!NodeData.contains(node)) {
+        cwSurvexNodeData* result = new cwSurvexNodeData(node);
+        NodeData[node] = result;
+    }
+    return NodeData[node];
 }
 
 /**
@@ -133,6 +143,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataNode *chunkBlock)
 {
     cwTreeImportDataNode* current = chunkBlock;
+    auto chunkData = nodeData(chunkBlock);
 
     //Move to block that has a name
     while(current != nullptr &&
@@ -168,6 +179,8 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
         caveSurvexBlock = chunkBlock;
     }
 
+    auto caveSurvexData = nodeData(caveSurvexBlock);
+
 
     //Go through all the stations and fix the station names
     for(int i = 0; i < chunk->stationCount(); i++) {
@@ -175,13 +188,13 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
         chunk->setStation(station, i);
 
         //See if the station is exported
-        if(chunkBlock->ExportStations.contains(station.name())) {
+        if(chunkData->ExportStations.contains(station.name())) {
             QString fullStationName = stationPrefix + station.name();
 
             //See if the station needs to be converted
-            if(caveSurvexBlock->EquateMap.contains(fullStationName)) {
+            if(caveSurvexData->EquateMap.contains(fullStationName)) {
                 //Chance the station name
-                QString mappedStationName = caveSurvexBlock->EquateMap.value(fullStationName);
+                QString mappedStationName = caveSurvexData->EquateMap.value(fullStationName);
 
                 station.setName(mappedStationName);
                 chunk->setStation(station, i);
@@ -191,15 +204,15 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
             }
         } else {
             //See if the station exists for the know stations for the cave
-            if(caveSurvexBlock->EquateMap.contains(station.name())) {
+            if(caveSurvexData->EquateMap.contains(station.name())) {
 
                 //Station name already exist
                 QString newStationName;
 
                 //See if the station is already been used survey block
-                if(chunkBlock->EquateMap.contains(station.name())) {
+                if(chunkData->EquateMap.contains(station.name())) {
                     //Station name is good!
-                    newStationName = chunkBlock->EquateMap.value(station.name());
+                    newStationName = chunkData->EquateMap.value(station.name());
                 } else {
                     //Duplicate station name!
                     newStationName = generateUniqueStationName(station.name(), caveSurvexBlock);
@@ -209,7 +222,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
                 chunk->setStation(station, i);
 
                 //Update the station for the trip block
-                chunkBlock->EquateMap.insert(station.name(), newStationName);
+                chunkData->EquateMap.insert(station.name(), newStationName);
 
             } else {
 
@@ -222,8 +235,8 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
 
                 //Add the station to the station cave lookup
                 //Doesn't exist in the cave or the current trip
-                chunkBlock->EquateMap.insert(fullStationName, station.name());
-                caveSurvexBlock->EquateMap.insert(fullStationName, station.name());
+                chunkData->EquateMap.insert(fullStationName, station.name());
+                caveSurvexData->EquateMap.insert(fullStationName, station.name());
             }
         }
     }
@@ -259,7 +272,8 @@ void cwSurvexGlobalData::fixDuplicatedStationInShot(cwSurveyChunk *chunk, cwTree
  */
 void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
 {
-    foreach(QStringList equateList, block->EqualStations) {
+    auto blockData = nodeData(block);
+    foreach(QStringList equateList, blockData->EqualStations) {
         if(equateList.size() < 2) {
             continue;
         }
@@ -267,8 +281,8 @@ void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
         //Find the best station
         QString bestStationName;
         foreach(QString name, equateList) {
-            if(block->EquateMap.contains(name) && bestStationName.isEmpty()) {
-                bestStationName = block->EquateMap.value(name);
+            if(blockData->EquateMap.contains(name) && bestStationName.isEmpty()) {
+                bestStationName = blockData->EquateMap.value(name);
                 break;
 //            } else if(block->EquateMap.contains(name)) {
                 //There's 3 or more equates linking a bunch of stations together
@@ -285,7 +299,7 @@ void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
         bestStationName = bestStationName.split(".").last();
 
         foreach(QString name, equateList) {
-            block->EquateMap.insert(name, bestStationName);
+            blockData->EquateMap.insert(name, bestStationName);
         }
     }
 
@@ -296,10 +310,11 @@ void cwSurvexGlobalData::populateEquateMap(cwTreeImportDataNode *block)
  * @param oldStationName
  * @return This will add 'x' to the end oldStationName until it is unique to the cave
  */
-QString cwSurvexGlobalData::generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock) const
+QString cwSurvexGlobalData::generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock)
 {
     QString newStationName = oldStationName + "x";
-    while(caveSurvexBlock->EquateMap.contains(newStationName)) {
+    auto caveSurvexData = nodeData(caveSurvexBlock);
+    while(caveSurvexData->EquateMap.contains(newStationName)) {
         newStationName = newStationName + "x";
     }
     return newStationName;
