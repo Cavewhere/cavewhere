@@ -143,7 +143,6 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataNode *chunkBlock)
 {
     cwTreeImportDataNode* current = chunkBlock;
-    auto chunkData = nodeData(chunkBlock);
 
     //Move to block that has a name
     while(current != nullptr &&
@@ -156,6 +155,7 @@ void cwSurvexGlobalData::fixStationNames(cwSurveyChunk *chunk, cwTreeImportDataN
     if(current != nullptr) {
         chunkBlock = current;
     }
+    auto chunkData = nodeData(chunkBlock);
 
     QString stationPrefix;
 
