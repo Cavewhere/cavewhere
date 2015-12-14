@@ -7,6 +7,8 @@
 typedef UnitizedDouble<Length> ULength;
 typedef UnitizedDouble<Angle> UAngle;
 
+using namespace dewalls;
+
 TEST_CASE( "importCalibrations", "[cwWallsImporter]" ) {
     WallsUnits units;
     cwTrip trip;

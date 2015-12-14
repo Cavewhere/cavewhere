@@ -69,7 +69,9 @@ void cwSurveyImportManager::importSurvex() {
         survexImportDialog->setUndoStack(UndoStack);
         survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         survexImportDialog->open();
-        survexImportDialog->setInputFiles(QStringList({filename}));
+        QStringList files;
+        files << filename;
+        survexImportDialog->setInputFiles(files);
     }
 }
 
@@ -146,7 +148,9 @@ void cwSurveyImportManager::importWalls() {
         wallsImportDialog->setUndoStack(UndoStack);
         wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
         wallsImportDialog->open();
-        wallsImportDialog->setInputFiles(QStringList({filename}));
+        QStringList files;
+        files << filename;
+        wallsImportDialog->setInputFiles(files);
     }
 }
 

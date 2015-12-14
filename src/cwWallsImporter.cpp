@@ -1,6 +1,5 @@
 #include "cwWallsImporter.h"
 
-#include "cwTrip.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunk.h"

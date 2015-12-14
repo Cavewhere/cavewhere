@@ -5,6 +5,7 @@
 #include "cwTreeDataImporter.h"
 #include "cwWallsImportData.h"
 #include "cwCave.h"
+#include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwStationRenamer.h"
 #include "wallsunits.h"
@@ -84,7 +85,7 @@ public:
 
     cwTreeImportData* data();
 
-    static void importCalibrations(WallsUnits units, cwTrip& trip);
+    static void CAVEWHERE_LIB_EXPORT importCalibrations(const WallsUnits units, cwTrip& trip);
 
 signals:
     void message(WallsMessage message);
