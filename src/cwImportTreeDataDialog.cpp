@@ -35,6 +35,9 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
     ImportThread(new QThread(this))
 {
     setupUi(this);
+    tabWidget->setTabText(tabWidget->indexOf(SurvexErrorsWidget), QApplication::translate("cwImportTreeDataDialog",
+                                                                                          names.errorsLabel.toLocal8Bit().constData(), 0));
+
     setupTypeComboBox();
 
     //Move the importer to another thread
