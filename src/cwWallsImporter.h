@@ -87,7 +87,7 @@ public:
 
     cwTreeImportData* data();
 
-    static void CAVEWHERE_LIB_EXPORT importCalibrations(const WallsUnits units, cwTrip& trip);
+    static void importCalibrations(const WallsUnits units, cwTrip& trip);
 
 public slots:
     void setInputFiles(QStringList filenames);
