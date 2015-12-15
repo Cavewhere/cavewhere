@@ -31,8 +31,8 @@ Q_OBJECT
 public:
     cwSurvexImporter(QObject* parent = nullptr);
 
-    bool hasErrors();
-    QStringList errors();
+    bool hasParseErrors();
+    QStringList parseErrors();
 
     QString lastImport();
 

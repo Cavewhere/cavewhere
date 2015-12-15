@@ -66,7 +66,7 @@ void WallsImporterVisitor::parsedFixStation(FixStation station)
     Q_UNUSED(station);
     ensureValidTrip();
     if (Importer->shouldWarn(cwWallsImporter::CANT_IMPORT_FIX_STATIONS)) {
-        message(WallsMessage("warning", "This data contains #FIX stations, which can't currently be imported into Cavewhere"));
+        Importer->addImportError(WallsMessage("warning", "This data contains #FIX stations, which can't currently be imported into Cavewhere"));
     }
 }
 
@@ -262,7 +262,7 @@ void WallsImporterVisitor::parsedComment(QString comment)
 
 void WallsImporterVisitor::message(WallsMessage message)
 {
-    Importer->addError(message);
+    Importer->addParseError(message);
 }
 
 cwWallsImporter::cwWallsImporter(QObject *parent) :
@@ -285,7 +285,7 @@ cwStation cwWallsImporter::createStation(QString name)
 {
     cwStation station = StationRenamer.createStation(name);
     if (shouldWarn(STATION_RENAMED, name != station.name())) {
-        emitMessage(WallsMessage("warning",
+        addImportError(WallsMessage("warning",
                              QString("Some stations in the imported data had to be renamed to comply with Cavewhere station name restrictions (for instance: %1 -> %2)").arg(name, station.name())));
     }
     return station;
@@ -316,23 +316,41 @@ void cwWallsImporter::runTask() {
   \brief Returns true if errors have accured.
   \returns The list of errors
   */
-bool cwWallsImporter::hasErrors() {
-    return !Errors.isEmpty();
+bool cwWallsImporter::hasParseErrors() {
+    return !ParseErrors.isEmpty();
 }
 
 /**
   \brief Gets the errors of the importer
   \return Returns the errors if any.  Will be empty if HasErrors() returns false
   */
-QStringList cwWallsImporter::errors() {
-    return Errors;
+QStringList cwWallsImporter::parseErrors() {
+    return ParseErrors;
+}
+
+/**
+  \brief Returns true if errors have accured.
+  \returns The list of errors
+  */
+bool cwWallsImporter::hasImportErrors() {
+    return !ImportErrors.isEmpty();
+}
+
+/**
+  \brief Gets the errors of the importer
+  \return Returns the errors if any.  Will be empty if HasErrors() returns false
+  */
+QStringList cwWallsImporter::importErrors() {
+    return ImportErrors;
 }
 
 /**
   \brief Clears all the current data in the object
   */
 void cwWallsImporter::clear() {
-    Errors.clear();
+    ParseErrors.clear();
+    ImportErrors.clear();
+    EmittedWarnings.clear();
     StationMap.clear();
 }
 
@@ -352,7 +370,7 @@ void cwWallsImporter::importWalls(QStringList filenames) {
         }
         else {
             WallsProjectParser projParser;
-            QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::emitMessage);
+            QObject::connect(&projParser, &WallsProjectParser::message, this, &cwWallsImporter::addParseError);
 
             WpjBookPtr rootBook = projParser.parseFile(filename);
             block = convertEntry(rootBook);
@@ -403,7 +421,7 @@ cwTreeImportDataNode* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
         return nullptr;
     }
     if (shouldWarn(CANT_IMPORT_REFS, !entry->reference().isNull())) {
-        emitMessage(WallsMessage("warning", "This data contains geographic references, which can't currently be imported into Cavewhere"));
+        addImportError(WallsMessage("warning", "This data contains geographic references, which can't currently be imported into Cavewhere"));
     }
     if (entry->isBook()) {
         return convertBook(entry.staticCast<WpjBook>());
@@ -469,29 +487,28 @@ cwTreeImportDataNode* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
     }
 }
 
-void cwWallsImporter::emitMessage(WallsMessage _message)
+void cwWallsImporter::addParseError(WallsMessage _message)
 {
-    addError(_message);
+    ParseErrors << _message.toString();
 }
 
-void cwWallsImporter::addError(WallsMessage _message)
+void cwWallsImporter::addImportError(WallsMessage _message)
 {
-    Errors << _message.toString();
-    emit message(_message);
+    ImportErrors << _message.toString();
 }
 
 bool cwWallsImporter::verifyFileExists(QString filename, Segment segment)
 {
     QFileInfo fileInfo(filename);
     if(!fileInfo.exists()) {
-        addError(WallsMessage("error",
+        addParseError(WallsMessage("error",
                                  QString("file doesn't exist: %1").arg(filename),
                                  segment));
         return false;
     }
 
     if(!fileInfo.isReadable()) {
-        addError(WallsMessage("error",
+        addParseError(WallsMessage("error",
                                  QString("file isn't readable: %1").arg(filename),
                                  segment));
         return false;
@@ -517,7 +534,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     QFile file(filename);
     if (!file.open(QFile::ReadOnly))
     {
-        addError(WallsMessage("error",
+        addParseError(WallsMessage("error",
                               QString("couldn't open file %1: %2").arg(filename).arg(file.errorString()),
                               survey->Name));
         return false;
@@ -535,7 +552,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         }
         catch (const SegmentParseException& ex)
         {
-            addError(WallsMessage(ex));
+            addParseError(WallsMessage(ex));
             return false;
         }
     }
@@ -558,7 +575,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         line = line.trimmed();
         if (file.error() != QFile::NoError)
         {
-            addError(WallsMessage("error",
+            addParseError(WallsMessage("error",
                                   QString("failed to read from file: %1").arg(file.errorString()),
                                   filename,
                                   lineNumber));
@@ -581,7 +598,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         }
         catch (const SegmentParseException& ex)
         {
-            addError(WallsMessage(ex));
+            addParseError(WallsMessage(ex));
             failed = true;
             break;
         }
