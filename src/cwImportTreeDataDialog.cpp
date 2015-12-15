@@ -175,23 +175,25 @@ void cwImportTreeDataDialog::updateImportErrors() {
   \brief Updates the import warning label next to the import button
   */
 void cwImportTreeDataDialog::updateImportWarningLabel() {
-    QStringList errors = Importer->errors();
+    QStringList errors;
+    errors << Importer->parseErrors();
+    errors << Importer->importErrors();
     int numberWarnings = 0;
     int numberErrors = 0;
     foreach(QString error, errors) {
-        if(error.contains("Error:")) {
+        if(error.contains("error", Qt::CaseInsensitive)) {
             numberErrors++;
-        } else if(error.contains("Warning:")) {
+        } else if(error.contains("warning", Qt::CaseInsensitive)) {
             numberWarnings++;
         }
     }
 
     QString message;
     if(numberErrors > 0) {
-        message.append(QString("<b>Errors:%1</b> ").arg(numberErrors));
+        message.append(QString("<b>Errors: %1</b> ").arg(numberErrors));
     }
     if(numberWarnings > 0) {
-        message.append(QString("Warnings:%2").arg(numberWarnings));
+        message.append(QString("Warnings: %2").arg(numberWarnings));
     }
     WarningLabel->setText(message);
 }
@@ -311,10 +313,15 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
     QString cutOffText = FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());
     FileLabel->setText(cutOffText);
 
-    //Load the error list view
+    //Load the parse error list view
     cwStringListErrorModel* parsingErrorsModel = new cwStringListErrorModel(this);
-    parsingErrorsModel->setStringList(Importer->errors());
+    parsingErrorsModel->setStringList(Importer->parseErrors());
     SurvexErrorListView->setModel(parsingErrorsModel);
+
+    //Load the import error list view
+    cwStringListErrorModel* importErrorsModel = new cwStringListErrorModel(this);
+    importErrorsModel->setStringList(Importer->importErrors());
+    ImportErrorListView->setModel(importErrorsModel);
 
     //Update the error / warning label at the bottom
     updateImportWarningLabel();

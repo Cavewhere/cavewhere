@@ -19,8 +19,11 @@ Q_OBJECT
 public:
     cwTreeDataImporter(QObject* parent = nullptr);
 
-    virtual bool hasErrors();
-    virtual QStringList errors();
+    virtual bool hasParseErrors();
+    virtual QStringList parseErrors();
+
+    virtual bool hasImportErrors();
+    virtual QStringList importErrors();
 
     virtual QString lastImport();
 

@@ -6,12 +6,22 @@ cwTreeDataImporter::cwTreeDataImporter(QObject *parent) : cwTask(parent)
 
 }
 
-bool cwTreeDataImporter::hasErrors()
+bool cwTreeDataImporter::hasParseErrors()
 {
     return false;
 }
 
-QStringList cwTreeDataImporter::errors()
+QStringList cwTreeDataImporter::parseErrors()
+{
+    return QStringList();
+}
+
+bool cwTreeDataImporter::hasImportErrors()
+{
+    return false;
+}
+
+QStringList cwTreeDataImporter::importErrors()
 {
     return QStringList();
 }

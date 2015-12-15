@@ -63,10 +63,15 @@
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="ExporErrorsWidget">
+         <widget class="QWidget" name="ImportErrorsWidget">
           <attribute name="title">
            <string>Import Errors</string>
           </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <item>
+            <widget class="QListView" name="ImportErrorListView"/>
+           </item>
+          </layout>
          </widget>
         </widget>
        </item>

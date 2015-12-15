@@ -66,7 +66,7 @@ private:
     cwTripPtr CurrentTrip;
 };
 
-class cwWallsImporter : public cwTreeDataImporter
+class CAVEWHERE_LIB_EXPORT cwWallsImporter : public cwTreeDataImporter
 {
     Q_OBJECT
 public:
@@ -80,19 +80,18 @@ public:
 
     friend class WallsImporterVisitor;
 
-    bool hasErrors();
-    QStringList errors();
+    bool hasParseErrors();
+    QStringList parseErrors();
+    bool hasImportErrors();
+    QStringList importErrors();
 
     cwTreeImportData* data();
 
     static void CAVEWHERE_LIB_EXPORT importCalibrations(const WallsUnits units, cwTrip& trip);
 
-signals:
-    void message(WallsMessage message);
-
 public slots:
-    void emitMessage(WallsMessage message);
     void setInputFiles(QStringList filenames);
+    void addParseError(WallsMessage message);
 
 protected:
     bool verifyFileExists(QString filename, Segment segment);
@@ -109,7 +108,7 @@ private:
 
     void applyLRUDs(cwTreeImportDataNode* block);
 
-    void addError(WallsMessage message);
+    void addImportError(WallsMessage message);
 
     cwStation createStation(QString name);
 
@@ -117,7 +116,8 @@ private:
 
     cwWallsImportData* GlobalData;
 
-    QStringList Errors;
+    QStringList ParseErrors;
+    QStringList ImportErrors;
 
     QList<cwCave*> Caves;
     cwStationRenamer StationRenamer;

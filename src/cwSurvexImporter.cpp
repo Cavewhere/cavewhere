@@ -99,7 +99,7 @@ QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::BeginEndState::def
   \brief Returns true if errors have accured.
   \returns The list of errors
   */
-bool cwSurvexImporter::hasErrors() {
+bool cwSurvexImporter::hasParseErrors() {
     return !Errors.isEmpty();
 }
 
@@ -107,7 +107,7 @@ bool cwSurvexImporter::hasErrors() {
   \brief Gets the errors of the importer
   \return Returns the errors if any.  Will be empty if HasErrors() returns false
   */
-QStringList cwSurvexImporter::errors() {
+QStringList cwSurvexImporter::parseErrors() {
     return Errors;
 }
 
