@@ -27,10 +27,3 @@ void cwTreeImportData::setNodes(QList<cwTreeImportDataNode*> nodes) {
 
     RootNodes = nodes;
 }
-
-/**
-  \brief Get's the current errors
-  */
-QStringList cwTreeImportData::errors() {
-    return QStringList();
-}

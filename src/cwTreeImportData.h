@@ -30,11 +30,9 @@ public:
     void setNodes(QList<cwTreeImportDataNode*> nodes);
 
     virtual QList<cwCave*> caves() = 0;
-    QStringList errors();
 
 private:
     QList<cwTreeImportDataNode*> RootNodes;
-    QStringList ImportErrors;
 };
 
 inline QList<cwTreeImportDataNode*> cwTreeImportData::nodes() const {
