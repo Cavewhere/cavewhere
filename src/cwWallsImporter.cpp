@@ -488,6 +488,7 @@ cwTreeImportDataNode* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
 
 void cwWallsImporter::addParseError(WallsMessage _message)
 {
+    std::cerr << _message.toString().toStdString() << std::endl;
     ParseErrors << _message.toString();
 }
 
