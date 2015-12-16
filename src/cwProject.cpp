@@ -20,6 +20,7 @@
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwMetaCaveSaveTask.h"
+#include "cwMetaCaveLoadTask.h"
 
 //Qt includes
 #include <QDir>
@@ -347,9 +348,18 @@ void cwProject::loadFile(QString filename) {
         ProjectVersion = Version_1;
 
     } else {
+        cwMetaCaveLoadTask* metaCaveLoad = new cwMetaCaveLoadTask();
+        connect(metaCaveLoad, &cwMetaCaveLoadTask::finished,
+                this, &cwProject::updateRegionDataVersion2);
+
+        //Set the data for the project
+        metaCaveLoad->setDatabaseFilename(filename);
+
+        //Start the save thread
+        metaCaveLoad->start();
+
         //Load the new version of the file, version 2
         ProjectVersion = Version_2;
-
     }
 
     emit versionChanged();
@@ -370,9 +380,31 @@ void cwProject::updateRegionDataVersion1() {
 
     //Copy the data from the loaded region
     loadTask->copyRegionTo(*Region);
+    loadTask->deleteLater();
 
     //Ask the user to convert, Must be hand
     emit tryToConvertFromVersion1toVersion2();
+
+    emit temporaryProjectChanged();
+}
+
+/**
+ * @brief cwProject::updateRegionDataVersion2
+ *
+ * This should
+ */
+void cwProject::updateRegionDataVersion2()
+{
+    TempProject = false;
+
+    cwMetaCaveLoadTask* loadTask = qobject_cast<cwMetaCaveLoadTask*>(sender());
+
+    //Update the project filename
+    setFilename(loadTask->databaseFilename());
+
+    //Copy the data from the loaded region
+    loadTask->copyRegionTo(*Region);
+    loadTask->deleteLater();
 
     emit temporaryProjectChanged();
 }

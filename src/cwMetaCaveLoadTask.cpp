@@ -59,7 +59,7 @@ void cwMetaCaveLoadTask::runTask()
     QJsonParseError parserError;
     QJsonDocument document = QJsonDocument::fromJson(fileData, &parserError);
 
-    if(parserError.error != QJsonParseError::NoError) {
+    if(parserError.error == QJsonParseError::NoError) {
         //Parsed json correctly
         QVariant variant = document.toVariant();
         QVariantMap map = variant.toMap();
@@ -74,6 +74,8 @@ void cwMetaCaveLoadTask::runTask()
         //There was a parsing error
         qDebug() << "JSON Syntax error loading file " << databaseFilename() << parserError.errorString();
     }
+
+    done();
 }
 
 /**
@@ -146,22 +148,23 @@ void cwMetaCaveLoadTask::loadTripCalibration(const QVariantMap &map, cwTripCalib
 
     hasProperty(map, "distUnit", "trip");
     hasProperty(map, "angleUnit", "trip");
-    hasProperty(map, "backsightsCorrected", "trip");
+    hasProperty(map, "azmBacksightsCorrected", "trip");
+    hasProperty(map, "incBacksightsCorrected", "trip");
 
     cwUnits::LengthUnit distanceUnit = cwUnits::toLengthUnit(map.value("distUnit").toString());
     tripCalibration->setDistanceUnit(distanceUnit);
 
     cwUnits::AngleUnit angleUnit = cwUnits::toAngleUnit(map.value("angleUnit").toString());
+    tripCalibration->setAngleUnit(angleUnit);
     tripCalibration->setFrontCompassUnit(angleUnit);
     tripCalibration->setFrontClinoUnit(angleUnit);
     tripCalibration->setBackCompassUnit(angleUnit);
     tripCalibration->setBackClinoUnit(angleUnit);
 
-    bool backsightCorrected = map.value("backsightsCorrected").toBool();
-    if(backsightCorrected) {
-        tripCalibration->setCorrectedClinoBacksight(true);
-        tripCalibration->setCorrectedCompassBacksight(true);
-    }
+    bool azmBacksightCorrected = map.value("backsightsCorrected").toBool();
+    bool incBacksightCorrected = map.value("incBacksightsCorrected").toBool();
+    tripCalibration->setCorrectedCompassBacksight(azmBacksightCorrected);
+    tripCalibration->setCorrectedClinoBacksight(incBacksightCorrected);
 
     loadOptionalData(map, "declination", tripCalibration, "declination", 0.0);
     loadOptionalData(map, "azmFsUnit", tripCalibration, "frontCompassUnit", cwUnits::Degrees);

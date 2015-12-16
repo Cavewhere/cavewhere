@@ -18,7 +18,7 @@ class cwUnits : public QObject
 {
     Q_OBJECT
 
-    Q_ENUMS(LengthUnit ImageResolutionUnit)
+    Q_ENUMS(LengthUnit ImageResolutionUnit AngleUnit)
 public:
     enum UnitType {
         InvalidUnitType,

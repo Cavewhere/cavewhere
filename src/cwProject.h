@@ -124,6 +124,7 @@ private:
 
 private slots:
     void updateRegionDataVersion1();
+    void updateRegionDataVersion2();
     void startDeleteImageTask();
     void deleteImageTask();
 

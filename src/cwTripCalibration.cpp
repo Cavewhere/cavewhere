@@ -21,6 +21,11 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
     DistanceUnit = cwUnits::Meters;
     FrontSights = true;
     BackSights = true;
+    FrontClinoUnit = cwUnits::Degrees;
+    BackClinoUnit = cwUnits::Degrees;
+    FrontCompassUnit = cwUnits::Degrees;
+    BackCompassUnit = cwUnits::Degrees;
+    AngleUnit = cwUnits::Degrees;
 }
 
 /**
@@ -55,6 +60,11 @@ cwTripCalibration& cwTripCalibration::copy(const cwTripCalibration& object) {
     DistanceUnit = object.DistanceUnit;
     FrontSights = object.FrontSights;
     BackSights = object.BackSights;
+    FrontClinoUnit = object.FrontClinoUnit;
+    BackClinoUnit = object.BackClinoUnit;
+    FrontCompassUnit = object.FrontCompassUnit;
+    BackCompassUnit = object.BackCompassUnit;
+    AngleUnit = object.AngleUnit;
 
     return *this;
 }
@@ -234,5 +244,16 @@ void cwTripCalibration::setBackClinoUnit(cwUnits::AngleUnit backClinoUnit) {
     if(BackClinoUnit != backClinoUnit) {
         BackClinoUnit = backClinoUnit;
         emit backClinoUnitChanged();
+    }
+}
+
+/**
+* @brief cwTripCalibration::setAngleUnit
+* @param angleUnit
+*/
+void cwTripCalibration::setAngleUnit(cwUnits::AngleUnit angleUnit) {
+    if(AngleUnit != angleUnit) {
+        AngleUnit = angleUnit;
+        emit angleUnitChanged();
     }
 }

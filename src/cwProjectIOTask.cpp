@@ -36,6 +36,12 @@ bool cwProjectIOTask::canConnect(QString filename)
     QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", "TestConnection");
     database.setDatabaseName(filename);
     bool connected = database.open();
+
+    if(connected) {
+        QSqlQuery query(database);
+        connected = query.prepare("SELECT name FROM sqlite_master WHERE type = \"table\"");
+    }
+
     database.close();
     return connected;
 }

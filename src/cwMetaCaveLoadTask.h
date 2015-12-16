@@ -26,6 +26,8 @@ class cwShot;
 
 class cwMetaCaveLoadTask : public cwRegionIOTask
 {
+    Q_OBJECT
+
 public:
     cwMetaCaveLoadTask();
 

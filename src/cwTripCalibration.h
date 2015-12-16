@@ -36,6 +36,7 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(cwUnits::AngleUnit frontClinoUnit READ frontClinoUnit WRITE setFrontClinoUnit NOTIFY frontClinoUnitChanged)
     Q_PROPERTY(cwUnits::AngleUnit backCompassUnit READ backCompassUnit WRITE setBackCompassUnit NOTIFY backCompassUnitChanged)
     Q_PROPERTY(cwUnits::AngleUnit backClinoUnit READ backClinoUnit WRITE setBackClinoUnit NOTIFY backClinoUnitChanged)
+    Q_PROPERTY(cwUnits::AngleUnit angleUnit READ angleUnit WRITE setAngleUnit NOTIFY angleUnitChanged)
 
 public:
     explicit cwTripCalibration(QObject *parent = 0);
@@ -87,6 +88,9 @@ public:
     cwUnits::AngleUnit backClinoUnit() const;
     void setBackClinoUnit(cwUnits::AngleUnit backClinoUnit);
 
+    cwUnits::AngleUnit angleUnit() const;
+    void setAngleUnit(cwUnits::AngleUnit angleUnit);
+
     QStringList supportedDistanceUnits() const;
 
     Q_INVOKABLE int mapToLengthUnit(int supportedUnitIndex);
@@ -110,6 +114,7 @@ signals:
     void frontClinoUnitChanged();
     void backCompassUnitChanged();
     void backClinoUnitChanged();
+    void angleUnitChanged();
 
 public slots:
 
@@ -129,6 +134,7 @@ private:
     cwUnits::AngleUnit FrontClinoUnit; //!<
     cwUnits::AngleUnit BackCompassUnit; //!<
     cwUnits::AngleUnit BackClinoUnit; //!<
+    cwUnits::AngleUnit AngleUnit; //!<
 
     cwTripCalibration& copy(const cwTripCalibration& object);
 };
@@ -210,6 +216,14 @@ inline cwUnits::AngleUnit cwTripCalibration::backCompassUnit() const {
 */
 inline cwUnits::AngleUnit cwTripCalibration::backClinoUnit() const {
     return BackClinoUnit;
+}
+
+/**
+* @brief cwTripCalibration::angleUnit
+* @return
+*/
+inline cwUnits::AngleUnit cwTripCalibration::angleUnit() const {
+    return AngleUnit;
 }
 
 #endif // CWTRIPCALIBRATION_H

@@ -32,6 +32,7 @@
 #include <QThreadPool>
 #include <QMetaObject>
 #include <QMetaProperty>
+#include <QApplication>
 
 void compareUnitValue(const cwUnitValue* load, const cwUnitValue* save) {
     REQUIRE(load->value() == save->value());
@@ -104,7 +105,8 @@ void compareCalibration(const cwTripCalibration* loadCalibration,
         QVariant loadVariant = loadCalibration->property(property.name());
         QVariant saveVariant = saveCalibration->property(property.name());
 
-        REQUIRE(loadVariant == saveVariant);
+        INFO(property.name());
+        REQUIRE(loadVariant.toString().toStdString() == saveVariant.toString().toStdString());
     }
 }
 
@@ -233,6 +235,7 @@ TEST_CASE( "cavewhere can be saved and loaded again", "[saveAndLoad]" ) {
 
         //Saving is async, wait until the threads are finished
         QThreadPool::globalInstance()->waitForDone();
+        QApplication::processEvents();
 
         QFileInfo fileInfo(filename);
         REQUIRE(fileInfo.isReadable() == true);
@@ -253,6 +256,7 @@ TEST_CASE( "cavewhere can be saved and loaded again", "[saveAndLoad]" ) {
         loadProject->loadFile(filename);
 
         QThreadPool::globalInstance()->waitForDone();
+        QApplication::processEvents();
 
         cwCavingRegion* loadRegion = loadProject->cavingRegion();
 

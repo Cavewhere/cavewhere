@@ -69,13 +69,13 @@ QVariantMap cwMetaCaveSaveTask::saveRegion()
 {
     QVariantMap regionMap;
 
-    QVariantList cavesList;
+    QVariantMap cavesMap;
     foreach(const cwCave* cave, Region->caves()) {
         QVariantMap caveAsVariantMap = saveCave(cave);
-        cavesList.append(caveAsVariantMap);
+        cavesMap.insert(cave->name(), caveAsVariantMap);
     }
 
-    regionMap.insert("caves", cavesList);
+    regionMap.insert("caves", cavesMap);
 
     return regionMap;
 }
@@ -255,6 +255,9 @@ QVariantMap cwMetaCaveSaveTask::saveShot(const cwShot &shot)
 void cwMetaCaveSaveTask::saveCalibration(QVariantMap &map, const cwTripCalibration *calibration)
 {
     map.insert("distUnit", cwUnits::unitName(calibration->distanceUnit()));
+    map.insert("angleUnit", cwUnits::unitName(calibration->angleUnit()));
+    map.insert("azmBacksightsCorrected", calibration->hasCorrectedCompassBacksight());
+    map.insert("incBacksightsCorrected", calibration->hasCorrectedClinoBacksight());
 }
 
 /**
