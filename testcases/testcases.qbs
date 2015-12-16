@@ -25,7 +25,8 @@ CavewhereApp {
         name: "dewalls testcases"
         files: [
             "../dewalls/test/*.cpp",
-            "../dewalls/test/*.h"
+            "../dewalls/test/*.h",
+            "../dewalls/test/dewalls-test.qrc"
         ]
         excludeFiles: "../dewalls/test/dewallstests.cpp"
     }
