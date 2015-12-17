@@ -291,12 +291,12 @@ void cwTask::changeThreads(QThread* thread) {
   calling this function
   */
 void cwTask::privateStop() {
-    QWriteLocker locker(&StatusLocker);
     if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
         CurrentStatus = Stopped;
 
         //Go through all children and stop them
         foreach(cwTask* child, ChildTasks) {
+            Q_ASSERT(child->thread() == thread()); //Child task must be on the same thread as thier parents
             child->privateStop();
         }
     }
