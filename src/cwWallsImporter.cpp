@@ -103,6 +103,11 @@ void WallsImporterVisitor::parsedVector(Vector v)
         UAngle frontInclination = v.frontInclination();
         UAngle backInclination = v.backInclination();
 
+        if (!frontInclination.isValid() && !backInclination.isValid())
+        {
+            frontInclination = UAngle(0, Angle::Degrees);
+        }
+
         shot.setDistance(distance.get(dUnit));
         if (v.frontAzimuth().isValid())
         {
