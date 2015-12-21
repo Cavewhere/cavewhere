@@ -460,33 +460,60 @@ cwTreeImportDataNode* cwWallsImporter::convertSurvey(WpjEntryPtr survey) {
     cwTreeImportDataNode* result = new cwTreeImportDataNode();
 
     try {
-        result->setName(survey->Title);
-        result->IncludeDistance = true;
-
         QList<cwTripPtr> trips;
         if (!parseSrvFile(survey, trips)) {
             // jump to catch block
             throw std::exception();
         }
 
-        if (!trips.isEmpty()) {
-            *result->calibration() = *trips[0]->calibrations();
+        if (trips.size() == 1) {
+            convertTrip(trips[0].data(), result);
         }
-
-        foreach (cwTripPtr trip, trips) {
-            foreach (cwSurveyChunk* chunk, trip->chunks()) {
-                result->addChunk(new cwSurveyChunk(*chunk));
-            }
-
-            foreach (cwTeamMember member, trip->team()->teamMembers()) {
-                result->team()->addTeamMember(member);
+        else {
+            for (int i = 0; i < trips.size(); i++) {
+                cwTreeImportDataNode* child = convertTrip(trips[i].data());
+                child->setName(QString("%1 (%2)").arg(survey->Title).arg(i + 1));
+                result->addChildNode(child);
             }
         }
+
+        result->setName(survey->Title);
+        result->IncludeDistance = true;
 
         return result;
     }
     catch (...) {
         delete result;
+        return nullptr;
+    }
+}
+
+cwTreeImportDataNode* cwWallsImporter::convertTrip(cwTrip* trip, cwTreeImportDataNode* result)
+{
+    bool createdResult = !result;
+    if (!result) {
+        result = new cwTreeImportDataNode();
+    }
+
+    try {
+        result->IncludeDistance = true;
+        result->setName(trip->name());
+        result->setDate(trip->date());
+        *result->calibration() = *trip->calibrations();
+        foreach(cwSurveyChunk* chunk, trip->chunks()) {
+            result->addChunk(new cwSurveyChunk(*chunk));
+        }
+
+        foreach (cwTeamMember member, trip->team()->teamMembers()) {
+            result->team()->addTeamMember(member);
+        }
+
+        return result;
+    }
+    catch (...) {
+        if (createdResult) {
+            delete result;
+        }
         return nullptr;
     }
 }

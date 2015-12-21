@@ -105,6 +105,7 @@ private:
     cwTreeImportDataNode* convertEntry(WpjEntryPtr entry);
     cwTreeImportDataNode* convertBook(WpjBookPtr book);
     cwTreeImportDataNode* convertSurvey(WpjEntryPtr survey);
+    cwTreeImportDataNode* convertTrip(cwTrip* trip, cwTreeImportDataNode* result = nullptr);
 
     void applyLRUDs(cwTreeImportDataNode* block);
 
