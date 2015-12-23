@@ -74,6 +74,7 @@ public:
         CANT_IMPORT_FIX_STATIONS = 1,
         CANT_IMPORT_REFS = 2,
         STATION_RENAMED = 3,
+        HEIGHT_CORRECTIONS_APPLIED = 4
     };
 
     explicit cwWallsImporter(QObject *parent = 0);

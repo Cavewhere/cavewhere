@@ -98,7 +98,9 @@ void WallsImporterVisitor::parsedVector(Vector v)
         toStation = Importer->createStation(units.processStationName(v.to()));
 
         // apply Walls corrections that Cavewhere doesn't support
-        v.applyHeightCorrections();
+        if (Importer->shouldWarn(cwWallsImporter::HEIGHT_CORRECTIONS_APPLIED, v.applyHeightCorrections())) {
+            Importer->addImportError(WallsMessage("warning", "This data contains shots with instrument/target heights and/or INCH correction.  Since these quantities are not stored in Cavewhere, the distance and inclination of such shots have been changed to reflect the same vector."));
+        }
         ULength distance = v.distance();
         UAngle frontInclination = v.frontInclination();
         UAngle backInclination = v.backInclination();
