@@ -8,6 +8,7 @@
 #include "cwLength.h"
 #include "wallssurveyparser.h"
 #include "wallsprojectparser.h"
+#include "wallstypes.h"
 #include "cwTreeImportData.h"
 #include "cwTreeImportDataNode.h"
 
@@ -95,6 +96,15 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
     if (v.distance().isValid())
     {
+        if (Importer->shouldWarn(cwWallsImporter::VARIANCE_OVERRIDES_NOT_SUPPORTED,
+                                 !v.horizVariance().isNull() || !v.vertVariance().isNull())) {
+            Importer->addImportError(WallsMessage("warning", "Walls variance overrides are not supported by Cavewhere"));
+        }
+        if (Importer->shouldWarn(cwWallsImporter::LRUD_FACING_ANGLE_NOT_SUPPORTED,
+                                 v.lrudAngle().isValid())) {
+            Importer->addImportError(WallsMessage("warning", "LRUD facing angles are not currently supported by Cavewhere"));
+        }
+
         toStation = Importer->createStation(units.processStationName(v.to()));
 
         // apply Walls corrections that Cavewhere doesn't support
@@ -104,6 +114,14 @@ void WallsImporterVisitor::parsedVector(Vector v)
         ULength distance = v.distance();
         UAngle frontInclination = v.frontInclination();
         UAngle backInclination = v.backInclination();
+
+        if (Importer->shouldWarn(cwWallsImporter::OTHER_ANGLE_UNITS_NOT_SUPPORTED,
+                                 (v.frontAzimuth().isValid() && v.frontAzimuth().unit() != Angle::Degrees) ||
+                                 (v.backAzimuth().isValid() && v.backAzimuth().unit() != Angle::Degrees) ||
+                                 (frontInclination.isValid() && frontInclination.unit() != Angle::Degrees) ||
+                                 (backInclination.isValid() && backInclination.unit() != Angle::Degrees))) {
+            Importer->addImportError(WallsMessage("warning", "This data contains azimuths and/or inclinations in units other than degrees; all have been converted to degrees for Cavewhere import"));
+        }
 
         if (!frontInclination.isValid() && !backInclination.isValid())
         {
@@ -246,6 +264,18 @@ void WallsImporterVisitor::parsedUnits()
         Parser->units().typeabCorrected() != priorUnits.typeabCorrected() ||
         Parser->units().typevbCorrected() != priorUnits.typevbCorrected())
     {
+        if (Importer->shouldWarn(cwWallsImporter::NO_AVERAGE_NOT_SUPPORTED,
+                                 Parser->units().typeabNoAverage() || Parser->units().typevbNoAverage())) {
+            Importer->addImportError(WallsMessage("warning", "no-average backsights (e.g. #units typeab=C,2,X) are not supported by Cavewhere"));
+        }
+        if (Importer->shouldWarn(cwWallsImporter::UV_NOT_SUPPORTED,
+                                 Parser->units().uvh() != 1.0 || Parser->units().uvv() != 1.0)) {
+            Importer->addImportError(WallsMessage("warning", "unit variance (e.g. #units uv=... uvv=... uvh=...) are not supported by Cavewhere"));
+        }
+        if (Importer->shouldWarn(cwWallsImporter::LRUD_TYPE_NOT_SUPPORTED,
+                                 Parser->units().lrud() != LrudType::From)) {
+            Importer->addImportError(WallsMessage("warning", "LRUD type (e.g. #units lrud=to) is not currently supported by Cavewhere"));
+        }
         // when the next vector or fix line sees that
         // CurrentTrip is null, it will create a new one
         clearTrip();
