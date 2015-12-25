@@ -14,32 +14,32 @@
 #include <QList>
 #include <QStringList>
 #include <QMap>
-#include "cwTask.h"
+#include "cwTreeDataImporter.h"
 #include <QFile>
 
 //Our includes
 #include "cwStation.h"
-class cwSurvexBlockData;
-class cwSurvexGlobalData;
+#include "cwSurvexGlobalData.h"
 class cwSurveyChunk;
 class cwShot;
+class cwSurvexNodeData;
 
-class cwSurvexImporter : public cwTask
+class cwSurvexImporter : public cwTreeDataImporter
 {
 Q_OBJECT
 
 public:
     cwSurvexImporter(QObject* parent = nullptr);
 
-    bool hasErrors();
-    QStringList errors();
+    bool hasParseErrors();
+    QStringList parseErrors();
 
     QString lastImport();
 
-    cwSurvexGlobalData* data();
+    cwTreeImportData* data();
 
 public slots:
-    void setSurvexFile(QString filename);
+    void setInputFiles(QStringList filenames);
 
 protected:
     virtual void runTask();
@@ -101,7 +101,7 @@ private:
     };
 
     //Root filename
-    QString RootFilename;
+    QStringList RootFilenames;
 
     //File state to handle includes
     QList<Include> IncludeStack;
@@ -113,9 +113,11 @@ private:
     QList<BeginEndState> BeginEndStateStack;
 
     //The data that'll be populated
-    cwSurvexBlockData* RootBlock; //All blocks are child of this object
-    cwSurvexBlockData* CurrentBlock; //The current block
+    cwTreeImportDataNode* RootBlock; //All blocks are child of this object
+    cwTreeImportDataNode* CurrentBlock; //The current block
     cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
+
+    cwSurvexNodeData* nodeData(cwTreeImportDataNode* node);
 
     QStringList Errors;
 
@@ -189,8 +191,8 @@ private:
 /**
   \brief Gets all the data from the importer
   */
-inline cwSurvexGlobalData* cwSurvexImporter::data() {
-    return GlobalData;
+inline cwTreeImportData* cwSurvexImporter::data() {
+    return static_cast<cwTreeImportData*>(GlobalData);
 }
 
 /**
@@ -203,8 +205,12 @@ inline bool cwSurvexImporter::compare(QString s1, QString s2) const {
 /**
   \brief Sets the root file for the survex
   */
-inline void cwSurvexImporter::setSurvexFile(QString filename) {
-    RootFilename = filename;
+inline void cwSurvexImporter::setInputFiles(QStringList filenames) {
+    RootFilenames = filenames;
+}
+
+inline cwSurvexNodeData* cwSurvexImporter::nodeData(cwTreeImportDataNode* node) {
+    return GlobalData->nodeData(node);
 }
 
 #endif // CWSURVEYIMPORTER_H

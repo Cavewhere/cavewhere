@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-#ifndef CWSURVEXBLOCKDATA_H
-#define CWSURVEXBLOCKDATA_H
+#ifndef CWTREEIMPORTDATANODE_H
+#define CWTREEIMPORTDATANODE_H
 
 //Our includes
 class cwSurveyChunk;
@@ -24,12 +24,14 @@ class cwTripCalibration;
 #include <QDate>
 
 
-class cwSurvexBlockData : public QObject
+class cwTreeImportDataNode : public QObject
 {
     Q_OBJECT
 
     friend class cwSurvexImporter;
     friend class cwSurvexGlobalData;
+    friend class cwWallsImporter;
+    friend class cwTreeImportData;
 
 public:
     enum ImportType {
@@ -39,24 +41,20 @@ public:
         Structure //!< This is neither a Cave nor a Trip, but a imported survex block
     };
 
-    cwSurvexBlockData(QObject* parent = 0);
+    cwTreeImportDataNode(QObject* parent = 0);
 
-    int childBlockCount();
-    cwSurvexBlockData* childBlock(int index);
+    void clear();
+
+    int childNodeCount();
+    cwTreeImportDataNode* childNode(int index);
 
     int chunkCount();
     cwSurveyChunk* chunk(int index);
 
-    cwSurvexBlockData* parentBlock() const;
+    cwTreeImportDataNode* parentNode() const;
 
     void setName(QString name);
     QString name() const;
-
-    void addToEquated(QStringList stationNames);
-    QStringList equatedStations(QString fullStationName) const;
-
-    void addExportStations(QStringList exportStations);
-    QStringList exportStations() const;
 
     void setDate(QDate date);
     QDate date() const;
@@ -69,7 +67,7 @@ public:
     static QString importTypeToString(ImportType type);
 
     QList<cwSurveyChunk*> chunks();
-    QList<cwSurvexBlockData*> childBlocks();
+    QList<cwTreeImportDataNode*> childNodes();
 
     int stationCount() const;
     cwStation station(int index) const;
@@ -88,11 +86,8 @@ signals:
 
 private:
     QList<cwSurveyChunk*> Chunks;
-    QList<cwSurvexLRUDChunk> LRUDChunks;
-    QList<cwSurvexBlockData*> ChildBlocks;
-    QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
-    QSet<QString> ExportStations; //Holds a station name that is exported for equates
-    cwSurvexBlockData* ParentBlock;
+    QList<cwTreeImportDataNode*> ChildNodes;
+    cwTreeImportDataNode* ParentNode;
 
     //Mutible elements
     QString Name;
@@ -104,16 +99,10 @@ private:
 
     bool IncludeDistance;
 
-    //For caves, used station names, and equating stations
-    QMap<QString, QString> EquateMap;  //All stations get added to the map
-
-    void addChildBlock(cwSurvexBlockData* blockData);
+    void addChildNode(cwTreeImportDataNode* blockData);
     void addChunk(cwSurveyChunk* chunk);
-    void addLRUDChunk();
 
-    void setParentBlock(cwSurvexBlockData* parentBlock);
-
-    void clear();
+    void setParentNode(cwTreeImportDataNode* parentNode);
 
     bool isTrip() const;
 };
@@ -121,100 +110,82 @@ private:
 /**
   \brief Gets the number of child blocks
   */
-inline int cwSurvexBlockData::childBlockCount() {
-    return ChildBlocks.size();
+inline int cwTreeImportDataNode::childNodeCount() {
+    return ChildNodes.size();
 }
 
 /**
   \brief Get's the number of chunks
   */
-inline int cwSurvexBlockData::chunkCount() {
+inline int cwTreeImportDataNode::chunkCount() {
     return Chunks.size();
 }
 
 /**
   \brief Get's the name of the block
   */
-inline QString cwSurvexBlockData::name() const {
+inline QString cwTreeImportDataNode::name() const {
     return Name;
 }
 
 /**
- * @brief cwSurvexBlockData::addToEquated
- * @param adds a list of stationNames that are equal to each other.
- */
-inline void cwSurvexBlockData::addToEquated(QStringList stationNames) {
-    EqualStations.append(stationNames);
-}
-
-
-/**
   \brief Get's all the chunks held by the block
   */
-inline QList<cwSurveyChunk*> cwSurvexBlockData::chunks() {
+inline QList<cwSurveyChunk*> cwTreeImportDataNode::chunks() {
     return Chunks;
 }
 
 /**
   \brief Get's all the child blocks held by the this block
   */
-inline QList<cwSurvexBlockData*> cwSurvexBlockData::childBlocks() {
-    return ChildBlocks;
+inline QList<cwTreeImportDataNode*> cwTreeImportDataNode::childNodes() {
+    return ChildNodes;
 }
 
 /**
   \brief Get's the parent block
   */
-inline cwSurvexBlockData* cwSurvexBlockData::parentBlock() const {
-    return ParentBlock;
+inline cwTreeImportDataNode* cwTreeImportDataNode::parentNode() const {
+    return ParentNode;
 }
 
 /**
   \brief Set's the parent block
   */
-inline void cwSurvexBlockData::setParentBlock(cwSurvexBlockData* parentBlock) {
-    ParentBlock = parentBlock;
+inline void cwTreeImportDataNode::setParentNode(cwTreeImportDataNode* parentBlock) {
+    ParentNode = parentBlock;
 }
 
-inline cwSurvexBlockData::ImportType cwSurvexBlockData::importType() const {
+inline cwTreeImportDataNode::ImportType cwTreeImportDataNode::importType() const {
     return Type;
 }
 
 /**
   Sets the date for the block
   */
-inline void cwSurvexBlockData::setDate(QDate date) {
+inline void cwTreeImportDataNode::setDate(QDate date) {
     Date = date;
 }
 
 /**
   Gets the date for the block
   */
-inline QDate cwSurvexBlockData::date() const {
+inline QDate cwTreeImportDataNode::date() const {
     return Date;
 }
 
 /**
   Gets the survey team for the block
   */
-inline cwTeam* cwSurvexBlockData::team() const {
+inline cwTeam* cwTreeImportDataNode::team() const {
     return Team;
 }
 
 /**
   Gets the survey's calibration
   */
-inline cwTripCalibration* cwSurvexBlockData::calibration() const {
+inline cwTripCalibration* cwTreeImportDataNode::calibration() const {
     return Calibration;
-}
-
-/**
- * @brief cwSurvexBlockData::exportStations
- * @return All the export stations in this block
- */
-inline QStringList cwSurvexBlockData::exportStations() const
-{
-    return QStringList(ExportStations.toList());
 }
 
 /**
@@ -223,7 +194,7 @@ inline QStringList cwSurvexBlockData::exportStations() const
  *
  * If false the distance shot length will be excluded
  */
-inline void cwSurvexBlockData::setIncludeDistance(bool includeLength)
+inline void cwTreeImportDataNode::setIncludeDistance(bool includeLength)
 {
     IncludeDistance = includeLength;
 }
@@ -232,10 +203,10 @@ inline void cwSurvexBlockData::setIncludeDistance(bool includeLength)
  * @brief cwSurvexBlockData::isDistanceInclude
  * @return True if the distance is include, and false, if it's not
  */
-inline bool cwSurvexBlockData::isDistanceInclude() const
+inline bool cwTreeImportDataNode::isDistanceInclude() const
 {
     return IncludeDistance;
 }
 
 
-#endif // CWSURVEXBLOCKDATA_H
+#endif // CWTREEIMPORTDATANODE_H

@@ -9,10 +9,10 @@
 #define CWIMPORTSURVEXDIALOG_H
 
 //Our includes
-#include "ui_cwImportSurvexDialog.h"
+#include "ui_cwImportTreeDataDialog.h"
 #include "cwUndoer.h"
-class cwSurvexImporterModel;
-class cwSurvexImporter;
+class cwTreeDataImporterModel;
+class cwTreeDataImporter;
 class cwCavingRegion;
 
 //Qt includes
@@ -21,29 +21,32 @@ class QAction;
 #include <QItemSelection>
 #include <QDebug>
 
-class cwImportSurvexDialog :
+class cwImportTreeDataDialog :
         public QDialog,
         public cwUndoer,
-        private Ui::cwImportSurvexDialog
+        private Ui::cwImportTreeDataDialog
 {
     Q_OBJECT
 
 public:
-    explicit cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent = 0);
-    virtual ~cwImportSurvexDialog();
+    struct Names {
+        QString windowTitle;
+        QString errorsLabel;
+    };
+
+    explicit cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent = 0);
+    virtual ~cwImportTreeDataDialog();
 
     void open();
 
 public slots:
-    void setSurvexFile(QString filename);
+    void setInputFiles(QStringList filenames);
 
 protected:
     void changeEvent(QEvent *e);
     void resizeEvent(QResizeEvent *event);
 
 private:
-    static const QString ImportSurvexKey;
-
     enum TypeItem {
         Invalid = -1,
         NoImportItem,
@@ -57,8 +60,8 @@ private:
 
     //Data stuff
     QString FullFilename;
-    cwSurvexImporterModel* Model;
-    cwSurvexImporter* Importer;
+    cwTreeDataImporterModel* Model;
+    cwTreeDataImporter* Importer;
     QItemSelectionModel* SurvexSelectionModel;
 
     //For threading ithe importer

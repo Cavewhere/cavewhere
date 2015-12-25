@@ -45,8 +45,9 @@ public:
     void setUndoStack(QUndoStack* undoStack);
 
     Q_INVOKABLE void importSurvex();
+    Q_INVOKABLE void importWalls();
+    Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
-    Q_INVOKABLE void importWallsDataFile(QList<QUrl> filenames);
 
 signals:
     void cavingRegionChanged();
@@ -58,12 +59,14 @@ public slots:
 
 private slots:
     void compassImporterFinished();
-    void wallsImporterFinished();
     void compassMessages(QString message);
     void wallsMessages(QString severity, QString message, QString source,
                        int startLine, int startColumn, int endLine, int endColumn);
 
 private:
+    static const QString ImportSurvexKey;
+    static const QString ImportWallsKey;
+
     QThread* ImportThread;
 
     QPointer<cwCavingRegion> CavingRegion;
@@ -71,9 +74,6 @@ private:
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
-
-    QStringList QueuedWallsFile;
-    cwWallsImporter* WallsImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
 
