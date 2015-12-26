@@ -34,12 +34,13 @@ public slots:
 private:
     static const QString ChipdataNewLine;
 
-    void writeTrip(QTextStream& stream, cwTrip* trip);
-    void writeHeader(QTextStream& stream, cwTrip* trip);
-    void writeDataFormat(QTextStream& stream, cwTripCalibration* calibrations);
+    void writeTrip(QTextStream& stream, cwTrip* trip, QString caveName = QString());
+    void writeHeader(QTextStream& stream, cwTrip* trip, QString caveName = QString());
+    void writeDataFormat(QTextStream& stream, cwTrip* trip);
     void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
     void writeShot(QTextStream &stream, cwTripCalibration *calibrations, const cwStation &fromStation, const cwStation &toStation, cwShot shot);
     void writeLrudMeasurement(QTextStream &stream, cwDistanceStates::State state, double measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit);
+    QString formatNumber(double number, int maxPrecision, int columnWidth);
 };
 
 #endif // CWCHIPDATAEXPORTCAVETASK_H

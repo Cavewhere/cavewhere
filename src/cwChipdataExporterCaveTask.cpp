@@ -35,7 +35,7 @@ bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
     //Go throug all the trips and save them
     for(int i = 0; i < cave->tripCount(); i++) {
         cwTrip* trip = cave->trip(i);
-        writeTrip(stream, trip);
+        writeTrip(stream, trip, i == 0 ? cave->name() : QString());
         TotalProgress += trip->numberOfStations();
     }
 
@@ -45,8 +45,8 @@ bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 /**
   Writes a signle trip to the stream
   */
-void cwChipdataExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
-    writeHeader(stream, trip);
+void cwChipdataExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip, QString caveName) {
+    writeHeader(stream, trip, caveName);
 
     //Write all chunks
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
@@ -62,11 +62,15 @@ void cwChipdataExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 /**
   Writes the compass file header to a file
   */
-void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
+void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, QString caveName) {
     cwCave* cave = trip->parentCave();
     Q_ASSERT(cave != nullptr);
 
-    stream << " *" << ChipdataNewLine;
+    if (!caveName.isNull()) {
+        stream << caveName << ChipdataNewLine;
+    } else {
+        stream << " *" << ChipdataNewLine;
+    }
     stream << trip->name() << ChipdataNewLine;
     QList<cwTeamMember> teamMembers = trip->team()->teamMembers();
     for (int i = 0; i < teamMembers.size(); i++) {
@@ -81,10 +85,12 @@ void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
 
     stream << " *" << ChipdataNewLine;
 
-    writeDataFormat(stream, trip->calibrations());
+    writeDataFormat(stream, trip);
 }
 
-void cwChipdataExportCaveTask::writeDataFormat(QTextStream &stream, cwTripCalibration *calibrations) {
+void cwChipdataExportCaveTask::writeDataFormat(QTextStream &stream, cwTrip *trip) {
+    cwTripCalibration* calibrations = trip->calibrations();
+
     switch (calibrations->distanceUnit()) {
     case cwUnits::Feet: 	stream << "FT "; break;
     case cwUnits::Inches:	stream << "FI "; break;
@@ -138,15 +144,14 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     if (shot.distanceState() == cwDistanceStates::Valid) {
         switch (calibrations->distanceUnit()) {
         case cwUnits::Feet:
-            stream << QString::number(shot.distance(), 'f', 2).rightJustified(6, ' ', true) << ' ';
+            stream << formatNumber(shot.distance(), 2, 6) << ' ';
             break;
         case cwUnits::Inches:
-            stream << QString::number(shot.distance() / 12.0, 'f', 0).rightJustified(4, ' ', true);
-            stream << QString::number(fmod(shot.distance(), 12.0), 'f', 0).rightJustified(3, ' ', true);
+            stream << formatNumber(shot.distance() / 12.0, 0, 4);
+            stream << formatNumber(fmod(shot.distance(), 12.0), 0, 3);
             break;
         default:
-            stream << QString::number(cwUnits::convert(shot.distance(), calibrations->distanceUnit(), cwUnits::Meters), 'f', 2)
-                      .rightJustified(6, ' ', true) << ' ';
+            stream << formatNumber(cwUnits::convert(shot.distance(), calibrations->distanceUnit(), cwUnits::Meters), 2, 6) << ' ';
             break;
         }
     }
@@ -161,22 +166,22 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     }
 
     if (shot.compassState() == cwCompassStates::Valid) {
-        stream << QString::number(shot.compass(), 'f', 2).rightJustified(6, ' ', true);
+        stream << formatNumber(shot.compass(), 2, 6);
     } else {
         stream << "      ";
     }
     if (shot.backCompassState() == cwCompassStates::Valid) {
-        stream << QString::number(shot.backCompass(), 'f', 2).rightJustified(6, ' ', true);
+        stream << formatNumber(shot.backCompass(), 2, 6);
     } else {
         stream << "      ";
     }
     if (shot.clinoState() == cwClinoStates::Valid) {
-        stream << QString::number(shot.clino(), 'f', 1).rightJustified(5, ' ', true);
+        stream << formatNumber(shot.clino(), 1, 5);
     } else {
         stream << "     ";
     }
     if (shot.backClinoState() == cwClinoStates::Valid) {
-        stream << QString::number(shot.backClino(), 'f', 1).rightJustified(5, ' ', true);
+        stream << formatNumber(shot.backClino(), 1, 5);
     } else {
         stream << "     ";
     }
@@ -201,9 +206,21 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
 void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, cwDistanceStates::State state, double measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)
 {
     if (state == cwDistanceStates::Valid) {
-        stream << QString::number(cwUnits::convert(measurement, fromUnit, toUnit), 'f', 1).rightJustified(3, ' ', true);
+        stream << formatNumber(cwUnits::convert(measurement, fromUnit, toUnit), 1, 3);
     } else {
         stream << "   ";
     }
+}
 
+QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, int columnWidth)
+{
+    QString formatted = QString::number(number, 'f', maxPrecision);
+    int decimalIndex = formatted.indexOf('.');
+    if (decimalIndex >= 0) {
+        int trimIndex = QRegExp("\\.?0+$").indexIn(formatted);
+        if (trimIndex >= 0) {
+            formatted = formatted.left(trimIndex);
+        }
+    }
+    return formatted.rightJustified(columnWidth, ' ', true);
 }
