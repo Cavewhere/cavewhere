@@ -48,13 +48,15 @@ bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 void cwChipdataExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip, QString caveName) {
     writeHeader(stream, trip, caveName);
 
+    bool feetAndInches = isFeetAndInches(trip);
+
     //Write all chunks
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
         //Trim the invalid stations off
         cwSurveyChunkTrimmer::trim(chunk);
 
         if (chunk->isValid()) {
-            writeChunk(stream, chunk);
+            writeChunk(stream, chunk, feetAndInches);
         }
     }
 }
@@ -80,7 +82,7 @@ void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, QS
         stream << teamMembers[i].name();
     }
     if (trip->date().isValid()) {
-        stream << " - " << trip->date().toString() << ChipdataNewLine;
+        stream << " - " << trip->date().toString("M/d/yy") << ChipdataNewLine;
     }
 
     stream << " *" << ChipdataNewLine;
@@ -91,10 +93,14 @@ void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, QS
 void cwChipdataExportCaveTask::writeDataFormat(QTextStream &stream, cwTrip *trip) {
     cwTripCalibration* calibrations = trip->calibrations();
 
-    switch (calibrations->distanceUnit()) {
-    case cwUnits::Feet: 	stream << "FT "; break;
-    case cwUnits::Inches:	stream << "FI "; break;
-    default:			stream << "M  "; break;
+    if (isFeetAndInches(trip)) {
+        stream << "FI ";
+    } else {
+        switch (calibrations->distanceUnit()) {
+        case cwUnits::Feet: 	stream << "FT "; break;
+        case cwUnits::Inches:	stream << "FI "; break;
+        default:			stream << "M  "; break;
+        }
     }
 
     stream << (calibrations->hasCorrectedCompassBacksight() ? "C" : "B");
@@ -106,7 +112,7 @@ void cwChipdataExportCaveTask::writeDataFormat(QTextStream &stream, cwTrip *trip
   Writes a chunk to the stream
   THe chunk has all the real survey data
   */
-void cwChipdataExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
+void cwChipdataExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk, bool feetAndInches) {
     cwTrip* trip = chunk->parentTrip();
 
     //Trim the invalid stations off
@@ -118,7 +124,7 @@ void cwChipdataExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
         cwStation from = chunk->station(i);
         cwStation to = chunk->station(i + 1);
 
-        writeShot(stream, trip->calibrations(), from, to, shot);
+        writeShot(stream, trip->calibrations(), feetAndInches, from, to, shot);
     }
 }
 
@@ -134,28 +140,33 @@ void cwChipdataExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* ch
   */
 void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
                                         cwTripCalibration* calibrations,
+                                        bool feetAndInches,
                                         const cwStation &fromStation,
                                         const cwStation &toStation,
                                         cwShot shot)
 {
-    stream << fromStation.name().rightJustified(5, ' ', true);
     stream << toStation.name().rightJustified(5, ' ', true);
+    stream << fromStation.name().rightJustified(5, ' ', true);
 
     if (shot.distanceState() == cwDistanceStates::Valid) {
-        switch (calibrations->distanceUnit()) {
-        case cwUnits::Feet:
-            stream << formatNumber(shot.distance(), 2, 6) << ' ';
-            break;
-        case cwUnits::Inches:
-            stream << formatNumber(shot.distance() / 12.0, 0, 4);
-            stream << formatNumber(fmod(shot.distance(), 12.0), 0, 3);
-            break;
-        default:
-            stream << formatNumber(cwUnits::convert(shot.distance(), calibrations->distanceUnit(), cwUnits::Meters), 2, 6) << ' ';
-            break;
+        if (feetAndInches) {
+            stream << formatNumber(floor(shot.distance()), 0, 4);
+            stream << formatNumber(fmod(shot.distance(), 1.0) * 12.0, 0, 3);
+        } else {
+            switch (calibrations->distanceUnit()) {
+            case cwUnits::Feet:
+                stream << formatNumber(shot.distance(), 2, 6) << ' ';
+                break;
+            case cwUnits::Inches:
+                stream << formatNumber(shot.distance() / 12.0, 0, 4);
+                stream << formatNumber(fmod(shot.distance(), 12.0), 0, 3);
+                break;
+            default:
+                stream << formatNumber(cwUnits::convert(shot.distance(), calibrations->distanceUnit(), cwUnits::Meters), 2, 6) << ' ';
+                break;
+            }
         }
-    }
-    else {
+    } else {
         stream << "       ";
     }
 
@@ -223,4 +234,28 @@ QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, 
         }
     }
     return formatted.rightJustified(columnWidth, ' ', true);
+}
+
+bool cwChipdataExportCaveTask::isFeetAndInches(cwTrip *trip)
+{
+    return trip->calibrations()->distanceUnit() == cwUnits::Feet && !containsShot(trip, [&](cwShot shot) {
+        if (shot.distanceState() == cwDistanceStates::Valid) {
+            double f = fmod(shot.distance() * 12.0, 1.0);
+            return f > 1e-6 && f < (1 - 1e-6);
+        }
+        return false;
+    });
+}
+
+template<typename P>
+bool cwChipdataExportCaveTask::containsShot(cwTrip* trip, P predicate)
+{
+    foreach (cwSurveyChunk* chunk, trip->chunks()) {
+        foreach (cwShot shot, chunk->shots()) {
+            if (predicate(shot)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
