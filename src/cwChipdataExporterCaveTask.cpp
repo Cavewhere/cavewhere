@@ -166,7 +166,7 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
         stream << "      ";
     }
     if (shot.backCompassState() == cwCompassStates::Valid) {
-        stream << " " << QString::number(shot.backCompass(), 'f', 2).rightJustified(6, ' ', true);
+        stream << QString::number(shot.backCompass(), 'f', 2).rightJustified(6, ' ', true);
     } else {
         stream << "      ";
     }
