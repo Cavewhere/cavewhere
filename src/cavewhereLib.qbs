@@ -96,15 +96,15 @@ DynamicLibrary {
         ]
     }
 
-//    Properties {
-//        condition: qbs.targetOS.contains("linux")
-//        cpp.dynamicLibraries: [
-//            "GL"
-//        ]
-//        cpp.libraryPaths: [
-//            "/usr/lib/x86_64-linux-gnu/mesa/"
-//        ]
-//    }
+    Properties {
+        condition: qbs.targetOS.contains("linux")
+        cpp.dynamicLibraries: [
+            "GL"
+        ]
+        cpp.libraryPaths: [
+            "/usr/lib/x86_64-linux-gnu/mesa/"
+        ]
+    }
 
     Properties {
         condition: qbs.targetOS.contains("windows")
@@ -165,8 +165,8 @@ DynamicLibrary {
     Group {
         name: "uiForms"
         files: [
-            "cwImportSurvexDialog.ui",
-            "cwTaskProgressDialog.ui"
+            "cwImportTreeDataDialog.ui",
+            "cwTaskProgressDialog.ui",
         ]
     }
 

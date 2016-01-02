@@ -56,7 +56,7 @@ Application {
     }
 
     Properties {
-        condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
+        condition: qbs.targetOS.contains("osx")
         cpp.cxxFlags: [
             "-stdlib=libc++", //Needed for protoc
             "-std=c++11", //For c++11 support

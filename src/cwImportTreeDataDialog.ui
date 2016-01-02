@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>cwImportSurvexDialog</class>
- <widget class="QDialog" name="cwImportSurvexDialog">
+ <class>cwImportTreeDataDialog</class>
+ <widget class="QDialog" name="cwImportTreeDataDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -12,6 +12,9 @@
   </property>
   <property name="windowTitle">
    <string>Dialog</string>
+  </property>
+  <property name="SurvexErrorsText" stdset="0">
+   <string>Survex Errors</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
@@ -52,7 +55,7 @@
          </property>
          <widget class="QWidget" name="SurvexErrorsWidget">
           <attribute name="title">
-           <string>Survex Errors</string>
+           <string notr="true">Survex Errors</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_3">
            <item>
@@ -60,10 +63,15 @@
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="ExporErrorsWidget">
+         <widget class="QWidget" name="ImportErrorsWidget">
           <attribute name="title">
            <string>Import Errors</string>
           </attribute>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <item>
+            <widget class="QListView" name="ImportErrorListView"/>
+           </item>
+          </layout>
          </widget>
         </widget>
        </item>

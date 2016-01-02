@@ -35,8 +35,8 @@ void cwSurveyChunkSignaler::setRegion(cwCavingRegion* region) {
         Region = region;
 
         //Connect all signal from the region
-        connect(Region, &cwCavingRegion::insertedCaves, this, &cwSurveyChunkSignaler::connectAddedCaves);
-        connect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwSurveyChunkSignaler::disconnectRemovedCaves);
+        connect(Region.data(), &cwCavingRegion::insertedCaves, this, &cwSurveyChunkSignaler::connectAddedCaves);
+        connect(Region.data(), &cwCavingRegion::beginRemoveCaves, this, &cwSurveyChunkSignaler::disconnectRemovedCaves);
 
         //Connect all sub data
         connectCaves(Region);

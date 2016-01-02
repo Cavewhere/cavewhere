@@ -125,22 +125,7 @@ Item {
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
-            },
-            State {
-                name: "IMPORT_WALLS"
-                PropertyChanges {
-                    target: fileDialog
-                    title: "Import from Walls"
-                    nameFilters: ["Walls (*.srv *.SRV)"]
-                    selectExisting: true
-                    selectMultiple: true
-                    onAccepted: {
-                        messageListDialog.title = "Walls Import";
-                        importManager.importWallsDataFile(fileUrls);
-                    }
-                }
             }
-
         ]
     }
 
@@ -232,11 +217,13 @@ Item {
                 }
 
                 Controls.MenuItem {
+                    text: "Walls (.wpj)"
+                    onTriggered: rootData.surveyImportManager.importWalls()
+                }
+
+                Controls.MenuItem {
                     text: "Walls (.srv)"
-                    onTriggered: {
-                        fileDialogItem.state = "IMPORT_WALLS"
-                        fileDialog.open()
-                    }
+                    onTriggered: rootData.surveyImportManager.importWallsSrv()
                 }
             }
         }

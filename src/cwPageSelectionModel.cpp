@@ -204,13 +204,13 @@ void cwPageSelectionModel::gotoPage(cwPage *page)
     if(CurrentPage != page) {
 
         if(CurrentPage != nullptr) {
-            disconnect(CurrentPage, &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
+            disconnect(CurrentPage.data(), &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
         }
 
         CurrentPage = page;
 
         if(CurrentPage != nullptr) {
-            connect(CurrentPage, &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
+            connect(CurrentPage.data(), &cwPage::nameChanged, this, &cwPageSelectionModel::currentPageAddressChanged);
         }
 
         if(!LockHistory) {

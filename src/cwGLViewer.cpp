@@ -94,13 +94,13 @@ void cwGLViewer::setScene(cwScene* scene) {
     if(Scene != scene) {
 
         if(Scene != nullptr) {
-            disconnect(Scene, &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
+            disconnect(Scene.data(), &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
         }
 
         Scene = scene;
 
         if(Scene != nullptr) {
-            connect(Scene, &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
+            connect(Scene.data(), &cwScene::needsRendering, this, &cwGLViewer::updateRenderer);
         }
 
         emit sceneChanged();

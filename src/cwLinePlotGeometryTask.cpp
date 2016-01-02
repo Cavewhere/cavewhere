@@ -93,8 +93,6 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
     double maxDepth = -std::numeric_limits<double>::max();
     double length = 0.0; //Cave's length
 
-    unsigned int firstStationIndex;
-
     //Go through all the trips in the cave
     for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
         cwTrip* trip = cave->trip(tripIndex);
@@ -126,11 +124,6 @@ void cwLinePlotGeometryTask::addShotLines(int caveIndex) {
                 fullName = fullStationName(caveIndex, cave->name(), station.name());
                 if(StationIndexLookup.contains(fullName)) {
                     unsigned int stationIndex = StationIndexLookup.value(fullStationName(caveIndex, cave->name(), station.name()), 0);
-
-                    //FIXME: is this if statement valid.  Do it do anything
-                    if(station.name() == "1") {
-                        firstStationIndex = previousStationIndex;
-                    }
 
                     //Depth and length calculation
                     QVector3D currentPoint = PointData.at(stationIndex);
