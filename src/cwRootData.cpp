@@ -34,7 +34,8 @@
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     DefaultTrip(new cwTrip(this)),
-    DefaultTripCalibration(new cwTripCalibration(this))
+    DefaultTripCalibration(new cwTripCalibration(this)),
+    LeadsVisible(true)
 {
 
     //Task Manager, allows the users to see running tasks
@@ -84,8 +85,6 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
-
-
 }
 
 /**
@@ -116,3 +115,15 @@ QString cwRootData::version() const {
     return CavewhereVersion; //Automatically generated from qbs in cavewhereVersion.h
 }
 
+/**
+* @brief cwRootData::setLeadsVisible
+* @param leadsVisible
+*
+* This function is temperary, should be moved to a layer manager
+*/
+void cwRootData::setLeadsVisible(bool leadsVisible) {
+    if(LeadsVisible != leadsVisible) {
+        LeadsVisible = leadsVisible;
+        emit leadsVisibleChanged();
+    }
+}

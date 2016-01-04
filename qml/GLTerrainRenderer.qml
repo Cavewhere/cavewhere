@@ -46,6 +46,7 @@ RegionViewer {
         anchors.fill: parent
         regionModel: rootData.regionTreeModel
         camera: renderer.camera
+        visible: rootData.leadsVisible
     }
 
     Row {

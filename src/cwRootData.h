@@ -64,6 +64,9 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
 
+    //Temporary properties that should be move to a view layer model
+    Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+
 public:
     explicit cwRootData(QObject *parent = 0);
     cwCavingRegion* region() const;
@@ -89,6 +92,9 @@ public:
     cwTrip* defaultTrip() const;
     cwTripCalibration* defaultTripCalibration() const;
 
+    bool leadsVisible() const;
+    void setLeadsVisible(bool leadsVisible);
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
@@ -103,6 +109,7 @@ signals:
     void versionChanged();
     void licenseChanged();
     void regionSceneManagerChanged();
+    void leadsVisibleChanged();
 
 public slots:
 
@@ -121,10 +128,13 @@ private:
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
 
-
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
+
+    //Temperary property should be move layer
+    bool LeadsVisible; //!<
+
 };
 
 /**
@@ -246,6 +256,13 @@ inline cwRegionTreeModel* cwRootData::regionTreeModel() const {
     return RegionTreeModel;
 }
 
+/**
+* @brief cwRootData::leadsVisible
+* @return The visiblity of the leads - temporay, should be moved to layer manager
+*/
+inline bool cwRootData::leadsVisible() const {
+    return LeadsVisible;
+}
 
 
 #endif // CWGLOBALQMLDATA_H

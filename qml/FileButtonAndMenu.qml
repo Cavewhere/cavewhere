@@ -117,6 +117,15 @@ MenuBar {
             }
         }
 
+        MenuItem {
+            text: "Leads Visible"
+            checked: rootData.leadsVisible
+            checkable: true
+            onTriggered: {
+                rootData.leadsVisible = !rootData.leadsVisible
+            }
+        }
+
         Menu {
             title: "Event Recording"
 
