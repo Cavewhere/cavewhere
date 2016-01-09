@@ -24,8 +24,6 @@ ApplicationWindow {
 
     LicenseWindow { }
 
-
-
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
 

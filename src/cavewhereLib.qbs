@@ -47,6 +47,10 @@ DynamicLibrary {
         cpp.rpaths: [product.rpath]
     }
 
+    Group {
+        fileTagsFilter: ["dynamiclibrary"]
+        qbs.install: qbs.targetOS.contains("windows")
+    }
 
     cpp.installNamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
