@@ -37,5 +37,20 @@ Project {
             name: "main"
             files: "main.cpp"
         }
+
+        //Create the plist info for the icon
+        bundle.infoPlist: {
+            var object = {"CFBundleIconFile":"cavewhereIcon.icns",
+                "CFBundleDocumentTypes":[
+                    {
+                        "CFBundleTypeName": "Cavewhere Project File",
+                        "CFBundleTypeExtensions": ["cw"],
+                        "CFBundleTypeIconFile": "cavewhereIcon",
+                        "LSHandlerRank": "Owner"
+                    }
+                ]
+            }
+            return object;
+        }
     }
 }

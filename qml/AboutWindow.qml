@@ -37,7 +37,7 @@ Window {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: {
-                return "Copyright 2013 Philip Schuchardt"
+                return "Copyright 2016 Philip Schuchardt"
             }
         }
     }

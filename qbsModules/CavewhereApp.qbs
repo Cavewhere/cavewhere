@@ -43,6 +43,10 @@ Application {
         buildDirectory + "/versionInfo"
     ]
 
+    cpp.rpaths: [
+        Qt.core.libPath
+    ]
+
     Properties {
         condition: qbs.targetOS.contains("osx")
 
@@ -95,8 +99,6 @@ Application {
         ]
     }
 
-
-//        cpp.infoPlistFile: "Info.plist"
     cpp.minimumOsxVersion: "10.7"
 
     Group {
