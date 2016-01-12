@@ -28,7 +28,6 @@ public:
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
 
-
 protected:
     //For database access
     QString DatabasePath;

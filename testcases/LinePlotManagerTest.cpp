@@ -19,6 +19,9 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 
+//Our includes
+#include "TestHelper.h"
+
 //Qt includes
 #include <QThread>
 #include <QApplication>
@@ -59,6 +62,7 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
         CHECK(cave->depth()->value() == 0.0);
         CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
         CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+
         CHECK(cave->errorModel()->fatalCount() == 0);
 
 
@@ -287,6 +291,257 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
                 CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
                 CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
             }
+        }
+
+        SECTION("Trip calibration should cause the cave to re-run") {
+            chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "182");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "-1");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "2");
+
+            plotManager->waitToFinish();
+
+            QVector3D originalA2 = QVector3D(0.17, 10.0, -0.26);
+
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+
+            SECTION("Turn off backsights") {
+
+                trip->calibrations()->setBackSights(false);
+
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.17));
+
+                SECTION("Turn the back on") {
+                    trip->calibrations()->setBackSights(true);
+
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn off front sights") {
+                trip->calibrations()->setFrontSights(false);
+
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.35, 9.99, -0.35));
+
+                SECTION("Turn the back on") {
+                    trip->calibrations()->setFrontSights(true);
+
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on correctedCompassBacksight") {
+                trip->calibrations()->setFrontSights(false);
+                plotManager->waitToFinish();
+
+                trip->calibrations()->setCorrectedCompassBacksight(true);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-0.35, -9.99, -0.35));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setFrontSights(true);
+                    plotManager->waitToFinish();
+
+                    trip->calibrations()->setCorrectedCompassBacksight(false);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on correctedClinoBacksight") {
+                trip->calibrations()->setFrontSights(false);
+                plotManager->waitToFinish();
+
+                trip->calibrations()->setCorrectedClinoBacksight(true);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.35, 9.99, 0.35));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setFrontSights(true);
+                    plotManager->waitToFinish();
+
+                    trip->calibrations()->setCorrectedClinoBacksight(false);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on correctedCompassFrontsight") {
+                trip->calibrations()->setBackSights(false);
+                plotManager->waitToFinish();
+
+                trip->calibrations()->setCorrectedCompassFrontsight(true);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, -10.0, -0.17));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setBackSights(true);
+                    plotManager->waitToFinish();
+
+                    trip->calibrations()->setCorrectedCompassFrontsight(false);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on correctedClinoFrontsight") {
+                trip->calibrations()->setBackSights(false);
+                plotManager->waitToFinish();
+
+                trip->calibrations()->setCorrectedClinoFrontsight(true);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.17));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setBackSights(true);
+                    plotManager->waitToFinish();
+
+                    trip->calibrations()->setCorrectedClinoFrontsight(false);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("setTapeCalibration") {
+                trip->calibrations()->setTapeCalibration(1.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.19, 10.99, -0.29));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setTapeCalibration(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("setFrontCompassCalibration") {
+                trip->calibrations()->setFrontCompassCalibration(-2.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.26));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setFrontCompassCalibration(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("setFrontClinoCalibration") {
+                trip->calibrations()->setFrontClinoCalibration(3.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.17, 10.0, 0.0));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setFrontClinoCalibration(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("setBackCompassCalibration") {
+                trip->calibrations()->setBackCompassCalibration(-2.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.26));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setBackCompassCalibration(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on setBackClinoCalibration") {
+                trip->calibrations()->setBackClinoCalibration(-3.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.17, 10.0, 0.0));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setBackClinoCalibration(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on setDeclination") {
+                trip->calibrations()->setDeclination(180.0);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-0.17, -10.0, -0.26));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setDeclination(0.0);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
+            SECTION("Turn on setDistance units") {
+                trip->calibrations()->setDistanceUnit(cwUnits::Feet);
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.05, 3.05, -0.08));
+
+                SECTION("Turn it off") {
+                    trip->calibrations()->setDistanceUnit(cwUnits::Meters);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                }
+            }
+
         }
     }
 

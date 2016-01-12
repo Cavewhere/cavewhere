@@ -19,6 +19,7 @@ class cwAddImageTask;
 class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;
+class cwRegionLoadTask;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -70,6 +71,8 @@ public:
 
     bool isTemporaryProject() const;
 
+    void waitToFinish();
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
@@ -89,6 +92,7 @@ private:
     cwCavingRegion* Region;
 
     //For loading images from the disk into this project
+    cwRegionLoadTask* LoadTask;
     QThread* LoadSaveThread;
 
     //The undo stack

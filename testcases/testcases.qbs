@@ -17,7 +17,8 @@ CavewhereApp {
         name: "testcases"
         files: [
             "*.cpp",
-            "*.h"
+            "*.h",
+            "cavewhere-test.qrc"
         ]
     }
 
@@ -34,7 +35,7 @@ CavewhereApp {
     Group {
         name: "CatchTestLibrary"
         files: [
-            "catch.hpp"
+            "catch.hpp",
         ]
     }
 }

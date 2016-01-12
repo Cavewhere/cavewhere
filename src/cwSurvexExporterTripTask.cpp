@@ -73,20 +73,23 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCali
     writeLengthUnits(stream, calibrations->distanceUnit());
 
     writeCalibration(stream, "TAPE", calibrations->tapeCalibration());
-    writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration());
 
-    float correctBacksiteCompass = calibrations->hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations->backCompassCalibration() + correctBacksiteCompass);
+    double correctFrontsightCompass = calibrations->hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
+    writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration() + correctFrontsightCompass);
 
-    writeCalibration(stream, "CLINO", calibrations->frontClinoCalibration());
+    double correctBacksightCompass = calibrations->hasCorrectedCompassBacksight() ? -180.0 : 0.0;
+    writeCalibration(stream, "BACKCOMPASS", calibrations->backCompassCalibration() + correctBacksightCompass);
 
-    float backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
+    double frontClinoScale = calibrations->hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
+    writeCalibration(stream, "CLINO", calibrations->frontClinoCalibration(), frontClinoScale);
+
+    double backClinoScale = calibrations->hasCorrectedClinoBacksight() ? -1.0 : 1.0;
     writeCalibration(stream, "BACKCLINO", calibrations->backClinoCalibration(), backClinoScale);
 
     writeCalibration(stream, "DECLINATION", calibrations->declination());
 }
 
-void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, float value, float scale) {
+void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString type, double value, double scale) {
     if(value == 0.0 && scale == 1.0) { return; }
     value = -value; //Flip the value be survex is counter intuitive
 

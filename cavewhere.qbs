@@ -35,7 +35,9 @@ Project {
 
         Group {
             name: "main"
-            files: "main.cpp"
+            files: [
+                "main.cpp"
+            ]
         }
 
         //Create the plist info for the icon

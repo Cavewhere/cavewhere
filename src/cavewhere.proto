@@ -4,6 +4,7 @@ package CavewhereProto;
 
 message CavingRegion {
     repeated Cave caves = 1;
+    optional int32 version = 2;
 }
 
 message Cave {
@@ -68,6 +69,8 @@ message TripCalibration {
     optional Units.LengthUnit distanceUnit = 9;
     optional bool frontSights = 10;
     optional bool backSights = 11;
+    optional bool correctedCompassFrontsight = 12;
+    optional bool correctedClinoFrontsight = 13;
 }
 
 message SurveyChunk {

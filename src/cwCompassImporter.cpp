@@ -511,6 +511,12 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             cwUnits::LengthUnit distanceUnits = CurrentTrip->calibrations()->distanceUnit();
 
             shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
+
+            //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
+            if(distanceUnits == cwUnits::Meters) {
+                shot.setDistance(qRound(shot.distance() * 100.0) / 100.0); //Round to the nearest cm
+            }
+
             shot.setCompass(bearing);
             shot.setClino(inclination);
 

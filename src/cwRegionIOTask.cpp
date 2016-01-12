@@ -72,6 +72,15 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
 }
 
 /**
+ * @brief cwRegionIOTask::version
+ * @return Returns the current version
+ */
+int cwRegionIOTask::version()
+{
+    return 1;
+}
+
+/**
  * @brief cwRegionIOTask::moveRegionToThread
  * @param thread
  *

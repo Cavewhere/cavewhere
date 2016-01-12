@@ -12,6 +12,8 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
 {
     CorrectedClinoBacksight = false;
     CorrectedCompassBacksight = false;
+    CorrectedClinoFrontsight = false;
+    CorrectedCompassFrontsight = false;
     TapeCalibration = 0.0f;
     FrontCompassCalibration = 0.0f;
     FrontClinoCalibration = 0.0f;
@@ -46,6 +48,8 @@ cwTripCalibration& cwTripCalibration::copy(const cwTripCalibration& object) {
 
     CorrectedCompassBacksight = object.CorrectedCompassBacksight;
     CorrectedClinoBacksight = object.CorrectedClinoBacksight;
+    CorrectedCompassFrontsight = object.CorrectedCompassFrontsight;
+    CorrectedClinoFrontsight = object.CorrectedClinoFrontsight;
     TapeCalibration = object.TapeCalibration;
     FrontCompassCalibration = object.FrontCompassCalibration;
     FrontClinoCalibration = object.FrontClinoCalibration;
@@ -179,6 +183,7 @@ void cwTripCalibration::setFrontSights(bool frontSights) {
     if(FrontSights != frontSights) {
         FrontSights = frontSights;
         emit frontSightsChanged();
+        emit calibrationsChanged();
     }
 }
 
@@ -190,6 +195,31 @@ void cwTripCalibration::setBackSights(bool backSights) {
     if(BackSights != backSights) {
         BackSights = backSights;
         emit backSightsChanged();
+        emit calibrationsChanged();
+    }
+}
+
+/**
+* @brief cwTripCalibration::setCorrectedCompassFrontsight
+* @param correctedCompassFrontsight
+*/
+void cwTripCalibration::setCorrectedCompassFrontsight(bool correctedCompassFrontsight) {
+    if(CorrectedCompassFrontsight != correctedCompassFrontsight) {
+        CorrectedCompassFrontsight = correctedCompassFrontsight;
+        emit correctedCompassFrontsightChanged();
+        emit calibrationsChanged();
+    }
+}
+
+/**
+* @brief class::setCorrectedClinoFrontsight
+* @param correctedClinoFrontsight
+*/
+void cwTripCalibration::setCorrectedClinoFrontsight(bool correctedClinoFrontsight) {
+    if(CorrectedClinoFrontsight != correctedClinoFrontsight) {
+        CorrectedClinoFrontsight = correctedClinoFrontsight;
+        emit correctedClinoFrontsightChanged();
+        emit calibrationsChanged();
     }
 }
 
