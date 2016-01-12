@@ -61,7 +61,6 @@ MenuBar {
             id: saveAsMenuItem
             text: "Save As"
             onTriggered:{
-                console.log("Open file dialog:" + saveAsFileDialog)
                 saveAsFileDialog.open()
             }
         }

@@ -13,13 +13,14 @@
 #include "cwUnits.h"
 #include "cwStation.h"
 #include "cwReadingStates.h"
+#include "cwGlobals.h"
 class cwCave;
 class cwTrip;
 class cwTripCalibration;
 class cwSurveyChunk;
 class cwShot;
 
-class cwCompassExportCaveTask : public cwCaveExporterTask
+class CAVEWHERE_LIB_EXPORT cwCompassExportCaveTask : public cwCaveExporterTask
 {
     Q_OBJECT
 public:

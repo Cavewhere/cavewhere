@@ -83,7 +83,9 @@ ApplicationWindow {
         nameFilters: ["Cavewhere Project (*.cw)"]
         title: "Save Cavewhere Project As"
         selectExisting: false
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             project.saveAs(fileUrl)
         }
     }
@@ -91,7 +93,9 @@ ApplicationWindow {
     FileDialog {
         id: loadFileDialogId
         nameFilters: ["Cavewhere File (*.cw)"]
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             rootData.pageSelectionModel.clearHistory();
             rootData.pageSelectionModel.gotoPageByName(null, "View")
             rootData.project.loadFile(fileUrl)

@@ -63,6 +63,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
+    Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
@@ -95,6 +96,9 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool leadsVisible);
 
+    QUrl lastDirectory() const;
+    void setLastDirectory(QUrl lastDirectory);
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
@@ -110,6 +114,7 @@ signals:
     void licenseChanged();
     void regionSceneManagerChanged();
     void leadsVisibleChanged();
+    void lastDirectoryChanged();
 
 public slots:
 

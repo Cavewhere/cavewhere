@@ -27,6 +27,8 @@
 //Qt includes
 #include <QItemSelectionModel>
 #include <QUndoStack>
+#include <QSettings>
+#include <QStandardPaths>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -125,5 +127,31 @@ void cwRootData::setLeadsVisible(bool leadsVisible) {
     if(LeadsVisible != leadsVisible) {
         LeadsVisible = leadsVisible;
         emit leadsVisibleChanged();
+    }
+}
+
+/**
+* @brief cwRootData::lastDirectory
+* @return Returns the last directory open by the file dialog. If the directory doesn't exist, this opens the desktopLocation
+*/
+QUrl cwRootData::lastDirectory() const {
+    QSettings settings;
+    QUrl dir = settings.value("LastDirectory", QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation))).toUrl();
+    return dir;
+}
+
+/**
+* @brief cwRootData::setLastDirectory
+* @param lastDirectory - Set the last directory that was opened by the user. This is useful for
+* propertly position the file dialogs
+*/
+void cwRootData::setLastDirectory(QUrl lastDirectory) {
+    QFileInfo info(lastDirectory.toLocalFile());
+    QUrl dir = QUrl::fromLocalFile(info.path());
+
+    if(this->lastDirectory() != dir) {
+        QSettings settings;
+        settings.setValue("LastDirectory", dir);
+        emit lastDirectoryChanged();
     }
 }
