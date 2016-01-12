@@ -187,7 +187,7 @@ void cwLinePlotTask::runCavern() {
         return;
     }
 
-    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
+//    qDebug() << "Running cavern on " << SurvexFile->fileName() << "Status" << status();
     CavernTask->start();
 }
 
@@ -212,7 +212,7 @@ void cwLinePlotTask::readXML() {
         return;
     }
 
-    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
+//    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
     PlotSauceParseTask->setPlotSauceXMLFile(PlotSauceTask->outputXMLFile());
     PlotSauceParseTask->start();
 }
