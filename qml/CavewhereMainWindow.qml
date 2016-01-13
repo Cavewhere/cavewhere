@@ -22,7 +22,12 @@ ApplicationWindow {
     title: "Cavewhere - " + version
     //    anchors.fill: parent;
 
-    LicenseWindow { }
+    Loader {
+        source: "LicenseWindow.qml"
+        visible: !license.hasReadLicenseAgreement
+        active: visible
+        asynchronous: true
+    }
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
@@ -46,7 +51,7 @@ ApplicationWindow {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
-        asynchronous: false //FIXME: Once https://bugreports.qt-project.org/browse/QTBUG-36410 is fixed turn this to true
+        asynchronous: true
         visible: status == Loader.Ready
 
 //        onLoaded: {
