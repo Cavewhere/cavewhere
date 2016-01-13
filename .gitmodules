@@ -16,3 +16,9 @@
 [submodule "squish"]
 	path = squish
 	url = git@github.com:Cavewhere/squish.git
+[submodule "dewalls"]
+	path = dewalls
+	url = git@github.com:Cavewhere/dewalls
+[submodule "lib-qt-qml-tricks"]
+	path = lib-qt-qml-tricks
+	url = git@github.com:Cavewhere/lib-qt-qml-tricks.git

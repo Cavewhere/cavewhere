@@ -11,16 +11,19 @@
 //Qt includes
 #include <QObject>
 #include <QStringList>
+#include "cwGlobals.h"
 
 //Our includes
 #include "cwUnits.h"
 
-class cwTripCalibration : public QObject
+class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(bool correctedCompassBacksight READ hasCorrectedCompassBacksight WRITE setCorrectedCompassBacksight NOTIFY correctedCompassBacksightChanged)
     Q_PROPERTY(bool correctedClinoBacksight READ hasCorrectedClinoBacksight WRITE setCorrectedClinoBacksight NOTIFY correctedClinoBacksightChanged)
+    Q_PROPERTY(bool correctedCompassFrontsight READ hasCorrectedCompassFrontsight WRITE setCorrectedCompassFrontsight NOTIFY correctedCompassFrontsightChanged)
+    Q_PROPERTY(bool correctedClinoFrontsight READ hasCorrectedClinoFrontsight WRITE setCorrectedClinoFrontsight NOTIFY correctedClinoFrontsightChanged)
     Q_PROPERTY(double tapeCalibration READ tapeCalibration WRITE setTapeCalibration NOTIFY tapeCalibrationChanged)
     Q_PROPERTY(double frontCompassCalibration READ frontCompassCalibration WRITE setFrontCompassCalibration NOTIFY frontCompassCalibrationChanged)
     Q_PROPERTY(double frontClinoCalibration READ frontClinoCalibration WRITE setFrontClinoCalibration NOTIFY frontClinoCalibrationChanged)
@@ -42,6 +45,12 @@ public:
 
     void setCorrectedClinoBacksight(bool isCorrected);
     bool hasCorrectedClinoBacksight() const;
+
+    void setCorrectedCompassFrontsight(bool correctedClinoFrontsight);
+    bool hasCorrectedCompassFrontsight() const;
+
+    void setCorrectedClinoFrontsight(bool correctedClinoFrontsight);
+    bool hasCorrectedClinoFrontsight() const;
 
     void setTapeCalibration(double tapeCalibration);
     double tapeCalibration() const;
@@ -79,6 +88,8 @@ public:
 signals:
     void correctedCompassBacksightChanged(bool corrected);
     void correctedClinoBacksightChanged(bool corrected);
+    void correctedCompassFrontsightChanged();
+    void correctedClinoFrontsightChanged();
     void tapeCalibrationChanged(double calibration);
     void frontCompassCalibrationChanged(double calibration);
     void frontClinoCalibrationChanged(double calibration);
@@ -96,6 +107,8 @@ public slots:
 private:
     bool CorrectedCompassBacksight;
     bool CorrectedClinoBacksight;
+    bool CorrectedCompassFrontsight; //!<
+    bool CorrectedClinoFrontsight; //!<
     double TapeCalibration;
     double FrontCompassCalibration;
     double FrontClinoCalibration;
@@ -116,6 +129,15 @@ inline bool cwTripCalibration::hasCorrectedCompassBacksight() const {
 inline bool cwTripCalibration::hasCorrectedClinoBacksight() const {
     return CorrectedClinoBacksight;
 }
+
+/**
+* @brief cwTripCalibration::correctedCompassFrontsight
+* @return
+*/
+inline bool cwTripCalibration::hasCorrectedCompassFrontsight() const {
+    return CorrectedCompassFrontsight;
+}
+
 
 inline double cwTripCalibration::tapeCalibration() const {
     return TapeCalibration;
@@ -158,6 +180,15 @@ Gets backSights
 inline bool cwTripCalibration::hasBackSights() const {
     return BackSights;
 }
+
+/**
+* @brief class::correctedClinoFrontsight
+* @return
+*/
+inline bool cwTripCalibration::hasCorrectedClinoFrontsight() const {
+    return CorrectedClinoFrontsight;
+}
+
 
 
 #endif // CWTRIPCALIBRATION_H

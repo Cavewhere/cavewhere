@@ -140,7 +140,7 @@ Project {
 
         Rule {
             inputs: ["innoOriginal"]
-            inputsFormDependencies: ["deployedApplication"]
+            inputsFromDependencies: ["deployedApplication"]
             multiplex: true
 
             Artifact {
@@ -162,7 +162,7 @@ Project {
 #define MyAppPublisher "Cavewhere"\n\
 #define MyAppURL "http://www.cavewhere.com"\n\
 #define MyAppExeName "Cavewhere.exe"\n\
-#define releaseDirectory "' + product.sourceDirectory + "/" + project.installDir + '"\n\n' +
+#define releaseDirectory "' + project.installDir + '"\n\n' +
 innoInputFile
 
                     var outputHandle = TextFile(output.filePath, TextFile.WriteOnly)
@@ -182,7 +182,7 @@ innoInputFile
             }
 
             prepare: {
-                var cmd = new Command("C:/Program Files/Inno Setup 5/ISCC.exe")
+                var cmd = new Command("C:/Program Files (x86)/Inno Setup 5/ISCC.exe")
                 cmd.arguments = [input.filePath]
                 cmd.description = "running ISCC.exe"
                 return cmd

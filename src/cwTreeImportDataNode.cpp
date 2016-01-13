@@ -6,15 +6,15 @@
 **************************************************************************/
 
 //Our includes
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 
-cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
+cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
     QObject(parent),
-    ParentBlock(nullptr),
+    ParentNode(nullptr),
     Type(NoImport),
     Team(new cwTeam(this)),
     Calibration(new cwTripCalibration(this)),
@@ -25,21 +25,21 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
 /**
   \brief Gets the survex block at index
   */
- cwSurvexBlockData* cwSurvexBlockData::childBlock(int index) {
-     return ChildBlocks[index];
+ cwTreeImportDataNode* cwTreeImportDataNode::childNode(int index) {
+     return ChildNodes[index];
  }
 
 /**
   \brief Get's the chunk at index
   */
- cwSurveyChunk* cwSurvexBlockData::chunk(int index) {
+ cwSurveyChunk* cwTreeImportDataNode::chunk(int index) {
      return Chunks[index];
  }
 
  /**
    \brief Sets the name of the block data
    */
- void cwSurvexBlockData::setName(QString name) {
+ void cwTreeImportDataNode::setName(QString name) {
      if(Name != name) {
          Name = name;
          emit nameChanged();
@@ -49,13 +49,13 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Sets how this block will be exported
    */
- void cwSurvexBlockData::setImportType(ImportType type) {
+ void cwTreeImportDataNode::setImportType(ImportType type) {
      if(Type != type) {
          //Go through children and update thier type
          Type = type;
          emit importTypeChanged();
 
-         foreach(cwSurvexBlockData* child, ChildBlocks) {
+         foreach(cwTreeImportDataNode* child, ChildNodes) {
              if(Type != NoImport) {
                  if(child->isTrip()) {
                      child->setImportType(Trip);
@@ -72,13 +72,13 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Checks to see if this is a trip
    */
- bool cwSurvexBlockData::isTrip() const {
-     cwSurvexBlockData* parent = parentBlock();
+ bool cwTreeImportDataNode::isTrip() const {
+     cwTreeImportDataNode* parent = parentNode();
      while(parent != nullptr) {
          if(parent->importType() == Trip) {
              return false;
          }
-         parent = parent->parentBlock();
+         parent = parent->parentNode();
      }
 
      return !Chunks.isEmpty();
@@ -87,7 +87,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Converts the export type to a string
    */
- QString cwSurvexBlockData::importTypeToString(ImportType type) {
+ QString cwTreeImportDataNode::importTypeToString(ImportType type) {
      switch(type) {
      case NoImport:
          return QString("Don't Import");
@@ -104,26 +104,17 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    \brief Adds a child block to the data
    */
- void cwSurvexBlockData::addChildBlock(cwSurvexBlockData* blockData) {
-     blockData->ParentBlock = this;
-     ChildBlocks.append(blockData);
+ void cwTreeImportDataNode::addChildNode(cwTreeImportDataNode* blockData) {
+     blockData->ParentNode = this;
+     ChildNodes.append(blockData);
  }
 
  /**
    \brief Adds a chunk to the data
    */
- void cwSurvexBlockData::addChunk(cwSurveyChunk* chunk) {
+ void cwTreeImportDataNode::addChunk(cwSurveyChunk* chunk) {
      chunk->setParent(this);
      Chunks.append(chunk);
- }
-
- /**
-  * @brief cwSurvexBlockData::addLRUDChunk
-  * This creates a new LRUD chunk
-  */
- void cwSurvexBlockData::addLRUDChunk()
- {
-     LRUDChunks.append(cwSurvexLRUDChunk());
  }
 
  /**
@@ -131,15 +122,15 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
 
    This will delete the block, if they're still owned by this object
    */
- void cwSurvexBlockData::clear() {
+ void cwTreeImportDataNode::clear() {
      Chunks.clear();
-     ChildBlocks.clear();
+     ChildNodes.clear();
  }
 
  /**
    \brief Get's all the station for this survex block
    */
- int cwSurvexBlockData::stationCount() const {
+ int cwTreeImportDataNode::stationCount() const {
      int numStations = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
          numStations += chunk->stationCount();
@@ -153,7 +144,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
    Returns null if the index is out of bounds. The index is out of bound when index >=
    stationCount()
    */
- cwStation cwSurvexBlockData::station(int index) const {
+ cwStation cwTreeImportDataNode::station(int index) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(index < chunk->stationCount()) {
              return chunk->station(index);
@@ -166,7 +157,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
 /**
   \brief Gets the number of shots in the block
   */
- int cwSurvexBlockData::shotCount() const {
+ int cwTreeImportDataNode::shotCount() const {
      int numShots = 0;
      foreach(cwSurveyChunk* chunk, Chunks) {
          numShots += chunk->shotCount();
@@ -177,7 +168,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
  /**
    Get's the parent cwSurveyChunk at shot index
    */
- cwSurveyChunk *cwSurvexBlockData::parentChunkOfShot(int shotIndex) const {
+ cwSurveyChunk *cwTreeImportDataNode::parentChunkOfShot(int shotIndex) const {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(shotIndex < chunk->shotCount()) {
              return chunk;
@@ -187,7 +178,7 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      return nullptr;
  }
 
- int cwSurvexBlockData::chunkShotIndex(int shotIndex) const
+ int cwTreeImportDataNode::chunkShotIndex(int shotIndex) const
  {
      foreach(cwSurveyChunk* chunk, Chunks) {
          if(shotIndex < chunk->shotCount()) {
@@ -197,36 +188,5 @@ cwSurvexBlockData::cwSurvexBlockData(QObject* parent) :
      }
      return -1;
  }
-
-
- /**
-  * @brief cwSurvexBlockData::equatedStations
-  * @return
-  */
- QStringList cwSurvexBlockData::equatedStations(QString stationName) const
- {
-     QStringList equatedStations;
-     foreach(QStringList stations, EqualStations) {
-         if(stations.contains(stationName)) {
-             equatedStations.append(stations);
-         }
-     }
-
-     return equatedStations;
- }
-
- /**
-  * @brief cwSurvexBlockData::addExportStations
-  * @param exportStations
-  *
-  * Appends the export stations to the export station list
-  */
- void cwSurvexBlockData::addExportStations(QStringList exportStations)
- {
-     foreach(QString station, exportStations) {
-         ExportStations.insert(station);
-     }
- }
-
 
 

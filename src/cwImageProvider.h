@@ -18,8 +18,9 @@
 //Our includes
 #include "cwImage.h"
 #include "cwImageData.h"
+#include "cwGlobals.h"
 
-class cwImageProvider : public QObject, public QQuickImageProvider
+class CAVEWHERE_LIB_EXPORT cwImageProvider : public QObject, public QQuickImageProvider
 {
     Q_OBJECT
 

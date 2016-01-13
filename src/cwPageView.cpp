@@ -38,14 +38,14 @@ void cwPageView::setPageSelectionModel(cwPageSelectionModel* pageSelectionModel)
     if(PageSelectionModel != pageSelectionModel) {
 
         if(!PageSelectionModel.isNull()) {
-            disconnect(PageSelectionModel, &cwPageSelectionModel::currentPageChanged,
+            disconnect(PageSelectionModel.data(), &cwPageSelectionModel::currentPageChanged,
                        this, &cwPageView::loadCurrentPage);
         }
 
         PageSelectionModel = pageSelectionModel;
 
         if(!PageSelectionModel.isNull()) {
-            connect(PageSelectionModel, &cwPageSelectionModel::currentPageChanged,
+            connect(PageSelectionModel.data(), &cwPageSelectionModel::currentPageChanged,
                     this, &cwPageView::loadCurrentPage);
 
             loadCurrentPage();
@@ -66,10 +66,10 @@ void cwPageView::loadCurrentPage()
     Q_ASSERT(!PageSelectionModel.isNull());
 
     cwPage* currentPage = PageSelectionModel->currentPage();
-    if(currentPage != CurrentPage) {
+    if(currentPage != CurrentPage && currentPage != PageSelectionModel->rootPage()) {
 
         if(!CurrentPage.isNull()) {
-            disconnect(CurrentPage, &cwPage::selectionPropertiesChanged,
+            disconnect(CurrentPage.data(), &cwPage::selectionPropertiesChanged,
                        this, &cwPageView::updateSelectionOnCurrentPage);
         }
 
@@ -77,7 +77,7 @@ void cwPageView::loadCurrentPage()
 
         if(currentPage != nullptr && currentPage->component() != nullptr) {
 
-            connect(CurrentPage, &cwPage::selectionPropertiesChanged,
+            connect(CurrentPage.data(), &cwPage::selectionPropertiesChanged,
                     this, &cwPageView::updateSelectionOnCurrentPage);
 
             QQuickItem* item = ComponentToItem.value(currentPage->component());

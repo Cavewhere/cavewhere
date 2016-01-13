@@ -7,9 +7,15 @@
 
 //Our includes
 #include "cwSurveyImportManager.h"
-#include "cwImportSurvexDialog.h"
+#include "cwImportTreeDataDialog.h"
+#include "cwSurvexImporter.h"
 #include "cwCompassImporter.h"
+#include "cwWallsImporter.h"
 #include "cwCavingRegion.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
+#include "cwStation.h"
+#include "cwShot.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -20,7 +26,8 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
     ImportThread(new QThread()),
     CavingRegion(nullptr),
-    CompassImporter(new cwCompassImporter())
+    CompassImporter(new cwCompassImporter()),
+    MessageListFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
 {
     CompassImporter->setThread(ImportThread);
     connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
@@ -43,15 +50,29 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
     }
 }
 
+const QString cwSurveyImportManager::ImportSurvexKey = "LastImportSurvexFile";
+const QString cwSurveyImportManager::ImportWallsKey = "LastImportWallsFile";
+
 /**
   \brief Opens the survex importer dialog
   */
 void cwSurveyImportManager::importSurvex() {
 
-    cwImportSurvexDialog* survexImportDialog = new cwImportSurvexDialog(cavingRegion());
-    survexImportDialog->setUndoStack(UndoStack);
-    survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    survexImportDialog->open();
+    QSettings settings;
+    QString lastFile = settings.value(ImportSurvexKey).toString();
+    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Survex", lastFile, "Survex *.svx");
+
+    if (QFileInfo(filename).exists()) {
+        settings.setValue(ImportSurvexKey, filename);
+        cwImportTreeDataDialog::Names names{"Survex Importer", "Survex Errors"};
+        cwImportTreeDataDialog* survexImportDialog = new cwImportTreeDataDialog(names, new cwSurvexImporter(), cavingRegion());
+        survexImportDialog->setUndoStack(UndoStack);
+        survexImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        survexImportDialog->open();
+        QStringList files;
+        files << filename;
+        survexImportDialog->setInputFiles(files);
+    }
 }
 
 /**
@@ -65,6 +86,7 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
 
     if(CompassImporter->isReady()) {
         CompassImporter->setCompassDataFiles(dataFiles + QueuedCompassFile);
+        emit messagesCleared();
         CompassImporter->start();
     } else if(CompassImporter->isRunning()) {
         QueuedCompassFile.append(dataFiles);
@@ -107,6 +129,59 @@ void cwSurveyImportManager::compassImporterFinished()
 void cwSurveyImportManager::compassMessages(QString message)
 {
     qDebug() << "Compass Importer:" << message;
+//    emit messageAdded(message);
+}
+
+/**
+  \brief Opens the Walls importer dialog
+  */
+void cwSurveyImportManager::importWalls() {
+
+    QSettings settings;
+    QString lastFile = settings.value(ImportWallsKey).toString();
+    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Walls", lastFile, "Walls *.wpj");
+
+    if (QFileInfo(filename).exists()) {
+        settings.setValue(ImportWallsKey, filename);
+        cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
+        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
+        wallsImportDialog->setUndoStack(UndoStack);
+        wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        wallsImportDialog->open();
+        QStringList files;
+        files << filename;
+        wallsImportDialog->setInputFiles(files);
+    }
+}
+
+void cwSurveyImportManager::importWallsSrv() {
+    QSettings settings;
+    QString lastDir = settings.value(ImportWallsKey).toString();
+    QStringList filenames = QFileDialog::getOpenFileNames(nullptr, "Import Walls", lastDir, "Walls *.srv");
+
+    if (!filenames.isEmpty()) {
+        settings.setValue(ImportWallsKey, filenames[0]);
+        cwImportTreeDataDialog::Names names{"Walls Importer", "Walls Errors"};
+        cwImportTreeDataDialog* wallsImportDialog = new cwImportTreeDataDialog(names, new cwWallsImporter(), cavingRegion());
+        wallsImportDialog->setUndoStack(UndoStack);
+        wallsImportDialog->setAttribute(Qt::WA_DeleteOnClose, true);
+        wallsImportDialog->open();
+        wallsImportDialog->setInputFiles(filenames);
+    }
+}
+
+/**
+ * @brief cwSurveyImportManager::wallsMessages
+ * @param message
+ *
+ * Reports messages
+ * TODO: Make this report to the gui, in a meaning full way
+ */
+void cwSurveyImportManager::wallsMessages(QString severity, QString message, QString source,
+                   int startLine, int startColumn, int endLine, int endColumn)
+{
+    qDebug() << "Walls Importer:" << message;
+    emit messageAdded(severity, message, source, startLine, startColumn, endLine, endColumn);
 }
 
 /**

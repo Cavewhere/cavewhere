@@ -6,8 +6,8 @@ import "cavewhereBuildFunctions.js" as utils
 Module {
     name: "Git"
 
-    readonly property string execPath: utils.findIfExisting(["C:/Program Files/Git/cmd/git.cmd",
-                                                             "C:/Program Files (x86)/Git/cmd/git.cmd",
+    readonly property string execPath: utils.findIfExisting(["C:/Program Files/Git/cmd/git.exe",
+                                                             "C:/Program Files (x86)/Git/cmd/git.exe",
                                                              "/usr/bin/git",
                                                              "/usr/local/bin/git"],
                                                             "git")

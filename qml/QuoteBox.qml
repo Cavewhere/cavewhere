@@ -41,6 +41,7 @@ Item {
     property point pointAtObjectPosition
 
     function updatePosition() {
+        if(!visible) { return; }
         var newPos = pointAt(pointAtObject, pointAtObjectPosition)
         x = newPos.x
         y = newPos.y
@@ -51,6 +52,7 @@ Item {
       */
     function pointAt(item, position) {
         if(item !== null) {
+
             var globalPos = item.mapToItem(null, position.x, position.y)
             var globalTrianglePos = arrowTipId.mapToItem(null, 0, 0)
 
@@ -67,6 +69,10 @@ Item {
     }
 
     onPointAtObjectPositionChanged: {
+        updatePosition()
+    }
+
+    onVisibleChanged: {
         updatePosition()
     }
 

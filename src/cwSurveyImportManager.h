@@ -15,10 +15,13 @@
 #include <QPointer>
 #include <QList>
 #include <QUrl>
+#include <QFont>
+#include <QFontDatabase>
 
 //Our includes
 class cwCavingRegion;
 class cwCompassImporter;
+class cwWallsImporter;
 
 /**
     This class allows qml to import data
@@ -29,6 +32,7 @@ class cwSurveyImportManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
+    Q_PROPERTY(QFont messageListFont MEMBER MessageListFont CONSTANT)
 
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);
@@ -41,19 +45,28 @@ public:
     void setUndoStack(QUndoStack* undoStack);
 
     Q_INVOKABLE void importSurvex();
+    Q_INVOKABLE void importWalls();
+    Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
 
 signals:
     void cavingRegionChanged();
     void undoStackChanged();
+    void messageAdded(QString severity, QString message, QString source, int startLine, int startColumn, int endLine, int endColumn);
+    void messagesCleared();
     
 public slots:
 
 private slots:
     void compassImporterFinished();
     void compassMessages(QString message);
+    void wallsMessages(QString severity, QString message, QString source,
+                       int startLine, int startColumn, int endLine, int endColumn);
 
 private:
+    static const QString ImportSurvexKey;
+    static const QString ImportWallsKey;
+
     QThread* ImportThread;
 
     QPointer<cwCavingRegion> CavingRegion;
@@ -63,6 +76,8 @@ private:
     cwCompassImporter* CompassImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
+
+    QFont MessageListFont;
 };
 
 

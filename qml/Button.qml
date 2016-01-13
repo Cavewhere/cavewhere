@@ -21,6 +21,7 @@ Rectangle {
     property int buttonMargin:  container.anchors.margins
     property bool mousePressed: false
     property bool enabled: true
+    property bool globalClickToUncheck: false //This is useful, if you're connect the button to a popup
 
     signal clicked();
 
@@ -82,7 +83,13 @@ Rectangle {
         hoverEnabled: true
 
         onClicked: {
-            if(checkable) { troggled = !troggled }
+            if(checkable) {
+                troggled = !troggled
+
+                if(globalClickToUncheck) {
+                    globalDialogHandler.enabled = true
+                }
+            }
             button.clicked();
         }
 
@@ -93,11 +100,22 @@ Rectangle {
         onReleased: {
             mousePressed = false
         }
+
+        Connections {
+            target: troggled ? globalDialogHandler : null
+
+            onClicked: {
+                console.log("--------------- Clicked! ----------");
+                troggled = !troggled
+                globalDialogHandler.enabled = false
+            }
+        }
     }
+
 
     states: [
         State {
-            name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled
+            name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled && !troggled
             extend: "enabledState"
             PropertyChanges { target: stop1; color: "#E6E6E6" }
             PropertyChanges { target: stop2; color: "#B3B3B3" }
@@ -106,10 +124,18 @@ Rectangle {
         State {
             name: "mousePressedState";
             extend: "enabledState"
-            when: mouseArea.containsMouse && mousePressed && enabled
+            when: (mouseArea.containsMouse && mousePressed && enabled) || troggled
             PropertyChanges { target: stop1; color: "#B3B3B3" }
             PropertyChanges { target: stop2; color: "#B3B3B3" }
         },
+
+//        State {
+//            name: "toggledState"
+//            extend: "enabledState"
+//            when: troggled
+//            PropertyChanges { target: stop1; color: "#D3D3D3" }
+//            PropertyChanges { target: stop2; color: "#FAFAFA" }
+//        },
 
         State {
             name: "enabledState"

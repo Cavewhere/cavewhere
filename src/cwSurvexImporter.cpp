@@ -9,11 +9,12 @@
 #include "cwSurvexImporter.h"
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
-#include "cwSurvexBlockData.h"
+#include "cwTreeImportDataNode.h"
 #include "cwSurvexGlobalData.h"
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurvexLRUDChunk.h"
+#include "cwSurvexNodeData.h"
 
 //Qt includes
 #include <QFile>
@@ -27,8 +28,8 @@
 #include "math.h"
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
-    cwTask(parent),
-    RootBlock(new cwSurvexBlockData(this)),
+    cwTreeDataImporter(parent),
+    RootBlock(new cwTreeImportDataNode(this)),
     CurrentBlock(nullptr),
     GlobalData(new cwSurvexGlobalData(this)),
     CurrentState(FirstBegin)
@@ -36,7 +37,9 @@ cwSurvexImporter::cwSurvexImporter(QObject* parent) :
 }
 
 void cwSurvexImporter::runTask() {
-    importSurvex(RootFilename);
+    if (!RootFilenames.isEmpty()) {
+        importSurvex(RootFilenames[0]);
+    }
     done();
 }
 
@@ -63,7 +66,7 @@ void cwSurvexImporter::importSurvex(QString filename) {
     loadFile(filename);
 
     //Add the rootBlocks to GlobalData
-    GlobalData->setBlocks(RootBlock->childBlocks());
+    GlobalData->setNodes(RootBlock->childNodes());
 
     saveLastImport(filename);
 
@@ -96,7 +99,7 @@ QMap<cwSurvexImporter::DataFormatType, int> cwSurvexImporter::BeginEndState::def
   \brief Returns true if errors have accured.
   \returns The list of errors
   */
-bool cwSurvexImporter::hasErrors() {
+bool cwSurvexImporter::hasParseErrors() {
     return !Errors.isEmpty();
 }
 
@@ -104,7 +107,7 @@ bool cwSurvexImporter::hasErrors() {
   \brief Gets the errors of the importer
   \return Returns the errors if any.  Will be empty if HasErrors() returns false
   */
-QStringList cwSurvexImporter::errors() {
+QStringList cwSurvexImporter::parseErrors() {
     return Errors;
 }
 
@@ -226,12 +229,12 @@ void cwSurvexImporter::parseLine(QString line) {
         //BeginNames.append(exp.cap(1));
 
         //Create a new block
-        cwSurvexBlockData* newBlock = new cwSurvexBlockData();
+        cwTreeImportDataNode* newBlock = new cwTreeImportDataNode();
         QString blockName = exp.cap(1).trimmed();
         newBlock->setName(blockName);
 
         //Add the block to the structure
-        CurrentBlock->addChildBlock(newBlock);
+        CurrentBlock->addChildNode(newBlock);
 
         //Copy the calibrations
         *(newBlock->calibration()) = *(CurrentBlock->calibration());
@@ -268,7 +271,7 @@ void cwSurvexImporter::parseLine(QString line) {
                 //Update the LRUD before getting out of this block
                 updateLRUDForCurrentBlock();
 
-                cwSurvexBlockData* parentBlock = CurrentBlock->parentBlock();
+                cwTreeImportDataNode* parentBlock = CurrentBlock->parentNode();
                 if(parentBlock != nullptr) {
                     CurrentBlock = parentBlock;
                 }
@@ -385,7 +388,7 @@ void cwSurvexImporter::parseDataFormat(QString line) {
         setCurrentDataEntryType(Normal);
     } else if(compare(dataFormatType, "passage")) {
         setCurrentDataEntryType(Passage);
-        CurrentBlock->addLRUDChunk();
+        nodeData(CurrentBlock)->addLRUDChunk();
     } else if(compare(dataFormatType, "nosurvey")) {
         setCurrentDataEntryType(NoSurvey);
     } else {
@@ -601,7 +604,7 @@ void cwSurvexImporter::parsePassageData(QString line) {
     station.setDown(extractData(data, Down));
 
     //Add the station to the current LRUD chunk
-    CurrentBlock->LRUDChunks.last().Stations.append(station);
+    nodeData(CurrentBlock)->LRUDChunks.last().Stations.append(station);
 }
 
 /**
@@ -614,16 +617,16 @@ void cwSurvexImporter::parsePassageData(QString line) {
 QString cwSurvexImporter::fullStationName(QString name) {
     if(name.isEmpty()) { return QString(); }
 
-    cwSurvexBlockData* current = CurrentBlock;
+    cwTreeImportDataNode* current = CurrentBlock;
     QLinkedList<QString> fullNameList;
 
     //While not the root element of the importer
-    while(current->parentBlock() != nullptr) {
+    while(current->parentNode() != nullptr) {
         QString blockName = current->name();
         if(!blockName.isEmpty()) {
             fullNameList.prepend(blockName);
         }
-        current = current->parentBlock();
+        current = current->parentNode();
     }
 
     QString fullName;
@@ -884,7 +887,7 @@ void cwSurvexImporter::parseEquate(QString line)
         return;
     }
 
-    CurrentBlock->addToEquated(equalStations);
+    nodeData(CurrentBlock)->addToEquated(equalStations);
 }
 
 /**
@@ -896,7 +899,7 @@ void cwSurvexImporter::parseEquate(QString line)
 void cwSurvexImporter::parseExport(QString line)
 {
     QStringList stations = line.split(QRegExp("\\s+"));
-    CurrentBlock->addExportStations(stations);
+    nodeData(CurrentBlock)->addExportStations(stations);
 }
 
 /**
@@ -985,7 +988,7 @@ void cwSurvexImporter::runStats(QString filename) {
  */
 void cwSurvexImporter::updateLRUDForCurrentBlock() {
 
-    foreach(cwSurvexLRUDChunk lrudChunk, CurrentBlock->LRUDChunks) {
+    foreach(cwSurvexLRUDChunk lrudChunk, nodeData(CurrentBlock)->LRUDChunks) {
         QList<cwStation> stations = lrudChunk.Stations;
         for(int i = 0; i < stations.size(); i++) {
             int before = i - 1;

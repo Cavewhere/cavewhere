@@ -11,6 +11,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwDebug.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QStringList>
@@ -18,7 +19,7 @@
 #include <QTextStream>
 #include <QScopedPointer>
 
-class cwExporterTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwExporterTask : public cwTask
 {
 Q_OBJECT
 

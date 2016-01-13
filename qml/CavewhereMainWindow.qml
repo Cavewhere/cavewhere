@@ -22,11 +22,11 @@ ApplicationWindow {
     title: "Cavewhere - " + version
     //    anchors.fill: parent;
 
-    LicenseWindow { }
-
-    Item {
-        id: rootQMLItem
-        anchors.fill: parent
+    Loader {
+        source: "LicenseWindow.qml"
+        visible: !license.hasReadLicenseAgreement
+        active: visible
+        asynchronous: true
     }
 
     menuBar: FileButtonAndMenu {
@@ -51,7 +51,7 @@ ApplicationWindow {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
-        asynchronous: false //FIXME: Once https://bugreports.qt-project.org/browse/QTBUG-36410 is fixed turn this to true
+        asynchronous: true
         visible: status == Loader.Ready
 
 //        onLoaded: {
@@ -88,7 +88,9 @@ ApplicationWindow {
         nameFilters: ["Cavewhere Project (*.cw)"]
         title: "Save Cavewhere Project As"
         selectExisting: false
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             project.saveAs(fileUrl)
         }
     }
@@ -96,7 +98,9 @@ ApplicationWindow {
     FileDialog {
         id: loadFileDialogId
         nameFilters: ["Cavewhere File (*.cw)"]
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             rootData.pageSelectionModel.clearHistory();
             rootData.pageSelectionModel.gotoPageByName(null, "View")
             rootData.project.loadFile(fileUrl)
@@ -110,12 +114,17 @@ ApplicationWindow {
         id: globalShadowTextInput
     }
 
-    //All the dialogs in cavewher are parented under this item.
+    //All the dialogs in cavewhere are parented under this item. This prevents
+    //mouse clicks outside of the dialog
     GlobalDialogHandler {
         id: globalDialogHandler
     }
 
-
+    //
+    Item {
+        id: rootPopupItem
+        anchors.fill: parent
+    }
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindow

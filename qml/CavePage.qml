@@ -161,6 +161,7 @@ Rectangle {
 
                 itemDelegate:
                     Item {
+                    clip: true
 
                     Connections {
                         target: tableViewId
@@ -184,23 +185,42 @@ Rectangle {
                         onlyLargestRange: true
                     }
 
-                    LinkText {
+                    Item {
                         visible: styleData.column === 0
-                        text: styleData.value.name
-                        onClicked: {
-                            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                       tripPageName(styleData.value));
+
+                        anchors.fill: parent
+
+                        RowLayout {
+                            id: rowLayout
+                            spacing: 1
+
+                            ErrorIconBar {
+                                errorModel: styleData.value.errorModel
+                            }
+
+                            LinkText {
+                                text: styleData.value.name
+                                elide: Text.ElideRight
+
+                                onClicked: {
+                                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                                               tripPageName(styleData.value));
+                                }
+                            }
                         }
                     }
 
-
                     Text {
                         visible: styleData.column === 1
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
                     }
 
                     Text {
                         visible: styleData.column === 2
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: {
                             if(usedStationTaskManager.usedStations.length > 0) {
                                 return usedStationTaskManager.usedStations[0]
@@ -211,6 +231,8 @@ Rectangle {
 
                     Text {
                         visible: styleData.column === 3
+                        elide: Text.ElideRight
+                        anchors.fill: parent
                         text: {
                             var unit = ""
                             switch(styleData.value.calibration.distanceUnit) {

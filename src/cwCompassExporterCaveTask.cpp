@@ -266,24 +266,57 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
 
     switch(field) {
     case Compass:
-        value = fmod(frontSite, 360.0);
+        value = frontSite;
+
+        if(calibrations->hasCorrectedClinoFrontsight()) {
+            value = value + 180.0;
+        }
+
+        if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
+            value += calibrations->frontCompassCalibration();
+        }
+
+        value = fmod(value, 360.0);
+
         break;
     case BackCompass:
+
         if(shot.backCompassState() == cwCompassStates::Valid) {
             //Backsite is valid
             value = backSite;
             if(calibrations->hasCorrectedCompassBacksight()) {
-                value = fmod((value + 180.0), 360.0);
-            } else {
-                value = fmod(value, 360.0);
+                value = value + 180.0;
+            }
+
+            if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
+                value += calibrations->backClinoCalibration();
             }
         } else {
             //Use flipped front site
-             value = fmod((frontSite + 180.0), 360.0);
+            if(calibrations->hasCorrectedCompassFrontsight()) {
+                value = frontSite;
+            } else {
+                value = frontSite + 180.0;
+            }
+
+            if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
+                value += calibrations->frontCompassCalibration();
+            }
         }
+        value = fmod(value, 360.0);
         break;
     case Clino:
-        value = qBound(-90.0, frontSite, 90.0);
+        if(calibrations->hasCorrectedCompassFrontsight()) {
+            value = -frontSite;
+        } else {
+            value = frontSite;
+        }
+
+        if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
+            value += calibrations->frontClinoCalibration();
+        }
+
+        value = qBound(-90.0, value, 90.0);
         break;
     case BackClino:
         if(shot.backClinoState() == cwClinoStates::Valid) {
@@ -292,11 +325,26 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
             } else {
                 value = backSite;
             }
-            value = qBound(-90.0, value, 90.0);
+
+            if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
+                value += calibrations->backClinoCalibration();
+            }
         } else {
             //Use flipped front site
-            value = qBound(-90.0, -frontSite, 90.0);
+            if(calibrations->hasCorrectedClinoFrontsight()) {
+                value = frontSite;
+            } else {
+                value = -frontSite;
+            }
+
+            if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
+                value += -calibrations->frontClinoCalibration();
+            }
+
         }
+
+        value = qBound(-90.0, value, 90.0);
+
         break;
     }
 
@@ -428,8 +476,16 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
   */
 void cwCompassExportCaveTask::writeCorrections(QTextStream &stream, cwTripCalibration *calibrations)
 {
-    double compassCorrections = calibrations->frontCompassCalibration();
-    double clinoCorrections = calibrations->frontClinoCalibration();
+    double compassCorrections = 0.0;
+    if(calibrations->frontCompassCalibration() == calibrations->backCompassCalibration()) {
+        compassCorrections = calibrations->frontCompassCalibration();
+    }
+
+    double clinoCorrections = 0.0;
+    if(calibrations->frontClinoCalibration() == calibrations->backClinoCalibration()) {
+        clinoCorrections = calibrations->frontClinoCalibration();
+    }
+
     double tapeCorrections = cwUnits::convert(calibrations->tapeCalibration(),
                                               calibrations->distanceUnit(),
                                               cwUnits::Feet);

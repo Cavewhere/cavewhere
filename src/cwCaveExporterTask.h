@@ -10,12 +10,13 @@
 
 //Our includes
 #include "cwExporterTask.h"
+#include "cwGlobals.h"
 class cwCave;
 
 //Qt includes
 #include <QTextStream>
 
-class cwCaveExporterTask : public cwExporterTask
+class CAVEWHERE_LIB_EXPORT cwCaveExporterTask : public cwExporterTask
 {
 public:
     cwCaveExporterTask(QObject* parent = 0);

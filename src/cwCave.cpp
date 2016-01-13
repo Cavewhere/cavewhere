@@ -10,11 +10,13 @@
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwLength.h"
+#include "cwErrorModel.h"
 
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
+    ErrorModel(new cwErrorModel(this)),
     StationPositionModelStale(false)
 {
     Length->setUnit(cwUnits::Meters);
@@ -22,6 +24,8 @@ cwCave::cwCave(QObject* parent) :
 
     Length->setUpdateValue(true);
     Depth->setUpdateValue(true);
+
+//    ErrorModel->addParent(this);
 }
 
 /**
@@ -31,7 +35,9 @@ cwCave::cwCave(const cwCave& object) :
     QAbstractListModel(nullptr),
     cwUndoer(),
     Length(new cwLength(this)),
-    Depth(new cwLength(this))
+    Depth(new cwLength(this)),
+    ErrorModel(new cwErrorModel(this)),
+    StationPositionModelStale(false)
 {
     Copy(object);
 }
@@ -74,6 +80,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
         cwTrip* newTrip = new cwTrip(*trip); //Deep copy of the trip
         newTrip->setParent(this);
         newTrip->setParentCave(this);
+        newTrip->errorModel()->setParentModel(ErrorModel);
         Trips.append(newTrip);
     }
 
@@ -267,6 +274,8 @@ void cwCave::InsertRemoveTrip::insertTrips() {
         int index = BeginIndex + i;
         cave->Trips.insert(index, Trips[i]);
         Trips[i]->setParentCave(cave);
+        Trips[i]->errorModel()->setParentModel(cave->errorModel());
+//        cave->errorModel()->addParent(Trips[i]);
     }
 
     OwnsTrips = false;
@@ -285,6 +294,7 @@ void cwCave::InsertRemoveTrip::removeTrips() {
         int index = BeginIndex + i;
         cave->Trips.removeAt(index);
         Trips[i]->setParentCave(nullptr);
+        Trips[i]->errorModel()->setParentModel(nullptr);
     }
 
     OwnsTrips = true;

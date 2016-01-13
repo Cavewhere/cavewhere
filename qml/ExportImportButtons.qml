@@ -29,12 +29,35 @@ Item {
         id: importManager
         cavingRegion: iconBar.currentRegion
         undoStack: rootData.undoStack
+        onMessageAdded: {
+            messageListDialog.visible = true;
+            messageListDialog.messages.append({
+                                                  severity: severity,
+                                                  message: message,
+                                                  lineCount: message.split('\n').length,
+                                                  source: source,
+                                                  startLine: startLine + 1,
+                                                  startColumn: startColumn + 1
+                                              });
+            messageListDialog.scrollToBottom();
+        }
+        onMessagesCleared: messageListDialog.messages.clear()
+    }
+
+    MessageListDialog {
+        visible: false
+        modality: Qt.NonModal
+        id: messageListDialog
+        width: 730
+        height: 400
+        font: importManager.messageListFont
     }
 
     Item {
         id: fileDialogItem
         FileDialog {
             id: fileDialog
+            folder: rootData.lastDirectory
         }
 
         states: [
@@ -47,6 +70,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexTrip(fileUrl);
                     }
                 }
@@ -60,6 +84,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexCave(fileUrl);
                     }
                 }
@@ -73,6 +98,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexRegion(fileUrl);
                     }
                 }
@@ -86,6 +112,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportCaveToCompass(fileUrl);
                     }
                 }
@@ -99,12 +126,12 @@ Item {
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
+                        messageListDialog.title = "Compass Import"
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
             }
-
-
         ]
     }
 
@@ -193,6 +220,16 @@ Item {
                         fileDialogItem.state = "IMPORT_COMPASS"
                         fileDialog.open()
                     }
+                }
+
+                Controls.MenuItem {
+                    text: "Walls (.wpj)"
+                    onTriggered: rootData.surveyImportManager.importWalls()
+                }
+
+                Controls.MenuItem {
+                    text: "Walls (.srv)"
+                    onTriggered: rootData.surveyImportManager.importWallsSrv()
                 }
             }
         }

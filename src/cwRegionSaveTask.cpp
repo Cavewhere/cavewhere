@@ -184,6 +184,8 @@ void cwRegionSaveTask::saveTripCalibration(CavewhereProto::TripCalibration *prot
     proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
     proto->set_frontsights(tripCalibration->hasFrontSights());
     proto->set_backsights(tripCalibration->hasBackSights());
+    proto->set_correctedcompassfrontsight(tripCalibration->hasCorrectedCompassFrontsight());
+    proto->set_correctedclinofrontsight(tripCalibration->hasCorrectedClinoFrontsight());
 }
 
 /**
@@ -502,6 +504,7 @@ void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
         saveCave(protoCave, cave);
     }
 
+    region.set_version(version());
 }
 
 /**

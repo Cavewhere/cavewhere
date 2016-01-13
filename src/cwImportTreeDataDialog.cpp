@@ -6,12 +6,12 @@
 **************************************************************************/
 
 //Our includes
-#include "cwImportSurvexDialog.h"
-#include "cwSurvexImporterModel.h"
-#include "cwSurvexImporter.h"
+#include "cwImportTreeDataDialog.h"
+#include "cwTreeDataImporterModel.h"
+#include "cwTreeDataImporter.h"
 #include "cwGlobalIcons.h"
-#include "cwSurvexBlockData.h"
-#include "cwSurvexGlobalData.h"
+#include "cwTreeImportDataNode.h"
+#include "cwTreeImportData.h"
 #include "cwCavingRegion.h"
 #include "cwTaskProgressDialog.h"
 #include "cwStringListErrorModel.h"
@@ -19,8 +19,6 @@
 
 //Qt includes
 #include <QFileSystemModel>
-#include <QSettings>
-#include <QFileDialog>
 #include <QItemSelectionModel>
 #include <QPixmapCache>
 #include <QMessageBox>
@@ -28,17 +26,18 @@
 #include <QThread>
 
 
-const QString cwImportSurvexDialog::ImportSurvexKey = "LastImportSurvexFile";
-
-cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *parent) :
+cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
     QDialog(parent),
     Region(region),
-    Model(new cwSurvexImporterModel(this)),
-    Importer(new cwSurvexImporter()),
+    Model(new cwTreeDataImporterModel(this)),
+    Importer(importer),
     SurvexSelectionModel(new QItemSelectionModel(Model, this)),
     ImportThread(new QThread(this))
 {
     setupUi(this);
+    tabWidget->setTabText(tabWidget->indexOf(SurvexErrorsWidget), QApplication::translate("cwImportTreeDataDialog",
+                                                                                          names.errorsLabel.toLocal8Bit().constData(), 0));
+
     setupTypeComboBox();
 
     //Move the importer to another thread
@@ -63,10 +62,10 @@ cwImportSurvexDialog::cwImportSurvexDialog(cwCavingRegion* region, QWidget *pare
     SurvexErrorListView->setWordWrap(true);
     //SurvexErrorListView->setUniformItemSizes(true);
 
-    setWindowTitle("Survex Importer");
+    setWindowTitle(names.windowTitle);
 }
 
-cwImportSurvexDialog::~cwImportSurvexDialog() {
+cwImportTreeDataDialog::~cwImportTreeDataDialog() {
     Importer->stop();
 
     ImportThread->quit();
@@ -78,31 +77,20 @@ cwImportSurvexDialog::~cwImportSurvexDialog() {
 /**
   \brief Start to the dialog to import
   */
-void cwImportSurvexDialog::open() {
+void cwImportTreeDataDialog::open() {
     if(Region == nullptr) {
         QMessageBox box(QMessageBox::Critical, "Broke Sauce!", "Oops, the programer has made a mistake and Cavewhere can't open Survex Import Dialog.");
         box.exec();
         return;
-    }
-
-    QSettings settings;
-    QString lastFile = settings.value(ImportSurvexKey).toString();
-
-    QString filename = QFileDialog::getOpenFileName(nullptr, "Import Survex", lastFile, "Survex *.svx");
-    if(QFileInfo(filename).exists()) {
-        setSurvexFile(filename);
     }
 }
 
 /**
   \brief The survex file that'll be opened
   */
-void cwImportSurvexDialog::setSurvexFile(QString filename) {
-    QSettings settings;
-    settings.setValue(ImportSurvexKey, filename);
-
+void cwImportTreeDataDialog::setInputFiles(QStringList filenames) {
     //The root filename
-    FullFilename = filename;
+    FullFilename = filenames.isEmpty() ? "" : filenames[0];
 
     //Show a progress dialog
     cwTaskProgressDialog* progressDialog = new cwTaskProgressDialog(this);
@@ -111,12 +99,12 @@ void cwImportSurvexDialog::setSurvexFile(QString filename) {
     progressDialog->show();
 
     //Run the importer on another thread
-    QMetaObject::invokeMethod(Importer, "setSurvexFile", Q_ARG(QString, filename));
+    QMetaObject::invokeMethod(Importer, "setInputFiles", Q_ARG(QStringList, filenames));
     Importer->start();
 }
 
 
-void cwImportSurvexDialog::changeEvent(QEvent *e)
+void cwImportTreeDataDialog::changeEvent(QEvent *e)
 {
     QDialog::changeEvent(e);
     switch (e->type()) {
@@ -131,7 +119,7 @@ void cwImportSurvexDialog::changeEvent(QEvent *e)
 /**
   \brief When the dialog is resized
   */
-void cwImportSurvexDialog::resizeEvent(QResizeEvent* event) {
+void cwImportTreeDataDialog::resizeEvent(QResizeEvent* event) {
     QDialog::resizeEvent(event);
 
     QString cuttOffText =  FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());
@@ -143,7 +131,7 @@ void cwImportSurvexDialog::resizeEvent(QResizeEvent* event) {
 /**
   \brief Sets up the combo box for this dialog
   */
-void cwImportSurvexDialog::setupTypeComboBox() {
+void cwImportTreeDataDialog::setupTypeComboBox() {
     QPixmap dontImportIcon;
     if(!QPixmapCache::find(cwGlobalIcons::NoImport, &dontImportIcon)) {
         dontImportIcon = QPixmap(cwGlobalIcons::NoImportFilename);
@@ -167,11 +155,11 @@ void cwImportSurvexDialog::setupTypeComboBox() {
     }
 
     TypeComboBox->setItemIcon((int)NoImportItem, QIcon(dontImportIcon));
-    TypeComboBox->setItemText((int)NoImportItem, cwSurvexBlockData::importTypeToString(cwSurvexBlockData::NoImport));
+    TypeComboBox->setItemText((int)NoImportItem, cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::NoImport));
     TypeComboBox->setItemIcon((int)CaveItem, QIcon(caveIcon));
-    TypeComboBox->setItemText((int)CaveItem, cwSurvexBlockData::importTypeToString(cwSurvexBlockData::Cave));
+    TypeComboBox->setItemText((int)CaveItem, cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::Cave));
     TypeComboBox->setItemIcon((int)TripItem, QIcon(tripIcon));
-    TypeComboBox->setItemText((int)TripItem, cwSurvexBlockData::importTypeToString(cwSurvexBlockData::Trip));
+    TypeComboBox->setItemText((int)TripItem, cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::Trip));
     TypeComboBox->setCurrentIndex(-1);
 
     connect(TypeComboBox, SIGNAL(activated(int)), SLOT(setType(int)));
@@ -182,31 +170,33 @@ void cwImportSurvexDialog::setupTypeComboBox() {
 
   The main purpose of this dialog is to check for name collision for stations in a cave
   */
-void cwImportSurvexDialog::updateImportErrors() {
+void cwImportTreeDataDialog::updateImportErrors() {
 
 }
 
 /**
   \brief Updates the import warning label next to the import button
   */
-void cwImportSurvexDialog::updateImportWarningLabel() {
-    QStringList errors = Importer->errors();
+void cwImportTreeDataDialog::updateImportWarningLabel() {
+    QStringList errors;
+    errors << Importer->parseErrors();
+    errors << Importer->importErrors();
     int numberWarnings = 0;
     int numberErrors = 0;
     foreach(QString error, errors) {
-        if(error.contains("Error:")) {
+        if(error.contains("error", Qt::CaseInsensitive)) {
             numberErrors++;
-        } else if(error.contains("Warning:")) {
+        } else if(error.contains("warning", Qt::CaseInsensitive)) {
             numberWarnings++;
         }
     }
 
     QString message;
     if(numberErrors > 0) {
-        message.append(QString("<b>Errors:%1</b> ").arg(numberErrors));
+        message.append(QString("<b>Errors: %1</b> ").arg(numberErrors));
     }
     if(numberWarnings > 0) {
-        message.append(QString("Warnings:%2").arg(numberWarnings));
+        message.append(QString("Warnings: %2").arg(numberWarnings));
     }
     WarningLabel->setText(message);
 }
@@ -215,12 +205,12 @@ void cwImportSurvexDialog::updateImportWarningLabel() {
 /**
   \brief Updates this view with the current items that are selected
   */
-void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelection /*deselected*/) {
+void cwImportTreeDataDialog::updateCurrentItem(QItemSelection selected, QItemSelection /*deselected*/) {
     QModelIndexList selectedIndexes = selected.indexes();
     if(selectedIndexes.size() == 1) {
         //Only one item selected
         QModelIndex index = selectedIndexes.first();
-        cwSurvexBlockData* block = Model->toBlockData(index);
+        cwTreeImportDataNode* block = Model->toNode(index);
         if(block != nullptr) {
 
             //Set the index of the combo box
@@ -229,9 +219,9 @@ void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelec
 
             //Set the text for the combo box
             QString name = block->name();
-            QString noImportStrting = QString("%1 %2").arg(cwSurvexBlockData::importTypeToString(cwSurvexBlockData::NoImport)).arg(name);
-            QString caveString  = QString("%1 is a %2").arg(name).arg(cwSurvexBlockData::importTypeToString(cwSurvexBlockData::Cave));
-            QString tripString = QString("%1 is a %2").arg(name).arg(cwSurvexBlockData::importTypeToString(cwSurvexBlockData::Trip));
+            QString noImportStrting = QString("%1 %2").arg(cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::NoImport)).arg(name);
+            QString caveString  = QString("%1 is a %2").arg(name).arg(cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::Cave));
+            QString tripString = QString("%1 is a %2").arg(name).arg(cwTreeImportDataNode::importTypeToString(cwTreeImportDataNode::Trip));
 
             TypeComboBox->setItemText((int)NoImportItem, noImportStrting);
             TypeComboBox->setItemText((int)CaveItem, caveString);
@@ -250,15 +240,15 @@ void cwImportSurvexDialog::updateCurrentItem(QItemSelection selected, QItemSelec
 
   If multiple items are selected then
   */
-void cwImportSurvexDialog::setType(int index) {
+void cwImportTreeDataDialog::setType(int index) {
 
     QModelIndexList selectedIndexes = SurvexSelectionModel->selectedIndexes();
 
     foreach(QModelIndex currentIndex, selectedIndexes) {
-        cwSurvexBlockData* block = Model->toBlockData(currentIndex);
+        cwTreeImportDataNode* block = Model->toNode(currentIndex);
 
         if(block != nullptr) {
-            cwSurvexBlockData::ImportType importType = (cwSurvexBlockData::ImportType)typeItemToImportType((TypeItem)index);
+            cwTreeImportDataNode::ImportType importType = (cwTreeImportDataNode::ImportType)typeItemToImportType((TypeItem)index);
             block->setImportType(importType);
         }
     }
@@ -268,14 +258,14 @@ void cwImportSurvexDialog::setType(int index) {
 /**
   \brief Converts a typeItem to a cwSurvexBlockData::ImportType
   */
-int cwImportSurvexDialog::typeItemToImportType(TypeItem typeItem) const {
+int cwImportTreeDataDialog::typeItemToImportType(TypeItem typeItem) const {
     switch(typeItem) {
     case NoImportItem:
-        return cwSurvexBlockData::NoImport;
+        return cwTreeImportDataNode::NoImport;
     case CaveItem:
-        return cwSurvexBlockData::Cave;
+        return cwTreeImportDataNode::Cave;
     case TripItem:
-        return cwSurvexBlockData::Trip;
+        return cwTreeImportDataNode::Trip;
     default:
         return -1;
     }
@@ -284,23 +274,23 @@ int cwImportSurvexDialog::typeItemToImportType(TypeItem typeItem) const {
     /**
       \brief Converts a cwSurvexBlockData::ImportType to a typeItem
       */
-cwImportSurvexDialog::TypeItem cwImportSurvexDialog::importTypeToTypeItem(int type) const {
+cwImportTreeDataDialog::TypeItem cwImportTreeDataDialog::importTypeToTypeItem(int type) const {
     switch(type) {
-    case cwSurvexBlockData::NoImport:
+    case cwTreeImportDataNode::NoImport:
         return NoImportItem;
-    case cwSurvexBlockData::Cave:
+    case cwTreeImportDataNode::Cave:
         return CaveItem;
-    case cwSurvexBlockData::Trip:
+    case cwTreeImportDataNode::Trip:
         return TripItem;
     }
-    return (cwImportSurvexDialog::TypeItem)-1;
+    return (cwImportTreeDataDialog::TypeItem)-1;
 }
 
 /**
   \brief Tries to import
   */
-void cwImportSurvexDialog::import() {
-    cwSurvexGlobalData* globalData = Importer->data();
+void cwImportTreeDataDialog::import() {
+    cwTreeImportData* globalData = Importer->data();
 
     if(!globalData->caves().isEmpty()) {
         beginUndoMacro("Import survex");
@@ -315,21 +305,26 @@ void cwImportSurvexDialog::import() {
 
   All the data has been parsed out of the importer
   */
-void cwImportSurvexDialog::importerFinishedRunning() {
+void cwImportTreeDataDialog::importerFinishedRunning() {
     //Move the importer back to this thread
     Importer->setThread(thread(), Qt::BlockingQueuedConnection);
 
     //Get the importer's data
-    Model->setSurvexData(Importer->data());
+    Model->setTreeImportData(Importer->data());
 
     //Cutoff to long text
     QString cutOffText = FileLabel->fontMetrics().elidedText(FullFilename, Qt::ElideMiddle, FileLabel->width());
     FileLabel->setText(cutOffText);
 
-    //Load the error list view
+    //Load the parse error list view
     cwStringListErrorModel* parsingErrorsModel = new cwStringListErrorModel(this);
-    parsingErrorsModel->setStringList(Importer->errors());
+    parsingErrorsModel->setStringList(Importer->parseErrors());
     SurvexErrorListView->setModel(parsingErrorsModel);
+
+    //Load the import error list view
+    cwStringListErrorModel* importErrorsModel = new cwStringListErrorModel(this);
+    importErrorsModel->setStringList(Importer->importErrors());
+    ImportErrorListView->setModel(importErrorsModel);
 
     //Update the error / warning label at the bottom
     updateImportWarningLabel();
@@ -343,7 +338,7 @@ void cwImportSurvexDialog::importerFinishedRunning() {
 /**
   \brief Called if the importer has been canceled by the user
   */
-void cwImportSurvexDialog::importerCanceled() {
+void cwImportTreeDataDialog::importerCanceled() {
     ImportThread->quit();
     close();
 }

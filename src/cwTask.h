@@ -8,16 +8,21 @@
 #ifndef CWTASK_H
 #define CWTASK_H
 
+//Qt includes
 #include <QMutex>
 #include <QObject>
 #include <QReadWriteLock>
 #include <QTimer>
+#include <QWaitCondition>
+
+//Our includes
+#include "cwGlobals.h"
 
 /**
   \brief A member functions in the class are thread safe
   */
 
-class cwTask : public QObject
+class CAVEWHERE_LIB_EXPORT cwTask : public QObject
 {
     Q_OBJECT
 
@@ -48,6 +53,8 @@ public:
 
     QString name() const;
     void setName(QString name);
+
+    void waitToFinish(unsigned long time = ULONG_MAX);
 
 
     //Do not move this to a slot!!! You will break things
@@ -85,19 +92,25 @@ private:
     mutable QReadWriteLock StatusLocker;
     mutable QReadWriteLock ProgressLocker;
     mutable QReadWriteLock NameLocker;
+    QMutex WaitToFinishLocker;
+    QWaitCondition WaitToFinishCondition;
 
     int NumberOfSteps;
     int Progress; //!<
 
     Status CurrentStatus;
+    bool NeedsRestart;
 
     QList<cwTask*> ChildTasks;
     cwTask* ParentTask;
 
     QString Name; //!< The name of the task
 
+
     void privateStop();
     bool isParentsRunning();
+
+    bool needsRestart() const;
 
 private:
     Q_INVOKABLE void startOnCurrentThread();

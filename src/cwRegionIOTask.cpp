@@ -67,8 +67,18 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
     //Move Region back to task's thread
     if(QThread::currentThread() != thread()) {
         Region->moveToThread(thread());
-        Region->setParent(this);
+        QMetaObject::invokeMethod(this, "updateRegionParent",
+                                  Qt::BlockingQueuedConnection);
     }
+}
+
+/**
+ * @brief cwRegionIOTask::version
+ * @return Returns the current version
+ */
+int cwRegionIOTask::version()
+{
+    return 1;
 }
 
 /**
@@ -82,5 +92,13 @@ void cwRegionIOTask::moveRegionToThread(QThread* thread)
 {
     Region->setParent(nullptr);
     Region->moveToThread(thread);
+}
+
+/**
+ * @brief cwRegionIOTask::updateRegionParent
+ */
+void cwRegionIOTask::updateRegionParent()
+{
+    Region->setParent(this);
 }
 

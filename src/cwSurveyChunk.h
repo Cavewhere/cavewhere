@@ -12,6 +12,9 @@
 //#include "cwStationReference.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwError.h"
+#include "cwGlobals.h"
+class cwErrorModel;
 class cwTrip;
 class cwCave;
 
@@ -21,11 +24,13 @@ class cwCave;
 //#include <QDeclarativeListProperty>
 #include <QVariant>
 
-class cwSurveyChunk : public QObject {
+class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     Q_OBJECT
-    Q_ENUMS(DataRole)
+    Q_ENUMS(DataRole ConnectedState)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
+    Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
+    Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
 
 public:
     enum Direction {
@@ -45,6 +50,13 @@ public:
         ShotBackCompassRole,
         ShotClinoRole,
         ShotBackClinoRole
+    };
+
+    //If the chunk is connected to the rest of the cave, Connected
+    enum ConnectedState {
+        Connected, //Connected to the rest of the cave
+        Disconnected, //Not connected, the survey is just floating
+        Unknown //State isn't set
     };
 
     cwSurveyChunk(QObject *parent = 0);
@@ -75,6 +87,11 @@ public:
 
     Q_INVOKABLE bool isStationAndShotsEmpty() const;
 
+    ConnectedState connectedState() const;
+    void setConnectedState(ConnectedState connectedState);
+
+    cwErrorModel* errorModel() const;
+
 signals:
     void parentTripChanged();
 
@@ -85,6 +102,12 @@ signals:
     void shotsRemoved(int beginIndex, int endIndex);
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
+
+    void connectedChanged();
+
+    void connectedStateChanged();
+
+    void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
 
 public slots:
     int stationCount() const;
@@ -115,11 +138,40 @@ public slots:
     QVariant data(DataRole role, int index) const;
     void setData(DataRole role, int index, QVariant data);
 
+//    QVariantList errors() const;
+    cwErrorModel* errorsAt(int index, DataRole role) const;
+//    void setSuppressWarning(cwError warning, bool suppress);
+
+
 private:
+    class CellIndex {
+
+    public:
+        CellIndex() : Index(-1), Role(-1) {}
+        CellIndex(int index, int role) : Index(index), Role(role) {}
+
+        bool operator<(const CellIndex& other) const {
+            if(Index == other.Index) {
+                return Role < other.Role;
+            }
+            return Index < other.Index;
+        }
+
+    private:
+        int Index;
+        int Role;
+    };
+
     QList<cwStation> Stations;
     QList<cwShot> Shots;
+
+    cwErrorModel* ErrorModel;
+    QMap<CellIndex, cwErrorModel*> CellErrorModels;
+
+
     cwTrip* ParentTrip;
     bool Editting; //!< Puts the survey chunk in a edditing state, this will try to keep a empty shot at the end of the chunk
+    ConnectedState IsConnectedState; //!<
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < Shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < Stations.count(); }
@@ -136,6 +188,28 @@ private:
 
     void setStationData(DataRole role, int index, const QVariant &data);
     void setShotData(DataRole role, int index, const QVariant &data);
+
+    void checkForErrorOnDataChanged(DataRole role, int index);
+    void checkForError(DataRole role, int index);
+    void checkForStationError(int index);
+    void checkForShotError(int index);
+    QList<cwError> checkLRUDError(cwSurveyChunk::DataRole role, int index) const;
+    QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
+    QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;
+    QList<cwError> checkClinoMixingType(cwSurveyChunk::DataRole role, int index) const;
+    bool isShotDataEmpty(int index) const;
+    bool isStationDataEmpty(int index) const;
+    void clearErrors();
+    void updateErrors();
+    bool isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const;
+    bool isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const;
+
+private slots:
+    void updateCompassErrors();
+    void updateClinoErrors();
+    void updateCompassClinoErrors();
+
+//    int errorCount(cwSurveyChunkError::ErrorType type) const;
 
 };
 
@@ -166,5 +240,22 @@ inline QList<cwShot> cwSurveyChunk::shots() const {
     return Shots;
 }
 
+
+/**
+* @brief cwSurveyChunk::connectedState
+* @return
+*/
+inline cwSurveyChunk::ConnectedState cwSurveyChunk::connectedState() const {
+    return IsConnectedState;
+}
+
+
+/**
+* @brief cwSurveyChunk::errorModel
+* @return
+*/
+inline cwErrorModel* cwSurveyChunk::errorModel() const {
+    return ErrorModel;
+}
 
 #endif // CWSurveyChunk_H

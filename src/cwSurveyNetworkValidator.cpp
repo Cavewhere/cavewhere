@@ -1,13 +1,15 @@
 /**************************************************************************
 **
-**    Copyright (C) 2013 by Philip Schuchardt
+**    Copyright (C) 2015 by Philip Schuchardt
 **    www.cavewhere.com
 **
 **************************************************************************/
 
-import QtQuick 2.0
-import Cavewhere 1.0
 
-FileDialogHelper {
+#include "cwSurveyNetworkValidator.h"
+
+cwSurveyNetworkValidator::cwSurveyNetworkValidator(QObject *parent) : QObject(parent)
+{
 
 }
+

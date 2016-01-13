@@ -38,6 +38,7 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
     Region(new cwCavingRegion(this)),
+    LoadTask(nullptr),
     UndoStack(new QUndoStack(this))
 {
     newProject();
@@ -73,8 +74,6 @@ void cwProject::createTempProjectFile() {
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
     setFilename(projectFile);
     TempProject = true;
-
-    qDebug() << "Creating temp files:" << ProjectFile;
 
     //Create and open a new database connection
     ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
@@ -328,21 +327,25 @@ void cwProject::loadFile(QString filename) {
 
     if(filename.isEmpty()) { return; }
 
-    filename = convertFromURL(filename);
+    if(LoadTask == nullptr) {
+        LoadTask = new cwRegionLoadTask();
 
-    //Load the region task
-    cwRegionLoadTask* loadTask = new cwRegionLoadTask();
-    connect(loadTask, &cwRegionLoadTask::finishedLoading,
-            this, &cwProject::updateRegionData);
+        //Load the region task
+        connect(LoadTask, &cwRegionLoadTask::finishedLoading,
+                this, &cwProject::updateRegionData);
+    }
 
-    loadTask->setThread(LoadSaveThread);
+    if(LoadTask && LoadTask->isReady()) {
+        filename = convertFromURL(filename);
 
-    //Set the data for the project
-    loadTask->setDatabaseFilename(filename);
+        LoadTask->setThread(LoadSaveThread);
 
-    //Start the save thread
-    loadTask->start();
+        //Set the data for the project
+        LoadTask->setDatabaseFilename(filename);
 
+        //Start the save thread
+        LoadTask->start();
+    }
 }
 
 /**
@@ -353,13 +356,11 @@ void cwProject::loadFile(QString filename) {
 void cwProject::updateRegionData() {
     TempProject = false;
 
-    cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
-
     //Update the project filename
-    setFilename(loadTask->databaseFilename());
+    setFilename(LoadTask->databaseFilename());
 
     //Copy the data from the loaded region
-    loadTask->copyRegionTo(*Region);
+    LoadTask->copyRegionTo(*Region);
 
     emit temporaryProjectChanged();
 }
@@ -597,6 +598,19 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
             QString("dotsPerMeter INTEGER,") + //The resolution of the image
             QString("imageData BLOB)"); //The blob that stores the image data
     createTable(database, imageTableQuery);
+}
+
+/**
+ * @brief cwProject::waitToFinish
+ *
+ * Will cause the project to block until the underlying task is finished. This is useful
+ * for unit testing.
+ */
+void cwProject::waitToFinish()
+{
+    if(LoadTask != nullptr) {
+        LoadTask->waitToFinish();
+    }
 }
 
 /**

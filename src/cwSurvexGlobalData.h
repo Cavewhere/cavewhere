@@ -9,51 +9,39 @@
 #define CWSURVEXGLOBALDATA_H
 
 //Our includes
-class cwSurvexBlockData;
+#include "cwTreeImportData.h"
 class cwCave;
 class cwTrip;
 class cwSurveyChunk;
 #include "cwStation.h"
 #include "cwUndoer.h"
+class cwSurvexNodeData;
 
 //Qt includes
+#include <QHash>
 #include <QObject>
 #include <QList>
 #include <QStringList>
 
-class cwSurvexGlobalData : public QObject
+class cwSurvexGlobalData : public cwTreeImportData
 {
-    friend class cwSurvexImporter;
-
 public:
     cwSurvexGlobalData(QObject* object);
 
-    QList<cwSurvexBlockData*> blocks() const;
-
     QList<cwCave*> caves();
-    QStringList erros();
+
+    cwSurvexNodeData* nodeData(cwTreeImportDataNode* node);
 
 private:
-    QList<cwSurvexBlockData*> RootBlocks;
+    QHash<cwTreeImportDataNode*, cwSurvexNodeData*> NodeData;
 
-    QStringList ImportErrors;
+    void cavesHelper(QList<cwCave*>* caves, cwTreeImportDataNode* currentBlock, cwCave* currentCave, cwTrip* trip);
 
-    void setBlocks(QList<cwSurvexBlockData*> blocks);
+    void fixStationNames(cwSurveyChunk* chunk, cwTreeImportDataNode* currentBlock);
+    void fixDuplicatedStationInShot(cwSurveyChunk* chunk, cwTreeImportDataNode* caveSurvexBlock);
 
-    void cavesHelper(QList<cwCave*>* caves, cwSurvexBlockData* currentBlock, cwCave* currentCave, cwTrip* trip);
-
-    void fixStationNames(cwSurveyChunk* chunk, cwSurvexBlockData* currentBlock);
-    void fixDuplicatedStationInShot(cwSurveyChunk* chunk, cwSurvexBlockData* caveSurvexBlock);
-
-    void populateEquateMap(cwSurvexBlockData* block);
-    QString generateUniqueStationName(QString oldStationName, cwSurvexBlockData* caveSurvexBlock) const;
-
-
+    void populateEquateMap(cwTreeImportDataNode* block);
+    QString generateUniqueStationName(QString oldStationName, cwTreeImportDataNode* caveSurvexBlock);
 };
-
-inline QList<cwSurvexBlockData*> cwSurvexGlobalData::blocks() const {
-    return RootBlocks;
-}
-
 
 #endif // CWSURVEXGLOBALDATA_H

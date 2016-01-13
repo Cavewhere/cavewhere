@@ -18,6 +18,7 @@ class QQuickView;
 class QQmlApplicationEngine;
 
 //Our includes
+#include "cwGlobals.h"
 class cwRegionTreeModel;
 class cwCavingRegion;
 class cwLinePlotManager;
@@ -40,7 +41,7 @@ class cwPageSelectionModel;
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
 #endif
 
-class cwRootData : public QObject
+class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 {
     Q_OBJECT
 
@@ -62,6 +63,10 @@ class cwRootData : public QObject
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
+    Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
+
+    //Temporary properties that should be move to a view layer model
+    Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -88,6 +93,12 @@ public:
     cwTrip* defaultTrip() const;
     cwTripCalibration* defaultTripCalibration() const;
 
+    bool leadsVisible() const;
+    void setLeadsVisible(bool leadsVisible);
+
+    QUrl lastDirectory() const;
+    void setLastDirectory(QUrl lastDirectory);
+
 signals:
     void regionChanged();
     void linePlotManagerChanged();
@@ -102,6 +113,8 @@ signals:
     void versionChanged();
     void licenseChanged();
     void regionSceneManagerChanged();
+    void leadsVisibleChanged();
+    void lastDirectoryChanged();
 
 public slots:
 
@@ -120,10 +133,13 @@ private:
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
 
-
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
     cwTripCalibration* DefaultTripCalibration;
+
+    //Temperary property should be move layer
+    bool LeadsVisible; //!<
+
 };
 
 /**
@@ -245,6 +261,13 @@ inline cwRegionTreeModel* cwRootData::regionTreeModel() const {
     return RegionTreeModel;
 }
 
+/**
+* @brief cwRootData::leadsVisible
+* @return The visiblity of the leads - temporay, should be moved to layer manager
+*/
+inline bool cwRootData::leadsVisible() const {
+    return LeadsVisible;
+}
 
 
 #endif // CWGLOBALQMLDATA_H

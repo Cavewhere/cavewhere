@@ -151,6 +151,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  */
 void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
 {
+
     Region->clearCaves();
 
     QList<cwCave*> caves;
@@ -254,6 +255,8 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
 {
     tripCalibration->setCorrectedCompassBacksight(protoTripCalibration.correctedcompassbacksight());
     tripCalibration->setCorrectedClinoBacksight(protoTripCalibration.correctedclinobacksight());
+    tripCalibration->setCorrectedCompassFrontsight(protoTripCalibration.correctedcompassfrontsight());
+    tripCalibration->setCorrectedClinoFrontsight(protoTripCalibration.correctedclinofrontsight());
     tripCalibration->setTapeCalibration(protoTripCalibration.tapecalibration());
     tripCalibration->setFrontCompassCalibration(protoTripCalibration.frontcompasscalibration());
     tripCalibration->setFrontClinoCalibration(protoTripCalibration.frontclinocalibration());

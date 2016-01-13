@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-#ifndef CWSURVEXIMPORTERMODEL_H
-#define CWSURVEXIMPORTERMODEL_H
+#ifndef CWTREEDATAIMPORTERMODEL_H
+#define CWTREEDATAIMPORTERMODEL_H
 
 //Our includes
-class cwSurvexGlobalData;
-class cwSurvexBlockData;
+class cwTreeImportData;
+class cwTreeImportDataNode;
 class cwShot;
 class cwSurveyChunk;
 
@@ -18,11 +18,11 @@ class cwSurveyChunk;
 #include <QAbstractItemModel>
 #include <QHash>
 
-class cwSurvexImporterModel : public QAbstractItemModel
+class cwTreeDataImporterModel : public QAbstractItemModel
 {
     Q_OBJECT
 public:
-    explicit cwSurvexImporterModel(QObject *parent = 0);
+    explicit cwTreeDataImporterModel(QObject *parent = 0);
 
     virtual int columnCount ( const QModelIndex & parent = QModelIndex() ) const;
     virtual QVariant data ( const QModelIndex & index, int role = Qt::DisplayRole ) const;
@@ -30,12 +30,12 @@ public:
     virtual QModelIndex parent ( const QModelIndex & index ) const;
     virtual int rowCount ( const QModelIndex & parent = QModelIndex() ) const;
 
-    void setSurvexData(cwSurvexGlobalData* data);
+    void setTreeImportData(cwTreeImportData* data);
 
-    cwSurvexBlockData* toBlockData(const QModelIndex& index) const;
-    cwSurveyChunk* surveyChunk(cwSurvexBlockData* parentBlock, int shotIndex);
+    cwTreeImportDataNode* toNode(const QModelIndex& index) const;
+    cwSurveyChunk* surveyChunk(cwTreeImportDataNode* parentNode, int shotIndex);
 
-    QModelIndex toIndex(cwSurvexBlockData* block);
+    QModelIndex toIndex(cwTreeImportDataNode* node);
 
 signals:
 
@@ -54,20 +54,20 @@ private:
         Invalid
     };
 
-    cwSurvexGlobalData* GlobalData;
+    cwTreeImportData* GlobalData;
 
     QVariant NameColumnData(const QModelIndex & index, int role) const;
     QVariant NameColumnDisplayData(const QModelIndex& index) const;
     QVariant NameColumnIconData(const QModelIndex& index) const;
 
-    void connectBlock(cwSurvexBlockData* block);
+    void connectNode(cwTreeImportDataNode* block);
 
-    bool isBlock(const QModelIndex& index) const;
+    bool isNode(const QModelIndex& index) const;
     bool isShot(const QModelIndex& index) const;
 
 private slots:
-    void blockDataChanged();
+    void nodeDataChanged();
 
 };
 
-#endif // CWSURVEXIMPORTERMODEL_H
+#endif // CWTREEDATAIMPORTERMODEL_H

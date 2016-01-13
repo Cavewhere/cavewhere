@@ -12,12 +12,14 @@
 #include "cwTask.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+#include "cwGlobals.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
 class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;
+class cwRegionLoadTask;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -33,7 +35,7 @@ class QUndoStack;
 
   The file format is create
   */
-class cwProject :  public QObject{
+class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
@@ -69,10 +71,13 @@ public:
 
     bool isTemporaryProject() const;
 
+    void waitToFinish();
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
     void temporaryProjectChanged();
+    void regionChanged();
 
 public slots:
      void loadFile(QString filename);
@@ -88,6 +93,7 @@ private:
     cwCavingRegion* Region;
 
     //For loading images from the disk into this project
+    cwRegionLoadTask* LoadTask;
     QThread* LoadSaveThread;
 
     //The undo stack

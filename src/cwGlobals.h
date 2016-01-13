@@ -12,6 +12,17 @@
 #include <QString>
 #include <QFileDialog>
 
+/**
+  These are required defines for exporting symbols in the cavewhere lib for
+  windows. These do nothing on other platforms like mac and linux
+  */
+#if defined(CAVEWHERE_LIB)
+#  define CAVEWHERE_LIB_EXPORT Q_DECL_EXPORT
+#else
+#  define CAVEWHERE_LIB_EXPORT Q_DECL_IMPORT
+#endif
+
+
 class cwGlobals
 {
 public:
