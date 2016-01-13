@@ -56,6 +56,7 @@ public:
     Q_INVOKABLE void gotoPageByName(cwPage *parentPage, QString subPage);
 
     cwPage* currentPage() const;
+    cwPage *rootPage() const;
 
     Q_INVOKABLE void clearHistory();
     QList<QObject*> history() const;
@@ -101,6 +102,17 @@ private:
 
 };
 
+
+/**
+ * @brief cwPageSelectionModel::rootPage
+ * @return rootPage or the selection model.
+ *
+ * All other pages are children of the root page.
+ */
+inline cwPage *cwPageSelectionModel::rootPage() const
+{
+    return RootPage;
+}
 
 /**
  * @brief cwPageSelectionModel::hasForward

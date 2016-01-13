@@ -66,7 +66,7 @@ void cwPageView::loadCurrentPage()
     Q_ASSERT(!PageSelectionModel.isNull());
 
     cwPage* currentPage = PageSelectionModel->currentPage();
-    if(currentPage != CurrentPage) {
+    if(currentPage != CurrentPage && currentPage != PageSelectionModel->rootPage()) {
 
         if(!CurrentPage.isNull()) {
             disconnect(CurrentPage.data(), &cwPage::selectionPropertiesChanged,
