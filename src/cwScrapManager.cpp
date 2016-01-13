@@ -279,10 +279,12 @@ bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
  */
 void cwScrapManager::handleRegionReset()
 {
-    foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+    if(RegionModel->cavingRegion() != nullptr) {
+        foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                foreach(cwNote* note, trip->notes()->notes()) {
+                    scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+                }
             }
         }
     }

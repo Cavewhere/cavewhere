@@ -77,6 +77,7 @@ signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
     void temporaryProjectChanged();
+    void regionChanged();
 
 public slots:
      void loadFile(QString filename);

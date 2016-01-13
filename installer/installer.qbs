@@ -182,7 +182,7 @@ innoInputFile
             }
 
             prepare: {
-                var cmd = new Command("C:/Program Files/Inno Setup 5/ISCC.exe")
+                var cmd = new Command("C:/Program Files (x86)/Inno Setup 5/ISCC.exe")
                 cmd.arguments = [input.filePath]
                 cmd.description = "running ISCC.exe"
                 return cmd
