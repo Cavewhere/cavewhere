@@ -231,7 +231,7 @@ Application {
         name: "windowsDLLs-release"
         condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
         qbs.install: true
-        files:[
+        files: [
             Qt.core.binPath + "/Qt5Concurrent.dll",
             Qt.core.binPath + "/Qt5Core.dll",
             Qt.core.binPath + "/Qt5Gui.dll",
@@ -245,11 +245,7 @@ Application {
             Qt.core.binPath + "/Qt5Test.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
-            Qt.core.binPath + "/icudt*.dll",
-
-            //Redistrobution libraries for vs2010 32bit
-            "c:/windows/system32/MSVCR120.DLL",
-            "c:/windows/system32/MSVCP120.DLL"
+            Qt.core.binPath + "/icudt*.dll"
         ]
 
     }
