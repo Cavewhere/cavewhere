@@ -293,6 +293,50 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
             }
         }
 
+        SECTION("Frontsite and backsite down/up work") {
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "DOWN");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "UP");
+
+            plotManager->waitToFinish();
+
+            CHECK(cave->length()->value() == 10.0);
+            CHECK(cave->depth()->value() == 10.0);
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, -10.0));
+
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "UP");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "DOWN");
+
+            plotManager->waitToFinish();
+
+            CHECK(cave->length()->value() == 10.0);
+            CHECK(cave->depth()->value() == 10.0);
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
+
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "0");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "0");
+
+            plotManager->waitToFinish();
+
+            trip->calibrations()->setCorrectedClinoBacksight(true);
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "UP");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "UP");
+
+            plotManager->waitToFinish();
+
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
+
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "DOWN");
+            chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "DOWN");
+
+            plotManager->waitToFinish();
+
+            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, -10.0));
+        }
+
         SECTION("Trip calibration should cause the cave to re-run") {
             chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, "182");
             chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "-1");
