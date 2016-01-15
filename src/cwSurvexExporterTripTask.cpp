@@ -358,6 +358,13 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
         if(clino.isEmpty()) { clino = "-"; }
         if(backClino.isEmpty()) { backClino = "-"; }
 
+        if((clino.compare("up", Qt::CaseInsensitive) == 0 &&
+                backClino.compare("up", Qt::CaseInsensitive) == 0) ||
+                (clino.compare("down", Qt::CaseInsensitive) == 0 &&
+                backClino.compare("down", Qt::CaseInsensitive) == 0)) {
+            // survex errors on "up up" or "down down" when backsights are corrected
+            backClino = "-";
+        }
 
         //Figure out the line of data
         QString line;
