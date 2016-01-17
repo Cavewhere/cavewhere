@@ -111,7 +111,7 @@ Project {
             prepare: {
                 var cmd = new Command(inputs.shell[0].filePath)
                 cmd.arguments = [product.version,
-                                 product.qtLibPath]
+                                 product.sourceDirectory]
 
                 cmd.workingDirectory = project.installDir
                 cmd.description = "running " + inputs.shell[0].filePath
