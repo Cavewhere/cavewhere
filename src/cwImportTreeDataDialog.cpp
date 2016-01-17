@@ -50,6 +50,8 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
     connect(SurvexSelectionModel, SIGNAL(selectionChanged(QItemSelection,QItemSelection)), SLOT(updateCurrentItem(QItemSelection,QItemSelection)));
     connect(ImportButton, SIGNAL(clicked()), SLOT(import()));
 
+    connect(Model, &cwTreeDataImporterModel::dataChanged, this, &cwImportTreeDataDialog::updateImportButton);
+
     SurvexTreeView->setModel(Model);
     SurvexTreeView->setSelectionModel(SurvexSelectionModel);
     SurvexTreeView->setHeaderHidden(true);
@@ -63,6 +65,8 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
     //SurvexErrorListView->setUniformItemSizes(true);
 
     setWindowTitle(names.windowTitle);
+
+    updateImportButton(Model->index(0, 0), Model->index(Model->rowCount() - 1, 0));
 }
 
 cwImportTreeDataDialog::~cwImportTreeDataDialog() {
@@ -341,4 +345,40 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
 void cwImportTreeDataDialog::importerCanceled() {
     ImportThread->quit();
     close();
+}
+
+/**
+ * @brief cwImportTreeDataDialog::updateImportButton
+ *
+ * This updates the import button enable / disable
+ */
+void cwImportTreeDataDialog::updateImportButton(QModelIndex begin, QModelIndex end)
+{
+    //See if the user has selected to import the cave or a trip
+    bool enableImportButton = false;
+    if(begin.isValid() && end.isValid()) {
+        for(int i = begin.row(); i <= end.row(); i++) {
+            QModelIndex index = Model->index(i, 0, begin.parent());
+            cwTreeImportDataNode* node = Model->toNode(index);
+            if(node->importType() == cwTreeImportDataNode::Cave
+                    || node->importType() == cwTreeImportDataNode::Trip)
+            {
+                enableImportButton = true;
+                break;
+            }
+        }
+    }
+
+    if(!enableImportButton) {
+        //Make sure all nodes are disabled
+        enableImportButton = !Importer->data()->caves().isEmpty();
+    }
+
+    ImportButton->setEnabled(enableImportButton);
+
+    if(!enableImportButton) {
+        HintLabel->setText("You need to select which caves you want to import");
+    } else {
+        HintLabel->setText(QString());
+    }
 }
