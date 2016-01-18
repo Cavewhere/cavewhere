@@ -9,24 +9,13 @@
 #include <QGuiApplication>
 #include <QApplication>
 #include <QQmlContext>
-#include <QThread>
-#include <QQuickView>
-#include <QModelIndex>
-#include <QWidget>
-#include <QDir>
-#include <QImageReader>
-#include <QOpenGLFunctions>
 #include <QMessageBox>
 #include <QQmlApplicationEngine>
 
 //Our includes
 //#include "cwMainWindow.h"
-#include "cwStation.h"
-#include "cwSurveyChunk.h"
-#include "cwCavingRegion.h"
 #include "cwImage.h"
 #include "cwGlobalDirectory.h"
-#include "cwStation.h"
 #include "cwQMLRegister.h"
 #include "cwRootData.h"
 #include "cwProject.h"
@@ -61,12 +50,6 @@ int main(int argc, char *argv[])
     cwOpenFileEventHandler* openFileHandler = new cwOpenFileEventHandler(&a);
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
-
-//    foreach(QByteArray imageFormats, QImageReader::supportedImageFormats()) {
-//        qDebug() << "Image formats:" << imageFormats;
-//    }
-
-
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");

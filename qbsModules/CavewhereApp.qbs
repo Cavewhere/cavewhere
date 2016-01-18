@@ -29,9 +29,8 @@ Application {
             "widgets",
             "quick",
             "sql",
-            "opengl",
-            "xml",
-            "concurrent" ]
+            "test"
+        ]
     }
     Depends { name: "cavewhere-lib" }
     Depends { name: "sdk-utilities" }

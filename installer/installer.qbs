@@ -65,7 +65,7 @@ Project {
                     }
 
                     args = [bundlePath,
-                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml",
+                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml"
                             ]
                 }
 
@@ -104,7 +104,7 @@ Project {
             multiplex: true
 
             Artifact {
-                filePath: "Cavewhere " + product.version + ".zip"
+                filePath: "Cavewhere " + product.version + ".dmg"
                 fileTags: "shellInstaller"
             }
 
