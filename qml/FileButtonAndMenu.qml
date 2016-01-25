@@ -125,6 +125,13 @@ MenuBar {
             }
         }
 
+        MenuItem {
+            text: "Testcases"
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "Testcases");
+            }
+        }
+
         Menu {
             title: "Event Recording"
 
