@@ -37,6 +37,8 @@ Item {
         }
     }
 
+
+
     ColumnLayout {
         anchors.fill: parent
         RowLayout {
@@ -104,6 +106,15 @@ Item {
             id: textArea
             Layout.fillHeight: true
             Layout.fillWidth: true
+
+            HelpBox {
+                anchors.centerIn: parent
+                visible: testcases.processState === TestcaseManager.Running &&
+                         textArea.text.length === 0
+
+
+                text: "Testcases are running! Please wait, it will be a while."
+            }
         }
 
 
