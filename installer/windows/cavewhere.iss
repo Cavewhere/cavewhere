@@ -124,8 +124,7 @@ begin
   // this statement, the following won't install your VC redist only when
   // the Visual C++ 2010 Redist (x86) and Visual C++ 2010 SP1 Redist(x86)
   // are installed for the current user
-  Result := not (VCVersionInstalled(VC_2010_REDIST_X86) and
-    VCVersionInstalled(VC_2010_SP1_REDIST_X86));
+  Result := not (VCVersionInstalled({#MyRedistributableVersion}));
 end;
 
 

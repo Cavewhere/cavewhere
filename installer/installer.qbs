@@ -190,6 +190,22 @@ Project {
             return arch;
         }
 
+        readonly property string redistributableVersion: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "VC_2013_REDIST_X86_ADD";
+                break;
+            case "x86_64":
+                arch = "VC_2013_REDIST_X64_ADD";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
+
         Depends { name: "cavewhere-install" }
         Depends { name: "Git" }
 
@@ -247,6 +263,7 @@ Project {
 #define MyArchitecturesInstallIn64BitMode "' + product.architecturesInstallIn64BitMode + '"\n\
 #define Arch "' + product.arch + '"\n\
 #define MyRedistributableExe "' + product.redistributableExe + '"\n\
+#define MyRedistributableVersion "' + product.redistributableVersion + '"\n\
 #define releaseDirectory "' + project.installDir + '"\n\n' +
 innoInputFile
 
