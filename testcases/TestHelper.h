@@ -109,7 +109,7 @@ inline QString copyToTempFolder(QString filename) {
     INFO("Trying to copy " << filename << " to " << newFileLocation);
     REQUIRE(couldCopy == true);
 
-    bool couldPermissions = QFile::setPermissions(newFileLocation, QFile::WriteOwner);
+    bool couldPermissions = QFile::setPermissions(newFileLocation, QFile::WriteOwner | QFile::ReadOwner);
     INFO("Trying to set permissions for " << filename);
     REQUIRE(couldPermissions);
 
