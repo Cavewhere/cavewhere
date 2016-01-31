@@ -118,6 +118,19 @@ Item {
                 }
             },
             State {
+                name: "EXPORT_CAVE_CHIPDATA"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Export " + exportManager.currentCaveName + " to chipdata"
+                    nameFilters: ["Chipdata (*.*)"]
+                    selectExisting: false
+                    selectMultiple: false
+                    onAccepted: {
+                        exportManager.exportCaveToChipdata(fileUrl);
+                    }
+                }
+            },
+            State {
                 name: "IMPORT_COMPASS"
                 PropertyChanges {
                     target: fileDialog
@@ -189,6 +202,19 @@ Item {
                         currentText: exportManager.currentCaveName
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_COMPASS"
+                            fileDialog.open()
+                        }
+                    }
+                }
+
+                Controls.Menu {
+                    title: "Chipdata"
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: exportManager.currentCaveName
+                        onTriggered: {
+                            fileDialogItem.state = "EXPORT_CAVE_CHIPDATA"
                             fileDialog.open()
                         }
                     }
