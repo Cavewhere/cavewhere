@@ -8,6 +8,7 @@
 // import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
 import Cavewhere 1.0
+import QtQuick.Controls 1.0 as Controls
 import "Utils.js" as Utils
 
 CheckableGroupBox {
@@ -100,5 +101,67 @@ The calibration is added to uncorrected value
 for the calibration to correct it. UncorrectedValue = +4°,
 Calibration = -1°, so +4° + (-1°) = +3° </p>"
         }
+
+        BreakLine {}
+
+        Row {
+            InformationButton {
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: {
+                    correctedCompassHelpArea.visible = !correctedCompassHelpArea.visible
+                }
+            }
+
+            Controls.CheckBox {
+                id: compassCorrected
+                text: "Backwards <i>Compass</i>"
+
+                checked: calibration.correctedCompassFrontsight
+
+                onCheckedChanged: {
+                    calibration.correctedCompassFrontsight = checked
+                }
+            }
+        }
+
+
+        HelpArea {
+            id: correctedCompassHelpArea
+            anchors.left: parent.left
+            anchors.right: parent.right
+            text: "Read backwards compass allow you to entry front sight as if they were read as
+            a back sight.  This will <b>subtract 180°</b> to all front sight compass readings to get
+            the true value."
+        }
+
+        Row {
+            InformationButton {
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: {
+                    correctedClinoHelpArea.visible = !correctedClinoHelpArea.visible
+                }
+            }
+
+            Controls.CheckBox {
+                id: clinoCorrected
+                text: "Backwards <i>Clino</i>"
+
+                checked: calibration.correctedClinoFrontsight
+
+                onCheckedChanged: {
+                    calibration.correctedClinoFrontsight = checked
+                }
+            }
+        }
+
+        HelpArea {
+            id: correctedClinoHelpArea
+            anchors.left: parent.left
+            anchors.right: parent.right
+            text: "Read backwards clino allow you to entry front sights as if they were read as
+            a back sight.  This will <b>multiple -1</b> to all front sight clino readings to get
+            the true value."
+        }
     }
+
 }

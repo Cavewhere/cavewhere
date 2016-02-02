@@ -12,6 +12,7 @@
 #include "cwTask.h"
 #include "cwCave.h"
 #include "cwStationRenamer.h"
+#include "cwGlobals.h"
 
 //Qt include
 #include <QRegExp>
@@ -24,7 +25,7 @@ class QFile;
  *
  * This allow cavewhere to import a compass dat file.
  */
-class cwCompassImporter : public cwTask
+class CAVEWHERE_LIB_EXPORT cwCompassImporter : public cwTask
 {
     Q_OBJECT
 public:

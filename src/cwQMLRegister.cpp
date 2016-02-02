@@ -29,7 +29,6 @@
 #include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
-#include "cwXMLProjectLoadSaveTask.h"
 #include "cwBasePanZoomInteraction.h"
 #include "cwBaseScrapInteraction.h"
 #include "cwCamera.h"
@@ -104,6 +103,7 @@
 #include "cwUnitValueList.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwTestcaseManager.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -112,6 +112,7 @@
 #include <QDebug>
 #include <QUndoStack>
 #include <QThread>
+#include <QProcess>
 #include <QMetaType>
 #include <QJSValue>
 
@@ -239,4 +240,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorModel>("Cavewhere", 1, 0, "ErrorModel");
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
+    qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+
 }

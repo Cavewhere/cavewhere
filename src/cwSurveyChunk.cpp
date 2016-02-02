@@ -79,9 +79,21 @@ int cwSurveyChunk::stationCount() const {
 void cwSurveyChunk::setParentTrip(cwTrip* trip) {
     if(ParentTrip != trip) {
         if(ParentTrip != nullptr) {
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::frontCompassCalibrationChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::backCompassCalibrationChanged,
+                    this, &cwSurveyChunk::updateCompassErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::frontClinoCalibrationChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::backClinoCalibrationChanged,
+                    this, &cwSurveyChunk::updateClinoErrors);
             disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassBacksightChanged,
                        this, &cwSurveyChunk::updateCompassErrors);
             disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassFrontsightChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            disconnect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoFrontsightChanged,
                        this, &cwSurveyChunk::updateClinoErrors);
             disconnect(ParentTrip->calibrations(), &cwTripCalibration::frontSightsChanged,
                        this, &cwSurveyChunk::updateCompassClinoErrors);
@@ -93,9 +105,21 @@ void cwSurveyChunk::setParentTrip(cwTrip* trip) {
         setParent(trip);
 
         if(ParentTrip != nullptr) {
+            connect(ParentTrip->calibrations(), &cwTripCalibration::frontCompassCalibrationChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::backCompassCalibrationChanged,
+                    this, &cwSurveyChunk::updateCompassErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::frontClinoCalibrationChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::backClinoCalibrationChanged,
+                    this, &cwSurveyChunk::updateClinoErrors);
             connect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassBacksightChanged,
                        this, &cwSurveyChunk::updateCompassErrors);
             connect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoBacksightChanged,
+                       this, &cwSurveyChunk::updateClinoErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::correctedCompassFrontsightChanged,
+                       this, &cwSurveyChunk::updateCompassErrors);
+            connect(ParentTrip->calibrations(), &cwTripCalibration::correctedClinoFrontsightChanged,
                        this, &cwSurveyChunk::updateClinoErrors);
             connect(ParentTrip->calibrations(), &cwTripCalibration::frontSightsChanged,
                     this, &cwSurveyChunk::updateCompassClinoErrors);
@@ -1151,7 +1175,6 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
 
     bool okay;
     double frontSight = data(frontSightRole, index).toDouble(&okay);
-
     if(!okay) { return errors; }
 
     double backSight = data(backSightRole, index).toDouble(&okay);
@@ -1160,14 +1183,43 @@ QList<cwError> cwSurveyChunk::checkWithTolerance(cwSurveyChunk::DataRole frontSi
     //Correct the backSight
     switch(frontSightRole) {
     case ShotCompassRole:
-        if(parentTrip() == nullptr || (parentTrip() != nullptr && !parentTrip()->calibrations()->hasCorrectedCompassBacksight())) {
-            backSight = fmod(backSight + 180.0, 360.0);
+        if(parentTrip() != nullptr) {
+            frontSight += parentTrip()->calibrations()->frontCompassCalibration();
+            backSight += parentTrip()->calibrations()->backCompassCalibration();
+
+            if(parentTrip()->calibrations()->hasCorrectedCompassFrontsight()) {
+                frontSight += 180.0;
+            }
+
+            if(parentTrip()->calibrations()->hasCorrectedCompassBacksight()) {
+                backSight += 180.0;
+            }
+
         }
+        //Flip the backsight so it's in frontsight space
+        frontSight = fmod(frontSight, 360.0);
+        backSight = fmod(backSight + 180.0, 360.0);
         break;
     case ShotClinoRole:
-        if(parentTrip() == nullptr || (parentTrip() != nullptr && !parentTrip()->calibrations()->hasCorrectedClinoBacksight())) {
-            backSight = backSight * -1.0;
+        if(parentTrip() != nullptr) {
+            frontSight += parentTrip()->calibrations()->frontClinoCalibration();
+            backSight += parentTrip()->calibrations()->backClinoCalibration();
+
+            if(parentTrip()->calibrations()->hasCorrectedClinoFrontsight()) {
+                frontSight *= -1;
+            }
+
+            if(parentTrip()->calibrations()->hasCorrectedClinoBacksight()) {
+                backSight *= -1;
+            }
         }
+
+        //Flip the backsight so it's in frontsight space
+        backSight *= -1;
+
+        frontSight = qBound(-90.0, frontSight, 90.0);
+        backSight = qBound(-90.0, backSight, 90.0);
+
         break;
     default:
         Q_ASSERT(false);

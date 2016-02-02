@@ -30,7 +30,6 @@ public:
 
     static bool canConnect(QString filename);
     bool canConnect() const;
-
 protected:
     //For database access
     QString DatabasePath;

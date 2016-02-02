@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/compassImportExport.cw</file>
+    </qresource>
+</RCC>

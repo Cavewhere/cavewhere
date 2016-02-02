@@ -29,9 +29,8 @@ Application {
             "widgets",
             "quick",
             "sql",
-            "opengl",
-            "xml",
-            "concurrent" ]
+            "test"
+        ]
     }
     Depends { name: "cavewhere-lib" }
     Depends { name: "sdk-utilities" }
@@ -41,6 +40,10 @@ Application {
         applicationId.prefix + "src/utils",
         buildDirectory + "/serialization",
         buildDirectory + "/versionInfo"
+    ]
+
+    cpp.rpaths: [
+        Qt.core.libPath
     ]
 
     Properties {
@@ -57,11 +60,29 @@ Application {
 
     Properties {
         condition: qbs.targetOS.contains("osx")
-        cpp.cxxFlags: [
-            "-stdlib=libc++", //Needed for protoc
-            "-std=c++11", //For c++11 support
-            "-Werror" //Treat warnings as errors
-        ]
+        cpp.cxxFlags: {
+            var flags = [
+                        "-stdlib=libc++", //Needed for protoc
+                        "-std=c++11", //For c++11 support
+                        "-Werror", //Treat warnings as errors
+
+                    ];
+
+            if(qbs.buildVariant == "debug") {
+                flags.push(["-fsanitize=address",
+                            "-fno-omit-frame-pointer"]);
+            }
+
+            return flags;
+        }
+
+        cpp.linkerFlags: {
+            var flags = [];
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address")
+            }
+            return flags;
+        }
     }
 
     Properties {
@@ -95,8 +116,6 @@ Application {
         ]
     }
 
-
-//        cpp.infoPlistFile: "Info.plist"
     cpp.minimumOsxVersion: "10.7"
 
     Group {
@@ -211,7 +230,7 @@ Application {
         name: "windowsDLLs-release"
         condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
         qbs.install: true
-        files:[
+        files: [
             Qt.core.binPath + "/Qt5Concurrent.dll",
             Qt.core.binPath + "/Qt5Core.dll",
             Qt.core.binPath + "/Qt5Gui.dll",
@@ -225,11 +244,7 @@ Application {
             Qt.core.binPath + "/Qt5Test.dll",
             Qt.core.binPath + "/icuin*.dll",
             Qt.core.binPath + "/icuuc*.dll",
-            Qt.core.binPath + "/icudt*.dll",
-
-            //Redistrobution libraries for vs2010 32bit
-            "c:/windows/system32/MSVCR120.DLL",
-            "c:/windows/system32/MSVCP120.DLL"
+            Qt.core.binPath + "/icudt*.dll"
         ]
 
     }

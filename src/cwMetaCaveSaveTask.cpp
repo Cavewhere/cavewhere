@@ -35,6 +35,7 @@
 //Qt includes
 #include <QFile>
 #include <QJsonDocument>
+#include <QThread>
 
 cwMetaCaveSaveTask::cwMetaCaveSaveTask()
 {
@@ -43,7 +44,9 @@ cwMetaCaveSaveTask::cwMetaCaveSaveTask()
 
 void cwMetaCaveSaveTask::runTask()
 {
+    moveObjectToThread(Region, QThread::currentThread(), nullptr);
     QVariantMap regionMap = saveRegion();
+    moveObjectToThread(Region, thread(), this);
 
     QJsonDocument jsonDocument = QJsonDocument::fromVariant(regionMap);
 

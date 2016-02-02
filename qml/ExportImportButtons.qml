@@ -57,6 +57,7 @@ Item {
         id: fileDialogItem
         FileDialog {
             id: fileDialog
+            folder: rootData.lastDirectory
         }
 
         states: [
@@ -69,6 +70,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexTrip(fileUrl);
                     }
                 }
@@ -82,6 +84,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexCave(fileUrl);
                     }
                 }
@@ -95,6 +98,7 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportSurvexRegion(fileUrl);
                     }
                 }
@@ -108,7 +112,21 @@ Item {
                     selectExisting: false
                     selectMultiple: false
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         exportManager.exportCaveToCompass(fileUrl);
+                    }
+                }
+            },
+            State {
+                name: "EXPORT_CAVE_CHIPDATA"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Export " + exportManager.currentCaveName + " to chipdata"
+                    nameFilters: ["Chipdata (*.*)"]
+                    selectExisting: false
+                    selectMultiple: false
+                    onAccepted: {
+                        exportManager.exportCaveToChipdata(fileUrl);
                     }
                 }
             },
@@ -121,6 +139,7 @@ Item {
                     selectExisting: true
                     selectMultiple: true
                     onAccepted: {
+                        rootData.lastDirectory = fileUrl
                         messageListDialog.title = "Compass Import"
                         importManager.importCompassDataFile(fileUrls);
                     }
@@ -183,6 +202,19 @@ Item {
                         currentText: exportManager.currentCaveName
                         onTriggered: {
                             fileDialogItem.state = "EXPORT_CAVE_COMPASS"
+                            fileDialog.open()
+                        }
+                    }
+                }
+
+                Controls.Menu {
+                    title: "Chipdata"
+
+                    ExportSurveyMenuItem {
+                        prefixText: "Current cave"
+                        currentText: exportManager.currentCaveName
+                        onTriggered: {
+                            fileDialogItem.state = "EXPORT_CAVE_CHIPDATA"
                             fileDialog.open()
                         }
                     }

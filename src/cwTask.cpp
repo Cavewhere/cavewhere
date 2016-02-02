@@ -225,6 +225,30 @@ void cwTask::setProgress(int progress)
 }
 
 /**
+ * This allows tasks to move object's they're working to and from a thread. This function
+ * may block the thread if the current thread doesn't equal the object's thread.
+ */
+void cwTask::moveObjectToThread(QObject *object, QThread *thread, QObject *newParent)
+{
+    if(object->thread() == QThread::currentThread()) {
+        object->moveToThread(thread);
+        object->setParent(newParent);
+//        QMetaObject::invokeMethod(this, "setObjectParent",
+//                                         Qt::BlockingQueuedConnection,
+//                                         Q_ARG(QObject*, object),
+//                                         Q_ARG(QObject*, newParent)
+//                                    );
+    } else {
+        object->setParent(newParent);
+        QMetaObject::invokeMethod(this, "pushToThread",
+                                  Qt::BlockingQueuedConnection,
+                                  Q_ARG(QObject*, object),
+                                  Q_ARG(QThread*, thread));
+
+    }
+}
+
+/**
   \brief This function should be called when the task has completed
 
   This will emit the finished or stopped signal and also handle
@@ -294,13 +318,22 @@ void cwTask::startOnCurrentThread() {
 }
 
 /**
-  \brief Moves the task to the thread
+ * This is a helper function moveObjectToThread.
+ */
+void cwTask::pushToThread(QObject *object, QThread *thread)
+{
+    Q_ASSERT(object->thread() == QThread::currentThread());
+    object->moveToThread(thread);
+}
 
-  This moves this task and all it children to the thread
-  */
-void cwTask::changeThreads(QThread* thread) {
-    moveToThread(thread);
-    emit threadChanged();
+/**
+ * @brief cwTask::setObjectParent
+ * @param object
+ * @param objectParent
+ */
+void cwTask::setObjectParent(QObject *object, QObject *objectParent)
+{
+    object->setParent(objectParent);
 }
 
 /**
@@ -378,7 +411,7 @@ void cwTask::run()
  *
  * This waits for the task to finish successfully, (this will wait for the task to restart)
  */
-void cwTask::waitToFinish(unsigned long time)
+void cwTask::waitToFinish()
 {
     QCoreApplication::processEvents();
 
@@ -389,7 +422,7 @@ void cwTask::waitToFinish(unsigned long time)
 
     while(!isReady() || needsRestart()) {
         WaitToFinishLocker.lock();
-        WaitToFinishCondition.wait(&WaitToFinishLocker, time);
+        WaitToFinishCondition.wait(&WaitToFinishLocker, 100);
         WaitToFinishLocker.unlock();
 
         QCoreApplication::processEvents(); //Allows the task to signal for a restart

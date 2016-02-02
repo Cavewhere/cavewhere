@@ -542,7 +542,9 @@ Item {
         id: exportDialogId
         title: "Export to " + fileTypeExportComboBox.currentText
         selectExisting: false
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             screenCaptureManagerId.filename = fileUrl
             screenCaptureManagerId.capture();
         }

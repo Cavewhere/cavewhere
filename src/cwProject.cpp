@@ -19,6 +19,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
+
 #include "cwMetaCaveSaveTask.h"
 #include "cwMetaCaveLoadTask.h"
 
@@ -42,6 +43,8 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
     Region(new cwCavingRegion(this)),
+    ProtoLoadTask(nullptr),
+    MetaCaveLoadTask(nullptr),
     UndoStack(new QUndoStack(this))
 {
     newProject();
@@ -71,8 +74,6 @@ void cwProject::createTempProjectFile() {
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
     setFilename(projectFile);
     TempProject = true;
-
-//    qDebug() << "Creating temp files:" << ProjectFile;
 
     //Create and open a new database connection
     int connectionName = ConnectionCounter.fetchAndAddAcquire(1);
@@ -189,12 +190,15 @@ void cwProject::save() {
   */
 void cwProject::privateSave() {
     //Save to meta-cave format
-    cwMetaCaveSaveTask* metaCaveSaveTask = new cwMetaCaveSaveTask();
-    connect(metaCaveSaveTask, SIGNAL(finished()), metaCaveSaveTask, SLOT(deleteLater()));
-    connect(metaCaveSaveTask, SIGNAL(stopped()), metaCaveSaveTask, SLOT(deleteLater()));
-    metaCaveSaveTask->setCavingRegion(*Region);
-    metaCaveSaveTask->setDatabaseFilename(ProjectFile);
-    metaCaveSaveTask->start();
+    if(SaveTask == nullptr) {
+        SaveTask = new cwMetaCaveSaveTask();
+    }
+
+//    connect(SaveTask, SIGNAL(finished()), SaveTask, SLOT(deleteLater()));
+//    connect(SaveTask, SIGNAL(stopped()), SaveTask, SLOT(deleteLater()));
+    SaveTask->setCavingRegion(*Region);
+    SaveTask->setDatabaseFilename(ProjectFile);
+    SaveTask->start();
 
     //Save Geometry Cache
 
@@ -329,34 +333,39 @@ void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
 
-    filename = convertFromURL(filename);
 
     if(cwProjectIOTask::canConnect(filename)) {
         //Load the old version of the file, version 1
+        if(ProtoLoadTask == nullptr) {
+            ProtoLoadTask = new cwRegionLoadTask();
 
-        //Load the region task
-        cwRegionLoadTask* loadTask = new cwRegionLoadTask();
-        connect(loadTask, &cwRegionLoadTask::finishedLoading,
-                this, &cwProject::updateRegionDataVersion1);
+            //Load the region task
+            connect(ProtoLoadTask, &cwRegionLoadTask::finishedLoading,
+                    this, &cwProject::updateRegionDataVersion1);
+        }
+
+        filename = convertFromURL(filename);
 
         //Set the data for the project
-        loadTask->setDatabaseFilename(filename);
+        ProtoLoadTask->setDatabaseFilename(filename);
 
         //Start the save thread
-        loadTask->start();
-
+        ProtoLoadTask->start();
+    
         ProjectVersion = Version_1;
 
     } else {
-        cwMetaCaveLoadTask* metaCaveLoad = new cwMetaCaveLoadTask();
-        connect(metaCaveLoad, &cwMetaCaveLoadTask::finished,
-                this, &cwProject::updateRegionDataVersion2);
+        if(MetaCaveLoadTask == nullptr) {
+            MetaCaveLoadTask = new cwMetaCaveLoadTask();
+            connect(MetaCaveLoadTask, &cwMetaCaveLoadTask::finished,
+                    this, &cwProject::updateRegionDataVersion2);
+        }
 
         //Set the data for the project
-        metaCaveLoad->setDatabaseFilename(filename);
+        MetaCaveLoadTask->setDatabaseFilename(filename);
 
         //Start the save thread
-        metaCaveLoad->start();
+        MetaCaveLoadTask->start();
 
         //Load the new version of the file, version 2
         ProjectVersion = Version_2;
@@ -373,14 +382,11 @@ void cwProject::loadFile(QString filename) {
 void cwProject::updateRegionDataVersion1() {
     TempProject = false;
 
-    cwRegionLoadTask* loadTask = qobject_cast<cwRegionLoadTask*>(sender());
-
     //Update the project filename
-    setFilename(loadTask->databaseFilename());
+    setFilename(ProtoLoadTask->databaseFilename());
 
     //Copy the data from the loaded region
-    loadTask->copyRegionTo(*Region);
-    loadTask->deleteLater();
+    ProtoLoadTask->copyRegionTo(*Region);
 
     //Ask the user to convert, Must be hand
     emit tryToConvertFromVersion1toVersion2();
@@ -397,14 +403,11 @@ void cwProject::updateRegionDataVersion2()
 {
     TempProject = false;
 
-    cwMetaCaveLoadTask* loadTask = qobject_cast<cwMetaCaveLoadTask*>(sender());
-
     //Update the project filename
-    setFilename(loadTask->databaseFilename());
+    setFilename(MetaCaveLoadTask->databaseFilename());
 
     //Copy the data from the loaded region
-    loadTask->copyRegionTo(*Region);
-    loadTask->deleteLater();
+    MetaCaveLoadTask->copyRegionTo(*Region);
 
     emit temporaryProjectChanged();
 }
@@ -657,6 +660,36 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
 QString cwProject::cacheFilename() const
 {
     return cacheFilename(filename());
+}
+
+/**
+ * @brief cwProject::waitToFinish
+ *
+ * Will cause the project to block until the underlying load task is finished. This is useful
+ * for unit testing.
+ */
+void cwProject::loadWaitToFinish()
+{
+    if(ProtoLoadTask != nullptr) {
+        ProtoLoadTask->waitToFinish();
+    }
+
+    if(MetaCaveLoadTask != nullptr) {
+        MetaCaveLoadTask->waitToFinish();
+    }
+}
+
+/**
+ * @brief cwProject::waitToFinish
+ *
+ * Will cause the project to block until the underlying save task is finished. This is useful
+ * for unit testing.
+ */
+void cwProject::saveWaitToFinish()
+{
+    if(!SaveTask.isNull()) {
+        SaveTask->waitToFinish();
+    }
 }
 
 /**

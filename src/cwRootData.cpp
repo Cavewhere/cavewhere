@@ -27,6 +27,8 @@
 //Qt includes
 #include <QItemSelectionModel>
 #include <QUndoStack>
+#include <QSettings>
+#include <QStandardPaths>
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
@@ -34,7 +36,8 @@
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     DefaultTrip(new cwTrip(this)),
-    DefaultTripCalibration(new cwTripCalibration(this))
+    DefaultTripCalibration(new cwTripCalibration(this)),
+    LeadsVisible(true)
 {
 
     //Task Manager, allows the users to see running tasks
@@ -84,8 +87,6 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
-
-
 }
 
 /**
@@ -116,3 +117,41 @@ QString cwRootData::version() const {
     return CavewhereVersion; //Automatically generated from qbs in cavewhereVersion.h
 }
 
+/**
+* @brief cwRootData::setLeadsVisible
+* @param leadsVisible
+*
+* This function is temperary, should be moved to a layer manager
+*/
+void cwRootData::setLeadsVisible(bool leadsVisible) {
+    if(LeadsVisible != leadsVisible) {
+        LeadsVisible = leadsVisible;
+        emit leadsVisibleChanged();
+    }
+}
+
+/**
+* @brief cwRootData::lastDirectory
+* @return Returns the last directory open by the file dialog. If the directory doesn't exist, this opens the desktopLocation
+*/
+QUrl cwRootData::lastDirectory() const {
+    QSettings settings;
+    QUrl dir = settings.value("LastDirectory", QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation))).toUrl();
+    return dir;
+}
+
+/**
+* @brief cwRootData::setLastDirectory
+* @param lastDirectory - Set the last directory that was opened by the user. This is useful for
+* propertly position the file dialogs
+*/
+void cwRootData::setLastDirectory(QUrl lastDirectory) {
+    QFileInfo info(lastDirectory.toLocalFile());
+    QUrl dir = QUrl::fromLocalFile(info.path());
+
+    if(this->lastDirectory() != dir) {
+        QSettings settings;
+        settings.setValue("LastDirectory", dir);
+        emit lastDirectoryChanged();
+    }
+}

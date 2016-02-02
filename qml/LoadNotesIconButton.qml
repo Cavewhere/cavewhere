@@ -27,7 +27,9 @@ IconButton {
         nameFilters: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
         title: "Load Images"
         selectMultiple: true
+        folder: rootData.lastDirectory
         onAccepted: {
+            rootData.lastDirectory = fileUrl
             buttonId.filesSelected(fileDialog.fileUrls)
         }
     }

@@ -72,18 +72,7 @@ void cwPlotSauceTask::runTask() {
     plotSauceAppNames.append("plotsauce");
     plotSauceAppNames.append("plotsauce.exe");
 
-    QString plotSaucePath;
-
-    foreach(QString plotSauceAppName, plotSauceAppNames) {
-        QDir plotSauceDir(QApplication::applicationDirPath());
-        QString currentPlotSaucePath = plotSauceDir.absoluteFilePath(plotSauceAppName);
-
-        QFileInfo plotSauceFileInfo(currentPlotSaucePath);
-        if(plotSauceFileInfo.exists() && plotSauceFileInfo.isExecutable()) {
-            plotSaucePath = currentPlotSaucePath;
-            break;
-        }
-    }
+    QString plotSaucePath = cwGlobals::findExecutable(plotSauceAppNames);
 
     //Found plot sauce executable?
     if(plotSaucePath.isEmpty()) {

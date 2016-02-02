@@ -81,6 +81,8 @@ private slots:
     void importerFinishedRunning();
     void importerCanceled();
 
+    void updateImportButton(QModelIndex begin, QModelIndex end);
+
 };
 
 #endif // CWIMPORTSURVEXDIALOG_H

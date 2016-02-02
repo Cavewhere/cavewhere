@@ -25,8 +25,13 @@ public:
 protected:
     cwCavingRegion* Region;
 
+    static int version();
+
+
+//    void moveRegionToCurrentThread();
+//    Q_INVOKABLE void moveRegionToThread(QThread* thread);
 private:
-    Q_INVOKABLE void moveRegionToThread(QThread* thread);
+    Q_INVOKABLE void updateRegionParent();
 };
 
 #endif // CWREGIONIOTASK_H

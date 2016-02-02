@@ -158,7 +158,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
             anchors.left: parent.left
             anchors.right: parent.right
             text: "Corrected clino allow you to entry back sights as if they were read as
-            a front sight.  This will <b>subtract 90°</b> to all back sight clino readings to get
+            a front sight.  This will <b>multiple -1</b> to all back sight clino readings to get
             the true value."
         }
     }

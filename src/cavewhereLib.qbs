@@ -13,14 +13,13 @@ DynamicLibrary {
 
     name: "cavewhere-lib"
 
-    readonly property string gitVersion: Git.productVersion
-    readonly property string installPrefix: {
-        if(qbs.targetOS.contains("osx")) {
-            return name + ".app/Contents/MacOS/"
-        }
-        return ""
-    }
+    //For mac os x we need to build dylib instead of framework bundle. When running
+    //macdepolyqt for release, with a framework, an extra "lib" is added to the
+    //path which prevents macdeployqt from finding the correct library's location
+    consoleApplication: true
 
+    readonly property string gitVersion: Git.productVersion
+    readonly property string rpath: buildDirectory
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -43,22 +42,18 @@ DynamicLibrary {
     Depends { name: "dewalls" }
     Depends { name: "sdk-utilities" }
 
-//        Depends { name: "icns-out" }
-
-//        Qt.quick.qmlDebugging: true //qbs.buildVariant === "debug"
+    Export {
+        Depends { name: "cpp" }
+        cpp.rpaths: [product.rpath]
+    }
 
     Group {
         fileTagsFilter: ["dynamiclibrary"]
-        qbs.installDir: (qbs.targetOS.contains("darwin") ? product.name + ".framework/Versions/A" : "")
-        qbs.install: true
+        qbs.install: qbs.targetOS.contains("windows")
     }
 
-    Group {
-        fileTagsFilter: ["bundle"]
-        qbs.install: true
-    }
-
-    cpp.installNamePrefix: qbs.installRoot
+    cpp.installNamePrefix: "@rpath"
+    cpp.rpaths: [Qt.core.libPath]
 
     cpp.includePaths: [
         ".",
@@ -81,11 +76,29 @@ DynamicLibrary {
 
     Properties {
         condition: qbs.targetOS.contains("osx")
-        cpp.cxxFlags: [
-            "-stdlib=libc++", //Needed for protoc
-            "-std=c++11", //For c++11 support
-            "-Werror" //Treat warnings as errors
-        ]
+        cpp.cxxFlags: {
+            var flags = [
+                        "-stdlib=libc++", //Needed for protoc
+                        "-std=c++11", //For c++11 support
+                        "-Werror", //Treat warnings as errors
+
+                    ];
+
+            if(qbs.buildVariant == "debug") {
+                flags.push(["-fsanitize=address",
+                            "-fno-omit-frame-pointer"])
+            }
+
+            return flags;
+        }
+
+        cpp.linkerFlags: {
+            var flags = [];
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address")
+            }
+            return flags;
+        }
     }
 
     Properties {

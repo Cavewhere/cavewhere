@@ -233,9 +233,8 @@ TEST_CASE( "cavewhere can be saved and loaded again", "[saveAndLoad]" ) {
 
         project->saveAs(filename);
 
-        //Saving is async, wait until the threads are finished
-        QThreadPool::globalInstance()->waitForDone();
-        QApplication::processEvents();
+        //Saving is async, wait until the thread are finished
+        project->saveWaitToFinish();
 
         QFileInfo fileInfo(filename);
         REQUIRE(fileInfo.isReadable() == true);
@@ -255,8 +254,8 @@ TEST_CASE( "cavewhere can be saved and loaded again", "[saveAndLoad]" ) {
         cwProject* loadProject = new cwProject();
         loadProject->loadFile(filename);
 
-        QThreadPool::globalInstance()->waitForDone();
-        QApplication::processEvents();
+        //Loaded is async, wait until the thread finishes
+        loadProject->loadWaitToFinish();
 
         cwCavingRegion* loadRegion = loadProject->cavingRegion();
 

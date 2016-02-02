@@ -37,6 +37,7 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QMapIterator>
+#include <QThread>
 
 cwMetaCaveLoadTask::cwMetaCaveLoadTask()
 {
@@ -65,7 +66,9 @@ void cwMetaCaveLoadTask::runTask()
         QVariantMap map = variant.toMap();
 
         try {
+            moveObjectToThread(Region, QThread::currentThread());
             loadCavingRegion(map);
+            moveObjectToThread(Region, thread(), this);
         } catch(QString message) {
             qDebug() << "JSON loading error:" << message;
         }

@@ -26,19 +26,19 @@ void cwRegionIOTask::setCavingRegion(const cwCavingRegion& region) {
     Q_ASSERT(thread() == Region->thread());
 
     //Move the region to the current thread
-    if(QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(this, "moveRegionToThread",
-                                  Qt::BlockingQueuedConnection,
-                                  Q_ARG(QThread*, QThread::currentThread()));
-    }
+//    if(QThread::currentThread() != thread()) {
+//        QMetaObject::invokeMethod(this, "moveRegionToThread",
+//                                  Qt::BlockingQueuedConnection,
+//                                  Q_ARG(QThread*, QThread::currentThread()));
+//    }
 
     *Region = region;
 
     //Move Region back to task's thread
-    if(QThread::currentThread() != thread()) {
-        Region->moveToThread(thread());
-        Region->setParent(this);
-    }
+//    if(QThread::currentThread() != thread()) {
+//        Region->moveToThread(thread());
+//        Region->setParent(this);
+//    }
 }
 
 /**
@@ -55,32 +55,60 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
     Q_ASSERT(thread() == Region->thread());
 
     //Move the region to the current thread
-    if(QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(this, "moveRegionToThread",
-                                  Qt::BlockingQueuedConnection,
-                                  Q_ARG(QThread*, QThread::currentThread()));
-    }
+//    if(QThread::currentThread() != thread()) {
+//        QMetaObject::invokeMethod(this, "moveRegionToThread",
+//                                  Qt::BlockingQueuedConnection,
+//                                  Q_ARG(QThread*, QThread::currentThread()));
+//    }
 
     //Preform copy
     region = *Region;
 
     //Move Region back to task's thread
-    if(QThread::currentThread() != thread()) {
-        Region->moveToThread(thread());
-        Region->setParent(this);
-    }
+//    if(QThread::currentThread() != thread()) {
+//        Region->moveToThread(thread());
+//        QMetaObject::invokeMethod(this, "updateRegionParent",
+//                                  Qt::BlockingQueuedConnection);
+//    }
 }
 
 /**
- * @brief cwRegionIOTask::moveRegionToThread
- * @param thread
- *
- * This moves Region to thread. We need this function because, objects can only be pushed to other
- * threads, and can't be pulled to threads. See Qt documentation for details.
+ * @brief cwRegionIOTask::version
+ * @return Returns the current version
  */
-void cwRegionIOTask::moveRegionToThread(QThread* thread)
+int cwRegionIOTask::version()
 {
-    Region->setParent(nullptr);
-    Region->moveToThread(thread);
+    return 1;
+}
+
+//void cwRegionIOTask::moveRegionToCurrentThread()
+//{
+//    //Move the region to the current thread
+//    if(QThread::currentThread() != thread()) {
+//        QMetaObject::invokeMethod(this, "moveRegionToThread",
+//                                  Qt::BlockingQueuedConnection,
+//                                  Q_ARG(QThread*, QThread::currentThread()));
+//    }
+//}
+
+///**
+// * @brief cwRegionIOTask::moveRegionToThread
+// * @param thread
+// *
+// * This moves Region to thread. We need this function because, objects can only be pushed to other
+// * threads, and can't be pulled to threads. See Qt documentation for details.
+// */
+//void cwRegionIOTask::moveRegionToThread(QThread* thread)
+//{
+//    Region->setParent(nullptr);
+//    Region->moveToThread(thread);
+//}
+
+/**
+ * @brief cwRegionIOTask::updateRegionParent
+ */
+void cwRegionIOTask::updateRegionParent()
+{
+    Region->setParent(this);
 }
 

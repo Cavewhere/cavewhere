@@ -58,7 +58,7 @@ public:
     void setName(QString name);
 
     void run();
-    void waitToFinish(unsigned long time = ULONG_MAX);
+    void waitToFinish();
 
     //Do not move this to a slot!!! You will break things
     //TODO: figure out why this is bad...
@@ -86,6 +86,8 @@ protected:
     void setNumberOfSteps(int steps);
     void setProgress(int progress);
     virtual void runTask() = 0;
+
+    void moveObjectToThread(QObject* object, QThread* thread, QObject* newParent = nullptr);
 
 protected slots:
     void done();
@@ -119,7 +121,8 @@ private:
 
 private:
     Q_INVOKABLE void startOnCurrentThread();
-    Q_INVOKABLE void changeThreads(QThread* thread);
+    Q_INVOKABLE void pushToThread(QObject* object, QThread* thread);
+    Q_INVOKABLE void setObjectParent(QObject* object, QObject* objectParent);
 
 };
 

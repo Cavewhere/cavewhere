@@ -60,6 +60,7 @@ public slots:
     void exportSurvexCave(QString filename);
     void exportSurvexRegion(QString filename);
     void exportCaveToCompass(QString filename);
+    void exportCaveToChipdata(QString filename);
 
 private slots:
     void exporterFinished();

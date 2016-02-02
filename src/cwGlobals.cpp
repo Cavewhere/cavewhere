@@ -10,6 +10,7 @@
 //Qt includes
 #include <QFileInfo>
 #include <QSettings>
+#include <QApplication>
 #include <QDebug>
 
 //Std includes
@@ -57,5 +58,28 @@ QString cwGlobals::convertFromURL(QString filenameUrl)
         return fileUrl.toLocalFile();
     }
     return filenameUrl;
+}
+
+/**
+ * @brief cwGlobals::findExecutable
+ * @param executables - A list of executables, [cavern.exe, cavern]
+ * @return Returns the first exectuable that exists base on the QApplication::applicationPath()
+ */
+QString cwGlobals::findExecutable(QStringList executables)
+{
+    QString execPath;
+
+    foreach(QString plotSauceAppName, executables) {
+        QDir plotSauceDir(QApplication::applicationDirPath());
+        QString currentPlotSaucePath = plotSauceDir.absoluteFilePath(plotSauceAppName);
+
+        QFileInfo plotSauceFileInfo(currentPlotSaucePath);
+        if(plotSauceFileInfo.exists() && plotSauceFileInfo.isExecutable()) {
+            execPath = currentPlotSaucePath;
+            break;
+        }
+    }
+
+    return execPath;
 }
 

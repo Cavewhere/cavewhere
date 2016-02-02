@@ -19,6 +19,9 @@ class cwAddImageTask;
 class cwTrip;
 class cwScrapManager;
 class cwTaskManagerModel;
+class cwRegionLoadTask;
+class cwMetaCaveSaveTask;
+class cwMetaCaveLoadTask;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -80,6 +83,9 @@ public:
     bool isTemporaryProject() const;
 
     Version version() const;
+    
+    void loadWaitToFinish();
+    void saveWaitToFinish();
 
     static QString convertFromURL(QString fileUrl);
 
@@ -88,6 +94,7 @@ signals:
     void undoStackChanged();
     void temporaryProjectChanged();
     void versionChanged();
+    void regionChanged();
     void tryToConvertFromVersion1toVersion2();
 
 public slots:
@@ -103,6 +110,10 @@ private:
 
     //The region that this project looks after
     cwCavingRegion* Region;
+
+    cwRegionLoadTask* ProtoLoadTask;
+    cwMetaCaveLoadTask* MetaCaveLoadTask;
+    QPointer<cwMetaCaveSaveTask> SaveTask;
 
     //The undo stack
     QUndoStack* UndoStack;

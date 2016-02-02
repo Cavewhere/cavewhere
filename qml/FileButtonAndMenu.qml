@@ -91,7 +91,6 @@ Item {
                 id: saveAsMenuItem
                 text: "Save As"
                 onTriggered:{
-                    console.log("Open file dialog:" + saveAsFileDialog)
                     saveAsFileDialog.open()
                 }
             }
@@ -144,6 +143,22 @@ Item {
                 onTriggered: {
                     regionSceneManager.scraps.visible = !regionSceneManager.scraps.visible
                     terrainRenderer.update()
+            }
+        }
+
+        MenuItem {
+            text: "Leads Visible"
+            checked: rootData.leadsVisible
+            checkable: true
+            onTriggered: {
+                rootData.leadsVisible = !rootData.leadsVisible
+            }
+        }
+
+        MenuItem {
+            text: "Testcases"
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "Testcases");
                 }
             }
 

@@ -33,7 +33,9 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   */
 void cwCaveExporterTask::runTask() {
     if(checkData() && openOutputFile()) {
-        bool good = writeCave(*OutputStream.data(), Cave);
+        QScopedPointer<cwCave> tempCave(new cwCave(*Cave));
+
+        bool good = writeCave(*OutputStream.data(), tempCave.data());
         closeOutputFile();
 
         if(!good) {

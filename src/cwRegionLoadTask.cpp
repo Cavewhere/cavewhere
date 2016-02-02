@@ -34,6 +34,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QThread>
 
 //Std includes
 #include <sstream>
@@ -56,7 +57,9 @@ void cwRegionLoadTask::runTask() {
         insureVacuuming();
 
         //Try loading Proto Buffer
+        moveObjectToThread(Region, QThread::currentThread());
         bool success = loadFromProtoBuffer();
+        moveObjectToThread(Region, thread(), this);
 
 //        if(!success) {
 //            qDebug() << "Warning loading from XML serialization!" << LOCATION;
@@ -155,6 +158,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  */
 void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
 {
+
     Region->clearCaves();
 
     QList<cwCave*> caves;
@@ -258,6 +262,8 @@ void cwRegionLoadTask::loadTripCalibration(const CavewhereProto::TripCalibration
 {
     tripCalibration->setCorrectedCompassBacksight(protoTripCalibration.correctedcompassbacksight());
     tripCalibration->setCorrectedClinoBacksight(protoTripCalibration.correctedclinobacksight());
+    tripCalibration->setCorrectedCompassFrontsight(protoTripCalibration.correctedcompassfrontsight());
+    tripCalibration->setCorrectedClinoFrontsight(protoTripCalibration.correctedclinofrontsight());
     tripCalibration->setTapeCalibration(protoTripCalibration.tapecalibration());
     tripCalibration->setFrontCompassCalibration(protoTripCalibration.frontcompasscalibration());
     tripCalibration->setFrontClinoCalibration(protoTripCalibration.frontclinocalibration());
