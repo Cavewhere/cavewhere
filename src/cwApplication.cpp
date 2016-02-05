@@ -56,19 +56,19 @@ QEvent* cwApplication::cloneEvent(QEvent *event) const
     return nullptr;
 }
 
-#ifdef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug str, const QEvent *ev)
-{
-    static int eventEnumIndex = QEvent::staticMetaObject
-           .indexOfEnumerator("Type");
-     str << "QEvent";
-     if (ev) {
-        QString name = QEvent::staticMetaObject
-              .enumerator(eventEnumIndex).valueToKey(ev->type());
-        if (!name.isEmpty()) str << name; else str << ev->type();
-     } else {
-        str << (void*)ev;
-     }
-     return str.maybeSpace();
-}
-#endif //QT_NO_DEBUG_STREAM
+//#ifdef QT_NO_DEBUG_STREAM
+//QDebug operator<<(QDebug str, const QEvent *ev)
+//{
+//    static int eventEnumIndex = QEvent::staticMetaObject
+//           .indexOfEnumerator("Type");
+//     str << "QEvent";
+//     if (ev) {
+//        QString name = QEvent::staticMetaObject
+//              .enumerator(eventEnumIndex).valueToKey(ev->type());
+//        if (!name.isEmpty()) str << name; else str << ev->type();
+//     } else {
+//        str << (void*)ev;
+//     }
+//     return str.maybeSpace();
+//}
+//#endif //QT_NO_DEBUG_STREAM
