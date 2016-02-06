@@ -632,22 +632,22 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
         return station.name();
     case StationLeftRole:
         if(station.leftInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.left(), 'g', -1);
+            return QString::number(station.left(), 'f', -1);
         }
         break;
     case StationRightRole:
         if(station.rightInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.right(), 'g', -1);
+            return QString::number(station.right(), 'f', -1);
         }
         break;
     case StationUpRole:
         if(station.upInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.up(), 'g', -1);
+            return QString::number(station.up(), 'f', -1);
         }
         break;
     case StationDownRole:
         if(station.downInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.down(), 'g', -1);
+            return QString::number(station.down(), 'f', -1);
         }
         break;
     default:
@@ -667,25 +667,25 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
     switch(role) {
     case ShotDistanceRole:
         if(shot.distanceState() == cwDistanceStates::Valid) {
-            return QString::number(shot.distance(), 'g', -1);
+            return QString::number(shot.distance(), 'f', -1);
         }
         break;
     case ShotDistanceIncludedRole:
         return shot.isDistanceIncluded();
     case ShotCompassRole:
         if(shot.compassState() == cwCompassStates::Valid) {
-            return QString::number(shot.compass(), 'g', -1);
+            return QString::number(shot.compass(), 'f', -1);
         }
         break;
     case ShotBackCompassRole:
         if(shot.backCompassState() == cwCompassStates::Valid) {
-            return QString::number(shot.backCompass(), 'g', -1);
+            return QString::number(shot.backCompass(), 'f', -1);
         }
         break;
     case ShotClinoRole: {
         switch(shot.clinoState()) {
         case cwClinoStates::Valid:
-            return QString::number(shot.clino(), 'g', -1);
+            return QString::number(shot.clino(), 'f', -1);
         case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:
@@ -698,7 +698,7 @@ QVariant cwSurveyChunk::shotData(DataRole role, int index) const {
     case ShotBackClinoRole:
         switch(shot.backClinoState()) {
         case cwClinoStates::Valid:
-            return QString::number(shot.backClino(), 'g', -1);
+            return QString::number(shot.backClino(), 'f', -1);
         case cwClinoStates::Empty:
             return QVariant();
         case cwClinoStates::Down:

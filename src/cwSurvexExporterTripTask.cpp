@@ -260,9 +260,9 @@ QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceSta
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return QString("%1").arg(length);
+        return QString("%1").arg(length, 0, 'f');
     default:
-        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
+        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters), 0, 'f');
     }
 }
 
@@ -275,7 +275,7 @@ QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassState
     case cwCompassStates::Empty:
         return QString("-");
     case cwCompassStates::Valid:
-        return QString("%1").arg(compass);
+        return QString("%1").arg(compass, 0, 'f');
     }
     return QString();
 }
@@ -289,7 +289,7 @@ QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::Sta
     case cwClinoStates::Empty:
         return QString("-");
     case cwClinoStates::Valid:
-        return QString("%1").arg(clino);
+        return QString("%1").arg(clino, 0, 'f');
     case cwClinoStates::Down:
         return QString("DOWN");
     case cwClinoStates::Up:
