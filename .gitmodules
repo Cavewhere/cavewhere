@@ -22,3 +22,12 @@
 [submodule "lib-qt-qml-tricks"]
 	path = lib-qt-qml-tricks
 	url = git@github.com:Cavewhere/lib-qt-qml-tricks.git
+[submodule "metacave"]
+	path = metacave
+	url = git@github.com:Cavewhere/metacave.git
+[submodule "installer/windows/vcredist"]
+	path = installer/windows/vcredist
+	url = git@github.com:Cavewhere/vcredist.git
+[submodule "installer/mac/create-dmg"]
+	path = installer/mac/create-dmg
+	url = git@github.com:Cavewhere/create-dmg.git

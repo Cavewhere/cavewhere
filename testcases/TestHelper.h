@@ -91,15 +91,27 @@ inline void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositio
     }
 }
 
+/**
+ * Copyies filename to the temp folder
+ */
 inline QString copyToTempFolder(QString filename) {
 
     QFileInfo info(filename);
     QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
 
-    QFile::remove(newFileLocation);
+    if(QFileInfo::exists(newFileLocation)) {
+        bool couldRemove = QFile::remove(newFileLocation);
+        INFO("Trying to remove " << newFileLocation);
+        REQUIRE(couldRemove == true);
+    }
 
     bool couldCopy = QFile::copy(filename, newFileLocation);
+    INFO("Trying to copy " << filename << " to " << newFileLocation);
     REQUIRE(couldCopy == true);
+
+    bool couldPermissions = QFile::setPermissions(newFileLocation, QFile::WriteOwner | QFile::ReadOwner);
+    INFO("Trying to set permissions for " << filename);
+    REQUIRE(couldPermissions);
 
     return newFileLocation;
 }

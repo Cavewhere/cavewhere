@@ -37,8 +37,9 @@ Project {
                 if(targetOS.contains("windows")) {
                     deploymentApp = "windeployqt.exe"
                     args = ["--qmldir",
-                            product.sourceDirectory + "/" + project.installDir + "/qml",
-                            inputs.application[0].filePath]
+                            project.installDir + "/qml",
+                            "-sql",
+                            project.installDir + "/" + inputs.application[0].fileName]
                 } else if(targetOS.contains("osx")) {
                     deploymentApp = "macdeployqt"
 
@@ -64,7 +65,7 @@ Project {
                     }
 
                     args = [bundlePath,
-                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml",
+                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml"
                             ]
                 }
 
@@ -103,14 +104,14 @@ Project {
             multiplex: true
 
             Artifact {
-                filePath: "Cavewhere " + product.version + ".zip"
+                filePath: "Cavewhere " + product.version + ".dmg"
                 fileTags: "shellInstaller"
             }
 
             prepare: {
                 var cmd = new Command(inputs.shell[0].filePath)
                 cmd.arguments = [product.version,
-                                 product.qtLibPath]
+                                 product.sourceDirectory]
 
                 cmd.workingDirectory = project.installDir
                 cmd.description = "running " + inputs.shell[0].filePath
@@ -126,6 +127,84 @@ Project {
         condition: qbs.targetOS.contains("windows")
 
         readonly property string version: Git.productVersion
+        readonly property string arch: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "32bit";
+                break;
+            case "x86_64":
+                arch = "64bit";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
+        readonly property string architecturesAllowed: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "";
+                break;
+            case "x86_64":
+                arch = "x64";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
+
+        readonly property string architecturesInstallIn64BitMode: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "";
+                break;
+            case "x86_64":
+                arch = "x64";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
+
+        readonly property string redistributableExe: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "vcredist_x86.exe";
+                break;
+            case "x86_64":
+                arch = "vcredist_x64.exe";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
+
+        readonly property string redistributableVersion: {
+            var arch
+            switch(qbs.architecture) {
+            case "x86":
+                arch = "VC_2013_REDIST_X86_ADD";
+                break;
+            case "x86_64":
+                arch = "VC_2013_REDIST_X64_ADD";
+                break;
+            default:
+                arch = "Unknown Arch";
+                break;
+            }
+            return arch;
+        }
 
         Depends { name: "cavewhere-install" }
         Depends { name: "Git" }
@@ -136,6 +215,24 @@ Project {
             files: [
                 "windows/cavewhere.iss"
             ]
+        }
+
+        Group {
+            name: "redist x86"
+            fileTags: "redistributableExe"
+            files: [
+                "windows/vcredist/vcredist_x86.exe"
+            ]
+            qbs.install: qbs.architecture == "x86"
+        }
+
+        Group {
+            name: "redist x64"
+            fileTags: "redistributableExe"
+            files: [
+                "windows/vcredist/vcredist_x64.exe"
+            ]
+            qbs.install: qbs.architecture == "x86_64"
         }
 
         Rule {
@@ -162,6 +259,11 @@ Project {
 #define MyAppPublisher "Cavewhere"\n\
 #define MyAppURL "http://www.cavewhere.com"\n\
 #define MyAppExeName "Cavewhere.exe"\n\
+#define MyArchitecturesAllowed "' + product.architecturesAllowed + '"\n\
+#define MyArchitecturesInstallIn64BitMode "' + product.architecturesInstallIn64BitMode + '"\n\
+#define Arch "' + product.arch + '"\n\
+#define MyRedistributableExe "' + product.redistributableExe + '"\n\
+#define MyRedistributableVersion "' + product.redistributableVersion + '"\n\
 #define releaseDirectory "' + project.installDir + '"\n\n' +
 innoInputFile
 
@@ -177,7 +279,7 @@ innoInputFile
             inputs: ["inno"]
 
             Artifact {
-                filePath: "Cavewhere " + product.version + " 32bit.exe"
+                filePath:  "Cavewhere " + product.version + " " + product.arch + ".exe"
                 fileTags: "innoInstaller"
             }
 

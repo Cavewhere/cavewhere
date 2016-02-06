@@ -4,6 +4,7 @@ qtc_Desktop-debug/*
 qtc_*/*
 .moc/*
 docs/*
+*.qbs.user*
 .DS_Store
 .moc/moc_cw3dRegionViewer.cpp
 .moc/moc_cwAbstract2PointItem.cpp
@@ -974,3 +975,4 @@ build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/i
 build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/install-root/share/survex/ro.msg
 build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/install-root/share/survex/sk.msg
 build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/qtc_iphoneos_6f38e403-debug.bg
+cavewhere.qbs.user.0f41663

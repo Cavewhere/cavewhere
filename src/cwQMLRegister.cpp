@@ -102,6 +102,7 @@
 #include "cwLinkBarModel.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwTestcaseManager.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -109,6 +110,7 @@
 #include <QGraphicsScene>
 #include <QDebug>
 #include <QUndoStack>
+#include <QProcess>
 
 cwQMLRegister::cwQMLRegister()
 {
@@ -227,4 +229,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorModel>("Cavewhere", 1, 0, "ErrorModel");
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
+    qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+
 }

@@ -34,6 +34,7 @@ public:
 
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);
+    static QString findExecutable(QStringList executables);
 };
 
 #endif // CWGLOBALS_H

@@ -110,9 +110,9 @@ private:
 
     void setFilename(QString newFilename);
 
-     void privateSave();
+    void privateSave();
 
-     QString convertFromURL(QString fileUrl) const;
+    QString convertFromURL(QString fileUrl) const;
 private slots:
     void updateRegionData();
     void startDeleteImageTask();
