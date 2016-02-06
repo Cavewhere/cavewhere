@@ -7,6 +7,7 @@
 
 // import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
+import "Theme.js" as Theme
 
 Item {
 
@@ -17,15 +18,11 @@ Item {
 
     height: titleText.height + contentHeight + 3
 
-    Style {
-        id: style
-    }
-
     Rectangle {
         id: checkBoxGroup
         border.width: 1
         border.color: "gray"
-        radius: style.floatingWidgetRadius
+        radius: Theme.floatingWidgetRadius
         color: "#00000000"
 
         anchors.top: titleText.verticalCenter

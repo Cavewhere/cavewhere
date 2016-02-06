@@ -7,7 +7,9 @@
 
 import QtQuick 2.0
 import QtQuick.Controls 1.0 as Controls
+import QtQuick.Layouts 1.0
 import Cavewhere 1.0
+import "Theme.js" as Theme
 
 Item {
     id: editor
@@ -35,99 +37,82 @@ Item {
         value: noteTransform
     }
 
-    Style {
-        id: style
-    }
+    FloatingGroupBox {
+        title: "Scrap Info"
+        borderWidth: 0
 
-    Text {
-        id: scrapInfoText
-        z: 1
-        anchors.right: checkBoxGroup.right
-        anchors.bottom: checkBoxGroup.top
-        anchors.rightMargin: 5
+        ColumnLayout {
+            id: columnLayoutId
 
-        font.bold:  true
-        text: "Scrap Info"
-    }
+            RowLayout {
+                LabelWithHelp {
+                    text: "Type"
+                    helpArea: scrapTypeHelpId
+                }
 
-    ShadowRectangle {
-        id: backgroundRect
+                Controls.ComboBox {
+                    implicitWidth: 175
+                    model: ["Plan", "Running Profile"]
+                }
+            }
 
-        color: style.floatingWidgetColor
-        radius: style.floatingWidgetRadius
-        height: checkBoxGroup.height + scrapInfoText.height + autoTransformCheckBox.height / 2.0
-        width: checkBoxGroup.width + checkBoxGroup.x * 2.0
-        //        y: groupAreaRect.height / 2.0
-    }
+            HelpArea {
+                id: scrapTypeHelpId
+                text: "The scrap type designates how Cavewhere will interperate the scrap. A running
+                        profile will warp the scrap vertically along the centerline. Plan will warp
+                        the scrap in plan view"
+                width: columnLayoutId.width
+            }
 
-    Rectangle {
-        id: checkBoxGroup
-        border.width: 1
-        radius: style.floatingWidgetRadius
-        color: "#00000000"
+            CheckableGroupBox {
+                id: checkableBoxId
+                backgroundColor: Theme.floatingWidgetColor
+                text: "Auto Calculate"
 
-        anchors.top: autoTransformCheckBox.verticalCenter
-        anchors.left: column1.left
-        anchors.right: column1.right
-        anchors.bottom: column1.bottom
 
-        anchors.leftMargin: -3
-        anchors.rightMargin: -3
-        anchors.bottomMargin: -3
-    }
+                ColumnLayout {
+                    id: column1
 
-    Rectangle {
-        color: backgroundRect.color
-        anchors.fill: autoTransformCheckBox
-    }
+                    NoteNorthUpInput {
+                        id: northUpInputId
+                        noteTransform: editor.noteTransform
+                        onNorthUpInteractionActivated: interactionManager.active(northInteraction)
+                        northUpHelp: northUpHelpArea
+                        enable: !checkableBoxId.checked
+                    }
 
-    Controls.CheckBox {
-        id: autoTransformCheckBox
-        text: "Auto Calculate"
-        anchors.left: checkBoxGroup.left
-        anchors.leftMargin: 6
+                    HelpArea {
+                        id: northUpHelpArea
+                        width: scaleInputId.width
+                        text: "You can set the direction of <b>north</b> relative to page for a scrap.
+                Cavewhere only uses <b>north</b> to help you automatically label stations."
+                    }
 
-        y: scrapInfoText.height / 2.0
-    }
+                    PaperScaleInput {
+                        id: scaleInputId
+                        scaleObject: editor.noteTransform == null ? null : editor.noteTransform.scaleObject
+                        scaleHelp: scaleHelpAreaId
+                        onScaleInteractionActivated: interactionManager.active(scaleInteraction)
+                        autoScaling: checkableBoxId.checked
+                    }
 
-    Column {
-        id: column1
-        spacing: 3
-
-        x: 6
-
-        anchors.top: checkBoxGroup.top
-        anchors.topMargin: 8
-
-        NoteNorthUpInput {
-            id: northUpInputId
-            noteTransform: editor.noteTransform
-            onNorthUpInteractionActivated: interactionManager.active(northInteraction)
-            northUpHelp: northUpHelpArea
-            enable: !autoTransformCheckBox.checked
+                    HelpArea {
+                        id: scaleHelpAreaId
+                        width: scaleInputId.width
+                        text: "You can set the <b>scale</b> of the scrap."
+                    }
+                }
+            }
         }
 
-        HelpArea {
-            id: northUpHelpArea
-            width: scaleInputId.width
-            text: "You can set the direction of <b>north</b> relative to page for a scrap.
-            Cavewhere only uses <b>north</b> to help you automatically label stations."
-        }
-
-        PaperScaleInput {
-            id: scaleInputId
-            scaleObject: editor.noteTransform == null ? null : editor.noteTransform.scaleObject
-            scaleHelp: scaleHelpAreaId
-            onScaleInteractionActivated: interactionManager.active(scaleInteraction)
-            autoScaling: autoTransformCheckBox.checked
-        }
-
-        HelpArea {
-            id: scaleHelpAreaId
-            width: scaleInputId.width
-            text: "You can set the <b>scale</b> of the scrap."
-        }
     }
+
+
+
+
+
+
+
 
     states: [
         State {
@@ -139,7 +124,7 @@ Item {
             }
 
             PropertyChanges {
-                target: autoTransformCheckBox
+                target: checkableBoxId
                 checked: scrap.calculateNoteTransform
                 onCheckedChanged: scrap.calculateNoteTransform = checked
             }

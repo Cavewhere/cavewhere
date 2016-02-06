@@ -97,6 +97,7 @@ MenuBar {
 
                 var currentSource = mainContentLoader.source;
                 mainContentLoader.source = ""
+                mainContentLoader.asynchronous = false;
                 qmlReloader.reload();
                 mainContentLoader.source = currentSource;
 

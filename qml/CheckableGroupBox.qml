@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import QtQuick.Controls 1.0 as Controls
+import "Theme.js" as Theme
 
 Item {
 
@@ -14,20 +15,19 @@ Item {
     property alias checked: checkbox.checked
     property alias text: checkbox.text
     property bool contentsVisible: true
-    property int contentHeight
     default property alias contentData: contentArea.data
 
-    height: contentsVisible ? checkbox.height + contentHeight + 3 : checkbox.height
+    height: contentsVisible ? checkbox.height + contentArea.childrenRect.height + 3 : checkbox.height
+    width: contentArea.childrenRect.width + 6
 
-    Style {
-        id: style
-    }
+    implicitHeight: height
+    implicitWidth: width
 
     Rectangle {
         id: checkBoxGroup
         border.width: 1
         border.color: "gray"
-        radius: style.floatingWidgetRadius
+        radius: Theme.floatingWidgetRadius
         color: "#00000000"
         visible: contentsVisible
 

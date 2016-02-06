@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import QtGraphicalEffects 1.0
+import "Theme.js" as Theme
 
 Item {
     id: widgetId
@@ -39,13 +40,8 @@ Item {
             width: columnId.width + 20
             height: columnId.height + 20
 
-            radius: style.floatingWidgetRadius
-            color: style.floatingWidgetColor
-
-
-            Style {
-                id: style
-            }
+            radius: Theme.floatingWidgetRadius
+            color: Theme.floatingWidgetColor
 
             Column {
                 id: columnId

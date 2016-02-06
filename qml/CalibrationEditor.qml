@@ -9,18 +9,14 @@
 import QtQuick 2.0
 import Cavewhere 1.0
 import "Utils.js" as Utils
+import "Theme.js" as Theme
 
 Rectangle {
     id: calibrationEditor
     property Calibration calibration
 
-    //    color: style.floatingWidgetColor
     radius: 8
     height: childrenRect.height
-
-    Style {
-        id: style
-    }
 
     Column {
 

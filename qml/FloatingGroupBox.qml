@@ -7,21 +7,18 @@
 
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
+import "Theme.js" as Theme
 
 Item {
     id: floatingGroupBoxId
 
     property int margin: 3
     property alias title: titleId.text
+    property real borderWidth: 0
     default property alias boxGroupChildren: container.children
 
     width: childrenRect.width
     height: childrenRect.height
-
-
-    Style {
-        id: style
-    }
 
     Text {
         id: titleId
@@ -35,8 +32,8 @@ Item {
     ShadowRectangle {
         id: backgroundRect
 
-        color: style.floatingWidgetColor
-        radius: style.floatingWidgetRadius
+        color: Theme.floatingWidgetColor
+        radius: Theme.floatingWidgetRadius
         height: boxGroupId.height + titleId.height + margin
         width: boxGroupId.width + margin * 2
         //        y: groupAreaRect.height / 2.0
@@ -49,8 +46,8 @@ Item {
         x: margin
         y: titleId.height
 
-        border.width: 1
-        radius: style.floatingWidgetRadius
+        border.width: borderWidth
+        radius: Theme.floatingWidgetRadius
         color: "#00000000"
 
         width: container.width + margin * 2;

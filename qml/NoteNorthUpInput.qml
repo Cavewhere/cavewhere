@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
 Item {
@@ -16,17 +17,15 @@ Item {
 
     signal northUpInteractionActivated()
 
-    height: childrenRect.height
-    width: row.width
+    implicitHeight: row.height
+    implicitWidth: row.width
 
-    Row {
+    RowLayout {
         id: row
-        spacing: 5
 
         Button {
             id: setNorthButton
-
-            width: 24
+            iconSource: "qrc:/icons/north.png"
 
             onClicked: northUpInteractionActivated()
         }

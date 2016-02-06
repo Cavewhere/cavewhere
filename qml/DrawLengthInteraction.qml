@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import "Theme.js" as Theme
 
 Interaction {
     id: interaction
@@ -80,8 +81,8 @@ Interaction {
 
         visible: false
 
-        radius: style.floatingWidgetRadius
-        color: style.floatingWidgetColor
+        radius: Theme.floatingWidgetRadius
+        color: Theme.floatingWidgetColor
 
         width: row.width + row.x * 2
         height: row.height + row.y * 2
@@ -97,10 +98,6 @@ Interaction {
             onReleased: {
                 mouse.accepted = true;
             }
-        }
-
-        Style {
-            id: style
         }
 
         Length {
