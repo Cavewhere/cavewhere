@@ -34,8 +34,9 @@ class cwScrap : public QObject
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
+    Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
 
-    Q_ENUMS(StationDataRole LeadDataRole)
+    Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
 
     enum StationDataRole {
@@ -54,6 +55,11 @@ public:
         LeadNumberOfRoles
     };
 
+    enum ScrapType {
+        Plan,
+        RunningProfile
+    };
+
     explicit cwScrap(QObject *parent = 0);
     cwScrap(const cwScrap& other);
     const cwScrap& operator =(const cwScrap& other);
@@ -63,6 +69,9 @@ public:
 
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
+
+    ScrapType type() const;
+    void setType(ScrapType type);
 
     void addPoint(QPointF point);
     Q_INVOKABLE void insertPoint(int index, QPointF point);
@@ -133,6 +142,7 @@ signals:
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
+    void typeChanged();
 
 private:
 
@@ -164,6 +174,9 @@ private:
     //The note transform, this is used for guessing the station name's for the user
     cwNoteTranformation* NoteTransformation;
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
+
+    //The type of scrap
+    ScrapType Type; //!<
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -281,13 +294,19 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
-
-
 /**
   \brief Gets the triangulation data
   */
 inline cwTriangulatedData cwScrap::triangulationData() const {
     return TriangulationData;
+}
+
+/**
+* Returns The scrap type.
+* The scrap type tells the warping algorithm how to warp the scrap.
+*/
+inline cwScrap::ScrapType cwScrap::type() const {
+    return Type;
 }
 
 

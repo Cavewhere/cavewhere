@@ -940,3 +940,15 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
 
     leadsDataChanged(0, leads().size() - 1, roles);
 }
+
+/**
+* Sets the type
+* The scrap type tells the warping algorithm how to warp the scrap. Scrap type can be Plan (default)
+* and RunningProfile.
+*/
+void cwScrap::setType(ScrapType type) {
+    if(Type != type) {
+        Type = type;
+        emit typeChanged();
+    }
+}
