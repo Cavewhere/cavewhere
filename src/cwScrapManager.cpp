@@ -371,6 +371,7 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
+    connect(scrap, &cwScrap::typeChanged, this, &cwScrapManager::regenerateScrapGeometry);
 }
 
 /**
@@ -401,6 +402,7 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     disconnect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     disconnect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
+    disconnect(scrap, &cwScrap::typeChanged, this, &cwScrapManager::regenerateScrapGeometry);
 }
 
 /**

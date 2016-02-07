@@ -17,6 +17,7 @@
 #include "cwTriangulateStation.h"
 #include "cwNoteTranformation.h"
 #include "cwLead.h"
+#include "cwScrap.h"
 
 class cwTriangulateInData
 {
@@ -38,18 +39,24 @@ public:
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
 
+    cwScrap::ScrapType type() const;
+    void setType(cwScrap::ScrapType type);
+
     QList<cwLead> leads() const;
     void setLeads(QList<cwLead> leads);
 
 private:
     class PrivateData : public QSharedData {
     public:
+        PrivateData() : Type(cwScrap::Plan) {}
+
         cwImage NoteImage;
         double DotPerMeter;
         QPolygonF Outline;
         cwNoteTranformation NoteTransform;
         QList<cwTriangulateStation> Stations;
         QList<cwLead> Leads;
+        cwScrap::ScrapType Type;
     };
 
     QSharedDataPointer<PrivateData> Data;
@@ -128,6 +135,24 @@ inline double cwTriangulateInData::noteImageResolution() const
 inline void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
 {
     Data->DotPerMeter = dotsPerMeter;
+}
+
+/**
+ * @brief cwTriangulateInData::type
+ * @return The type of the scrap
+ */
+inline cwScrap::ScrapType cwTriangulateInData::type() const
+{
+    return Data->Type;
+}
+
+/**
+ * @brief cwTriangulateInData::setType
+ * @param type - The type of the scrap, Plan or RunningProfile
+ */
+inline void cwTriangulateInData::setType(cwScrap::ScrapType type)
+{
+    Data->Type = type;
 }
 
 /**

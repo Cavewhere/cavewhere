@@ -35,6 +35,16 @@ inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
     return os;
 }
 
+inline std::ostream& operator << ( std::ostream& os, QStringList const& value ) {
+    if(!value.isEmpty()) {
+        for(auto iter = value.begin(); iter != value.end() - 1; iter++) {
+            os << "\"" + iter->toStdString() + "\",";
+        }
+        os << "\"" + value.last() + "\"";
+    }
+    return os;
+}
+
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
     os << value.toString().toStdString();
     return os;
