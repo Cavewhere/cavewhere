@@ -257,6 +257,7 @@ void cwLinePlotManager::updateLinePlot() {
 
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());
+            cave->setSurveyNetwork(caveData.network());
         }
 
         if(caveData.hasDepthLengthChanged()) {

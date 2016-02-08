@@ -13,6 +13,7 @@
 class cwCavingRegion;
 class cwLinePlotGeometryTask;
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNetwork.h"
 #include "cwFindUnconnectedSurveyChunksTask.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
@@ -43,11 +44,13 @@ public:
         void setLength(double length);
         void setStationPositions(cwStationPositionLookup positionLookup);
         void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunksTask::Result> results);
+        void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
         cwStationPositionLookup stationPositions() const;
         QList<cwFindUnconnectedSurveyChunksTask::Result> unconnectedChunkError() const;
+        cwSurveyNetwork network() const;
 
         bool hasDepthLengthChanged() const;
         bool hasStationPositionsChanged() const;
@@ -60,6 +63,7 @@ public:
 
         bool StationPostionsChanged;
         cwStationPositionLookup Lookup;
+        cwSurveyNetwork Network;
     };
 
     /**
@@ -217,6 +221,8 @@ private:
     void updateInteralCaveStationLookups(QVector<cwStationPositionLookup> caveStations);
     void updateExteralCaveStationLookups();
 
+    void updateCaveNetworks();
+
     Q_INVOKABLE void moveCaveRegionToThread(QThread* thread);
 
     void addEmptyStationLookup(int caveIndex);
@@ -277,7 +283,6 @@ inline QVector<unsigned int> cwLinePlotTask::LinePlotResultData::linePlotIndexDa
 {
     return LinePlotIndexData;
 }
-
 
 /**
  * @brief cwLinePlotTask::LinePlotResultData::setCaveData
@@ -388,6 +393,15 @@ inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwF
 }
 
 /**
+ * @brief cwLinePlotTask::LinePlotCaveData::setNetwork
+ * @param network - Sets the survey network for the cave
+ */
+inline void cwLinePlotTask::LinePlotCaveData::setNetwork(cwSurveyNetwork network)
+{
+    Network = network;
+}
+
+/**
  * @brief cwLinePlotTask::LinePlotCaveData::depth
  * @return The depth of the cave
  */
@@ -422,6 +436,15 @@ inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPosition
 inline QList<cwFindUnconnectedSurveyChunksTask::Result> cwLinePlotTask::LinePlotCaveData::unconnectedChunkError() const
 {
     return UnconnectedChunksErrors;
+}
+
+/**
+ * @brief cwLinePlotTask::LinePlotCaveData::network
+ * @return The survey network. This is how the stations are connected to one another
+ */
+inline cwSurveyNetwork cwLinePlotTask::LinePlotCaveData::network() const
+{
+    return Network;
 }
 
 /**

@@ -21,6 +21,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QSet>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -37,12 +38,19 @@ inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
 
 inline std::ostream& operator << ( std::ostream& os, QStringList const& value ) {
     if(!value.isEmpty()) {
+        os << "[";
         for(auto iter = value.begin(); iter != value.end() - 1; iter++) {
             os << "\"" + iter->toStdString() + "\",";
         }
-        os << "\"" + value.last() + "\"";
+        os << "\"" + value.last() + "\"]";
+    } else {
+        os << "[]";
     }
     return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QSet<QString> const& value ) {
+    return operator <<(os, value.toList());
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {

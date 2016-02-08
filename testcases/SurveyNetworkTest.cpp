@@ -23,30 +23,26 @@ TEST_CASE("Build a survey network", "[SurveyNetwork]") {
     network.addShot("a2", "a4");
     network.addShot("a2", "a5");
 
-    QStringList a1Neigbors;
-    a1Neigbors << "A2" << "A3";
+    auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
+        auto foundNeighbors = network.neighbors(stationName).toSet();
+        auto checkNeigbbors = neighbors.toSet();
+        CHECK(foundNeighbors == checkNeigbbors);
+    };
 
-    CHECK(network.neighbors("A1") == a1Neigbors);
+    testStationNeigbors("A1", QStringList() << "A2" << "A3");
+    testStationNeigbors("A2", QStringList() << "A1" << "A3" << "A4" << "A5");
+    testStationNeigbors("A3", QStringList() << "A1" << "A2");
+    testStationNeigbors("A4", QStringList() << "A2");
+    testStationNeigbors("A5", QStringList() << "A2");
 
-    QStringList a2Neigbors;
-    a2Neigbors << "A1" << "A3" << "A4" << "A5";
+    SECTION("Add invalid shot") {
+        network.addShot("", "a5");
+        network.addShot("a1", "");
 
-    CHECK(network.neighbors("a2") == a2Neigbors);
-
-    QStringList a3Neigbors;
-    a3Neigbors << "A2" << "A1";
-
-    CHECK(network.neighbors("a3") == a3Neigbors);
-
-    QStringList a4Neigbors;
-    a4Neigbors << "A2";
-
-    CHECK(network.neighbors("a4") == a4Neigbors);
-
-    QStringList a5Neigbors;
-    a5Neigbors << "A2";
-
-    CHECK(network.neighbors("a5") == a5Neigbors);
+        testStationNeigbors("a1", QStringList() << "A2" << "A3");
+        testStationNeigbors("a5", QStringList() << "A2");
+        testStationNeigbors("", QStringList());
+    }
 
     SECTION("Clear the network") {
         network.clear();
@@ -57,5 +53,7 @@ TEST_CASE("Build a survey network", "[SurveyNetwork]") {
         CHECK(network.neighbors("a4") == QStringList());
         CHECK(network.neighbors("a5") == QStringList());
     }
+
+
 }
 

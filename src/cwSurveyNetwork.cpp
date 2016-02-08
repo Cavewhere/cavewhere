@@ -55,6 +55,8 @@ void cwSurveyNetwork::addShot(QString from, QString to) {
     from = from.toUpper();
     to = to.toUpper();
 
+    if(from.isEmpty() || to.isEmpty()) { return; }
+
     if(!data->Network.contains(from)) {
         data->Network.insert(from, QStringList());
     }
