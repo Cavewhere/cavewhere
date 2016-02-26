@@ -155,7 +155,7 @@ private:
     //For morphing
     QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);
     QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point, const QList<cwTriangulateStation>& stations, const QPolygonF& scrapOutline) const;
-    QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations, const QMatrix4x4 &toWorldCoords, const QVector3D &point);
+    QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations, const QMatrix4x4 &toWorldCoords, const QMatrix4x4 &viewMatrix, const QVector3D &point);
 
     //For lead handling
     QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads) const;

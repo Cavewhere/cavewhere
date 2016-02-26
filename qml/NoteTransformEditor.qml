@@ -52,7 +52,11 @@ Item {
 
                 Controls.ComboBox {
                     implicitWidth: 175
-                    model: ["Plan", "Running Profile"]
+                    model: scrap.types
+                    currentIndex: scrap.type
+                    onCurrentIndexChanged: {
+                        scrap.type = currentIndex
+                    }
                 }
             }
 

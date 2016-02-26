@@ -35,6 +35,7 @@ class cwScrap : public QObject
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
     Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(QStringList types READ types CONSTANT)
 
     Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
@@ -56,8 +57,8 @@ public:
     };
 
     enum ScrapType {
-        Plan,
-        RunningProfile
+        Plan = 0,
+        RunningProfile = 1
     };
 
     explicit cwScrap(QObject *parent = 0);
@@ -72,6 +73,7 @@ public:
 
     ScrapType type() const;
     void setType(ScrapType type);
+    QStringList types() const;
 
     void addPoint(QPointF point);
     Q_INVOKABLE void insertPoint(int index, QPointF point);
@@ -307,6 +309,14 @@ inline cwTriangulatedData cwScrap::triangulationData() const {
 */
 inline cwScrap::ScrapType cwScrap::type() const {
     return Type;
+}
+
+/**
+* @brief cwScrap::types
+* @return
+*/
+inline QStringList cwScrap::types() const {
+    return QStringList() << "Plan" << "Running Profile";
 }
 
 

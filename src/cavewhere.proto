@@ -116,12 +116,18 @@ message ClinoStates {
 }
 
 message Scrap {
+    enum ScrapType {
+        Plan = 0;
+        RunningProfile = 1;
+    }
+
     repeated QtProto.QPointF outlinePoints = 1;
     repeated NoteStation noteStations = 2;
     optional NoteTranformation noteTransformation = 3;
     optional bool calculateNoteTransform = 4;
     optional TriangulatedData triangleData = 5;
     repeated Lead leads = 6;
+    optional ScrapType type = 7;
 }
 
 message TriangulatedData {

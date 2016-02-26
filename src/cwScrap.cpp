@@ -27,6 +27,7 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
+    Type(Plan),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false)
@@ -914,6 +915,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
+    Type = other.Type;
 
     emit stationsReset();
 

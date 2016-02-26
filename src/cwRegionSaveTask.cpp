@@ -279,6 +279,7 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
     saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
+    protoScrap->set_type((CavewhereProto::Scrap_ScrapType)scrap->type());
 }
 
 /**
