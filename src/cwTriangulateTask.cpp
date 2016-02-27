@@ -738,23 +738,39 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             profileStations.append(*(foundStation - 1));
             profileStations.append(*(foundStation));
 
-            qDebug() << "ProfileStation1:" << profileStations.at(0).notePosition() << profileStations.at(0).name();
-            qDebug() << "ProfileStation2:" << profileStations.at(1).notePosition() << profileStations.at(1).name();
+            qDebug() << "ProfileStation1:" << profileStations.at(0).notePosition() << profileStations.at(0).position() << profileStations.at(0).name();
+            qDebug() << "ProfileStation2:" << profileStations.at(1).notePosition() << profileStations.at(1).position() << profileStations.at(1).name();
 
             //Calculate the rotation matrix for the profile for this point (could be looked up)
             QVector3D shotDirection = profileStations.last().position() - profileStations.first().position();
+            QVector3D yAxis(0.0, 1.0, 0.0);
             QVector3D xAxis(1.0, 0.0, 0.0);
-            QVector3D eulerAngles = QQuaternion::rotationTo(xAxis, shotDirection.normalized()).toEulerAngles();
+            QVector3D eulerAngles = QQuaternion::rotationTo(yAxis, shotDirection.normalized()).toEulerAngles();
 //            QVector3D yawOnly(eulerAngles.z(), 90.0, 0.0);
             qDebug() << "EulerAngle" << eulerAngles;
-            QQuaternion yawQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, eulerAngles.z());
-            QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(shotDirection, 90.0);
-            Q_UNUSED(yawQuat);
+//            QQuaternion pitchQuat;
+
+//Station: QVector3D(6.30128, -0.134091, 0) QVector3D(0, 0, 0) "a1"
+//Point QVector3D(3.30449, -28.7237, 0) station: "a1"
+//Station: QVector3D(6.0668, -9.69757, 0) QVector3D(-10, -7.10543e-14, -8.42937e-07) "a2"
+//Point QVector3D(-6.46103, -19.1603, -8.42937e-07) station: "a2"
+//            QQuaternion yawQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, eulerAngles.z());
+//            QQuaternion yawQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, eulerAngles.z());
+
+//            QQuaternion rollQuat = QQuaternion::fromAxisAndAngle(shotDirection.x(), shotDirection.y(), 0.0, 90.0);
+//            QQuaternion rollQuat = QQuaternion::fromAxisAndAngle(shotDirection.x(), shotDirection.y(), 0.0, 90.0);
+            //            QQuaternion pitchQuat = QQuaternion::fromEulerAngles(eulerAngles.y(), 0.0, eulerAngles.x());
+//            QQuaternion pitchQuat = QQuaternion::fromEulerAngles(-eulerAngles.x(), 90.0, eulerAngles.x());
+//            QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(shotDirection, 90.0);
+//            qDebug() << "YawPitchRoll:" << rollQuat.toEulerAngles();
+//            pitchQuat = QQuaternion::fromEulerAngles(0.0, -eulerAngles.x(), 0.0) * pitchQuat; //eulerAngles.x()); //, 0.0);
+//            pitchQuat = QQuaternion::fromEulerAngles(0.0, eulerAngles.x(), 0.0) * pitchQuat; //eulerAngles.x()); //, 0.0);
+//            Q_UNUSED(yawQuat);
 //            QQuaternion pitchQuat = QQuaternion::rotationTo(QVector3D(0.0, 0.0, -1.0), QVector3D(1.0, 0.0, 0.0));
-            Q_UNUSED(pitchQuat);
-            QQuaternion rotationQuat = yawQuat;
+//            Q_UNUSED(pitchQuat);
+//            QQuaternion rotationQuat = yawQuat;
             QMatrix4x4 rotationMatrix;
-            rotationMatrix.rotate(rotationQuat);
+//            rotationMatrix.rotate(rotationQuat);
 
             QMatrix4x4 translateForward;
             translateForward.translate(profileStations.first().position());
@@ -762,12 +778,31 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             QMatrix4x4 translateBackward;
             translateBackward.translate(-profileStations.first().position());
 
-            toWorldCoords = toMetersInCave * rotationMatrix * toMetersOnPaper * toPixels * toLocal;
+            QMatrix4x4 rollMatrix;
+//            rollMatrix.rotate(rollQuat);
 
-            QMatrix4x4 pitchMatrix;
-            pitchMatrix.rotate(pitchQuat);
+            toWorldCoords = rollMatrix * toMetersInCave * rotationMatrix * toMetersOnPaper * toPixels * toLocal;
+
+            //QQuaternion(scalar:0.707107, vector:(0.707107, 0, 0)) -> QQuaternion(scalar:0.707107, vector:(0, 0, 0.707107))
+//            QQuaternion profileQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, 90.0) * QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, eulerAngles.z());
+
+
+
+            //Profile aligned with the compass direction
+            QQuaternion profileQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0) * QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, -eulerAngles.z() - 90.0);
+//            QVector3D rotatedXAxis = profileQuat.rotatedVector(xAxis);
+//            QQuaternion toXAxisQuat = QQuaternion::rotationTo(xAxis, rotatedXAxis);
+
+            //ProfileQuat QQuaternion(scalar:1, vector:(0, 0, 0))
+//            QQuaternion profileQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, eulerAngles.z());
+//            qDebug() << "ProfileQuat" << profileQuat;
+//            QQuaternion viewRotationQuat = QQuaternion::fromEulerAngles(90.0, eulerAngles.z(), 0.0);
+
+            QMatrix4x4 viewRotationMatrix;
+            viewRotationMatrix.rotate(profileQuat);
+
 //            viewMatrix = pitchMatrix;
-            viewMatrix = translateForward * pitchMatrix * translateBackward;
+            viewMatrix = translateForward * viewRotationMatrix * translateBackward;
 
             stationsUsedToMorph = profileStations;
         }
@@ -963,20 +998,21 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     foreach(cwTriangulateStation station, visibleStations) {
 
         //Setup the transformation
-        QVector3D stationOnNote = viewMatrix * toWorldCoords * QVector3D(station.notePosition()); //In world coordinates
-        QVector3D stationPos = viewMatrix * station.position(); //In world coordianets
+        QVector3D stationOnNote = toWorldCoords * QVector3D(station.notePosition()); //In world coordinates
+        QVector3D stationPos = viewMatrix * station.position(); //.toVector2D().toVector3D(); //In world coordianets
 
-        qDebug() << "ViewMatrix" << viewMatrix << toWorldCoords << viewMatrix * toWorldCoords;
+//        qDebug() << "ViewMatrix" << viewMatrix << toWorldCoords << viewMatrix * toWorldCoords;
         qDebug() << "Station:" << stationOnNote << stationPos << station.name();
 
         QMatrix4x4 offsetToFirstStation;
         offsetToFirstStation.translate(-stationOnNote);
         offsetToFirstStation.translate(stationPos);
 
-        QMatrix4x4 noteToScene = offsetToFirstStation * viewMatrix * toWorldCoords; //outputs in world coordinates
+        QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords; //outputs in world coordinates
 
         //Do the transformation
         QVector3D pointInRespectToCurrentStation = noteToScene.map(point);
+        qDebug() << "Point" << pointInRespectToCurrentStation << "station:" << station.name();
 
         //Add to point list
         pointInRespectToStations.append(pointInRespectToCurrentStation);
@@ -991,7 +1027,7 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     }
 
     //Put the weighted position in world coordinates
-    weightPosition = weightPosition;
+    weightPosition = viewMatrix.inverted() * weightPosition;
 
     return weightPosition;
 }
