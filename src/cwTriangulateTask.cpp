@@ -693,6 +693,11 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     {
         if(scrapData.type() == cwScrap::RunningProfile) {
 
+            //Need to have a least two stations
+            if(stations.size() < 2) {
+                return QList<cwTriangulateStation>();
+            }
+
             //Look for the section for the notePoint, returns the stations we want to warp between
             auto compare = [](const cwTriangulateStation& station, const QVector3D& point)->bool {
                 return station.notePosition().x() < point.x();
@@ -735,6 +740,9 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     auto calculateViewMatrix = [&scrapData](const QList<cwTriangulateStation>& stations) {
         if(scrapData.type() == cwScrap::RunningProfile) {
             //Calculate the rotation matrix for the profile for this point (could be looked up)
+            if(stations.size() < 2) {
+                return QMatrix4x4();
+            }
 
             QVector3D fromPostion = stations.first().position();
             QVector3D toPosition = stations.last().position();
