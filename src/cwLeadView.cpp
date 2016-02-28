@@ -92,10 +92,12 @@ void cwLeadView::addScrap(cwScrap *scrap)
 void cwLeadView::removeScrap(cwScrap *scrap)
 {
     Q_ASSERT(scrap != nullptr);
-    Q_ASSERT(ScrapToView.contains(scrap));
+//    Q_ASSERT(ScrapToView.contains(scrap));
 
-    cwScrapLeadView* view = ScrapToView.value(scrap);
-    view->deleteLater();
+    if(ScrapToView.contains(scrap)) {
+        cwScrapLeadView* view = ScrapToView.value(scrap);
+        view->deleteLater();
+    }
 }
 
 /**
