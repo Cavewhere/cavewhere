@@ -11,6 +11,7 @@ import Cavewhere 1.0
 
 Item {
 
+    property int scrapType
     property NoteTransform noteTransform
     property HelpArea northUpHelp
     property alias enable: setNorthButton.visible
@@ -25,7 +26,16 @@ Item {
 
         Button {
             id: setNorthButton
-            iconSource: "qrc:/icons/north.png"
+            iconSource: {
+                switch(scrapType) {
+                case Scrap.Plan:
+                    return "qrc:/icons/north.png"
+                case Scrap.RunningProfile:
+                    return "qrc:/icons/up.png"
+                default:
+                    return "qrc:/icons/error.png"
+                }
+            }
 
             onClicked: northUpInteractionActivated()
         }
@@ -33,7 +43,16 @@ Item {
         LabelWithHelp {
             id: labelId
             helpArea: northUpHelp
-            text: "North"
+            text: {
+                switch(scrapType) {
+                case Scrap.Plan:
+                    return "North"
+                case Scrap.RunningProfile:
+                    return "Up"
+                default:
+                    return "Error"
+                }
+            }
             anchors.verticalCenter: parent.verticalCenter
         }
 

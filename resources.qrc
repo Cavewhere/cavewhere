@@ -86,5 +86,6 @@
         <file>icons/addLead.png</file>
         <file>icons/measurement.png</file>
         <file>icons/north.png</file>
+        <file>icons/up.png</file>
     </qresource>
 </RCC>

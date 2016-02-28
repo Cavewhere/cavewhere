@@ -19,6 +19,7 @@ Item {
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
+    property int scrapType: scrap ? scrap.type : Scrap.Plan
 
     visible: noteTransform !== null
 
@@ -51,11 +52,15 @@ Item {
                 }
 
                 Controls.ComboBox {
+                    id: typeComboBox
                     implicitWidth: 175
-                    model: scrap.types
-                    currentIndex: scrap.type
-                    onCurrentIndexChanged: {
-                        scrap.type = currentIndex
+                    model: scrap ? scrap.types : null
+                    onCurrentIndexChanged: if(scrap) { scrap.type = currentIndex; }
+
+                    Binding {
+                        target: typeComboBox
+                        property: "currentIndex"
+                        value: scrapType
                     }
                 }
             }
@@ -77,8 +82,9 @@ Item {
                 ColumnLayout {
                     id: column1
 
-                    NoteNorthUpInput {
-                        id: northUpInputId
+                    NoteUpInput {
+                        id: upInputId
+                        scrapType: editor.scrapType
                         noteTransform: editor.noteTransform
                         onNorthUpInteractionActivated: interactionManager.active(northInteraction)
                         northUpHelp: northUpHelpArea
@@ -88,8 +94,18 @@ Item {
                     HelpArea {
                         id: northUpHelpArea
                         width: scaleInputId.width
-                        text: "You can set the direction of <b>north</b> relative to page for a scrap.
-                Cavewhere only uses <b>north</b> to help you automatically label stations."
+                        text: {
+                            switch(scrapType) {
+                            case Scrap.Plan:
+                                return "You can set the direction of <b>north</b> relative to page for a scrap.
+                                Setting this incorrectly may cause warping issues."
+                            case Scrap.RunningProfile:
+                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap.
+                                Setting this incorrectly may cause warping issues."
+                            default:
+                                    return "Error..."
+                            }
+                        }
                     }
 
                     PaperScaleInput {
@@ -108,15 +124,7 @@ Item {
                 }
             }
         }
-
     }
-
-
-
-
-
-
-
 
     states: [
         State {

@@ -18,6 +18,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QQuaternion>
 
 //Std includes
 #include <limits>
@@ -458,14 +459,14 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
     if(parentCave() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
-//    //Find the valid stations
-//    QSet<cwNoteStation> validStationsSet;
-//    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
-//    foreach(cwNoteStation noteStation, Stations) {
-//        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
-//            validStationsSet.insert(noteStation);
-//        }
-//    }
+    //    //Find the valid stations
+    //    QSet<cwNoteStation> validStationsSet;
+    //    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
+    //    foreach(cwNoteStation noteStation, Stations) {
+    //        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
+    //            validStationsSet.insert(noteStation);
+    //        }
+    //    }
 
     //Get the parent trip of for these notes
     cwTrip* trip = parentNote()->parentTrip();
@@ -534,8 +535,15 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     QVector3D station2RealPos = positionLookup.position(station2.name());
 
     //Remove the z for plan view
-    station1RealPos.setZ(0.0);
-    station2RealPos.setZ(0.0);
+    switch(type()) {
+    case Plan:
+        station1RealPos.setZ(0.0);
+        station2RealPos.setZ(0.0);
+        break;
+    case RunningProfile:
+        //Keep the full point, because running profile keeps the full length
+        break;
+    }
 
     QVector3D station1NotePos(station1.positionOnNote()); //In normalized coordinates
     QVector3D station2NotePos(station2.positionOnNote());
@@ -557,15 +565,58 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     realVector.normalize();
     noteVector.normalize();
 
-    QVector3D zeroVector(0.0, 1.0, 0.0);
-    double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
-    QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
-    QMatrix4x4 rotationToNorth;
-    rotationToNorth.rotate(-angleToZero, crossProduct);
+    /**
+      Calculates the shot transform in plan view between station1 and station2
+      */
+    auto planCalcTransformation = [&]()->ScrapShotTransform {
+            QVector3D zeroVector(0.0, 1.0, 0.0);
+            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
+            QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
-    QVector3D rotatedNoteVector = rotationToNorth.map(noteVector);
-    return ScrapShotTransform(scale, rotatedNoteVector);
+            QMatrix4x4 rotationToNorth;
+            rotationToNorth.rotate(-angleToZero, crossProduct);
+
+            QVector3D rotatedNoteVector = rotationToNorth.map(noteVector);
+            return ScrapShotTransform(scale, rotatedNoteVector);
+};
+
+    /**
+      Calculates the shot transform in running profile view between station1 and station2
+      */
+    auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
+            QVector3D yAxis(0.0, 1.0, 0.0);
+            QVector3D xAxis(1.0, 0.0, 0.0);
+            QVector3D realEulerAngles = QQuaternion::rotationTo(yAxis, realVector).toEulerAngles();
+            QVector3D noteEulerAngles = QQuaternion::rotationTo(xAxis, noteVector).toEulerAngles();
+
+            double clinoReal = realEulerAngles.x();
+            double clinoNote = noteEulerAngles.z();
+
+            double clinoDiff = clinoNote - clinoReal;
+
+            QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(xAxis, clinoDiff);
+            QVector3D rotatedNoteVector = errorQuat.rotatedVector(noteVector);
+
+            //Not sure if this is the right way of doing this, we might need to add another rotation in there
+            //This doesn't work for rotated pages of notes... We are assuming that the profile is drawn
+            //from left to right on the page or right to left on teh page
+            rotatedNoteVector = QVector3D(rotatedNoteVector.y(),
+                                          fabs(rotatedNoteVector.x()),
+                                          rotatedNoteVector.z());
+
+            qDebug() << "eulerAngles:" << realEulerAngles << noteEulerAngles << clinoDiff << rotatedNoteVector;
+
+            return ScrapShotTransform(scale, rotatedNoteVector);
+};
+
+    switch(type()) {
+    case Plan:
+        return planCalcTransformation();
+    case RunningProfile:
+        return profileCalcTrasnformation();
+    }
+
 }
 
 /**
@@ -747,10 +798,10 @@ void cwScrap::setParentNote(cwNote* note) {
 
         if(ParentNote != nullptr) {
             ParentCave = parentNote()->parentCave();
-//            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
+            //            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
 
-//        updateStationsWithNewCave();
+        //        updateStationsWithNewCave();
     }
 }
 
