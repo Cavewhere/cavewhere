@@ -605,7 +605,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
                                           fabs(rotatedNoteVector.x()),
                                           rotatedNoteVector.z());
 
-            qDebug() << "eulerAngles:" << realEulerAngles << noteEulerAngles << clinoDiff << rotatedNoteVector;
+//            qDebug() << "eulerAngles:" << realEulerAngles << noteEulerAngles << clinoDiff << rotatedNoteVector;
 
             return ScrapShotTransform(scale, rotatedNoteVector);
 };
@@ -616,7 +616,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     case RunningProfile:
         return profileCalcTrasnformation();
     }
-
+    return ScrapShotTransform();
 }
 
 /**

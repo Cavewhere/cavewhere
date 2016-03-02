@@ -9,11 +9,15 @@
 #ifndef CWSURVEYNETWORK_H
 #define CWSURVEYNETWORK_H
 
+//Qt includes
 #include <QSharedDataPointer>
+
+//Our includes
+#include "cwGlobals.h"
 
 class cwSurveyNetworkData;
 
-class cwSurveyNetwork
+class CAVEWHERE_LIB_EXPORT cwSurveyNetwork
 {
 public:
     cwSurveyNetwork();
