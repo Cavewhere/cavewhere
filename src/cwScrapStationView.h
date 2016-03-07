@@ -66,6 +66,9 @@ private slots:
 protected:
     virtual QSGNode* updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *);
 
+    QMatrix4x4 runningProfileDirection() const;
+
+
 };
 
 Q_DECLARE_METATYPE(cwScrapStationView*)

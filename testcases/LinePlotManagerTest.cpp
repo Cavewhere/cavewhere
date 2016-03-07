@@ -28,12 +28,7 @@
 #include <QApplication>
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
-
-    QString datasetFile = copyToTempFolder(":/datasets/network.cw");
-
-    cwProject* project = new cwProject();
-    project->loadFile(datasetFile);
-    project->waitToFinish();
+    cwProject* project = fileToProject(":/datasets/network.cw");
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 

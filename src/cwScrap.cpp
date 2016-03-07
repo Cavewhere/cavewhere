@@ -15,6 +15,7 @@
 #include "cwGlobals.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwTriangulateTask.h"
 
 //Qt includes
 #include <QDebug>
@@ -439,10 +440,21 @@ void cwScrap::updateNoteTransformation() {
 
     //Get all the stations that make shots on the page of notes
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
-    QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
-    cwNoteTranformation averageTransformation = averageTransformations(transformations);
 
-    noteTransformation()->setScale(averageTransformation.scale());
+    //Choose the averaging function
+    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> >)> averageFunc;
+    switch(type()) {
+    case cwScrap::RunningProfile:
+        averageFunc = &cwScrap::runningProfileAverageTransform;
+        break;
+    case cwScrap::Plan:
+        averageFunc = &cwScrap::planAverageTransform;
+        break;
+    };
+
+    //Do the calculations
+    cwNoteTranformation averageTransformation = averageFunc(this, shotStations);
+    NoteTransformation->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
 
@@ -503,12 +515,15 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
 
 /**
   This will create cwNoteTransformation for each shot in the list
+
+  The zeroVector is only for running profile calculations. The zeroVector provides a reference, where up is zero.
   */
-QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
+QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
+                                                                           const ProfileTransform &profileTransform) const {
     QList<ScrapShotTransform> transformations;
     for(int i = 0; i < shots.size(); i++) {
         QPair< cwNoteStation, cwNoteStation >& shot = shots[i];
-        ScrapShotTransform transformation = calculateShotTransformation(shot.first, shot.second);
+        ScrapShotTransform transformation = calculateShotTransformation(shot.first, shot.second, profileTransform);
         transformations.append(transformation);
     }
 
@@ -517,8 +532,10 @@ QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList
 
 /**
   This will caluclate the transfromation between station1 and station2
+
+  The zeroVector is only for running profile calculations. The zeroVector provides a reference, where up is zero.
   */
-cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
+cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2, const ProfileTransform &profileTransform) const {
     if(parentCave() == nullptr) {
         qDebug() << "Can't calculate shot transformation because parentCave is null" << LOCATION;
         return ScrapShotTransform();
@@ -585,9 +602,12 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
       Calculates the shot transform in running profile view between station1 and station2
       */
     auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
-            QVector3D yAxis(0.0, 1.0, 0.0);
-            QVector3D xAxis(1.0, 0.0, 0.0);
-            QVector3D realEulerAngles = QQuaternion::rotationTo(yAxis, realVector).toEulerAngles();
+            QMatrix4x4 toProfile = cwTriangulateTask::toProfileRotation(station1RealPos, station2RealPos);
+            QVector3D realProfileVector = toProfile.mapVector(realVector);
+
+            QVector3D xAxis = profileTransform.Rotation * profileTransform.Mirror * QVector3D(1.0, 0.0, 0.0);
+
+            QVector3D realEulerAngles = QQuaternion::rotationTo(xAxis, realProfileVector).toEulerAngles();
             QVector3D noteEulerAngles = QQuaternion::rotationTo(xAxis, noteVector).toEulerAngles();
 
             double clinoReal = realEulerAngles.x();
@@ -598,16 +618,23 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(xAxis, clinoDiff);
             QVector3D rotatedNoteVector = errorQuat.rotatedVector(noteVector);
 
+            QMatrix4x4 mirror;
+            mirror.scale(xAxis.x() == 0.0 ? 1.0 : xAxis.x(),
+                         xAxis.y() == 0.0 ? 1.0 : -xAxis.y(),
+                         1.0);
+
+            rotatedNoteVector = mirror * rotatedNoteVector;
+
             //Not sure if this is the right way of doing this, we might need to add another rotation in there
             //This doesn't work for rotated pages of notes... We are assuming that the profile is drawn
             //from left to right on the page or right to left on teh page
-            rotatedNoteVector = QVector3D(rotatedNoteVector.y(),
-                                          fabs(rotatedNoteVector.x()),
-                                          rotatedNoteVector.z());
+//            rotatedNoteVector = QVector3D(rotatedNoteVector.x(),
+//                                          rotatedNoteVector.y(),
+//                                          rotatedNoteVector.z());
 
-//            qDebug() << "eulerAngles:" << realEulerAngles << noteEulerAngles << clinoDiff << rotatedNoteVector;
+            qDebug() << "XAxis:" << xAxis << "Diff" << clinoDiff << "real:" << realProfileVector << noteVector << rotatedNoteVector;
 
-            return ScrapShotTransform(scale, rotatedNoteVector);
+            return ScrapShotTransform(scale, rotatedNoteVector, clinoDiff);
 };
 
     switch(type()) {
@@ -622,7 +649,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 /**
   This will average all the transformatons into one transfromation
   */
-cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) {
+cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) const {
 
     if(shotTransforms.empty()) {
         return cwNoteTranformation();
@@ -654,6 +681,8 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
     errorVectorAverage = errorVectorAverage / numberValidTransforms;
     scaleAverage = scaleAverage / numberValidTransforms;
 
+    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
+
     cwNoteTranformation transformation;
     double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
 
@@ -662,6 +691,90 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
     transformation.scaleDenominator()->setValue(scaleAverage);
 
     return transformation;
+}
+
+/**
+  Finds the average transfrom for the plan, based on all the shots in the scrap
+  */
+cwNoteTranformation cwScrap::planAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+{
+    QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
+    cwNoteTranformation averageTransformation = averageTransformations(transformations);
+    return averageTransformation;
+}
+
+/**
+  Finds the average transform for the running profile, based on all the shots in the scrap
+  */
+cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+{
+    class ErrorTransforms {
+    public:
+        ErrorTransforms(double errorLength) :
+            ErrorLength(errorLength),
+            Rotation(0.0)
+        {}
+
+        ErrorTransforms(double errorLength, double rotation, QList<ScrapShotTransform> transform) :
+            ErrorLength(errorLength),
+            Rotation(rotation),
+            Transformations(transform)
+        {}
+
+        double ErrorLength;
+        double Rotation;
+        QList<ScrapShotTransform> Transformations;
+    };
+
+    /**
+      Averages all the error length for a list of scrap shot transforms
+      */
+    auto upErrorLength = [](const QList<ScrapShotTransform>& transforms)->double {
+        //Calculate the clino error
+        double sumErrorAngle = 0.0;
+        foreach(ScrapShotTransform transform, transforms) {
+            sumErrorAngle += transform.RotationDiff * transform.RotationDiff; //Sum of the squares
+        }
+        return sumErrorAngle / (double)transforms.size();
+    };
+
+    //Seach through 0, -90 to figure out what the best orientation by mimimizing the
+    //error length.
+    qDebug() << "----------------------";
+
+    ErrorTransforms minError(std::numeric_limits<double>::max());
+    for(int s = 0; s < 2; s++) {
+
+        QMatrix4x4 xMirror;
+        if(s == 1) {
+            //Right to Left
+            xMirror.scale(QVector3D(-1.0, 1.0, 1.0));
+        }
+
+        for(int i = 0; i < 2; i++) {
+            double rotation = i * -90.0; //Rotation will be 0.0, -90, -180, or -270
+
+            QMatrix4x4 rotationMatrix;
+            rotationMatrix.rotate(rotation, QVector3D(0.0, 0.0, 1.0)); //Rotate around the z-axis
+
+            ProfileTransform profileTransform(rotationMatrix, xMirror);
+
+            QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations, profileTransform);
+            double errorLength = upErrorLength(transformations);
+
+            qDebug() << "ErrorLength:" << errorLength << rotation;
+
+            if(errorLength < minError.ErrorLength) {
+                minError = ErrorTransforms(errorLength, rotation, transformations);
+            }
+        }
+    }
+
+    //Using the mimimized error, find the average transform
+    cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations);
+    averageTransformation.setNorthUp(averageTransformation.northUp() - 90);
+
+    return averageTransformation;
 }
 
 /**

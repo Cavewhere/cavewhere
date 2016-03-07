@@ -2,5 +2,9 @@
     <qresource prefix="/">
         <file>datasets/compassImportExport.cw</file>
         <file>datasets/network.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfile.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
     </qresource>
 </RCC>

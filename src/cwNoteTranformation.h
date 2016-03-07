@@ -38,7 +38,9 @@ class cwNoteTranformation : public QObject
     Q_PROPERTY(cwLength* scaleDenominator READ scaleDenominator CONSTANT)
     Q_PROPERTY(cwScale* scaleObject READ scaleObject NOTIFY scaleObjectChanged)
 
+    Q_ENUMS(ProfileDirection)
 public:
+
     cwNoteTranformation(QObject* parent = 0);
     cwNoteTranformation(const cwNoteTranformation& other);
     const cwNoteTranformation& operator =(const cwNoteTranformation& other);

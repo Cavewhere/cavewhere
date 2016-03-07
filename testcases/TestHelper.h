@@ -25,6 +25,7 @@
 
 //Our includes
 #include "cwStationPositionLookup.h"
+#include "cwProject.h"
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -83,6 +84,7 @@ inline QVector3D roundToDecimal(QVector3D v, int decimals) {
                      roundToDecimal(v.z(), decimals));
 }
 
+
 inline void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2) {
     if(v1 != v2) {
         v1 = roundToDecimal(v1, decimals);
@@ -132,6 +134,21 @@ inline QString copyToTempFolder(QString filename) {
     REQUIRE(couldPermissions);
 
     return newFileLocation;
+}
+
+/**
+ * @brief fileToProject
+ * @param filename
+ * @return A new project generate from filename
+ */
+inline cwProject* fileToProject(QString filename) {
+    QString datasetFile = copyToTempFolder(filename);
+
+    cwProject* project = new cwProject();
+    project->loadFile(datasetFile);
+    project->waitToFinish();
+
+    return project;
 }
 
 #endif // STREAMOPERATOR

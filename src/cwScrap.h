@@ -157,11 +157,28 @@ private:
      */
     class ScrapShotTransform {
     public:
-        ScrapShotTransform() : Scale(0.0) { }
-        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector) {}
+        ScrapShotTransform() : Scale(0.0), RotationDiff(0.0) { }
+        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector), RotationDiff(0.0) {}
+        ScrapShotTransform(double scale, QVector3D errorVector, double rotationDiff) : Scale(scale), ErrorVector(errorVector), RotationDiff(rotationDiff) {}
 
         double Scale;
         QVector3D ErrorVector;
+        double RotationDiff;
+    };
+
+    /**
+     * @brief The ProfileTransform class
+     *
+     * This class is used to re-project the x-axis for drawing running profile. Rotation is what
+     * direction up is, and mirror is left to right, or right to left (mirror on x-axis)
+     */
+    class ProfileTransform {
+    public:
+        ProfileTransform() {}
+        ProfileTransform(QMatrix4x4 rotation, QMatrix4x4 mirror) : Rotation(rotation), Mirror(mirror) {}
+
+        QMatrix4x4 Rotation;
+        QMatrix4x4 Mirror;
     };
 
     //The outline of the scrap, in normalized points
@@ -194,9 +211,14 @@ private:
 
     //For note station transformation, automatic calculation
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-    ScrapShotTransform calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms);
+    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
+                                                           const ProfileTransform& profileTransform = ProfileTransform()) const;
+    ScrapShotTransform calculateShotTransformation(cwNoteStation station1,
+                                                   cwNoteStation station2,
+                                                   const ProfileTransform& profileTransform) const;
+    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
+    cwNoteTranformation planAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    cwNoteTranformation runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
 
