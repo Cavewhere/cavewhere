@@ -54,6 +54,7 @@ DynamicLibrary {
 
     cpp.installNamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
+    cpp.dsymutilFlags: ["-u", "-t", "8"]
 
     cpp.includePaths: [
         ".",

@@ -149,7 +149,7 @@ private:
     void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
 
     //For transformation from note coords to local note coords
-    QMatrix4x4 localNormalizedCoordinates(const QRectF& bounds) const;
+    QMatrix4x4 mapToScrapCoordinates(const QRectF& bounds) const;
     QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords) const;
     QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords) const;
     QVector<QVector2D> scaleTexCoordinates(const cwImage& image, QVector<QVector2D> texCoords) const;

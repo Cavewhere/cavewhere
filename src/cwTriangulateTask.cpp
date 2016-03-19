@@ -152,8 +152,8 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Triangulate the quads (this will update the outputs data)
     cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
 
-    //Create the matrix that converts the normalized coords to the normalized coords
-    QMatrix4x4 toLocal = localNormalizedCoordinates(bounds);
+    //Create the matrix that converts the normalized note coords to normalized scrap coords
+    QMatrix4x4 toLocal = mapToScrapCoordinates(bounds);
 
     //Convert the normalized points to local note points
     QVector<QVector3D> localNotePoints = mapToLocalNoteCoordinates(toLocal, triangleData.points());
@@ -637,7 +637,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 /**
   Maps the bounds into local normalized coordinates
   */
-QMatrix4x4 cwTriangulateTask::localNormalizedCoordinates(const QRectF &bounds) const
+QMatrix4x4 cwTriangulateTask::mapToScrapCoordinates(const QRectF &bounds) const
 {
     float xScale = 1 / bounds.width();
     float yScale = 1 / bounds.height();
@@ -697,25 +697,30 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
       This returns a list of sorted stations base on stations position in the x-axis
       */
-    auto sortScrapStations = [&scrapData]()->QList<cwTriangulateStation> {
-            QList<cwTriangulateStation> stations = scrapData.stations();
-            if(scrapData.type() == cwScrap::RunningProfile) {
+    auto sortScrapStations = [&scrapData]() {
+        QList<cwTriangulateStation> stations = scrapData.stations();
+        if(scrapData.type() == cwScrap::RunningProfile) {
             //This assumes that up on the page is up for the scrap
-            auto profileCompare = [](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
-        return left.notePosition().x() < right.notePosition().x();
-    };
+            auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
+                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+
+                QPointF leftPoint = rotation.map(left.notePosition());
+                QPointF rightPoint = rotation.map(right.notePosition());
+
+                return leftPoint.x() < rightPoint.x();
+            };
 
             //Sort the stations by note position
             std::sort(stations.begin(), stations.end(), profileCompare);
-}
-            return stations;
-};
+        }
+        return stations;
+    };
 
     /**
      * Given a list of stations this finds the stations to use as control points in the morphing.
      *
      * If scrapData is running profile this will use two stations that notePoint.x() falls between.
-     * Those two stations are returned.
+     * Those two stations are returned. The notePoint.x() will be rotated to the northUp().
      *
      * If scrapData is plan this will simply return stations.
      */
@@ -729,8 +734,13 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             }
 
             //Look for the section for the notePoint, returns the stations we want to warp between
-            auto compare = [](const cwTriangulateStation& station, const QVector3D& point)->bool {
-                return station.notePosition().x() < point.x();
+            auto compare = [&scrapData](const cwTriangulateStation& station, const QVector3D& point)->bool {
+                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+
+                QPointF left = rotation.map(station.notePosition());
+                QVector3D right = rotation.map(point);
+
+                return left.x() < right.x();
             };
 
             auto foundStation = std::lower_bound(stations.begin(), stations.end(), notePoint, compare);

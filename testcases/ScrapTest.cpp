@@ -63,7 +63,7 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
         cwScrap* scrap = note->scrap(0);
 
         //Force recalculation
-        scrap->setCalculateNoteTransform(false);
+        CHECK(scrap->calculateNoteTransform() == false);
         scrap->setCalculateNoteTransform(true);
 
         cwNoteTranformation* transform = scrap->noteTransformation();
@@ -77,6 +77,4 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
 
         delete project;
     }
-
-
 }

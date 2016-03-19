@@ -625,14 +625,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
             rotatedNoteVector = mirror * rotatedNoteVector;
 
-            //Not sure if this is the right way of doing this, we might need to add another rotation in there
-            //This doesn't work for rotated pages of notes... We are assuming that the profile is drawn
-            //from left to right on the page or right to left on teh page
-//            rotatedNoteVector = QVector3D(rotatedNoteVector.x(),
-//                                          rotatedNoteVector.y(),
-//                                          rotatedNoteVector.z());
-
-            qDebug() << "XAxis:" << xAxis << "Diff" << clinoDiff << "real:" << realProfileVector << noteVector << rotatedNoteVector;
+//            qDebug() << "XAxis:" << xAxis << "Diff" << clinoDiff << "real:" << realProfileVector << noteVector << rotatedNoteVector;
 
             return ScrapShotTransform(scale, rotatedNoteVector, clinoDiff);
 };
@@ -752,7 +745,7 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
         }
 
         for(int i = 0; i < 2; i++) {
-            double rotation = i * -90.0; //Rotation will be 0.0, -90, -180, or -270
+            double rotation = i * -270.0; //Rotation will be 0.0, -90, -180, or -270
 
             QMatrix4x4 rotationMatrix;
             rotationMatrix.rotate(rotation, QVector3D(0.0, 0.0, 1.0)); //Rotate around the z-axis
