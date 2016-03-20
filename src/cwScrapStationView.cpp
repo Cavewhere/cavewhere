@@ -16,7 +16,6 @@
 #include "cwGlobalDirectory.h"
 #include "cwCave.h"
 #include "cwSGLinesNode.h"
-#include "cwTriangulateTask.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -159,7 +158,7 @@ void cwScrapStationView::updateShotLines() {
                 if(foundStation) { continue; }
 
                 //Caluclate the running profile rotation based on the stations
-                QMatrix4x4 toProfileRotation = cwTriangulateTask::toProfileRotation(selectedStationPos, currentPos);
+                QMatrix4x4 toProfileRotation = cwScrap::toProfileRotation(selectedStationPos, currentPos);
 
                 toNormalizedNote = noteStationOffset *
                         dotPerMeter *

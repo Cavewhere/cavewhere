@@ -116,6 +116,8 @@ public:
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
 
+    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
+
 public slots:
     void updateNoteTransformation();
 

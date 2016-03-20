@@ -6,5 +6,7 @@
         <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfile.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw</file>
     </qresource>
 </RCC>

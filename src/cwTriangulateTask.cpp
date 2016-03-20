@@ -53,36 +53,6 @@ QList<cwTriangulatedData> cwTriangulateTask::triangulatedScrapData() const {
 }
 
 /**
- * @brief cwTriangulateTask::profileViewRotation
- * @param fromStationPos
- * @param toStationPos
- * @return This returns the rotation matrix that will rotate the view from fromStationPos to toStationPos
- * in a profile view. This will remove the azimuth from the shot between fromStationPos and toStationPos.
- * It will also show the pitch of the shot.
- */
-QMatrix4x4 cwTriangulateTask::toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos)
-{
-    //Calculate the compass and clino from the shot
-    QVector3D shotDirection = toStationPos - fromStationPos; //stations.last().position() - stations.first().position();
-    QVector3D yAxis(0.0, 1.0, 0.0);
-    QVector3D eulerAngles = QQuaternion::rotationTo(yAxis, shotDirection.normalized()).toEulerAngles();
-
-    //Rotate the profile view
-    QQuaternion profilePitch = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0);
-
-    //Profile aligned with the compass direction
-    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, -eulerAngles.z() - 90.0);
-
-    //Combine the rotation to create the shot's profile view rotation
-    QQuaternion profileQuat = profilePitch * profileYaw;
-
-    QMatrix4x4 viewRotationMatrix;
-    viewRotationMatrix.rotate(profileQuat);
-
-    return viewRotationMatrix;
-}
-
-/**
   \brief Does the triangulation
   */
 void cwTriangulateTask::runTask() {
@@ -794,7 +764,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
             QMatrix4x4 translateBackward;
             translateBackward.translate(-fromPostion);
 
-            QMatrix4x4 viewRotationMatrix = toProfileRotation(fromPostion, toPosition);
+            QMatrix4x4 viewRotationMatrix = cwScrap::toProfileRotation(fromPostion, toPosition);
 
             QMatrix4x4 viewMatrix = translateForward * viewRotationMatrix * translateBackward;
 

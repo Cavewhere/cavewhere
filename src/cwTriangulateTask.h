@@ -36,8 +36,6 @@ public:
     //Outputs of the task
     QList<cwTriangulatedData> triangulatedScrapData() const;
 
-    static QMatrix4x4 toProfileRotation(QVector3D fromStation, QVector3D station2);
-
 signals:
     
 public slots:
