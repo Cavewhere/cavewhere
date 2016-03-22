@@ -97,6 +97,7 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw"));
+    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
 
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
