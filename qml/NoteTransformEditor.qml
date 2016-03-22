@@ -19,7 +19,7 @@ Item {
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
-    property int scrapType: scrap ? scrap.type : Scrap.Plan
+    property int scrapType: scrap ? scrap.type : -1
 
     visible: noteTransform !== null
 
