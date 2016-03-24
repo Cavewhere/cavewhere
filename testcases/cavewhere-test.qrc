@@ -10,5 +10,6 @@
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw</file>
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw</file>
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw</file>
     </qresource>
 </RCC>
