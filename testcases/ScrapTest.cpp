@@ -98,6 +98,7 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
+    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw"));
 
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
@@ -108,13 +109,26 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
         REQUIRE(scrap->stations().size() >= 1);
         cwNoteStation centerStation = scrap->stations().first();
 
-        for(int i = 1; i < scrap->stations().size(); i++) {
-            cwNoteStation station = scrap->station(i);
+        QList<cwNoteStation> scrapStations = scrap->stations();
 
-//            qDebug() << "Matching station:" << station.name();
-            QString guessedName = scrap->guessNeighborStationName(centerStation, station.positionOnNote());
+        foreach(cwNoteStation noteStation, scrapStations) {
+            QSet<cwStation> neighbors = scrap->parentNote()->parentTrip()->neighboringStations(noteStation.name());
 
-            CHECK(station.name().toStdString() == guessedName.toStdString());
+            INFO("Center station:" << noteStation.name().toStdString());
+
+            foreach(cwStation neighbor, neighbors) {
+                auto found = std::find_if(scrapStations.begin(), scrapStations.end(), [neighbor](const cwNoteStation& station) {
+                    return station.name() == neighbor.name();
+                });
+
+                CHECK(found != scrapStations.end());
+
+                cwNoteStation neighborNoteStation = *found;
+
+                QString guessedName = scrap->guessNeighborStationName(noteStation, neighborNoteStation.positionOnNote());
+
+                CHECK(neighborNoteStation.name().toStdString() == guessedName.toStdString());
+            }
         }
 
         delete planProject;

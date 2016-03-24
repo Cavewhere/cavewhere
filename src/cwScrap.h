@@ -111,7 +111,7 @@ public:
 
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
-    QMatrix4x4 mapWorldToNoteMatrix(cwNoteStation stationOffset);
+    QMatrix4x4 mapWorldToNoteMatrix(const cwNoteStation &referenceStation) const;
 
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
