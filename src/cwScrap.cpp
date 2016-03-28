@@ -575,8 +575,11 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     double lengthOnPage = noteVector.length(); //Length on page
     double lengthInCave = realVector.length(); //Length in cave
 
+
     //calculate the scale
     double scale = lengthInCave / lengthOnPage;
+
+//    qDebug() << "Length on page:" << lengthOnPage << lengthInCave << scale << station1.name() << station2.name();
 
     realVector.normalize();
     noteVector.normalize();
@@ -601,32 +604,22 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
       Calculates the shot transform in running profile view between station1 and station2
       */
     auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
-            QMatrix4x4 toProfile = cwScrap::toProfileRotation(station1RealPos, station2RealPos);
+            QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
+            QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
+
+            QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
-            QVector3D xAxis = profileTransform.Rotation * profileTransform.Mirror * QVector3D(1.0, 0.0, 0.0);
+            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::RadiansToDegrees;
 
-            QVector3D realEulerAngles = QQuaternion::rotationTo(xAxis, realProfileVector).toEulerAngles();
-            QVector3D noteEulerAngles = QQuaternion::rotationTo(xAxis, noteVector).toEulerAngles();
+            QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
 
-            double clinoReal = realEulerAngles.x();
-            double clinoNote = noteEulerAngles.z();
+            QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(QVector3D(0.0, 0.0, 1.0), clinoDiff);
+            QVector3D errorVector = errorQuat.rotatedVector(xAxis);
 
-            double clinoDiff = clinoNote - clinoReal;
+//            qDebug() << "real:" << realProfileVector << afterNoteVector << noteVector << clinoDiff << errorVector << xAxis;
 
-            QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(xAxis, clinoDiff);
-            QVector3D rotatedNoteVector = errorQuat.rotatedVector(noteVector);
-
-            QMatrix4x4 mirror;
-            mirror.scale(xAxis.x() == 0.0 ? 1.0 : xAxis.x(),
-                         xAxis.y() == 0.0 ? 1.0 : -xAxis.y(),
-                         1.0);
-
-            rotatedNoteVector = mirror * rotatedNoteVector;
-
-//            qDebug() << "XAxis:" << xAxis << "Diff" << clinoDiff << "real:" << realProfileVector << noteVector << rotatedNoteVector;
-
-            return ScrapShotTransform(scale, rotatedNoteVector, clinoDiff);
+            return ScrapShotTransform(scale, errorVector, clinoDiff);
 };
 
     switch(type()) {
@@ -673,10 +666,11 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
     errorVectorAverage = errorVectorAverage / numberValidTransforms;
     scaleAverage = scaleAverage / numberValidTransforms;
 
-//    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
 
     cwNoteTranformation transformation;
     double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
+
+//    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
 
     transformation.setNorthUp(angle);
     transformation.scaleNumerator()->setValue(1);
@@ -704,17 +698,20 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
     public:
         ErrorTransforms(double errorLength) :
             ErrorLength(errorLength),
-            Rotation(0.0)
+            Rotation(0.0),
+            RotationOffset(0.0)
         {}
 
-        ErrorTransforms(double errorLength, double rotation, QList<ScrapShotTransform> transform) :
+        ErrorTransforms(double errorLength, double rotation, double rotationOffset, QList<ScrapShotTransform> transform) :
             ErrorLength(errorLength),
             Rotation(rotation),
+            RotationOffset(rotationOffset),
             Transformations(transform)
         {}
 
         double ErrorLength;
         double Rotation;
+        double RotationOffset;
         QList<ScrapShotTransform> Transformations;
     };
 
@@ -730,6 +727,21 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
         return sumErrorAngle / (double)transforms.size();
     };
 
+    auto lookupRotationOffset = [](int i)->double {
+        switch(i) {
+        case 0:
+            return -90.0; //0 rotation
+        case 1:
+            return -270; //90 rotation
+        case 2:
+            return -90.0; //180 rotation
+        case 3:
+            return 90.0; //270 rotation
+        default:
+            return 0.0;
+        }
+    };
+
     //Seach through 0, -90 to figure out what the best orientation by mimimizing the
     //error length.
 //    qDebug() << "----------------------";
@@ -743,8 +755,8 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
             xMirror.scale(QVector3D(-1.0, 1.0, 1.0));
         }
 
-        for(int i = 0; i < 2; i++) {
-            double rotation = i * -270.0; //Rotation will be 0.0, -90, -180, or -270
+        for(int i = 0; i < 4; i++) {
+            double rotation = i * 90.0; //Rotation will be 0.0, 90, 180, or 270
 
             QMatrix4x4 rotationMatrix;
             rotationMatrix.rotate(rotation, QVector3D(0.0, 0.0, 1.0)); //Rotate around the z-axis
@@ -754,17 +766,23 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
             QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations, profileTransform);
             double errorLength = upErrorLength(transformations);
 
-//            qDebug() << "ErrorLength:" << errorLength << rotation;
+//            qDebug() << "ErrorLength:" << errorLength << rotation << s;
 
             if(errorLength < minError.ErrorLength) {
-                minError = ErrorTransforms(errorLength, rotation, transformations);
+                double rotationOffset = lookupRotationOffset(i);
+                minError = ErrorTransforms(errorLength, rotation, rotationOffset, transformations);
             }
         }
     }
 
+//    qDebug() << "Best rotation:" << minError.Rotation;
+
     //Using the mimimized error, find the average transform
     cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations);
-    averageTransformation.setNorthUp(averageTransformation.northUp() - 90);
+
+//    qDebug() << "Average Transform:" << averageTransformation.northUp() << averageTransformation.scale();
+
+    averageTransformation.setNorthUp(averageTransformation.northUp() + minError.RotationOffset);
 
     return averageTransformation;
 }

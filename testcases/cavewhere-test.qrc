@@ -11,5 +11,13 @@
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw</file>
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw</file>
         <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw</file>
     </qresource>
 </RCC>

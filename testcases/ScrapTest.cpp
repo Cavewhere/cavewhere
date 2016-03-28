@@ -25,6 +25,38 @@
 //Qt includes
 #include <QtGlobal>
 
+class TestRow {
+public:
+    TestRow(QString filename, double rotation, double scale) :
+        Filename(filename),
+        Rotation(rotation),
+        Scale(scale),
+        RotationEpsilon(1.0e-4),
+        ScaleEpsilon(1.0e-4)
+    {}
+
+    TestRow(QString filename, double rotation, double scale, double rotationEpsilon, double scaleEpsilon) :
+        Filename(filename),
+        Rotation(rotation),
+        Scale(scale),
+        RotationEpsilon(rotationEpsilon),
+        ScaleEpsilon(scaleEpsilon)
+    {}
+
+    TestRow() :
+        Rotation(0.0),
+        Scale(0.0),
+        RotationEpsilon(0.0),
+        ScaleEpsilon(0.0)
+    {}
+
+    QString Filename;
+    double Rotation;
+    double Scale;
+    double RotationEpsilon;
+    double ScaleEpsilon;
+};
+
 cwScrap* firstScrap(const cwProject* project) {
     REQUIRE(project->cavingRegion()->caveCount() == 1);
     cwCave* cave = project->cavingRegion()->cave(0);
@@ -42,26 +74,25 @@ cwScrap* firstScrap(const cwProject* project) {
     return scrap;
 }
 
+void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
+    INFO("Row filename:" << row.Filename.toStdString());
+    cwNoteTranformation* transform = scrap->noteTransformation();
+
+    double realScale = 1.0 / transform->scale();
+
+    INFO("Calc Scale:" << realScale << " Row Scale:" << row.Scale );
+    CHECK(realScale == Approx(row.Scale).epsilon(row.ScaleEpsilon));
+    INFO("Calc Up:" << transform->northUp() << " Row Up:" << row.Rotation );
+    CHECK(transform->northUp() == Approx(row.Rotation).epsilon(row.RotationEpsilon));
+}
+
 TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
 
-    class TestRow {
-    public:
-        TestRow(QString filename, double rotation, double scale) :
-            Filename(filename),
-            Rotation(rotation),
-            Scale(scale) {}
-        TestRow() {}
-
-        QString Filename;
-        double Rotation;
-        double Scale;
-    };
-
     QList<TestRow> rows;
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 89.7529184495, 176.349));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotateMirror.cw", 89.5297778044, 176.696));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", -0.1062471752, 175.592));
-    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", 0.0034680627, 176.721));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 87.8004635984, 176.349));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotateMirror.cw", 87.5044033263, 176.696));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", -1.8869214928, 175.592));
+    rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
 
     foreach(TestRow row, rows) {
         cwProject* project = fileToProject(row.Filename);
@@ -71,18 +102,43 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
         CHECK(scrap->calculateNoteTransform() == false);
         scrap->setCalculateNoteTransform(true);
 
-        cwNoteTranformation* transform = scrap->noteTransformation();
-
-        double realScale = 1.0 / transform->scale();
-
-        INFO("Calc Scale:" << realScale << " Row Scale:" << row.Scale );
-        CHECK(realScale == Approx(row.Scale));
-        INFO("Calc Up:" << transform->northUp() << " Row Up:" << row.Rotation );
-        CHECK(transform->northUp() == Approx(row.Rotation));
+        checkScrapTransform(scrap, row);
 
         delete project;
     }
 }
+
+TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
+
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.1, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", -0.26, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw", 90, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw", 90, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw", 180, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw", 180, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw", 270, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw", 270, 5795.0, 0.05, 0.005));
+
+    foreach(TestRow row, rows) {
+        cwProject* project = fileToProject(row.Filename);
+        cwScrap* scrap = firstScrap(project);
+
+        //Force recalculation
+        INFO("Filename:" << row.Filename.toStdString());
+        CHECK(scrap->calculateNoteTransform() == false);
+        scrap->setCalculateNoteTransform(true);
+
+        while(scrap->stations().size() >= 6) {
+            checkScrapTransform(scrap, row);
+            INFO("Removing station:" << scrap->station(scrap->stations().size() - 1).name().toStdString());
+            scrap->removeStation(scrap->stations().size() - 1);
+        }
+
+        delete project;
+    }
+}
+
 
 TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
     class TestRow {
