@@ -1219,6 +1219,7 @@ QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStat
 void cwScrap::setType(ScrapType type) {
     if(Type != type) {
         Type = type;
+        updateNoteTransformation();
         emit typeChanged();
     }
 }
