@@ -52,7 +52,7 @@ MenuBar {
                 if(!project.temporaryProject) {
                     project.save();
                 } else {
-                    saveAsMenuItem.fileDialog.open()
+                    saveAsFileDialog.open()
                 }
             }
         }
