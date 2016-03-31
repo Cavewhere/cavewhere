@@ -54,6 +54,7 @@ DynamicLibrary {
 
     cpp.installNamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
+    cpp.cxxLanguageVersion: "c++11"
 
     cpp.includePaths: [
         ".",
@@ -79,7 +80,6 @@ DynamicLibrary {
         cpp.cxxFlags: {
             var flags = [
                         "-stdlib=libc++", //Needed for protoc
-                        "-std=c++11", //For c++11 support
                         "-Werror", //Treat warnings as errors
 
                     ];
@@ -104,7 +104,6 @@ DynamicLibrary {
     Properties {
         condition: qbs.targetOS.contains("linux")
         cpp.cxxFlags: [
-            "-std=c++11", //For c++11 support
             "-Werror" //Treat warnings as errors
         ]
     }

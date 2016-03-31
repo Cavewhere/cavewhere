@@ -21,7 +21,7 @@ class cwScrap;
 class cwCave;
 class cwImageResolution;
 
-class cwNote : public QObject
+class CAVEWHERE_LIB_EXPORT cwNote : public QObject
 {
     Q_OBJECT
 

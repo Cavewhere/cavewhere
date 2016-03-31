@@ -15,6 +15,7 @@
 #include <QPolygonF>
 
 //Our includes
+#include "cwGlobals.h"
 #include "cwNoteTranformation.h"
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
@@ -28,7 +29,7 @@ class cwCave;
   Points can be added or removed from the scrap.  All the points will be in
   normalize note coordinates system.
   */
-class cwScrap : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 {
     Q_OBJECT
 

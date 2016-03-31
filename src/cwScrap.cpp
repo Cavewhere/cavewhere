@@ -23,6 +23,7 @@
 //Std includes
 #include <limits>
 #include <cmath>
+#include <functional>
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
@@ -441,13 +442,13 @@ void cwScrap::updateNoteTransformation() {
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
 
     //Choose the averaging function
-    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> >)> averageFunc;
+    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
     switch(type()) {
     case cwScrap::RunningProfile:
-        averageFunc = &cwScrap::runningProfileAverageTransform;
+        averageFunc = std::mem_fn(&cwScrap::runningProfileAverageTransform);
         break;
     case cwScrap::Plan:
-        averageFunc = &cwScrap::planAverageTransform;
+        averageFunc = std::mem_fn(&cwScrap::planAverageTransform);
         break;
     };
 

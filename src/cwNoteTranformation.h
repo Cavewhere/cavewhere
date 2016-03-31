@@ -17,6 +17,7 @@
 #include <QMatrix4x4>
 
 //Our includes
+#include "cwGlobals.h"
 class cwLength;
 class cwImageResolution;
 class cwScale;
@@ -28,7 +29,7 @@ class cwScale;
   The scale can be set throught the scaleNumerator : scaleDenominator.  When one of those change, the
   unitless scale will also change.
   */
-class cwNoteTranformation : public QObject
+class CAVEWHERE_LIB_EXPORT cwNoteTranformation : public QObject
 {
     Q_OBJECT
 
