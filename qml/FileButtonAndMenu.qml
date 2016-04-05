@@ -82,7 +82,7 @@ Item {
                     if(!project.temporaryProject) {
                         project.save();
                     } else {
-                        saveAsFileDialogId.open()
+                    	saveAsFileDialog.open()
                     }
                 }
             }
@@ -127,6 +127,7 @@ Item {
 
                     var currentSource = mainContentLoader.source;
                     mainContentLoader.source = ""
+                mainContentLoader.asynchronous = false;
                     qmlReloader.reload();
                     mainContentLoader.source = currentSource;
 

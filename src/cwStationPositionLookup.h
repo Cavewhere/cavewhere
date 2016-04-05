@@ -13,11 +13,14 @@
 #include <QString>
 #include <QMap>
 
+//Our includes
+#include "cwGlobals.h"
+
 /**
   The station position model holds the position of all the stations
   in a cave.
   */
-class cwStationPositionLookup {
+class CAVEWHERE_LIB_EXPORT cwStationPositionLookup {
 public:
     cwStationPositionLookup();
 

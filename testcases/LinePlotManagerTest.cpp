@@ -18,6 +18,7 @@
 #include "cwTripCalibration.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwProject.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -25,6 +26,34 @@
 //Qt includes
 #include <QThread>
 #include <QApplication>
+
+TEST_CASE("Survey network are returned", "[LinePlotManager]") {
+    cwProject* project = fileToProject(":/datasets/network.cw");
+
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+
+    cwCave* cave = project->cavingRegion()->cave(0);
+    cave->setStationPositionLookup(cwStationPositionLookup());
+
+    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    plotManager->setRegion(project->cavingRegion());
+    plotManager->waitToFinish();
+
+    cwSurveyNetwork network = cave->network();
+
+    auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
+        auto foundNeighbors = network.neighbors(stationName).toSet();
+        auto checkNeigbbors = neighbors.toSet();
+        CHECK(foundNeighbors == checkNeigbbors);
+    };
+
+    testStationNeigbors("a1", QStringList() << "A2" << "A4");
+    testStationNeigbors("a2", QStringList() << "A1" << "A3");
+    testStationNeigbors("a3", QStringList() << "A2" << "A4" << "A5");
+    testStationNeigbors("a4", QStringList() << "A1" << "A3");
+    testStationNeigbors("a5", QStringList() << "A3" << "A6");
+    testStationNeigbors("a6", QStringList() << "A5");
+}
 
 TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should run plotting", "[LinePlotManager]")
 {

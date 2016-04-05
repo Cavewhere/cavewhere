@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import "Theme.js" as Theme
 
 Rectangle {
     id: noteGallery
@@ -306,12 +307,8 @@ Rectangle {
         width: mainToolBar.width + 6
         height: mainToolBar.height + 6
 
-        radius: style.floatingWidgetRadius
-        color: style.floatingWidgetColor
-
-        Style {
-            id: style
-        }
+        radius: Theme.floatingWidgetRadius
+        color: Theme.floatingWidgetColor
 
         Row {
             id: mainToolBar

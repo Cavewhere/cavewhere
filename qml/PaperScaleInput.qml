@@ -30,7 +30,7 @@ Item {
         Button {
             id: setLength
             anchors.verticalCenter: parent.verticalCenter
-            width: 24
+            iconSource: "qrc:/icons/measurement.png"
             visible: !autoScaling && usingInteraction
             onClicked: scaleInteractionActivated()
         }

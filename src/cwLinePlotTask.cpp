@@ -43,7 +43,6 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
 {
 }
 
-
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     cwTask(parent)
 {
@@ -242,6 +241,9 @@ void cwLinePlotTask::linePlotTaskComplete() {
 
     //Update the depth and length of the cave
     updateDepthLength();
+    //Update the networks for the caves
+    updateCaveNetworks();
+
 }
 
 /**
@@ -555,6 +557,39 @@ void cwLinePlotTask::updateExteralCaveStationLookups()
             cwCave* cave = Region->cave(i);
             cave->setStationPositionLookup(CaveStationLookups[i]);
         }
+    }
+}
+
+/**
+ * @brief cwLinePlotTask::updateCaveNetworks
+ *
+ * This goes through all the caves and creates cave networks for each of them.
+ */
+void cwLinePlotTask::updateCaveNetworks()
+{
+    auto createNetwork = [](cwCave* cave) {
+        cwSurveyNetwork network;
+
+        foreach(cwTrip* trip, cave->trips()) {
+            foreach(cwSurveyChunk* chunk, trip->chunks()) {
+                QList<cwStation> stations = chunk->stations();
+                for(int i = 0; i < stations.size() - 1; i++) {
+                    cwStation from = stations.at(i);
+                    cwStation to = stations.at(i + 1);
+                    network.addShot(from.name(), to.name());
+                }
+            }
+        }
+
+        return network;
+    };
+
+    QList<cwCave*> caves = Region->caves();
+    for(int i = 0; i < caves.size(); i++) {
+        cwCave* cave = caves.at(i);
+        cwSurveyNetwork network = createNetwork(cave);
+        cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
+        Result.Caves[externalCave].setNetwork(network);
     }
 }
 

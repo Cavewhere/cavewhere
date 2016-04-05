@@ -42,6 +42,8 @@ void cwGLScraps::draw() {
     Program->enableAttributeArray(vVertex);
     Program->enableAttributeArray(vScrapTexCoords);
 
+    glEnable(GL_DEPTH_TEST);
+
     foreach(GLScrap scrap, Scraps) {
         Program->setUniformValue(UniformScaleTexCoords, scrap.Texture->scaleTexCoords());
 

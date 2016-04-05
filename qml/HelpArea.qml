@@ -18,7 +18,7 @@ Rectangle {
     property bool animationToInvisible: true
 
     color: "#BBBBBB"
-    implicitHeight: helpText.height
+    implicitHeight: layout.height
     radius: 5
     clip: true
 
@@ -34,28 +34,38 @@ Rectangle {
         }
     }
 
-    Image {
-        id: icon
-        anchors.left: parent.left
+    RowLayout {
+        id: layout
         anchors.leftMargin: 5
-        anchors.verticalCenter: parent.verticalCenter
-//        source: "qrc:icons/Information20x20.png"
-        width: sourceSize.width
-        height: sourceSize.height
+        anchors.rightMargin: 5
+        anchors.topMargin: 5
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
 
-    }
 
-    Text {
-        id: helpText
+        Image {
+            id: icon
+            anchors.verticalCenter: parent.verticalCenter
+            //        source: "qrc:icons/Information20x20.png"
+            width: sourceSize.width
+            height: sourceSize.height
 
-        width: helpArea.width - 10
-        anchors.horizontalCenter: parent.horizontalCenter
+        }
 
-        textFormat: Text.RichText
-        wrapMode: Text.WordWrap
-        font.pointSize: 10
+        Text {
+            id: helpText
 
-        text: "No documentation"
+            Layout.fillWidth: true
+
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            textFormat: Text.RichText
+            wrapMode: Text.WordWrap
+            font.pointSize: 10
+
+            text: "No documentation"
+        }
     }
 
     QtObject {

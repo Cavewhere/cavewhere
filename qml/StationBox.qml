@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import "Theme.js" as Theme
 
 DataBox {
     id: stationBox
@@ -40,14 +41,10 @@ DataBox {
         }
     }
 
-    Style {
-        id: style
-    }
-
     Rectangle {
         id: guessAreaBackground
 //        radius: 5
-        color: style.floatingWidgetColor
+        color: Theme.floatingWidgetColor
         anchors.centerIn: parent
         visible: false
         border.color: "#888888"

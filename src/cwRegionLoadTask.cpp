@@ -408,6 +408,7 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
     scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
+    scrap->setType((cwScrap::ScrapType)protoScrap.type());
 }
 
 /**

@@ -16,6 +16,7 @@ class cwErrorModel;
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
 #include "cwGlobals.h"
+#include "cwSurveyNetwork.h"
 
 //Qt includes
 #include <QObject>
@@ -73,6 +74,9 @@ public:
     cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionLookup(const cwStationPositionLookup& model);
 
+    cwSurveyNetwork network() const;
+    void setSurveyNetwork(const cwSurveyNetwork& network);
+
     void setStationPositionLookupStale(bool isStale);
     bool isStationPositionLookupStale() const;
 
@@ -88,6 +92,7 @@ signals:
     void nameChanged();
 
     void stationPositionPositionChanged();
+    void surveyNetworkChanged();
 
 private:
     QList<cwTrip*> Trips;
@@ -100,6 +105,8 @@ private:
 
     cwStationPositionLookup StationPositionModel;
     bool StationPositionModelStale;
+
+    cwSurveyNetwork Network;
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();
@@ -216,6 +223,16 @@ inline int cwCave::indexOf(cwTrip* trip) const {
 inline cwStationPositionLookup cwCave::stationPositionLookup() const
 {
     return StationPositionModel;
+}
+
+/**
+ * @brief cwCave::network
+ * @return This returns a lookup for stations to station neighbors. This is undirected graph
+ * of stations.
+ */
+inline cwSurveyNetwork cwCave::network() const
+{
+    return Network;
 }
 
 /**

@@ -7,6 +7,7 @@
 
 import QtQuick 2.0
 import Cavewhere 1.0
+import "Theme.js" as Theme
 
 ShadowRectangle {
     id: removeChallenge
@@ -29,11 +30,7 @@ ShadowRectangle {
 
     signal remove();
 
-    Style {
-        id: style
-    }
-
-    color: style.errorBackground
+    color: Theme.errorBackground
 
     MouseArea {
         parent: rootPopupItem

@@ -6,27 +6,36 @@
 **************************************************************************/
 
 import QtQuick 2.0
+import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
 Item {
 
+    property int scrapType
     property NoteTransform noteTransform
     property HelpArea northUpHelp
     property alias enable: setNorthButton.visible
 
     signal northUpInteractionActivated()
 
-    height: childrenRect.height
-    width: row.width
+    implicitHeight: row.height
+    implicitWidth: row.width
 
-    Row {
+    RowLayout {
         id: row
-        spacing: 5
 
         Button {
             id: setNorthButton
-
-            width: 24
+            iconSource: {
+                switch(scrapType) {
+                case Scrap.Plan:
+                    return "qrc:/icons/north.png"
+                case Scrap.RunningProfile:
+                    return "qrc:/icons/up.png"
+                default:
+                    return "qrc:/icons/error.png"
+                }
+            }
 
             onClicked: northUpInteractionActivated()
         }
@@ -34,7 +43,16 @@ Item {
         LabelWithHelp {
             id: labelId
             helpArea: northUpHelp
-            text: "North"
+            text: {
+                switch(scrapType) {
+                case Scrap.Plan:
+                    return "North"
+                case Scrap.RunningProfile:
+                    return "Up"
+                default:
+                    return "Error"
+                }
+            }
             anchors.verticalCenter: parent.verticalCenter
         }
 

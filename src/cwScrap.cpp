@@ -18,15 +18,18 @@
 
 //Qt includes
 #include <QDebug>
+#include <QQuaternion>
 
 //Std includes
 #include <limits>
 #include <cmath>
+#include <functional>
 
 cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
+    Type(Plan),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false)
@@ -437,10 +440,21 @@ void cwScrap::updateNoteTransformation() {
 
     //Get all the stations that make shots on the page of notes
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
-    QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
-    cwNoteTranformation averageTransformation = averageTransformations(transformations);
 
-    noteTransformation()->setScale(averageTransformation.scale());
+    //Choose the averaging function
+    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
+    switch(type()) {
+    case cwScrap::RunningProfile:
+        averageFunc = std::mem_fn(&cwScrap::runningProfileAverageTransform);
+        break;
+    case cwScrap::Plan:
+        averageFunc = std::mem_fn(&cwScrap::planAverageTransform);
+        break;
+    };
+
+    //Do the calculations
+    cwNoteTranformation averageTransformation = averageFunc(this, shotStations);
+    NoteTransformation->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
 
@@ -457,14 +471,14 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
     if(parentCave() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
-//    //Find the valid stations
-//    QSet<cwNoteStation> validStationsSet;
-//    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
-//    foreach(cwNoteStation noteStation, Stations) {
-//        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
-//            validStationsSet.insert(noteStation);
-//        }
-//    }
+    //    //Find the valid stations
+    //    QSet<cwNoteStation> validStationsSet;
+    //    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
+    //    foreach(cwNoteStation noteStation, Stations) {
+    //        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
+    //            validStationsSet.insert(noteStation);
+    //        }
+    //    }
 
     //Get the parent trip of for these notes
     cwTrip* trip = parentNote()->parentTrip();
@@ -501,12 +515,15 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
 
 /**
   This will create cwNoteTransformation for each shot in the list
+
+  The zeroVector is only for running profile calculations. The zeroVector provides a reference, where up is zero.
   */
-QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const {
+QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
+                                                                           const ProfileTransform &profileTransform) const {
     QList<ScrapShotTransform> transformations;
     for(int i = 0; i < shots.size(); i++) {
         QPair< cwNoteStation, cwNoteStation >& shot = shots[i];
-        ScrapShotTransform transformation = calculateShotTransformation(shot.first, shot.second);
+        ScrapShotTransform transformation = calculateShotTransformation(shot.first, shot.second, profileTransform);
         transformations.append(transformation);
     }
 
@@ -515,8 +532,10 @@ QList< cwScrap::ScrapShotTransform > cwScrap::calculateShotTransformations(QList
 
 /**
   This will caluclate the transfromation between station1 and station2
+
+  The zeroVector is only for running profile calculations. The zeroVector provides a reference, where up is zero.
   */
-cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const {
+cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation station1, cwNoteStation station2, const ProfileTransform &profileTransform) const {
     if(parentCave() == nullptr) {
         qDebug() << "Can't calculate shot transformation because parentCave is null" << LOCATION;
         return ScrapShotTransform();
@@ -533,8 +552,15 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     QVector3D station2RealPos = positionLookup.position(station2.name());
 
     //Remove the z for plan view
-    station1RealPos.setZ(0.0);
-    station2RealPos.setZ(0.0);
+    switch(type()) {
+    case Plan:
+        station1RealPos.setZ(0.0);
+        station2RealPos.setZ(0.0);
+        break;
+    case RunningProfile:
+        //Keep the full point, because running profile keeps the full length
+        break;
+    }
 
     QVector3D station1NotePos(station1.positionOnNote()); //In normalized coordinates
     QVector3D station2NotePos(station2.positionOnNote());
@@ -550,27 +576,66 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     double lengthOnPage = noteVector.length(); //Length on page
     double lengthInCave = realVector.length(); //Length in cave
 
+
     //calculate the scale
     double scale = lengthInCave / lengthOnPage;
+
+//    qDebug() << "Length on page:" << lengthOnPage << lengthInCave << scale << station1.name() << station2.name();
 
     realVector.normalize();
     noteVector.normalize();
 
-    QVector3D zeroVector(0.0, 1.0, 0.0);
-    double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
-    QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
-    QMatrix4x4 rotationToNorth;
-    rotationToNorth.rotate(-angleToZero, crossProduct);
+    /**
+      Calculates the shot transform in plan view between station1 and station2
+      */
+    auto planCalcTransformation = [&]()->ScrapShotTransform {
+            QVector3D zeroVector(0.0, 1.0, 0.0);
+            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
+            QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
-    QVector3D rotatedNoteVector = rotationToNorth.map(noteVector);
-    return ScrapShotTransform(scale, rotatedNoteVector);
+            QMatrix4x4 rotationToNorth;
+            rotationToNorth.rotate(-angleToZero, crossProduct);
+
+            QVector3D rotatedNoteVector = rotationToNorth.map(noteVector);
+            return ScrapShotTransform(scale, rotatedNoteVector);
+};
+
+    /**
+      Calculates the shot transform in running profile view between station1 and station2
+      */
+    auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
+            QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
+            QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
+
+            QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
+            QVector3D realProfileVector = toProfile.mapVector(realVector);
+
+            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::RadiansToDegrees;
+
+            QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
+
+            QQuaternion errorQuat = QQuaternion::fromAxisAndAngle(QVector3D(0.0, 0.0, 1.0), clinoDiff);
+            QVector3D errorVector = errorQuat.rotatedVector(xAxis);
+
+//            qDebug() << "real:" << realProfileVector << afterNoteVector << noteVector << clinoDiff << errorVector << xAxis;
+
+            return ScrapShotTransform(scale, errorVector, clinoDiff);
+};
+
+    switch(type()) {
+    case Plan:
+        return planCalcTransformation();
+    case RunningProfile:
+        return profileCalcTrasnformation();
+    }
+    return ScrapShotTransform();
 }
 
 /**
   This will average all the transformatons into one transfromation
   */
-cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) {
+cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) const {
 
     if(shotTransforms.empty()) {
         return cwNoteTranformation();
@@ -602,14 +667,125 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
     errorVectorAverage = errorVectorAverage / numberValidTransforms;
     scaleAverage = scaleAverage / numberValidTransforms;
 
+
     cwNoteTranformation transformation;
     double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
+
+//    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
 
     transformation.setNorthUp(angle);
     transformation.scaleNumerator()->setValue(1);
     transformation.scaleDenominator()->setValue(scaleAverage);
 
     return transformation;
+}
+
+/**
+  Finds the average transfrom for the plan, based on all the shots in the scrap
+  */
+cwNoteTranformation cwScrap::planAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+{
+    QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
+    cwNoteTranformation averageTransformation = averageTransformations(transformations);
+    return averageTransformation;
+}
+
+/**
+  Finds the average transform for the running profile, based on all the shots in the scrap
+  */
+cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+{
+    class ErrorTransforms {
+    public:
+        ErrorTransforms(double errorLength) :
+            ErrorLength(errorLength),
+            Rotation(0.0),
+            RotationOffset(0.0)
+        {}
+
+        ErrorTransforms(double errorLength, double rotation, double rotationOffset, QList<ScrapShotTransform> transform) :
+            ErrorLength(errorLength),
+            Rotation(rotation),
+            RotationOffset(rotationOffset),
+            Transformations(transform)
+        {}
+
+        double ErrorLength;
+        double Rotation;
+        double RotationOffset;
+        QList<ScrapShotTransform> Transformations;
+    };
+
+    /**
+      Averages all the error length for a list of scrap shot transforms
+      */
+    auto upErrorLength = [](const QList<ScrapShotTransform>& transforms)->double {
+        //Calculate the clino error
+        double sumErrorAngle = 0.0;
+        foreach(ScrapShotTransform transform, transforms) {
+            sumErrorAngle += transform.RotationDiff * transform.RotationDiff; //Sum of the squares
+        }
+        return sumErrorAngle / (double)transforms.size();
+    };
+
+    auto lookupRotationOffset = [](int i)->double {
+        switch(i) {
+        case 0:
+            return -90.0; //0 rotation
+        case 1:
+            return -270; //90 rotation
+        case 2:
+            return -90.0; //180 rotation
+        case 3:
+            return 90.0; //270 rotation
+        default:
+            return 0.0;
+        }
+    };
+
+    //Seach through 0, -90 to figure out what the best orientation by mimimizing the
+    //error length.
+//    qDebug() << "----------------------";
+
+    ErrorTransforms minError(std::numeric_limits<double>::max());
+    for(int s = 0; s < 2; s++) {
+
+        QMatrix4x4 xMirror;
+        if(s == 1) {
+            //Right to Left
+            xMirror.scale(QVector3D(-1.0, 1.0, 1.0));
+        }
+
+        for(int i = 0; i < 4; i++) {
+            double rotation = i * 90.0; //Rotation will be 0.0, 90, 180, or 270
+
+            QMatrix4x4 rotationMatrix;
+            rotationMatrix.rotate(rotation, QVector3D(0.0, 0.0, 1.0)); //Rotate around the z-axis
+
+            ProfileTransform profileTransform(rotationMatrix, xMirror);
+
+            QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations, profileTransform);
+            double errorLength = upErrorLength(transformations);
+
+//            qDebug() << "ErrorLength:" << errorLength << rotation << s;
+
+            if(errorLength < minError.ErrorLength) {
+                double rotationOffset = lookupRotationOffset(i);
+                minError = ErrorTransforms(errorLength, rotation, rotationOffset, transformations);
+            }
+        }
+    }
+
+//    qDebug() << "Best rotation:" << minError.Rotation;
+
+    //Using the mimimized error, find the average transform
+    cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations);
+
+//    qDebug() << "Average Transform:" << averageTransformation.northUp() << averageTransformation.scale();
+
+    averageTransformation.setNorthUp(averageTransformation.northUp() + minError.RotationOffset);
+
+    return averageTransformation;
 }
 
 /**
@@ -637,11 +813,9 @@ void cwScrap::setCalculateNoteTransform(bool calculateNoteTransform) {
 
 /**
   This guess the station based on the position on the Notes
-
+scra
   If it doesn't know the station name.  If a station is within 5%, then it'll automatically
   update the station name.
-
-  This only works for the plan view, z is always 0
 
   \param previousStation - The current station that's select.  This will only look at neighboring
   station of this station
@@ -669,32 +843,98 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
         return QString();
     }
 
+    //The previous Station position
+    QVector3D prevStationPos = stationLookup.position(previousStation.name());
+
+    QMatrix4x4 offsetMatrix;
+    offsetMatrix.translate(-prevStationPos);
+
     //The matrix the maps the note station to the world coordinates
     QMatrix4x4 worldToNoteMatrix = mapWorldToNoteMatrix(previousStation);
 
     //The best station name
     QString bestStationName;
-    double bestNormalizeError = 1.0;
+    double bestError = std::numeric_limits<double>::max();
 
+//    qDebug() << "-------" << previousStation.name() << previousStation.positionOnNote() << "--------";
+
+    /**
+      Finds the amount of error for station's note position vs the prediected position. If the
+      station has the lowest error, then it is the WINNER! and is set as the best station. If
+      it is the lowest error of all the neighboring stations, then it returned from guessNeighborStationName()
+      */
+    auto updateBestStation = [&](const QString& stationName, QPointF predictedPosition) {
+        //Figure out the error between stationNotePosition and predictedPosition
+        QPointF errorVector = predictedPosition - stationNotePosition;
+        double errorLength = QVector2D(errorVector).lengthSquared();
+
+//        qDebug() << "PredictedPosition:" << stationName << stationNotePosition << predictedPosition << errorVector << errorLength;
+
+        if(errorLength < bestError) {
+            //Station is probably the one
+            bestStationName = stationName;
+            bestError = errorLength;
+        }
+    };
+
+    /**
+      Calculates the error using a matrix that converts the stationPosition into note coordinates
+      */
+    auto calcErrorUsingMatrix = [&updateBestStation](const QString& stationName, QVector3D stationPosition, QMatrix4x4 matrix) {
+        //Figure out the predicited position of the station on the notes
+        QPointF predictedPosition = matrix.map(stationPosition).toPointF();
+        updateBestStation(stationName, predictedPosition);
+    };
+
+    /**
+      Calculates the error in plan mode
+      */
+    auto calcErrorForPlan = [&calcErrorUsingMatrix, worldToNoteMatrix, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+        calcErrorUsingMatrix(stationName, stationPosition, worldToNoteMatrix * offsetMatrix);
+    };
+
+    /**
+      Calculates the error for running profile mode
+      */
+    auto calcErrorForProfile = [&calcErrorUsingMatrix, worldToNoteMatrix, prevStationPos, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+        QMatrix4x4 worldToProfileNoteMatrix;
+
+        //Rotate into a profile
+        QMatrix4x4 profileRotation = toProfileRotation(prevStationPos, stationPosition);
+
+        //Mirror right to left, left to right, running profile can be drawn either way
+        for(int i = 0; i < 2; i++) {
+            double sign = i ? 1.0 : -1.0;
+            QMatrix4x4 mirrorMatrix;
+            mirrorMatrix.scale(sign, 1.0, 1.0); //Mirror along the y-axis
+
+            //Rotate into profile, then mirror, then convert to note coordinates
+            worldToProfileNoteMatrix = worldToNoteMatrix * mirrorMatrix * profileRotation * offsetMatrix;
+
+            calcErrorUsingMatrix(stationName, stationPosition, worldToProfileNoteMatrix);
+        }
+    };
+
+    //Figure out how we are going to calculate the error, choose the function pointer
+    std::function<void (const QString&, QVector3D)> calcError;
+    switch(type()) {
+    case cwScrap::Plan:
+        calcError = calcErrorForPlan;
+        break;
+    case cwScrap::RunningProfile:
+        calcError = calcErrorForProfile;
+        break;
+    }
+
+    //Calculate the error each station
     foreach(cwStation station, neigborStations) {
         if(stationLookup.hasPosition(station.name())) {
             QVector3D stationPosition = stationLookup.position(station.name());
-
-            //Figure out the predicited position of the station on the notes
-            QPointF predictedPosition = worldToNoteMatrix.map(stationPosition).toPointF();
-
-            //Figure out the error between stationNotePosition and predictedPosition
-            QPointF errorVector = predictedPosition - stationNotePosition;
-            QPointF noteVector = previousStation.positionOnNote() - predictedPosition;
-            double normalizedError = QVector2D(errorVector).length() / QVector2D(noteVector).length();
-
-            if(normalizedError < bestNormalizeError) {
-                //Station is probably the one
-                bestStationName = station.name();
-            }
+            calcError(station.name(), stationPosition);
         }
     }
 
+    //return the best station from the calculation
     return bestStationName;
 }
 
@@ -702,16 +942,16 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
   This creates a QMatrix4x4 that can be used to transform a station's position in
   3D to normalize note coordinates
   */
-QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
+QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) const {
     if(parentNote() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QMatrix4x4(); }
 
-    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
-    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
+//    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
+//    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
 
     //The position of the selected station
-    QVector3D stationPos = stationLookup.position(referenceStation.name());
+//    QVector3D stationPos = stationLookup.position(referenceStation.name());
 
     //Create the matrix to covert global position into note position
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
@@ -719,16 +959,16 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(cwNoteStation referenceStation) {
 
     QMatrix4x4 dotsOnPageMatrix = parentNote()->metersOnPageMatrix().inverted();
 
-    QMatrix4x4 offsetMatrix;
-    offsetMatrix.translate(-stationPos);
+//    QMatrix4x4 offsetMatrix;
+//    offsetMatrix.translate(-stationPos);
 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
     QMatrix4x4 toNormalizedNote = noteStationOffset *
             dotsOnPageMatrix *
-            noteTransformMatrix *
-            offsetMatrix;
+            noteTransformMatrix;
+//            offsetMatrix;
 
     return toNormalizedNote;
 }
@@ -746,10 +986,10 @@ void cwScrap::setParentNote(cwNote* note) {
 
         if(ParentNote != nullptr) {
             ParentCave = parentNote()->parentCave();
-//            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
+            //            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
 
-//        updateStationsWithNewCave();
+        //        updateStationsWithNewCave();
     }
 }
 
@@ -914,6 +1154,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
+    Type = other.Type;
 
     emit stationsReset();
 
@@ -939,4 +1180,47 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
     roles.append(cwScrap::LeadPosition);
 
     leadsDataChanged(0, leads().size() - 1, roles);
+}
+
+/**
+ * @brief cwTriangulateTask::profileViewRotation
+ * @param fromStationPos
+ * @param toStationPos
+ * @return This returns the rotation matrix that will rotate the view from fromStationPos to toStationPos
+ * in a profile view. This will remove the azimuth from the shot between fromStationPos and toStationPos.
+ * It will also show the pitch of the shot.
+ */
+QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos)
+{
+    //Calculate the compass and clino from the shot
+    QVector3D shotDirection = toStationPos - fromStationPos; //stations.last().position() - stations.first().position();
+    QVector3D yAxis(0.0, 1.0, 0.0);
+    QVector3D eulerAngles = QQuaternion::rotationTo(yAxis, shotDirection.normalized()).toEulerAngles();
+
+    //Rotate the profile view
+    QQuaternion profilePitch = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0);
+
+    //Profile aligned with the compass direction
+    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, -eulerAngles.z() - 90.0);
+
+    //Combine the rotation to create the shot's profile view rotation
+    QQuaternion profileQuat = profilePitch * profileYaw;
+
+    QMatrix4x4 viewRotationMatrix;
+    viewRotationMatrix.rotate(profileQuat);
+
+    return viewRotationMatrix;
+}
+
+/**
+* Sets the type
+* The scrap type tells the warping algorithm how to warp the scrap. Scrap type can be Plan (default)
+* and RunningProfile.
+*/
+void cwScrap::setType(ScrapType type) {
+    if(Type != type) {
+        Type = type;
+        updateNoteTransformation();
+        emit typeChanged();
+    }
 }

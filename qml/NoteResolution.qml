@@ -7,6 +7,7 @@
 
 // import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
+import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 import QtQuick.Controls 1.2 as Controls;
 
@@ -25,47 +26,56 @@ FloatingGroupBox {
 
     title: "Image Info"
 
-    Row {
-        spacing: 5
-
-        Button {
-            id: setResolution
-            width: 24
-            onClicked: activateDPIInteraction()
-        }
-
-        LabelWithHelp {
-            id: labelId
-            text: "Image Resolution"
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        UnitValueInput {
-            unitValue: resolution
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        ContextMenuButton {
-            anchors.verticalCenter: parent.verticalCenter
-
-            Controls.Menu {
-                Controls.MenuItem {
-                    text: {
-                        var tripName = ""
-                        if(note !== null && note.parentTrip() !== null) {
-                            tripName = note.parentTrip().name
-                        }
-                        return "<b>Propagate resolution</b> for each note in " + tripName
-                    }
-                    onTriggered: note.propagateResolutionNotesInTrip();
-                }
-
-                Controls.MenuItem {
-                    text: "<b>Reset</b> to original"
-                    onTriggered: note.resetImageResolution()
-                }
+    ColumnLayout {
+        id: layoutId
+        RowLayout {
+            Button {
+                id: setResolution
+                iconSource: "qrc:/icons/measurement.png"
+                onClicked: activateDPIInteraction()
             }
 
+            LabelWithHelp {
+                id: labelId
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Image Resolution"
+                helpArea: resolutionHelpAreaId
+            }
+
+            UnitValueInput {
+                unitValue: resolution
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            ContextMenuButton {
+                anchors.verticalCenter: parent.verticalCenter
+
+                Controls.Menu {
+                    Controls.MenuItem {
+                        text: {
+                            var tripName = ""
+                            if(note !== null && note.parentTrip() !== null) {
+                                tripName = note.parentTrip().name
+                            }
+                            return "Propagate resolution for each note in " + tripName
+                        }
+                        onTriggered: note.propagateResolutionNotesInTrip();
+                    }
+
+                    Controls.MenuItem {
+                        text: "Reset to original"
+                        onTriggered: note.resetImageResolution()
+                    }
+                }
+
+            }
+        }
+
+        HelpArea {
+             id: resolutionHelpAreaId
+             width: layoutId.width
+             text: "The number of pixels per unit of length in the image. This property allows
+                    cavewhere to propertly scale the image."
         }
     }
 }

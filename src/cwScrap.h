@@ -15,6 +15,7 @@
 #include <QPolygonF>
 
 //Our includes
+#include "cwGlobals.h"
 #include "cwNoteTranformation.h"
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
@@ -28,14 +29,16 @@ class cwCave;
   Points can be added or removed from the scrap.  All the points will be in
   normalize note coordinates system.
   */
-class cwScrap : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
+    Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(QStringList types READ types CONSTANT)
 
-    Q_ENUMS(StationDataRole LeadDataRole)
+    Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
 
     enum StationDataRole {
@@ -54,6 +57,11 @@ public:
         LeadNumberOfRoles
     };
 
+    enum ScrapType {
+        Plan = 0,
+        RunningProfile = 1
+    };
+
     explicit cwScrap(QObject *parent = 0);
     cwScrap(const cwScrap& other);
     const cwScrap& operator =(const cwScrap& other);
@@ -63,6 +71,10 @@ public:
 
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
+
+    ScrapType type() const;
+    void setType(ScrapType type);
+    QStringList types() const;
 
     void addPoint(QPointF point);
     Q_INVOKABLE void insertPoint(int index, QPointF point);
@@ -100,10 +112,12 @@ public:
 
     QString guessNeighborStationName(const cwNoteStation& previousStation, QPointF stationNotePosition);
 
-    QMatrix4x4 mapWorldToNoteMatrix(cwNoteStation stationOffset);
+    QMatrix4x4 mapWorldToNoteMatrix(const cwNoteStation &referenceStation) const;
 
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
+
+    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
 
 public slots:
     void updateNoteTransformation();
@@ -133,6 +147,7 @@ signals:
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
+    void typeChanged();
 
 private:
 
@@ -145,11 +160,28 @@ private:
      */
     class ScrapShotTransform {
     public:
-        ScrapShotTransform() : Scale(0.0) { }
-        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector) {}
+        ScrapShotTransform() : Scale(0.0), RotationDiff(0.0) { }
+        ScrapShotTransform(double scale, QVector3D errorVector) : Scale(scale), ErrorVector(errorVector), RotationDiff(0.0) {}
+        ScrapShotTransform(double scale, QVector3D errorVector, double rotationDiff) : Scale(scale), ErrorVector(errorVector), RotationDiff(rotationDiff) {}
 
         double Scale;
         QVector3D ErrorVector;
+        double RotationDiff;
+    };
+
+    /**
+     * @brief The ProfileTransform class
+     *
+     * This class is used to re-project the x-axis for drawing running profile. Rotation is what
+     * direction up is, and mirror is left to right, or right to left (mirror on x-axis)
+     */
+    class ProfileTransform {
+    public:
+        ProfileTransform() {}
+        ProfileTransform(QMatrix4x4 rotation, QMatrix4x4 mirror) : Rotation(rotation), Mirror(mirror) {}
+
+        QMatrix4x4 Rotation;
+        QMatrix4x4 Mirror;
     };
 
     //The outline of the scrap, in normalized points
@@ -165,6 +197,9 @@ private:
     cwNoteTranformation* NoteTransformation;
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
+    //The type of scrap
+    ScrapType Type; //!<
+
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
     cwCave* ParentCave;
@@ -179,9 +214,14 @@ private:
 
     //For note station transformation, automatic calculation
     QList< QPair <cwNoteStation, cwNoteStation> > noteShots() const;
-    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots) const;
-    ScrapShotTransform calculateShotTransformation(cwNoteStation station1, cwNoteStation station2) const;
-    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms);
+    QList<ScrapShotTransform> calculateShotTransformations(QList< QPair <cwNoteStation, cwNoteStation> > shots,
+                                                           const ProfileTransform& profileTransform = ProfileTransform()) const;
+    ScrapShotTransform calculateShotTransformation(cwNoteStation station1,
+                                                   cwNoteStation station2,
+                                                   const ProfileTransform& profileTransform) const;
+    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
+    cwNoteTranformation planAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    cwNoteTranformation runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
 
@@ -281,13 +321,27 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
-
-
 /**
   \brief Gets the triangulation data
   */
 inline cwTriangulatedData cwScrap::triangulationData() const {
     return TriangulationData;
+}
+
+/**
+* Returns The scrap type.
+* The scrap type tells the warping algorithm how to warp the scrap.
+*/
+inline cwScrap::ScrapType cwScrap::type() const {
+    return Type;
+}
+
+/**
+* @brief cwScrap::types
+* @return
+*/
+inline QStringList cwScrap::types() const {
+    return QStringList() << "Plan" << "Running Profile";
 }
 
 

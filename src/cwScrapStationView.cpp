@@ -139,10 +139,36 @@ void cwScrapStationView::updateShotLines() {
                 noteTransformMatrix *
                 offsetMatrix;
 
+        //Only used if the scrap is in running profile
+        QMatrix4x4 profileDirection = runningProfileDirection();
+
         //Go through all the neighboring stations and add the position to the line
         foreach(cwStation station, neighboringStations) {
 
             QVector3D currentPos = stationPositionLookup.position(station.name());
+
+            if(scrap()->type() == cwScrap::RunningProfile) {
+                bool foundStation = false;
+                foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
+                    if(currentNoteStation.name().toLower() == station.name().toLower()) {
+                        foundStation = true;
+                    }
+                }
+
+                if(foundStation) { continue; }
+
+                //Caluclate the running profile rotation based on the stations
+                QMatrix4x4 toProfileRotation = cwScrap::toProfileRotation(selectedStationPos, currentPos);
+
+                toNormalizedNote = noteStationOffset *
+                        dotPerMeter *
+                        notePageAspect *
+                        noteTransformMatrix *
+                        profileDirection *
+                        toProfileRotation *
+                        offsetMatrix;
+            }
+
             QVector3D normalizeNotePos = toNormalizedNote.map(currentPos);
 
             ShotLines.append(QLineF(noteStation.positionOnNote(), normalizeNotePos.toPointF()));
@@ -235,6 +261,46 @@ QSGNode *cwScrapStationView::updatePaintNode(QSGNode *oldNode, QQuickItem::Updat
     }
 
     return oldNode;
+}
+
+/**
+  This takes all the scrap note points in order and figure out if the user has
+  entered them in from left to right, or right to left. Then return's a transformation matrix
+  that flip along the y-axis. Left to right return's an idenity and right to left returns
+  matrix that scaled (-1, 1, 1)
+ */
+QMatrix4x4 cwScrapStationView::runningProfileDirection() const
+{
+    QMatrix4x4 profileDirection;
+
+    if(scrap()->type() == cwScrap::RunningProfile) {
+        QMatrix4x4 noteMatrix = scrap()->noteTransformation()->matrix();
+
+        QMatrix4x4 pageOffset;
+        pageOffset.translate(-QVector3D(scrap()->stations().first().positionOnNote()));
+
+        //Move to first station, rotate so up is along the y-axis
+        QMatrix4x4 normalizePage = noteMatrix * pageOffset;
+
+        int numLeft = 0;
+        int numRight = 0;
+        for(int i = 1; i < scrap()->stations().size(); i++) {
+            const cwNoteStation& station = scrap()->stations().at(i);
+            QVector3D rotatedNoteStation = normalizePage * QVector3D(station.positionOnNote());
+            if(rotatedNoteStation.x() > 0) {
+                ++numRight;
+            } else {
+                ++numLeft;
+            }
+        }
+
+        if(numRight < numLeft) {
+            //Make a matrix that flips along the y-axis
+            //Going from right to left
+            profileDirection.scale(-1.0, 1.0, 1.0);
+        }
+    }
+    return profileDirection;
 }
 
 /**

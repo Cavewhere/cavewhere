@@ -1,15 +1,19 @@
 /**************************************************************************
 **
-**    Copyright (C) 2015 by Philip Schuchardt
+**    Copyright (C) 2016 by Philip Schuchardt
 **    www.cavewhere.com
 **
 **************************************************************************/
 
 
-#include "cwSurveyNetworkValidator.h"
 
-cwSurveyNetworkValidator::cwSurveyNetworkValidator(QObject *parent) : QObject(parent)
-{
+//Catch includes
+#include "catch.hpp"
 
-}
+//Cavewhere includes
+#include "cwTriangulateTask.h"
+
+//Our includes
+#include "TestHelper.h"
+
 

@@ -976,3 +976,4 @@ build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/i
 build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/install-root/share/survex/sk.msg
 build-survex-iphoneos_clang_Qt_5_5_1_for_iOS-Debug/qtc_iphoneos_6f38e403-debug/qtc_iphoneos_6f38e403-debug.bg
 cavewhere.qbs.user.0f41663
+cavewhereCheck.cppcheck

@@ -144,7 +144,7 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
     }
   }
 
-  delete V;
+  delete[] V;
 
   return true;
 }

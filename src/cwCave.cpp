@@ -389,6 +389,21 @@ void cwCave::setStationPositionLookup(const cwStationPositionLookup &model) {
     emit stationPositionPositionChanged();
 }
 
+
+
+/**
+ * @brief cwCave::setSurveyNetwork
+ * @param network
+ *
+ * Holds the calculated survey network for the cave. This is a look up for stations and
+ * thier neighoring stations
+ */
+void cwCave::setSurveyNetwork(const cwSurveyNetwork &network)
+{
+    Network = network;
+    emit surveyNetworkChanged();
+}
+
 /**
  * @brief cwCave::setStationPositionLookupStale
  * @param isStale

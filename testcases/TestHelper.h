@@ -21,9 +21,11 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QSet>
 
 //Our includes
 #include "cwStationPositionLookup.h"
+#include "cwProject.h"
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -33,6 +35,23 @@ inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
 inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
     os << value.toStdString();
     return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QStringList const& value ) {
+    if(!value.isEmpty()) {
+        os << "[";
+        for(auto iter = value.begin(); iter != value.end() - 1; iter++) {
+            os << "\"" + iter->toStdString() + "\",";
+        }
+        os << "\"" + value.last() + "\"]";
+    } else {
+        os << "[]";
+    }
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QSet<QString> const& value ) {
+    return operator <<(os, value.toList());
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
@@ -64,6 +83,7 @@ inline QVector3D roundToDecimal(QVector3D v, int decimals) {
                      roundToDecimal(v.y(), decimals),
                      roundToDecimal(v.z(), decimals));
 }
+
 
 inline void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2) {
     if(v1 != v2) {
@@ -114,6 +134,21 @@ inline QString copyToTempFolder(QString filename) {
     REQUIRE(couldPermissions);
 
     return newFileLocation;
+}
+
+/**
+ * @brief fileToProject
+ * @param filename
+ * @return A new project generate from filename
+ */
+inline cwProject* fileToProject(QString filename) {
+    QString datasetFile = copyToTempFolder(filename);
+
+    cwProject* project = new cwProject();
+    project->loadFile(datasetFile);
+    project->loadWaitToFinish();
+
+    return project;
 }
 
 #endif // STREAMOPERATOR

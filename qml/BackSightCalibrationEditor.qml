@@ -16,7 +16,6 @@ CheckableGroupBox {
     property Calibration calibration
 
     anchors.margins: 3
-    contentHeight: frontSightContent.height
     text: "<b>Back Sights</b>"
     checked: calibration.backSights
 

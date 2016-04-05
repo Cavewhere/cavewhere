@@ -123,8 +123,8 @@ void cwTriangulateTask::triangulateScrap(int index) {
     //Triangulate the quads (this will update the outputs data)
     cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
 
-    //Create the matrix that converts the normalized coords to the normalized coords
-    QMatrix4x4 toLocal = localNormalizedCoordinates(bounds);
+    //Create the matrix that converts the normalized note coords to normalized scrap coords
+    QMatrix4x4 toLocal = mapToScrapCoordinates(bounds);
 
     //Convert the normalized points to local note points
     QVector<QVector3D> localNotePoints = mapToLocalNoteCoordinates(toLocal, triangleData.points());
@@ -137,9 +137,9 @@ void cwTriangulateTask::triangulateScrap(int index) {
 
     //Morph the lead points for the scrap
     QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrapData.leads()),
-                                                 scrapData,
-                                                 toLocal,
-                                                 croppedImage);
+                                                scrapData,
+                                                toLocal,
+                                                croppedImage);
 
     //For testing
     cwTriangulatedData& outScrapData = TriangulatedScraps[index];
@@ -257,7 +257,7 @@ QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid 
   Quads that are outside of the scrap's outline aren't stored in the database, and simply discarded.
   */
 cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangulateTask::PointGrid &grid,
-//                                                               const QSet<int> &pointsInScrap,
+                                                               //                                                               const QSet<int> &pointsInScrap,
                                                                const QPolygonF& polygon) {
     //The valid grid size, crop out the last band of points
     int width = grid.GridSize.width() - 1;
@@ -291,9 +291,9 @@ cwTriangulateTask::QuadDatabase cwTriangulateTask::createQuads(const cwTriangula
     This returns the points that make up the polygon (these are in original note cooridates, before cropping)
  */
 cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::PointGrid &grid,
-                                        const QSet<int> pointsContainedInOutline,
-                                        const cwTriangulateTask::QuadDatabase &database,
-                                        const cwTriangulateInData &inScrapData) {
+                                                      const QSet<int> pointsContainedInOutline,
+                                                      const cwTriangulateTask::QuadDatabase &database,
+                                                      const cwTriangulateInData &inScrapData) {
 
     //Resize the outputScrapData to have all points contained in the scrap outline
     QVector<QVector3D> points;
@@ -346,7 +346,7 @@ cwTriangulatedData cwTriangulateTask::createTriangles(const cwTriangulateTask::P
     The grid is used to get the quad
   */
 QVector<uint> cwTriangulateTask::createTrianglesFull(const cwTriangulateTask::QuadDatabase &database,
-                                                    const QHash<int, int> &mapGridToOutput) {
+                                                     const QHash<int, int> &mapGridToOutput) {
 
     QVector<uint> triangles;
 
@@ -384,8 +384,8 @@ bool distanceLessThan(const QPair<QPointF, double> &d1, const QPair<QPointF, dou
   and partial quad.
   */
 QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTask::PointGrid& grid,
-                                                             const cwTriangulateTask::QuadDatabase &database,
-                                                             const QPolygonF& scrapOutline) {
+                                                           const cwTriangulateTask::QuadDatabase &database,
+                                                           const QPolygonF& scrapOutline) {
 
     QVector<QPointF> allTriangles;
 
@@ -608,7 +608,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 /**
   Maps the bounds into local normalized coordinates
   */
-QMatrix4x4 cwTriangulateTask::localNormalizedCoordinates(const QRectF &bounds) const
+QMatrix4x4 cwTriangulateTask::mapToScrapCoordinates(const QRectF &bounds) const
 {
     float xScale = 1 / bounds.width();
     float yScale = 1 / bounds.height();
@@ -663,6 +663,118 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
                                                   const QMatrix4x4& toLocal,
                                                   const cwImage& croppedImage) {
 
+    /**
+      This sorts scrapData stations if the scrap is in running profile mode.
+
+      This returns a list of sorted stations base on stations position in the x-axis
+      */
+    auto sortScrapStations = [&scrapData]() {
+        QList<cwTriangulateStation> stations = scrapData.stations();
+        if(scrapData.type() == cwScrap::RunningProfile) {
+            //This assumes that up on the page is up for the scrap
+            auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
+                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+
+                QPointF leftPoint = rotation.map(left.notePosition());
+                QPointF rightPoint = rotation.map(right.notePosition());
+
+                return leftPoint.x() < rightPoint.x();
+            };
+
+            //Sort the stations by note position
+            std::sort(stations.begin(), stations.end(), profileCompare);
+        }
+        return stations;
+    };
+
+    /**
+     * Given a list of stations this finds the stations to use as control points in the morphing.
+     *
+     * If scrapData is running profile this will use two stations that notePoint.x() falls between.
+     * Those two stations are returned. The notePoint.x() will be rotated to the northUp().
+     *
+     * If scrapData is plan this will simply return stations.
+     */
+    auto findStationsToUseForMorphing = [&scrapData](QList<cwTriangulateStation> stations, QVector3D notePoint)->QList<cwTriangulateStation>
+    {
+        if(scrapData.type() == cwScrap::RunningProfile) {
+
+            //Need to have a least two stations
+            if(stations.size() < 2) {
+                return QList<cwTriangulateStation>();
+            }
+
+            //Look for the section for the notePoint, returns the stations we want to warp between
+            auto compare = [&scrapData](const cwTriangulateStation& station, const QVector3D& point)->bool {
+                QMatrix4x4 rotation = scrapData.noteTransform().matrix();
+
+                QPointF left = rotation.map(station.notePosition());
+                QVector3D right = rotation.map(point);
+
+                return left.x() < right.x();
+            };
+
+            auto foundStation = std::lower_bound(stations.begin(), stations.end(), notePoint, compare);
+
+            if(stations.size() >= 2) {
+                if(foundStation == stations.end()) {
+                    foundStation = foundStation - 1; //To from the end
+                } else if(foundStation == stations.begin()) {
+                    foundStation = foundStation + 1;
+                }
+            } else {
+                foundStation = stations.begin();
+            }
+
+            QList<cwTriangulateStation> profileStations;
+            profileStations.append(*(foundStation - 1));
+            profileStations.append(*(foundStation));
+            return profileStations;
+        }
+
+//        //Figure out which stations are visible to this point
+//        stations = stationsVisibleToPoint(notePoints[i],
+//                                          scrapData.stations(),
+//                                          scrapData.outline());
+
+
+        return stations;
+    };
+
+    /**
+      When the scrapData is a plan type, this function returns a identity matrix
+
+      When in running profile mode, this returns a view matrix of the shot between the first
+      and last station in stations. This view matrix is in a profile view, where the shot
+      is aligned with the x-axis.
+     */
+    auto calculateViewMatrix = [&scrapData](const QList<cwTriangulateStation>& stations) {
+        if(scrapData.type() == cwScrap::RunningProfile) {
+            //Calculate the rotation matrix for the profile for this point (could be looked up)
+            if(stations.size() < 2) {
+                return QMatrix4x4();
+            }
+
+            QVector3D fromPostion = stations.first().position();
+            QVector3D toPosition = stations.last().position();
+
+            //These are rotation offset, so we do the rotation around the from station's position
+            QMatrix4x4 translateForward;
+            translateForward.translate(fromPostion);
+
+            QMatrix4x4 translateBackward;
+            translateBackward.translate(-fromPostion);
+
+            QMatrix4x4 viewRotationMatrix = cwScrap::toProfileRotation(fromPostion, toPosition);
+
+            QMatrix4x4 viewMatrix = translateForward * viewRotationMatrix * translateBackward;
+
+            return viewMatrix;
+        }
+        return QMatrix4x4();
+    };
+
+
     QSize imageSize = croppedImage.origianlSize();
     double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
 
@@ -677,18 +789,21 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
     QMatrix4x4 toWorldCoords = toMetersInCave * toMetersOnPaper * toPixels * toLocal;
 
+    QList<cwTriangulateStation> stations = sortScrapStations();
+
     QVector<QVector3D> points;
     points.reserve(notePoints.size());
     points.resize(notePoints.size());
     for(int i = 0; i < notePoints.size(); i++) {
 
-//        //Figure out which stations are visible to this point
-//        QList<cwTriangulateStation> visibleStations = stationsVisibleToPoint(notePoints[i],
-//                                                                             scrapData.stations(),
-//                                                                             scrapData.outline());
+        //Find the stations we want to use the morph the current note point
+        QList<cwTriangulateStation> stationsUsedToMorph = findStationsToUseForMorphing(stations, notePoints[i]);
+
+        //Find the view that we want to use for the morphing
+        QMatrix4x4 viewMatrix = calculateViewMatrix(stationsUsedToMorph);
 
         //Based on the visible stations morph point into the scene coords
-        points[i] = morphPoint(scrapData.stations(), toWorldCoords, notePoints[i]);
+        points[i] = morphPoint(stationsUsedToMorph, toWorldCoords, viewMatrix, notePoints[i]);
     }
 
     return points;
@@ -813,10 +928,14 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
 
   \param visibleStations - The visible stations that the point can see
   \param toWorldCoords - The matrix that can translate a note coordinate into a world coordinate (this doesn't include offset)
+  \param viewMatrix - The view that the point will be warped in. You can think of this as the projection.
+  In plan view this should be an identitidy matrix. In running profile, this is a a rotation matrix to align the view
+  to be perpindicular to the shot's compass bearing.
   \param point - The point that's going to be morphed, this is in original note coordinates
   */
 QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visibleStations,
                                         const QMatrix4x4& toWorldCoords,
+                                        const QMatrix4x4& viewMatrix,
                                         const QVector3D &point)
 {
 
@@ -864,12 +983,12 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     foreach(cwTriangulateStation station, visibleStations) {
 
         //Setup the transformation
-        QPointF stationOnNote = toWorldCoords * station.notePosition(); //In world coordinates
-        QVector3D stationPos = station.position(); //In world coordianets
+        QVector3D stationOnNote = toWorldCoords * QVector3D(station.notePosition()); //In view coordinates
+        QVector3D stationPos = viewMatrix * station.position(); //In view coordianets
 
         QMatrix4x4 offsetToFirstStation;
-        offsetToFirstStation.translate(-stationOnNote.x(), -stationOnNote.y(), 0.0); //Assumtion in plan mode only
-        offsetToFirstStation.translate(stationPos.x(), stationPos.y(), stationPos.z());
+        offsetToFirstStation.translate(-stationOnNote);
+        offsetToFirstStation.translate(stationPos);
 
         QMatrix4x4 noteToScene = offsetToFirstStation * toWorldCoords; //outputs in world coordinates
 
@@ -887,6 +1006,9 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
     for(int i = 0; i < pointInRespectToStations.size(); i++) {
         weightPosition += weights[i] * pointInRespectToStations[i];
     }
+
+    //Put the weighted position in world coordinates
+    weightPosition = viewMatrix.inverted() * weightPosition;
 
     return weightPosition;
 }
