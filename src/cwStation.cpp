@@ -28,28 +28,13 @@ cwStation::cwStation(QString name) :
     setName(name);
 }
 
-cwStation::PrivateData::PrivateData() :
-    LeftState(cwDistanceStates::Empty),
-    RightState(cwDistanceStates::Empty),
-    UpState(cwDistanceStates::Empty),
-    DownState(cwDistanceStates::Empty),
-    Left(0.0),
-    Right(0.0),
-    Up(0.0),
-    Down(0.0) {
+cwStation::PrivateData::PrivateData()
+{
 
 }
 
 cwStation::PrivateData::PrivateData(QString name) :
-    Name(name),
-    LeftState(cwDistanceStates::Empty),
-    RightState(cwDistanceStates::Empty),
-    UpState(cwDistanceStates::Empty),
-    DownState(cwDistanceStates::Empty),
-    Left(0.0),
-    Right(0.0),
-    Up(0.0),
-    Down(0.0)
+    Name(name)
 {
 
 }
@@ -85,82 +70,38 @@ QVariant cwStation::data(DataRoles role) const {
     case NameRole:
         return name();
     case LeftRole:
-        return left();
+        return left().value();
     case RightRole:
-        return right();
+        return right().value();
     case UpRole:
-        return up();
+        return up().value();
     case DownRole:
-        return down();
+        return down().value();
     }
     return QVariant();
 }
 
-/**
-    Must be a valid length
-  */
-bool cwStation::setLeft(QString left) {
-    return setStringValue(Data->Left, Data->LeftState, left);
-}
-
-bool cwStation::setLeft(double left)
+bool cwStation::setLeft(cwLengthInput left)
 {
-    return setDoubleValue(Data->Left, Data->LeftState, left);
+    Data->Left = left;
+    return true;
 }
 
-void cwStation::setLeftInputState(cwDistanceStates::State state)
+bool cwStation::setRight(cwLengthInput right)
 {
-    setPrivateLRUDState(Data->LeftState, state);
+    Data->Right = right;
+    return true;
 }
 
-/**
-    Must be a valid length, or empty
-  */
-bool cwStation::setRight(QString right) {
-    return setStringValue(Data->Right, Data->RightState, right);
-}
-
-bool cwStation::setRight(double right)
+bool cwStation::setUp(cwLengthInput up)
 {
-    return setDoubleValue(Data->Right, Data->RightState, right);
+    Data->Up = up;
+    return true;
 }
 
-void cwStation::setRightInputState(cwDistanceStates::State state)
-{
-    setPrivateLRUDState(Data->RightState, state);
-}
-
-/**
-    Must be a valid length, or empty
-  */
-bool cwStation::setUp(QString up) {
-    return setStringValue(Data->Up, Data->UpState, up);
-}
-
-bool cwStation::setUp(double up)
-{
-    return setDoubleValue(Data->Up, Data->UpState, up);
-}
-
-void cwStation::setUpInputState(cwDistanceStates::State state)
-{
-    setPrivateLRUDState(Data->UpState, state);
-}
-
-/**
-    Must be a valid length, or empty
-  */
-bool cwStation::setDown(QString down) {
-    return setStringValue(Data->Down, Data->DownState, down);
-}
-
-bool cwStation::setDown(double down) {
-    return setDoubleValue(Data->Down, Data->DownState, down);
-}
-
-void cwStation::setDownInputState(cwDistanceStates::State state)
-{
-    setPrivateLRUDState(Data->DownState, state);
+bool cwStation::setDown(cwLengthInput down) {
+    Data->Down = down;
+    return true;
 }
 
 /**
@@ -174,50 +115,6 @@ bool cwStation::nameIsValid(QString stationName)
 {
     cwStationValidator validator;
     return QValidator::Acceptable == validator.validate(stationName);
-}
-
-
-bool cwStation::setStringValue(double &setValue, cwDistanceStates::State &state, QString value) {
-    if(value.isEmpty()) {
-        state = cwDistanceStates::Empty;
-        setValue = 0.0;
-        return true;
-    }
-
-    bool okay;
-    double doubleValue = value.toDouble(&okay);
-    if(okay) {
-        return setDoubleValue(setValue, state, doubleValue);
-    }
-    return false;
-}
-
-bool cwStation::setDoubleValue(double &setValue, cwDistanceStates::State &state, double value) {
-    if(checkLRUDValue(value)) {
-        setValue = value;
-        state = cwDistanceStates::Valid;
-        return true;
-    }
-    return false;
-}
-
-/**
-  Sets the LRUD State, this function uses a switch statement to verify the newState
-  */
-void cwStation::setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState)
-{
-    //We need this switch statement because serialization class (or any other class) could send in interger
-    switch(newState) {
-    case cwDistanceStates::Empty:
-        memberState = cwDistanceStates::Empty;
-        break;
-    case cwDistanceStates::Valid:
-        memberState = cwDistanceStates::Valid;
-        break;
-    default:
-        memberState = cwDistanceStates::Empty;
-        break;
-    }
 }
 
 /**

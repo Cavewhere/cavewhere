@@ -14,6 +14,7 @@
 #include "cwTeam.h"
 #include "cwTripCalibration.h"
 #include "cwSurveyChunkTrimmer.h"
+#include "cwLengthInput.h"
 
 //Std includes
 #include "cwMath.h"
@@ -206,18 +207,19 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     }
 
 
-    writeLrudMeasurement(stream, toStation.leftInputState(),  toStation.left(),  calibrations->distanceUnit(), lrudUnit);
-    writeLrudMeasurement(stream, toStation.rightInputState(), toStation.right(), calibrations->distanceUnit(), lrudUnit);
-    writeLrudMeasurement(stream, toStation.upInputState(),    toStation.up(),    calibrations->distanceUnit(), lrudUnit);
-    writeLrudMeasurement(stream, toStation.downInputState(),  toStation.down(),  calibrations->distanceUnit(), lrudUnit);
+    writeLrudMeasurement(stream, toStation.left(),  calibrations->distanceUnit(), lrudUnit);
+    writeLrudMeasurement(stream, toStation.right(), calibrations->distanceUnit(), lrudUnit);
+    writeLrudMeasurement(stream, toStation.up(),    calibrations->distanceUnit(), lrudUnit);
+    writeLrudMeasurement(stream, toStation.down(),  calibrations->distanceUnit(), lrudUnit);
 
     stream << ChipdataNewLine;
 }
 
-void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, cwDistanceStates::State state, double measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)
+void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, const cwLengthInput& measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)
 {
-    if (state == cwDistanceStates::Valid) {
-        stream << formatNumber(cwUnits::convert(measurement, fromUnit, toUnit), 1, 3);
+    if (measurement.isValid()) {
+        Q_ASSERT(measurement.defaultUnit() == fromUnit);
+        stream << formatNumber(measurement.value(toUnit), 1, 3);
     } else {
         stream << "   ";
     }

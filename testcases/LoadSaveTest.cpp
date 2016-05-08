@@ -116,10 +116,6 @@ void compareStation(const cwStation& load, const cwStation& save) {
     REQUIRE(load.right() == save.right());
     REQUIRE(load.up() == save.up());
     REQUIRE(load.down() == save.down());
-    REQUIRE(load.leftInputState() == save.leftInputState());
-    REQUIRE(load.rightInputState() == save.rightInputState());
-    REQUIRE(load.upInputState() == save.upInputState());
-    REQUIRE(load.downInputState() == save.downInputState());
 }
 
 void compareShot(const cwShot& load, const cwShot& save) {
@@ -226,6 +222,10 @@ TEST_CASE( "cavewhere can be saved and loaded again", "[saveAndLoad]" ) {
     project->cavingRegion()->addCave(cave);
 
     QString filename("LoadSaveTest.cw");
+
+    QDir dir;
+    qDebug() << "FilePath:" << dir.absoluteFilePath(filename);
+
 
     SECTION( "save caving region" ) {
 

@@ -75,10 +75,10 @@ void cwSurvexExporterTripTask::writeCalibrations(QTextStream& stream, cwTripCali
     writeCalibration(stream, "TAPE", calibrations->tapeCalibration());
 
     double correctFrontsightCompass = calibrations->hasCorrectedCompassFrontsight() ? -180.0 : 0.0;
-    writeCalibration(stream, "COMPASS", calibrations->frontCompassCalibration() + correctFrontsightCompass);
+    writeCalibration(stream, "COMPASS", (double)calibrations->frontCompassCalibration() + correctFrontsightCompass);
 
     double correctBacksightCompass = calibrations->hasCorrectedCompassBacksight() ? -180.0 : 0.0;
-    writeCalibration(stream, "BACKCOMPASS", calibrations->backCompassCalibration() + correctBacksightCompass);
+    writeCalibration(stream, "BACKCOMPASS", (double)calibrations->backCompassCalibration() + correctBacksightCompass);
 
     double frontClinoScale = calibrations->hasCorrectedClinoFrontsight() ? -1.0 : 1.0;
     writeCalibration(stream, "CLINO", calibrations->frontClinoCalibration(), frontClinoScale);
@@ -201,10 +201,10 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
             if(station.isValid()) {
                 QString dataLine = dataLineTemplate
                         .arg(station.name(), TextPadding)
-                        .arg(toSupportedLength(station.left(), station.leftInputState()), TextPadding)
-                        .arg(toSupportedLength(station.right(), station.rightInputState()), TextPadding)
-                        .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
-                        .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
+                        .arg(toSupportedLength(station.left()), TextPadding)
+                        .arg(toSupportedLength(station.right()), TextPadding)
+                        .arg(toSupportedLength(station.up()), TextPadding)
+                        .arg(toSupportedLength(station.down()), TextPadding);
 
                 stream << dataLine << endl;
             }
@@ -241,6 +241,29 @@ void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
 {
     if(date.isValid()) {
         stream << "*date " << date.toString("yyyy.MM.dd") << endl;
+    }
+}
+
+/**
+  Survex only supports yard, ft, and meters
+
+  If the current calibration isn't in yard, feet or meters, then this function converts the
+  length into meters.
+*/
+QString cwSurvexExporterTripTask::toSupportedLength(const cwLengthInput &length) const
+{
+    if(length.value().isEmpty()) {
+        return "-";
+    }
+
+    cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
+    switch(unit) {
+    case cwUnits::Meters:
+    case cwUnits::Feet:
+    case cwUnits::Yards:
+        return QString("%1").arg(length.value(unit));
+    default:
+        return QString("%1").arg(length.value(cwUnits::Meters));
     }
 }
 

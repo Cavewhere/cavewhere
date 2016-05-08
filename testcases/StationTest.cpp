@@ -16,14 +16,10 @@ TEST_CASE("Station can be created and data can be changed", "[station]") {
 
     SECTION("Check default constructor") {
         CHECK(station.name() == QString());
-        CHECK(station.left() == 0.0);
-        CHECK(station.right() == 0.0);
-        CHECK(station.up() == 0.0);
-        CHECK(station.down() == 0.0);
-        CHECK(station.leftInputState() == cwDistanceStates::Empty);
-        CHECK(station.rightInputState() == cwDistanceStates::Empty);
-        CHECK(station.upInputState() == cwDistanceStates::Empty);
-        CHECK(station.downInputState() == cwDistanceStates::Empty);
+        CHECK(station.left().value().toStdString() == "");
+        CHECK(station.right().value().toStdString() == "");
+        CHECK(station.up().value().toStdString() == "");
+        CHECK(station.down().value().toStdString() == "");
         CHECK(station.isValid() == false);
         CHECK(station == cwStation());
     }
@@ -36,21 +32,17 @@ TEST_CASE("Station can be created and data can be changed", "[station]") {
 
     SECTION("Stations can have thier data changed") {
         bool stationNameOkay = station.setName("a2");
-        station.setLeft(1.0);
-        station.setRight(2.0);
-        station.setUp(3.0);
-        station.setDown(4.0);
+        station.setLeft(QString("1.0"));
+        station.setRight(QString("2.0"));
+        station.setUp(QString("3.0"));
+        station.setDown(QString("4.0"));
 
         CHECK(stationNameOkay == true);
         CHECK(station.name() == "a2");
-        CHECK(station.left() == 1.0);
-        CHECK(station.right() == 2.0);
-        CHECK(station.up() == 3.0);
-        CHECK(station.down() == 4.0);
-        CHECK(station.leftInputState() == cwDistanceStates::Valid);
-        CHECK(station.rightInputState() == cwDistanceStates::Valid);
-        CHECK(station.upInputState() == cwDistanceStates::Valid);
-        CHECK(station.downInputState() == cwDistanceStates::Valid);
+        CHECK(station.left().value() == "1.0");
+        CHECK(station.right().value() == "2.0");
+        CHECK(station.up().value() == "3.0");
+        CHECK(station.down().value() == "4.0");
         CHECK(station.isValid() == true);
     }
 

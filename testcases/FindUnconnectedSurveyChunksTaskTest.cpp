@@ -28,10 +28,10 @@ TEST_CASE("Test the find unconnected survey chunks") {
     for(int i = 0; i < numStations; i++) {
         cwStation station;
         station.setName(QString("%1").arg(i+1));
-        station.setLeft("0");
-        station.setRight("0");
-        station.setUp("0");
-        station.setDown("0");
+        station.setLeft(QString("0"));
+        station.setRight(QString("0"));
+        station.setUp(QString("0"));
+        station.setDown(QString("0"));
 
         stations.append(station);
     }

@@ -36,12 +36,12 @@ TEST_CASE( "importCalibrations", "[cwWallsImporter]" ) {
     CHECK( trip.calibrations()->hasCorrectedCompassBacksight() );
     CHECK( trip.calibrations()->hasCorrectedClinoBacksight() );
     CHECK( trip.calibrations()->distanceUnit() == cwUnits::LengthUnit::Feet );
-    CHECK( trip.calibrations()->tapeCalibration() == incd.get(dUnit) );
-    CHECK( trip.calibrations()->frontCompassCalibration() == inca.get(Angle::Degrees) );
-    CHECK( trip.calibrations()->backCompassCalibration() == incab.get(Angle::Degrees) );
-    CHECK( trip.calibrations()->frontClinoCalibration() == incv.get(Angle::Degrees) );
-    CHECK( trip.calibrations()->backClinoCalibration() == incvb.get(Angle::Degrees) );
-    CHECK( trip.calibrations()->declination() == decl.get(Angle::Degrees) );
+    CHECK( trip.calibrations()->tapeCalibration() == Approx(incd.get(dUnit)) );
+    CHECK( trip.calibrations()->frontCompassCalibration() == Approx(inca.get(Angle::Degrees)) );
+    CHECK( trip.calibrations()->backCompassCalibration() == Approx(incab.get(Angle::Degrees)) );
+    CHECK( trip.calibrations()->frontClinoCalibration() == Approx(incv.get(Angle::Degrees)) );
+    CHECK( trip.calibrations()->backClinoCalibration() == Approx(incvb.get(Angle::Degrees)) );
+    CHECK( trip.calibrations()->declination() == Approx(decl.get(Angle::Degrees)) );
 
     incd = ULength(4, Length::Feet);
     dUnit = Length::Meters;

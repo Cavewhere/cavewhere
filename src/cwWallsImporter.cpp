@@ -198,33 +198,17 @@ void WallsImporterVisitor::parsedVector(Vector v)
     {
         lrudStation->setLeft(v.left().get(dUnit));
     }
-    else
-    {
-        lrudStation->setLeftInputState(cwDistanceStates::Empty);
-    }
     if (v.right().isValid())
     {
         lrudStation->setRight(v.right().get(dUnit));
-    }
-    else
-    {
-        lrudStation->setRightInputState(cwDistanceStates::Empty);
     }
     if (v.up().isValid())
     {
         lrudStation->setUp(v.up().get(dUnit));
     }
-    else
-    {
-        lrudStation->setUpInputState(cwDistanceStates::Empty);
-    }
     if (v.down().isValid())
     {
         lrudStation->setDown(v.down().get(dUnit));
-    }
-    else
-    {
-        lrudStation->setDownInputState(cwDistanceStates::Empty);
     }
 
     // save the latest LRUDs associated with each station so that we can apply them in the end

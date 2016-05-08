@@ -220,10 +220,10 @@ QVariantMap cwMetaCaveSaveTask::saveStation(const cwStation &station)
     stationMap.insert("station", station.name());
 
     QVariantList lrud;
-    lrud.append(station.left());
-    lrud.append(station.right());
-    lrud.append(station.up());
-    lrud.append(station.down());
+    lrud.append(station.left().value());
+    lrud.append(station.right().value());
+    lrud.append(station.up().value());
+    lrud.append(station.down().value());
 
     stationMap.insert("lrud", lrud);
 
@@ -261,6 +261,16 @@ void cwMetaCaveSaveTask::saveCalibration(QVariantMap &map, const cwTripCalibrati
     map.insert("angleUnit", cwUnits::unitName(calibration->angleUnit()));
     map.insert("azmBacksightsCorrected", calibration->hasCorrectedCompassBacksight());
     map.insert("incBacksightsCorrected", calibration->hasCorrectedClinoBacksight());
+    map.insert("declination", calibration->declination());
+    map.insert("azmFsUnit", cwUnits::unitName(calibration->frontCompassUnit()));
+    map.insert("azmBsUnit", cwUnits::unitName(calibration->backCompassUnit()));
+    map.insert("incFsUnit", cwUnits::unitName(calibration->frontClinoUnit()));
+    map.insert("incBsUnit", cwUnits::unitName(calibration->backClinoUnit()));
+    map.insert("distCorrection", calibration->tapeCalibration());
+    map.insert("azmFsCorrection", calibration->frontCompassCalibration());
+    map.insert("azmBsCorrection", calibration->backCompassCalibration());
+    map.insert("incFsCorrection", calibration->frontClinoCalibration());
+    map.insert("incBsCorrection", calibration->backClinoCalibration());
 }
 
 /**

@@ -583,10 +583,10 @@ bool cwSurveyChunk::isStationAndShotsEmpty() const
 
     foreach(cwStation station, Stations) {
         if(!station.name().isEmpty() ||
-                station.leftInputState() != cwDistanceStates::Empty ||
-                station.rightInputState() != cwDistanceStates::Empty ||
-                station.upInputState() != cwDistanceStates::Empty ||
-                station.downInputState() != cwDistanceStates::Empty)
+                station.left().value().isEmpty() ||
+                station.right().value().isEmpty() ||
+                station.up().value().isEmpty() ||
+                station.down().value().isEmpty())
         {
             return false;
         }
@@ -631,24 +631,16 @@ QVariant cwSurveyChunk::stationData(DataRole role, int index) const {
     case StationNameRole:
         return station.name();
     case StationLeftRole:
-        if(station.leftInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.left(), 'g', -1);
-        }
+        return station.left().value();
         break;
     case StationRightRole:
-        if(station.rightInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.right(), 'g', -1);
-        }
+        return station.right().value();
         break;
     case StationUpRole:
-        if(station.upInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.up(), 'g', -1);
-        }
+        return station.up().value();
         break;
     case StationDownRole:
-        if(station.downInputState() == cwDistanceStates::Valid) {
-            return QString::number(station.down(), 'g', -1);
-        }
+        return station.down().value();
         break;
     default:
         return QVariant();

@@ -527,15 +527,22 @@ cwStation cwRegionLoadTask::loadStation(const CavewhereProto::Station& protoStat
 {
     cwStation station;
 
+
     station.setName(loadString(protoStation.name()));
-    station.setLeft(protoStation.left());
-    station.setRight(protoStation.right());
-    station.setUp(protoStation.up());
-    station.setDown(protoStation.down());
-    station.setLeftInputState((cwDistanceStates::State)protoStation.leftstate());
-    station.setRightInputState((cwDistanceStates::State)protoStation.rightstate());
-    station.setUpInputState((cwDistanceStates::State)protoStation.upstate());
-    station.setDownInputState((cwDistanceStates::State)protoStation.downstate());
+
+    auto toLength = [](double measurement, CavewhereProto::DistanceStates_State state) {
+        cwLengthInput length;
+        if(state == CavewhereProto::DistanceStates_State_Valid) {
+            length.setValue(measurement);
+        }
+        return length;
+    };
+
+    station.setLeft(toLength(protoStation.left(), protoStation.leftstate()));
+    station.setRight(toLength(protoStation.right(), protoStation.rightstate()));
+    station.setUp(toLength(protoStation.up(), protoStation.upstate()));
+    station.setDown(toLength(protoStation.down(), protoStation.downstate()));
+
     return station;
 }
 

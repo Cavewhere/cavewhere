@@ -211,24 +211,16 @@ double cwCompassExportCaveTask::convertField(cwStation station,
     double value = 0.0;
     switch(field) {
     case Left:
-        if(station.leftInputState() == cwDistanceStates::Valid) {
-            value = station.left();
-        }
+        value = station.left().value(cwUnits::Feet);
         break;
     case Right:
-        if(station.rightInputState() == cwDistanceStates::Valid) {
-            value = station.right();
-        }
+        value = station.right().value(cwUnits::Feet);
         break;
     case Up:
-        if(station.upInputState() == cwDistanceStates::Valid) {
-            value = station.up();
-        }
+        value = station.up().value(cwUnits::Feet);
         break;
     case Down:
-        if(station.downInputState() == cwDistanceStates::Valid) {
-            value = station.down();
-        }
+        value = station.down().value(cwUnits::Feet);
         break;
     }
 

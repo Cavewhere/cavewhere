@@ -14,12 +14,12 @@ cwTripCalibration::cwTripCalibration(QObject *parent) :
     CorrectedCompassBacksight = false;
     CorrectedClinoFrontsight = false;
     CorrectedCompassFrontsight = false;
-    TapeCalibration = 0.0f;
-    FrontCompassCalibration = 0.0f;
-    FrontClinoCalibration = 0.0f;
-    BackCompasssCalibration = 0.0f;
-    BackClinoCalibration = 0.0f;
-    Declination = 0.0f;
+    TapeCalibration = 0.0;
+    FrontCompassCalibration = 0.0;
+    FrontClinoCalibration = 0.0;
+    BackCompasssCalibration = 0.0;
+    BackClinoCalibration = 0.0;
+    Declination = 0.0;
     DistanceUnit = cwUnits::Meters;
     FrontSights = true;
     BackSights = true;
@@ -89,7 +89,7 @@ void cwTripCalibration::setCorrectedClinoBacksight(bool isCorrected) {
     }
 }
 
-void cwTripCalibration::setTapeCalibration(double tapeCalibration) {
+void cwTripCalibration::setTapeCalibration(cwStringDouble  tapeCalibration) {
     if(tapeCalibration != TapeCalibration) {
         TapeCalibration = tapeCalibration;
         emit tapeCalibrationChanged(TapeCalibration);
@@ -97,7 +97,7 @@ void cwTripCalibration::setTapeCalibration(double tapeCalibration) {
     }
 }
 
-void cwTripCalibration::setFrontCompassCalibration(double calibration) {
+void cwTripCalibration::setFrontCompassCalibration(cwStringDouble  calibration) {
     if(FrontCompassCalibration != calibration) {
         FrontCompassCalibration = calibration;
         emit frontCompassCalibrationChanged(FrontCompassCalibration);
@@ -105,7 +105,7 @@ void cwTripCalibration::setFrontCompassCalibration(double calibration) {
     }
 }
 
-void cwTripCalibration::setFrontClinoCalibration(double calibration) {
+void cwTripCalibration::setFrontClinoCalibration(cwStringDouble  calibration) {
     if(FrontClinoCalibration != calibration) {
         FrontClinoCalibration = calibration;
         emit frontClinoCalibrationChanged(FrontClinoCalibration);
@@ -113,7 +113,7 @@ void cwTripCalibration::setFrontClinoCalibration(double calibration) {
     }
 }
 
-void cwTripCalibration::setBackCompassCalibration(double calibration) {
+void cwTripCalibration::setBackCompassCalibration(cwStringDouble  calibration) {
     if(BackCompasssCalibration != calibration) {
         BackCompasssCalibration = calibration;
         emit backCompassCalibrationChanged(BackCompasssCalibration);
@@ -121,7 +121,7 @@ void cwTripCalibration::setBackCompassCalibration(double calibration) {
     }
 }
 
-void cwTripCalibration::setBackClinoCalibration(double calibration) {
+void cwTripCalibration::setBackClinoCalibration(cwStringDouble  calibration) {
     if(BackClinoCalibration != calibration) {
         BackClinoCalibration = calibration;
         emit backClinoCalibrationChanged(BackClinoCalibration);
@@ -129,7 +129,7 @@ void cwTripCalibration::setBackClinoCalibration(double calibration) {
     }
 }
 
-void cwTripCalibration::setDeclination(double declination) {
+void cwTripCalibration::setDeclination(cwStringDouble  declination) {
     if(Declination != declination) {
         Declination = declination;
         emit declinationChanged(Declination);

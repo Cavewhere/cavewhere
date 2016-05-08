@@ -11,10 +11,11 @@
 //Qt includes
 #include <QObject>
 #include <QStringList>
-#include "cwGlobals.h"
 
 //Our includes
 #include "cwUnits.h"
+#include "cwGlobals.h"
+#include "cwStringDouble.h"
 
 class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
 {
@@ -24,12 +25,12 @@ class CAVEWHERE_LIB_EXPORT cwTripCalibration : public QObject
     Q_PROPERTY(bool correctedClinoBacksight READ hasCorrectedClinoBacksight WRITE setCorrectedClinoBacksight NOTIFY correctedClinoBacksightChanged)
     Q_PROPERTY(bool correctedCompassFrontsight READ hasCorrectedCompassFrontsight WRITE setCorrectedCompassFrontsight NOTIFY correctedCompassFrontsightChanged)
     Q_PROPERTY(bool correctedClinoFrontsight READ hasCorrectedClinoFrontsight WRITE setCorrectedClinoFrontsight NOTIFY correctedClinoFrontsightChanged)
-    Q_PROPERTY(double tapeCalibration READ tapeCalibration WRITE setTapeCalibration NOTIFY tapeCalibrationChanged)
-    Q_PROPERTY(double frontCompassCalibration READ frontCompassCalibration WRITE setFrontCompassCalibration NOTIFY frontCompassCalibrationChanged)
-    Q_PROPERTY(double frontClinoCalibration READ frontClinoCalibration WRITE setFrontClinoCalibration NOTIFY frontClinoCalibrationChanged)
-    Q_PROPERTY(double backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
-    Q_PROPERTY(double backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
-    Q_PROPERTY(double declination READ declination WRITE setDeclination NOTIFY declinationChanged)
+    Q_PROPERTY(cwStringDouble tapeCalibration READ tapeCalibration WRITE setTapeCalibration NOTIFY tapeCalibrationChanged)
+    Q_PROPERTY(cwStringDouble frontCompassCalibration READ frontCompassCalibration WRITE setFrontCompassCalibration NOTIFY frontCompassCalibrationChanged)
+    Q_PROPERTY(cwStringDouble frontClinoCalibration READ frontClinoCalibration WRITE setFrontClinoCalibration NOTIFY frontClinoCalibrationChanged)
+    Q_PROPERTY(cwStringDouble backCompassCalibration READ backCompassCalibration WRITE setBackCompassCalibration NOTIFY backCompassCalibrationChanged)
+    Q_PROPERTY(cwStringDouble backClinoCalibration READ backClinoCalibration WRITE setBackClinoCalibration NOTIFY backClinoCalibrationChanged)
+    Q_PROPERTY(cwStringDouble declination READ declination WRITE setDeclination NOTIFY declinationChanged)
     Q_PROPERTY(cwUnits::LengthUnit distanceUnit READ distanceUnit WRITE setDistanceUnit NOTIFY distanceUnitChanged)
     Q_PROPERTY(QStringList supportedDistanceUnits READ supportedDistanceUnits NOTIFY supportedUnitsChanged)
     Q_PROPERTY(bool frontSights READ hasFrontSights WRITE setFrontSights NOTIFY frontSightsChanged)
@@ -57,23 +58,23 @@ public:
     void setCorrectedClinoFrontsight(bool correctedClinoFrontsight);
     bool hasCorrectedClinoFrontsight() const;
 
-    void setTapeCalibration(double tapeCalibration);
-    double tapeCalibration() const;
+    void setTapeCalibration(cwStringDouble tapeCalibration);
+    cwStringDouble tapeCalibration() const;
 
-    void setFrontCompassCalibration(double calibration);
-    double frontCompassCalibration() const;
+    void setFrontCompassCalibration(cwStringDouble calibration);
+    cwStringDouble frontCompassCalibration() const;
 
-    void setFrontClinoCalibration(double calibration);
-    double frontClinoCalibration() const;
+    void setFrontClinoCalibration(cwStringDouble calibration);
+    cwStringDouble frontClinoCalibration() const;
 
-    void setBackCompassCalibration(double calibration);
-    double backCompassCalibration() const;
+    void setBackCompassCalibration(cwStringDouble calibration);
+    cwStringDouble backCompassCalibration() const;
 
-    void setBackClinoCalibration(double calibration);
-    double backClinoCalibration() const;
+    void setBackClinoCalibration(cwStringDouble calibration);
+    cwStringDouble backClinoCalibration() const;
 
-    void setDeclination(double declination);
-    double declination() const;
+    void setDeclination(cwStringDouble declination);
+    cwStringDouble declination() const;
 
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit unit);
@@ -109,12 +110,12 @@ signals:
     void correctedClinoBacksightChanged(bool corrected);
     void correctedCompassFrontsightChanged();
     void correctedClinoFrontsightChanged();
-    void tapeCalibrationChanged(double calibration);
-    void frontCompassCalibrationChanged(double calibration);
-    void frontClinoCalibrationChanged(double calibration);
-    void backCompassCalibrationChanged(double calibration);
-    void backClinoCalibrationChanged(double calibration);
-    void declinationChanged(double declination);
+    void tapeCalibrationChanged(cwStringDouble calibration);
+    void frontCompassCalibrationChanged(cwStringDouble calibration);
+    void frontClinoCalibrationChanged(cwStringDouble calibration);
+    void backCompassCalibrationChanged(cwStringDouble calibration);
+    void backClinoCalibrationChanged(cwStringDouble calibration);
+    void declinationChanged(cwStringDouble declination);
     void distanceUnitChanged(cwUnits::LengthUnit unit);
     void supportedUnitsChanged();
     void frontSightsChanged();
@@ -133,12 +134,12 @@ private:
     bool CorrectedClinoBacksight;
     bool CorrectedCompassFrontsight; //!<
     bool CorrectedClinoFrontsight; //!<
-    double TapeCalibration;
-    double FrontCompassCalibration;
-    double FrontClinoCalibration;
-    double BackCompasssCalibration;
-    double BackClinoCalibration;
-    double Declination;
+    cwStringDouble TapeCalibration;
+    cwStringDouble FrontCompassCalibration;
+    cwStringDouble FrontClinoCalibration;
+    cwStringDouble BackCompasssCalibration;
+    cwStringDouble BackClinoCalibration;
+    cwStringDouble Declination;
     cwUnits::LengthUnit DistanceUnit;
     bool BackSights; //!<
     bool FrontSights; //!<
@@ -168,27 +169,27 @@ inline bool cwTripCalibration::hasCorrectedCompassFrontsight() const {
 }
 
 
-inline double cwTripCalibration::tapeCalibration() const {
+inline cwStringDouble cwTripCalibration::tapeCalibration() const {
     return TapeCalibration;
 }
 
-inline double cwTripCalibration::frontCompassCalibration() const {
+inline cwStringDouble cwTripCalibration::frontCompassCalibration() const {
     return FrontCompassCalibration;
 }
 
-inline double cwTripCalibration::frontClinoCalibration() const {
+inline cwStringDouble cwTripCalibration::frontClinoCalibration() const {
     return FrontClinoCalibration;
 }
 
-inline double cwTripCalibration::backCompassCalibration() const {
+inline cwStringDouble cwTripCalibration::backCompassCalibration() const {
     return BackCompasssCalibration;
 }
 
-inline double cwTripCalibration::backClinoCalibration() const {
+inline cwStringDouble cwTripCalibration::backClinoCalibration() const {
     return BackClinoCalibration;
 }
 
-inline double cwTripCalibration::declination() const {
+inline cwStringDouble cwTripCalibration::declination() const {
     return Declination;
 }
 

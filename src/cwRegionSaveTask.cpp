@@ -463,15 +463,17 @@ void cwRegionSaveTask::saveTeamMember(CavewhereProto::TeamMember *protoTeamMembe
  */
 void cwRegionSaveTask::saveStation(CavewhereProto::Station *protoStation, const cwStation &station)
 {
-    saveString(protoStation->mutable_name(), station.name());
-    protoStation->set_left(station.left());
-    protoStation->set_right(station.right());
-    protoStation->set_up(station.up());
-    protoStation->set_down(station.down());
-    protoStation->set_leftstate((CavewhereProto::DistanceStates_State)station.leftInputState());
-    protoStation->set_rightstate((CavewhereProto::DistanceStates_State)station.rightInputState());
-    protoStation->set_upstate((CavewhereProto::DistanceStates_State)station.upInputState());
-    protoStation->set_downstate((CavewhereProto::DistanceStates_State)station.downInputState());
+    Q_UNUSED(protoStation);
+    Q_UNUSED(station);
+//    saveString(protoStation->mutable_name(), station.name());
+//    protoStation->set_left(station.left());
+//    protoStation->set_right(station.right());
+//    protoStation->set_up(station.up());
+//    protoStation->set_down(station.down());
+//    protoStation->set_leftstate((CavewhereProto::DistanceStates_State)station.leftInputState());
+//    protoStation->set_rightstate((CavewhereProto::DistanceStates_State)station.rightInputState());
+//    protoStation->set_upstate((CavewhereProto::DistanceStates_State)station.upInputState());
+//    protoStation->set_downstate((CavewhereProto::DistanceStates_State)station.downInputState());
 }
 
 /**
