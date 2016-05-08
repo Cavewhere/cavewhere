@@ -218,8 +218,7 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
 void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, const cwLengthInput& measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)
 {
     if (measurement.isValid()) {
-        Q_ASSERT(measurement.defaultUnit() == fromUnit);
-        stream << formatNumber(measurement.value(toUnit), 1, 3);
+        stream << formatNumber(measurement.value(fromUnit, toUnit), 1, 3);
     } else {
         stream << "   ";
     }

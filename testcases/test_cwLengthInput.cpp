@@ -64,7 +64,7 @@ TEST_CASE("Test cwLengthInput setting and getting", "[cwLengthInput]") {
 
         INFO("Row input: \"" << row.Input.toStdString() << "\"");
         CHECK(length.value().toStdString() == row.Value.toStdString());
-        CHECK(length.value(row.Unit) == Approx(row.ValueDouble));
+        CHECK(length.value(cwUnits::Meters, row.Unit) == Approx(row.ValueDouble));
         CHECK(length.validate() == row.State);
         CHECK(length.isValid() == row.Valid);
     }
@@ -78,9 +78,9 @@ TEST_CASE("Test Default constructor for cwLengthInput", "[cwLengthInput]") {
 }
 
 TEST_CASE("Test Value constructor for cwLengthInput", "[cwLengthInput]") {
-    cwLengthInput input(54.2, cwUnits::Feet);
+    cwLengthInput input(54.2);
     CHECK(input.value().toStdString() == "54.2");
     CHECK(input.validate() == QValidator::Acceptable);
     CHECK(input.isValid() == true);
-    CHECK(input.value(cwUnits::Meters) == 16.52016);
+    CHECK(input.value(cwUnits::Feet, cwUnits::Meters) == 16.52016);
 }

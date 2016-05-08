@@ -211,20 +211,20 @@ double cwCompassExportCaveTask::convertField(cwStation station,
     double value = 0.0;
     switch(field) {
     case Left:
-        value = station.left().value(cwUnits::Feet);
+        value = station.left().value(unit, cwUnits::Feet);
         break;
     case Right:
-        value = station.right().value(cwUnits::Feet);
+        value = station.right().value(unit, cwUnits::Feet);
         break;
     case Up:
-        value = station.up().value(cwUnits::Feet);
+        value = station.up().value(unit, cwUnits::Feet);
         break;
     case Down:
-        value = station.down().value(cwUnits::Feet);
+        value = station.down().value(unit, cwUnits::Feet);
         break;
     }
 
-    return cwUnits::convert(value, unit, cwUnits::Feet);
+    return value;
 }
 
 /**

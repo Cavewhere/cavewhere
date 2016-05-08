@@ -261,9 +261,9 @@ QString cwSurvexExporterTripTask::toSupportedLength(const cwLengthInput &length)
     case cwUnits::Meters:
     case cwUnits::Feet:
     case cwUnits::Yards:
-        return QString("%1").arg(length.value(unit));
+        return QString("%1").arg(length.value(unit, unit));
     default:
-        return QString("%1").arg(length.value(cwUnits::Meters));
+        return QString("%1").arg(length.value(unit, cwUnits::Meters));
     }
 }
 

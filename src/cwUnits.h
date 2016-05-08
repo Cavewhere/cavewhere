@@ -57,6 +57,11 @@ public:
         PercentGrade = 5
     };
 
+    // !!NOTICE!! Changing the enum effects SAVE / LOAD and the cwUnit Code !!NOTICE!!
+    enum VerticalAngleUnit {
+        //This just a place holder for templates to work correctly,
+    };
+
     static double convert(double value,
                           cwUnits::LengthUnit from,
                           cwUnits::LengthUnit to);
@@ -81,9 +86,22 @@ public:
     static cwUnits::AngleUnit toAngleUnit(QString unitString);
     static bool canConvertAngleUnit(QString unitString);
 
+    static double convert(double value,
+                          cwUnits::VerticalAngleUnit from,
+                          cwUnits::VerticalAngleUnit to);
+    static QStringList vertcialAngleUnitNames();
+    static QString unitName(cwUnits::VerticalAngleUnit unit);
+    static cwUnits::VerticalAngleUnit toVerticalAngleUnit(QString unitString);
+    static bool canConvertVerticalAngleUnit(QString unitString);
+
     static void toUnitAndType(QString unitString, int *unit, UnitType *type);
     static QString toString(int unit, UnitType type);
 
+    template <class UnitType>
+    static QStringList unitNames();
+
+    template <class UnitType>
+    static UnitType toUnit(QString unit);
 
 private:
     static double LengthUnitsToMeters[Miles + 1];
@@ -93,6 +111,8 @@ private:
     static double convert(double value, double fromFactor, double toFactor);
 
 };
+
+
 
 /**
  * @brief cwUnits::convert

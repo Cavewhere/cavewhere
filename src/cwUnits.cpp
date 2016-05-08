@@ -354,63 +354,21 @@ QString cwUnits::unitName(cwUnits::AngleUnit unit)
     default:
         return "Unknown";
     }
+
 }
 
 /**
  * @brief cwUnits::toAngleUnit
  * @param unitString
- * @return
+ * @return Convert the string to a unit
  */
 cwUnits::AngleUnit cwUnits::toAngleUnit(QString unitString)
 {
-    unitString = unitString.toLower();
-    if(unitString == "deg") {
-        return Degrees;
-    } else if(unitString == "degs") {
-        return Degrees;
-    } else if(unitString == "°") {
-        return Degrees;
-    } else if(unitString == "degrees") {
-        return Degrees;
-    } else if(unitString == "degree") {
-        return Degrees;
-    } else if(unitString == "min") {
-        return Minutes;
-    } else if(unitString == "mins") {
-        return Minutes;
-    } else if(unitString == "'") {
-        return Minutes;
-    } else if(unitString == "minute") {
-        return Minutes;
-    } else if(unitString == "minutes") {
-        return Minutes;
-    } else if(unitString == "sec") {
-        return Seconds;
-    } else if(unitString == "secs") {
-        return Seconds;
-    } else if(unitString == "\"") {
-        return Seconds;
-    } else if(unitString == "second") {
-        return Seconds;
-    } else if(unitString == "seconds") {
-        return Seconds;
-    } else if(unitString == "grad") {
-        return Gradians;
-    } else if(unitString == "gradian") {
-        return Gradians;
-    } else if(unitString == "gradians") {
-        return Gradians;
-    } else if(unitString == "mils") {
-        return Mils;
-    } else if(unitString == "mil") {
-        return Mils;
-    } else if(unitString == "percent") {
-        return PercentGrade;
-    } else if(unitString == "%") {
-        return PercentGrade;
+    AngleUnit unit = static_cast<cwUnits::AngleUnit>(toVerticalAngleUnit(unitString));
+    if(unit == PercentGrade) {
+        throw QString("Invalid angle unitString:") + unitString;
     }
-
-    throw QString("Invalid angle unitString:") + unitString;
+    return unit;
 }
 
 /**
@@ -422,6 +380,107 @@ bool cwUnits::canConvertAngleUnit(QString unitString)
 {
     try {
         toAngleUnit(unitString);
+    } catch (QString error) {
+        Q_UNUSED(error);
+        return false;
+    }
+    return true;
+}
+
+double cwUnits::convert(double value, cwUnits::VerticalAngleUnit from, cwUnits::VerticalAngleUnit to)
+{
+    return convert(value, static_cast<cwUnits::AngleUnit>(from), static_cast<cwUnits::AngleUnit>(to));
+}
+
+/**
+ * @brief cwUnits::vertcialAngleUnitNames
+ * @return Returns all the names of the units
+ *
+ * Returns the units as a stringlist
+ */
+QStringList cwUnits::vertcialAngleUnitNames()
+{
+    QStringList names = angleUnitNames();
+    names.append(unitName(cwUnits::PercentGrade));
+    return names;
+}
+
+/**
+ * @brief cwUnits::unitName
+ * @param unit
+ * @return Return the string version of unit
+ */
+QString cwUnits::unitName(cwUnits::VerticalAngleUnit unit)
+{
+    return unitName(static_cast<cwUnits::AngleUnit>(unit));
+}
+
+/**
+ * @brief cwUnits::toVerticalAngleUnit
+ * @param unitString - The unit string
+ * @return Returns the unit that the string represents
+ */
+cwUnits::VerticalAngleUnit cwUnits::toVerticalAngleUnit(QString unitString)
+{
+    unitString = unitString.toLower();
+    if(unitString == "deg") {
+        return static_cast<VerticalAngleUnit>(Degrees);
+    } else if(unitString == "degs") {
+        return static_cast<VerticalAngleUnit>(Degrees);
+    } else if(unitString == "°") {
+        return static_cast<VerticalAngleUnit>(Degrees);
+    } else if(unitString == "degrees") {
+        return static_cast<VerticalAngleUnit>(Degrees);
+    } else if(unitString == "degree") {
+        return static_cast<VerticalAngleUnit>(Degrees);
+    } else if(unitString == "min") {
+        return static_cast<VerticalAngleUnit>(Minutes);
+    } else if(unitString == "mins") {
+        return static_cast<VerticalAngleUnit>(Minutes);
+    } else if(unitString == "'") {
+        return static_cast<VerticalAngleUnit>(Minutes);
+    } else if(unitString == "minute") {
+        return static_cast<VerticalAngleUnit>(Minutes);
+    } else if(unitString == "minutes") {
+        return static_cast<VerticalAngleUnit>(Minutes);
+    } else if(unitString == "sec") {
+        return static_cast<VerticalAngleUnit>(Seconds);
+    } else if(unitString == "secs") {
+        return static_cast<VerticalAngleUnit>(Seconds);
+    } else if(unitString == "\"") {
+        return static_cast<VerticalAngleUnit>(Seconds);
+    } else if(unitString == "second") {
+        return static_cast<VerticalAngleUnit>(Seconds);
+    } else if(unitString == "seconds") {
+        return static_cast<VerticalAngleUnit>(Seconds);
+    } else if(unitString == "grad") {
+        return static_cast<VerticalAngleUnit>(Gradians);
+    } else if(unitString == "gradian") {
+        return static_cast<VerticalAngleUnit>(Gradians);
+    } else if(unitString == "gradians") {
+        return static_cast<VerticalAngleUnit>(Gradians);
+    } else if(unitString == "mils") {
+        return static_cast<VerticalAngleUnit>(Mils);
+    } else if(unitString == "mil") {
+        return static_cast<VerticalAngleUnit>(Mils);
+    } else if(unitString == "percent") {
+        return static_cast<VerticalAngleUnit>(PercentGrade);
+    } else if(unitString == "%") {
+        return static_cast<VerticalAngleUnit>(PercentGrade);
+    }
+
+    throw QString("Invalid angle unitString:") + unitString;
+}
+
+/**
+ * @brief cwUnits::canConvertVerticalAngleUnit
+ * @param unitString - The unit string, for example "%" will return true
+ * @return True if toVerticalAngleUnit() will work and false if it'll fails
+ */
+bool cwUnits::canConvertVerticalAngleUnit(QString unitString)
+{
+    try {
+        toVerticalAngleUnit(unitString);
     } catch (QString error) {
         Q_UNUSED(error);
         return false;
@@ -476,4 +535,59 @@ QString cwUnits::toString(int unit, cwUnits::UnitType type)
     }
 }
 
+/**
+ * This is a template specialization of lengthUnitNames()
+ * aka. equaliant to calling lengthUnitNames()
+ */
+template <>
+QStringList cwUnits::unitNames<cwUnits::LengthUnit>() {
+    return lengthUnitNames();
+}
 
+/**
+ * This is a template specialization of angleUnitNames()
+ * aka. equaliant to calling angleUnitNames()
+ */
+template <>
+QStringList cwUnits::unitNames<cwUnits::AngleUnit>() {
+    return angleUnitNames();
+}
+
+/**
+ * This is a template specialization of angleUnitNames()
+ * aka. equaliant to calling angleUnitNames()
+ */
+template <>
+QStringList cwUnits::unitNames<cwUnits::VerticalAngleUnit>() {
+    return angleUnitNames();
+}
+
+/**
+ * This is a template specialization of toLengthUnit(unit);
+ * aka. equaliant to calling toLengthUnit(unit);
+ */
+template <>
+cwUnits::LengthUnit cwUnits::toUnit<cwUnits::LengthUnit>(QString unit)
+{
+    return toLengthUnit(unit);
+}
+
+/**
+ * This is a template specialization of toLengthUnit(unit);
+ * aka. equaliant to calling toLengthUnit(unit);
+ */
+template <>
+cwUnits::AngleUnit cwUnits::toUnit<cwUnits::AngleUnit>(QString unit)
+{
+    return toAngleUnit(unit);
+}
+
+/**
+ * This is a template specialization of toLengthUnit(unit);
+ * aka. equaliant to calling toLengthUnit(unit);
+ */
+template <>
+cwUnits::VerticalAngleUnit cwUnits::toUnit<cwUnits::VerticalAngleUnit>(QString unit)
+{
+    return toVerticalAngleUnit(unit);
+}
