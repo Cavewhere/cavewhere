@@ -500,30 +500,50 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             double up;
             double down;
 
-            if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
-            if(!convertNumber(bearingString, "bearing", &bearing)) { CurrentFileGood = false; return; }
-            if(!convertNumber(inclinationString, "inclination", &inclination)) { CurrentFileGood = false; return; }
-            if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
-            if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
-            if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
-            if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
+            QString missingEntry = "-999.00";
 
             cwUnits::LengthUnit distanceUnits = CurrentTrip->calibrations()->distanceUnit();
 
-            shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
+            if(lengthString != missingEntry) {
+                if(!convertNumber(lengthString, "length", &length)) { CurrentFileGood = false; return; }
 
-            //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
-            if(distanceUnits == cwUnits::Meters) {
-                shot.setDistance(qRound(shot.distance() * 100.0) / 100.0); //Round to the nearest cm
+                shot.setDistance(cwUnits::convert(length, cwUnits::Feet, distanceUnits));
+
+                //Fix the rounding issue, for compass... Only stores 1 hundreds of an foot
+                if(distanceUnits == cwUnits::Meters) {
+                    shot.setDistance(qRound(shot.distance() * 100.0) / 100.0); //Round to the nearest cm
+                }
             }
 
-            shot.setCompass(bearing);
-            shot.setClino(inclination);
+            if(bearingString != missingEntry) {
+                if(!convertNumber(bearingString, "bearing", &bearing)) { CurrentFileGood = false; return; }
+                shot.setCompass(bearing);
+            }
 
-            fromStation.setLeft(cwUnits::convert(left, cwUnits::Feet, distanceUnits));
-            fromStation.setRight(cwUnits::convert(right, cwUnits::Feet, distanceUnits));
-            fromStation.setUp(cwUnits::convert(up, cwUnits::Feet, distanceUnits));
-            fromStation.setDown(cwUnits::convert(down, cwUnits::Feet, distanceUnits));
+            if(inclinationString != missingEntry) {
+                if(!convertNumber(inclinationString, "inclination", &inclination)) { CurrentFileGood = false; return; }
+                shot.setClino(inclination);
+            }
+
+            if(leftString != missingEntry) {
+                if(!convertNumber(leftString, "left", &left)) { CurrentFileGood = false; return; }
+                fromStation.setLeft(cwUnits::convert(left, cwUnits::Feet, distanceUnits));
+            }
+
+            if(rightString != missingEntry) {
+                if(!convertNumber(rightString, "right", &right)) { CurrentFileGood = false; return; }
+                fromStation.setRight(cwUnits::convert(right, cwUnits::Feet, distanceUnits));
+            }
+
+            if(upString != missingEntry) {
+                if(!convertNumber(upString, "up", &up)) { CurrentFileGood = false; return; }
+                fromStation.setUp(cwUnits::convert(up, cwUnits::Feet, distanceUnits));
+            }
+
+            if(downString != missingEntry) {
+                if(!convertNumber(downString, "down", &down)) { CurrentFileGood = false; return; }
+                fromStation.setDown(cwUnits::convert(down, cwUnits::Feet, distanceUnits));
+            }
 
             if(CurrentTrip->calibrations()->hasBackSights() && dataStrings.size() >= 11) {
                 QString backCompassString = dataStrings.at(9);
@@ -532,11 +552,15 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 double backCompass;
                 double backClino;
 
-                if(!convertNumber(backCompassString, "back compass", &backCompass)) { CurrentFileGood = false; return; }
-                if(!convertNumber(backClinoString, "back clino", &backClino)) { CurrentFileGood = false; return; }
+                if(backCompassString != missingEntry) {
+                    if(!convertNumber(backCompassString, "back compass", &backCompass)) { CurrentFileGood = false; return; }
+                    shot.setBackCompass(backCompass);
+                }
 
-                shot.setBackCompass(backCompass);
-                shot.setBackClino(backClino);
+                if(backClinoString != missingEntry) {
+                    if(!convertNumber(backClinoString, "back clino", &backClino)) { CurrentFileGood = false; return; }
+                    shot.setBackClino(backClino);
+                }
             }
 
             //Exclude length from calculation
@@ -544,11 +568,13 @@ void cwCompassImporter::parseSurveyData(QFile *file)
                 shot.setDistanceIncluded(false);
             }
 
-            CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
-            if(!CurrentTrip->chunks().isEmpty()) {
-                cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
-                int secondToLastStation = lastChunk->stationCount() - 2;
-                lastChunk->setStation(fromStation, secondToLastStation);
+            if(shot.isValid()) {
+                CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
+                if(!CurrentTrip->chunks().isEmpty()) {
+                    cwSurveyChunk* lastChunk = CurrentTrip->chunks().last();
+                    int secondToLastStation = lastChunk->stationCount() - 2;
+                    lastChunk->setStation(fromStation, secondToLastStation);
+                }
             }
         } else {
             emit statusMessage(QString("Data string doesn't have enough fields. I need at least 9 but found only %1 in %2 on line %3")

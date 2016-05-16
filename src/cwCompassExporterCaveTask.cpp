@@ -208,31 +208,34 @@ double cwCompassExportCaveTask::convertField(cwStation station,
                                              StationLRUDField field,
                                              cwUnits::LengthUnit unit) {
 
-    double value = 0.0;
+    double value = -999.0;
     switch(field) {
     case Left:
         if(station.leftInputState() == cwDistanceStates::Valid) {
             value = station.left();
+            return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Right:
         if(station.rightInputState() == cwDistanceStates::Valid) {
             value = station.right();
+            return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Up:
         if(station.upInputState() == cwDistanceStates::Valid) {
             value = station.up();
+            return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     case Down:
         if(station.downInputState() == cwDistanceStates::Valid) {
             value = station.down();
+            return cwUnits::convert(value, unit, cwUnits::Feet);
         }
         break;
     }
-
-    return cwUnits::convert(value, unit, cwUnits::Feet);
+    return value;
 }
 
 /**
@@ -257,7 +260,7 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
         backSite = shot.backClino();
     }
 
-    double value = 0.0f;
+    double value = -999.0;
 
     if(field == Clino || field == BackClino) {
         convertFromDownUp(shot.clinoState(), &frontSite);
@@ -266,17 +269,20 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
 
     switch(field) {
     case Compass:
-        value = frontSite;
 
-        if(calibrations->hasCorrectedClinoFrontsight()) {
-            value = value + 180.0;
+        if(shot.compassState() == cwCompassStates::Valid) {
+            value = frontSite;
+
+            if(calibrations->hasCorrectedClinoFrontsight()) {
+                value = value + 180.0;
+            }
+
+            if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
+                value += calibrations->frontCompassCalibration();
+            }
+
+            value = fmod(value, 360.0);
         }
-
-        if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
-            value += calibrations->frontCompassCalibration();
-        }
-
-        value = fmod(value, 360.0);
 
         break;
     case BackCompass:
@@ -291,32 +297,24 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
             if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
                 value += calibrations->backClinoCalibration();
             }
-        } else {
-            //Use flipped front site
-            if(calibrations->hasCorrectedCompassFrontsight()) {
-                value = frontSite;
-            } else {
-                value = frontSite + 180.0;
-            }
-
-            if(calibrations->frontCompassCalibration() != calibrations->backCompassCalibration()) {
-                value += calibrations->frontCompassCalibration();
-            }
+            value = fmod(value, 360.0);
         }
-        value = fmod(value, 360.0);
+
         break;
     case Clino:
-        if(calibrations->hasCorrectedCompassFrontsight()) {
-            value = -frontSite;
-        } else {
-            value = frontSite;
-        }
+        if(shot.clinoState() == cwClinoStates::Valid) {
+            if(calibrations->hasCorrectedCompassFrontsight()) {
+                value = -frontSite;
+            } else {
+                value = frontSite;
+            }
 
-        if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
-            value += calibrations->frontClinoCalibration();
-        }
+            if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
+                value += calibrations->frontClinoCalibration();
+            }
 
-        value = qBound(-90.0, value, 90.0);
+            value = qBound(-90.0, value, 90.0);
+        }
         break;
     case BackClino:
         if(shot.backClinoState() == cwClinoStates::Valid) {
@@ -329,22 +327,9 @@ double cwCompassExportCaveTask::convertField(cwTripCalibration* calibrations, cw
             if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
                 value += calibrations->backClinoCalibration();
             }
-        } else {
-            //Use flipped front site
-            if(calibrations->hasCorrectedClinoFrontsight()) {
-                value = frontSite;
-            } else {
-                value = -frontSite;
-            }
 
-            if(calibrations->frontClinoCalibration() != calibrations->backClinoCalibration()) {
-                value += -calibrations->frontClinoCalibration();
-            }
-
+            value = qBound(-90.0, value, 90.0);
         }
-
-        value = qBound(-90.0, value, 90.0);
-
         break;
     }
 
@@ -427,9 +412,9 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
     if(LRUDShotOnly) {
         writeData(stream, "To", 12, fromStation.name().toLower() + "lrud");
         stream << " ";
-        stream << formatDouble(0.0) << " ";
-        stream << formatDouble(0.0) << " ";
-        stream << formatDouble(0.0) << " ";
+        stream << formatDouble(-999.0) << " ";
+        stream << formatDouble(-999.0) << " ";
+        stream << formatDouble(-999.0) << " ";
     } else {
         double shotLength = cwUnits::convert(shot.distance(),
                                              calibrations->distanceUnit(),
@@ -455,8 +440,8 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
     //Write out backsight
     if(calibrations->hasBackSights()) {
         if(LRUDShotOnly) {
-            stream << formatDouble(180.0) << " ";
-            stream << formatDouble(0.0) << " ";
+            stream << formatDouble(-999.0) << " ";
+            stream << formatDouble(-999.0) << " ";
         } else {
             stream << formatDouble(convertField(calibrations, shot, BackCompass)) << " ";
             stream << formatDouble(convertField(calibrations, shot, BackClino)) << " ";
