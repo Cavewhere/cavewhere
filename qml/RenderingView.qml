@@ -37,6 +37,10 @@ SplitView {
             id: rendererId
             anchors.fill: parent
         }
+
+        Renderer3D {
+            anchors.fill: parent
+        }
     }
 
     RenderingSideBar {
