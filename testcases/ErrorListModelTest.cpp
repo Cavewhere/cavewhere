@@ -14,7 +14,7 @@
 
 //Qt includes
 #include <QSignalSpy>
-#include <QQmlGadgetListModel>
+#include <QQmlGadgetListModel.h>
 
 void checkError(const cwError& error, cwErrorListModel& model, int idx) {
     REQUIRE(idx >= 0);

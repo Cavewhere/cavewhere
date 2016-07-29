@@ -31,3 +31,6 @@
 [submodule "installer/mac/create-dmg"]
 	path = installer/mac/create-dmg
 	url = git@github.com:Cavewhere/create-dmg.git
+[submodule "qt-qml-models"]
+	path = qt-qml-models
+	url = git@github.com:Cavewhere/qt-qml-models.git

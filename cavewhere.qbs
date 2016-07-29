@@ -25,7 +25,7 @@ Project {
         "installer/installer.qbs",
         "testcases/testcases.qbs",
         "dewalls/dewalls.qbs",
-        "lib-qt-qml-tricks/QtQmlTricks.qbs"
+        "qt-qml-models/QtQmlModels.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]
