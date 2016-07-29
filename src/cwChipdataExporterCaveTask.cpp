@@ -149,21 +149,21 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     stream << toStation.name().rightJustified(5, ' ', true);
     stream << fromStation.name().rightJustified(5, ' ', true);
 
-    if (shot.distanceState() == cwDistanceStates::Valid) {
+    if (shot.distance().isValid()) {
         if (feetAndInches) {
-            stream << formatNumber(floor(shot.distance()), 0, 4);
-            stream << formatNumber(fmod(shot.distance(), 1.0) * 12.0, 0, 3);
+            stream << formatNumber(floor(shot.distance().value(calibrations->distanceUnit())), 0, 4);
+            stream << formatNumber(fmod(shot.distance().value(calibrations->distanceUnit()), 1.0) * 12.0, 0, 3);
         } else {
             switch (calibrations->distanceUnit()) {
             case cwUnits::Feet:
-                stream << formatNumber(shot.distance(), 2, 6) << ' ';
+                stream << formatNumber(shot.distance().value(calibrations->distanceUnit()), 2, 6) << ' ';
                 break;
             case cwUnits::Inches:
-                stream << formatNumber(shot.distance() / 12.0, 0, 4);
-                stream << formatNumber(fmod(shot.distance(), 12.0), 0, 3);
+                stream << formatNumber(shot.distance().value(calibrations->distanceUnit()) / 12.0, 0, 4);
+                stream << formatNumber(fmod(shot.distance().value(calibrations->distanceUnit()), 12.0), 0, 3);
                 break;
             default:
-                stream << formatNumber(cwUnits::convert(shot.distance(), calibrations->distanceUnit(), cwUnits::Meters), 2, 6) << ' ';
+                stream << formatNumber(shot.distance().value(calibrations->distanceUnit(), cwUnits::Meters), 2, 6) << ' ';
                 break;
             }
         }
@@ -178,22 +178,22 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     }
 
     if (shot.compassState() == cwCompassStates::Valid) {
-        stream << formatNumber(shot.compass(), 2, 6);
+        stream << formatNumber(shot.compass().value(calibrations->frontCompassUnit(), cwUnits::Degrees), 2, 6);
     } else {
         stream << "      ";
     }
     if (shot.backCompassState() == cwCompassStates::Valid) {
-        stream << formatNumber(shot.backCompass(), 2, 6);
+        stream << formatNumber(shot.backCompass().value(calibrations->backCompassUnit(), cwUnits::Degrees), 2, 6);
     } else {
         stream << "      ";
     }
     if (shot.clinoState() == cwClinoStates::Valid) {
-        stream << formatNumber(shot.clino(), 1, 5);
+        stream << formatNumber(shot.clino().value(calibrations->frontClinoUnit(), cwUnits::Degrees), 1, 5);
     } else {
         stream << "     ";
     }
     if (shot.backClinoState() == cwClinoStates::Valid) {
-        stream << formatNumber(shot.backClino(), 1, 5);
+        stream << formatNumber(shot.backClino().value(calibrations->backClinoUnit(), cwUnits::Degrees), 1, 5);
     } else {
         stream << "     ";
     }

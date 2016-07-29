@@ -46,6 +46,7 @@ public:
     void setValue(QString input);
     QString value() const;
     double value(UnitType defaultUnit, UnitType toUnit) const;
+    double value(UnitType defaultUnit) const;
 
     QValidator::State validate() const;
     static QValidator::State validate(QString str);
@@ -133,6 +134,17 @@ double cwUnitValueInput<UnitType, Validator>::value(UnitType defaultUnit, UnitTy
         calcValue += cwUnits::convert(valueUnit.Value, currentUnit, toUnit);
     }
     return calcValue;
+}
+
+/**
+ * @brief cwUnitValueInput::value
+ * @param defaultUnit
+ * @return The same as calling value(defaultUnit, defaultUnit)
+ */
+template <class UnitType, class Validator>
+double cwUnitValueInput<UnitType, Validator>::value(UnitType defaultUnit) const
+{
+    return value(defaultUnit, defaultUnit);
 }
 
 /**

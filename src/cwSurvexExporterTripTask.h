@@ -13,6 +13,8 @@
 #include "cwUnits.h"
 #include "cwReadingStates.h"
 #include "cwLengthInput.h"
+#include "cwAngleInput.h"
+#include "cwVerticalAngleInput.h"
 class cwTrip;
 class cwSurveyChunk;
 class cwTripCalibration;
@@ -55,9 +57,9 @@ private:
     void writeDate(QTextStream& stream, QDate date);
 
     QString toSupportedLength(const cwLengthInput& length) const;
-    QString toSupportedLength(double length, cwDistanceStates::State) const;
-    QString compassToString(double compass, cwCompassStates::State) const;
-    QString clinoToString(double clino, cwClinoStates::State) const;
+//    QString toSupportedLength(double length, cwDistanceStates::State) const;
+    QString compassToString(const cwAngleInput& angle) const;
+    QString clinoToString(const cwVerticalAngleInput& angle) const;
 };
 
 #endif // CWSURVEXEXPORTERTRIPTASK_H

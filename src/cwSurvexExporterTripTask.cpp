@@ -273,46 +273,48 @@ QString cwSurvexExporterTripTask::toSupportedLength(const cwLengthInput &length)
   If the current calibration isn't in yard, feet or meters, then this function converts the
   length into meters.
 */
-QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceStates::State state) const {
-    if(state == cwDistanceStates::Empty) {
-        return "-";
-    }
+//QString cwSurvexExporterTripTask::toSupportedLength(double length, cwDistanceStates::State state) const {
+//    if(state == cwDistanceStates::Empty) {
+//        return "-";
+//    }
 
-    cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
-    switch(unit) {
-    case cwUnits::Meters:
-    case cwUnits::Feet:
-    case cwUnits::Yards:
-        return QString("%1").arg(length);
-    default:
-        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
-    }
-}
+//    cwUnits::LengthUnit unit = Trip->calibrations()->distanceUnit();
+//    switch(unit) {
+//    case cwUnits::Meters:
+//    case cwUnits::Feet:
+//    case cwUnits::Yards:
+//        return QString("%1").arg(length);
+//    default:
+//        return QString("%1").arg(cwUnits::convert(length, unit, cwUnits::Meters));
+//    }
+//}
 
 /**
   This converts a compass bearing into a string based on the state.
   */
-QString cwSurvexExporterTripTask::compassToString(double compass, cwCompassStates::State state) const
+QString cwSurvexExporterTripTask::compassToString(const cwAngleInput& compass, bool frontSight) const
 {
-    switch(state) {
-    case cwCompassStates::Empty:
-        return QString("-");
-    case cwCompassStates::Valid:
-        return QString("%1").arg(compass);
+    cwUnits::AngleUnit angleUnit = frontSight ? Trip->calibrations()->frontCompassUnit() :
+                                                Trip->calibrations()->backCompassUnit();
+
+    if(compass.isValid()) {
+        return QString("%1").arg(compass.value(angleUnit, cwUnits::Degrees));
     }
-    return QString();
+    return QString("-");
 }
 
 /**
   This converts a clino into a string based on the state.
   */
-QString cwSurvexExporterTripTask::clinoToString(double clino, cwClinoStates::State state) const
+QString cwSurvexExporterTripTask::clinoToString(const cwVerticalAngleInput &angle) const
 {
+
+
     switch(state) {
     case cwClinoStates::Empty:
         return QString("-");
     case cwClinoStates::Valid:
-        return QString("%1").arg(clino);
+        return QString("%1").arg(angle);
     case cwClinoStates::Down:
         return QString("DOWN");
     case cwClinoStates::Up:
@@ -351,8 +353,8 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         if(!fromStation.isValid() || !toStation.isValid()) { continue; }
 
-        QString distance = toSupportedLength(shot.distance(), cwDistanceStates::Valid);
-        QString compass = compassToString(shot.compass(), shot.compassState());
+        QString distance = toSupportedLength(shot.distance());
+        QString compass = compassToString(shot.compass());
         QString backCompass = compassToString(shot.backCompass(), shot.backCompassState());
         QString clino = clinoToString(shot.clino(), shot.clinoState());
         QString backClino = clinoToString(shot.backClino(), shot.backClinoState());

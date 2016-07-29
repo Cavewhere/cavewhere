@@ -40,16 +40,6 @@ cwShot::cwShot(const cwShot &shot) :
 }
 
 cwShot::PrivateData::PrivateData() :
-    Distance(0.0),
-    Compass(0.0),
-    BackCompass(0.0),
-    Clino(0.0),
-    BackClino(0.0),
-    DistanceState(cwDistanceStates::Empty),
-    CompassState(cwCompassStates::Empty),
-    BackCompassState(cwCompassStates::Empty),
-    ClinoState(cwClinoStates::Empty),
-    BackClinoState(cwClinoStates::Empty),
     IncludeDistance(true)
 {
 
