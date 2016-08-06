@@ -1014,49 +1014,66 @@ void cwSurvexImporter::updateLRUDForCurrentBlock() {
  */
 void cwSurvexImporter::updateStationLRUD(cwStation before, cwStation station, cwStation after)
 {
+    Q_UNUSED(before);
+
+    //Update's the chunk's LRUD from station and after
+    auto setLRUD = [](
+            const cwStation& station,
+            const cwStation& after,
+            cwSurveyChunk* chunk,
+            int stationIndex)
+            ->bool
+    {
+        QString afterStationName = chunk->station(stationIndex + 1).name().toLower();
+        QString currentStationName = chunk->station(stationIndex).name().toLower();
+        if(station.name().toLower() == currentStationName
+                && after.name().toLower() == afterStationName)
+        {
+            chunk->setStation(station, stationIndex);
+            chunk->setStation(after, stationIndex + 1);
+            return true;
+        }
+        return false;
+    };
+
+    //Swaps the left distance with the right distance
+    auto swapLeftRight = [](cwStation& station) {
+        double left = station.left();
+        double right = station.right();
+        cwDistanceStates::State leftState = station.leftInputState();
+        cwDistanceStates::State rightState = station.rightInputState();
+
+        std::swap(left, right);
+        std::swap(leftState, rightState);
+
+        station.setLeft(left);
+        station.setRight(right);
+        station.setLeftInputState(leftState);
+        station.setRightInputState(rightState);
+    };
+
     for(int i = 0; i < CurrentBlock->Chunks.size(); i++) {
         cwSurveyChunk* chunk = CurrentBlock->Chunks.at(i);
         QList<int> stationIndices = chunk->indicesOfStation(station.name());
-        if(!stationIndices.isEmpty()) {
-            foreach(int index, stationIndices) {
-                //NOTE: This won't work this case sensitive survex files
-                QString beforeStationName = chunk->station(index - 1).name();
-                bool beforeGood = !before.isValid() || beforeStationName.compare(before.name(), Qt::CaseInsensitive) == 0;
 
-                QString afterStationName = chunk->station(index + 1).name();
-                bool afterGood = !after.isValid() || afterStationName.compare(after.name(), Qt::CaseInsensitive) == 0;
+        foreach(int stationIndex, stationIndices) {
+            Q_ASSERT(chunk->station(stationIndex) == station.name());
 
-                if(beforeGood && afterGood) {
-                    chunk->setStation(station, index);
-                    break;
-                }
+            cwStation stationTmp = station;
+            cwStation afterTmp = after;
 
-                //Try altrating shot orintation. A good test case is the Erwong Dong survex file
-                if(index == 0) {
+            bool success = setLRUD(stationTmp, afterTmp, chunk, stationIndex);
+            if(!success) {
+                //Swap the stations
+                std::swap(stationTmp, afterTmp);
 
-                    //Get the previous chunk
-                    if(i > 1) {
-                        cwSurveyChunk* previousChunk = CurrentBlock->Chunks.at(i - 1);
+                //Swap the station's left and right direction
+                swapLeftRight(stationTmp);
+                swapLeftRight(afterTmp);
 
-                        //Get the last station in the previous chunk
-                        beforeStationName = previousChunk->stations().last().name();
-                        beforeGood = !before.isValid() || beforeStationName.compare(before.name(), Qt::CaseInsensitive) == 0;
-                    }
-                } else if(index == chunk->stationCount() - 1) {
-                    //Last index in the chunk
-                    if(i < CurrentBlock->Chunks.size() - 1) {
-                        cwSurveyChunk* nextChunk = CurrentBlock->Chunks.at(i + 1);
-
-                        //Get the first station in the next chunk
-                        afterStationName = nextChunk->stations().first().name();
-                        afterGood = !after.isValid() || afterStationName.compare(after.name(), Qt::CaseInsensitive) == 0;
-                    }
-                }
-
-                //After station should be good.
-                if(beforeGood && afterGood) {
-                    chunk->setStation(station, index);
-                    break;
+                success = setLRUD(stationTmp, afterTmp, chunk, stationIndex-1);
+                if(success) {
+                    return;
                 }
             }
         }
