@@ -55,7 +55,7 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     testStationNeigbors("a6", QStringList() << "A5");
 }
 
-TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should run plotting", "[LinePlotManager]")
+TEST_CASE("Changing data adding and removing caves trips survey chunks should run plotting", "[LinePlotManager]")
 {
 
     cwCavingRegion region;
@@ -614,7 +614,77 @@ TEST_CASE("Changing data, adding and removing caves, trips, survey chunks should
                     CHECK(cave->stationPositionLookup().position("a2") == originalA2);
                 }
             }
+        }
 
+        SECTION("Chunk calibration changes should re-run cwLinePlotManager") {
+
+            cwSurveyChunk* chunk = new cwSurveyChunk();
+
+            chunk->appendNewShot();
+            chunk->setData(cwSurveyChunk::StationNameRole, 0, "a1");
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "0");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "0");
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10");
+            chunk->setData(cwSurveyChunk::StationNameRole, 1, "b2");
+            chunk->appendNewShot();
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 1, "90");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 1, "0");
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 1, "5");
+            chunk->setData(cwSurveyChunk::StationNameRole, 2, "b3");
+            chunk->appendNewShot();
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 2, "180");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 2, "0");
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 2, "15");
+            chunk->setData(cwSurveyChunk::StationNameRole, 3, "b4");
+            chunk->appendNewShot();
+            chunk->setData(cwSurveyChunk::ShotCompassRole, 3, "270");
+            chunk->setData(cwSurveyChunk::ShotClinoRole, 3, "0");
+            chunk->setData(cwSurveyChunk::ShotDistanceRole, 3, "20");
+            chunk->setData(cwSurveyChunk::StationNameRole, 4, "b5");
+            trip->addChunk(chunk);
+
+            plotManager->waitToFinish();
+
+            CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("b3") == QVector3D(5.0, 10.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("b4") == QVector3D(5.0, -5.0, 0.0));
+            CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -5.0, 0.0));
+
+
+            SECTION("Adding a calibration should re-run") {
+                cwTripCalibration* calibration = new cwTripCalibration();
+                calibration->setTapeCalibration(-1);
+
+                chunk->addCalibration(1, calibration);
+
+                plotManager->waitToFinish();
+
+                CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("b3") == QVector3D(4.0, 10.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("b4") == QVector3D(4.0, -4.0, 0.0));
+                CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -4.0, 0.0));
+
+                SECTION("Changing the calibration should re-run") {
+                    calibration->setTapeCalibration(-2);
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b3") == QVector3D(3.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b4") == QVector3D(3.0, -3.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -3.0, 0.0));
+                }
+
+                SECTION("Remove a calibration should re-run") {
+                    chunk->removeCalibration(1);
+
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b3") == QVector3D(5.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b4") == QVector3D(5.0, -5.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -5.0, 0.0));
+                }
+            }
         }
     }
 

@@ -17,6 +17,7 @@
 class cwErrorModel;
 class cwTrip;
 class cwCave;
+class cwTripCalibration;
 
 //Qt
 #include <QObject>
@@ -74,6 +75,10 @@ public:
     QList<cwStation> stations() const;
     QList<cwShot> shots() const;
 
+    void addCalibration(int shotIndex, cwTripCalibration *calibration = nullptr);
+    void removeCalibration(int shotIndex);
+    QMap<int, cwTripCalibration *> calibrations() const;
+
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;
 
@@ -101,6 +106,8 @@ signals:
     void stationsRemoved(int beginIndex, int endIndex);
     void shotsRemoved(int beginIndex, int endIndex);
 
+    void calibrationsChanged();
+
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
 
     void connectedChanged();
@@ -127,7 +134,7 @@ public slots:
     cwSurveyChunk* splitAtStation(int stationIndex);
 
     void insertStation(int stationIndex, Direction direction);
-    void insertShot(int stationIndex, Direction direction);
+    void insertShot(int shotIndex, Direction direction);
 
     void removeStation(int stationIndex, Direction shot);
     bool canRemoveStation(int stationIndex, Direction shot);
@@ -164,6 +171,7 @@ private:
 
     QList<cwStation> Stations;
     QList<cwShot> Shots;
+    QMap<int, cwTripCalibration*> Calibrations;
 
     cwErrorModel* ErrorModel;
     QMap<CellIndex, cwErrorModel*> CellErrorModels;
@@ -208,6 +216,9 @@ private slots:
     void updateCompassErrors();
     void updateClinoErrors();
     void updateCompassClinoErrors();
+
+    void updateCalibrationsNewShots(int beginIndex, int endIndex);
+    void updateCalibrationsRemoveShots(int beginIndex, int endIndex);
 
 //    int errorCount(cwSurveyChunkError::ErrorType type) const;
 

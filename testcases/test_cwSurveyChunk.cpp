@@ -9,7 +9,7 @@
 #define CATCH_CONFIG_SFINAE
 #include "catch.hpp"
 
-//Our includes
+//Cavewhere includes
 #include "cwError.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
@@ -18,7 +18,23 @@
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
 
+//Our includes
 #include "TestHelper.h"
+
+//Qt includes
+#include <QSignalSpy>
+
+std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> const& value ) {
+    os << "QMap<int, cwTripCalibration*>:[";
+    for(auto iter = value.begin(); iter != value.end(); ++iter) {
+        os << iter.key() << ":" << iter.value();
+        if(iter + 1 != value.end()) {
+            os << ", ";
+        }
+    }
+    os << "]";
+    return os;
+}
 
 void printErrorForChunk(const cwSurveyChunk* chunk) {
     foreach(cwErrorModel* model, chunk->errorModel()->childModels()) {
@@ -110,7 +126,7 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
 /**
   This testcase tests the error handling inside of a cwSurveyChunk
   */
-TEST_CASE("Checks cwSurveyChunk errors")
+TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 {
     cwSurveyChunk* chunk = new cwSurveyChunk();
 
@@ -566,3 +582,174 @@ TEST_CASE("Checks cwSurveyChunk errors")
     }
 }
 
+/**
+ * @brief TEST_CASE
+ *
+ * This test creates 5 shots and adds and removes calibrations from the surveyChunk
+ */
+TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations", "[cwSurveyChunk]") {
+
+    cwSurveyChunk chunk;
+    QSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
+
+    chunk.appendNewShot();
+    chunk.setData(cwSurveyChunk::StationNameRole, 0, "a1");
+    chunk.setData(cwSurveyChunk::ShotCompassRole, 0, "0");
+    chunk.setData(cwSurveyChunk::ShotClinoRole, 0, "0");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 0, "10");
+    chunk.setData(cwSurveyChunk::StationNameRole, 1, "a2");
+    chunk.appendNewShot();
+    chunk.setData(cwSurveyChunk::ShotCompassRole, 1, "0");
+    chunk.setData(cwSurveyChunk::ShotClinoRole, 1, "0");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 1, "10");
+    chunk.setData(cwSurveyChunk::StationNameRole, 2, "a3");
+    chunk.appendNewShot();
+    chunk.setData(cwSurveyChunk::ShotCompassRole, 2, "0");
+    chunk.setData(cwSurveyChunk::ShotClinoRole, 2, "0");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 2, "10");
+    chunk.setData(cwSurveyChunk::StationNameRole, 3, "a4");
+    chunk.appendNewShot();
+    chunk.setData(cwSurveyChunk::ShotCompassRole, 3, "0");
+    chunk.setData(cwSurveyChunk::ShotClinoRole, 3, "0");
+    chunk.setData(cwSurveyChunk::ShotDistanceRole, 3, "10");
+    chunk.setData(cwSurveyChunk::StationNameRole, 4, "a5");
+
+    SECTION("Add calibration") {
+        CHECK(chunk.calibrations().isEmpty());
+        CHECK(spy.isEmpty());
+
+        chunk.addCalibration(0);
+        CHECK(chunk.calibrations().size() == 1);
+        CHECK(spy.size() == 1);
+
+        REQUIRE(chunk.calibrations().value(0) != nullptr);
+        CHECK(chunk.calibrations().value(0)->parent() == &chunk);
+
+        cwTripCalibration* calibration = new cwTripCalibration();
+        calibration->setTapeCalibration(1);
+        chunk.addCalibration(3, calibration);
+        CHECK(chunk.calibrations().size() == 2);
+        CHECK(spy.size() == 2);
+        REQUIRE(chunk.calibrations().value(3) == calibration);
+        CHECK(chunk.calibrations().value(3)->parent() == &chunk);
+
+        chunk.addCalibration(1);
+        CHECK(chunk.calibrations().size() == 3);
+        CHECK(spy.size() == 3);
+        CHECK(chunk.calibrations().value(1) != nullptr);
+        CHECK(chunk.calibrations().value(2) == nullptr);
+
+        SECTION("Copy calibration") {
+            cwSurveyChunk chunkCopy(chunk);
+
+            CHECK(chunkCopy.calibrations().size() == 3);
+            auto calibrations = chunkCopy.calibrations();
+            for(auto iter = calibrations.begin();
+                iter != calibrations.end();
+                iter++)
+            {
+                CHECK(iter.key() != 2);
+                CHECK(iter.value()->parent() == &chunkCopy);
+            }
+
+            CHECK(chunkCopy.calibrations().value(3)->tapeCalibration() == 1);
+        }
+
+        CHECK(spy.size() == 3);
+
+        SECTION("Remove calibration") {
+            chunk.removeCalibration(2);
+            CHECK(chunk.calibrations().size() == 3);
+
+            chunk.removeCalibration(0);
+            CHECK(chunk.calibrations().size() == 2);
+            CHECK(chunk.calibrations().value(0) == nullptr);
+            CHECK(chunk.calibrations().value(3)->tapeCalibration() == 1);
+            CHECK(spy.size() == 4);
+
+            chunk.removeCalibration(3);
+            CHECK(chunk.calibrations().size() == 1);
+            CHECK(chunk.calibrations().value(3) == nullptr);
+            CHECK(spy.size() == 5);
+
+            chunk.removeCalibration(1);
+            CHECK(chunk.calibrations().size() == 0);
+            CHECK(chunk.calibrations().value(1) == nullptr);
+            CHECK(spy.size() == 6);
+        }
+
+        SECTION("Insert shots") {
+            CHECK(chunk.calibrations().size() == 3);
+            CHECK(spy.size() == 3);
+
+            QMap<int, cwTripCalibration*> calibrations1 = chunk.calibrations();
+
+            chunk.appendNewShot();
+
+            CHECK(chunk.calibrations().size() == 3);
+            CHECK(spy.size() == 3);
+
+            CHECK(chunk.calibrations() == calibrations1);
+
+            QMap<int, cwTripCalibration*> calibrations2;
+            for(auto iter = calibrations1.begin(); iter != calibrations1.end(); ++iter) {
+                calibrations2.insert(iter.key() + 1, iter.value());
+            }
+
+            chunk.insertShot(0, cwSurveyChunk::Above);
+            CHECK(chunk.calibrations() == calibrations2);
+            CHECK(spy.size() == 4);
+
+            QMap<int, cwTripCalibration*> calibrations3;
+            for(auto iter = calibrations2.begin(); iter != calibrations2.end(); ++iter) {
+                if(iter.key() >= 3) {
+                    calibrations3.insert(iter.key() + 1, iter.value());
+                } else {
+                    calibrations3.insert(iter.key(), iter.value());
+                }
+            }
+            chunk.insertShot(3, cwSurveyChunk::Above);
+            CHECK(chunk.calibrations() == calibrations3);
+            CHECK(spy.size() == 5);
+        }
+
+        SECTION("Remove shots") {
+            CHECK(chunk.calibrations().size() == 3);
+            CHECK(spy.size() == 3);
+
+            chunk.appendNewShot();
+
+            QMap<int, cwTripCalibration*> calibrations1 = chunk.calibrations();
+
+            //Remove the last shot
+            chunk.removeShot(4, cwSurveyChunk::Below);
+            CHECK(chunk.calibrations().size() == 3);
+            CHECK(spy.size() == 3);
+            CHECK(calibrations1 == chunk.calibrations());
+
+            //Remove First shot, overrides the calibration
+            QMap<int, cwTripCalibration*> calibrations2;
+            for(auto iter = calibrations1.begin(); iter != calibrations1.end(); ++iter) {
+                calibrations2.insert(iter.key() - 1, iter.value());
+            }
+            calibrations2.insert(0, calibrations2.value(-1));
+            calibrations2.remove(-1);
+            chunk.removeShot(0, cwSurveyChunk::Above);
+            CHECK(spy.size() == 4);
+            CHECK(chunk.calibrations().size() == 2);
+            CHECK(chunk.calibrations() == calibrations2);
+
+            //Remove the last shot again
+            QMap<int, cwTripCalibration*> calibrations3 = calibrations2;
+            calibrations3.remove(2);
+            chunk.removeShot(2, cwSurveyChunk::Below);
+            CHECK(chunk.calibrations().size() == 1);
+            CHECK(spy.size() == 5);
+            CHECK(calibrations3 == chunk.calibrations());
+        }
+
+
+    }
+
+
+}
