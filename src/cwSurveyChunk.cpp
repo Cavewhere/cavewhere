@@ -105,7 +105,7 @@ cwCave* cwSurveyChunk::parentCave() const {
 void cwSurveyChunk::addCalibration(int shotIndex, cwTripCalibration* calibration)
 {
     Q_ASSERT(shotIndex >= 0);
-    Q_ASSERT(shotIndex < shotCount());
+    Q_ASSERT(shotIndex <= shotCount());
 
     if(calibration == nullptr) {
         if(!Calibrations.contains(shotIndex)) {
@@ -152,6 +152,20 @@ void cwSurveyChunk::removeCalibration(int shotIndex)
 QMap<int, cwTripCalibration *> cwSurveyChunk::calibrations() const
 {
     return Calibrations;
+}
+
+/**
+ * @brief cwSurveyChunk::lastCalibration
+ * @return calibrations().last();
+ *
+ * If calibrations is empty this returns nullptr
+ */
+cwTripCalibration *cwSurveyChunk::lastCalibration() const
+{
+    if(Calibrations.isEmpty()) {
+        return nullptr;
+    }
+    return Calibrations.last();
 }
 
 /**
@@ -1508,7 +1522,9 @@ void cwSurveyChunk::updateCalibrationsNewShots(int beginIndex, int endIndex)
         QMap<int, cwTripCalibration*> newCalibration;
         bool updated = false;
         for(auto iter = Calibrations.begin(); iter != Calibrations.end(); iter++) {
-            if(beginIndex <= iter.key()) {
+            //if the calibration at shot x is greater than or equal to the first
+            //index that was added and the beginIndex isn't the last shot in shots
+            if(beginIndex <= iter.key() && beginIndex != Shots.size() - distance) {
                 //Update the key and shift the calibration down
                 newCalibration.insert(iter.key() + distance, iter.value());
                 updated = true;

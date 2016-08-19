@@ -1,0 +1,13 @@
+*begin dakeng
+*calibrate tape 2
+1	2	25.48	44	30
+2	3	10.2	-	UP
+3	4	16.9	-	UP
+				
+*calibrate	tape	1		
+4	39	20.95	332	-4
+39	40	17.3	36	-2
+40	41	9.9	321	2
+41	42	2.55	298	-4
+
+*end dakeng

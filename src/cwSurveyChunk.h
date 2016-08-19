@@ -78,6 +78,7 @@ public:
     void addCalibration(int shotIndex, cwTripCalibration *calibration = nullptr);
     void removeCalibration(int shotIndex);
     QMap<int, cwTripCalibration *> calibrations() const;
+    cwTripCalibration* lastCalibration() const;
 
     bool hasStation(QString stationName) const;
     QSet<cwStation> neighboringStations(QString stationName) const;

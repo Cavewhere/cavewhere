@@ -579,6 +579,31 @@ void cwSurvexImporter::addShotToCurrentChunk(cwStation fromStation,
 }
 
 /**
+ * @brief cwSurvexImporter::addCalibrationToCurrentChunk
+ * @param calibration
+ *
+ * Add calibration to the current survey chunk. This there's no survey chunks this
+ * will copy the calibration to CurrentBlock's calibration and delete calibration
+ */
+void cwSurvexImporter::addCalibrationToCurrentChunk(cwTripCalibration *calibration)
+{
+    auto chunks = CurrentBlock->chunks();
+    for(int i = chunks.size() - 1; i >= 0; --i) {
+        cwSurveyChunk* chunk = chunks.at(i);
+        if(chunk->shotCount() > 0) {
+            int lastShotIndex = chunk->shotCount();
+            chunk->addCalibration(lastShotIndex, calibration);
+            return;
+        }
+    }
+
+    //Couldn't find a valid shot to add the calibration
+    //Copy the calibration into CurrentBlock's calibration
+    *CurrentBlock->calibration() = *calibration;
+    calibration->deleteLater();
+}
+
+/**
   \brief Parses the passage data
   Something like this
   *data passage station left right up down
@@ -768,8 +793,8 @@ void cwSurvexImporter::parseCalibrate(QString line) {
         //Flip the calibration value because survex is written by strange british people
         calibrationValue = -calibrationValue;
 
-        //Get the current calibration
-        cwTripCalibration* calibration = CurrentBlock->calibration();
+        //Create a new calibration
+        cwTripCalibration* calibration = new cwTripCalibration();
 
         if(type == "tape") {
             calibration->setTapeCalibration(calibrationValue);
@@ -813,6 +838,8 @@ void cwSurvexImporter::parseCalibrate(QString line) {
         } else if (type == "z") {
             addWarning("cavewhere cannot handle 'Z' calibration");
         }
+
+        addCalibrationToCurrentChunk(calibration);
 
     } else {
         addError("Couldn't read calibration");

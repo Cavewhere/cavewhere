@@ -674,6 +674,32 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                     CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -3.0, 0.0));
                 }
 
+                SECTION("Chunk calibrations are transitive ie. save from previous calibration") {
+                    cwSurveyChunk* chunk2 = new cwSurveyChunk();
+
+                    chunk2->appendNewShot();
+                    chunk2->setData(cwSurveyChunk::StationNameRole, 0, "b5");
+                    chunk2->setData(cwSurveyChunk::ShotCompassRole, 0, "270");
+                    chunk2->setData(cwSurveyChunk::ShotClinoRole, 0, "0");
+                    chunk2->setData(cwSurveyChunk::ShotDistanceRole, 0, "5");
+                    chunk2->setData(cwSurveyChunk::StationNameRole, 1, "c1");
+                    chunk2->appendNewShot();
+                    chunk2->setData(cwSurveyChunk::ShotCompassRole, 1, "180");
+                    chunk2->setData(cwSurveyChunk::ShotClinoRole, 1, "0");
+                    chunk2->setData(cwSurveyChunk::ShotDistanceRole, 1, "7");
+                    chunk2->setData(cwSurveyChunk::StationNameRole, 2, "c2");
+                    trip->addChunk(chunk2);
+
+                    plotManager->waitToFinish();
+
+                    CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b3") == QVector3D(4.0, 10.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b4") == QVector3D(4.0, -4.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -4.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("c1") == QVector3D(-19.0, -4.0, 0.0));
+                    CHECK(cave->stationPositionLookup().position("c2") == QVector3D(-19.0, -10.0, 0.0));
+                }
+
                 SECTION("Remove a calibration should re-run") {
                     chunk->removeCalibration(1);
 
