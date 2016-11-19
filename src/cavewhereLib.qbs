@@ -52,7 +52,7 @@ DynamicLibrary {
         qbs.install: qbs.targetOS.contains("windows")
     }
 
-    cpp.installNamePrefix: "@rpath"
+    cpp.sonamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
     cpp.cxxLanguageVersion: "c++11"
 
@@ -245,8 +245,10 @@ DynamicLibrary {
         }
     }
 
-    Transformer {
+    Rule {
         id: cavewhereVersionGenerator
+
+        multiplex: true
 
         Artifact {
             fileTags: ["hpp"]
