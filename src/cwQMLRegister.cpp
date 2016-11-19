@@ -103,6 +103,7 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwTestcaseManager.h"
+#include "cwSurvexEditorModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -230,5 +231,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+    qmlRegisterType<cwSurvexEditorModel>("Cavewhere", 1, 0, "SurvexEditorModel");
 
 }

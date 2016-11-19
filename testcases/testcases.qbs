@@ -6,36 +6,56 @@ import qbs.File
 
 import "../qbsModules/CavewhereApp.qbs" as CavewhereApp
 
-CavewhereApp {
-    name: "cavewhere-test"
-    consoleApplication: true
+Project {
 
-    Depends { name: "Qt"; submodules: ["test"] }
-    Depends { name: "dewalls" }
+    CavewhereApp {
+        name: "cavewhere-test"
+        consoleApplication: true
 
-    Group {
-        name: "testcases"
-        files: [
-            "*.cpp",
-            "*.h",
-            "cavewhere-test.qrc"
-        ]
+        Depends { name: "Qt"; submodules: ["testlib"] }
+        Depends { name: "dewalls" }
+
+        Group {
+            name: "testcases"
+            files: [
+                "*.cpp",
+                "*.h",
+                "cavewhere-test.qrc"
+            ]
+        }
+
+        Group {
+            name: "dewalls testcases"
+            files: [
+                "../dewalls/test/*.cpp",
+                "../dewalls/test/*.h",
+                "../dewalls/test/dewalls-test.qrc"
+            ]
+            excludeFiles: "../dewalls/test/dewallstests.cpp"
+        }
+
+        Group {
+            name: "CatchTestLibrary"
+            files: [
+                "catch.hpp",
+            ]
+        }
     }
 
-    Group {
-        name: "dewalls testcases"
-        files: [
-            "../dewalls/test/*.cpp",
-            "../dewalls/test/*.h",
-            "../dewalls/test/dewalls-test.qrc"
-        ]
-        excludeFiles: "../dewalls/test/dewallstests.cpp"
-    }
+    CppApplication {
+        name: "cavewhere-qml-test"
+        consoleApplication: true
 
-    Group {
-        name: "CatchTestLibrary"
+        Depends { name: "Qt"; submodules: ["testlib", "quick"] }
+
+        Group {
+            fileTagsFilter: ["application"]
+//            qbs.installDir: qbs.targetOS.contains("darwin") ? "Cavewhere.app/Contents/MacOS" : ""
+            qbs.install: true
+        }
+
         files: [
-            "catch.hpp",
+            "qml/*.cpp"
         ]
     }
 }

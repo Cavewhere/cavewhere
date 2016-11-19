@@ -19,26 +19,26 @@ DataBox {
     }
 
     onFocusChanged: {
-        if(focus) {
-            //Make sure it's visible to the user
-            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+//        if(focus) {
+//            //Make sure it's visible to the user
+//            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
 
-            var lastStationIndex = surveyChunk.stationCount() - 1
+//            var lastStationIndex = surveyChunk.stationCount() - 1
 
-            //Try to guess for new stations what the next station is
-            //Make sure the station is the last station in the chunk
-            if(lastStationIndex  === rowIndex) {
+//            //Try to guess for new stations what the next station is
+//            //Make sure the station is the last station in the chunk
+//            if(lastStationIndex  === rowIndex) {
 
-                //Make sure the data is empty
-                if(dataValue == "") {
-                    var guessedstationName = surveyChunk.guessLastStationName();
-                    if(guessedstationName !== "") {
-                        stationName.text = guessedstationName
-                        state = "AutoNameState"
-                    }
-                }
-            }
-        }
+//                //Make sure the data is empty
+//                if(dataValue == "") {
+//                    var guessedstationName = surveyChunk.guessLastStationName();
+//                    if(guessedstationName !== "") {
+//                        stationName.text = guessedstationName
+//                        state = "AutoNameState"
+//                    }
+//                }
+//            }
+//        }
     }
 
     Rectangle {

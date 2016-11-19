@@ -14,7 +14,8 @@ import "Utils.js" as Utils
 Item {
     id: clipArea
 
-    property alias currentTrip: view.trip
+    //    property alias currentTrip: view.trip
+    property Trip currentTrip
     property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
 
@@ -28,6 +29,11 @@ Item {
         trip: currentTrip
     }
 
+    SurvexEditorModel {
+        id: editorModel
+        trip: currentTrip
+    }
+
     Controls.ScrollView {
         id: scrollAreaId
 
@@ -36,35 +42,39 @@ Item {
         anchors.left: parent.left
         anchors.margins: 1;
 
-        width: flickableAreaId.contentWidth
+        width: 500; //flickableAreaId.contentWidth
         visible: true
 
-        Flickable {
-            id: flickableAreaId
+        //        Flickable {
+        //            id: flickableAreaId
 
-            contentHeight: column.height
-            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
+        //            contentHeight: column.height
+        //            contentWidth: Math.max(spaceAddBar.width + spaceAddBar.x, view.contentWidth + 2) + 20.0
 
-            function ensureVisible(r){
-                var contentY = flickableAreaId.contentY;
-                if (flickableAreaId.contentY >= r.y) {
-                    contentY = r.y;
-                } else if (flickableAreaId.contentY+height <= r.y+r.height) {
-                    contentY = r.y+r.height-height;
-                }
+        //            function ensureVisible(r){
+        //                var contentY = flickableAreaId.contentY;
+        //                if (flickableAreaId.contentY >= r.y) {
+        //                    contentY = r.y;
+        //                } else if (flickableAreaId.contentY+height <= r.y+r.height) {
+        //                    contentY = r.y+r.height-height;
+        //                }
 
-                flickableAreaId.contentY = contentY;
-            }
+        //                flickableAreaId.contentY = contentY;
+        //            }
 
-            Column {
+        ListView {
+            id: view
+
+            header: ColumnLayout {
                 id: column
-
                 spacing: 5
+                width: scrollAreaId.width - 30
+
 
                 ColumnLayout {
-                    width: view.contentWidth
+                    Layout.fillWidth: true
 
-                    Item {
+                   Item {
                         Layout.fillWidth: true
                         implicitHeight: collapseButton.height
                         SectionLabel {
@@ -116,7 +126,7 @@ Item {
                 BreakLine { }
 
                 CalibrationEditor {
-                    width: view.contentWidth
+                    Layout.fillWidth: true
                     calibration: currentTrip === null ? null : currentTrip.calibration
                 }
 
@@ -125,7 +135,7 @@ Item {
                 TeamTable {
                     id: teamTable
                     model: currentTrip !== null ? currentTrip.team : null
-                    width: view.contentWidth
+                    Layout.fillWidth: true
                 }
 
                 BreakLine { }
@@ -134,25 +144,19 @@ Item {
                     text: "Data"
                 }
 
-                SurveyErrorOverview {
-                    trip: currentTrip
-                }
+//                SurveyErrorOverview {
+//                    trip: currentTrip
+//                }
+            }
 
-                SurveyChunkGroupView {
-                    id: view
 
-                    trip: defaultTrip
+            model: editorModel
+            delegate: DrySurveyComponent {
+                calibration: currentCalibration
+            }
 
-                    height: contentHeight
-                    width: view.contentWidth
-
-                    viewportX: flickableAreaId.contentX;
-                    viewportY: flickableAreaId.contentY;
-                    viewportWidth: scrollAreaId.viewport.width;
-                    viewportHeight: scrollAreaId.viewport.height;
-
-                    onEnsureVisibleRectChanged: flickableAreaId.ensureVisible(ensureVisibleRect);
-                }
+            footer: ColumnLayout {
+                width: scrollAreaId.width - 30
 
                 Text {
                     visible: !addSurveyData.visible
@@ -176,9 +180,10 @@ Item {
                     id: spaceAddBar
                     source: "qrc:icons/spacebar.png"
 
-                    anchors.horizontalCenter: view.horizontalCenter
+                    //                    anchors.horizontalCenter: view.horizontalCenter
 
                     visible: currentTrip !== null && currentTrip.numberOfChunks > 0
+                    Layout.alignment: Qt.AlignHCenter
 
                     Text {
                         anchors.centerIn: parent
@@ -193,26 +198,27 @@ Item {
                         }
                     }
                 }
+            }
 
-                AddButton {
-                    id: addSurveyData
-                    text: "Add Survey Data"
-                    anchors.horizontalCenter: view.horizontalCenter
-                    visible: currentTrip !== null && currentTrip.numberOfChunks === 0
+            AddButton {
+                id: addSurveyData
+                text: "Add Survey Data"
+                anchors.horizontalCenter: view.horizontalCenter
+                visible: currentTrip !== null && currentTrip.numberOfChunks === 0
 
-                    onClicked: {
-                        currentTrip.addNewChunk()
-                    }
+                onClicked: {
+                    currentTrip.addNewChunk()
                 }
             }
         }
     }
-
-    MouseArea {
-        anchors.fill: scrollAreaId
-        onPressed: {
-            scrollAreaId.forceActiveFocus()
-            mouse.accepted = false;
-        }
-    }
 }
+
+//MouseArea {
+//    anchors.fill: scrollAreaId
+//    onPressed: {
+//        scrollAreaId.forceActiveFocus()
+//        mouse.accepted = false;
+//    }
+//}
+//}

@@ -65,12 +65,11 @@ Application {
                         "-stdlib=libc++", //Needed for protoc
                         "-std=c++11", //For c++11 support
                         "-Werror", //Treat warnings as errors
-
                     ];
 
             if(qbs.buildVariant == "debug") {
-                flags.push(["-fsanitize=address",
-                            "-fno-omit-frame-pointer"]);
+                flags.push("-fsanitize=address");
+                flags.push("-fno-omit-frame-pointer");
             }
 
             return flags;

@@ -16,7 +16,7 @@ Rectangle {
     property Calibration calibration
 
     radius: 8
-    height: childrenRect.height
+    implicitHeight: childrenRect.height
 
     Column {
 

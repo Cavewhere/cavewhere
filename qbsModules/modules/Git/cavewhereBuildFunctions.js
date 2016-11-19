@@ -1,3 +1,6 @@
+
+var File = loadExtension("qbs.File");
+
 function findIfExisting(paths, programName) {
     for(i in paths) {
         if(File.exists(paths[i])) {

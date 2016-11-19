@@ -21,6 +21,7 @@ Item {
     property SurveyChunkTrimmer surveyChunkTrimmer; //For interaction
     property alias aboutToDelete: removeBoxId.visible
     property ErrorModel errorModel: null
+    property KeyNavigationContainer navigation: KeyNavigationContainer {}
 
     property int rowIndex: -1
     property int dataRole
@@ -50,14 +51,51 @@ Item {
         state = 'MiddleTyping';
     }
 
+    function handleNavigation(navProperty) {
+        if(navigation[navProperty] !== null) {
+            if(navigation[navProperty].indexOffset !== 0) {
+                view.currentIndex = index
+
+                var itemIndex = -1;
+                for(var childIndex in view.currentItem.children) {
+                    if(view.currentItem.children[childIndex] === navigation[navProperty].item) {
+                        itemIndex = childIndex;
+                        break;
+                    }
+                }
+
+                if(itemIndex >= 0) {
+                    do {
+                        view.currentIndex += navigation[navProperty].indexOffset
+                    } while(view.currentIndex < view.count &&
+                            view.currentIndex >= 0 &&
+                            !view.currentItem.children[itemIndex].visible)
+
+                    view.currentItem.children[itemIndex].forceActiveFocus()
+                } else {
+                    var childrenItemStr = "";
+                    for(var childIndex in view.currentItem.children) {
+                        childrenItemStr += "\n\t" + view.currentItem.children[childIndex];
+                    }
+
+                    throw "Couldn't find " + navigation[navProperty].item + " try setting offsetIndex = 0, in list:" + childrenItemStr;
+                }
+            } else {
+                if(navigation[navProperty].item != null) {
+                    navigation[navProperty].item.forceActiveFocus()
+                }
+            }
+        }
+    }
+
     function handleTab(eventKey) {
         if(eventKey.key === Qt.Key_Tab) {
             tabPressed();
-            surveyChunkView.tab(rowIndex, dataRole)
+            handleNavigation("tabNext");
             eventKey.accepted = true
         } else if(eventKey.key === 1 + Qt.Key_Tab) {
             //Shift tab -- 1 + Qt.Key_Tab is a hack but it works
-            surveyChunkView.previousTab(rowIndex, dataRole)
+            handleNavigation("tabPrevious");
             eventKey.accepted = true
         }
     }
@@ -175,7 +213,7 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
         onClicked: {
-            dataBox.focus = true
+            dataBox.forceActiveFocus()
 
             if(mouse.button == Qt.RightButton) {
                 rightClick(mouse)
@@ -275,11 +313,19 @@ Item {
 
     Keys.onPressed: {
         handleTab(event);
+        switch(event.key) {
+        case Qt.Key_Left:
+        case Qt.Key_Right:
+        case Qt.Key_Up:
+        case Qt.Key_Down:
+        case Qt.Key_Backspace:
+            deletePressedHandler();
+            return;
+        }
+
         surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
         if(event.key === Qt.Key_Backspace) {
-            deletePressedHandler();
-            return;
         }
 
         if(editor.validator.validate(event.text) > 0 && event.text.length > 0) {
@@ -319,8 +365,8 @@ Item {
     onFocusChanged: {
         if(focus) {
             //Make sure it's visible to the user
-            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
-            surveyChunkTrimmer.chunk = surveyChunk;
+//            surveyChunkView.ensureDataBoxVisible(rowIndex, dataRole)
+//            surveyChunkTrimmer.chunk = surveyChunk;
         }
     }
 
@@ -348,7 +394,7 @@ Item {
                     //Tab to the next entry on enter
                     if(pressKeyEvent.key === Qt.Key_Enter ||
                             pressKeyEvent.key === Qt.Key_Return) {
-                        surveyChunkView.tab(rowIndex, dataRole)
+                        handleNavigation("tabNext")
                         pressKeyEvent.accepted = true;
                     }
 
@@ -383,7 +429,7 @@ Item {
                 onEnterPressed: {
                     var commited = editor.commitChanges();
                     if(commited) {
-                        dataBox.focus = true
+                        dataBox.forceActiveFocus()
                     }
                 }
             }

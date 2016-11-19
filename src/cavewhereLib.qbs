@@ -52,7 +52,7 @@ DynamicLibrary {
         qbs.install: qbs.targetOS.contains("windows")
     }
 
-    cpp.installNamePrefix: "@rpath"
+    cpp.sonamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
     cpp.cxxLanguageVersion: "c++11"
 
@@ -81,12 +81,11 @@ DynamicLibrary {
             var flags = [
                         "-stdlib=libc++", //Needed for protoc
                         "-Werror", //Treat warnings as errors
-
                     ];
 
             if(qbs.buildVariant == "debug") {
-                flags.push(["-fsanitize=address",
-                            "-fno-omit-frame-pointer"])
+                flags.push("-fsanitize=address")
+                flags.push("-fno-omit-frame-pointer")
             }
 
             return flags;
@@ -245,8 +244,10 @@ DynamicLibrary {
         }
     }
 
-    Transformer {
+    Rule {
         id: cavewhereVersionGenerator
+
+        multiplex: true
 
         Artifact {
             fileTags: ["hpp"]
