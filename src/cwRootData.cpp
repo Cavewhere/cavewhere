@@ -87,6 +87,8 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }
 
 /**

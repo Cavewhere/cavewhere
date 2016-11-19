@@ -146,7 +146,7 @@ inline cwProject* fileToProject(QString filename) {
 
     cwProject* project = new cwProject();
     project->loadFile(datasetFile);
-    project->waitToFinish();
+    project->waitLoadToFinish();
 
     return project;
 }
