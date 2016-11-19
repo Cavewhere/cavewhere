@@ -85,8 +85,8 @@ DynamicLibrary {
                     ];
 
             if(qbs.buildVariant == "debug") {
-                flags.push(["-fsanitize=address",
-                            "-fno-omit-frame-pointer"])
+                flags.push("-fsanitize=address");
+                flags.push("-fno-omit-frame-pointer");
             }
 
             return flags;
