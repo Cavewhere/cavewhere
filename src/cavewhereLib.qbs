@@ -40,7 +40,7 @@ DynamicLibrary {
     Depends { name: "z" }
     Depends { name: "Git" }
     Depends { name: "dewalls" }
-    Depends { name: "sdk-utilities" }
+    Depends { name: "libqtqmltricks-qtqmlmodels" }
 
     Export {
         Depends { name: "cpp" }

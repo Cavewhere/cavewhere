@@ -23,7 +23,7 @@ Application {
     property string prefix: sourceDirectory.indexOf("/testcases") > 0 ? "../" : ""
 
     Depends { name: "cpp" }
-    Depends { name: "Qt";
+    Depends { name: "Qt"
         submodules: [ "core",
             "gui",
             "widgets",
@@ -33,7 +33,7 @@ Application {
         ]
     }
     Depends { name: "cavewhere-lib" }
-    Depends { name: "sdk-utilities" }
+    Depends { name: "libqtqmltricks-qtqmlmodels" }
 
     cpp.includePaths: [
         applicationId.prefix + "src",

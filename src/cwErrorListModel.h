@@ -10,7 +10,7 @@
 #define CWERRORLISTMODEL_H
 
 //Qt includes
-#include <QQmlGadgetListModel>
+#include <QQmlGadgetListModel.h>
 
 //Our inculdes
 #include "cwError.h"
