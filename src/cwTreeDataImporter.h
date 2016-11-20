@@ -6,13 +6,14 @@
 #include <QString>
 #include <QList>
 #include <QStringList>
-#include "cwTask.h"
 
 //Our includes
 #include "cwStation.h"
 #include "cwTreeImportData.h"
+#include "cwTask.h"
+#include "cwGlobals.h"
 
-class cwTreeDataImporter : public cwTask
+class CAVEWHERE_LIB_EXPORT cwTreeDataImporter : public cwTask
 {
 Q_OBJECT
 
