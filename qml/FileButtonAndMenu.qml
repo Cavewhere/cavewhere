@@ -17,6 +17,7 @@ MenuBar {
     property Loader mainContentLoader;
     property FileDialog loadFileDialog;
     property FileDialog saveAsFileDialog;
+    property ApplicationWindow applicationWindow;
 
     signal openAboutWindow;
 
@@ -75,7 +76,7 @@ MenuBar {
         MenuItem {
             text: "Quit"
             shortcut: "Ctrl+Q"
-            onTriggered: Qt.quit()
+            onTriggered: applicationWindow.close(); //Qt.quit()
         }
     }
 

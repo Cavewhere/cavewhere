@@ -15,6 +15,7 @@ class cwTeam;
 class cwTripCalibration;
 #include "cwStation.h"
 #include "cwSurvexLRUDChunk.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QList>
@@ -24,7 +25,7 @@ class cwTripCalibration;
 #include <QDate>
 
 
-class cwTreeImportDataNode : public QObject
+class CAVEWHERE_LIB_EXPORT cwTreeImportDataNode : public QObject
 {
     Q_OBJECT
 

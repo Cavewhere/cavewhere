@@ -1,6 +1,5 @@
 <RCC>
     <qresource prefix="/">
-        <file>datasets/compassImportExport.cw</file>
         <file>datasets/network.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
@@ -19,5 +18,9 @@
         <file>datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw</file>
         <file>datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw</file>
         <file>datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw</file>
+        <file>datasets/compass/missingDataValidated.dat</file>
+        <file>datasets/compass/compassExportMissingLRUD.cw</file>
+        <file>datasets/compass/compassImportExport.cw</file>
+        <file>datasets/survex/issue118.svx</file>
     </qresource>
 </RCC>

@@ -69,8 +69,8 @@ Application {
                     ];
 
             if(qbs.buildVariant == "debug") {
-                flags.push(["-fsanitize=address",
-                            "-fno-omit-frame-pointer"]);
+                flags.push("-fsanitize=address");
+                flags.push("-fno-omit-frame-pointer");
             }
 
             return flags;
@@ -131,7 +131,7 @@ Application {
 
     Group {
         name: "qmlFiles"
-        qbs.install: qbs.buildVariant == "release"
+        qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
         qbs.installDir: product.installPrefix + "qml"
         files: [
             applicationId.prefix + "qml/*.qml",
@@ -142,7 +142,7 @@ Application {
     Group {
         name: "shaderFiles"
         qbs.installDir: product.installPrefix + "shaders"
-        qbs.install: qbs.buildVariant == "release"
+        qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
 
         files: [
             applicationId.prefix + "shaders/*.vert",
@@ -156,7 +156,7 @@ Application {
     Group {
         name: "shaderFiles-compass"
         qbs.installDir: product.installPrefix + "shaders/compass"
-        qbs.install: qbs.buildVariant == "release"
+        qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
 
         files: [
             applicationId.prefix + "shaders/compass/*.vsh",
@@ -207,7 +207,7 @@ Application {
     Group {
         name: "windowsDLLs-debug"
         condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
-        qbs.install: true
+        qbs.install: !product.consoleApplication
         files:[
             Qt.core.binPath + "/Qt5Concurrentd.dll",
             Qt.core.binPath + "/Qt5Cored.dll",
@@ -229,7 +229,7 @@ Application {
     Group {
         name: "windowsDLLs-release"
         condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-        qbs.install: true
+        qbs.install: !product.consoleApplication
         files: [
             Qt.core.binPath + "/Qt5Concurrent.dll",
             Qt.core.binPath + "/Qt5Core.dll",

@@ -39,6 +39,7 @@ cwProject::cwProject(QObject* parent) :
     TempProject(true),
     Region(new cwCavingRegion(this)),
     LoadTask(nullptr),
+    SaveTask(nullptr),
     UndoStack(new QUndoStack(this))
 {
     newProject();
@@ -207,18 +208,18 @@ void cwProject::save() {
   Save the project, writes all files to the project
   */
 void cwProject::privateSave() {
-    cwRegionSaveTask* saveTask = new cwRegionSaveTask();
-    connect(saveTask, SIGNAL(finished()), saveTask, SLOT(deleteLater()));
-    connect(saveTask, SIGNAL(stopped()), saveTask, SLOT(deleteLater()));
-    saveTask->setThread(LoadSaveThread);
+    if(SaveTask == nullptr) {
+        SaveTask = new cwRegionSaveTask();
+        SaveTask->setThread(LoadSaveThread);
+    }
 
     //Set the data for the project
     qDebug() << "Saving project to:" << ProjectFile;
-    saveTask->setCavingRegion(*Region);
-    saveTask->setDatabaseFilename(ProjectFile);
+    SaveTask->setCavingRegion(*Region);
+    SaveTask->setDatabaseFilename(ProjectFile);
 
     //Start the save thread
-    saveTask->start();
+    SaveTask->start();
 }
 
 /**
@@ -606,10 +607,23 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
  * Will cause the project to block until the underlying task is finished. This is useful
  * for unit testing.
  */
-void cwProject::waitToFinish()
+void cwProject::waitLoadToFinish()
 {
     if(LoadTask != nullptr) {
         LoadTask->waitToFinish();
+    }
+}
+
+/**
+ * @brief cwProject::waitSaveToFinish
+ *
+ * Will cause the project to block until the underlying save task is finished. This is
+ * useful
+ */
+void cwProject::waitSaveToFinish()
+{
+    if(SaveTask != nullptr) {
+        SaveTask->waitToFinish();
     }
 }
 
