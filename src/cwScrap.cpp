@@ -1180,6 +1180,8 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
     roles.append(cwScrap::LeadPosition);
 
     leadsDataChanged(0, leads().size() - 1, roles);
+
+    emit triangulationDataChange();
 }
 
 /**

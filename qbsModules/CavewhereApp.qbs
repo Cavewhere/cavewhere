@@ -38,6 +38,7 @@ Application {
     cpp.includePaths: [
         applicationId.prefix + "src",
         applicationId.prefix + "src/utils",
+        applicationId.prefix + "src/rendering",
         buildDirectory + "/serialization",
         buildDirectory + "/versionInfo"
     ]

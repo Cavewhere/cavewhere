@@ -5,9 +5,9 @@ import QtGraphicalEffects 1.0
 
 
 SplitView {
-    property alias scene: rendererId.scene
-    property alias turnTableInteraction: rendererId.turnTableInteraction
-    property alias leadView: rendererId.leadView
+    property var scene: null; //llrenderId.scene
+    property alias turnTableInteraction: renderId.turnTableInteraction
+    property alias leadView: renderId.leadView
 
     anchors.fill: parent
 
@@ -19,7 +19,7 @@ SplitView {
         Layout.preferredWidth: parent.width * .75
 
         Item {
-            anchors.fill: rendererId
+            anchors.fill: renderId
 
             RadialGradient {
                 anchors.fill: parent
@@ -33,17 +33,18 @@ SplitView {
             }
         }
 
-        GLTerrainRenderer {
-            id: rendererId
-            anchors.fill: parent
-        }
+//        GLTerrainRenderer {
+//            id: rendererId
+////            anchors.fill: parent
+//        }
 
         Renderer3D {
+            id: renderId
             anchors.fill: parent
         }
     }
 
     RenderingSideBar {
-        viewer: rendererId
+        viewer: renderId
     }
 }

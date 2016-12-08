@@ -30,6 +30,7 @@ class cwRemoveImageTask;
 class cwLinePlotManager;
 class cwTaskManagerModel;
 class cwRegionTreeModel;
+class cwScrapsEntity;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
@@ -43,6 +44,7 @@ class cwScrapManager : public QObject
     Q_OBJECT
 
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+    Q_PROPERTY(cwScrapsEntity* scrapsEntity READ scrapsEntity CONSTANT)
 
 public:
     explicit cwScrapManager(QObject *parent = 0);
@@ -57,6 +59,8 @@ public:
 
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
+
+    cwScrapsEntity* scrapsEntity() const;
 
 signals:
     void automaticUpdateChanged();
@@ -83,6 +87,7 @@ private:
     cwTaskManagerModel* TaskManagerModel;
 
     //The gl scraps that need updating
+    cwScrapsEntity* ScrapsEntity; //!<
     cwGLScraps* GLScraps;
 
     bool AutomaticUpdate; //!<
@@ -159,6 +164,13 @@ inline bool cwScrapManager::automaticUpdate() const {
     return AutomaticUpdate;
 }
 
+/**
+* @brief class::scrapsEntity
+* @return
+*/
+inline cwScrapsEntity* cwScrapManager::scrapsEntity() const {
+    return ScrapsEntity;
+}
 
 
 

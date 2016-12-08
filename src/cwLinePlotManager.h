@@ -19,6 +19,7 @@ class cwStationReference;
 class cwGLLinePlot;
 class cwSurveyChunkSignaler;
 class cwErrorListModel;
+class cwLinePlotMesh;
 #include "cwLinePlotTask.h"
 #include "cwGlobals.h"
 
@@ -37,6 +38,8 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
+    void setLinePlotMesh(cwLinePlotMesh* mesh);
+
     void waitToFinish();
 
 signals:
@@ -54,6 +57,7 @@ private:
     QThread* LinePlotThread;
 
     cwGLLinePlot* GLLinePlot;
+    cwLinePlotMesh* LinePlotMesh;
 
     cwSurveyChunkSignaler* SurveySignaler;
 

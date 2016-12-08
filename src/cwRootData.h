@@ -36,6 +36,7 @@ class cwScreen;
 class cwEventRecorderModel;
 class cwTaskManagerModel;
 class cwPageSelectionModel;
+class cwMainEntity;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -57,6 +58,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwQMLReload* qmlReloader READ qmlReloader NOTIFY qmlReloaderChanged)
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
+    Q_PROPERTY(cwMainEntity* renderEntity READ renderEntity CONSTANT)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
@@ -86,6 +88,7 @@ public:
     cwTaskManagerModel* taskManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
+    cwMainEntity* renderEntity() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -98,6 +101,8 @@ public:
 
     QUrl lastDirectory() const;
     void setLastDirectory(QUrl lastDirectory);
+
+    Q_INVOKABLE void printImage(const QImage& image) const;
 
 signals:
     void regionChanged();
@@ -132,6 +137,7 @@ private:
     cwTaskManagerModel* TaskManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
+    cwMainEntity* RenderEntity; //!<
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -269,5 +275,12 @@ inline bool cwRootData::leadsVisible() const {
     return LeadsVisible;
 }
 
+/**
+* @brief class::renderEntry
+* @return The main entity for rendering the 3d scene for qt3d
+*/
+inline cwMainEntity* cwRootData::renderEntity() const {
+    return RenderEntity;
+}
 
 #endif // CWGLOBALQMLDATA_H

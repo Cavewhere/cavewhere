@@ -17,8 +17,6 @@ RegionViewer {
 
     clip: true
 
-
-
     TurnTableInteraction {
         id: turnTableInteractionId
         anchors.fill: parent
@@ -34,12 +32,12 @@ RegionViewer {
         defaultInteraction: turnTableInteractionId
     }
 
-    LinePlotLabelView {
-        id: labelView
-        anchors.fill: parent
-        camera: renderer.camera
-        region: rootData.region
-    }
+//    LinePlotLabelView {
+//        id: labelView
+//        anchors.fill: parent
+//        camera: renderer.camera
+//        region: rootData.region
+//    }
 
     LeadView {
         id: leadViewId

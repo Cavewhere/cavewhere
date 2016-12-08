@@ -95,7 +95,7 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     QRay3D ray(frontPoint, direction);
 
     //See if it hits any of the scraps
-    double t = scene()->geometryItersecter()->intersects(ray);
+    double t = nan(nullptr); //scene()->geometryItersecter()->intersects(ray);
 
     if(qIsNaN(t)) {
 

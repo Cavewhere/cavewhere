@@ -5,15 +5,28 @@
 **
 **************************************************************************/
 
+//Our includes
 #include "cwCamera.h"
 #include "cwDebug.h"
 
+//Qt includes
+#include <Qt3DCore/QTransform>
+
+using namespace Qt3DRender;
+using namespace Qt3DCore;
+
 cwCamera::cwCamera(QObject *parent) :
     QObject(parent),
-    ZoomScale(1.0)
+    ZoomScale(1.0),
+    Qt3dCamera(nullptr)
 {
     ViewProjectionMatrixIsDirty = true;
     connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
+
+    //Test code
+//    setProjection(orthoProjectionDefault());
+
+    setQt3dCamera(new QCamera());
 }
 
 /**
@@ -207,4 +220,48 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      QRectF viewport = this->viewport();
      projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
      return projection;
+ }
+
+ /**
+* @brief cwCamera::setQt3dCamera
+* @param qt3dCamera
+*/
+ void cwCamera::setQt3dCamera(Qt3DRender::QCamera* qt3dCamera) {
+     if(Qt3dCamera != qt3dCamera) {
+
+         if(Qt3dCamera != nullptr) {
+             disconnect(this, 0, Qt3dCamera, 0);
+         }
+
+         Qt3dCamera = qt3dCamera;
+
+         if(Qt3dCamera != nullptr) {
+             auto updateProjection = [&]() {
+                  Qt3dCamera->setProjectionMatrix(projectionMatrix());
+             };
+
+             auto updateView = [&]() {
+                 Qt3dCamera->transform()->setMatrix(viewMatrix());
+             };
+
+             connect(this, &cwCamera::projectionChanged, Qt3dCamera, updateProjection);
+             connect(this, &cwCamera::viewMatrixChanged, Qt3dCamera, updateView);
+
+             updateProjection();
+             updateView();
+         }
+
+         emit qt3dCameraChanged();
+     }
+ }
+
+ /**
+   Sets the viewport for the camera
+   */
+ void cwCamera::setViewport(QRect viewport) {
+    if(Viewport != viewport) {
+        Viewport = viewport;
+        emit viewportChanged();
+        setProjection(orthoProjectionDefault());
+    }
  }

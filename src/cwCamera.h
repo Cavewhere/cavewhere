@@ -15,6 +15,8 @@
 #include <QObject>
 #include <QRect>
 #include <QMatrix4x4>
+#include <QCamera>
+
 
 class cwCamera : public QObject
 {
@@ -24,6 +26,8 @@ class cwCamera : public QObject
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
+    Q_PROPERTY(Qt3DRender::QCamera* qt3dCamera READ qt3dCamera WRITE setQt3dCamera NOTIFY qt3dCameraChanged)
+    Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
 
 public:
     explicit cwCamera(QObject *parent = 0);
@@ -62,12 +66,16 @@ public:
     cwProjection orthoProjectionDefault() const;
     cwProjection perspectiveProjectionDefault() const;
 
+    Qt3DRender::QCamera* qt3dCamera() const;
+    void setQt3dCamera(Qt3DRender::QCamera* qt3dCamera);
+
 signals:
     void viewportChanged();
     void projectionChanged();
     void viewMatrixChanged();
     void pixelsPerMeterChanged();
     void zoomScaleChanged();
+    void qt3dCameraChanged();
 
 public slots:
 
@@ -80,17 +88,13 @@ private:
     double ZoomScale; //!<
 
     bool ViewProjectionMatrixIsDirty;
+
+    Qt3DRender::QCamera* Qt3dCamera; //!<
 };
 
 Q_DECLARE_METATYPE(cwCamera*)
 
-/**
-  Sets the viewport for the camera
-  */
-inline void cwCamera::setViewport(QRect viewport) {
-    Viewport = viewport;
-    emit viewportChanged();
-}
+
 
 /**
   Gets the viewport for the camera
@@ -156,5 +160,13 @@ inline QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 m
 */
 inline double cwCamera::zoomScale() const {
     return ZoomScale;
+}
+
+/**
+* @brief cwCamera::qt3dCamera
+* @return
+*/
+inline Qt3DRender::QCamera* cwCamera::qt3dCamera() const {
+    return Qt3dCamera;
 }
 #endif // CWCAMERA_H

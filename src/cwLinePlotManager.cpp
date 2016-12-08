@@ -22,6 +22,7 @@
 #include "cwSurveyChunkSignaler.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwLinePlotMesh.h"
 
 
 cwLinePlotManager::cwLinePlotManager(QObject *parent) :
@@ -29,6 +30,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 {
     Region = nullptr;
     GLLinePlot = nullptr;
+    LinePlotMesh = nullptr;
 
     SurveySignaler = new cwSurveyChunkSignaler(this);
 
@@ -86,6 +88,12 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
 void cwLinePlotManager::setGLLinePlot(cwGLLinePlot* linePlot) {
     GLLinePlot = linePlot;
+    updateLinePlot();
+}
+
+void cwLinePlotManager::setLinePlotMesh(cwLinePlotMesh* mesh)
+{
+    LinePlotMesh = mesh;
     updateLinePlot();
 }
 
@@ -274,6 +282,11 @@ void cwLinePlotManager::updateLinePlot() {
     if(GLLinePlot != nullptr) {
         GLLinePlot->setPoints(resultData.stationPositions());
         GLLinePlot->setIndexes(resultData.linePlotIndexData());
+    }
+
+    if(LinePlotMesh != nullptr) {
+        LinePlotMesh->setPoints(resultData.stationPositions());
+        LinePlotMesh->setIndexes(resultData.linePlotIndexData());
     }
 
     //Mark all caves as up todate

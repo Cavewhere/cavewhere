@@ -30,7 +30,10 @@ DynamicLibrary {
             "sql",
             "opengl",
             "xml",
-            "concurrent" ]
+            "concurrent",
+            "3dcore",
+            "3drender"
+        ]
     }
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
@@ -59,6 +62,7 @@ DynamicLibrary {
     cpp.includePaths: [
         ".",
         "utils",
+        "rendering",
         buildDirectory + "/serialization",
         buildDirectory + "/versionInfo"
     ]
@@ -158,7 +162,7 @@ DynamicLibrary {
 
         files: [
             "cavewhere.proto",
-            "qt.proto"
+            "qt.proto",
         ]
 
         fileTags: ["proto"]
@@ -169,6 +173,8 @@ DynamicLibrary {
         files: [
             "*.cpp",
             "*.h",
+            "rendering/*.cpp",
+            "rendering/*.h",
             "utils/*.cpp",
             "utils/*.h"
         ]

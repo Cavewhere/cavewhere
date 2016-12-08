@@ -23,6 +23,7 @@
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
+#include "cwScrapsEntity.h"
 
 //Qt includes
 #include <QThread>
@@ -36,6 +37,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(nullptr),
     TaskManagerModel(nullptr),
+    ScrapsEntity(new cwScrapsEntity()),
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
@@ -594,7 +596,8 @@ void cwScrapManager::scrapInsertedHelper(cwNote *parentNote, int begin, int end)
         connectScrap(scrap);
 
         //Add the scrap data that's already in it
-        GLScraps->addScrapToUpdate(scrap);
+        ScrapsEntity->addScrap(scrap);
+//        GLScraps->addScrapToUpdate(scrap);
 
         //Make sure the scrap's previously calculated data is okay.
         if(scrap->triangulationData().isStale() ||
@@ -626,7 +629,8 @@ void cwScrapManager::scrapRemovedHelper(cwNote *parentNote, int begin, int end)
         //Connect the scrap
         disconnectScrap(scrap);
 
-        GLScraps->removeScrap(scrap);
+//        GLScraps->removeScrap(scrap);
+        ScrapsEntity->removeScrap(scrap);
     }
 }
 

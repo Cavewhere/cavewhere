@@ -11,6 +11,7 @@
 #include <QQmlContext>
 #include <QMessageBox>
 #include <QQmlApplicationEngine>
+#include <QSurfaceFormat>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -61,6 +62,10 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
+//    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+//    format.setSamples(4);
+//    QSurfaceFormat::setDefaultFormat(format);
+
     QUrl mainWindowPath = mainWindowSourcePath();
     QQmlApplicationEngine applicationEnigine;
 
@@ -71,8 +76,7 @@ int main(int argc, char *argv[])
 //    QQuickView view;
 //    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
 
-//    QSurfaceFormat format = view.format();
-//    format.setSamples(4);
+
 
      //&view);
 

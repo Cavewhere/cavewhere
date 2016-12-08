@@ -103,6 +103,10 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwTestcaseManager.h"
+#include "cwMainEntity.h"
+#include "cwLinePlotMesh.h"
+#include "cwScrapEntity.h"
+#include "cwScrapsEntity.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -230,5 +234,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+    qmlRegisterType<cwLinePlotMesh>("Cavewhere", 1, 0, "LinePlotMesh");
+    qmlRegisterType<cwMainEntity>("Cavewhere", 1, 0, "MainEntity");
+    qmlRegisterType<cwScrapsEntity>("Cavewhere", 1, 0, "ScrapsEntity");
+    qmlRegisterType<cwScrapEntity>("Cavewhere", 1, 0, "ScrapEntity");
 
 }

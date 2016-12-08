@@ -23,6 +23,7 @@
 #include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
+#include "cwMainEntity.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -35,6 +36,7 @@
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
+    RenderEntity(new cwMainEntity),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this)),
     LeadsVisible(true)
@@ -85,6 +87,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     ScrapManager->setGLScraps(RegionSceneManager->scraps());
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
+    LinePlotManager->setLinePlotMesh(RenderEntity->linePlotMesh());
 
     PageSelectionModel = new cwPageSelectionModel(this);
 
@@ -156,4 +159,9 @@ void cwRootData::setLastDirectory(QUrl lastDirectory) {
         settings.setValue("LastDirectory", dir);
         emit lastDirectoryChanged();
     }
+}
+
+void cwRootData::printImage(const QImage& image) const
+{
+    qDebug() << "Image:" << image.size() << image;
 }

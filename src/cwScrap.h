@@ -130,6 +130,9 @@ signals:
     void pointsReset();
     void closeChanged();
 
+    //Scrap geometry
+    void triangulationDataChange();
+
     //For stations
     void stationAdded();
     void stationPositionChanged(int begin, int end);
