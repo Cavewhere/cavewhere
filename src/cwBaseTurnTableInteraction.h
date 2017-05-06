@@ -11,12 +11,14 @@
 
 //Our includes
 #include "cwInteraction.h"
+class cwInersecter;
 class cwCamera;
-class cwScene;
 class cwMatrix4x4Animation;
 
 //Qt 3D
 #include <QPlane3D>
+#include <Qt3DCore/QEntity>
+#include <Qt3DCore/QComponent>
 
 //Qt includes
 #include <QTimer>
@@ -30,8 +32,8 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
     Q_PROPERTY(double pitch READ pitch WRITE setPitch NOTIFY pitchChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
-    Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
+    Q_PROPERTY(cwInersecter* inersecter READ inersecter WRITE setInersecter NOTIFY inersecterChanged)
 
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
@@ -47,8 +49,8 @@ public:
     cwCamera* camera() const;
     void setCamera(cwCamera* camera);
 
-    cwScene* scene() const;
-    void setScene(cwScene* scene);
+    cwInersecter* inersecter() const;
+    void setInersecter(cwInersecter* inersecter);
 
     void setGridPlane(const QPlane3D& plan);
 
@@ -62,6 +64,7 @@ signals:
     void pitchChanged();
     void cameraChanged();
     void sceneChanged();
+    void inersecterChanged();
 
 public slots:
 
@@ -106,7 +109,7 @@ private:
     QPoint TranslatePosition;
 
     QPointer<cwCamera> Camera; //!<
-    QPointer<cwScene> Scene; //!<
+    QPointer<cwInersecter> Inersecter; //!<
 
     cwMatrix4x4Animation* ViewMatrixAnimation;
 
@@ -146,6 +149,8 @@ inline double cwBaseTurnTableInteraction::azimuth() const {
 inline double cwBaseTurnTableInteraction::pitch() const {
     return Pitch;
 }
+
+
 
 
 #endif // CWTURNTABLEINTERACTION_H

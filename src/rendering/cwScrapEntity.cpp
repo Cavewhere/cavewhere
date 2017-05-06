@@ -1,11 +1,15 @@
 //Our includes
 #include "cwScrapEntity.h"
 #include "cwScrap.h"
+#include "cwTextureImage.h"
 
 //Qt includes
 #include <Qt3DRender/QGeometryRenderer>
 #include <Qt3DRender/QAttribute>
 #include <Qt3DRender/QBuffer>
+#include <Qt3DRender/QEffect>
+#include <Qt3DRender/QMaterial>
+#include <Qt3DRender/QParameter>
 #include <QVector3D>
 #include <QVector2D>
 using namespace Qt3DCore;
@@ -14,7 +18,8 @@ using namespace Qt3DRender;
 cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         QEntity(parent),
         GeometryRenderer(new QGeometryRenderer()),
-        Material(nullptr)
+        Material(new QMaterial()),
+        ScrapTextureImage(new cwTextureImage())
 {
 
     QAttribute* pointAttribute = new QAttribute();
@@ -23,6 +28,7 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     pointAttribute->setDataType(QAttribute::Float);
     pointAttribute->setByteOffset(0);
     pointAttribute->setBuffer(new Qt3DRender::QBuffer());
+    pointAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     pointAttribute->setName("vertexPosition");
 
     QAttribute* texCoordAttribute = new QAttribute();
@@ -31,12 +37,14 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     texCoordAttribute->setDataType(QAttribute::Float);
     texCoordAttribute->setByteOffset(0);
     texCoordAttribute->setBuffer(new Qt3DRender::QBuffer());
-    texCoordAttribute->setName("texCoord");
+    texCoordAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
+    texCoordAttribute->setName("scrapTexCoord");
 
     QAttribute* indexAttribute = new QAttribute();
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setDataType(QAttribute::UnsignedInt);
     indexAttribute->setBuffer(new Qt3DRender::QBuffer());
+    indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     //Create geometry
     QGeometry* geometry = new QGeometry();
@@ -45,10 +53,18 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
+    Material = new QMaterial();
+
+    QTexture2D* texture = new QTexture2D();
+    texture->addTextureImage(ScrapTextureImage);
+    Material->addParameter(new QParameter("scrapTexture", texture));
+    Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
+
     //Setup what type we are drawing
     GeometryRenderer->setPrimitiveType(QGeometryRenderer::Triangles);
 
     addComponent(GeometryRenderer);
+    addComponent(Material);
 }
 
 /**
@@ -93,23 +109,23 @@ Qt3DRender::QMaterial* cwScrapEntity::material() const {
 * @brief cwScrapEntity::setMaterial
 * @param material
 */
-void cwScrapEntity::setMaterial(Qt3DRender::QMaterial* material) {
-    if(Material != material) {
+//void cwScrapEntity::setMaterial(Qt3DRender::QMaterial* material) {
+//    if(Material != material) {
 
-        if(Material != nullptr) {
-            removeComponent(Material);
-        }
+//        if(Material != nullptr) {
+//            removeComponent(Material);
+//        }
 
-        Material = material;
+//        Material = material;
 
-        if(Material != nullptr) {
-            qDebug() << "Adding material:" << Material;
-            addComponent(Material);
-        }
+//        if(Material != nullptr) {
+//            qDebug() << "Adding material:" << Material;
+//            addComponent(Material);
+//        }
 
-        emit materialChanged();
-    }
-}
+//        emit materialChanged();
+//    }
+//}
 
 /**
  * @brief cwScrapEntity::updateGeometry
@@ -144,6 +160,46 @@ void cwScrapEntity::updateGeometry()
             indexAttribute->buffer()->setData(QByteArray(indexes, size)); //shallow copy
             indexAttribute->setCount(Indices.size());
 
+            ScrapTextureImage->setImage(triangleData.croppedImage());
         }
+    }
+}
+
+/**
+* @brief cwScrapEntity::setProject
+* @param project
+*/
+void cwScrapEntity::setProject(QString project) {
+    if(this->project() != project) {
+        ScrapTextureImage->setProjectFilename(project);
+        emit projectChanged();
+    }
+}
+
+/**
+* @brief cwScrapEntity::project
+* @return
+*/
+QString cwScrapEntity::project() const {
+    return ScrapTextureImage->projectFilename();
+}
+
+/**
+* @brief class::effect
+* @return
+*/
+Qt3DRender::QEffect* cwScrapEntity::effect() const {
+    return Effect;
+}
+
+/**
+* @brief class::setEffect
+* @param effect
+*/
+void cwScrapEntity::setEffect(Qt3DRender::QEffect* effect) {
+    if(Effect != effect) {
+        Effect = effect;
+        Material->setEffect(Effect);
+        emit effectChanged();
     }
 }

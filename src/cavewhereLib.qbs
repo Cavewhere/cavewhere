@@ -88,19 +88,19 @@ DynamicLibrary {
 
                     ];
 
-            if(qbs.buildVariant == "debug") {
-                flags.push("-fsanitize=address");
-                flags.push("-fno-omit-frame-pointer");
-            }
+//            if(qbs.buildVariant == "debug") {
+//                flags.push("-fsanitize=address");
+//                flags.push("-fno-omit-frame-pointer");
+//            }
 
             return flags;
         }
 
         cpp.linkerFlags: {
             var flags = [];
-            if(qbs.buildVariant == "debug") {
-                flags.push("-fsanitize=address")
-            }
+//            if(qbs.buildVariant == "debug") {
+//                flags.push("-fsanitize=address")
+//            }
             return flags;
         }
     }

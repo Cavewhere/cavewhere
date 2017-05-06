@@ -7,7 +7,7 @@ using namespace Qt3DRender;
 
 cwScrapsEntity::cwScrapsEntity(Qt3DCore::QNode* parent) :
     QEntity(parent),
-    Material(nullptr)
+    Effect(nullptr)
 {
 
 }
@@ -21,7 +21,8 @@ void cwScrapsEntity::addScrap(cwScrap* scrap)
     if(!ScrapToEntity.contains(scrap)) {
         cwScrapEntity* entity = new cwScrapEntity(this);
         entity->setScrap(scrap);
-        entity->setMaterial(Material);
+        entity->setEffect(Effect);
+        entity->setProject(Project);
         ScrapToEntity.insert(scrap, entity);
     }
 }
@@ -40,26 +41,43 @@ void cwScrapsEntity::removeScrap(cwScrap* scrap)
 }
 
 /**
-* @brief cwScrapsE::material
+* @brief cwScrapsE::effect
 * @return
 */
-Qt3DRender::QMaterial* cwScrapsEntity::material() const {
-    return Material;
+Qt3DRender::QEffect* cwScrapsEntity::effect() const {
+    return Effect;
 }
 
 /**
-* @brief cwScrapsE::setMaterial
-* @param material
+* @brief cwScrapsE::setEffect
+* @param effect
 */
-void cwScrapsEntity::setMaterial(Qt3DRender::QMaterial* material) {
-    if(Material != material) {
-        Material = material;
+void cwScrapsEntity::setEffect(Qt3DRender::QEffect* effect) {
+    if(Effect != effect) {
+        Effect = effect;
 
         for(auto iter = ScrapToEntity.begin(); iter != ScrapToEntity.end(); iter++) {
             auto entity = iter.value();
-            entity->setMaterial(Material);
+            entity->setEffect(Effect);
         }
 
-        emit materialChanged();
+        emit effectChanged();
+    }
+}
+
+/**
+* @brief cwScrapEntity::setProject
+* @param project
+*/
+void cwScrapsEntity::setProject(QString project) {
+    if(Project != project) {
+        Project = project;
+
+        for(auto iter = ScrapToEntity.begin(); iter != ScrapToEntity.end(); iter++) {
+            auto entity = iter.value();
+            entity->setProject(Project);
+        }
+
+        emit projectChanged();
     }
 }

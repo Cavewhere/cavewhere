@@ -11,6 +11,7 @@
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
 #include "cwMatrix4x4Animation.h"
+#include "cwInersecter.h"
 
 //Std includes
 #include "math.h"
@@ -95,7 +96,7 @@ QVector3D cwBaseTurnTableInteraction::unProject(QPoint point) {
     QRay3D ray(frontPoint, direction);
 
     //See if it hits any of the scraps
-    double t = nan(nullptr); //scene()->geometryItersecter()->intersects(ray);
+    double t = inersecter()->intersects(ray);
 
     if(qIsNaN(t)) {
 
@@ -542,30 +543,11 @@ void cwBaseTurnTableInteraction::setCamera(cwCamera* camera) {
 }
 
 /**
-* @brief cwBaseTurnTableInteraction::setScene
-* @param scene
-*/
-void cwBaseTurnTableInteraction::setScene(cwScene* scene) {
-    if(Scene != scene) {
-        Scene = scene;
-        emit sceneChanged();
-    }
-}
-
-/**
 * @brief cwBaseTurnTableInteraction::camera
 * @return
 */
 cwCamera* cwBaseTurnTableInteraction::camera() const {
     return Camera;
-}
-
-/**
-* @brief cwBaseTurnTableInteraction::scene
-* @return
-*/
-cwScene* cwBaseTurnTableInteraction::scene() const {
-    return Scene;
 }
 
 /**
@@ -576,3 +558,21 @@ int cwBaseTurnTableInteraction::startDragDistance() const {
     return QGuiApplication::styleHints()->startDragDistance();
 }
 
+/**
+* @brief cwBaseTurnTableInteraction::setInersecter
+* @param inersecter
+*/
+void cwBaseTurnTableInteraction::setInersecter(cwInersecter* inersecter) {
+    if(Inersecter != inersecter) {
+        Inersecter = inersecter;
+        emit inersecterChanged();
+    }
+}
+
+/**
+* @brief cwBaseTurnTableInteraction::inersecter
+* @return
+*/
+cwInersecter* cwBaseTurnTableInteraction::inersecter() const {
+    return Inersecter;
+}

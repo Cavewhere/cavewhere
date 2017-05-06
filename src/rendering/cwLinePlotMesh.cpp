@@ -20,12 +20,14 @@ cwLinePlotMesh::cwLinePlotMesh(Qt3DCore::QNode *parent)
     pointAttribute->setDataType(QAttribute::Float);
     pointAttribute->setByteOffset(0);
     pointAttribute->setBuffer(new Qt3DRender::QBuffer());
+    pointAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     pointAttribute->setName("vertexPosition");
 
     QAttribute* indexAttribute = new QAttribute();
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setDataType(QAttribute::UnsignedInt);
     indexAttribute->setBuffer(new Qt3DRender::QBuffer());
+    indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     geometry()->addAttribute(pointAttribute);
     geometry()->addAttribute(indexAttribute);

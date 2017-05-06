@@ -62,9 +62,13 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
-//    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+    QSurfaceFormat format = QSurfaceFormat::defaultFormat();
+    format.setAlphaBufferSize(8);
+    format.setRedBufferSize(8);
+    format.setGreenBufferSize(8);
+    format.setBlueBufferSize(8);
 //    format.setSamples(4);
-//    QSurfaceFormat::setDefaultFormat(format);
+    QSurfaceFormat::setDefaultFormat(format);
 
     QUrl mainWindowPath = mainWindowSourcePath();
     QQmlApplicationEngine applicationEnigine;
@@ -75,6 +79,33 @@ int main(int argc, char *argv[])
 
 //    QQuickView view;
 //    view.setTitle(QString("Cavewhere - %1").arg(CAVEWHERE_VERSION));
+
+    auto checkFormat = []() {
+        const QSurfaceFormat format = QSurfaceFormat::defaultFormat(); //dm_gl->format();
+        const uint a = format.alphaBufferSize();
+        const uint r = format.redBufferSize();
+        const uint g = format.greenBufferSize();
+        const uint b = format.blueBufferSize();
+
+#define RGBA_BITS(r,g,b,a) (r | (g << 6) | (b << 12) | (a << 18))
+
+        const uint bits = RGBA_BITS(r,g,b,a);
+        qDebug() << "Bits:" << QString("%1").arg(bits, 0, 16) << format.alphaBufferSize() << format.redBufferSize() << format.greenBufferSize() << format.blueBufferSize();
+        switch (bits) {
+        case RGBA_BITS(8,8,8,8):
+            qDebug() << "QAbstractTexture::RGBA8_UNorm";
+            break;
+        case RGBA_BITS(8,8,8,0):
+            qDebug() << "QAbstractTexture::RGB8_UNorm";
+            break;
+        case RGBA_BITS(5,6,5,0):
+            qDebug() << "QAbstractTexture::R5G6B5";
+            break;
+        }
+#undef RGBA_BITS
+    };
+
+    checkFormat();
 
 
 

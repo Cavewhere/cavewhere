@@ -5,19 +5,17 @@
 **
 **************************************************************************/
 
-attribute vec3 vVertex;
-attribute vec2 vScrapTexCoords;
+attribute vec3 vertexPosition;
+attribute vec2 scrapTexCoord;
 
-//varying vec3 vPosition;
 varying vec2 vTexCoord;
-//varying float elevation;
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform vec2 vTexCoordsScale;
+uniform mat4 modelView;
+uniform mat3 modelViewNormal;
+uniform mat4 modelViewProjection;
+uniform vec2 texCoordsScale;
 
 void main() {
-//    elevation = vVertex.z;
-    gl_Position = ModelViewProjectionMatrix * vec4(vVertex, 1.0);
-//    vPosition = gl_Position.xyz;
-    vTexCoord = vTexCoordsScale * vScrapTexCoords;
+    gl_Position = modelViewProjection * vec4(vertexPosition, 1.0);
+    vTexCoord = texCoordsScale * scrapTexCoord;
 }

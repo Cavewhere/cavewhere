@@ -37,5 +37,5 @@ void main() {
     float c = contour(100.0, 1.25) * contour(1000.0, 1.5);
     c = 1.0 - min(1.0, c);
     gl_FragColor = vec4(c, c, c, c) * vec4(0.0, 0.0, 0.0, 1.0);
-
+    gl_FragDepth = gl_FragColor.a >= 0.001 ? gl_FragCoord.z : 1.0;
 }

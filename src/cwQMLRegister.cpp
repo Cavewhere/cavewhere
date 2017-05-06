@@ -107,6 +107,7 @@
 #include "cwLinePlotMesh.h"
 #include "cwScrapEntity.h"
 #include "cwScrapsEntity.h"
+#include "cwInersecter.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -238,5 +239,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwMainEntity>("Cavewhere", 1, 0, "MainEntity");
     qmlRegisterType<cwScrapsEntity>("Cavewhere", 1, 0, "ScrapsEntity");
     qmlRegisterType<cwScrapEntity>("Cavewhere", 1, 0, "ScrapEntity");
-
+    qmlRegisterType<cwInersecter>("Cavewhere", 1, 0, "Inersecter");
 }

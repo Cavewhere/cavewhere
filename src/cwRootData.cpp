@@ -164,4 +164,5 @@ void cwRootData::setLastDirectory(QUrl lastDirectory) {
 void cwRootData::printImage(const QImage& image) const
 {
     qDebug() << "Image:" << image.size() << image;
+//    image.save("")
 }

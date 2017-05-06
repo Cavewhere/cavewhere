@@ -67,6 +67,8 @@ void cwScrapManager::setProject(cwProject *project) {
         Project = project;
 
         if(Project != nullptr) {
+            ScrapsEntity->setProject(Project->filename());
+
             ImageProvider.setProjectPath(Project->filename());
 
             connect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
@@ -180,6 +182,7 @@ void cwScrapManager::updateAllScraps() {
 void cwScrapManager::updateImageProviderPath()
 {
     ImageProvider.setProjectPath(Project->filename());
+    ScrapsEntity->setProject(Project->filename());
 }
 
 /**

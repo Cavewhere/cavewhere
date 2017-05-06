@@ -36,7 +36,7 @@ QQ2.Item {
         onCompleteChanged: {
             var captureReply = captureConnection.target;
             console.log("Capture finished: " + captureReply.complete + " " + captureReply.captureId + " " + captureReply.image);
-            captureReply.saveToFile("~/testShot.png");
+            captureReply.saveToFile("/Users/vpicaver/Desktop/testShot.png");
             rootData.printImage(captureReply.image)
         }
     }
@@ -59,6 +59,7 @@ QQ2.Item {
 
     Scene3D {
         anchors.fill: parent
+        multisample: true
 
         Entity {
             id: sceneRoot
@@ -115,17 +116,19 @@ QQ2.Item {
                 //                camera: cameraId
                 //            }
 
+                FilterKey {
+                    id: forward
+                    name: "renderingStyle"
+                    value: "forward"
+                }
 
+                CW.Inersecter {
+                    id: inersectorId
+                }
 
                 Material {
                     id: lineMaterial
                     effect: Effect {
-
-                        FilterKey {
-                            id: forward
-                            name: "renderingStyle"
-                            value: "forward"
-                        }
 
                         techniques: [
                             Technique {
@@ -151,10 +154,95 @@ QQ2.Item {
                     }
                 }
 
+                Effect {
+                    id: scrapEffect
+
+                    techniques: [
+                        Technique {
+                            // GL 2 Technique
+                            filterKeys: [ forward ]
+                            graphicsApiFilter {
+                                api: GraphicsApiFilter.OpenGL
+                                profile: GraphicsApiFilter.NoProfile
+                                majorVersion: 2
+                                minorVersion: 0
+                            }
+
+                            renderPasses: [
+                                RenderPass {
+                                    shaderProgram: ShaderProgram {
+                                        vertexShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/scrap.vert")
+                                        fragmentShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/scrap.frag")
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+
+
                 Entity {
                     id: linePlotEntity
-                    components: [ rootData.renderEntity.linePlotMesh, lineMaterial ]
+                    components: [
+                        rootData.renderEntity.linePlotMesh,
+                        lineMaterial,
+                        inersectorId
+                    ]
                     //            components: [ rootData.renderEntity.linePlotMesh ]
+                }
+
+                Entity {
+                    id: grid
+
+                    PlaneMesh {
+                        id: plane
+                        width: 1000
+                        height: 1000
+                        meshResolution: qt.size(2,2)
+                    }
+
+                    Transform {
+                        id: planeTransform
+                        rotationX: -90
+                    }
+
+                    Material {
+                        id: gridMatrial
+
+                        parameters: [
+                            Parameter { name: "model"; value: planeTransform.matrix }
+                        ]
+
+                        effect: Effect {
+                            techniques: [
+                                Technique {
+                                    // GL 2 Technique
+                                    filterKeys: [ forward ]
+                                    graphicsApiFilter {
+                                        api: GraphicsApiFilter.OpenGL
+                                        profile: GraphicsApiFilter.NoProfile
+                                        majorVersion: 2
+                                        minorVersion: 1
+                                    }
+
+                                    renderPasses: [
+                                        RenderPass {
+                                            shaderProgram: ShaderProgram {
+                                                vertexShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/grid.vert")
+                                                fragmentShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/grid.frag")
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+
+                    components: [
+                        plane,
+                        planeTransform,
+                        gridMatrial
+                    ]
                 }
 
                 PhongMaterial {
@@ -204,16 +292,18 @@ QQ2.Item {
                 }
 
 
-                QQ2.NumberAnimation {
-                    target: sphereTransform
-                    property: "userAngle"
-                    duration: 10000
-                    from: 0
-                    to: 360
 
-                    loops: QQ2.Animation.Infinite
-                    running: true
-                }
+
+//                QQ2.NumberAnimation {
+//                    target: sphereTransform
+//                    property: "userAngle"
+//                    duration: 10000
+//                    from: 0
+//                    to: 360
+
+//                    loops: QQ2.Animation.Infinite
+//                    running: false
+//                }
 
                 Entity {
                     id: cppEntities
@@ -227,7 +317,7 @@ QQ2.Item {
 
         QQ2.Component.onCompleted: {
             rootData.scrapManager.scrapsEntity.parent = cppEntities
-            rootData.scrapManager.scrapsEntity.material = lineMaterial;
+            rootData.scrapManager.scrapsEntity.effect = scrapEffect
         }
     }
 
@@ -242,6 +332,8 @@ QQ2.Item {
         id: turnTableInteractionId
         anchors.fill: parent
         camera: cwCameraId
+        inersecter: inersectorId
+
         //        scene: renderer.scene
     }
 
