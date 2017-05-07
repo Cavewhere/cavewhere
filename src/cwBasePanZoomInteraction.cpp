@@ -15,7 +15,7 @@ cwBasePanZoomInteraction::cwBasePanZoomInteraction(QQuickItem *parent) :
     cwInteraction(parent),
     Camera(new cwCamera())
 {
-    Camera->setParent(this);
+
 }
 
 /**
@@ -24,10 +24,10 @@ cwBasePanZoomInteraction::cwBasePanZoomInteraction(QQuickItem *parent) :
 void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
     if(Camera != camera) {
 
-        if(Camera->parent() == this) {
-            //Delete camera's that are owned my this object
-            Camera->deleteLater();
-        }
+//        if(Camera->parent() == this) {
+//            //Delete camera's that are owned my this object
+//            Camera->deleteLater();
+//        }
 
         Camera = camera;
         emit cameraChanged();
