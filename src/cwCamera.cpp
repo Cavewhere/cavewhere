@@ -15,18 +15,26 @@
 using namespace Qt3DRender;
 using namespace Qt3DCore;
 
-cwCamera::cwCamera(QObject *parent) :
-    QObject(parent),
+cwCamera::cwCamera(Qt3DCore::QNode *parent) :
+    Qt3DCore::QEntity(parent),
     ZoomScale(1.0),
-    Qt3dCamera(nullptr)
+    Transform(new Qt3DCore::QTransform(this)),
+    CameraLens(new Qt3DRender::QCameraLens(this))
+//    Qt3dCamera(nullptr)
 {
     ViewProjectionMatrixIsDirty = true;
     connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
 
+    connect(this, &cwCamera::projectionChanged, this, [&](){CameraLens->setProjectionMatrix(projectionMatrix());});
+    connect(this, &cwCamera::viewMatrixChanged, this, [&](){Transform->setMatrix(viewMatrix());});
+
     //Test code
 //    setProjection(orthoProjectionDefault());
 
-    setQt3dCamera(new QCamera());
+//    setQt3dCamera(new QCamera());
+
+    addComponent(Transform);
+    addComponent(CameraLens);
 }
 
 /**
@@ -117,6 +125,7 @@ QMatrix4x4 cwCamera::viewProjectionMatrix() {
         ViewProjectionMatrix.optimize();
         ViewProjectionMatrixIsDirty = false;
     }
+    qDebug() << "Returning view projection matrix";
     return ViewProjectionMatrix;
 }
 
@@ -226,34 +235,34 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
 * @brief cwCamera::setQt3dCamera
 * @param qt3dCamera
 */
- void cwCamera::setQt3dCamera(Qt3DRender::QCamera* qt3dCamera) {
-     if(Qt3dCamera != qt3dCamera) {
+// void cwCamera::setQt3dCamera(Qt3DRender::QCamera* qt3dCamera) {
+//     if(Qt3dCamera != qt3dCamera) {
 
-         if(Qt3dCamera != nullptr) {
-             disconnect(this, 0, Qt3dCamera, 0);
-         }
+//         if(Qt3dCamera != nullptr) {
+//             disconnect(this, 0, Qt3dCamera, 0);
+//         }
 
-         Qt3dCamera = qt3dCamera;
+//         Qt3dCamera = qt3dCamera;
 
-         if(Qt3dCamera != nullptr) {
-             auto updateProjection = [&]() {
-                  Qt3dCamera->setProjectionMatrix(projectionMatrix());
-             };
+//         if(Qt3dCamera != nullptr) {
+//             auto updateProjection = [&]() {
+//                  Qt3dCamera->setProjectionMatrix(projectionMatrix());
+//             };
 
-             auto updateView = [&]() {
-                 Qt3dCamera->transform()->setMatrix(viewMatrix());
-             };
+//             auto updateView = [&]() {
+//                 Qt3dCamera->transform()->setMatrix(viewMatrix());
+//             };
 
-             connect(this, &cwCamera::projectionChanged, Qt3dCamera, updateProjection);
-             connect(this, &cwCamera::viewMatrixChanged, Qt3dCamera, updateView);
+//             connect(this, &cwCamera::projectionChanged, Qt3dCamera, updateProjection);
+//             connect(this, &cwCamera::viewMatrixChanged, Qt3dCamera, updateView);
 
-             updateProjection();
-             updateView();
-         }
+//             updateProjection();
+//             updateView();
+//         }
 
-         emit qt3dCameraChanged();
-     }
- }
+//         emit qt3dCameraChanged();
+//     }
+// }
 
  /**
    Sets the viewport for the camera

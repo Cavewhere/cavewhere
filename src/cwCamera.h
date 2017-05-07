@@ -16,9 +16,11 @@
 #include <QRect>
 #include <QMatrix4x4>
 #include <QCamera>
+#include <Qt3DCore/QEntity>
+#include <Qt3DRender/QCameraLens>
 
 
-class cwCamera : public QObject
+class cwCamera : public Qt3DCore::QEntity
 {
     Q_OBJECT
 
@@ -26,11 +28,11 @@ class cwCamera : public QObject
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
-    Q_PROPERTY(Qt3DRender::QCamera* qt3dCamera READ qt3dCamera WRITE setQt3dCamera NOTIFY qt3dCameraChanged)
+//    Q_PROPERTY(Qt3DRender::QCamera* qt3dCamera READ qt3dCamera WRITE setQt3dCamera NOTIFY qt3dCameraChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
 
 public:
-    explicit cwCamera(QObject *parent = 0);
+    explicit cwCamera(Qt3DCore::QNode *parent = 0);
 
     double zoomScale() const;
     void setZoomScale(double zoomScale);
@@ -89,7 +91,10 @@ private:
 
     bool ViewProjectionMatrixIsDirty;
 
-    Qt3DRender::QCamera* Qt3dCamera; //!<
+    Qt3DCore::QTransform* Transform;
+    Qt3DRender::QCameraLens* CameraLens;
+
+//    Qt3DRender::QCamera* Qt3dCamera; //!<
 };
 
 Q_DECLARE_METATYPE(cwCamera*)
@@ -166,7 +171,7 @@ inline double cwCamera::zoomScale() const {
 * @brief cwCamera::qt3dCamera
 * @return
 */
-inline Qt3DRender::QCamera* cwCamera::qt3dCamera() const {
-    return Qt3dCamera;
-}
+//inline Qt3DRender::QCamera* cwCamera::qt3dCamera() const {
+//    return Qt3dCamera;
+//}
 #endif // CWCAMERA_H

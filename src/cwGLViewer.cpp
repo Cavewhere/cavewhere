@@ -30,7 +30,8 @@ cwGLViewer::cwGLViewer(QQuickItem *parent) :
     setFlag(QQuickItem::ItemHasContents, true);
 
 //    GeometryItersecter = new cwGeometryItersecter();
-    Camera = new cwCamera(this);
+    Camera = new cwCamera();
+    Camera->setParent(this);
 
     connect(this, SIGNAL(widthChanged()), SLOT(privateResizeGL()));
     connect(this, SIGNAL(heightChanged()), SLOT(privateResizeGL()));

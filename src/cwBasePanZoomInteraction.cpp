@@ -13,9 +13,9 @@
 
 cwBasePanZoomInteraction::cwBasePanZoomInteraction(QQuickItem *parent) :
     cwInteraction(parent),
-    Camera(new cwCamera(this))
+    Camera(new cwCamera())
 {
-
+    Camera->setParent(this);
 }
 
 /**

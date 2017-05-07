@@ -39,10 +39,12 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     Columns(0),
     Rows(0),
     TileSize(1024, 1024),
-    CaptureCamera(new cwCamera(this)),
+    CaptureCamera(new cwCamera()),
     PreviewItem(nullptr),
     Item(nullptr)
 {
+    CaptureCamera->setParent(this);
+
     connect(ScaleOrtho, &cwScale::scaleChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
     connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
@@ -178,7 +180,8 @@ void cwCaptureViewport::capture()
 
             cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
 
-            cwCamera* croppedCamera = new cwCamera(command);
+            cwCamera* croppedCamera = new cwCamera();
+            croppedCamera->setParent(command);
             croppedCamera->setViewport(QRect(QPoint(), croppedTileSize));
             croppedCamera->setProjection(tileProj);
             croppedCamera->setViewMatrix(camera->viewMatrix());
