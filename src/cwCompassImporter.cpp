@@ -467,7 +467,7 @@ void cwCompassImporter::parseSurveyData(QFile *file)
         if(!isFileGood(file, "data line")) { return; }
 
         //Make sure not at the end of the survey section
-        if(!dataLine.isEmpty() && dataLine.at(0) == 0x0C) { break; }
+        if(!dataLine.isEmpty() && dataLine.toLocal8Bit().at(0) == 0x0C) { break; }
 
         QStringList dataStrings = dataLine.split(QRegExp("\\s+"), QString::SkipEmptyParts);
 
