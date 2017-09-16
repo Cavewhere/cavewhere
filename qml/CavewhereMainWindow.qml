@@ -13,7 +13,7 @@ import QtQuick.Window 2.0
 import QtQuick.Dialogs 1.2
 
 ApplicationWindow {
-    id: applicationWindow
+    id: applicationWindowId
     objectName: "applicationWindow"
 
     visible: license.hasReadLicenseAgreement
@@ -37,6 +37,7 @@ ApplicationWindow {
         mainContentLoader: loadMainContentsId
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadFileDialogId
+        applicationWindow: applicationWindowId
 
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
@@ -83,16 +84,8 @@ ApplicationWindow {
         }
     }
 
-    FileDialog {
+    SaveAsDialog {
         id: saveAsFileDialogId
-        nameFilters: ["Cavewhere Project (*.cw)"]
-        title: "Save Cavewhere Project As"
-        selectExisting: false
-        folder: rootData.lastDirectory
-        onAccepted: {
-            rootData.lastDirectory = fileUrl
-            project.saveAs(fileUrl)
-        }
     }
 
     FileDialog {
@@ -126,8 +119,18 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
+    AskToSaveDialog {
+        id: askToSaveDialog
+        saveAsDialog: saveAsFileDialogId
+    }
+
+    onClosing: {
+        askToSaveDialog.askToSave();
+        close.accepted = false;
+    }
+
     Component.onCompleted: {
-        eventRecorderModel.rootEventObject = applicationWindow
+        eventRecorderModel.rootEventObject = applicationWindowId
     }
 }
 

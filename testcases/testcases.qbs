@@ -46,7 +46,7 @@ Project {
         name: "cavewhere-qml-test"
         consoleApplication: true
 
-        Depends { name: "Qt"; submodules: ["testlib", "quick"] }
+        Depends { name: "Qt"; submodules: ["testlib", "quick", "qmltest"] }
 
         Group {
             fileTagsFilter: ["application"]

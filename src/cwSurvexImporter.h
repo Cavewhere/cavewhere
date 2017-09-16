@@ -20,11 +20,12 @@
 //Our includes
 #include "cwStation.h"
 #include "cwSurvexGlobalData.h"
+#include "cwGlobals.h"
 class cwSurveyChunk;
 class cwShot;
 class cwSurvexNodeData;
 
-class cwSurvexImporter : public cwTreeDataImporter
+class CAVEWHERE_LIB_EXPORT cwSurvexImporter : public cwTreeDataImporter
 {
 Q_OBJECT
 

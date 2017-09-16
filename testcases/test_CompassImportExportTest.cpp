@@ -33,7 +33,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     cwProject* project = new cwProject();
     project->loadFile(datasetFile);
 
-    project->waitToFinish();
+    project->waitLoadToFinish();
 
     INFO("Loading:" << datasetFile);
     REQUIRE(project->cavingRegion()->caves().size() == 1);
@@ -97,7 +97,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     cwProject* project = new cwProject();
     project->loadFile(datasetFile);
 
-    project->waitToFinish();
+    project->waitLoadToFinish();
 
     INFO("Loading:" << datasetFile);
     REQUIRE(project->cavingRegion()->caves().size() == 1);
