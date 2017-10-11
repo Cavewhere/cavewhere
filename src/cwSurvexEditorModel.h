@@ -40,7 +40,8 @@ public:
         ShotBackCompassRole,
         ShotClinoRole,
         ShotBackClinoRole,
-        ShotCalibrationRole
+        ShotCalibrationRole,
+        ChunkIdRole
     };
 
     cwTrip* trip() const;

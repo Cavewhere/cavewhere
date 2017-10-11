@@ -5,6 +5,8 @@ qtc_*/*
 .moc/*
 docs/*
 *.qbs.user*
+*.qmlc
+*.jsc
 .DS_Store
 .moc/moc_cw3dRegionViewer.cpp
 .moc/moc_cwAbstract2PointItem.cpp

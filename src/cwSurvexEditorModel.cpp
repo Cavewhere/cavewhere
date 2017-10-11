@@ -51,6 +51,8 @@ QVariant cwSurvexEditorModel::data(const QModelIndex& index, int role) const
         return QVariant(chunk->station(stationIndex).up());
     case StationDownRole:
         return QVariant(chunk->station(stationIndex).down());
+    case ChunkIdRole:
+        return QString("%1").arg(reinterpret_cast<qlonglong>(chunk));
     default:
         break;
     }
@@ -116,6 +118,7 @@ QHash<int, QByteArray> cwSurvexEditorModel::roleNames() const
     roles.insert(ShotClinoRole, "shotClino");
     roles.insert(ShotBackClinoRole, "shotBackClino");
     roles.insert(ShotCalibrationRole, "shotCalibration");
+    roles.insert(ChunkIdRole, "chunkId");
     return roles;
 }
 

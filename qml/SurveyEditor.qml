@@ -151,8 +151,24 @@ Item {
 
 
             model: editorModel
+
             delegate: DrySurveyComponent {
                 calibration: currentCalibration
+            }
+
+            section.property: "chunkId"
+            section.delegate: SurveyEditorColumnTitles {
+                visible: {
+                    console.log("Section:" + section + " " + section.length);
+                    return section.length !== 0
+                }
+
+                onVisibleChanged: {
+                    console.log("Section visiblity" + visible)
+                    if(section.length === 0) {
+                        visible = false;
+                    }
+                }
             }
 
             footer: ColumnLayout {
