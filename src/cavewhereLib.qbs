@@ -52,7 +52,6 @@ DynamicLibrary {
         qbs.install: qbs.targetOS.contains("windows")
     }
 
-    cpp.sonamePrefix: "@rpath"
     cpp.rpaths: [Qt.core.libPath]
     cpp.cxxLanguageVersion: "c++11"
 
@@ -66,9 +65,7 @@ DynamicLibrary {
     Properties {
         condition: qbs.targetOS.contains("osx")
 
-        cpp.dynamicLibraries: [
-            "c++"
-        ]
+        cpp.sonamePrefix: "@rpath"
 
         cpp.frameworks: [
             "OpenGL"
@@ -92,7 +89,7 @@ DynamicLibrary {
             return flags;
         }
 
-        cpp.linkerFlags: {
+        cpp.driverFlags: {
             var flags = [];
             if(qbs.buildVariant == "debug") {
                 flags.push("-fsanitize=address")
@@ -149,9 +146,6 @@ DynamicLibrary {
 
         return base;
     }
-
-//        cpp.infoPlistFile: "Info.plist"
-    cpp.minimumOsxVersion: "10.7"
 
     Group {
         name: "ProtoFiles"
