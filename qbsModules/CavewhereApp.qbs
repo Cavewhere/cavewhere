@@ -35,6 +35,8 @@ Application {
     Depends { name: "cavewhere-lib" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
 
+    cpp.cxxLanguageVersion: "c++11"
+
     cpp.includePaths: [
         applicationId.prefix + "/src",
         applicationId.prefix + "/src/utils",
@@ -58,8 +60,8 @@ Application {
         condition: qbs.targetOS.contains("osx")
         cpp.cxxFlags: {
             var flags = [
-                        "-stdlib=libc++", //Needed for protoc
-                        "-std=c++11", //For c++11 support
+//                        "-stdlib=libc++", //Needed for protoc
+//                        "-std=c++11", //For c++11 support
                         "-Werror", //Treat warnings as errors
 
                     ];
