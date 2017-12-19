@@ -38,6 +38,7 @@ class cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
     Q_PROPERTY(QUrl filename READ filename WRITE setFilename NOTIFY filenameChanged)
     Q_PROPERTY(FileType fileType READ fileType WRITE setFileType NOTIFY fileTypeChanged)
+    Q_PROPERTY(QStringList fileTypes READ fileTypes CONSTANT)
 
     Q_PROPERTY(QGraphicsScene* scene READ scene CONSTANT)
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
@@ -46,9 +47,12 @@ class cwCaptureManager : public QAbstractListModel
     Q_ENUMS(FileType Roles)
 public:   
     enum FileType {
+        UnknownType,
         PNG, // Raster export
+        TIF, // Raster export
+        JPG, // Raster export
         SVG, // Raster/Vector export
-        PDF  // Raster/Vector export
+        PDF // Raster/Vector export
     };
 
     enum Roles {
@@ -106,6 +110,9 @@ public:
 
     QHash<int, QByteArray> roleNames() const;
 
+    QStringList fileTypes() const;
+    Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
+
 signals:
     void viewChanged();
     void paperSizeChanged();
@@ -145,15 +152,18 @@ private:
     QUrl Filename; //!<
     FileType Filetype; //!<
     cwCaptureGroupModel* GroupModel; //!<
+    const QMap<QString, FileType> FileTypes = {
+        {"PNG", PNG},
+        {"TIF", TIF},
+        {"JPG", JPG},
+        {"SVG", SVG},
+        {"PDF", PDF}
+    };
 
     //For internal drawing
 
     //For processing
     int NumberOfImagesProcessed;
-//    int Columns;
-//    int Rows;
-//    QSize TileSize;
-//    QSize ImageSize;
     QGraphicsScene* Scene;
     QGraphicsRectItem* PaperRectangle;
     QGraphicsRectItem* BorderRectangle;
@@ -279,11 +289,23 @@ inline int cwCaptureManager::numberOfCaptures() const {
 }
 
 /**
+ * @brief cwCaptureManager::typeNameToFileType
+ * @param fileType
+ * @return
+ */
+inline cwCaptureManager::FileType cwCaptureManager::typeNameToFileType(QString fileType) const
+{
+    return FileTypes.value(fileType, UnknownType);
+}
+
+/**
 * @brief cwCaptureManager::groupModel
 * @return
 */
 inline cwCaptureGroupModel* cwCaptureManager::groupModel() const {
     return GroupModel;
 }
+
+
 
 #endif // CWSCREENCAPTUREMANAGER_H

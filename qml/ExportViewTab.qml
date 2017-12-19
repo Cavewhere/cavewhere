@@ -116,7 +116,7 @@ Item {
 
                     ComboBox {
                         id: fileTypeExportComboBox
-                        model: ["PNG"]
+                        model: screenCaptureManagerId.fileTypes
                     }
                 }
 
@@ -544,9 +544,12 @@ Item {
         selectExisting: false
         folder: rootData.lastDirectory
         onAccepted: {
+            var type = screenCaptureManagerId.typeNameToFileType(fileTypeExportComboBox.currentText);
+
             rootData.lastDirectory = fileUrl
             screenCaptureManagerId.filename = fileUrl
-            screenCaptureManagerId.capture();
+            screenCaptureManagerId.fileType = type
+            screenCaptureManagerId.capture()
         }
     }
 

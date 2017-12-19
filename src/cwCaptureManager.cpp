@@ -27,6 +27,8 @@
 #include <QPainter>
 #include <QGraphicsRectItem>
 #include <QQmlEngine>
+#include <QSvgGenerator>
+#include <QPdfWriter>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
@@ -427,21 +429,81 @@ void cwCaptureManager::saveScene()
 {
     QSizeF imageSize = paperSize() * resolution();
     QRectF imageRect = QRectF(QPointF(), imageSize);
-
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
-    QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
-    outputImage.fill(Qt::white); //transparent);
 
-    cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
-    cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
+    auto appendExtention = [](const QString& filename, const QString& extention) {
+        QFileInfo info(filename);
+        if(info.suffix().compare(extention, Qt::CaseInsensitive) != 0) {
+            return filename + QString(".") + extention;
+        }
+        return filename;
+    };
 
-    outputImage.setDotsPerMeterX(resolutionDPM.value());
-    outputImage.setDotsPerMeterY(resolutionDPM.value());
+    auto saveToImage = [&](const QString& type) {
+        QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
+        outputImage.fill(Qt::white); //transparent);
 
-    QPainter painter(&outputImage);
-    Scene->render(&painter, imageRect, sceneRect);
+        cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
+        cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
 
-    outputImage.save(filename().toLocalFile(), "png");
+        outputImage.setDotsPerMeterX(resolutionDPM.value());
+        outputImage.setDotsPerMeterY(resolutionDPM.value());
+
+        QPainter painter(&outputImage);
+        Scene->render(&painter, imageRect, sceneRect);
+
+        QString fileName = appendExtention(filename().toLocalFile(), type);
+
+        outputImage.save(fileName, type.toLocal8Bit());
+    };
+
+    auto saveToSVG = [&]() {
+        QString fileName = appendExtention(filename().toLocalFile(), "svg");
+
+        QSvgGenerator generator;
+        generator.setFileName(fileName);
+        generator.setSize(imageSize.toSize());
+        generator.setViewBox(imageRect);
+
+        QPainter painter;
+        painter.begin(&generator);
+        Scene->render(&painter, imageRect, sceneRect);
+        painter.end();
+    };
+
+    auto saveToPDF = [&]() {
+        QString fileName = appendExtention(filename().toLocalFile(), "pdf");
+
+        QPdfWriter pdfWriter(fileName);
+        pdfWriter.setPageSize(QPageSize(paperSize(), QPageSize::Inch));
+        pdfWriter.setResolution(resolution());
+
+        QPainter painter;
+        painter.begin(&pdfWriter);
+        Scene->render(&painter, imageRect, sceneRect);
+        painter.end();
+    };
+
+    switch (fileType()) {
+    case PNG:
+        saveToImage("png");
+        break;
+    case TIF:
+        saveToImage("tif");
+        break;
+    case JPG:
+        saveToImage("jpg");
+        break;
+    case SVG:
+        saveToSVG();
+        break;
+    case PDF:
+        saveToPDF();
+        break;
+    default:
+        qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
+        break;
+    }
 
     emit finishedCapture();
 }
@@ -625,3 +687,10 @@ void cwCaptureManager::updateBorderRectangle()
     BorderRectangle->setRect(borderRectangle);
 }
 
+/**
+* @brief cwCaptureManeger::fileTypes
+* @return
+*/
+QStringList cwCaptureManager::fileTypes() const {
+    return FileTypes.keys();
+}

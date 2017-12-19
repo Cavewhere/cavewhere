@@ -30,7 +30,9 @@ DynamicLibrary {
             "sql",
             "opengl",
             "xml",
-            "concurrent" ]
+            "concurrent",
+            "svg"
+        ]
     }
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
