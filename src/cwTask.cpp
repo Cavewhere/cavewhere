@@ -16,6 +16,7 @@
 #include <QReadWriteLock>
 #include <QApplication>
 #include <QThread>
+#include <QThreadPool>
 #include <QDebug>
 
 cwTask::cwTask(QObject *parent) :
@@ -25,9 +26,9 @@ cwTask::cwTask(QObject *parent) :
     NumberOfSteps = 0;
     CurrentStatus = Ready;
     ParentTask = nullptr;
-    NeedsRestart = false;
+    UsingThreadPool = true;
 
-
+    setAutoDelete(false);
 }
 
 /**
@@ -52,24 +53,39 @@ void cwTask::setParentTask(cwTask* parentTask) {
         ParentTask->ChildTasks.removeOne(this);
     }
 
-    //Update the thread we're going to be running on
-    setThread(parentTask->thread());
+    if(isUsingThreadPool()) {
+        setUsingThreadPool(false);
+    }
 
-    //Reparent this task to parentTask
+     //Reparent this task to parentTask
     setParent(parentTask); //For memory management and prevent stall pointers
     ParentTask = parentTask;
     ParentTask->ChildTasks.append(this);
 }
 
 /**
-  \brief Sets the thread that this task will run on
+ * @brief cwTask::setUsingThreadPool
+ * @param enabled
+ */
+void cwTask::setUsingThreadPool(bool enabled)
+{
+    Q_ASSERT(isReady());
+    UsingThreadPool = enabled;
 
-  This will move the object to that thread using the meta object system
-  */
-void cwTask::setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType) {
-    threadToRunOn->start();
-    QMetaObject::invokeMethod(this, "changeThreads", connectionType,
-                              Q_ARG(QThread*, threadToRunOn));
+    if(isUsingThreadPool()) {
+        foreach(cwTask* childTask, ChildTasks) {
+            childTask->setUsingThreadPool(false);
+        }
+    }
+}
+
+/**
+ * @brief cwTask::isUsingThreadPool
+ * @return
+ */
+bool cwTask::isUsingThreadPool() const
+{
+    return UsingThreadPool;
 }
 
 /**
@@ -78,7 +94,7 @@ void cwTask::setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType
   This function is thread safe
   */
 int cwTask::numberOfSteps() const {
-    QReadLocker locker(const_cast<QReadWriteLock*>(&NumberOfStepsLocker));
+    QReadLocker locker(&NumberOfStepsLocker);
     return NumberOfSteps;
 }
 
@@ -86,7 +102,7 @@ int cwTask::numberOfSteps() const {
   \brief Gets the status of the task
   */
 cwTask::Status cwTask::status() const {
-    QReadLocker locker(const_cast<QReadWriteLock*>(&StatusLocker));
+    QReadLocker locker(&StatusLocker);
     return CurrentStatus;
 }
 
@@ -96,7 +112,7 @@ cwTask::Status cwTask::status() const {
   This function is thread safe
   */
 bool cwTask::isRunning() const {
-    QReadLocker locker(const_cast<QReadWriteLock*>(&StatusLocker));
+    QReadLocker locker(&StatusLocker);
     return CurrentStatus == Running || CurrentStatus == PreparingToStart;
 }
 
@@ -113,25 +129,17 @@ void cwTask::stop() {
 /**
   \brief Starts the task to run.
 
-  This will start the task implemented in the base class runTask.
+  This will call runTask() that's implement in the subclass.
 
-  setThread() runs the task on a new therad. The object will be move to that thread, when this
-  function is called. If no thread is set, then the task will run on the
-  current thread. Once the task is complete, the task is moved back to it's original thread.
-  If the thread is already assigned to another thread, or started is called from a thread
-  that this object currently running on, then the task willn't bee moved.  The task, also
-  can't be moved if it's currently running.
+  By default cwTask runs a new thread from the QThreadPool. It will not automatically be destroyed.
+  If setting useThreadPool() to false will run the task on the current thread.
 
-If the user calls stop() or the task stops, then this function, will emit
+  If the user calls stop() or the task stops, then this function, will emit
   stopped() and the task should stop on it's next step.
 
-  If the task is completed, the task will be move to it's original thread, and finished will be
-emitted. Moving to the original thread, just changes which thread the slots of this class and
-subclasses run on.
+  If the task is already running or preparing to start, then this function does nothing
 
-If the task is already running or preparing to start, then this function does nothing
-
-This function is thread safe
+  This function is thread safe
   */
 void cwTask::start() {
     {
@@ -146,9 +154,14 @@ void cwTask::start() {
         emit preparingToStart();
     }
 
-    //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
-    //This is an asycranous call
-    QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
+    if(ParentTask != nullptr) {
+        startOnCurrentThread();
+    } else {
+        //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
+        //This is an asycranous call
+        QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
+    }
+
 }
 
 /**
@@ -222,14 +235,17 @@ void cwTask::done() {
     //If the task is still running, this means that the task has finished, without error
     if(CurrentStatus == Restart) {
         CurrentStatus = Ready;
+        locker.unlock();
         emit stopped();
         emit shouldRerun();
     } else if(CurrentStatus == Stopped) {
         privateStop();
         CurrentStatus = Ready;
+        locker.unlock();
         emit stopped();
     } else if(CurrentStatus == Running) {
         CurrentStatus = Ready;
+        locker.unlock();
         emit finished();
     }
 
@@ -269,9 +285,11 @@ void cwTask::startOnCurrentThread() {
     //Set the progress to zero
     setProgress(0);
 
-    //Run the task
-    emit started();
-    runTask();
+    if(isUsingThreadPool()) {
+        QThreadPool::globalInstance()->start(this);
+    } else {
+        run();
+    }
 }
 
 /**
@@ -342,29 +360,27 @@ void cwTask::setName(QString name) {
 }
 
 /**
- * @brief cwTask::waitToFinish
- * @param time
+ * @brief cwTask::run
  *
- * This waits for the task to finish successfully, (this will wait for the task to restart)
+ * Runs the task.
  */
-void cwTask::waitToFinish(unsigned long time)
+void cwTask::run()
 {
-    QCoreApplication::processEvents();
+    //Run the task
+    emit started();
+    runTask();
+}
 
-    //Put this in a loop because this allows the task to restart
-    while(needsRestart()) {
-        QCoreApplication::processEvents();
-    }
+/**
+ * @brief cwTask::waitToFinish
+ */
+void cwTask::waitToFinish()
+{
+   if(isUsingThreadPool() && isRunning()) {
 
-    while(!isReady() || needsRestart()) {
-        WaitToFinishLocker.lock();
-        WaitToFinishCondition.wait(&WaitToFinishLocker, time);
-        WaitToFinishLocker.unlock();
-
-        QCoreApplication::processEvents(); //Allows the task to signal for a restart
-    }
-
-    QCoreApplication::processEvents();
+       //We should probably replace this with QSemaphore to wait for just the specific thread
+       QThreadPool::globalInstance()->waitForDone();
+   }
 
     Q_ASSERT(isReady());
 }

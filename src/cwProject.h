@@ -25,7 +25,6 @@ class cwRegionSaveTask;
 //Qt includes
 #include <QSqlDatabase>
 #include <QDir>
-#include <QThread>
 #include <QMap>
 #include <QHash>
 #include <QPointer>
@@ -94,11 +93,8 @@ private:
     //The region that this project looks after
     cwCavingRegion* Region;
 
-    //For loading images from the disk into this project
     cwRegionLoadTask* LoadTask;
     cwRegionSaveTask* SaveTask;
-    QThread* LoadSaveThread;
-
     //The undo stack
     QUndoStack* UndoStack;
 

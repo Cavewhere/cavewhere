@@ -67,8 +67,6 @@ private:
     static const QString ImportSurvexKey;
     static const QString ImportWallsKey;
 
-    QThread* ImportThread;
-
     QPointer<cwCavingRegion> CavingRegion;
     QPointer<QUndoStack> UndoStack;
 

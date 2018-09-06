@@ -13,7 +13,7 @@
 #include <QObject>
 #include <QReadWriteLock>
 #include <QTimer>
-#include <QWaitCondition>
+#include <QRunnable>
 
 //Our includes
 #include "cwGlobals.h"
@@ -22,7 +22,7 @@
   \brief A member functions in the class are thread safe
   */
 
-class CAVEWHERE_LIB_EXPORT cwTask : public QObject
+class CAVEWHERE_LIB_EXPORT cwTask : public QObject, public QRunnable
 {
     Q_OBJECT
 
@@ -42,7 +42,9 @@ public:
     explicit cwTask(QObject *parent = 0);
 
     void setParentTask(cwTask* parentTask);
-    void setThread(QThread* threadToRunOn, Qt::ConnectionType connectionType = Qt::AutoConnection);
+
+    void setUsingThreadPool(bool enabled);
+    bool isUsingThreadPool() const;
 
     int numberOfSteps() const;
     int progress() const;
@@ -54,8 +56,9 @@ public:
     QString name() const;
     void setName(QString name);
 
-    void waitToFinish(unsigned long time = ULONG_MAX);
+    void run();
 
+    void waitToFinish();
 
     //Do not move this to a slot!!! You will break things
     //TODO: figure out why this is bad...
@@ -105,6 +108,8 @@ private:
     cwTask* ParentTask;
 
     QString Name; //!< The name of the task
+
+    bool UsingThreadPool;
 
 
     void privateStop();

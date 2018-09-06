@@ -43,16 +43,10 @@ cwProject::cwProject(QObject* parent) :
     UndoStack(new QUndoStack(this))
 {
     newProject();
-
-    //Create a new thread
-    LoadSaveThread = new QThread(this);
-    LoadSaveThread->start();
 }
 
 cwProject::~cwProject()
 {
-    LoadSaveThread->quit();
-    LoadSaveThread->wait();
 }
 
 /**
@@ -211,7 +205,6 @@ void cwProject::privateSave() {
     if(SaveTask == nullptr) {
         SaveTask = new cwRegionSaveTask();
         SaveTask->setThread(LoadSaveThread);
-    }
 
     //Set the data for the project
     qDebug() << "Saving project to:" << ProjectFile;
@@ -336,11 +329,9 @@ void cwProject::loadFile(QString filename) {
                 this, &cwProject::updateRegionData);
     }
 
-    if(LoadTask && LoadTask->isReady()) {
         filename = convertFromURL(filename);
 
         LoadTask->setThread(LoadSaveThread);
-
         //Set the data for the project
         LoadTask->setDatabaseFilename(filename);
 
@@ -379,8 +370,6 @@ void cwProject::startDeleteImageTask()
 
     cwAddImageTask* task = static_cast<cwAddImageTask*>(sender());
     connect(task, &cwTask::threadChanged, this, &cwProject::deleteImageTask);
-
-    task->setThread(thread());
 }
 
 /**
@@ -431,7 +420,6 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
         connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
         connect(addImageTask, &cwTask::finished, this, &cwProject::startDeleteImageTask);
         connect(addImageTask, &cwTask::stopped, this, &cwProject::startDeleteImageTask);
-        addImageTask->setThread(LoadSaveThread);
 
         //Set the project path
         addImageTask->setDatabaseFilename(filename());

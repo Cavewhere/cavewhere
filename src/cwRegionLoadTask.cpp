@@ -102,6 +102,7 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
 
     //Clean up old images
     cwImageCleanupTask imageCleanupTask;
+    imageCleanupTask.setUsingThreadPool(false);
     imageCleanupTask.setDatabaseFilename(databaseFilename());
     imageCleanupTask.setRegion(Region);
     imageCleanupTask.start();
