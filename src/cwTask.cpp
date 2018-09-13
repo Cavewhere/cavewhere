@@ -154,13 +154,19 @@ void cwTask::start() {
         emit preparingToStart();
     }
 
-    if(ParentTask != nullptr) {
-        startOnCurrentThread();
+    if(isUsingThreadPool()) {
+        QThreadPool::globalInstance()->start(this);
     } else {
-        //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
-        //This is an asycranous call
-        QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
+        run();
     }
+
+//    if(ParentTask != nullptr) {
+//        startOnCurrentThread();
+//    } else {
+//        //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
+//        //This is an asycranous call
+//        QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
+//    }
 
 }
 
@@ -366,6 +372,32 @@ void cwTask::setName(QString name) {
  */
 void cwTask::run()
 {
+    if(!isParentsRunning()) {
+        //Parent task aren't running
+        stop(); //Stop
+        done(); //We are finished
+        return;
+    }
+
+    {
+        QWriteLocker locker(&StatusLocker);
+
+        Q_ASSERT(CurrentStatus != Running); //The thread should definitally not me running here
+
+        if(CurrentStatus != PreparingToStart) {
+            done();
+            return;
+        }
+
+        //Make sure we are preparing to start
+        CurrentStatus = Running;
+
+        NeedsRestart = false;
+    }
+
+    //Set the progress to zero
+    setProgress(0);
+
     //Run the task
     emit started();
     runTask();
@@ -376,13 +408,28 @@ void cwTask::run()
  */
 void cwTask::waitToFinish()
 {
-   if(isUsingThreadPool() && isRunning()) {
+   QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
-       //We should probably replace this with QSemaphore to wait for just the specific thread
-       QThreadPool::globalInstance()->waitForDone();
+   if(isUsingThreadPool()) {
+       switch (status()) {
+       case Ready:
+           break;
+       case PreparingToStart:
+       case Running:
+       case Stopped:
+           QThreadPool::globalInstance()->waitForDone();
+           Q_ASSERT(isReady());
+           break;
+       case Restart:
+           while(!isReady()) {
+               QThreadPool::globalInstance()->waitForDone();
+               QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+           }
+           break;
+       }
    }
 
-    Q_ASSERT(isReady());
+   QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 }
 
 /**

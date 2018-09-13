@@ -101,6 +101,9 @@ private:
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
 
+    //For keeping database connection unique
+    static QAtomicInt ConnectionCounter;
+
     void createTempProjectFile();
     void createDefaultSchema();
 

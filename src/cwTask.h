@@ -14,6 +14,7 @@
 #include <QReadWriteLock>
 #include <QTimer>
 #include <QRunnable>
+#include <QWaitCondition>
 
 //Our includes
 #include "cwGlobals.h"
@@ -38,6 +39,7 @@ public:
         Stopped,
         Restart
     };
+    Q_ENUM(Status)
 
     explicit cwTask(QObject *parent = 0);
 

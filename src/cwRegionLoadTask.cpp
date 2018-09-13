@@ -34,6 +34,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QThread>
 
 //Std includes
 #include <sstream>
@@ -51,7 +52,6 @@ void cwRegionLoadTask::runTask() {
     //Clear region
     bool connected = connectToDatabase("loadRegionTask");
     if(connected) {
-
         //This makes sure that sqlite is clean up after it self
         insureVacuuming();
 
@@ -152,7 +152,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  */
 void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
 {
-
+    Region->moveToThread(QThread::currentThread());
     Region->clearCaves();
 
     QList<cwCave*> caves;
@@ -167,6 +167,7 @@ void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &regi
     }
 
     Region->addCaves(caves);
+    Region->moveToThread(nullptr);
 }
 
 /**

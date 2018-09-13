@@ -3,6 +3,7 @@ import qbs.TextFile
 import qbs.Process
 import qbs.FileInfo
 import qbs.File
+import "../qbsModules/GitProbe.qbs" as GitProbe
 
 /**
   The cavewhere-lib is used by both cavewhere.qbs and testcases/testcases.qbs.
@@ -18,7 +19,7 @@ DynamicLibrary {
     //path which prevents macdeployqt from finding the correct library's location
     consoleApplication: true
 
-    readonly property string gitVersion: Git.productVersion
+    readonly property string gitVersion: git.productVersion
     readonly property string rpath: buildDirectory
 
     Depends { name: "cpp" }
@@ -40,17 +41,44 @@ DynamicLibrary {
     Depends { name: "protoc" }
     Depends { name: "protobuf" }
     Depends { name: "z" }
-    Depends { name: "Git" }
     Depends { name: "dewalls" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
+
+    GitProbe {
+        id: git
+        sourceDirectory: product.sourceDirectory
+    }
 
     Export {
         Depends { name: "cpp" }
         cpp.rpaths: [product.rpath]
+        cpp.includePaths: [
+            ".",
+            "utils",
+            buildDirectory + "/serialization",
+            buildDirectory + "/versionInfo"
+        ]
+
+        Depends { name: "Qt";
+            submodules: [ "core",
+                "gui",
+                "widgets",
+                "quick",
+                "sql",
+                "opengl",
+                "xml",
+                "concurrent",
+                "svg"
+            ]
+        }
+
+        Depends { name: "libqtqmltricks-qtqmlmodels" }
+
     }
 
     Group {
         fileTagsFilter: ["dynamiclibrary"]
+        condition: qbs.buildVariant == "release"
         qbs.install: qbs.targetOS.contains("windows")
     }
 

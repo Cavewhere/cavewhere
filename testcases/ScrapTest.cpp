@@ -111,8 +111,8 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
 TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.1, 5795.0, 0.05, 0.005));
-    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", -0.26, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.155, 5795.0, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw", -0.26, 5795.0, 0.06, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw", 90, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw", 90, 5795.0, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw", 180, 5795.0, 0.05, 0.005));

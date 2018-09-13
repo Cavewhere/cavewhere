@@ -64,6 +64,7 @@ private:
     void clearUnconnectedChunkErrors();
 
 private slots:
+    void rerunSurvex();
     void runSurvex();
 
     void updateLinePlot();

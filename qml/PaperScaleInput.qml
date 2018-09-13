@@ -43,7 +43,6 @@ Item {
                 id: scaleLabelId
                 helpArea: scaleHelp
                 text: "Scale"
-                anchors.verticalCenter: parent.verticalCenter
             }
 
             TitledRectangle {
@@ -51,7 +50,6 @@ Item {
                 title: "On Paper"
                 UnitValueInput {
                     id: onPaperLengthInput
-                    anchors.horizontalCenter: parent.horizontalCenter
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: autoScaling
@@ -69,7 +67,6 @@ Item {
                 title: "In Cave"
                 UnitValueInput {
                     id: inCaveLengthInput
-                    anchors.horizontalCenter: parent.horizontalCenter
                     unitValue: null
                     valueVisible: false
                     valueReadOnly: autoScaling

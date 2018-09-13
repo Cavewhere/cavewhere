@@ -29,8 +29,14 @@ RowLayout {
     Rectangle {
 
         Layout.fillWidth: true
-        implicitHeight: 30
+        implicitHeight: sizeItemId.height + 10
         border.width: 1
+
+        LinkBarItem {
+            id: sizeItemId
+            text: "Size of text"
+            visible: false
+        }
 
         ListView {
             id: linkBarListView
@@ -41,42 +47,9 @@ RowLayout {
             spacing: 5
             visible: !textFieldId.visible
 
-            delegate: Item {
-                width: childrenRect.width
-                height: childrenRect.height
-
-                RowLayout {
-                    spacing: 2
-                    Rectangle {
-                        implicitWidth: nameTextId.width + 2
-                        implicitHeight: nameTextId.height + 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: buttonId.containsMouse ? "#C5E4F7" : "#EEEEEE"
-                        radius: 3
-
-                        Text {
-                            id: nameTextId
-                            text: nameRole
-                            anchors.centerIn: parent
-                        }
-
-                        MouseArea {
-                            id: buttonId
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked:  {
-                                rootData.pageSelectionModel.currentPageAddress = fullPathRole;
-                            }
-                        }
-                    }
-
-                    Image {
-                        source: "qrc:icons/moreArrow.png"
-                        sourceSize: Qt.size(10, 10)
-                        visible: linkBarListView.count - 1 !== index
-
-                    }
-                }
+            delegate: LinkBarItem {
+                nextArrowVisible: linkBarListView.count - 1 !== index
+                text: nameRole
             }
         }
 

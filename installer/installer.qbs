@@ -1,5 +1,6 @@
 import qbs 1.0
 import qbs.TextFile
+import "../qbsModules/GitProbe.qbs" as GitProbe
 
 Project {
     name: "installer"
@@ -13,9 +14,10 @@ Project {
         type: "deployedApplication"
         builtByDefault: false
 
-        property var qt: qtApp.Qt.core.binPath
+        property var qt: Qt.core.binPath
 
         Depends { name: "Cavewhere" }
+        Depends { name: "Qt.core" }
 
         Rule {
             multiplex: true
@@ -126,7 +128,12 @@ Project {
         builtByDefault: false
         condition: qbs.targetOS.contains("windows")
 
-        readonly property string version: Git.productVersion
+        GitProbe {
+            id: git
+            sourceDirectory: product.sourceDirectory
+        }
+
+        readonly property string version: git.productVersion
         readonly property string arch: {
             var arch
             switch(qbs.architecture) {
@@ -207,7 +214,6 @@ Project {
         }
 
         Depends { name: "cavewhere-install" }
-        Depends { name: "Git" }
 
         Group {
             name: "innoFiles"
@@ -292,10 +298,10 @@ innoInputFile
         }
     }
 
-    CppApplication {
-        id: qtApp
-        name: "QtApp"
-        Depends { name: "Qt"; submodules: ["core"] }
-    }
+//    CppApplication {
+//        id: qtApp
+//        name: "QtApp"
+//        Depends { name: "Qt"; submodules: ["core"] }
+//    }
 
 }

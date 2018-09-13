@@ -53,7 +53,6 @@ Item {
                     return "Error"
                 }
             }
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         ClickTextInput {
@@ -61,14 +60,12 @@ Item {
             readOnly: !enable
             text: ""
             onFinishedEditting: ( { } )
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         Text {
             id: unit
             textFormat: Text.RichText
             text: "&deg"
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 

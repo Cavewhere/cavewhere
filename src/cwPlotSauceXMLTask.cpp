@@ -27,8 +27,7 @@ cwPlotSauceXMLTask::cwPlotSauceXMLTask(QObject *parent) :
   \brief Sets the input file for the task to parse
   */
 void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
-    QMetaObject::invokeMethod(this, "privateSetPlotSauceXMLFile",
-                              Q_ARG(QString, inputFile));
+    XMLFileName = inputFile;
 }
 
 
@@ -56,19 +55,14 @@ void cwPlotSauceXMLTask::runTask() {
 }
 
 /**
-  \brief Helper to the setPlotSauceXMLFile
-  */
-void cwPlotSauceXMLTask::privateSetPlotSauceXMLFile(QString inputFile) {
-    XMLFileName = inputFile;
-}
-
-/**
   \brief Parse the xml out of the QByteArray
 
   This will emit stationPosition() when a station's position is found
   */
 void cwPlotSauceXMLTask::ParseXML(QByteArray xmlData) {
     if(!isRunning()) { return; }
+
+    if(xmlData.isEmpty()) { return; }
 
     QDomDocument document;
 

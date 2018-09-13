@@ -30,6 +30,9 @@
 #include <QUndoStack>
 #include <QFileDialog>
 #include <QSettings>
+#include <QCoreApplication>
+
+QAtomicInt cwProject::ConnectionCounter;
 
 /**
   By default, a project is open to a temporary directory
@@ -71,7 +74,8 @@ void cwProject::createTempProjectFile() {
     TempProject = true;
 
     //Create and open a new database connection
-    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", "ProjectConnection");
+    int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
+    ProjectDatabase = QSqlDatabase::addDatabase("QSQLITE", QString("ProjectConnection-%1").arg(nextConnectonName));
     ProjectDatabase.setDatabaseName(ProjectFile);
     bool couldOpen = ProjectDatabase.open();
     if(!couldOpen) {
@@ -204,7 +208,7 @@ void cwProject::save() {
 void cwProject::privateSave() {
     if(SaveTask == nullptr) {
         SaveTask = new cwRegionSaveTask();
-        SaveTask->setThread(LoadSaveThread);
+    }
 
     //Set the data for the project
     qDebug() << "Saving project to:" << ProjectFile;
@@ -327,11 +331,9 @@ void cwProject::loadFile(QString filename) {
         //Load the region task
         connect(LoadTask, &cwRegionLoadTask::finishedLoading,
                 this, &cwProject::updateRegionData);
-    }
 
         filename = convertFromURL(filename);
 
-        LoadTask->setThread(LoadSaveThread);
         //Set the data for the project
         LoadTask->setDatabaseFilename(filename);
 

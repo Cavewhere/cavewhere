@@ -20,6 +20,7 @@ class CAVEWHERE_LIB_EXPORT cwCaveExporterTask : public cwExporterTask
 {
 public:
     cwCaveExporterTask(QObject* parent = 0);
+    ~cwCaveExporterTask();
 
     void setData(const cwCave& cave);
     virtual bool writeCave(QTextStream& stream, cwCave* cave) = 0;

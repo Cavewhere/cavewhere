@@ -436,7 +436,7 @@ int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
 #ifdef Q_OS_WIN
     //FIXME: Need to have settings to use opengl dxt1 compression!
     //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
-//    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
 #else
     //FIXME: This is commented out because this breaks hard on old intel graphics cards
     QByteArray outputData = openglDxt1Compression(image);
@@ -624,7 +624,7 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
  *
  * This assumes that the opengl context is bound
  */
-//#ifndef Q_OS_WIN
+#ifndef Q_OS_WIN
 QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
 {
     glBindTexture(GL_TEXTURE_2D, Texture);
@@ -658,7 +658,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
     qDebug() << "Error: Couldn't compress image" << LOCATION;
     return QByteArray();
 }
-//#endif
+#endif
 
 
 /**

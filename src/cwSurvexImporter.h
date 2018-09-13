@@ -31,6 +31,7 @@ Q_OBJECT
 
 public:
     cwSurvexImporter(QObject* parent = nullptr);
+    ~cwSurvexImporter();
 
     bool hasParseErrors();
     QStringList parseErrors();
@@ -116,7 +117,8 @@ private:
     //The data that'll be populated
     cwTreeImportDataNode* RootBlock; //All blocks are child of this object
     cwTreeImportDataNode* CurrentBlock; //The current block
-    cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is stored
+    cwSurvexGlobalData* GlobalData; //Where all the fix points and other global data is storeds
+    cwSurvexGlobalData* PreviousGlobalData;
 
     cwSurvexNodeData* nodeData(cwTreeImportDataNode* node);
 

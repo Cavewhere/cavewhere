@@ -138,10 +138,8 @@ cwImageData cwImageProvider::originalMetadata(const cwImage &image) const {
 cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
     //Needed to get around const correctness
-    cwImageProvider* castedConstThis = const_cast<cwImageProvider*>(this);
-    int connectionName = castedConstThis->ConnectionCounter.fetchAndAddAcquire(1);
+    int connectionName = ConnectionCounter.fetchAndAddAcquire(1);
 
-//    QString databaseName = QString("resquestImage/%1").arg(counter);
     QString request = metaDataOnly ? "requestMetadata/%1" : "resquestImage/%1";
 
     //Define the database

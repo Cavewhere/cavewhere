@@ -23,23 +23,50 @@
 #include <QLinkedList>
 #include <QFileInfo>
 #include <QDir>
+#include <QThread>
 
 //Std include
 #include "math.h"
 
 cwSurvexImporter::cwSurvexImporter(QObject* parent) :
     cwTreeDataImporter(parent),
-    RootBlock(new cwTreeImportDataNode(this)),
+    RootBlock(new cwTreeImportDataNode()),
     CurrentBlock(nullptr),
-    GlobalData(new cwSurvexGlobalData(this)),
+    GlobalData(nullptr),
+    PreviousGlobalData(new cwSurvexGlobalData()),
     CurrentState(FirstBegin)
 {
+    RootBlock->moveToThread(nullptr);
+
+    connect(this, &cwTask::finished, this, [&]() {
+        //Move GlobalData to PreviousGlobalData
+        PreviousGlobalData->deleteLater();
+        PreviousGlobalData = GlobalData;
+        PreviousGlobalData->moveToThread(thread());
+        PreviousGlobalData->setParent(this);
+    });
+}
+
+cwSurvexImporter::~cwSurvexImporter()
+{
+    Q_ASSERT(isReady());
+    delete RootBlock;
+    if(GlobalData != nullptr) {
+        delete GlobalData;
+    }
 }
 
 void cwSurvexImporter::runTask() {
+    RootBlock->moveToThread(QThread::currentThread());
+    GlobalData = new cwSurvexGlobalData();
+
     if (!RootFilenames.isEmpty()) {
         importSurvex(RootFilenames[0]);
     }
+
+    RootBlock->moveToThread(nullptr);
+    GlobalData->moveToThread(nullptr);
+
     done();
 }
 

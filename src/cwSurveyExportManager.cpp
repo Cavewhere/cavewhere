@@ -133,7 +133,6 @@ void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
         exportTask->setData(*cave);
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-        exportTask->setThread(ExportThread);
         exportTask->start();
     }
 }

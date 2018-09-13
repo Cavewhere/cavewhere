@@ -37,18 +37,15 @@ FloatingGroupBox {
 
             LabelWithHelp {
                 id: labelId
-                anchors.verticalCenter: parent.verticalCenter
                 text: "Image Resolution"
                 helpArea: resolutionHelpAreaId
             }
 
             UnitValueInput {
                 unitValue: resolution
-                anchors.verticalCenter: parent.verticalCenter
             }
 
             ContextMenuButton {
-                anchors.verticalCenter: parent.verticalCenter
 
                 Controls.Menu {
                     Controls.MenuItem {

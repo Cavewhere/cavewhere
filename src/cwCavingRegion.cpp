@@ -94,8 +94,8 @@ QModelIndex cwCavingRegion::index(int row, int column, const QModelIndex &parent
   \brief Copy's the object into this object
   */
 cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
-    Q_ASSERT(object.thread() == thread());
-    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(object.thread() == thread() || object.thread() == nullptr || thread() == nullptr);
+    Q_ASSERT(QThread::currentThread() == thread() || thread() == nullptr);
 
     if(&object == this) {
         return *this;

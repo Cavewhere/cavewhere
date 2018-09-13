@@ -28,8 +28,9 @@ protected:
     static int version();
 
 private:
-    Q_INVOKABLE void moveRegionToThread(QThread* thread);
-    Q_INVOKABLE void updateRegionParent();
+//    void protectedMoveReginoToThread(QThread* thread);
+//    Q_INVOKABLE void moveRegionToThread(QThread* thread);
+//    Q_INVOKABLE void setRegionParent(QObject* parent);
 };
 
 #endif // CWREGIONIOTASK_H

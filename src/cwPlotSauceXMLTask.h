@@ -42,12 +42,6 @@ private:
     //Output
     cwStationPositionLookup StationPositions;
 
-    //For extracting the gunzip data
-//    cwGunZipReader* GunZipReader;
-
-    Q_INVOKABLE void privateSetPlotSauceXMLFile(QString inputFile);
-
-//    QByteArray extractXMLData();
     void ParseXML(QByteArray xml);
     void ParseStationXML(QDomNode station);
 
