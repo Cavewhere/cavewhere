@@ -115,7 +115,6 @@ void cwSurveyChunk::addCalibration(int shotIndex, cwTripCalibration* calibration
     } else {
         calibration->setParent(this);
         if(!Calibrations.contains(shotIndex)) {
-            Calibrations.value(shotIndex)->deleteLater();
             Calibrations.insert(shotIndex, calibration);
             emit calibrationsChanged();
         }
@@ -1526,9 +1525,11 @@ void cwSurveyChunk::updateCalibrationsNewShots(int beginIndex, int endIndex)
             //index that was added and the beginIndex isn't the last shot in shots
             if(beginIndex <= iter.key() && beginIndex != Shots.size() - distance) {
                 //Update the key and shift the calibration down
+                Q_ASSERT(iter.value() != nullptr);
                 newCalibration.insert(iter.key() + distance, iter.value());
                 updated = true;
             } else {
+                Q_ASSERT(iter.value() != nullptr);
                 newCalibration.insert(iter.key(), iter.value());
             }
         }
