@@ -317,6 +317,7 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
         dataLineTemplate = QString("%1 %2 %3 %4 %5");
     }
 
+    //Iterate over all the shots
     for(int i = 0; i < chunk->stationCount() - 1; i++) {
 
         //Make sure we can still be run
@@ -391,6 +392,12 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
                    .arg(distance, TextPadding)
                    .arg(backCompass, TextPadding)
                    .arg(backClino, TextPadding);
+        }
+
+        //Add chunk calibrations
+        cwTripCalibration* calibration = chunk->calibrations().value(i, nullptr);
+        if(calibration != nullptr) {
+            writeCalibrations(stream, calibration);
         }
 
         //Distance should be excluded, mark as duplicate

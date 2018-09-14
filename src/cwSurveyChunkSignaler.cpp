@@ -143,6 +143,37 @@ void cwSurveyChunkSignaler::addConnectionToChunks(const char *signal, QObject *r
 }
 
 /**
+ * @brief cwSurveyChunkSignaler::addConnectionToChunkCalibrations
+ * @param signal
+ * @param reciver
+ * @param slot
+ *
+ * This adds a connection dynamically to all the cwSurveyChunk calibrations in the region. If more cwSurveyChunk, trips, or caves are added to the
+ * region the connection created for each additional cwSurveyChunk calibration.
+ */
+void cwSurveyChunkSignaler::addConnectionToChunkCalibrations(const char *signal, QObject *reciever, const char *slot)
+{
+    Connection connection(signal, reciever, slot);
+
+    Q_ASSERT(!ChunkCalibrationConnections.contains(connection));
+
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            foreach(cwTrip* trip, cave->trips()) {
+                foreach(cwSurveyChunk* chunk, trip->chunks()) {
+                    auto calibrations = chunk->calibrations();
+                    for(auto iter = calibrations.begin(); iter != calibrations.end(); iter++) {
+                        connection.connect(iter.value());
+                    }
+                }
+            }
+        }
+    }
+
+    ChunkCalibrationConnections.append(connection);
+}
+
+/**
  * @brief cwSurveyChunkSignaler::connectCaves
  * @param region
  *
@@ -201,6 +232,14 @@ void cwSurveyChunkSignaler::connectChunks(cwTrip* trip) {
   */
 void cwSurveyChunkSignaler::connectChunk(cwSurveyChunk* chunk) {
     connectAll(chunk, ChunkConnections); //Connect to all user added connections
+
+    connect(chunk, &cwSurveyChunk::calibrationsChanged, this, [=]() {
+        //Connect all the
+        auto calibrations = chunk->calibrations();
+        for(auto iter = calibrations.begin(); iter != calibrations.end(); iter++) {
+            connectAll(iter.value(), ChunkCalibrationConnections);
+        }
+    });
 }
 
 /**
@@ -265,6 +304,13 @@ void cwSurveyChunkSignaler::disconnectSurveyChunks(cwTrip *trip, int beginIndex,
 void cwSurveyChunkSignaler::disconnectSurveyChunk(cwSurveyChunk *chunk)
 {
     disconnectAll(chunk, ChunkConnections);
+
+    auto calibrations = chunk->calibrations();
+    for(auto iter = calibrations.begin(); iter != calibrations.end(); iter++) {
+        disconnectAll(iter.value(), ChunkCalibrationConnections);
+    }
+
+    disconnect(chunk, nullptr, this, nullptr);
 }
 
 /**
@@ -375,7 +421,7 @@ void cwSurveyChunkSignaler::disconnectRemovedChunks(int beginIndex, int endIndex
 
 void cwSurveyChunkSignaler::Connection::connect(QObject *sender) const
 {
-    QObject::connect(sender, Signal.constData(), Reciever, Slot.constData());
+    QObject::connect(sender, Signal.constData(), Reciever, Slot.constData(), Qt::UniqueConnection);
 }
 
 void cwSurveyChunkSignaler::Connection::disconnect(QObject *sender) const

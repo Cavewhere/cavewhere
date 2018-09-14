@@ -68,8 +68,13 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     }
 
     //Write all chunks
+    cwTripCalibration* calibration = trip->calibrations();
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
-        writeChunk(stream, chunk);
+        writeChunk(stream, chunk, calibration);
+
+        if(chunk->lastCalibration() != nullptr) {
+            calibration = chunk->lastCalibration();
+        }
     }
 
     stream << (char)(0x0C); //0C is the ending char for the compass file
@@ -178,25 +183,30 @@ void cwCompassExportCaveTask::writeData(QTextStream& stream,
 
   THe chunk has all the real survey data
   */
-void cwCompassExportCaveTask::writeChunk(QTextStream& stream, cwSurveyChunk* chunk) {
-    cwTrip* trip = chunk->parentTrip();
+void cwCompassExportCaveTask::writeChunk(QTextStream& stream,
+                                         cwSurveyChunk* chunk,
+                                         cwTripCalibration* calibration) {
 
     //Trim the invalid stations off
     cwSurveyChunkTrimmer::trim(chunk);
 
     //Go through all the shots
     for(int i = 0; i < chunk->shotCount(); i++) {
+        //Change the calibration
+        cwTripCalibration* overrideCalibration = chunk->calibrations().value(i, nullptr);
+        calibration = overrideCalibration == nullptr ? calibration : overrideCalibration;
+
         cwShot shot = chunk->shot(i);
         cwStation from = chunk->station(i);
         cwStation to = chunk->station(i + 1);
 
-        writeShot(stream, trip->calibrations(), from, to, shot, false);
+        writeShot(stream, calibration, from, to, shot, false);
     }
 
     //Write the last stations LRUD
     cwStation lastStation = chunk->station(chunk->stationCount() - 1);
     cwShot emptyShot;
-    writeShot(stream, trip->calibrations(), lastStation, lastStation, emptyShot, true);
+    writeShot(stream, calibration, lastStation, lastStation, emptyShot, true);
 }
 
 /**

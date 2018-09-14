@@ -46,6 +46,8 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
     LinePlotTask = new cwLinePlotTask();
     connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(rerunSurvex())); //So the task is rerun

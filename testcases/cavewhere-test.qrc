@@ -22,5 +22,6 @@
         <file>datasets/compass/compassExportMissingLRUD.cw</file>
         <file>datasets/compass/compassImportExport.cw</file>
         <file>datasets/survex/issue118.svx</file>
+        <file>datasets/survex/dakeng.svx</file>
     </qresource>
 </RCC>

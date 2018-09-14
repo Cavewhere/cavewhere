@@ -303,6 +303,14 @@ void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoC
 
         chunk->appendShot(fromStation, toStation, shot);
     }
+
+    for(int i = 0; i < protoChunk.calibrations_size(); i++) {
+        const CavewhereProto::ChunkCalibration& protoCalibration = protoChunk.calibrations(i);
+        cwTripCalibration* calibration = new cwTripCalibration();
+        loadTripCalibration(protoCalibration.calibration(), calibration);
+
+        chunk->addCalibration(protoCalibration.shotindex(), calibration);
+    }
 }
 
 /**

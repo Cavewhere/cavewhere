@@ -156,6 +156,7 @@ private:
     void addShotToCurrentChunk(cwStation fromStation,
                                cwStation toStation,
                                cwShot shot);
+    void addCalibrationToCurrentChunk(cwTripCalibration* calibration);
 
     void parsePassageData(QString line);
 
