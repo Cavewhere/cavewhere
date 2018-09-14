@@ -14,8 +14,6 @@ ColumnLayout {
         rows: 3
         columns: 3
 
-        anchors.horizontalCenter: parent.horizontalCenter
-
         InformationButton {
             showItemOnClick: directionHelpAreaId
         }
@@ -131,7 +129,5 @@ ColumnLayout {
         text: "The views azimuth (in degrees between 0.0 and 360.0) is
              the compass direction that the view is facing.
             <ul><li>0.0° for North<li>90.0° for East<li>180.0° for South<li>270.0° for West</ul>";
-        anchors.left: parent.left
-        anchors.right: parent.right
     }
 }

@@ -7,6 +7,8 @@ docs/*
 *.qbs.user*
 qml/*.qmlc
 qml/*.jsc
+*.qmlc
+*.jsc
 .DS_Store
 .moc/moc_cw3dRegionViewer.cpp
 .moc/moc_cwAbstract2PointItem.cpp

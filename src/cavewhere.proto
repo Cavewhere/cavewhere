@@ -73,9 +73,15 @@ message TripCalibration {
     optional bool correctedClinoFrontsight = 13;
 }
 
+message ChunkCalibration {
+    optional int32 shotIndex = 1;
+    optional TripCalibration calibration = 2;
+}
+
 message SurveyChunk {
     repeated Station stations = 1;
     repeated Shot shots = 2;
+    repeated ChunkCalibration calibrations = 3;
 }
 
 message Shot {

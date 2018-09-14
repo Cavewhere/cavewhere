@@ -46,7 +46,6 @@ Rectangle {
 
         Image {
             id: icon
-            anchors.verticalCenter: parent.verticalCenter
             //        source: "qrc:icons/Information20x20.png"
             width: sourceSize.width
             height: sourceSize.height
@@ -57,8 +56,6 @@ Rectangle {
             id: helpText
 
             Layout.fillWidth: true
-
-            anchors.horizontalCenter: parent.horizontalCenter
 
             textFormat: Text.RichText
             wrapMode: Text.WordWrap

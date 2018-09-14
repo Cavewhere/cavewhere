@@ -25,6 +25,7 @@ cwCropImageTask::cwCropImageTask(QObject* parent) :
     cwProjectIOTask(parent) {
     AddImageTask = new cwAddImageTask(this);
     AddImageTask->setParentTask(this);
+    AddImageTask->setUsingThreadPool(false);
 
 }
 

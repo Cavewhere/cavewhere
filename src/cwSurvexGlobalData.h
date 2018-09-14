@@ -26,7 +26,7 @@ class cwSurvexNodeData;
 class cwSurvexGlobalData : public cwTreeImportData
 {
 public:
-    cwSurvexGlobalData(QObject* object);
+    cwSurvexGlobalData(QObject* object = nullptr);
 
     QList<cwCave*> caves();
 

@@ -40,6 +40,13 @@ Project {
             ]
         }
 
+        Group {
+            name: "README"
+            files: [
+                "README.md"
+            ]
+        }
+
         //Create the plist info for the icon
         bundle.infoPlist: {
             var object = {"CFBundleIconFile":"cavewhereIcon.icns",

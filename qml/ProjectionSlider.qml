@@ -56,8 +56,6 @@ Item {
 
         HelpArea {
             id: projectionSliderHelpAreaId
-            anchors.left: parent.left
-            anchors.right: parent.right
             text: "Cavewhere supports two types of projections:<ul>
 <li>Orthogonal - 3D objects always appear the same size no matter how close
 or far away they are to the view. When printing or drawing a cave map, this is the

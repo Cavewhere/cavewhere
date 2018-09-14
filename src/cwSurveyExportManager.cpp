@@ -26,11 +26,9 @@
 #include <QMenu>
 #include <QItemSelectionModel>
 #include <QDebug>
-#include <QThread>
 
 cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
-    QObject(parent),
-    ExportThread(new QThread(this))
+    QObject(parent)
 {
 }
 
@@ -38,8 +36,6 @@ cwSurveyExportManager::cwSurveyExportManager(QObject *parent) :
     Destructor
   */
 cwSurveyExportManager::~cwSurveyExportManager() {
-    ExportThread->exit();
-    ExportThread->wait();
 }
 
 /**
@@ -59,7 +55,6 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
     exportTask->setData(*cavingRegion());
     connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
     connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-    exportTask->setThread(ExportThread);
     exportTask->start();
 }
 
@@ -79,7 +74,6 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
         exportTask->setData(*cave);
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-        exportTask->setThread(ExportThread);
         exportTask->start();
     }
 }
@@ -99,7 +93,6 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
         exportTask->setData(*trip);
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-        exportTask->setThread(ExportThread);
         exportTask->start();
     }
 }
@@ -120,7 +113,6 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
         exportTask->setData(*cave);
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-        exportTask->setThread(ExportThread);
         exportTask->start();
     }
 }
@@ -141,7 +133,6 @@ void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
         exportTask->setData(*cave);
         connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
         connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
-        exportTask->setThread(ExportThread);
         exportTask->start();
     }
 }

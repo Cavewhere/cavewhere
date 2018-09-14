@@ -19,26 +19,22 @@
 
 //Qt includes
 #include <QFileDialog>
-#include <QThread>
 #include <QSettings>
 
 cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
-    ImportThread(new QThread()),
     CavingRegion(nullptr),
     CompassImporter(new cwCompassImporter()),
     MessageListFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
 {
-    CompassImporter->setThread(ImportThread);
     connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
     connect(CompassImporter, &cwCompassImporter::statusMessage, this, &cwSurveyImportManager::compassMessages);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()
 {
-    ImportThread->quit();
-    ImportThread->wait();
-    ImportThread->deleteLater();
+    CompassImporter->stop();
+    CompassImporter->waitToFinish();
     CompassImporter->deleteLater();
 }
 

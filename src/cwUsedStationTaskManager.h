@@ -44,7 +44,6 @@ class cwUsedStationTaskManager : public QObject
 
     Q_PROPERTY(bool listenToChanges READ listenToChanges WRITE setListenToChanges NOTIFY listenToChangesChanged)
     Q_PROPERTY(QStringList usedStations READ usedStations NOTIFY usedStationsChanged)
-    Q_PROPERTY(bool threaded READ threaded WRITE setThreaded NOTIFY threadedChanged)
 
     //Settings for how the data is displayed
     Q_PROPERTY(bool bold READ bold WRITE setBold NOTIFY boldChanged)
@@ -112,9 +111,6 @@ private:
 
     cwUsedStationsTask::Settings TaskSettings;
 
-    bool Threaded; //!<
-    QThread* Thread; //The thread that the task will use
-
     QList<QString> uoallCaveStationNames() const;
     void hookupCaveToTask();
 
@@ -144,14 +140,6 @@ inline QStringList cwUsedStationTaskManager::usedStations() const {
   */
 inline bool cwUsedStationTaskManager::listenToChanges() const {
     return ListenToChanges;
-}
-
-/**
-* @brief cwUsedStationTaskManager::threaded
-* @return True if the used station task manager use a seperate thread to calculate the used stations
-*/
-inline bool cwUsedStationTaskManager::threaded() const {
-    return Threaded;
 }
 
 

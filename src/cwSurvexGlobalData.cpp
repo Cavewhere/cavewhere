@@ -14,6 +14,9 @@
 #include "cwDebug.h"
 #include "cwSurvexNodeData.h"
 
+//Qt includes
+#include <QThread>
+
 cwSurvexGlobalData::cwSurvexGlobalData(QObject* parent) :
     cwTreeImportData(parent), NodeData()
 {

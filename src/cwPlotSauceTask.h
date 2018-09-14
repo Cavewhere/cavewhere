@@ -32,16 +32,12 @@ private:
     //The filename of the survex 3d file
     static const QString PlotSauceExtension;
     QString Survex3DFileName;
-    QReadWriteLock Survex3DFileNameLocker;
 
     QProcess* PlotSauceProcess;
 
     QString survex3DFilename() const;
 
-    Q_INVOKABLE void privateSetSurvex3DFile(QString survex3dFilename);
-
 private slots:
-    void plotSauceFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/);
     void printErrors();
 
 };

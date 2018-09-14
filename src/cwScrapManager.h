@@ -80,7 +80,6 @@ private:
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
 
     //The task that'll be run
-    QThread* TriangulateThread;
     cwTriangulateTask* TriangulateTask;
     cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;

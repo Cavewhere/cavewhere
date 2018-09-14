@@ -75,6 +75,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
     cwCavingRegion* importedRegion = new cwCavingRegion();
     importedRegion->addCave(new cwCave(caves.first()));
+    CHECK(importedRegion->caveCount() == 1);
 
     cwLinePlotManager* plotManager = new cwLinePlotManager();
     plotManager->setRegion(project->cavingRegion());

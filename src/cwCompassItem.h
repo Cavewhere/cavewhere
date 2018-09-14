@@ -51,6 +51,7 @@ public:
     QQuaternion modelView() const;
 
     void paint(QPainter *painter);
+    void releaseResources();
 
 signals:
     void cameraChanged();

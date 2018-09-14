@@ -115,6 +115,7 @@
 #include <QGraphicsScene>
 #include <QDebug>
 #include <QUndoStack>
+#include <QThread>
 #include <QProcess>
 
 cwQMLRegister::cwQMLRegister()

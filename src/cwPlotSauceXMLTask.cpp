@@ -20,16 +20,14 @@
 cwPlotSauceXMLTask::cwPlotSauceXMLTask(QObject *parent) :
     cwTask(parent)
 {
-    GunZipReader = new cwGunZipReader(this);
-    GunZipReader->setParentTask(this);
+
 }
 
 /**
   \brief Sets the input file for the task to parse
   */
 void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
-    QMetaObject::invokeMethod(this, "privateSetPlotSauceXMLFile",
-                              Q_ARG(QString, inputFile));
+    XMLFileName = inputFile;
 }
 
 
@@ -43,62 +41,18 @@ void cwPlotSauceXMLTask::setPlotSauceXMLFile(QString inputFile) {
   plot sauce file are usually compressed.
   */
 void cwPlotSauceXMLTask::runTask() {
+
     StationPositions.clearStations();
 
-    GunZipReader->setFilename(XMLFileName);
-    GunZipReader->start();
+    QScopedPointer<cwGunZipReader> gunZipReader(new cwGunZipReader());
+    gunZipReader->setFilename(XMLFileName);
+    gunZipReader->setUsingThreadPool(false);
+    gunZipReader->start();
 
-    QByteArray xmlData = GunZipReader->data();
+    QByteArray xmlData = gunZipReader->data();
     ParseXML(xmlData);
     done();
 }
-
-/**
-  \brief Helper to the setPlotSauceXMLFile
-  */
-void cwPlotSauceXMLTask::privateSetPlotSauceXMLFile(QString inputFile) {
-    XMLFileName = inputFile;
-}
-
-///**
-//  \brief This will extract the xml file data from
-//  */
-//QByteArray cwPlotSauceXMLTask::extractXMLData() {
-//    GunZipReader->
-
-//    if(!isRunning()) { return QByteArray(); }
-
-//    if(!QFileInfo(XMLFileName).exists()) {
-//        qWarning() << "Can't parse plot sauce xml file becauce the file doesn't exist: " << XMLFileName;
-//        return QByteArray();
-//    }
-
-//    QByteArray totalBytes;
-//    QByteArray buffer;
-//    const int bufferSize = 32 * 1024;
-//    buffer.resize(bufferSize); //32k buffer
-
-//    gzFile file = gzopen((const char*)XMLFileName.toAscii(), "r");
-//    int numberOfBytesCopied = 0;
-//    while((numberOfBytesCopied = gzread(file, buffer.data(), buffer.size())) && isRunning()) {
-//        buffer.resize(numberOfBytesCopied);
-//        totalBytes.append(buffer);
-//    }
-
-//    if(!isRunning()) {
-//        return QByteArray();
-//    }
-
-//    //If there was a error reading
-//    if(!gzeof(file)) {
-//        int errorCode;
-//        const char* errorString = gzerror(file, &errorCode);
-//        qWarning() << "There was an error reading gunzip data:" << errorCode << errorString;
-//        return QByteArray();
-//    }
-
-//    return totalBytes;
-//}
 
 /**
   \brief Parse the xml out of the QByteArray
@@ -107,6 +61,8 @@ void cwPlotSauceXMLTask::privateSetPlotSauceXMLFile(QString inputFile) {
   */
 void cwPlotSauceXMLTask::ParseXML(QByteArray xmlData) {
     if(!isRunning()) { return; }
+
+    if(xmlData.isEmpty()) { return; }
 
     QDomDocument document;
 

@@ -9,10 +9,19 @@
 #include "cwCaveExporterTask.h"
 #include "cwCave.h"
 
+//Qt includes
+#include <QThread>
+
 cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
     cwExporterTask(parent)
 {
-    Cave = new cwCave(this);
+    Cave = new cwCave();
+    Cave->moveToThread(nullptr);
+}
+
+cwCaveExporterTask::~cwCaveExporterTask()
+{
+    Cave->deleteLater();
 }
 
 /**
@@ -22,7 +31,9 @@ cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
   */
 void cwCaveExporterTask::setData(const cwCave& cave) {
     if(!isRunning()) {
+        Cave->moveToThread(QThread::currentThread());
         *Cave = cave;
+        Cave->moveToThread(nullptr);
     } else {
         qWarning("Can't set cave data when cave exporter is already running");
     }
@@ -32,6 +43,7 @@ void cwCaveExporterTask::setData(const cwCave& cave) {
   \brief Starts running the export cave task
   */
 void cwCaveExporterTask::runTask() {
+    Cave->moveToThread(QThread::currentThread());
     if(checkData() && openOutputFile()) {
         bool good = writeCave(*OutputStream.data(), Cave);
         closeOutputFile();
@@ -42,6 +54,7 @@ void cwCaveExporterTask::runTask() {
     } else {
         stop();
     }
+    Cave->moveToThread(nullptr);
     done();
 }
 

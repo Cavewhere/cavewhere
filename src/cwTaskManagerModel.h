@@ -62,6 +62,8 @@ private:
     QSignalMapper* TaskProgressMapper;
     QSignalMapper* TaskNumberOfStepsMapper;
 
+    QTime* ActiveTimer;
+
     cwTask* convertToTask(QObject* task);
     void removeActiveTask(cwTask* task);
     void addActiveTask(cwTask* task);

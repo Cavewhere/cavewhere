@@ -1,5 +1,5 @@
 
-var File = loadExtension("qbs.File");
+var File = require("qbs.File");
 
 function findIfExisting(paths, programName) {
     for(i in paths) {

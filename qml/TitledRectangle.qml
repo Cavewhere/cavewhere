@@ -18,7 +18,6 @@ Rectangle {
 
         Text {
             id: onPaperId
-            anchors.horizontalCenter: parent.horizontalCenter
         }
     }
 }

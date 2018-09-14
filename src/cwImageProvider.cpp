@@ -139,7 +139,6 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 
     int connectionName = ConnectionCounter.fetchAndAddAcquire(1);
 
-//    QString databaseName = QString("resquestImage/%1").arg(counter);
     QString request = metaDataOnly ? "requestMetadata/%1" : "resquestImage/%1";
 
     //Define the database

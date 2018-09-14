@@ -25,7 +25,6 @@ class cwLinePlotMesh;
 
 //Qt includes
 #include <QObject>
-#include <QThread>
 #include <QPointer>
 
 class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
@@ -54,7 +53,6 @@ private:
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
     cwLinePlotTask* LinePlotTask;
-    QThread* LinePlotThread;
 
     cwGLLinePlot* GLLinePlot;
     cwLinePlotMesh* LinePlotMesh;
@@ -70,6 +68,7 @@ private:
     void clearUnconnectedChunkErrors();
 
 private slots:
+    void rerunSurvex();
     void runSurvex();
 
     void updateLinePlot();

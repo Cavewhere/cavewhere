@@ -34,6 +34,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlRecord>
+#include <QThread>
 
 //Std includes
 #include <sstream>
@@ -51,7 +52,6 @@ void cwRegionLoadTask::runTask() {
     //Clear region
     bool connected = connectToDatabase("loadRegionTask");
     if(connected) {
-
         //This makes sure that sqlite is clean up after it self
         insureVacuuming();
 
@@ -102,6 +102,7 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
 
     //Clean up old images
     cwImageCleanupTask imageCleanupTask;
+    imageCleanupTask.setUsingThreadPool(false);
     imageCleanupTask.setDatabaseFilename(databaseFilename());
     imageCleanupTask.setRegion(Region);
     imageCleanupTask.start();
@@ -151,7 +152,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  */
 void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
 {
-
+    Region->moveToThread(QThread::currentThread());
     Region->clearCaves();
 
     QList<cwCave*> caves;
@@ -166,6 +167,7 @@ void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &regi
     }
 
     Region->addCaves(caves);
+    Region->moveToThread(nullptr);
 }
 
 /**
@@ -300,6 +302,14 @@ void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoC
         cwShot shot = shots[i];
 
         chunk->appendShot(fromStation, toStation, shot);
+    }
+
+    for(int i = 0; i < protoChunk.calibrations_size(); i++) {
+        const CavewhereProto::ChunkCalibration& protoCalibration = protoChunk.calibrations(i);
+        cwTripCalibration* calibration = new cwTripCalibration();
+        loadTripCalibration(protoCalibration.calibration(), calibration);
+
+        chunk->addCalibration(protoCalibration.shotindex(), calibration);
     }
 }
 

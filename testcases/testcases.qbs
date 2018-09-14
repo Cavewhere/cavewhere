@@ -6,12 +6,15 @@ import qbs.File
 
 import "../qbsModules/CavewhereApp.qbs" as CavewhereApp
 
-CavewhereApp {
+CppApplication {
     name: "cavewhere-test"
     consoleApplication: true
 
     Depends { name: "Qt"; submodules: ["test"] }
     Depends { name: "dewalls" }
+    Depends { name: "cavewhere-lib" }
+
+    cpp.includePaths: ["catch"]
 
     Group {
         name: "testcases"
@@ -35,7 +38,13 @@ CavewhereApp {
     Group {
         name: "CatchTestLibrary"
         files: [
-            "catch.hpp",
+            "catch/catch.hpp",
         ]
+    }
+
+    Group {
+        fileTagsFilter: bundle.isBundle ? ["bundle.content"] : ["application"]
+        qbs.install: true
+        qbs.installSourceBase: product.buildDirectory
     }
 }

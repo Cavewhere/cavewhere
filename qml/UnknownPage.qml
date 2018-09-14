@@ -20,7 +20,7 @@ Item {
 
             Text {
                 text: "Unknown page!"
-                font.pointSize: 50
+                font.pointSize: 30
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -33,8 +33,8 @@ Item {
 
             Image {
                 source: "qrc:/icons/unknownPage.png"
-
-                sourceSize.width: 400
+                Layout.alignment: Qt.AlignHCenter
+//                sourceSize.width: 400
             }
 
             LinkText {

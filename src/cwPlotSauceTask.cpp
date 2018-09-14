@@ -12,6 +12,7 @@
 #include <QReadLocker>
 #include <QWriteLocker>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QFileInfo>
 #include <QDir>
 #include <QApplication>
@@ -22,9 +23,9 @@ const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
 cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
-    PlotSauceProcess = new QProcess(this);
-    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
-    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+
+//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
+
 }
 
 /**
@@ -33,9 +34,7 @@ cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
   This function is thread safe
 */
 void cwPlotSauceTask::setSurvex3DFile(QString inputFile) {
-    //Thread safe way to set the data for the task
-    QMetaObject::invokeMethod(this, "privateSetSurvex3DFile",
-                              Q_ARG(QString, inputFile));
+    Survex3DFileName = inputFile;
 }
 
 /**
@@ -54,7 +53,6 @@ QString cwPlotSauceTask::outputXMLFile() const {
   \brief Gets the 3d filename for the task
   */
 QString cwPlotSauceTask::survex3DFilename() const {
-    QReadLocker locker(const_cast<QReadWriteLock*>(&Survex3DFileNameLocker));
     return Survex3DFileName;
 }
 
@@ -66,6 +64,9 @@ void cwPlotSauceTask::runTask() {
         done();
         return;
     }
+
+    PlotSauceProcess = new QProcess();
+    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
 
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
@@ -87,18 +88,12 @@ void cwPlotSauceTask::runTask() {
     arguments.append(inputFile);
     arguments.append(outputFile);
 
+    PlotSauceProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
     PlotSauceProcess->start(plotSaucePath, arguments);
-}
+    PlotSauceProcess->waitForFinished();
 
-/**
-  Set the survex 3d file
-  */
-void cwPlotSauceTask::privateSetSurvex3DFile(QString survex3dFilename) {
-    QWriteLocker locker(&Survex3DFileNameLocker);
-    Survex3DFileName = survex3dFilename;
-}
+    delete PlotSauceProcess;
 
-void cwPlotSauceTask::plotSauceFinished(int /*exitCode*/, QProcess::ExitStatus /*exitStatus*/) {
     done();
 }
 

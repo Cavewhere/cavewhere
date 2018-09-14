@@ -46,11 +46,7 @@
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
-    CompressionContext = new QOpenGLContext(this);
-    Window = new QWindow();
-    Window->setSurfaceType(QSurface::OpenGLSurface);
-    Window->create();
-    Texture = 0;
+
 
     MipmapOnly = false;
 }
@@ -61,6 +57,11 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   This will mipmap the images as well, create a icon image.  The original is also stored
   */
 void cwAddImageTask::runTask() {
+    CompressionContext = new QOpenGLContext();
+    Window = new QWindow();
+    Window->setSurfaceType(QSurface::OpenGLSurface);
+    Window->create();
+    Texture = 0;
 
     //Clear all previous data
     Images.clear();
@@ -109,6 +110,9 @@ void cwAddImageTask::runTask() {
     }
 
     CompressionContext->doneCurrent();
+
+    delete CompressionContext;
+    delete Window;
 
     //Finished
     done();

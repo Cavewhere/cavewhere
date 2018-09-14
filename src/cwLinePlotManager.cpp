@@ -48,21 +48,17 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SLOT(runSurvex()));
-
-    LinePlotThread = new QThread(this);
-    LinePlotThread->start();
+    SurveySignaler->addConnectionToChunks(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
     LinePlotTask = new cwLinePlotTask();
-    LinePlotTask->setThread(LinePlotThread);
-    connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(runSurvex())); //So the task is rerun
+    connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(rerunSurvex())); //So the task is rerun
     connect(LinePlotTask, SIGNAL(finished()), SLOT(updateLinePlot()));
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
     LinePlotTask->stop();
-
-    QMetaObject::invokeMethod(LinePlotThread, "quit");
-    LinePlotThread->wait();
+    LinePlotTask->waitToFinish();
 
     delete LinePlotTask;
 }
@@ -218,6 +214,16 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
     UnconnectedChunks.clear();
 }
 
+/**
+ * @brief cwLinePlotManager::rerunSurvex
+ *
+ * Re-runs the survex. This simply just calls runSurvex but is useful for debugging
+ * if the re-run isn't working correctly.
+ */
+void cwLinePlotManager::rerunSurvex()
+{
+    runSurvex();
+}
 
 /**
   \brief Run the line plot task
@@ -225,13 +231,11 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
 void cwLinePlotManager::runSurvex() {
     if(Region != nullptr) {
         if(LinePlotTask->isReady()) {
-//            qDebug() << "Running the task";
             setCaveStationLookupAsStale(true);
             LinePlotTask->setData(*Region);
             LinePlotTask->start();
         } else {
             //Restart the survex
-//            qDebug() << "Restart plot task";
             LinePlotTask->restart();
         }
     }

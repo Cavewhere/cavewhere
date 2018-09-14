@@ -53,7 +53,7 @@ void cwCompassItem::draw()
     QMatrix4x4 rotationMatrix;
     rotationMatrix.rotate(Rotation);
 
-    bool lookingDown = rotationMatrix.map(QVector3D(0.0, 0.0, 1.0)).z() > 0.0;
+    bool lookingDown = rotationMatrix.map(QVector3D(0.0, 0.0, 1.0)).z() > 0.0f;
 
     QMatrix4x4 modelView;
     modelView.translate(0.5, 0.5, 0.0);
@@ -122,6 +122,22 @@ void cwCompassItem::paint(QPainter *painter)
     draw();
 
     painter->endNativePainting();
+}
+
+void cwCompassItem::releaseResources()
+{
+    delete Program;
+    delete XShadowProgram;
+    delete YShadowProgram;
+    delete ShadowOutputProgram;
+    CompassVertexBuffer.destroy();
+    TextureGeometryBuffer.destroy();
+
+    delete CompassFramebuffer; //Can be a multi-sample or texture framebuffer
+    delete ShadowBufferFramebuffer;
+    delete HorizonalShadowBufferFramebuffer;
+
+    QQuickPaintedItem::releaseResources();
 }
 
 /**
@@ -541,7 +557,10 @@ void cwCompassItem::drawLabel(QVector3D pos, QString label, QFont font, QPainter
 
     QPointF northPosition = camera->project(pos);
 
+    //FIXME: This is a bug in Qt 5.11 https://bugreports.qt.io/browse/QTBUG-61822
+#if QT_VERSION_MINOR != 11
     painter->setFont(font);
+#endif
     QPainterPath textPath;
     textPath.addText(northPosition - northRect.center(), font, label);
 
@@ -549,7 +568,6 @@ void cwCompassItem::drawLabel(QVector3D pos, QString label, QFont font, QPainter
     pen.setWidth(10);
     pen.setColor(Qt::white);
 
-//    painter->setBrush(Qt::black);
     painter->setPen(pen);
     painter->drawPath(textPath);
 

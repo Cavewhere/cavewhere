@@ -23,7 +23,6 @@
 #include <QPixmapCache>
 #include <QMessageBox>
 #include <QDebug>
-#include <QThread>
 
 
 cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* importer, cwCavingRegion* region, QWidget *parent) :
@@ -31,17 +30,13 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
     Region(region),
     Model(new cwTreeDataImporterModel(this)),
     Importer(importer),
-    SurvexSelectionModel(new QItemSelectionModel(Model, this)),
-    ImportThread(new QThread(this))
+    SurvexSelectionModel(new QItemSelectionModel(Model, this))
 {
     setupUi(this);
     tabWidget->setTabText(tabWidget->indexOf(SurvexErrorsWidget), QApplication::translate("cwImportTreeDataDialog",
                                                                                           names.errorsLabel.toLocal8Bit().constData(), 0));
 
     setupTypeComboBox();
-
-    //Move the importer to another thread
-    Importer->setThread(ImportThread);
 
     //Connect the importer up
     connect(Importer, SIGNAL(finished()), SLOT(importerFinishedRunning()));
@@ -71,10 +66,7 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
 
 cwImportTreeDataDialog::~cwImportTreeDataDialog() {
     Importer->stop();
-
-    ImportThread->quit();
-    ImportThread->wait();
-
+    Importer->waitToFinish();
     delete Importer;
 }
 
@@ -310,8 +302,8 @@ void cwImportTreeDataDialog::import() {
   All the data has been parsed out of the importer
   */
 void cwImportTreeDataDialog::importerFinishedRunning() {
-    //Move the importer back to this thread
-    Importer->setThread(thread(), Qt::BlockingQueuedConnection);
+//    //Move the importer back to this thread
+//    Importer->setThread(thread(), Qt::BlockingQueuedConnection);
 
     //Get the importer's data
     Model->setTreeImportData(Importer->data());
@@ -333,9 +325,6 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
     //Update the error / warning label at the bottom
     updateImportWarningLabel();
 
-    //shut down the thread
-    ImportThread->quit();
-
     show();
 }
 
@@ -343,7 +332,7 @@ void cwImportTreeDataDialog::importerFinishedRunning() {
   \brief Called if the importer has been canceled by the user
   */
 void cwImportTreeDataDialog::importerCanceled() {
-    ImportThread->quit();
+    Importer->waitToFinish();
     close();
 }
 

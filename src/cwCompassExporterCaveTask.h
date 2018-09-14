@@ -56,7 +56,7 @@ private:
     void writeDeclination(QTextStream& stream, cwTripCalibration* calibrations);
     void writeCorrections(QTextStream& stream, cwTripCalibration* calibrations);
     void writeData(QTextStream& stream, QString fieldName, int fieldLength, QString data);
-    void writeChunk(QTextStream& stream, cwSurveyChunk* chunk);
+    void writeChunk(QTextStream& stream, cwSurveyChunk* chunk, cwTripCalibration *calibration);
 
     double convertField(cwStation station, StationLRUDField field, cwUnits::LengthUnit unit);
     double convertField(cwTripCalibration *trip, cwShot shot, ShotField field);

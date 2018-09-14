@@ -127,9 +127,31 @@ void cwTaskManagerModel::addTask(cwTask *task)
  */
 void cwTaskManagerModel::removeTask(cwTask *task)
 {
-    qDebug() << "Remove Task:" << task << "TODO, implement this function!!!";
-    Q_UNUSED(task);
+    if(WatchingTasks.contains(task)) {
+        Q_ASSERT(TaskToTimer.contains(task));
+        QTimer* timer = TaskToTimer.value(task);
 
+        connect(task, nullptr, this, nullptr);
+        connect(task, nullptr, TaskStartedMapper, nullptr);
+        connect(task, nullptr, TaskStoppedMapper, nullptr);
+        connect(task, nullptr, TaskFinishedMapper, nullptr);
+        connect(task, nullptr, TaskProgressMapper, nullptr);
+        connect(task, nullptr, TaskNumberOfStepsMapper,nullptr);
+        connect(task, nullptr, TaskNameMapper, nullptr);
+        connect(timer, nullptr, TaskActiveMapper, nullptr);
+
+        TaskStartedMapper->removeMappings(task);
+        TaskStoppedMapper->removeMappings(task);
+        TaskFinishedMapper->removeMappings(task);
+        TaskProgressMapper->removeMappings(task);
+        TaskNumberOfStepsMapper->removeMappings(task);
+        TaskNameMapper->removeMappings(task);
+        TaskActiveMapper->removeMappings(timer);
+
+        WatchingTasks.remove(task);
+        TaskToTimer.remove(task);
+        timer->deleteLater();
+    }
 }
 
 /**

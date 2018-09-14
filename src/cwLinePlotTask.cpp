@@ -58,34 +58,18 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     SurvexExporter->setParentTask(this);
     SurvexExporter->setOutputFile(SurvexFile->fileName());
 
-    connect(SurvexExporter, SIGNAL(finished()), SLOT(runCavern()));
-    connect(SurvexExporter, SIGNAL(stopped()), SLOT(done()));
-
     CavernTask = new cwCavernTask();
     CavernTask->setParentTask(this);
     CavernTask->setSurvexFile(SurvexFile->fileName());
 
-    connect(CavernTask, SIGNAL(finished()), SLOT(convertToXML()));
-    connect(CavernTask, SIGNAL(stopped()), SLOT(done()));
-
     PlotSauceTask = new cwPlotSauceTask();
     PlotSauceTask->setParentTask(this);
-
-    connect(PlotSauceTask, SIGNAL(finished()), SLOT(readXML()));
-    connect(PlotSauceTask, SIGNAL(stopped()), SLOT(done()));
 
     PlotSauceParseTask = new cwPlotSauceXMLTask();
     PlotSauceParseTask->setParentTask(this);
 
-    connect(PlotSauceParseTask, SIGNAL(finished()), SLOT(generateCenterlineGeometry()));
-    connect(PlotSauceParseTask, SIGNAL(stopped()), SLOT(done()));
-    //connect(PlotSauceParseTask, SIGNAL(stationPosition(QString,QVector3D)), SLOT(updateStationPositionForCaves(QString,QVector3D)));
-
     CenterlineGeometryTask = new cwLinePlotGeometryTask();
     CenterlineGeometryTask->setParentTask(this);
-
-    connect(CenterlineGeometryTask, SIGNAL(finished()), SLOT(linePlotTaskComplete()));
-    connect(CenterlineGeometryTask, SIGNAL(stopped()), SLOT(done()));
 
     UnconnectedSurveyChunkTask = new cwFindUnconnectedSurveyChunksTask();
     UnconnectedSurveyChunkTask->setParentTask(this);
@@ -105,20 +89,16 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
         return;
     }
 
-    //Move region to the current thread
-    QMetaObject::invokeMethod(this,
-                              "moveCaveRegionToThread",
-                              Qt::BlockingQueuedConnection,
-                              Q_ARG(QThread*, QThread::currentThread()));
-
     //Copy over all region data
-    *Region = region;  
+    *Region = region;
 
-    //Move region back to task thread
-    moveCaveRegionToThread(thread());
+    //Change all the cave names, such that survex can handle them correctly
+    encodeCaveNames();
+
+    SurvexExporter->setData(*Region);
 
     //Populate the original pointers
-    RegionOriginalPointers = RegionDataPtrs(region);
+     RegionOriginalPointers = RegionDataPtrs(region);
 
 }
 
@@ -131,35 +111,43 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
   4. Update the survey data
   */
 void cwLinePlotTask::runTask() {
-//     qDebug() << "\n-------------------------------------";
     if(!isRunning()) {
         done();
         return;
     }
 
-//    qDebug() << "Running line plot task";
-
     //Clear the previous results
     Result.clear();
 
     try {
-
         //Check for errors
         checkForErrors();
-
-        //Change all the cave names, such that survex can handle them correctly
-        encodeCaveNames();
 
         //Initilize the cave station lookup, from previous run
         initializeCaveStationLookups();
 
         Time.start();
+
         exportData();
+
+        runCavern();
+
+        convertToXML();
+
+        readXML();
+
+        generateCenterlineGeometry();
+
+        linePlotTaskComplete();
+
+        done();
 
     } catch(QString) {
         done();
         return;
     }
+
+
 }
 
 /**
@@ -167,12 +155,10 @@ void cwLinePlotTask::runTask() {
   */
 void cwLinePlotTask::exportData() {
     if(!isRunning()) {
-        done();
         return;
     }
 
-//    qDebug() << "Running export data status:" << status();
-    SurvexExporter->setData(*Region);
+//    qDebug() << "Survex export started on " << SurvexFile->fileName() << "Status" << status();
     SurvexExporter->start();
 }
 
@@ -182,7 +168,6 @@ void cwLinePlotTask::exportData() {
   */
 void cwLinePlotTask::runCavern() {
     if(!isRunning()) {
-        done();
         return;
     }
 
@@ -196,7 +181,6 @@ void cwLinePlotTask::runCavern() {
   */
 void cwLinePlotTask::convertToXML() {
     if(!isRunning()) {
-        done();
         return;
     }
 
@@ -207,7 +191,6 @@ void cwLinePlotTask::convertToXML() {
 
 void cwLinePlotTask::readXML() {
     if(!isRunning()) {
-        done();
         return;
     }
 
@@ -223,7 +206,6 @@ void cwLinePlotTask::readXML() {
   */
 void cwLinePlotTask::generateCenterlineGeometry() {
     if(!isRunning()) {
-        done();
         return;
     }
 
@@ -243,6 +225,9 @@ void cwLinePlotTask::generateCenterlineGeometry() {
   \brief This alerts all the listeners that the data is done
   */
 void cwLinePlotTask::linePlotTaskComplete() {
+    if(!isRunning()) {
+        return;
+    }
 
     //Copy all the from the CenterLineGemoetryTask into the results
     Result.StationPositions = CenterlineGeometryTask->pointData();
@@ -255,7 +240,6 @@ void cwLinePlotTask::linePlotTaskComplete() {
     updateCaveNetworks();
 
 //    qDebug() << "Finished running linePlotTask:" << Time.elapsed() << "ms";
-    done();
 }
 
 /**

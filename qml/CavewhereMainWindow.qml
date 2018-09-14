@@ -6,8 +6,6 @@
 **************************************************************************/
 
 import QtQuick 2.0
-//import Cavewhere 1.0
-//import QtGraphicalEffects 1.0
 import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
 import QtQuick.Dialogs 1.2
@@ -17,10 +15,9 @@ ApplicationWindow {
     objectName: "applicationWindow"
 
     visible: license.hasReadLicenseAgreement
-    width: 1280
-    height: 800
+    visibility: Window.Maximized
+
     title: "Cavewhere - " + version
-    //    anchors.fill: parent;
 
     Loader {
         source: "LicenseWindow.qml"

@@ -20,7 +20,7 @@ Application {
         }
         return ""
     }
-    property string prefix: sourceDirectory.indexOf("/testcases") > 0 ? "../" : ""
+    property string prefix: project.sourceDirectory
 
     Depends { name: "cpp" }
     Depends { name: "Qt"
@@ -35,9 +35,11 @@ Application {
     Depends { name: "cavewhere-lib" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
 
+    cpp.cxxLanguageVersion: "c++11"
+
     cpp.includePaths: [
-        applicationId.prefix + "src",
-        applicationId.prefix + "src/utils",
+        applicationId.prefix + "/src",
+        applicationId.prefix + "/src/utils",
         applicationId.prefix + "src/rendering",
         buildDirectory + "/serialization",
         buildDirectory + "/versionInfo"
@@ -50,10 +52,6 @@ Application {
     Properties {
         condition: qbs.targetOS.contains("osx")
 
-        cpp.dynamicLibraries: [
-            "c++"
-        ]
-
         cpp.frameworks: [
             "OpenGL"
         ]
@@ -63,8 +61,8 @@ Application {
         condition: qbs.targetOS.contains("osx")
         cpp.cxxFlags: {
             var flags = [
-                        "-stdlib=libc++", //Needed for protoc
-                        "-std=c++11", //For c++11 support
+//                        "-stdlib=libc++", //Needed for protoc
+//                        "-std=c++11", //For c++11 support
                         "-Werror", //Treat warnings as errors
 
                     ];
@@ -77,7 +75,7 @@ Application {
             return flags;
         }
 
-        cpp.linkerFlags: {
+        cpp.driverFlags: {
             var flags = [];
 //            if(qbs.buildVariant == "debug") {
 //                flags.push("-fsanitize=address")
@@ -108,7 +106,7 @@ Application {
         condition: qbs.targetOS.contains("windows")
 
         cpp.cxxFlags: [
-            "/WX", //Treat warnings as errors
+//            "/WX", //Treat warnings as errors
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 
@@ -117,26 +115,13 @@ Application {
         ]
     }
 
-    cpp.minimumOsxVersion: "10.7"
-
-    Group {
-        fileTagsFilter: ["bundle"]
-        qbs.install: true
-    }
-
-    Group {
-        fileTagsFilter: ["application"]
-        qbs.installDir: qbs.targetOS.contains("darwin") ? "Cavewhere.app/Contents/MacOS" : ""
-        qbs.install: true
-    }
-
     Group {
         name: "qmlFiles"
         qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
         qbs.installDir: product.installPrefix + "qml"
         files: [
-            applicationId.prefix + "qml/*.qml",
-            applicationId.prefix + "qml/*.js"
+            applicationId.prefix + "/qml/*.qml",
+            applicationId.prefix + "/qml/*.js"
         ]
     }
 
@@ -146,11 +131,11 @@ Application {
         qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
 
         files: [
-            applicationId.prefix + "shaders/*.vert",
-            applicationId.prefix + "shaders/*.frag",
-            applicationId.prefix + "shaders/*.geam",
-            applicationId.prefix + "shaders/*.vsh",
-            applicationId.prefix + "shaders/*.fsh"
+            applicationId.prefix + "/shaders/*.vert",
+            applicationId.prefix + "/shaders/*.frag",
+            applicationId.prefix + "/shaders/*.geam",
+            applicationId.prefix + "/shaders/*.vsh",
+            applicationId.prefix + "/shaders/*.fsh"
         ]
     }
 
@@ -160,8 +145,8 @@ Application {
         qbs.install: qbs.buildVariant == "release" && !product.consoleApplication
 
         files: [
-            applicationId.prefix + "shaders/compass/*.vsh",
-            applicationId.prefix + "shaders/compass/*.fsh"
+            applicationId.prefix + "/shaders/compass/*.vsh",
+            applicationId.prefix + "/shaders/compass/*.fsh"
         ]
     }
 
@@ -169,7 +154,7 @@ Application {
         name: "packageCreatorScripts"
 
         files: [
-            applicationId.prefix + "installer/mac/installMac.sh"
+            applicationId.prefix + "/installer/mac/installMac.sh"
         ]
     }
 
@@ -178,77 +163,84 @@ Application {
     Group {
         name: "DocumentationFiles"
         files: [
-            applicationId.prefix + "docs/FileFormatDocumentation.txt",
-            applicationId.prefix + "LICENSE.txt",
+            applicationId.prefix + "/docs/FileFormatDocumentation.txt",
+            applicationId.prefix + "/LICENSE.txt",
         ]
     }
 
     Group {
         name: "rcFiles"
         files: [
-            applicationId.prefix + "Cavewhere.rc"
+            applicationId.prefix + "/Cavewhere.rc"
         ]
     }
 
     Group {
         name: "qrcFiles"
         files: [
-            applicationId.prefix + "resources.qrc"
+            applicationId.prefix + "/resources.qrc"
         ]
     }
 
     Group {
         name: "macIcons"
         files: [
-            applicationId.prefix + "cavewhereIcon.icns",
+            applicationId.prefix + "/cavewhereIcon.icns",
         ]
         fileTags: ["icns-in"]
     }
 
-    Group {
-        name: "windowsDLLs-debug"
-        condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
-        qbs.install: !product.consoleApplication
-        files:[
-            Qt.core.binPath + "/Qt5Concurrentd.dll",
-            Qt.core.binPath + "/Qt5Cored.dll",
-            Qt.core.binPath + "/Qt5Guid.dll",
-            Qt.core.binPath + "/Qt5OpenGLd.dll",
-            Qt.core.binPath + "/Qt5Qmld.dll",
-            Qt.core.binPath + "/Qt5Quickd.dll",
-            Qt.core.binPath + "/Qt5Sqld.dll",
-            Qt.core.binPath + "/Qt5Widgetsd.dll",
-            Qt.core.binPath + "/Qt5Networkd.dll",
-            Qt.core.binPath + "/Qt5Xmld.dll",
-            Qt.core.binPath + "/Qt5Testd.dll",
-            Qt.core.binPath + "/icuin*.dll",
-            Qt.core.binPath + "/icuuc*.dll",
-            Qt.core.binPath + "/icudt*.dll"
-        ]
-    }
+//    Group {
+//        name: "windowsDLLs-debug"
+//        condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
+//        qbs.install: !product.consoleApplication
+//        files:[
+//            Qt.core.binPath + "/Qt5Concurrentd.dll",
+//            Qt.core.binPath + "/Qt5Cored.dll",
+//            Qt.core.binPath + "/Qt5Guid.dll",
+//            Qt.core.binPath + "/Qt5OpenGLd.dll",
+//            Qt.core.binPath + "/Qt5Qmld.dll",
+//            Qt.core.binPath + "/Qt5Quickd.dll",
+//            Qt.core.binPath + "/Qt5Sqld.dll",
+//            Qt.core.binPath + "/Qt5Widgetsd.dll",
+//            Qt.core.binPath + "/Qt5Networkd.dll",
+//            Qt.core.binPath + "/Qt5Xmld.dll",
+//            Qt.core.binPath + "/Qt5Testd.dll",
+//            Qt.core.binPath + "/icuin*.dll",
+//            Qt.core.binPath + "/icuuc*.dll",
+//            Qt.core.binPath + "/icudt*.dll"
+//        ]
+//    }
+
+//    Group {
+//        name: "windowsDLLs-release"
+//        condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
+//        qbs.install: !product.consoleApplication
+//        files: [
+//            Qt.core.binPath + "/Qt5Concurrent.dll",
+//            Qt.core.binPath + "/Qt5Core.dll",
+//            Qt.core.binPath + "/Qt5Gui.dll",
+//            Qt.core.binPath + "/Qt5OpenGL.dll",
+//            Qt.core.binPath + "/Qt5Qml.dll",
+//            Qt.core.binPath + "/Qt5Quick.dll",
+//            Qt.core.binPath + "/Qt5Sql.dll",
+//            Qt.core.binPath + "/Qt5Widgets.dll",
+//            Qt.core.binPath + "/Qt5Network.dll",
+//            Qt.core.binPath + "/Qt5Xml.dll",
+//            Qt.core.binPath + "/Qt5Test.dll",
+//            Qt.core.binPath + "/icuin*.dll",
+//            Qt.core.binPath + "/icuuc*.dll",
+//            Qt.core.binPath + "/icudt*.dll"
+//        ]
+
+//    }
 
     Group {
-        name: "windowsDLLs-release"
-        condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-        qbs.install: !product.consoleApplication
-        files: [
-            Qt.core.binPath + "/Qt5Concurrent.dll",
-            Qt.core.binPath + "/Qt5Core.dll",
-            Qt.core.binPath + "/Qt5Gui.dll",
-            Qt.core.binPath + "/Qt5OpenGL.dll",
-            Qt.core.binPath + "/Qt5Qml.dll",
-            Qt.core.binPath + "/Qt5Quick.dll",
-            Qt.core.binPath + "/Qt5Sql.dll",
-            Qt.core.binPath + "/Qt5Widgets.dll",
-            Qt.core.binPath + "/Qt5Network.dll",
-            Qt.core.binPath + "/Qt5Xml.dll",
-            Qt.core.binPath + "/Qt5Test.dll",
-            Qt.core.binPath + "/icuin*.dll",
-            Qt.core.binPath + "/icuuc*.dll",
-            Qt.core.binPath + "/icudt*.dll"
-        ]
-
+        fileTagsFilter: bundle.isBundle ? ["bundle.content"] : ["application"]
+        qbs.install: true
+        qbs.installSourceBase: product.buildDirectory
     }
+
 
 
     Rule {
@@ -282,7 +274,6 @@ Application {
         Artifact {
             fileTags: ["resourcerules"]
             filePath: product.buildDirectory + "/Cavewhere.app/Contents/MacOS/" + FileInfo.baseName(input.filePath)
-//                fileName: applicationId.name + ".app/Contents/Resources/" + FileInfo.baseName(input.filePath) + ".icns"
         }
 
         prepare: {

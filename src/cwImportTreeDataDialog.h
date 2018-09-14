@@ -64,9 +64,6 @@ private:
     cwTreeDataImporter* Importer;
     QItemSelectionModel* SurvexSelectionModel;
 
-    //For threading ithe importer
-    QThread* ImportThread;
-
     void setupTypeComboBox();
 
     void updateImportErrors();
