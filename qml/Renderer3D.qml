@@ -1,8 +1,8 @@
 import QtQuick 2.2 as QQ2
-import Qt3D.Core 2.0
-import Qt3D.Render 2.0
-import Qt3D.Input 2.0
-import Qt3D.Extras 2.0
+import Qt3D.Core 2.1
+import Qt3D.Render 2.1
+import Qt3D.Input 2.1
+import Qt3D.Extras 2.1
 import QtQuick.Scene3D 2.0
 import QtQuick.Controls 1.1
 import Cavewhere 1.0 as CW
@@ -149,8 +149,8 @@ QQ2.Item {
                                 renderPasses: [
                                     RenderPass {
                                         shaderProgram: ShaderProgram {
-                                            vertexShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/LinePlot.vert")
-                                            fragmentShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/LinePlot.frag")
+                                            vertexShaderCode: loadSource("qrc:/shaders/LinePlot.vert")
+                                            fragmentShaderCode: loadSource("qrc:/shaders/LinePlot.frag")
                                         }
                                     }
                                 ]
@@ -176,8 +176,8 @@ QQ2.Item {
                             renderPasses: [
                                 RenderPass {
                                     shaderProgram: ShaderProgram {
-                                        vertexShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/scrap.vert")
-                                        fragmentShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/scrap.frag")
+                                        vertexShaderCode: loadSource("qrc:/shaders/scrap.vert")
+                                        fragmentShaderCode: loadSource("qrc:/shaders/scrap.frag")
                                     }
                                 }
                             ]
@@ -203,7 +203,7 @@ QQ2.Item {
                         id: plane
                         width: 1000
                         height: 1000
-                        meshResolution: qt.size(2,2)
+                        meshResolution: Qt.size(2,2)
                     }
 
                     Transform {
@@ -233,8 +233,8 @@ QQ2.Item {
                                     renderPasses: [
                                         RenderPass {
                                             shaderProgram: ShaderProgram {
-                                                vertexShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/grid.vert")
-                                                fragmentShaderCode: loadSource("file://Users/vpicaver/Documents/Projects/cavewhere/shaders/grid.frag")
+                                                vertexShaderCode: loadSource("qrc:/shaders/grid.vert")
+                                                fragmentShaderCode: loadSource("qrc:/shaders/grid.frag")
                                             }
                                         }
                                     ]
@@ -338,8 +338,6 @@ QQ2.Item {
         anchors.fill: parent
         camera: cwCameraId
         inersecter: inersectorId
-
-        //        scene: renderer.scene
     }
 
     CW.LinePlotLabelView {

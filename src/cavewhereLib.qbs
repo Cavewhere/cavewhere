@@ -214,7 +214,8 @@ DynamicLibrary {
     Group {
         name: "qrcFiles"
         files: [
-            "../resources.qrc"
+            "../*.qrc",
+            "../shaders/*.qrc"
         ]
     }
 

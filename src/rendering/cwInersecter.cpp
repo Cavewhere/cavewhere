@@ -46,6 +46,7 @@ double cwInersecter::intersects(const QRay3D& ray) const
             case QAttribute::Double:
                 return 8;
             }
+            return 0;
         };
 
         /**
@@ -58,21 +59,22 @@ double cwInersecter::intersects(const QRay3D& ray) const
 
             Q_ASSERT(index < indexAttribute->buffer()->data().size());
 
-            char* data = indexAttribute->buffer()->data().data();
+            const char* data = &(indexAttribute->buffer()->data().constData()[index]);
 
             switch(indexAttribute->vertexBaseType()) {
             case Qt3DRender::QAttribute::Byte:
-                return static_cast<uint>(*data);
+                return static_cast<uint>(data[index]);
             case Qt3DRender::QAttribute::UnsignedByte:
-                return static_cast<uint>(*reinterpret_cast<unsigned char*>(data));
+                return static_cast<uint>(*reinterpret_cast<const unsigned char*>(data));
             case Qt3DRender::QAttribute::Short:
-                return static_cast<uint>(*reinterpret_cast<short*>(data));
+                return static_cast<uint>(*reinterpret_cast<const short*>(data));
             case Qt3DRender::QAttribute::UnsignedShort:
-                return static_cast<uint>(*reinterpret_cast<unsigned short*>(data));
+                return static_cast<uint>(*reinterpret_cast<const unsigned short*>(data));
             case Qt3DRender::QAttribute::Int:
-                return static_cast<uint>(*reinterpret_cast<int*>(data));
-            case Qt3DRender::QAttribute::UnsignedInt:
-                return static_cast<uint>(*reinterpret_cast<unsigned int*>(data));
+                return static_cast<uint>(*reinterpret_cast<const int*>(data));
+            case Qt3DRender::QAttribute::UnsignedInt: {
+                return static_cast<uint>(*(reinterpret_cast<const unsigned int*>(data)));
+            }
             default:
                 Q_ASSERT(false); //Index needs to be int type value
             }
@@ -86,17 +88,17 @@ double cwInersecter::intersects(const QRay3D& ray) const
             int index = pointAttribute->byteOffset() + i * (byteSize(pointAttribute) * pointAttribute->vertexSize() + pointAttribute->byteStride());
             Q_ASSERT(index < pointAttribute->buffer()->data().size());
 
-            char* data = pointAttribute->buffer()->data().data();
+            const char* data = &(pointAttribute->buffer()->data().constData()[index]);
 
             switch(pointAttribute->vertexBaseType()) {
             case Qt3DRender::QAttribute::HalfFloat:
                 Q_ASSERT(false); //Not supported
             case Qt3DRender::QAttribute::Float:
-                return *reinterpret_cast<QVector3D*>(data);
+                return *reinterpret_cast<const QVector3D*>(data);
             case Qt3DRender::QAttribute::Double: {
-                double x = *reinterpret_cast<double*>(data);
-                double y = *reinterpret_cast<double*>((&data[8]));
-                double z = *reinterpret_cast<double*>((&data[16]));
+                double x = *reinterpret_cast<const double*>(data);
+                double y = *reinterpret_cast<const double*>((&data[8]));
+                double z = *reinterpret_cast<const double*>((&data[16]));
                 return QVector3D(x, y, z);
             }
             default:
@@ -162,6 +164,8 @@ double cwInersecter::intersects(const QRay3D& ray) const
 
                 uint i0 = pointIndex(indexAttribute, i);
                 uint i1 = pointIndex(indexAttribute, i + 1);
+
+                qDebug() << "indexes:" << i0 << i1;
 
                 QVector3D p1 = point(pointsAttribute, i0);
                 QVector3D p2 = point(pointsAttribute, i1);

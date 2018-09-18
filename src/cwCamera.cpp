@@ -125,7 +125,6 @@ QMatrix4x4 cwCamera::viewProjectionMatrix() {
         ViewProjectionMatrix.optimize();
         ViewProjectionMatrixIsDirty = false;
     }
-    qDebug() << "Returning view projection matrix";
     return ViewProjectionMatrix;
 }
 

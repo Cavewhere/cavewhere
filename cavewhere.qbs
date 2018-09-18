@@ -31,6 +31,9 @@ Project {
     qbsSearchPaths: ["qbsModules"]
 
     CavewhereApp {
+        files: [
+            "shaders/shaderresources.qrc",
+        ]
         name: "Cavewhere"
 
         Group {
