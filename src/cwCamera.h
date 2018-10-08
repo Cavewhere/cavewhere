@@ -28,7 +28,6 @@ class cwCamera : public Qt3DCore::QEntity
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
-//    Q_PROPERTY(Qt3DRender::QCamera* qt3dCamera READ qt3dCamera WRITE setQt3dCamera NOTIFY qt3dCameraChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
 
 public:
@@ -68,9 +67,6 @@ public:
     cwProjection orthoProjectionDefault() const;
     cwProjection perspectiveProjectionDefault() const;
 
-    Qt3DRender::QCamera* qt3dCamera() const;
-    void setQt3dCamera(Qt3DRender::QCamera* qt3dCamera);
-
 signals:
     void viewportChanged();
     void projectionChanged();
@@ -93,8 +89,6 @@ private:
 
     Qt3DCore::QTransform* Transform;
     Qt3DRender::QCameraLens* CameraLens;
-
-//    Qt3DRender::QCamera* Qt3dCamera; //!<
 };
 
 Q_DECLARE_METATYPE(cwCamera*)
@@ -126,6 +120,7 @@ inline QMatrix4x4 cwCamera::projectionMatrix() const
   Gets the view matrix for the camera
   */
 inline QMatrix4x4 cwCamera::viewMatrix() const {
+//    qDebug() << "ViewMatrix:" << ViewMatrix;
     return ViewMatrix;
 }
 

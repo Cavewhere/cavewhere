@@ -45,6 +45,6 @@ SplitView {
     }
 
     RenderingSideBar {
-        viewer: renderId
+        turnTableInteraction: renderId.turnTableInteraction
     }
 }

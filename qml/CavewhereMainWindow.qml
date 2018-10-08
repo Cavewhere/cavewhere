@@ -17,6 +17,9 @@ ApplicationWindow {
     visible: license.hasReadLicenseAgreement
     visibility: Window.Maximized
 
+    width: 1024
+    height: 800
+
     title: "Cavewhere - " + version
 
     Loader {

@@ -9,6 +9,7 @@ Item {
     implicitWidth: columnLayoutId.width
 
     property GLTerrainRenderer viewer
+    property TurnTableInteraction turnTableInteraction
 
     ScrollView {
         anchors.fill: parent
@@ -25,6 +26,13 @@ Item {
             anchors.top: parent.top
             anchors.margins: 5
 
+            Button {
+                text: "Reset View"
+                onClicked: {
+                    turnTableInteraction.resetView()
+                }
+            }
+
             GroupBox {
                 title: "Azimuth"
                 Item {
@@ -32,7 +40,7 @@ Item {
                     height: azimuthSettingsId.height
                     CameraAzimuthSettings {
                         id: azimuthSettingsId
-                        turnTableInteraction: itemId.viewer.turnTableInteraction
+                        turnTableInteraction: itemId.turnTableInteraction
                         anchors.left: parent.left
                         anchors.right: parent.right
                     }
@@ -47,7 +55,7 @@ Item {
                     height: verticalAngleSettingsId.height
                     CameraVerticalAngleSettings {
                         id: verticalAngleSettingsId
-                        turnTableInteraction: itemId.viewer.turnTableInteraction
+                        turnTableInteraction: itemId.turnTableInteraction
                         anchors.left: parent.left
                         anchors.right: parent.right
                     }

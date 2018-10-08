@@ -7,6 +7,7 @@ TabView {
     id: tabViewId
 
     property GLTerrainRenderer viewer
+    property TurnTableInteraction turnTableInteraction
     property Tab viewTab
 
     Component {
@@ -59,11 +60,7 @@ TabView {
     Connections {
         target: viewTab
         onLoaded: {
-            viewTab.item.viewer = viewer
+            viewTab.item.turnTableInteraction = turnTableInteraction
         }
     }
-
-//    onCurrentIndexChanged: {
-//        getTab(currentIndex).item.viewer = viewer;
-//    }
 }

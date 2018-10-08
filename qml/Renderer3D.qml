@@ -59,15 +59,17 @@ QQ2.Item {
 
     Scene3D {
         anchors.fill: parent
-        multisample: true
+        multisample: false
+
+
 
         Entity {
             id: sceneRoot
 
             components: [
                 RenderSettings {
+                    renderPolicy: RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
-                        normalizedRect: Qt.rect(0.0, 0.0, 1.0, 1.0)
 
                         RenderSurfaceSelector {
                             TechniqueFilter {
@@ -98,10 +100,8 @@ QQ2.Item {
                 //                InputSettings { }
             ]
 
-
             CW.Camera {
                 id: cwCameraId
-//                qt3dCamera: cameraId
                 viewport: Qt.rect(0, 0, rootItem.width, rootItem.height)
             }
 
@@ -208,7 +208,7 @@ QQ2.Item {
 
                     Transform {
                         id: planeTransform
-                        rotationX: -90
+                        rotationX: 90
                     }
 
                     Material {
@@ -254,6 +254,21 @@ QQ2.Item {
                     id: material
                 }
 
+                PhongMaterial {
+                    id: materialX
+                    ambient: "red"
+                }
+
+                PhongMaterial {
+                    id: materialY
+                    ambient: "green"
+                }
+
+                PhongMaterial {
+                    id: materialZ
+                    ambient: "blue"
+                }
+
                 TorusMesh {
                     id: torusMesh
                     radius: 5
@@ -264,13 +279,13 @@ QQ2.Item {
 
                 Transform {
                     id: torusTransform
-                    scale3D: Qt.vector3d(1.5, 1, 0.5)
-                    rotation: fromAxisAndAngle(Qt.vector3d(1, 0, 0), 45)
+//                    scale3D: Qt.vector3d(1.5, 1, 0.5)
+//                    rotation: fromAxisAndAngle(Qt.vector3d(1, 0, 0), 45)
                 }
 
                 Entity {
                     id: torusEntity
-                    components: [ torusMesh, material, torusTransform ]
+                    components: [ torusMesh, lineMaterial, torusTransform ]
                 }
 
                 //                rooscrapsEntity,
@@ -281,7 +296,7 @@ QQ2.Item {
                 }
 
                 Transform {
-                    id: sphereTransform
+                    id: sphereTransformX
                     property real userAngle: 0.0
                     matrix: {
                         var m = Qt.matrix4x4();
@@ -291,12 +306,59 @@ QQ2.Item {
                     }
                 }
 
-                Entity {
-                    id: sphereEntity
-                    components: [ sphereMesh, material, sphereTransform ]
+                Transform {
+                    id: sphereTransformY
+                    property real userAngle: 0.0
+                    matrix: {
+                        var m = Qt.matrix4x4();
+//                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+                        m.translate(Qt.vector3d(0, 20, 0));
+                        return m;
+                    }
+                }
+
+                Transform {
+                    id: sphereTransformZ
+                    property real userAngle: 0.0
+                    matrix: {
+                        var m = Qt.matrix4x4();
+//                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+                        m.translate(Qt.vector3d(0, 0, 20));
+                        return m;
+                    }
                 }
 
 
+                Transform {
+                    id: sphereTransformZ2
+                    property real userAngle: 0.0
+                    matrix: {
+                        var m = Qt.matrix4x4();
+//                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+                        m.translate(Qt.vector3d(0, 0, 10));
+                        return m;
+                    }
+                }
+
+                Entity {
+                    id: sphereEntityX
+                    components: [ sphereMesh, materialX, sphereTransformX ]
+                }
+
+                Entity {
+                    id: sphereEntityY
+                    components: [ sphereMesh, materialY, sphereTransformY ]
+                }
+
+                Entity {
+                    id: sphereEntityZ
+                    components: [ sphereMesh, materialZ, sphereTransformZ ]
+                }
+
+                Entity {
+                    id: sphereEntityZ2
+                    components: [ sphereMesh, materialZ, sphereTransformZ2 ]
+                }
 
 
 //                QQ2.NumberAnimation {
@@ -326,11 +388,11 @@ QQ2.Item {
         }
     }
 
-    Entity {
-        id: torusEntity2
-        components: [ torusMesh, lineMaterial]
-        parent: cppEntities
-    }
+//    Entity {
+//        id: torusEntity2
+//        components: [ torusMesh, lineMaterial]
+//        parent: cppEntities
+//    }
 
 
     TurnTableInteraction {

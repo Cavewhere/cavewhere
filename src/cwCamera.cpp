@@ -17,22 +17,23 @@ using namespace Qt3DCore;
 
 cwCamera::cwCamera(Qt3DCore::QNode *parent) :
     Qt3DCore::QEntity(parent),
-    ZoomScale(1.0),
+    ZoomScale(1/10.0),
     Transform(new Qt3DCore::QTransform(this)),
     CameraLens(new Qt3DRender::QCameraLens(this))
-//    Qt3dCamera(nullptr)
 {
     ViewProjectionMatrixIsDirty = true;
     connect(this, &cwCamera::projectionChanged, this, &cwCamera::pixelsPerMeterChanged);
 
     connect(this, &cwCamera::projectionChanged, this, [&](){CameraLens->setProjectionMatrix(projectionMatrix());});
-    connect(this, &cwCamera::viewMatrixChanged, this, [&](){Transform->setMatrix(viewMatrix());});
+    connect(this, &cwCamera::viewMatrixChanged, this, [&](){
+        //I'm not sure why this has to be inverted, qt3d somehow inverse the view
+        //matrix before it hits GLSL shaders. If we invert it here, then the view
+        //is rendered correctly and the interactions run correctly.
+        //TODO: Create bug report that reproduces view inversion
+        Transform->setMatrix(viewMatrix().inverted());
+    });
 
-    //Test code
-//    setProjection(orthoProjectionDefault());
-
-//    setQt3dCamera(new QCamera());
-
+    //This allows camera to update Qt3D camera
     addComponent(Transform);
     addComponent(CameraLens);
 }
