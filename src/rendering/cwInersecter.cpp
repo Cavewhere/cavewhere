@@ -10,6 +10,7 @@
 #include <QRay3D>
 #include <QBox3D>
 #include <QBuffer>
+#include <QBufferDataGenerator>
 
 using namespace Qt3DRender;
 using namespace Qt3DCore;
@@ -50,16 +51,30 @@ double cwInersecter::intersects(const QRay3D& ray) const
         };
 
         /**
+          Returns the data from an QAttribute
+          */
+        auto data = [](QAttribute* attribute) {
+            QByteArray byteArray = attribute->buffer()->data();
+            if(byteArray.isEmpty() && attribute->count() > 0) {
+                //Buffer is using a generator instead
+                byteArray = attribute->buffer()->dataGenerator()->operator()(); //Generate the data
+            }
+            return byteArray;
+        };
+
+        /**
           Return the uint of the index at i in bytes
           */
         auto pointIndex = [&](QAttribute* indexAttribute, uint i)->uint {
             Q_ASSERT(indexAttribute->vertexSize() == 1);
 
-            int index = indexAttribute->byteOffset() + i * (byteSize(indexAttribute) + indexAttribute->byteStride());
+            int index = indexAttribute->byteOffset() + i * byteSize(indexAttribute) + indexAttribute->byteStride();
 
-            Q_ASSERT(index < indexAttribute->buffer()->data().size());
+            QByteArray byteArray = data(indexAttribute);
 
-            const char* data = &(indexAttribute->buffer()->data().constData()[index]);
+            Q_ASSERT(index < byteArray.size());
+
+            const char* data = &(byteArray.constData()[index]);
 
             switch(indexAttribute->vertexBaseType()) {
             case Qt3DRender::QAttribute::Byte:
@@ -85,10 +100,13 @@ double cwInersecter::intersects(const QRay3D& ray) const
           Returns the QVector3D at index i
           */
         auto point = [&](QAttribute* pointAttribute, uint i) {
-            int index = pointAttribute->byteOffset() + i * (byteSize(pointAttribute) * pointAttribute->vertexSize() + pointAttribute->byteStride());
-            Q_ASSERT(index < pointAttribute->buffer()->data().size());
+            int index = pointAttribute->byteOffset() + i * byteSize(pointAttribute) * pointAttribute->vertexSize() + pointAttribute->byteStride();
 
-            const char* data = &(pointAttribute->buffer()->data().constData()[index]);
+            QByteArray byteArray = data(pointAttribute);
+
+            Q_ASSERT(index < byteArray.size());
+
+            const char* data = &(byteArray.constData()[index]);
 
             switch(pointAttribute->vertexBaseType()) {
             case Qt3DRender::QAttribute::HalfFloat:
@@ -165,8 +183,6 @@ double cwInersecter::intersects(const QRay3D& ray) const
                 uint i0 = pointIndex(indexAttribute, i);
                 uint i1 = pointIndex(indexAttribute, i + 1);
 
-                qDebug() << "indexes:" << i0 << i1;
-
                 QVector3D p1 = point(pointsAttribute, i0);
                 QVector3D p2 = point(pointsAttribute, i1);
 
@@ -183,6 +199,7 @@ double cwInersecter::intersects(const QRay3D& ray) const
         };
 
         //Go through all the entries and find the geometry and attributes, and creat bounding boxes
+        //FIXME: This should go through an aspect?
         foreach(auto entity, entities()) {
             QComponentVector components = entity->components();
             foreach(QComponent* component, components) {
@@ -277,7 +294,10 @@ double cwInersecter::intersects(const QRay3D& ray) const
 
     QList<double> intersections;
 
+//    qDebug() << "--------------------------------";
     foreach(auto box, boxes) {
+//        qDebug() << "Boxes:" << box.minimum() << box.maximum();
+        //FIXME: Boxes need to transformed with thier ModelMatrix
         double t = box.intersection(ray);
         if(!qIsNaN(t)) {
             intersections.append(t);

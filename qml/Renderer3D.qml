@@ -246,7 +246,7 @@ QQ2.Item {
                     components: [
                         plane,
                         planeTransform,
-                        gridMatrial
+                        gridMatrial,
                     ]
                 }
 
@@ -342,22 +342,22 @@ QQ2.Item {
 
                 Entity {
                     id: sphereEntityX
-                    components: [ sphereMesh, materialX, sphereTransformX ]
+                    components: [ sphereMesh, materialX, sphereTransformX, inersectorId]
                 }
 
                 Entity {
                     id: sphereEntityY
-                    components: [ sphereMesh, materialY, sphereTransformY ]
+                    components: [ sphereMesh, materialY, sphereTransformY, inersectorId]
                 }
 
                 Entity {
                     id: sphereEntityZ
-                    components: [ sphereMesh, materialZ, sphereTransformZ ]
+                    components: [ sphereMesh, materialZ, sphereTransformZ, inersectorId]
                 }
 
                 Entity {
                     id: sphereEntityZ2
-                    components: [ sphereMesh, materialZ, sphereTransformZ2 ]
+                    components: [ sphereMesh, materialZ, sphereTransformZ2, inersectorId]
                 }
 
 
