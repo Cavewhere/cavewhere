@@ -100,6 +100,11 @@ QQ2.Item {
                 //                InputSettings { }
             ]
 
+            CullFace {
+                id: noCullingId
+                mode: CullFace.NoCulling
+            }
+
             CW.Camera {
                 id: cwCameraId
                 viewport: Qt.rect(0, 0, rootItem.width, rootItem.height)
@@ -179,6 +184,10 @@ QQ2.Item {
                                         vertexShaderCode: loadSource("qrc:/shaders/scrap.vert")
                                         fragmentShaderCode: loadSource("qrc:/shaders/scrap.frag")
                                     }
+
+                                    renderStates: [
+                                        noCullingId
+                                    ]
                                 }
                             ]
                         }
@@ -236,6 +245,10 @@ QQ2.Item {
                                                 vertexShaderCode: loadSource("qrc:/shaders/grid.vert")
                                                 fragmentShaderCode: loadSource("qrc:/shaders/grid.frag")
                                             }
+
+                                            renderStates: [
+                                                noCullingId
+                                            ]
                                         }
                                     ]
                                 }
