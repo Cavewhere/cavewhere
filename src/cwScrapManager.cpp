@@ -864,7 +864,7 @@ void cwScrapManager::taskFinished() {
             Q_ASSERT(!triangleData.isStale());
 
             scrap->setTriangulationData(triangleData);
-            GLScraps->addScrapToUpdate(scrap);
+//            GLScraps->addScrapToUpdate(scrap);
         }
     }
 }

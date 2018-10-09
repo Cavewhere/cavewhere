@@ -38,12 +38,10 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     textureData->setTarget(QOpenGLTexture::Target2D);
 
     cwTextureUploadTask task;
+    task.setUsingThreadPool(false);
     task.setImage(image());
     task.setProjectFilename(project());
     task.start();
-    task.waitToFinish();
-
-    qDebug() << "Mipmaps:" << task.mipmaps().size();
 
     if(task.mipmaps().isEmpty()) {
         return textureData;
@@ -68,8 +66,6 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     textureData->setHeight(firstMipmap.second.height());
     textureData->setMipLevels(mipmaps.size());
     textureData->setData(compressedData, 8, true);
-
-    qDebug() << "Texture:" << textureData;
 
     return textureData;
 }
