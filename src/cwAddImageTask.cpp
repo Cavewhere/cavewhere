@@ -33,6 +33,7 @@
 #include <QBuffer>
 #include <QtConcurrentMap>
 #include <QOpenGLContext>
+#include <QOffscreenSurface>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -46,8 +47,6 @@
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
-
-
     MipmapOnly = false;
 }
 
@@ -58,9 +57,13 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   */
 void cwAddImageTask::runTask() {
     CompressionContext = new QOpenGLContext();
-    Window = new QWindow();
-    Window->setSurfaceType(QSurface::OpenGLSurface);
-    Window->create();
+
+    QMetaObject::invokeMethod(qApp,
+                              [this](){
+        Surface = new QOffscreenSurface();
+        Surface->create();},
+    Qt::BlockingQueuedConnection);
+
     Texture = 0;
 
     //Clear all previous data
@@ -79,14 +82,12 @@ void cwAddImageTask::runTask() {
         return;
     }
 
-    bool couldMakeCurrent = CompressionContext->makeCurrent(Window);
+    bool couldMakeCurrent = CompressionContext->makeCurrent(Surface);
     if(!couldMakeCurrent) {
         qDebug() << "Could make curernt: " << couldMakeCurrent << LOCATION;
         done();
         return;
     }
-
-    
 
     if(Texture == 0) {
         glGenTextures(1, &Texture);
@@ -111,8 +112,11 @@ void cwAddImageTask::runTask() {
 
     CompressionContext->doneCurrent();
 
+    QMetaObject::invokeMethod(qApp, [this](){
+        Surface->deleteLater();
+    }, Qt::BlockingQueuedConnection);
+
     delete CompressionContext;
-    delete Window;
 
     //Finished
     done();
@@ -165,12 +169,6 @@ void cwAddImageTask::calculateNumberOfSteps() {
   \brief This tries to add the image to the database
   */
 void cwAddImageTask::tryAddingImagesToDatabase() {
-//    bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
-//    if(!good) {
-//        qDebug() << "Couldn't begin transaction!";
-//        return;
-//    }
-
     //Database image, original image
     QList< PrivateImageData > images;
 
@@ -182,12 +180,7 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
         cwImage imageIds;
 
         //Copy the original image to the database
-        QImage originalImage;
-        //        if(MipmapOnly) {
-        //            originalImage = QImage(imagePath);
-        //        } else {
-        originalImage = copyOriginalImage(imagePath, &imageIds);
-        //        }
+        QImage originalImage = copyOriginalImage(imagePath, &imageIds);
 
         if(!originalImage.isNull()) {
             images.append(PrivateImageData(imageIds, originalImage, imagePath));

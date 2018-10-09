@@ -19,9 +19,9 @@
 #include <QDir>
 #include <QSqlDatabase>
 #include <QAtomicInt>
-#include <QWindow>
 #include <QDebug>
 #include <QOpenGLContext>
+class QOffscreenSurface;
 
 //Squish includes
 #include <squish.h>
@@ -91,7 +91,7 @@ private:
 
     QAtomicInt Progress;
     QOpenGLContext* CompressionContext;
-    QWindow* Window;
+    QOffscreenSurface* Surface;
     GLuint Texture;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);
