@@ -20,6 +20,7 @@ QQ2.Item {
         text: "Capture"
         z: 1
         onClicked:  {
+            sceneRootRenderPolicy.renderPolicy = RenderSettings.Always
             capture();
         }
     }
@@ -36,8 +37,9 @@ QQ2.Item {
         onCompleteChanged: {
             var captureReply = captureConnection.target;
             console.log("Capture finished: " + captureReply.complete + " " + captureReply.captureId + " " + captureReply.image);
-            captureReply.saveToFile("/Users/vpicaver/Desktop/testShot.png");
+            captureReply.saveToFile("testShot.png");
             rootData.printImage(captureReply.image)
+            sceneRootRenderPolicy.renderPolicy = RenderSettings.OnDemand
         }
     }
 
@@ -68,6 +70,7 @@ QQ2.Item {
 
             components: [
                 RenderSettings {
+                    id: sceneRootRenderPolicy
                     renderPolicy: RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
 
@@ -90,14 +93,7 @@ QQ2.Item {
                             }
                         }
                     }
-
-                    //                    ForwardRenderer {
-                    //                    clearColor: Qt.rgba(0, 0.5, 1, 1)
-                    //                    camera: camera
-                    //                }
                 }
-                // Event Source will be set by the Qt3DQuickWindow
-                //                InputSettings { }
             ]
 
             CullFace {
@@ -110,21 +106,6 @@ QQ2.Item {
                 viewport: Qt.rect(0, 0, rootItem.width, rootItem.height)
             }
 
-//                Camera {
-//                    id: cameraId
-//                    //                projectionType: CameraLens.PerspectiveProjection
-//                    //                fieldOfView: 45
-//                    //                aspectRatio: 16/9
-//                    //                nearPlane : 0.1
-//                    //                farPlane : 1000.0
-//                    //                position: Qt.vector3d( 0.0, 0.0, -40.0 )
-//                    //                upVector: Qt.vector3d( 0.0, 1.0, 0.0 )
-//                    //                viewCenter: Qt.vector3d( 0.0, 0.0, 0.0 )
-//                }
-
-                //            OrbitCameraController {
-                //                camera: cameraId
-                //            }
 
                 FilterKey {
                     id: forward
