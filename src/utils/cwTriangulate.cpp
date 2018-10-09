@@ -131,8 +131,8 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
 
       /* output Triangle */
       result.push_back( polygon[a] );
-      result.push_back( polygon[b] );
       result.push_back( polygon[c] );
+      result.push_back( polygon[b] );
 
       m++;
 
