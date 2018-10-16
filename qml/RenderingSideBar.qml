@@ -6,7 +6,7 @@ import Cavewhere 1.0
 TabView {
     id: tabViewId
 
-    property GLTerrainRenderer viewer
+    property Renderer3D viewer
     property TurnTableInteraction turnTableInteraction
     property Tab viewTab
 

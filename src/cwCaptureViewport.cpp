@@ -20,7 +20,7 @@
 #include "cwLength.h"
 #include "cwGlobals.h"
 
-//undef these because micrsoft is fucking retarded...
+//undef these because microsoft is fucking retarded...
 #ifdef Q_OS_WIN
 #undef far
 #undef near
@@ -40,8 +40,8 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     Rows(0),
     TileSize(1024, 1024),
     CaptureCamera(new cwCamera()),
-    PreviewItem(nullptr),
-    Item(nullptr)
+    PreviewItem(new QGraphicsItemGroup()),
+    Item(new QGraphicsItemGroup())
 {
 //    CaptureCamera->setParent(this);
 
@@ -53,17 +53,6 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
 cwCaptureViewport::~cwCaptureViewport()
 {
     deleteSceneItems();
-}
-
-/**
-* @brief cwScreenCaptureManager::setView
-* @param view
-*/
-void cwCaptureViewport::setView(cw3dRegionViewer* view) {
-    if(View != view) {
-        View = view;
-        emit viewChanged();
-    }
 }
 
 /**
@@ -89,11 +78,10 @@ void cwCaptureViewport::setViewport(QRect viewport) {
         Viewport = viewport;
         emit viewportChanged();
 
-        if(!View.isNull()) {
-            cwCamera* camera = View->camera();
-            CaptureCamera->setProjection(camera->projection());
-            CaptureCamera->setViewport(camera->viewport());
-            CaptureCamera->setViewMatrix(camera->viewMatrix());
+        if(!Camera.isNull()) {
+            CaptureCamera->setProjection(Camera->projection());
+            CaptureCamera->setViewport(Camera->viewport());
+            CaptureCamera->setViewMatrix(Camera->viewMatrix());
         }
     }
 }
@@ -106,12 +94,17 @@ void cwCaptureViewport::capture()
     if(CapturingImages) { return; }
     CapturingImages = true;
 
+//    Commands.clear(); //Clear previous commands
+
     if(!viewport().size().isValid()) {
         qWarning() << "Viewport isn't valid for export:" << viewport();
         return;
     }
 
-    cwScene* scene = view()->scene();
+    //Delete previous capture images
+    clearSceneItemChildren();
+
+//    cwScene* scene = view()->scene();
     cwCamera* camera = CaptureCamera;
     cwProjection originalProj = camera->projection();
 
@@ -123,20 +116,8 @@ void cwCaptureViewport::capture()
 
     double imageScale;
     if(previewCapture()) {
-        if(PreviewItem != NULL) {
-            delete PreviewItem;
-        }
-        PreviewItem = new QGraphicsItemGroup();
-        previewItemChanged();
-
         imageScale = 1.0;
     } else {
-        if(Item != NULL) {
-            delete Item;
-        }
-        Item = new QGraphicsItemGroup();
-        fullResolutionItemChanged();
-
         imageScale = ItemScale * resolution();
     }
 
@@ -161,7 +142,7 @@ void cwCaptureViewport::capture()
     Columns = columns;
     Rows = rows;
 
-    IdToOrigin.clear(); //This is used to keep track the positions of the images
+//    IdToOrigin.clear(); //This is used to keep track the positions of the images
 
     cwProjection croppedProjection = tileProjection(viewport,
                                                     camera->viewport().size(),
@@ -178,7 +159,8 @@ void cwCaptureViewport::capture()
             QRect tileViewport(QPoint(x, y), croppedTileSize);
             cwProjection tileProj = tileProjection(tileViewport, imageSize, croppedProjection);
 
-            cwScreenCaptureCommand* command = new cwScreenCaptureCommand();
+            auto command = new cwScreenCaptureCommand();
+//            Commands.append(command);
 
             cwCamera* croppedCamera = new cwCamera();
 //            croppedCamera->setParent(command);
@@ -186,26 +168,32 @@ void cwCaptureViewport::capture()
             croppedCamera->setProjection(tileProj);
             croppedCamera->setViewMatrix(camera->viewMatrix());
 
-            command->setCamera(croppedCamera);
-            command->setScene(scene);
+            qDebug() << "column:" << column << "row:" << row << "Projection:" << tileProj.matrix();
+            qDebug() << "column:" << column << "row:" << row << "View:" << croppedCamera->viewMatrix();
 
-            int id = row * columns + column;
-            command->setId(id);
+            command->setCamera(croppedCamera);
+//            command->setScene(scene);
+
+//            int id = row * columns + column;
+//            Q_ASSERT(Commands.size() - 1 == id);
+//            Q_ASSERT(Commands.last() == command);
+//            command->setId(id);
 
             double originX = column * tileSize.width();
             double originY = onPaperViewport.height() - (row * tileSize.height() + croppedTileSize.height());
             QPointF origin(originX, originY);
 
-            IdToOrigin[id] = origin;
+            command->setOrigin(origin);
+//            IdToOrigin[id] = origin;
 
-            connect(command, SIGNAL(createdImage(QImage,int)),
-                    this, SLOT(capturedImage(QImage,int)),
-                    Qt::QueuedConnection);
-            scene->addSceneCommand(command);
+            connect(command, &cwScreenCaptureCommand::imageChanged,
+                    this,  &cwCaptureViewport::capturedImage);
+
+            emit screenCaptureRequested(command);
         }
     }
 
-    view()->update();
+//    view()->update();
 }
 
 /**
@@ -297,6 +285,20 @@ void cwCaptureViewport::deleteSceneItems()
 }
 
 /**
+ * @brief cwCaptureViewport::clearSceneItemChildren
+ *
+ * This function deletes all children of a scene item. This will
+ * remove all image data that's associated with a capture.
+ */
+void cwCaptureViewport::clearSceneItemChildren()
+{
+    auto parent = previewCapture() ? PreviewItem : Item;
+    for(auto child : parent->childItems()) {
+        delete child;
+    }
+}
+
+/**
  * @brief cwScreenCaptureManager::tileProjection
  * @param viewport
  * @param originalProjection
@@ -367,7 +369,7 @@ QSize cwCaptureViewport::calcCroppedTileSize(QSize tileSize, QSize imageSize, in
     if(column == lastColumnIndex && !exactEdgeX)
     {
         //Edge tile, crop it
-        double tilesInImageX = imageSize.width() / (double)tileSize.width();
+        double tilesInImageX = imageSize.width() / static_cast<double>(tileSize.width());
         double extraX = tilesInImageX - floor(tilesInImageX);
         double imageWidthCrop = ceil(tileSize.width() * extraX);
         croppedTileSize.setWidth(imageWidthCrop);
@@ -376,7 +378,7 @@ QSize cwCaptureViewport::calcCroppedTileSize(QSize tileSize, QSize imageSize, in
     if(row == lastRowIndex && !exactEdgeY)
     {
         //Edge tile, crop it
-        double tilesInImageY = imageSize.height() / (double)tileSize.height();
+        double tilesInImageY = imageSize.height() / static_cast<double>(tileSize.height());
         double extraY = tilesInImageY - floor(tilesInImageY);
         double imageHeightCrop = ceil(tileSize.height() * extraY);
         croppedTileSize.setHeight(imageHeightCrop);
@@ -450,32 +452,37 @@ void cwCaptureViewport::updateBoundingBox()
 
 /**
  * @brief cwScreenCaptureManager::capturedImage
- * @param image
+ *
+ * This function assumes that the function was called through a signal and slot. From
+ * a valid cwScreenCatpureCommand.
  */
-void cwCaptureViewport::capturedImage(QImage image, int id)
+void cwCaptureViewport::capturedImage()
 {
-    Q_UNUSED(id)
+    Q_ASSERT(CapturingImages); //Most be in the capture images state
 
-    Q_ASSERT(CapturingImages);
+    Q_ASSERT(dynamic_cast<cwScreenCaptureCommand*>(sender()) != nullptr);
+    cwScreenCaptureCommand* command = static_cast<cwScreenCaptureCommand*>(sender());
 
-    QPointF origin = IdToOrigin.value(id);
+    QPointF origin = command->origin(); //IdToOrigin.value(id);
 
     QGraphicsItemGroup* parent = previewCapture() ? PreviewItem : Item;
 
     cwGraphicsImageItem* graphicsImage = new cwGraphicsImageItem(parent);
-    graphicsImage->setImage(image);
+    graphicsImage->setImage(command->image());
     graphicsImage->setPos(origin);
     parent->addToGroup(graphicsImage);
 
+    command->deleteLater();
+
     //For debugging tiles
-//    QRectF tileRect = QRectF(origin, image.size());
-//    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
-//    rectItem->setPen(QPen(Qt::red));
-//    rectItem->setRect(tileRect);
-//    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
+    QRectF tileRect = QRectF(origin, command->image().size());
+    QGraphicsRectItem* rectItem = new QGraphicsRectItem(parent);
+    rectItem->setPen(QPen(Qt::red));
+    rectItem->setRect(tileRect);
+    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(parent);
 //    textItem->setText(QString("Id:%1").arg(id));
-//    textItem->setPen(QPen(Qt::red));
-//    textItem->setPos(tileRect.center());
+    textItem->setPen(QPen(Qt::red));
+    textItem->setPos(tileRect.center());
 
     NumberOfImagesProcessed++;
 
@@ -539,13 +546,13 @@ void cwCaptureViewport::updateItemsPosition()
 
 }
 
-/**
-* @brief cwScreenCaptureManager::view
-* @return
-*/
-cw3dRegionViewer* cwCaptureViewport::view() const {
-    return View;
-}
+///**
+//* @brief cwScreenCaptureManager::view
+//* @return
+//*/
+//cw3dRegionViewer* cwCaptureViewport::view() const {
+//    return View;
+//}
 
 /**
 * @brief cwCaptureItem::setCameraPitch
@@ -588,3 +595,22 @@ QPointF cwCaptureViewport::mapToCapture(const cwCaptureViewport* viewport) const
 
     return paperOrigin + thisOrigin;
 }
+
+/**
+* @brief cwCaptureViewport::camera
+*/
+void cwCaptureViewport::setCamera(cwCamera* camera) {
+    if(Camera != camera) {
+        Camera = camera;
+        emit cameraChanged();
+    }
+}
+
+/**
+* @brief cwScreenCaptureCommand::camera
+* @return The view's camera
+*/
+cwCamera* cwCaptureViewport::camera() const {
+    return Camera;
+}
+

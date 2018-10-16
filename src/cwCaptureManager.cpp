@@ -8,7 +8,6 @@
 
 //Our includes
 #include "cwCaptureManager.h"
-#include "cw3dRegionViewer.h"
 #include "cwScreenCaptureCommand.h"
 #include "cwScene.h"
 #include "cwGraphicsImageItem.h"
@@ -80,17 +79,6 @@ cwCaptureManager::~cwCaptureManager()
     //to be delete before the QGraphicsScene in this object
     foreach(cwCaptureItem* item, Layers) {
         delete item;
-    }
-}
-
-/**
-* @brief cwCaptureManager::setView
-* @param view
-*/
-void cwCaptureManager::setView(cw3dRegionViewer* view) {
-    if(View != view) {
-        View = view;
-        emit viewChanged();
     }
 }
 
@@ -252,6 +240,7 @@ void cwCaptureManager::addCaptureViewport(cwCaptureViewport *capture)
     addFullResultionCaptureItemHelper(capture);
 
     connect(capture, &cwCaptureViewport::previewItemChanged, this, &cwCaptureManager::addPreviewCaptureItem);
+    connect(capture, &cwCaptureViewport::screenCaptureRequested, this, &cwCaptureManager::enqueueSceenCaptureCommand);
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
     capture->setParent(this);
@@ -407,10 +396,9 @@ void cwCaptureManager::saveCaptures()
             scene()->addItem(capture->fullResolutionItem());
             capture->setResolution(resolution());
             capture->previewItem()->setVisible(false);
+            capture->fullResolutionItem()->setVisible(true);
             capture->setPreviewCapture(false);
         }
-
-//        PaperRectangle->setVisible(false);
 
         saveScene();
 
@@ -429,7 +417,7 @@ void cwCaptureManager::saveScene()
 {
     QSizeF imageSize = paperSize() * resolution();
     QRectF imageRect = QRectF(QPointF(), imageSize);
-    QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
+    QRectF sceneRect = QRectF(QPointF(), paperSize());
 
     auto appendExtention = [](const QString& filename, const QString& extention) {
         QFileInfo info(filename);
@@ -441,7 +429,7 @@ void cwCaptureManager::saveScene()
 
     auto saveToImage = [&](const QString& type) {
         QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
-        outputImage.fill(Qt::white); //transparent);
+        outputImage.fill(Qt::white);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
         cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -694,3 +682,15 @@ void cwCaptureManager::updateBorderRectangle()
 QStringList cwCaptureManager::fileTypes() const {
     return FileTypes.keys();
 }
+
+cwScreenCaptureCommand *cwCaptureManager::dequeueScreenCaptureCommand()
+{
+    return ScreenCaptureCommands.dequeue();
+}
+
+void cwCaptureManager::enqueueSceenCaptureCommand(cwScreenCaptureCommand* command)
+{
+    ScreenCaptureCommands.enqueue(command);
+    emit screenCaptureCommandAdded();
+}
+

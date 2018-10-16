@@ -82,7 +82,6 @@ Item {
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
-            scene: regionSceneManager.scene
         }
     }
 

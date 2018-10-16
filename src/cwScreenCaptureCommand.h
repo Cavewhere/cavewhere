@@ -17,30 +17,63 @@ class cwCamera;
 //Qt includes
 #include <QPointer>
 #include <QImage>
-#include <QOpenGLFramebufferObject>
-#include <QOpenGLFunctions>
+#include <QSharedPointer>
 
-class cwScreenCaptureCommand : public QObject, public cwSceneCommand, public QOpenGLFunctions
+/**
+ * @brief The cwScreenCaptureCommand class
+ *
+ * A command is generated and a Qt3D Capture will generate the image for it. Once
+ * the image is stored the command will be used to update a QGraphicsScene.
+ */
+class cwScreenCaptureCommand : public QObject
 {
     Q_OBJECT
 
-public:
-    cwScreenCaptureCommand();
+    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
+    Q_PROPERTY(QPointF origin READ origin WRITE setOrigin NOTIFY originChanged)
+    Q_PROPERTY(QImage image READ image WRITE setImage NOTIFY imageChanged)
 
-    void setScene(cwScene* scene);
+public:
+    cwScreenCaptureCommand(QObject* parent = nullptr);
+    virtual ~cwScreenCaptureCommand();
+
+    cwCamera* camera() const;
     void setCamera(cwCamera* camera);
 
-    void excute();
+    QPointF origin() const;
+    void setOrigin(QPointF origin);
 
-    void setId(int id);
+    QImage image() const;
+    void setImage(QImage image);
 
 signals:
-    void createdImage(QImage image, int id);
+    void cameraChanged();
+    void originChanged();
+    void imageChanged();
 
 private:
-    QPointer<cwScene> Scene;
     QPointer<cwCamera> Camera;
-    int Id;
+    QPointF Origin; //!<
+    QImage Image; //!<
 };
+
+
+
+/**
+* @brief cwScreenCaptureCommand::origin
+* @return The origin of the image in the command
+*/
+inline QPointF cwScreenCaptureCommand::origin() const {
+    return Origin;
+}
+
+/**
+* @brief cwScreenCaptureCommand::image
+* @return The image that command will store
+*/
+inline QImage cwScreenCaptureCommand::image() const {
+    return Image;
+}
+
 
 #endif // CWSCREENCAPTURECOMMAND_H

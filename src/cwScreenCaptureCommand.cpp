@@ -7,87 +7,61 @@
 
 //Our includes
 #include "cwScreenCaptureCommand.h"
-#include "cwScene.h"
 #include "cwCamera.h"
 
-//Qt includes
-#include <QOpenGLFramebufferObject>
-#include <QOpenGLFramebufferObjectFormat>
-
-
-cwScreenCaptureCommand::cwScreenCaptureCommand() :
-    Id(0)
+cwScreenCaptureCommand::cwScreenCaptureCommand(QObject *parent) :
+    QObject(parent)
 {
 }
 
-void cwScreenCaptureCommand::setScene(cwScene *scene)
+cwScreenCaptureCommand::~cwScreenCaptureCommand()
 {
-    Scene = scene;
-}
-
-void cwScreenCaptureCommand::setCamera(cwCamera *camera)
-{
-    Camera = camera;
+    delete Camera;
 }
 
 /**
- * @brief cwScreenCaptureCommand::setId
- * @param id
- *
- * Sets the id for the screen capture.  This is useful for
- * multiple screencapture commands. The id isn't use for
- * any screencapture but is used for book keeping for
- * the caller.  The id is emited with the captured image.
- */
-void cwScreenCaptureCommand::setId(int id)
-{
-    Id = id;
+* @brief cwScreenCaptureCommand::setCamera
+*
+* Sets the camera of the command. The command will take ownership of the command
+*/
+void cwScreenCaptureCommand::setCamera(cwCamera* camera) {
+    if(Camera != camera) {
+        Camera = camera;
+        emit cameraChanged();
+    }
 }
 
 /**
- * @brief cwScreenCaptureCommand::excute
- */
-void cwScreenCaptureCommand::excute()
-{
-    Q_ASSERT(!Camera.isNull());
-    Q_ASSERT(!Scene.isNull());
-
-    initializeOpenGLFunctions();
-
-    QOpenGLFramebufferObjectFormat format;
-    format.setAttachment(QOpenGLFramebufferObject::Depth);
-
-    QSize size = Camera->viewport().size();
-
-    Q_ASSERT(size.width() > 0);
-    Q_ASSERT(size.height() > 0);
-
-    cwCamera* oldCamera = Scene->camera();
-
-    //Save the current framebuffer so we can rebind it
-    GLint previousFramebuffer;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
-
-    GLint previousViewport[4];
-    glGetIntegerv(GL_VIEWPORT, previousViewport);
-
-    //Paint the scene to a framebuffer object
-    QOpenGLFramebufferObject framebuffer(size, format);
-    framebuffer.bind();
-
-    glViewport(0, 0, size.width(), size.height());
-
-    Scene->setCamera(Camera);
-    Scene->paint();
-
-    framebuffer.release();
-    QImage image = framebuffer.toImage();
-
-    Scene->setCamera(oldCamera);
-    glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);
-
-    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-
-    //Emit the created image
-    emit createdImage(image, Id);
+* @brief cwScreenCaptureCommand::setOrigin
+*
+* Sets the origin of the image that the screen capture will take
+*/
+void cwScreenCaptureCommand::setOrigin(QPointF origin) {
+    if(Origin != origin) {
+        Origin = origin;
+        emit originChanged();
+    }
 }
+
+/**
+* @brief cwScreenCaptureCommand::setImage
+*
+* Sets the image that's capture when the command is executed
+*/
+void cwScreenCaptureCommand::setImage(QImage image) {
+    if(Image != image) {
+        Image = image;
+        emit imageChanged();
+    }
+}
+
+/**
+* @brief cwScreenCaptureCommand::camera
+*
+* Returns the camera of the command
+*/
+cwCamera* cwScreenCaptureCommand::camera() const {
+    return Camera;
+}
+
+

@@ -5,7 +5,7 @@ import Cavewhere 1.0
 Item {
     id: toolId
 
-    property GLTerrainRenderer view
+    property Renderer3D view
     property CaptureManager manager;
 
     anchors.fill: parent
@@ -23,12 +23,15 @@ Item {
         }
 
         var viewObject = captureViewComponentId.createObject()
-        viewObject.view = view
+        viewObject.camera = view.camera
         viewObject.viewport = rectangle
         viewObject.cameraAzimuth = view.turnTableInteraction.azimuth
         viewObject.cameraPitch = view.turnTableInteraction.pitch
-        viewObject.capture();
         manager.addCaptureViewport(viewObject);
+
+        //Capture must be added to the manager before capturing
+        //because of how the request management system works
+        viewObject.capture();
     }
 
     function resetTool() {

@@ -10,7 +10,7 @@ Item {
 
     implicitWidth: quickSceneView.implicitWidth + sidebarColumnId.implicitWidth
 
-    property GLTerrainRenderer view
+    property Renderer3D view
     property alias hideExternalTools: selectionTool.visible
 
     function updatePaperRectangle(paperWidth, paperHeight) {
@@ -33,9 +33,15 @@ Item {
             i.paperRectangle.width = view.width * aspect
             i.paperRectangle.height = view.height
         } else {
-            var aspect = viewerAspect / paperAspect
+            aspect = viewerAspect / paperAspect
             i.paperRectangle.width = view.width
             i.paperRectangle.height = view.height * aspect
+        }
+    }
+
+    onViewChanged: {
+        if(view) {
+            view.captureManager = screenCaptureManagerId
         }
     }
 
@@ -58,7 +64,7 @@ Item {
 
     CaptureManager {
         id: screenCaptureManagerId
-        view: exportViewTabId.view
+//        view: exportViewTabId.view
         viewport: Qt.rect(paperSizeInteraction.captureRectangle.x,
                           paperSizeInteraction.captureRectangle.y,
                           paperSizeInteraction.captureRectangle.width,

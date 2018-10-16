@@ -23,6 +23,7 @@ class cwCamera;
 #include "cwProjection.h"
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
+#include "cwScreenCaptureCommand.h"
 
 class cwCaptureViewport : public cwCaptureItem
 {
@@ -30,8 +31,8 @@ class cwCaptureViewport : public cwCaptureItem
 
     Q_PROPERTY(int resolution READ resolution WRITE setResolution NOTIFY resolutionChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
+    Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(cwScale* scaleOrtho READ scaleOrtho CONSTANT) //For ortho projections
-    Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QGraphicsItem* previewItem READ previewItem NOTIFY previewItemChanged)
     Q_PROPERTY(QGraphicsItem* fullResolutionItem READ fullResolutionItem NOTIFY fullResolutionItemChanged)
     Q_PROPERTY(double cameraAzimuth READ cameraAzimuth WRITE setCameraAzimuth NOTIFY cameraAzimuthChanged)
@@ -42,8 +43,8 @@ public:
     explicit cwCaptureViewport(QObject *parent = 0);
     virtual ~cwCaptureViewport();
 
-    cw3dRegionViewer* view() const;
-    void setView(cw3dRegionViewer* view);
+    cwCamera* camera() const;
+    void setCamera(cwCamera* camera);
 
     int resolution() const;
     void setResolution(int resolution);
@@ -82,15 +83,17 @@ signals:
     void previewItemChanged();
     void fullResolutionItemChanged();
     void transformOriginChanged();
+    void cameraChanged();
     void cameraPitchChanged();
     void cameraAzimuthChanged();
     void positionAfterScaleChanged();
+    void screenCaptureRequested(cwScreenCaptureCommand* command);
 
 public slots:
 
 private:
     //Properties
-    QPointer<cw3dRegionViewer> View; //!<
+    QPointer<cwCamera> Camera; //!<
     int Resolution; //!<
     cwScale* ScaleOrtho; //!<
     double ItemScale;
@@ -101,12 +104,12 @@ private:
     double CameraAzimuth; //!<
     double CameraPitch; //!<
 
+    //For Processing
     bool CapturingImages;
     int NumberOfImagesProcessed;
     int Columns;
     int Rows;
     QSize TileSize;
-    QHash<int, QPointF> IdToOrigin;
 
     //Scene state information
     cwCamera* CaptureCamera;
@@ -124,9 +127,10 @@ private:
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
     void deleteSceneItems();
+    void clearSceneItemChildren();
 
 private slots:
-    void capturedImage(QImage image, int id);
+    void capturedImage();
     void updateTransformForItems();
     void updateItemsPosition();
 };
