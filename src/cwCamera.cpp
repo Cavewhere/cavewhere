@@ -33,6 +33,8 @@ cwCamera::cwCamera(Qt3DCore::QNode *parent) :
         Transform->setMatrix(viewMatrix().inverted());
     });
 
+    setProjection(orthoProjection());
+
     //This allows camera to update Qt3D camera
     addComponent(Transform);
     addComponent(CameraLens);
@@ -97,15 +99,51 @@ void cwCamera::setCustomProjection(QMatrix4x4 matrix)
    Projection.setMatrix(matrix);
    ViewProjectionMatrixIsDirty = true;
    emit projectionChanged();
+   emit projectionTypeChanged();
 }
 
 /**
   Sets the projection matrix for the camera
   */
 void cwCamera::setProjection(cwProjection projection) {
+    bool hasProjectionTypeChanged = Projection.type() != projection.type();
     Projection = projection;
     ViewProjectionMatrixIsDirty = true;
     emit projectionChanged();
+
+    if(hasProjectionTypeChanged) {
+        emit projectionTypeChanged();
+    }
+}
+
+/**
+ * Returns the current projection type that the camera is using
+ */
+cwCamera::ProjectionType cwCamera::projectionType() const
+{
+    switch(projection().type()) {
+    case cwProjection::Perspective:
+        return Perspective;
+    case cwProjection::PerspectiveFrustum:
+        return Custom;
+    case cwProjection::Ortho:
+        return Orthoginal;
+    case cwProjection::Unknown:
+        return Custom;
+    }
+    return Custom;
+}
+
+/**
+ * @brief cwCamera::setProjectionType
+ *
+ * This will change the projection type to projectionType.
+ */
+void cwCamera::setProjectionType(cwCamera::ProjectionType projectionType)
+{
+    if(projectionType != this->projectionType()) {
+        updateProjection(projectionType);
+    }
 }
 
 /**
@@ -120,7 +158,7 @@ void cwCamera::setViewMatrix(QMatrix4x4 matrix) {
 /**
   \brief Gets the view projection matrix for the camera
   */
-QMatrix4x4 cwCamera::viewProjectionMatrix() {
+QMatrix4x4 cwCamera::viewProjectionMatrix() const {
     if(ViewProjectionMatrixIsDirty) {
         ViewProjectionMatrix = Projection.matrix() * ViewMatrix;
         ViewProjectionMatrix.optimize();
@@ -199,8 +237,20 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
 
      if(ZoomScale != zoomScale) {
          ZoomScale = zoomScale;
-         setProjection(orthoProjectionDefault());
+         setProjection(orthoProjection());
          emit zoomScaleChanged();
+     }
+ }
+
+ void cwCamera::setFieldOfView(double fieldOfView)
+ {
+     if(fieldOfView != FieldOfView) {
+         FieldOfView = fieldOfView;
+         emit fieldOfViewChanged();
+
+         if(projectionType() == Perspective) {
+             updateProjection(Perspective);
+         }
      }
  }
 
@@ -208,7 +258,7 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
   * @brief cw3dRegionViewer::orthoProjection
   * @return This get the current ortho projection at the current zoom level
   */
- cwProjection cwCamera::orthoProjectionDefault() const
+ cwProjection cwCamera::orthoProjection() const
  {
      cwProjection projection;
      QRectF viewport = this->viewport();
@@ -223,46 +273,33 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
   * @brief cw3dRegionViewer::perspectiveProjection
   * @return The current prespective projection for the viewer
   */
- cwProjection cwCamera::perspectiveProjectionDefault() const
+ cwProjection cwCamera::perspectiveProjection() const
  {
      cwProjection projection;
      QRectF viewport = this->viewport();
-     projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
+     projection.setPerspective(FieldOfView, viewport.width() / (float)viewport.height(), 1, 10000);
      return projection;
  }
 
  /**
-* @brief cwCamera::setQt3dCamera
-* @param qt3dCamera
-*/
-// void cwCamera::setQt3dCamera(Qt3DRender::QCamera* qt3dCamera) {
-//     if(Qt3dCamera != qt3dCamera) {
-
-//         if(Qt3dCamera != nullptr) {
-//             disconnect(this, 0, Qt3dCamera, 0);
-//         }
-
-//         Qt3dCamera = qt3dCamera;
-
-//         if(Qt3dCamera != nullptr) {
-//             auto updateProjection = [&]() {
-//                  Qt3dCamera->setProjectionMatrix(projectionMatrix());
-//             };
-
-//             auto updateView = [&]() {
-//                 Qt3dCamera->transform()->setMatrix(viewMatrix());
-//             };
-
-//             connect(this, &cwCamera::projectionChanged, Qt3dCamera, updateProjection);
-//             connect(this, &cwCamera::viewMatrixChanged, Qt3dCamera, updateView);
-
-//             updateProjection();
-//             updateView();
-//         }
-
-//         emit qt3dCameraChanged();
-//     }
-// }
+  * @brief cwCamera::updateProjection
+  *
+  * Update the projection for the camera to be equal to type
+  */
+ void cwCamera::updateProjection(cwCamera::ProjectionType type)
+ {
+     //Update the old with the new
+     switch(type) {
+     case Orthoginal:
+         setProjection(orthoProjection());
+         break;
+     case Perspective:
+         setProjection(perspectiveProjection());
+         break;
+     default:
+         break;
+     }
+ }
 
  /**
    Sets the viewport for the camera
@@ -270,7 +307,12 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
  void cwCamera::setViewport(QRect viewport) {
     if(Viewport != viewport) {
         Viewport = viewport;
+
+        //Update projection
+        updateProjection(projectionType());
+
         emit viewportChanged();
-        setProjection(orthoProjectionDefault());
+        emit orthProjectionMatrixChanged();
+        emit perspectiveProjectionMartixChanged();
     }
  }

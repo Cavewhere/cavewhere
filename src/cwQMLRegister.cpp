@@ -26,7 +26,6 @@
 #include "cwUsedStationTaskManager.h"
 #include "cwGlobalUndoStack.h"
 #include "cwGLLinePlot.h"
-#include "cw3dRegionViewer.h"
 #include "cwProject.h"
 #include "cwImageProvider.h"
 #include "cwXMLProjectLoadSaveTask.h"
@@ -66,9 +65,6 @@
 #include "cwSelectionManager.h"
 #include "cwUnitValue.h"
 #include "cwImageResolution.h"
-#include "cwExportRegionViewerToImageTask.h"
-#include "cwOrthogonalProjection.h"
-#include "cwPerspectiveProjection.h"
 #include "cwMatrix4x4Animation.h"
 #include "cwImageValidator.h"
 #include "cwQMLReload.h"
@@ -151,7 +147,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSurveyNoteModel>("Cavewhere", 1, 0, "NoteModel");
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwUsedStationTaskManager>("Cavewhere", 1, 0, "UsedStationTaskManager");
-    qmlRegisterType<cw3dRegionViewer>("Cavewhere", 1, 0, "RegionViewer");
     qmlRegisterType<cwLinePlotManager>("Cavewhere", 1, 0, "LinePlotManager");
     qmlRegisterType<cwGLLinePlot>("Cavewhere", 1, 0, "GLLinePlot");
     qmlRegisterType<cwProject>("Cavewhere", 1, 0, "Project");
@@ -192,9 +187,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwSelectionManager>("Cavewhere", 1, 0, "SelectionManager");
     qmlRegisterType<cwUnitValue>();
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
-    qmlRegisterType<cwSceneToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
-    qmlRegisterType<cwOrthogonalProjection>("Cavewhere", 1, 0, "OrthogonalProjection");
-    qmlRegisterType<cwPerspectiveProjection>("Cavewhere", 1, 0, "PerspectiveProjection");
     qmlRegisterType<cwMatrix4x4Animation>("Cavewhere", 1, 0, "Matrix4x4Animation");
     qmlRegisterType<cwImageValidator>("Cavewhere", 1, 0, "ImageValidator");
     qmlRegisterType<cwQMLReload>("Cavewhere", 1, 0, "QMLReload");
@@ -243,4 +235,5 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScrapEntity>("Cavewhere", 1, 0, "ScrapEntity");
     qmlRegisterType<cwInersecter>("Cavewhere", 1, 0, "Inersecter");
     qmlRegisterType<cwScreenCaptureCommand>("Cavewhere", 1, 0, "ScreenCaptureCommand");
+
 }

@@ -5,28 +5,26 @@ import Cavewhere 1.0
 ColumnLayout {
     id: itemId
 
-    property RegionViewer viewer;
+    property Camera camera;
     spacing: 5
 
     implicitWidth: Math.max(projectionSlider.width, fieldOfViewRowLayout.width)
 
     ProjectionSlider {
         id: projectionSlider
-//        anchors.left: parent.left
-//        anchors.right: parent.right
-        viewer: itemId.viewer
+        camera: itemId.camera
     }
 
     RowLayout {
         id: fieldOfViewRowLayout
-        visible: viewer.perspectiveProjection.enabled
+        visible: camera.projectionType == Camera.Perspective
         LabelWithHelp {
             text: "Field of View"
             helpArea: fieldOfViewId
         }
 
         ClickTextInput {
-            text: Number(viewer.perspectiveProjection.fieldOfView).toFixed(1)
+            text: Number(camera.fieldOfView).toFixed(1)
 
             onFinishedEditting: {
                 fieldOfViewAnimationId.to = newText
@@ -40,7 +38,7 @@ ColumnLayout {
 
         NumberAnimation {
             id: fieldOfViewAnimationId
-            target: viewer.perspectiveProjection;
+            target: camera;
             property: "fieldOfView";
             duration: 200;
             easing.type: Easing.InOutQuad }

@@ -16,6 +16,7 @@
 #include "cwCaptureItem.h"
 #include "cwCaptureViewport.h"
 #include "cwCaptureGroupModel.h"
+#include "cwProjection.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -28,6 +29,12 @@
 #include <QQmlEngine>
 #include <QSvgGenerator>
 #include <QPdfWriter>
+#include <QFileInfo>
+
+#ifdef Q_OS_WIN
+#undef far
+#undef near
+#endif
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),

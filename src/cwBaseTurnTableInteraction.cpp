@@ -33,7 +33,6 @@ cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     ViewMatrixAnimation->setEasingCurve(QEasingCurve(QEasingCurve::InOutCubic));
     connect(ViewMatrixAnimation, &cwMatrix4x4Animation::valueChanged,
             this, &cwBaseTurnTableInteraction::updateViewMatrixFromAnimation);
-//    resetView();
 
     setGridPlane(QPlane3D(QVector3D(), QVector3D(0.0, 0.0, 1.0)));
 

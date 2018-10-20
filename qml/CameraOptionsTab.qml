@@ -8,7 +8,6 @@ Item {
 
     implicitWidth: columnLayoutId.width
 
-    property GLTerrainRenderer viewer
     property TurnTableInteraction turnTableInteraction
 
     ScrollView {
@@ -70,7 +69,7 @@ Item {
                     height: projectionSettingsId.height
                     CameraProjectionSettings {
                         id: projectionSettingsId
-                        viewer: itemId.viewer
+                        camera: itemId.turnTableInteraction.camera
                         anchors.left: parent.left
                         anchors.right: parent.right
                     }

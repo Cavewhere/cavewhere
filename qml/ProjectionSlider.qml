@@ -16,9 +16,7 @@ Item {
     implicitWidth: columnLayoutId.width
     implicitHeight: columnLayoutId.height
 
-    property RegionViewer viewer
-//    property alias orthoProjection: orthoProjectionId
-//    property alias perspectiveProjection: perspectiveProjectionId
+    property Camera camera
 
     ColumnLayout {
         id: columnLayoutId
@@ -37,14 +35,14 @@ Item {
                 rightText: "     "
 
                 onIsLeftChanged: {
-                    if(viewer !== null) {
-                        viewer.orthoProjection.enabled = isLeft
+                    if(camera !== null) {
+                        camera.projectionType = Camera.Orthoginal
                     }
                 }
 
                 onIsRightChanged: {
-                    if(viewer !== null) {
-                        viewer.perspectiveProjection.enabled = isRight
+                    if(camera !== null) {
+                        camera.projectionType = Camera.Perspective
                     }
                 }
             }
@@ -67,8 +65,8 @@ projection you want to use.
 
     Matrix4x4Animation {
         id: matrix4x4AnimationId
-        startValue: viewer.orthoProjection.matrix
-        endValue: viewer.perspectiveProjection.matrix
+        startValue: camera.orthProjectionMatrix
+        endValue: camera.perspectiveProjectionMatrix
         duration: 1000
         currentTime: sliderId.sliderPos * 1000
 
@@ -76,7 +74,7 @@ projection you want to use.
 
         onPositionChanged: {
             if(position != 0.0 && position != 1.0) {
-                viewer.camera.setCustomProjection(currentValue)
+                camera.setCustomProjection(currentValue)
             }
         }
     }

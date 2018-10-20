@@ -13,7 +13,6 @@
 #include "cwScale.h"
 #include "cwScene.h"
 #include "cwCamera.h"
-#include "cw3dRegionViewer.h"
 #include "cwScreenCaptureCommand.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"

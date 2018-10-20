@@ -19,8 +19,8 @@
 #include <QQueue>
 
 //Our includes
-#include "cw3dRegionViewer.h"
 #include "cwScreenCaptureCommand.h"
+#include "cwProjection.h"
 class cwCaptureViewport;
 class cwCaptureItem;
 class cwCaptureGroupModel;
