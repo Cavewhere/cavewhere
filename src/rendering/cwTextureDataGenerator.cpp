@@ -72,6 +72,8 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
 
 bool cwTextureDataGenerator::operator ==(const Qt3DRender::QTextureImageDataGenerator& other) const
 {
+    auto otherPtr = &other;
+    if(otherPtr == nullptr) { return false; }
     const cwTextureDataGenerator *otherFunctor = functor_cast<cwTextureDataGenerator>(&other);
     return (otherFunctor != Q_NULLPTR
                             && otherFunctor->Generation == Generation
