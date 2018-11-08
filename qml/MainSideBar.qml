@@ -161,11 +161,6 @@ Rectangle {
                     border.width: 1
                     border.color: "black"
 
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 5
-                    anchors.rightMargin: 5
-
                     implicitHeight: 12
 
                     Rectangle {
