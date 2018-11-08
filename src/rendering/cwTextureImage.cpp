@@ -3,7 +3,8 @@
 #include "cwTextureDataGenerator.h"
 
 cwTextureImage::cwTextureImage(Qt3DCore::QNode* parent) :
-    Qt3DRender::QTextureImage(parent)
+    Qt3DRender::QTextureImage(parent),
+    Generator(new cwTextureDataGenerator())
 {
 
 }

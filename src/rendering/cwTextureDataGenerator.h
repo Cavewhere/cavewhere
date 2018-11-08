@@ -27,7 +27,7 @@ public:
 private:
     QString Project;
     cwImage Image;
-    int Generation;
+    int Generation = -1;
     Qt3DCore::QNodeId TextureId;
 
 
