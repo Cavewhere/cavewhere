@@ -284,6 +284,20 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
  /**
   * @brief cwCamera::updateProjection
   *
+  * This is a helper to update the projection automatically. If updateProjectionOnViewportChange is
+  * false, this function does nothing. Call updateProjection( with projection type ) instead to by
+  * pass this check.
+  */
+ void cwCamera::updateProjection()
+ {
+     if(UpdateProjectionOnViewportChange) {
+         updateProjection(projectionType());
+     }
+ }
+
+ /**
+  * @brief cwCamera::updateProjection
+  *
   * Update the projection for the camera to be equal to type
   */
  void cwCamera::updateProjection(cwCamera::ProjectionType type)
@@ -309,10 +323,28 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
         Viewport = viewport;
 
         //Update projection
-        updateProjection(projectionType());
+        updateProjection();
 
         emit viewportChanged();
         emit orthProjectionMatrixChanged();
         emit perspectiveProjectionMartixChanged();
     }
  }
+
+ /**
+* Set true if the cwCamera update the projection matrix automatically on viewport change (ie window
+* resize). Set this to false if the user of the cwCamera takes care of projection changes when viewport
+* changes. If this is set to true, this will automatically update the projection.
+*
+* By default this property is false
+*/
+ void cwCamera::setUpdateProjectionOnViewportChange(bool updateProjectionOnViewportChange) {
+     if(UpdateProjectionOnViewportChange != updateProjectionOnViewportChange) {
+         UpdateProjectionOnViewportChange = updateProjectionOnViewportChange;
+
+         updateProjection();
+
+         emit updateProjectionOnViewportChangeChanged();
+     }
+ }
+

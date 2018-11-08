@@ -35,6 +35,7 @@ class cwCamera : public Qt3DCore::QEntity
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
     Q_PROPERTY(ProjectionType projectionType READ projectionType WRITE setProjectionType NOTIFY projectionTypeChanged)
+    Q_PROPERTY(bool updateProjectionOnViewportChange READ updateProjectionOnViewportChange WRITE setUpdateProjectionOnViewportChange NOTIFY updateProjectionOnViewportChangeChanged)
 
     //For animating between projection matrixes
     Q_PROPERTY(QMatrix4x4 orthProjectionMatrix READ orthProjectionMatrix NOTIFY orthProjectionMatrixChanged)
@@ -71,6 +72,9 @@ public:
     void setViewMatrix(QMatrix4x4 matrix);
     QMatrix4x4 viewMatrix() const;
 
+    bool updateProjectionOnViewportChange() const;
+    void setUpdateProjectionOnViewportChange(bool updateProjectionOnViewportChange);
+
     QMatrix4x4 viewProjectionMatrix() const;
 
     QVector3D unProject(QPoint point, float viewDepth) const;
@@ -103,6 +107,7 @@ signals:
     void orthProjectionMatrixChanged();
     void perspectiveProjectionMartixChanged();
     void fieldOfViewChanged();
+    void updateProjectionOnViewportChangeChanged();
 
 public slots:
 
@@ -118,11 +123,15 @@ private:
     //For prespective projections
     double FieldOfView = 55.0; //In degrees
 
+    //For updating the projection automatically on viewport changes
+    bool UpdateProjectionOnViewportChange = false;
+
     mutable bool ViewProjectionMatrixIsDirty;
 
     Qt3DCore::QTransform* Transform;
     Qt3DRender::QCameraLens* CameraLens;
 
+    void updateProjection();
     void updateProjection(ProjectionType type);
 
 };
@@ -222,6 +231,14 @@ inline QMatrix4x4 cwCamera::orthProjectionMatrix() const
 */
 inline QMatrix4x4 cwCamera::perspectiveProjectionMatrix() const {
     return perspectiveProjection().matrix();
+}
+
+/**
+* Returns true if the camera automatically update the projection matrix on viewport changes. False
+* if the projection matrix is updated by user of this class
+*/
+inline bool cwCamera::updateProjectionOnViewportChange() const {
+    return UpdateProjectionOnViewportChange;
 }
 
 #endif // CWCAMERA_H

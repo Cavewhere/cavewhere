@@ -36,7 +36,7 @@ QQ2.Item {
             components: [
                 RenderSettings {
                     id: sceneRootRenderPolicy
-                    renderPolicy: RendererSettings.Always //RenderSettings.OnDemand
+                    renderPolicy: RenderSettings.Always //RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
 
                         RenderSurfaceSelector {
@@ -65,8 +65,7 @@ QQ2.Item {
             CW.Camera {
                 id: cwCameraId
                 viewport: Qt.rect(0, 0, rootItem.width, rootItem.height)
-
-
+                updateProjectionOnViewportChange: true
             }
 
 

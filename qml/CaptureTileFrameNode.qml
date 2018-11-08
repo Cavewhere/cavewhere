@@ -34,11 +34,14 @@ RenderTargetSelector {
                 attachmentPoint: RenderTargetOutput.Color0
                 texture: Texture2D {
                     id: sceneTexture
+
+                    property var viewport: forwardRenderId.camera ? forwardRenderId.camera.viewport : null
+
 //                    width: 2048
 //                    height: 2048
-                    width: forwardRendereId.camera.viewport.width
-                    height: forwardRendereId.camera.viewport.height
-                    format: Texture.RGBAFormat
+                    width: viewport ? viewport.width : 1
+                    height: viewport ? viewport.height : 1
+
                     generateMipMaps: false
                     magnificationFilter: Texture.Nearest
                     minificationFilter: Texture.Nearest
@@ -74,7 +77,7 @@ RenderTargetSelector {
 
         //The default fraph graph nodes for cavewhere
         ForwardRenderFrameNode {
-            id: forwardRendereId
+            id: forwardRenderId
             RenderCapture {
                 id: captureId
             }
@@ -93,6 +96,7 @@ RenderTargetSelector {
 
         property ScreenCaptureCommand command;
 
+        ignoreUnknownSignals: true
         onCompleteChanged: {
             var captureReply = captureConnection.target;
             console.log("Capture finished: " + captureReply.complete + " " + captureReply.captureId + " " + captureReply.image);
