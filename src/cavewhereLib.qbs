@@ -11,7 +11,6 @@ import "../qbsModules/GitProbe.qbs" as GitProbe
   files for the application and for the testcases.
   */
 DynamicLibrary {
-
     name: "cavewhere-lib"
 
     //For mac os x we need to build dylib instead of framework bundle. When running
@@ -57,6 +56,7 @@ DynamicLibrary {
         cpp.includePaths: [
             ".",
             "utils",
+            "rendering",
             buildDirectory + "/serialization",
             buildDirectory + "/versionInfo"
         ]
@@ -70,6 +70,8 @@ DynamicLibrary {
                 "opengl",
                 "xml",
                 "concurrent",
+                "3dcore",
+                "3drender",
                 "svg"
             ]
         }
