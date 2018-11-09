@@ -15,8 +15,8 @@ RenderTargetSelector {
     function requestNextCapture() {
         if(!captureManager.isScreenCaptureCommandQueueEmpty && captureConnection.command == null) {
             var command = captureManager.dequeueScreenCaptureCommand();
-            forwardRendereId.camera = command.camera;
-            console.log("Viewport:" + forwardRendereId.camera.viewport.width + "," + forwardRendereId.camera.viewport.height);
+            forwardRenderId.camera = command.camera;
+            console.log("Viewport:" + forwardRenderId.camera.viewport.width + "," + forwardRenderId.camera.viewport.height);
             var captureReply = captureId.requestCapture();
             captureConnection.command = command;
             captureConnection.target = captureReply;
@@ -42,6 +42,7 @@ RenderTargetSelector {
                     width: viewport ? viewport.width : 1
                     height: viewport ? viewport.height : 1
 
+                    format: Texture.RGBAFormat
                     generateMipMaps: false
                     magnificationFilter: Texture.Nearest
                     minificationFilter: Texture.Nearest
