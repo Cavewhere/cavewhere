@@ -105,6 +105,7 @@
 #include "cwScrapsEntity.h"
 #include "cwInersecter.h"
 #include "cwScreenCaptureCommand.h"
+#include "cwCompassEntry.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -235,5 +236,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScrapEntity>("Cavewhere", 1, 0, "ScrapEntity");
     qmlRegisterType<cwInersecter>("Cavewhere", 1, 0, "Inersecter");
     qmlRegisterType<cwScreenCaptureCommand>("Cavewhere", 1, 0, "ScreenCaptureCommand");
+    qmlRegisterType<cwCompassEntry>("Cavewhere", 1, 0, "CompassEntry");
 
 }
