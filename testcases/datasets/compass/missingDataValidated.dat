@@ -8,5 +8,5 @@ DECLINATION: 0.00 FORMAT: DMMDLRUDLADB CORRECTIONS: 0.00 0.00 0.00
 FROM TO   LEN  BEAR   INC LEFT UP DOWN RIGHT AZM2 INC2 FLAGS COMMENTS
 
           a1           a2  328.08    0.00    0.00 -999.00   32.81    0.00 -999.00 -999.00 -999.00
-          a2       a2lrud -999.00 -999.00 -999.00    3.28 -999.00    9.84    6.56 -999.00 -999.00
+          a2           a2    0.00 -999.00 -999.00    3.28 -999.00    9.84    6.56 -999.00 -999.00
 

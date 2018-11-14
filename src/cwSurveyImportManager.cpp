@@ -16,6 +16,7 @@
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwCSVImporterTask.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -25,10 +26,13 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
     QObject(parent),
     CavingRegion(nullptr),
     CompassImporter(new cwCompassImporter()),
+    CSVImporter(new cwCSVImporterTask()),
     MessageListFont(QFontDatabase::systemFont(QFontDatabase::FixedFont))
 {
     connect(CompassImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::compassImporterFinished);
     connect(CompassImporter, &cwCompassImporter::statusMessage, this, &cwSurveyImportManager::compassMessages);
+
+    connect(CSVImporter, &cwCompassImporter::finished, this, &cwSurveyImportManager::csvImportedFinished);
 }
 
 cwSurveyImportManager::~cwSurveyImportManager()
@@ -36,6 +40,9 @@ cwSurveyImportManager::~cwSurveyImportManager()
     CompassImporter->stop();
     CompassImporter->waitToFinish();
     CompassImporter->deleteLater();
+    CSVImporter->stop();
+    CSVImporter->waitToFinish();
+    CSVImporter->deleteLater();
 }
 
 void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
@@ -86,6 +93,17 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
         CompassImporter->start();
     } else if(CompassImporter->isRunning()) {
         QueuedCompassFile.append(dataFiles);
+    }
+}
+
+/**
+ * Starts the import task for CSV on filename
+ */
+void cwSurveyImportManager::importCSV(QUrl filename)
+{
+    if(CSVImporter->isReady()) {
+        CSVImporter->setFilename(filename.toLocalFile());
+        CSVImporter->start();
     }
 }
 
@@ -178,6 +196,19 @@ void cwSurveyImportManager::wallsMessages(QString severity, QString message, QSt
 {
     qDebug() << "Walls Importer:" << message;
     emit messageAdded(severity, message, source, startLine, startColumn, endLine, endColumn);
+}
+
+/**
+ * @brief cwSurveyImportManager::csvImportedFinished
+ *
+ * Adds the imported cave to cavewhere
+ */
+void cwSurveyImportManager::csvImportedFinished()
+{
+    foreach(cwCave cave, CSVImporter->caves()) {
+        cwCave* newCave = new cwCave(cave); //Copy the caves
+        CavingRegion->addCave(newCave);
+    }
 }
 
 /**
