@@ -420,11 +420,11 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
     writeData(stream, "From", 12, fromStation.name().toLower());
     stream << " ";
     if(LRUDShotOnly) {
-        writeData(stream, "To", 12, fromStation.name().toLower() + "lrud");
+        writeData(stream, "To", 12, fromStation.name().toLower());
         stream << " ";
-        stream << formatDouble(-999.0) << " ";
-        stream << formatDouble(-999.0) << " ";
-        stream << formatDouble(-999.0) << " ";
+        stream << formatDouble(0.0) << " ";
+        stream << formatDouble(-999) << " ";
+        stream << formatDouble(-999) << " ";
     } else {
         double shotLength = cwUnits::convert(shot.distance(),
                                              calibrations->distanceUnit(),
