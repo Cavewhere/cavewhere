@@ -1,14 +1,14 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.1
-import Cavewhere 1.0
+import Cavewhere 1.0 as Cavewhere
+import QtQuick.Controls 2.0
 
 ColumnLayout {
     property TurnTableInteraction turnTableInteraction;
 
-    implicitWidth: rowLayout.width
-
     RowLayout {
         id: rowLayout
+        Layout.fillWidth: true
 
         InformationButton {
             showItemOnClick: helpAreaId
@@ -27,7 +27,7 @@ ColumnLayout {
             text: "°"
         }
 
-        ClinoValidator {
+        Cavewhere.ClinoValidator {
             id: doubleValidatorId
         }
 
@@ -53,6 +53,22 @@ ColumnLayout {
                 enabled: turnTableInteraction.pitch !== 0.0
             }
         }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            LockButton {
+                anchors.top: parent.top
+                anchors.right: parent.right
+
+                down: turnTableInteraction.pitchLocked
+                onClicked: {
+                    turnTableInteraction.pitchLocked = !turnTableInteraction.pitchLocked
+                }
+            }
+        }
+
     }
 
     NumberAnimation {

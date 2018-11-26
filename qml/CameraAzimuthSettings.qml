@@ -1,6 +1,7 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.1
-import Cavewhere 1.0
+import Cavewhere 1.0 as Cavewhere
+import QtQuick.Controls 2.0
 
 ColumnLayout {
 
@@ -27,7 +28,13 @@ ColumnLayout {
             enabled: turnTableInteraction.azimuth !== 0.0
         }
 
-        Item { width:1; height:1 }
+        LockButton {
+            Layout.alignment: Qt.AlignRight
+            down: turnTableInteraction.azimuthLocked
+            onClicked: {
+                turnTableInteraction.azimuthLocked = !turnTableInteraction.azimuthLocked
+            }
+        }
 
         Button {
             id: westButton
@@ -53,7 +60,7 @@ ColumnLayout {
                 }
             }
 
-            CompassValidator {
+            Cavewhere.CompassValidator {
                 id: doubleValidatorId
             }
 

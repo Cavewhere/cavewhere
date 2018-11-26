@@ -87,5 +87,7 @@
         <file>icons/measurement.png</file>
         <file>icons/north.png</file>
         <file>icons/up.png</file>
+        <file>icons/lock.png</file>
+        <file>icons/unlock.png</file>
     </qresource>
 </RCC>

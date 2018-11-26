@@ -34,6 +34,8 @@ class cwBaseTurnTableInteraction : public cwInteraction
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(int startDragDistance READ startDragDistance CONSTANT)
     Q_PROPERTY(cwInersecter* inersecter READ inersecter WRITE setInersecter NOTIFY inersecterChanged)
+    Q_PROPERTY(bool pitchLocked READ pitchLocked WRITE setPitchLocked NOTIFY pitchLockedChanged)
+    Q_PROPERTY(bool azimuthLocked READ azimuthLocked WRITE setAzimuthLocked NOTIFY azimuthLockedChanged)
 
 public:
     explicit cwBaseTurnTableInteraction(QQuickItem *parent = 0);
@@ -52,6 +54,12 @@ public:
     cwInersecter* inersecter() const;
     void setInersecter(cwInersecter* inersecter);
 
+    bool pitchLocked() const;
+    void setPitchLocked(bool pitchLocked);
+
+    bool azimuthLocked() const;
+    void setAzimuthLocked(bool azimuthLocked);
+
     void setGridPlane(const QPlane3D& plan);
 
     Q_INVOKABLE void centerOn(QVector3D point, bool animate = false);
@@ -65,6 +73,8 @@ signals:
     void cameraChanged();
     void sceneChanged();
     void inersecterChanged();
+    void pitchLockedChanged();
+    void azimuthLockedChanged();
 
 public slots:
 
@@ -91,6 +101,9 @@ private:
     QQuaternion CurrentRotation;
     float Pitch;
     float Azimuth;
+
+    bool PitchLocked = false;
+    bool AzimuthLocked = false;
 
     QPlane3D LastDitchRotationPlane;
 
@@ -135,21 +148,33 @@ private:
 };
 
 /**
-* @brief cw3dRegionViewer::azimuth
-* @return
+* Returns the azimuth of the turn table
 */
 inline double cwBaseTurnTableInteraction::azimuth() const {
     return Azimuth;
 }
 
 /**
-* @brief cw3dRegionViewer::pitch
-* @return
+* Returns the pitch of the turn table
 */
 inline double cwBaseTurnTableInteraction::pitch() const {
     return Pitch;
 }
 
+/**
+* Locks the pitch such that it can't change and is readonly
+*/
+inline bool cwBaseTurnTableInteraction::pitchLocked() const {
+    return PitchLocked;
+}
+
+
+/**
+* Locks the azimuth such that it can't change and is readonly
+*/
+inline bool cwBaseTurnTableInteraction::azimuthLocked() const {
+    return AzimuthLocked;
+}
 
 
 

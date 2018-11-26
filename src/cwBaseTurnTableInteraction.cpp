@@ -237,12 +237,16 @@ void cwBaseTurnTableInteraction::rotateLastPosition()
     delta /= 2.0;
 
     //Calculate the new pitch
-    Pitch = clampPitch(Pitch + delta.y());
-    emit pitchChanged();
+    if(!PitchLocked) {
+        Pitch = clampPitch(Pitch + delta.y());
+        emit pitchChanged();
+    }
 
-    //Calculate the new azimuth
-    Azimuth = clampAzimuth(Azimuth - delta.x());
-    emit azimuthChanged();
+    if(!AzimuthLocked) {
+        //Calculate the new azimuth
+        Azimuth = clampAzimuth(Azimuth - delta.x());
+        emit azimuthChanged();
+    }
 
     updateRotationMatrix();
 }
@@ -505,7 +509,7 @@ QQuaternion cwBaseTurnTableInteraction::rotation() const {
 */
 void cwBaseTurnTableInteraction::setAzimuth(double azimuth) {
     azimuth = clampAzimuth(azimuth);
-    if(Azimuth != azimuth) {
+    if(Azimuth != azimuth && !AzimuthLocked) {
         Azimuth = azimuth;
         emit azimuthChanged();
 
@@ -521,7 +525,7 @@ void cwBaseTurnTableInteraction::setAzimuth(double azimuth) {
 void cwBaseTurnTableInteraction::setPitch(double pitch) {
     pitch = clampPitch(pitch);
 
-    if(Pitch != pitch) {
+    if(Pitch != pitch && !PitchLocked) {
         Pitch = pitch;
         emit pitchChanged();
 
@@ -576,4 +580,24 @@ void cwBaseTurnTableInteraction::setInersecter(cwInersecter* inersecter) {
 */
 cwInersecter* cwBaseTurnTableInteraction::inersecter() const {
     return Inersecter;
+}
+
+/**
+* Locks the pitch for the turn table. This prevents the pitch from changing and makes it readonly
+*/
+void cwBaseTurnTableInteraction::setPitchLocked(bool pitchLocked) {
+    if(PitchLocked != pitchLocked) {
+        PitchLocked = pitchLocked;
+        emit pitchLockedChanged();
+    }
+}
+
+/**
+* Locks the azimuth for the turn table. This prevent the azimuth from changing and makes it readonly
+*/
+void cwBaseTurnTableInteraction::setAzimuthLocked(bool azimuthLocked) {
+    if(AzimuthLocked != azimuthLocked) {
+        AzimuthLocked = azimuthLocked;
+        emit azimuthLockedChanged();
+    }
 }

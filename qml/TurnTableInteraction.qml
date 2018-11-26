@@ -105,6 +105,7 @@ BaseTurnTableInteraction {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
             onPressed: {
+                keyItemId.forceActiveFocus()
                 if(mouse.button == Qt.LeftButton) {
                     state = "panState"
                     startPanning(Qt.point(mouse.x, mouse.y));
@@ -156,6 +157,42 @@ BaseTurnTableInteraction {
                     }
                 }
             ]
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        id: keyItemId
+
+        property bool oldPitchLock: false
+        property bool oldAzimuthLock: false
+
+        Keys.onPressed: {
+            switch(event.key) {
+            case Qt.Key_Shift:
+                oldPitchLock = interactionId.pitchLocked
+                interactionId.pitchLocked = true;
+                event.accepted = true;
+                break;
+            case Qt.Key_Control:
+                oldAzimuthLock = interactionId.azimuthLocked
+                interactionId.azimuthLocked = true;
+                event.accepted = true;
+                break;
+            }
+        }
+
+        Keys.onReleased: {
+            switch(event.key) {
+            case Qt.Key_Shift:
+                interactionId.pitchLocked = oldPitchLock;
+                event.accepted = true;
+                break;
+            case Qt.Key_Control:
+                interactionId.azimuthLocked = oldAzimuthLock;
+                event.accepted = true;
+                break;
+            }
         }
     }
 }
