@@ -26,6 +26,17 @@ CppApplication {
     }
 
     Group {
+        name: "datasets"
+        files: [
+            "datasets/compass/*",
+            "datasets/scrapAutoCalculate/*",
+            "datasets/scrapGuessNeighbor/*",
+            "datasets/survex/*",
+            "datasets/test_cwCSVImporterManager/*"
+        ]
+    }
+
+    Group {
         name: "dewalls testcases"
         files: [
             "../dewalls/test/*.cpp",

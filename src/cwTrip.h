@@ -39,7 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
     Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
-    Q_PROPERTY(int numberOfChunks READ numberOfChunks NOTIFY numberOfChunksChanged)
+    Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)  
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
@@ -71,7 +71,7 @@ public:
     Q_INVOKABLE void addNewChunk();
     Q_INVOKABLE void removeChunk(cwSurveyChunk* chunk);
 
-    int numberOfChunks() const;
+    int chunkCount() const;
     Q_INVOKABLE cwSurveyChunk* chunk(int i) const;
     QList<cwSurveyChunk*> chunks() const;
 
@@ -152,7 +152,7 @@ Q_DECLARE_METATYPE(cwTrip*)
 /**
 Gets numberOfChunks
 */
-inline int cwTrip::numberOfChunks() const {
+inline int cwTrip::chunkCount() const {
     return chunks().size();
 }
 

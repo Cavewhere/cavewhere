@@ -16,25 +16,30 @@ class cwErrorData : public QSharedData
 {
 public:
     cwErrorData() :
-        Type(cwError::NoError),
-        ErrorId(-1),
-        Index(-1),
-        Role(-1),
-        Suppressed(false)
+        Type(cwError::NoError)
     {
-
     }
 
+    cwErrorData(const QString& message,
+                cwError::ErrorType type) :
+        Type(type),
+        Message(message)
+    {}
+
     cwError::ErrorType Type;
-    int ErrorId; //!<
-    int Index; //!<
-    int Role; //!<
-    bool Suppressed;
+    int ErrorId = -1; //!<
+    int Index = -1; //!<
+    bool Suppressed = false;
     QString Message;
-    QPointer<QObject> Parent; //!<
 };
 
 cwError::cwError() : data(new cwErrorData)
+{
+
+}
+
+cwError::cwError(const QString &message, cwError::ErrorType type) :
+    data(new cwErrorData(message, type))
 {
 
 }
@@ -108,9 +113,7 @@ bool cwError::operator==(const cwError &other) const
 {
     return data->ErrorId == other.data->ErrorId &&
             data->Type == other.data->Type &&
-            data->Role == other.data->Role &&
             data->Index == other.data->Index &&
-            data->Parent == other.data->Parent &&
             data->Suppressed == other.data->Suppressed &&
             data->Message == other.data->Message;
 }
@@ -142,51 +145,3 @@ int cwError::errorTypeId() const {
 void cwError::setErrorTypeId(int errorId) {
     data->ErrorId = errorId;
 }
-
-///**
-//* @brief cwError::parent
-//* @return The parent that this error is referancing
-//*/
-//QObject* cwError::parent() const {
-//    return data->Parent;
-//}
-
-///**
-//* @brief cwError::setParent
-//* @param parent
-//*/
-//void cwError::setParent(QObject* parent) {
-//    data->Parent = parent;
-//}
-
-///**
-//* @brief cwError::index
-//* @return
-//*/
-//int cwError::index() const {
-//    return data->Index;
-//}
-
-///**
-//* @brief cwError::setIndex
-//* @param index
-//*/
-//void cwError::setIndex(int index) {
-//    data->Index = index;
-//}
-
-///**
-//* @brief cwError::role
-//* @return
-//*/
-//int cwError::role() const {
-//    return data->Role;
-//}
-
-///**
-//* @brief cwError::setRole
-//* @param role
-//*/
-//void cwError::setRole(int role) {
-//    data->Role = role;
-//}

@@ -50,8 +50,8 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     writeHeader(stream, trip);
 
     //Make sure the trip has data
-    if(trip->numberOfChunks() <= 1) {
-        if(trip->numberOfChunks() == 1) {
+    if(trip->chunkCount() <= 1) {
+        if(trip->chunkCount() == 1) {
             cwSurveyChunk* chunk = trip->chunk(0);
 
             //Trim the invalid stations off

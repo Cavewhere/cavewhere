@@ -1,0 +1,168 @@
+//Our includes
+#include "cwCSVImporterManager.h"
+#include "cwCSVImporterTask.h"
+#include "cwColumnNameModel.h"
+#include "cwErrorModel.h"
+#include "cwErrorListModel.h"
+
+cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
+    QObject(parent),
+    AvailableColumns(new cwColumnNameModel(this)),
+    ColumnsModel(new cwColumnNameModel(this)),
+    ErrorModel(new cwErrorModel(this)),
+    Task(new cwCSVImporterTask)
+{
+    QVector<cwColumnNameModel::Column> availableColumns {
+        {"From", cwCSVImporterTask::FromStation},
+        {"To", cwCSVImporterTask::ToStation},
+        {"Length", cwCSVImporterTask::Length},
+        {"Compass", cwCSVImporterTask::CompassFrontSight},
+        {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
+        {"Clino", cwCSVImporterTask::ClinoFrontSight},
+        {"Clino Backsight", cwCSVImporterTask::ClinoBackSight},
+        {"Left", cwCSVImporterTask::Left},
+        {"Right", cwCSVImporterTask::Right},
+        {"Up", cwCSVImporterTask::Up},
+        {"Down", cwCSVImporterTask::Down}
+    };
+
+    QVector<cwColumnNameModel::Column> columns {
+        {"From", cwCSVImporterTask::FromStation},
+        {"To", cwCSVImporterTask::ToStation},
+        {"Length", cwCSVImporterTask::Length},
+        {"Compass", cwCSVImporterTask::CompassFrontSight},
+        {"Clino", cwCSVImporterTask::ClinoFrontSight}
+    };
+
+    AvailableColumns->setColumns(availableColumns);
+    ColumnsModel->setColumns(columns);
+
+    //For restarts
+    connect(Task, &cwTask::shouldRerun, this, &cwCSVImporterManager::startParsing);
+    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateErrorModel);
+    connect(ColumnsModel, &cwColumnNameModel::columnsChanged, this, &cwCSVImporterManager::startParsing);
+}
+
+cwCSVImporterManager::~cwCSVImporterManager()
+{
+    Task->stop();
+    Task->waitToFinish();
+    Task->deleteLater();
+}
+
+/**
+* @brief cwCSVImporterManager::setSkipHeaderLines
+* @param skipHeaderLines
+*/
+void cwCSVImporterManager::setSkipHeaderLines(int skipHeaderLines) {
+    if(this->skipHeaderLines() != skipHeaderLines) {
+        Settings.setSkipHeaderLines(skipHeaderLines);
+        emit skipHeaderLinesChanged();
+        startParsing();
+    }
+}
+
+/**
+* @brief cwCSVImporterManager::setSeperator
+* @param seperator
+*/
+void cwCSVImporterManager::setSeperator(QString seperator) {
+    if(this->seperator() != seperator) {
+        Settings.setSeperator(seperator);
+        emit seperatorChanged();
+        startParsing();
+    }
+}
+
+/**
+* @brief class::setUseFromStationForLRUD
+* @param useFromStationForLRUD
+*/
+void cwCSVImporterManager::setUseFromStationForLRUD(bool useFromStationForLRUD) {
+    if(this->useFromStationForLRUD() != useFromStationForLRUD) {
+        Settings.setUseFromStationForLRUD(useFromStationForLRUD);
+        emit useFromStationForLRUDChanged();
+        startParsing();
+    }
+}
+
+/**
+* @brief cwCSVImporterManager::setFilename
+* @param filename
+*/
+void cwCSVImporterManager::setFilename(const QString& filename) {
+    if(this->filename() != filename) {
+        Settings.setFilename(filename);
+        emit filenameChanged();
+        startParsing();
+    }
+}
+
+/**
+* @brief cwCSVImporterManager::setVariable
+* @param distanceUnit
+*/
+void cwCSVImporterManager::setDistanceUnit(cwUnits::LengthUnit distanceUnit) {
+    if(this->distanceUnit() != distanceUnit) {
+        Settings.setDistanceUnit(distanceUnit);
+        emit distanceUnitChanged();
+        startParsing();
+    }
+}
+
+/**
+ * Waits for the parser to finish
+ */
+void cwCSVImporterManager::waitToFinish()
+{
+    Task->waitToFinish();
+}
+
+/**
+ * Returns all the caves that were parsed. Caves will be avaliable when the underlying task
+ * finishes
+ */
+QList<cwCave> cwCSVImporterManager::caves() const
+{
+    if(Task->isReady()) {
+        return Task->output().caves;
+    }
+    return QList<cwCave>();
+}
+
+/**
+ * Starts parsing csv data
+ */
+void cwCSVImporterManager::startParsing()
+{
+    if(Task->isReady()) {
+        Settings.setColumns(ColumnsModel->columns());
+        Task->setSettings(Settings);
+        Task->start();
+    } else {
+        Task->restart();
+    }
+}
+
+/**
+ * Update the errors for the error model
+ */
+void cwCSVImporterManager::updateErrorModel()
+{
+    if(Task->isReady()) {
+        ErrorModel->errors()->clear();
+        ErrorModel->errors()->append(Task->output().errors);
+    }
+}
+
+/**
+* Sets true to treat empty lines as a new trip. Otherwise, all shots will be added to
+* a single trip.
+*/
+void cwCSVImporterManager::setNewTripOnEmptyLines(bool newTripOnEmptyLines) {
+    if(this->newTripOnEmptyLines() != newTripOnEmptyLines) {
+        Settings.setNewTripOnEmptyLines(newTripOnEmptyLines);
+        emit newTripOnEmptyLinesChanged();
+        startParsing();
+    }
+}

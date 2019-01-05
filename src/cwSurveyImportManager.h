@@ -22,6 +22,7 @@
 class cwCavingRegion;
 class cwCompassImporter;
 class cwWallsImporter;
+class cwCSVImporterTask;
 
 /**
     This class allows qml to import data
@@ -62,6 +63,7 @@ private slots:
     void compassMessages(QString message);
     void wallsMessages(QString severity, QString message, QString source,
                        int startLine, int startColumn, int endLine, int endColumn);
+//    void csvImportedFinished();
 
 private:
     static const QString ImportSurvexKey;
@@ -72,6 +74,7 @@ private:
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
+    cwCSVImporterTask* CSVImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
 

@@ -221,7 +221,7 @@ void cwSurveyChunkSignaler::connectTrip(cwTrip* trip) {
   \brief Connects all the trips in the chunk to this object
   */
 void cwSurveyChunkSignaler::connectChunks(cwTrip* trip) {
-    for(int i = 0; i < trip->numberOfChunks(); i++) {
+    for(int i = 0; i < trip->chunkCount(); i++) {
         cwSurveyChunk* chunk = trip->chunk(i);
         connectChunk(chunk);
     }
