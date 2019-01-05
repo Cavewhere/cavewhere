@@ -16,6 +16,7 @@
 #include "cwSurveyChunk.h"
 #include "cwStation.h"
 #include "cwShot.h"
+#include "cwSurveyImportManager.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -88,6 +89,17 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
         QueuedCompassFile.append(dataFiles);
     }
 }
+
+/**
+ * Starts the import task for CSV on filename
+ */
+//void cwSurveyImportManager::importCSV(QUrl filename)
+//{
+//    if(CSVImporter->isReady()) {
+//        CSVImporter->setFilename(filename.toLocalFile());
+//        CSVImporter->start();
+//    }
+//}
 
 /**
  * @brief cwSurveyImportManager::compassImporterFinished
@@ -179,6 +191,19 @@ void cwSurveyImportManager::wallsMessages(QString severity, QString message, QSt
     qDebug() << "Walls Importer:" << message;
     emit messageAdded(severity, message, source, startLine, startColumn, endLine, endColumn);
 }
+
+/**
+ * @brief cwSurveyImportManager::csvImportedFinished
+ *
+ * Adds the imported cave to cavewhere
+ */
+//void cwSurveyImportManager::csvImportedFinished()
+//{
+//    foreach(cwCave cave, CSVImporter->caves()) {
+//        cwCave* newCave = new cwCave(cave); //Copy the caves
+//        CavingRegion->addCave(newCave);
+//    }
+//}
 
 /**
  * @brief cwSurveyImportManager::urlsToStringList

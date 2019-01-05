@@ -49,6 +49,7 @@ public:
     Q_INVOKABLE void importWalls();
     Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
+//    Q_INVOKABLE void importCSV(QUrl filename);
 
 signals:
     void cavingRegionChanged();
@@ -74,7 +75,7 @@ private:
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
-    cwCSVImporterTask* CSVImporter;
+//    cwCSVImporterTask* CSVImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
 
