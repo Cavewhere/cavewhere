@@ -17,8 +17,8 @@ class cwLinePlotGeometryTask;
 #include "cwFindUnconnectedSurveyChunksTask.h"
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
-class cwPlotSauceTask;
-class cwPlotSauceXMLTask;
+class cwSurvexportTask;
+class cwSurvexportCSVTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
@@ -201,8 +201,8 @@ private:
 
     //Sub tasks
     cwCavernTask* CavernTask;
-    cwPlotSauceTask* PlotSauceTask;
-    cwPlotSauceXMLTask* PlotSauceParseTask;
+    cwSurvexportTask* PlotSauceTask;
+    cwSurvexportCSVTask* PlotSauceParseTask;
     cwLinePlotGeometryTask* CenterlineGeometryTask;
     cwFindUnconnectedSurveyChunksTask* UnconnectedSurveyChunkTask;
 

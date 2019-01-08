@@ -11,21 +11,19 @@
 //Our includes
 #include "cwTask.h"
 #include "cwStationPositionLookup.h"
-class cwGunZipReader;
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QString>
 #include <QVector3D>
-#include <QDomNode>
-#include <QDomElement>
 
-class cwPlotSauceXMLTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwSurvexportCSVTask : public cwTask
 {
     Q_OBJECT
 public:
-    explicit cwPlotSauceXMLTask(QObject *parent = 0);
+    explicit cwSurvexportCSVTask(QObject *parent = 0);
 
-    void setPlotSauceXMLFile(QString inputFile);
+    void setSurvexportCSVFile(const QString& inputFile);
 
     cwStationPositionLookup stationPositions() const;
     void clearStationPositions();
@@ -37,15 +35,12 @@ protected:
 
 private:
     //Input file
-    QString XMLFileName;
+    QString CSVFileName;
 
     //Output
     cwStationPositionLookup StationPositions;
 
-    void ParseXML(QByteArray xml);
-    void ParseStationXML(QDomNode station);
-
-    QString extractString(QDomElement element);
+    void parseCSVLine(const QString& station);
 };
 
 /**
@@ -53,14 +48,14 @@ private:
 
   This should only be called when the task has finished
   */
-inline cwStationPositionLookup cwPlotSauceXMLTask::stationPositions() const {
+inline cwStationPositionLookup cwSurvexportCSVTask::stationPositions() const {
     return StationPositions;
 }
 
 /**
   \brief Clears all the stations from memory
   */
-inline void cwPlotSauceXMLTask::clearStationPositions() {
+inline void cwSurvexportCSVTask::clearStationPositions() {
     StationPositions.clearStations();
 }
 

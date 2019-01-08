@@ -73,7 +73,7 @@ QString cwCavernTask::output3dFileName() const {
      cavernAppNames.append("cavern.exe");
 
      //The absolute pathe for the cavern executable
-     QString cavernPathName = cwGlobals::findExecutable(cavernAppNames);
+     QString cavernPathName = cwGlobals::findExecutable(cavernAppNames, {cwGlobals::survexPath()});
 
      //Found cavern executable?
      if(cavernPathName.isEmpty()) {

@@ -17,9 +17,9 @@ Project {
 
     references: [
         "src/cavewhereLib.qbs",
-        "survex/survex.qbs",
+//        "survex/survex.qbs",
         "squish/squish.qbs",
-        "plotsauce/plotsauce.qbs",
+//        "plotsauce/plotsauce.qbs",
         "QMath3d/QMath3d.qbs",
         "protobuf/protobuf.qbs",
         "zlib/zlib.qbs",

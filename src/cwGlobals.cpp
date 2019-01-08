@@ -63,20 +63,42 @@ QString cwGlobals::convertFromURL(QString filenameUrl)
  */
 QString cwGlobals::findExecutable(QStringList executables)
 {
+    return findExecutable(executables, {QDir(QApplication::applicationDirPath())});
+}
+
+QString cwGlobals::findExecutable(const QStringList &executables, const QList<QDir> &dirs)
+{
     QString execPath;
 
-    foreach(QString appName, executables) {
-        QDir appDir(QApplication::applicationDirPath());
-        QString currentPlotSaucePath = appDir.absoluteFilePath(appName);
+    for(QString appName : executables) {
+        for(QDir dir : dirs) {
+            QString currentPlotSaucePath = dir.absoluteFilePath(appName);
 
-        QFileInfo fileInfo(currentPlotSaucePath);
-        if(fileInfo.exists() && fileInfo.isExecutable()) {
-            execPath = currentPlotSaucePath;
-            break;
+            QFileInfo fileInfo(currentPlotSaucePath);
+            if(fileInfo.exists() && fileInfo.isExecutable()) {
+                return currentPlotSaucePath;
+            }
         }
     }
 
     return execPath;
+}
+
+/**
+ * Returns the path to default system's survex path aka the path to the bin directory
+ * that cavern and survexport lives
+ */
+QDir cwGlobals::survexPath()
+{
+#ifdef Q_OS_WIN
+    return QDir(QStringLiteral("c:/Program Files (x86)/Survex"));
+#elif Q_OS_LINUX
+    return QDir(QStringLiteral(""));
+#elif Q_OS_MACOS
+    return QDir(QStringLiteral(""));
+#else
+    return QDir();
+#endif
 }
 
 
