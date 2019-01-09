@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QApplication>
+#include <QProcessEnvironment>
 #include <QDebug>
 
 //Std includes
@@ -66,6 +67,9 @@ QString cwGlobals::findExecutable(QStringList executables)
     return findExecutable(executables, {QDir(QApplication::applicationDirPath())});
 }
 
+/**
+ * Returns the absolute file path to the first exectuable that exists from executables in dirs
+ */
 QString cwGlobals::findExecutable(const QStringList &executables, const QList<QDir> &dirs)
 {
     QString execPath;
@@ -85,19 +89,48 @@ QString cwGlobals::findExecutable(const QStringList &executables, const QList<QD
 }
 
 /**
+ * Returns all the directories in the PATH enviromental variable
+ */
+QList<QDir> cwGlobals::systemPaths()
+{
+    //This is static because the system enviroment shouldn't change and this is a slow
+    //function based Qt documentation
+    static const auto env = QProcessEnvironment::systemEnvironment();
+
+    QString seperator;
+#ifdef Q_OS_WIN
+    seperator = ";";
+#elif Q_OS_UNIX
+    seperator = ":";
+#endif
+
+    QList<QDir> dirs;
+    if(env.contains("PATH") && !seperator.isEmpty()) {
+        QString path = env.value("PATH");
+        QStringList dirStringList = path.split(seperator);
+        for(auto dirStr : dirStringList) {
+            QDir dir(dirStr);
+            if(dir.exists()) {
+                dirs.append(dir);
+            }
+        }
+    }
+
+    return dirs;
+}
+
+/**
  * Returns the path to default system's survex path aka the path to the bin directory
  * that cavern and survexport lives
  */
-QDir cwGlobals::survexPath()
+QList<QDir> cwGlobals::survexPath()
 {
 #ifdef Q_OS_WIN
-    return QDir(QStringLiteral("c:/Program Files (x86)/Survex"));
-#elif Q_OS_LINUX
-    return QDir(QStringLiteral(""));
-#elif Q_OS_MACOS
-    return QDir(QStringLiteral(""));
+    return {QDir(QStringLiteral("c:/Program Files (x86)/Survex")), QDir(QStringLiteral("c:/Program Files (x86)/Survex"))};
+#elif Q_OS_UNIX
+    return systemPaths();
 #else
-    return QDir();
+    return {};
 #endif
 }
 

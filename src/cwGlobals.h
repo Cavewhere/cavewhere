@@ -37,7 +37,8 @@ public:
     static QString convertFromURL(QString filenameUrl);
     static QString findExecutable(QStringList executables);
     static QString findExecutable(const QStringList& executables, const QList<QDir>& dirs);
-    static QDir survexPath();
+    static QList<QDir> systemPaths();
+    static QList<QDir> survexPath();
 };
 
 namespace cw {
