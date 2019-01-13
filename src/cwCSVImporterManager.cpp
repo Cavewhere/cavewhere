@@ -12,7 +12,7 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
     ErrorModel(new cwErrorModel(this)),
     Task(new cwCSVImporterTask)
 {
-    QVector<cwColumnNameModel::Column> availableColumns {
+    QList<cwColumnName> availableColumns {
         {"From", cwCSVImporterTask::FromStation},
         {"To", cwCSVImporterTask::ToStation},
         {"Length", cwCSVImporterTask::Length},
@@ -26,7 +26,7 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
         {"Down", cwCSVImporterTask::Down}
     };
 
-    QVector<cwColumnNameModel::Column> columns {
+    QList<cwColumnName> columns {
         {"From", cwCSVImporterTask::FromStation},
         {"To", cwCSVImporterTask::ToStation},
         {"Length", cwCSVImporterTask::Length},
@@ -34,13 +34,16 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
         {"Clino", cwCSVImporterTask::ClinoFrontSight}
     };
 
-    AvailableColumns->setColumns(availableColumns);
-    ColumnsModel->setColumns(columns);
+    AvailableColumns->append(availableColumns);
+    ColumnsModel->append(columns);
 
     //For restarts
     connect(Task, &cwTask::shouldRerun, this, &cwCSVImporterManager::startParsing);
     connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateErrorModel);
-    connect(ColumnsModel, &cwColumnNameModel::columnsChanged, this, &cwCSVImporterManager::startParsing);
+    connect(ColumnsModel, &QAbstractItemModel::modelReset, this, &cwCSVImporterManager::startParsing);
+    connect(ColumnsModel, &QAbstractItemModel::rowsRemoved, this, &cwCSVImporterManager::startParsing);
+    connect(ColumnsModel, &QAbstractItemModel::rowsInserted, this, &cwCSVImporterManager::startParsing);
+    connect(ColumnsModel, &QAbstractItemModel::rowsMoved, this, &cwCSVImporterManager::startParsing);
 }
 
 cwCSVImporterManager::~cwCSVImporterManager()
@@ -136,7 +139,7 @@ QList<cwCave> cwCSVImporterManager::caves() const
 void cwCSVImporterManager::startParsing()
 {
     if(Task->isReady()) {
-        Settings.setColumns(ColumnsModel->columns());
+        Settings.setColumns(ColumnsModel->toList());
         Task->setSettings(Settings);
         Task->start();
     } else {

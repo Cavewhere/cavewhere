@@ -1,32 +1,59 @@
 import QtQuick 2.0
 import QtQuick.Controls 2.0
 import QtQuick.Layouts 1.0
+import QtQuick.Dialogs 1.2
 import Cavewhere 1.0
 
 Item {
-
     anchors.fill: parent
+
+    CSVImporterManager {
+        id: csvManagerId
+
+    }
+
+    FileDialog {
+        id: openCSVFileDialogId
+
+        title: "Import CSV file"
+        selectExisting: true
+        nameFilters: [ "Comma Seperated (*.csv *.txt)", "All files (*)" ]
+        folder: rootData.lastDirectory
+
+        onAccepted: {
+            rootData.lastDirectory = fileUrl
+            csvManagerId.filename = fileUrl
+        }
+    }
 
     ColumnLayout {
 
         RowLayout {
             Text {
                 id: filenameId
-                text: "No file loaded"
+                text: csvManagerId.filename.length == 0 ? "No file loaded" : csvManagerId.filename
             }
 
             Button {
                 text: "Open"
+                onClicked: openCSVFileDialogId.open()
             }
         }
 
         GroupBox {
             title: "Available Columns"
 
+            ColumnNameView {
+                model: csvManagerId.availableColumnsModel
+            }
         }
 
         GroupBox {
             title: "Used Columns"
+
+            ColumnNameView {
+                model: csvManagerId.columnsModel
+            }
         }
 
         RowLayout {

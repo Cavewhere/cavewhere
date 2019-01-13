@@ -103,6 +103,8 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwTestcaseManager.h"
+#include "cwCSVImporterManager.h"
+#include "cwColumnNameModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -231,5 +233,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+    qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
+    qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
 
 }

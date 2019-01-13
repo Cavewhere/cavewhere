@@ -57,7 +57,7 @@ void cwCSVImporterTask::runTask()
     int skipHeaderLines = Settings.skipHeaderLines();
     QString sepratator = Settings.seperator();
     bool useFromStationForLRUD = Settings.useFromStationForLRUD();
-    QVector<cwColumnNameModel::Column> columns = Settings.columns();
+    QList<cwColumnName> columns = Settings.columns();
     cwUnits::LengthUnit distanceUnit = Settings.distanceUnit();
     trip->calibrations()->setDistanceUnit(distanceUnit);
 
@@ -98,7 +98,7 @@ void cwCSVImporterTask::runTask()
 
                 QString value = readColumns.at(i).trimmed();
 
-                switch(column.Id) {
+                switch(column.columnId()) {
                 case ToStation:
                     to.setName(value);
                     break;

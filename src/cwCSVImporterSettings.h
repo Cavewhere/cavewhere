@@ -30,8 +30,8 @@ public:
     cwUnits::LengthUnit distanceUnit() const;
     void setDistanceUnit(cwUnits::LengthUnit units);
 
-    QVector<cwColumnNameModel::Column> columns() const;
-    void setColumns(const QVector<cwColumnNameModel::Column>& columns);
+    QList<cwColumnName> columns() const;
+    void setColumns(const QList<cwColumnName>& columns);
 
     bool useFromStationForLRUD() const;
     void setUseFromStationForLRUD(bool useFromStationForLRUD);

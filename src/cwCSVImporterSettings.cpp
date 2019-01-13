@@ -8,7 +8,7 @@ public:
     int SkipHeaderLines = 1;
     QString Seperator = ",";
     cwUnits::LengthUnit DistanceUnit = cwUnits::Meters;
-    QVector<cwColumnNameModel::Column> Columns;
+    QList<cwColumnName> Columns;
     bool UseFromStationForLRUD = true;
     bool NewTripOnEmptyLines = false;
 };
@@ -75,12 +75,12 @@ void cwCSVImporterSettings::setDistanceUnit(cwUnits::LengthUnit units)
     data->DistanceUnit = units;
 }
 
-QVector<cwColumnNameModel::Column> cwCSVImporterSettings::columns() const
+QList<cwColumnName> cwCSVImporterSettings::columns() const
 {
     return data->Columns;
 }
 
-void cwCSVImporterSettings::setColumns(const QVector<cwColumnNameModel::Column> &columns)
+void cwCSVImporterSettings::setColumns(const QList<cwColumnName> &columns)
 {
     data->Columns = columns;
 }

@@ -124,7 +124,8 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
 
 TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.columnsModel()->setColumns(
+    manager.columnsModel()->clear();
+    manager.columnsModel()->append(
     {
                     {"Length", cwCSVImporterTask::Length},
                     {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
@@ -281,7 +282,8 @@ TEST_CASE("cwCSVImageManager should set distance units correctly", "[cwCSVImport
 
 TEST_CASE("cwCSVImageManager should process last shot LRUD data correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
-    manager.columnsModel()->setColumns(
+    manager.columnsModel()->clear();
+    manager.columnsModel()->append(
     {
                     {"Length", cwCSVImporterTask::Length},
                     {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
@@ -360,7 +362,8 @@ TEST_CASE("cwCSVImageManager should process last shot LRUD data correctly", "[cw
 TEST_CASE("cwCSVImageManager should set UseFromStationForLRUD correctly", "[cwCSVImporterManager]") {
     //Test that there's an extra, empty station that fills in LRUD
     cwCSVImporterManager manager;
-    manager.columnsModel()->setColumns(
+    manager.columnsModel()->clear();
+    manager.columnsModel()->append(
     {
                     {"Length", cwCSVImporterTask::Length},
                     {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
@@ -474,7 +477,8 @@ TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterMana
     }
 
     SECTION("Last LRUD shot wasn't found warning") {
-        manager.columnsModel()->setColumns(
+        manager.columnsModel()->clear();
+        manager.columnsModel()->append(
         {
                         {"Length", cwCSVImporterTask::Length},
                         {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
