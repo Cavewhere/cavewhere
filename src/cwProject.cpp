@@ -220,24 +220,6 @@ void cwProject::privateSave() {
 }
 
 /**
- * @brief cwProject::convertFromURL
- * @param fileUrl - The url that will be convert
- * @return Returns the converted url
- *
- * For example if fileUrl = file://SOME/LOCAL/FILENAME with will convert it to //SOME/LOCAL/FILENAME
- *
- * If the filenameUrl isn't a url, this just returns filenameUrl
- */
-QString cwProject::convertFromURL(QString filenameUrl) const
-{
-    QUrl fileUrl(filenameUrl);
-    if(fileUrl.isValid() && fileUrl.isLocalFile()) {
-        return fileUrl.toLocalFile();
-    }
-    return filenameUrl;
-}
-
-/**
   Saves the project as a new file
 
     Saves the project as.  This will copy the current project to a different location, leaving
@@ -246,7 +228,7 @@ QString cwProject::convertFromURL(QString filenameUrl) const
   */
 void cwProject::saveAs(QString newFilename){
     newFilename = cwGlobals::addExtension(newFilename, "cw");
-    newFilename = convertFromURL(newFilename);
+    newFilename = cwGlobals::convertFromURL(newFilename);
 
     //Just save it the user is overwritting it
     if(newFilename == filename()) {
@@ -332,7 +314,7 @@ void cwProject::loadFile(QString filename) {
         connect(LoadTask, &cwRegionLoadTask::finishedLoading,
                 this, &cwProject::updateRegionData);
 
-        filename = convertFromURL(filename);
+        filename = cwGlobals::convertFromURL(filename);
 
         //Set the data for the project
         LoadTask->setDatabaseFilename(filename);

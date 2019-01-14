@@ -9,6 +9,7 @@
 class cwColumnNameModel;
 class cwCSVImporterTask;
 class cwErrorModel;
+class cwCSVLineModel;
 #include "cwCSVImporterSettings.h"
 #include "cwGlobals.h"
 #include "cwCave.h"
@@ -31,6 +32,8 @@ class CAVEWHERE_LIB_EXPORT cwCSVImporterManager : public QObject
     Q_PROPERTY(cwColumnNameModel* availableColumnsModel READ availableColumnsModel CONSTANT)
     Q_PROPERTY(cwColumnNameModel* columnsModel READ columnsModel CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwCSVLineModel* lineModel READ lineModel CONSTANT)
+    Q_PROPERTY(int skipColumnId READ skipColumnId CONSTANT)
 
 public:
     cwCSVImporterManager(QObject* parent = nullptr);
@@ -54,9 +57,12 @@ public:
     bool newTripOnEmptyLines() const;
     void setNewTripOnEmptyLines(bool newTripOnEmptyLines);
 
+    int skipColumnId() const;
+
     cwColumnNameModel* availableColumnsModel() const;
     cwColumnNameModel* columnsModel() const;
     cwErrorModel* errorModel() const;
+    cwCSVLineModel* lineModel() const;
 
     void waitToFinish();
 
@@ -76,24 +82,25 @@ private:
     cwColumnNameModel* AvailableColumns; //!<
     cwColumnNameModel* ColumnsModel; //!<
     cwErrorModel* ErrorModel; //!<
+    cwCSVLineModel* LineModel; //!<
 
     cwCSVImporterTask* Task;
 
 private slots:
     void startParsing();
     void updateErrorModel();
+    void updateLineModel();
 };
 
 /**
-* @brief cwCSVImporterManager::filename
-* @return
+* Returns the filename of the CSV that will be parsed
 */
 inline QString cwCSVImporterManager::filename() const {
     return Settings.filename();
 }
 
 /**
-*
+* Return the number of lines that are skipped to ignore header lines
 */
 inline bool cwCSVImporterManager::useFromStationForLRUD() const {
     return Settings.useFromStationForLRUD();
@@ -107,29 +114,30 @@ inline int cwCSVImporterManager::skipHeaderLines() const {
 }
 
 /**
+* Returns the seperator that the parser uses.
 *
+* By default this is ","
 */
 inline QString cwCSVImporterManager::seperator() const {
     return Settings.seperator();
 }
 
 /**
-* @brief cwCSVImporterManager::distanceUnit
-* @return
+* Returns the distance unit the parser uses
 */
 inline cwUnits::LengthUnit cwCSVImporterManager::distanceUnit() const {
     return Settings.distanceUnit();
 }
 
 /**
-*
+* Returns the model that holds all the available columns
 */
 inline cwColumnNameModel* cwCSVImporterManager::availableColumnsModel() const {
     return AvailableColumns;
 }
 
 /**
-*
+*   Returns the model that holds the columns that are used to parse the data
 */
 inline cwColumnNameModel* cwCSVImporterManager::columnsModel() const {
     return ColumnsModel;
@@ -143,8 +151,18 @@ inline bool cwCSVImporterManager::newTripOnEmptyLines() const {
     return Settings.newTripOnEmptyLines();
 }
 
+/**
+ * Returns the model that holds all the errors from the last CSV read
+ */
 inline cwErrorModel* cwCSVImporterManager::errorModel() const {
     return ErrorModel;
+}
+
+/**
+* Stores all the lines in the loaded CSV file
+*/
+inline cwCSVLineModel* cwCSVImporterManager::lineModel() const {
+    return LineModel;
 }
 
 #endif // CWCSVIMPORTERMANAGER_H

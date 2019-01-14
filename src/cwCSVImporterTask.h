@@ -27,13 +27,15 @@ public:
         Left,
         Right,
         Up,
-        Down
+        Down,
+        Skip
     };
 
     class Output {
     public:
         QList<cwCave> caves;
         QList<cwError> errors;
+        QList<QStringList> lines;
     };
 
     cwCSVImporterTask();

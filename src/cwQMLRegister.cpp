@@ -105,6 +105,7 @@
 #include "cwTestcaseManager.h"
 #include "cwCSVImporterManager.h"
 #include "cwColumnNameModel.h"
+#include "cwCSVLineModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -235,5 +236,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
     qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
     qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
+    qmlRegisterType<cwCSVLineModel>("Cavewhere", 1, 0, "CSVLineModel");
 
 }

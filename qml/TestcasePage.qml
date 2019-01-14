@@ -3,7 +3,7 @@ import QtQuick.Controls 1.4
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
-Item {
+StandardPage {
 
     function runTestcases() {
         testcases.run();

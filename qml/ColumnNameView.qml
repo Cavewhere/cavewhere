@@ -7,6 +7,11 @@ Item {
 
     property ColumnNameModel model
     property bool isDragging
+    property var moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
+        var value = oldModel.get(oldIndex);
+        oldModel.remove(oldIndex);
+        model.insert(index + indexOffset, value);
+    }
 
     implicitWidth: layoutId.width
     implicitHeight: layoutId.height
@@ -17,7 +22,7 @@ Item {
         move: Transition {
             id: rowTransitionId
             enabled: false
-            NumberAnimation { properties: "x"; } // easing.type: Easing.OutBounce }
+            NumberAnimation { properties: "x"; }
         }
 
         Repeater {
@@ -56,6 +61,8 @@ Item {
                     onPressed: {
                         beginDrag = Qt.point(rectLayoutId.x, rectLayoutId.y);
                         rectLayoutId.Drag.hotSpot = Qt.point(mouse.x, mouse.y)
+
+
                     }
 
                     onReleased: {
@@ -135,6 +142,7 @@ Item {
                     delegate: delegateId
                     model: root.model
                     transitionsToBlock: [rowTransitionId, internalTransitionId] //Blocks transitions when drop has been completed
+                    moveFunction: root.moveFunction
                 }
 
                 ColumnNameDropArea {
@@ -148,6 +156,7 @@ Item {
                     model: root.model
                     indexOffset: 1 //Needs to be 1 because when inserting it needs to be right of the current item
                     transitionsToBlock: insertLeftDropArea.transitionsToBlock //Block transition when drop has been complete
+                    moveFunction: root.moveFunction
                 }
             }
         }

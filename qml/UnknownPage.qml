@@ -1,10 +1,7 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.1
 
-Item {
-
-    anchors.fill: parent
-
+ScrollViewPage {
     Rectangle {
         radius: 5
 
@@ -34,7 +31,6 @@ Item {
             Image {
                 source: "qrc:/icons/unknownPage.png"
                 Layout.alignment: Qt.AlignHCenter
-//                sourceSize.width: 400
             }
 
             LinkText {

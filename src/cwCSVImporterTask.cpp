@@ -92,11 +92,15 @@ void cwCSVImporterTask::runTask()
             CSVOutput.errors.append(error);
         }
 
+        QStringList line;
+        line.reserve(columns.size());
+
         for(int i = 0; i < readColumns.size(); i++) {
             if(i < columns.size()) {
                 auto column = columns.at(i);
 
                 QString value = readColumns.at(i).trimmed();
+                line.append(value);
 
                 switch(column.columnId()) {
                 case ToStation:
@@ -132,10 +136,13 @@ void cwCSVImporterTask::runTask()
                 case Down:
                     lrudStation.setDown(value);
                     break;
-
+                case Skip:
+                    break;
                 }
             }
         }
+
+        CSVOutput.lines.append(line);
     };
 
     auto setLastStationLRUD = [&](cwStation& from, cwStation& to, cwStation& lrudStation) {

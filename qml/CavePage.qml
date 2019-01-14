@@ -12,9 +12,8 @@ import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
-Rectangle {
+StandardPage {
     id: cavePageArea
-    anchors.fill: parent;
 
     property Cave currentCave
 

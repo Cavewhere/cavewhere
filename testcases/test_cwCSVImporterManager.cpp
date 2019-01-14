@@ -10,6 +10,7 @@
 #include "cwTripCalibration.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwCSVLineModel.h"
 
 class Checker {
 public:
@@ -91,6 +92,7 @@ TEST_CASE("cwCSVImporterManager should initilize correctly", "[cwCSVImporterMana
     REQUIRE(manager.errorModel() != nullptr);
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
+    CHECK(manager.lineModel() != nullptr);
     CHECK(manager.distanceUnit() == cwUnits::Meters);
     CHECK(manager.useFromStationForLRUD() == true);
 }
@@ -120,6 +122,9 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
     Checker::check(&testCave, &manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
+
+    CHECK(manager.lineModel()->rowCount() == 5);
+    CHECK(manager.lineModel()->columnCount() == 5);
 }
 
 TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporterManager]") {

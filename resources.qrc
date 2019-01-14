@@ -87,5 +87,6 @@
         <file>icons/measurement.png</file>
         <file>icons/north.png</file>
         <file>icons/up.png</file>
+        <file>icons/svg/dragAndDrop.svg</file>
     </qresource>
 </RCC>

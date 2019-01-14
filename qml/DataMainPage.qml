@@ -11,10 +11,8 @@ import QtQuick 2.0
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 
-Rectangle {
+StandardPage {
     id: pageId
-
-    anchors.fill: parent
 
     function cavePageName(cave) {
         return "Cave=" + cave.name;

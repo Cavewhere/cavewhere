@@ -4,26 +4,24 @@
 #include "cwColumnNameModel.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
+#include "cwCSVLineModel.h"
 
 cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
     QObject(parent),
     AvailableColumns(new cwColumnNameModel(this)),
     ColumnsModel(new cwColumnNameModel(this)),
     ErrorModel(new cwErrorModel(this)),
+    LineModel(new cwCSVLineModel(this)),
     Task(new cwCSVImporterTask)
 {
     QList<cwColumnName> availableColumns {
-        {"From", cwCSVImporterTask::FromStation},
-        {"To", cwCSVImporterTask::ToStation},
-        {"Length", cwCSVImporterTask::Length},
-        {"Compass", cwCSVImporterTask::CompassFrontSight},
         {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
-        {"Clino", cwCSVImporterTask::ClinoFrontSight},
         {"Clino Backsight", cwCSVImporterTask::ClinoBackSight},
         {"Left", cwCSVImporterTask::Left},
         {"Right", cwCSVImporterTask::Right},
         {"Up", cwCSVImporterTask::Up},
-        {"Down", cwCSVImporterTask::Down}
+        {"Down", cwCSVImporterTask::Down},
+        {"Skip", cwCSVImporterTask::Skip}
     };
 
     QList<cwColumnName> columns {
@@ -37,9 +35,12 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
     AvailableColumns->append(availableColumns);
     ColumnsModel->append(columns);
 
+    LineModel->setColumnModel(ColumnsModel);
+
     //For restarts
     connect(Task, &cwTask::shouldRerun, this, &cwCSVImporterManager::startParsing);
     connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateErrorModel);
+    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateLineModel);
     connect(ColumnsModel, &QAbstractItemModel::modelReset, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsRemoved, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsInserted, this, &cwCSVImporterManager::startParsing);
@@ -94,8 +95,9 @@ void cwCSVImporterManager::setUseFromStationForLRUD(bool useFromStationForLRUD) 
 * @param filename
 */
 void cwCSVImporterManager::setFilename(const QString& filename) {
-    if(this->filename() != filename) {
-        Settings.setFilename(filename);
+    QString localFilename = cwGlobals::convertFromURL(filename);
+    if(this->filename() != localFilename) {
+        Settings.setFilename(localFilename);
         emit filenameChanged();
         startParsing();
     }
@@ -159,6 +161,16 @@ void cwCSVImporterManager::updateErrorModel()
 }
 
 /**
+ * Updates the line model with new data
+ */
+void cwCSVImporterManager::updateLineModel()
+{
+    if(Task->isReady()) {
+        LineModel->setLines(Task->output().lines);
+    }
+}
+
+/**
 * Sets true to treat empty lines as a new trip. Otherwise, all shots will be added to
 * a single trip.
 */
@@ -168,4 +180,11 @@ void cwCSVImporterManager::setNewTripOnEmptyLines(bool newTripOnEmptyLines) {
         emit newTripOnEmptyLinesChanged();
         startParsing();
     }
+}
+
+/**
+* Returns the id for the skip column.
+*/
+ int cwCSVImporterManager::skipColumnId() const {
+    return cwCSVImporterTask::Skip;
 }
