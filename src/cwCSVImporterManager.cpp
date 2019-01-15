@@ -99,8 +99,9 @@ void cwCSVImporterManager::setFilename(const QString& filename) {
     if(this->filename() != localFilename) {
         Settings.setFilename(localFilename);
         emit filenameChanged();
-        startParsing();
     }
+    //Start parsing even if it's the same file, this reloads the file
+    startParsing();
 }
 
 /**
@@ -167,6 +168,12 @@ void cwCSVImporterManager::updateLineModel()
 {
     if(Task->isReady()) {
         LineModel->setLines(Task->output().lines);
+
+        Text = Task->output().text;
+        emit previewTextChanged();
+
+        LineCount = Task->output().lineCount;
+        emit lineCountChanged();
     }
 }
 
@@ -188,3 +195,18 @@ void cwCSVImporterManager::setNewTripOnEmptyLines(bool newTripOnEmptyLines) {
  int cwCSVImporterManager::skipColumnId() const {
     return cwCSVImporterTask::Skip;
 }
+
+/**
+* Sets the number of preview lines for the CSV parser
+*
+* If the file is longer than preview lines, those lines won't be added. Setting preview lines
+* to max int size will give you all the lines in the file. By default preview lines in 20
+*/
+ void cwCSVImporterManager::setPreviewLines(int previewLines) {
+     previewLines = std::max(0, previewLines);
+     if(this->previewLines() != previewLines) {
+         Settings.setPreviewLines(previewLines);
+         emit previewLinesChanged();
+         startParsing();
+     }
+ }

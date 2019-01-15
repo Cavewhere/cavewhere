@@ -36,6 +36,8 @@ public:
         QList<cwCave> caves;
         QList<cwError> errors;
         QList<QStringList> lines;
+        QString text;
+        int lineCount = 0;
     };
 
     cwCSVImporterTask();

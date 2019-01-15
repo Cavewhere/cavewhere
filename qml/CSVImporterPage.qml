@@ -1,5 +1,5 @@
 import QtQuick 2.12
-import QtQuick.Controls 2.0
+import QtQuick.Controls 2.5
 import QtQuick.Layouts 1.0
 import QtQuick.Dialogs 1.2
 import Cavewhere 1.0
@@ -8,7 +8,8 @@ ScrollViewPage {
 
     CSVImporterManager {
         id: csvManagerId
-
+        property int maxPreviewLines: 20
+        previewLines: maxPreviewLines
     }
 
     FileDialog {
@@ -44,7 +45,7 @@ ScrollViewPage {
         }
 
         ColumnLayout {
-            visible: csvManagerId.filename.length
+            //            visible: csvManagerId.filename.length
 
             GroupBox {
 
@@ -69,7 +70,6 @@ ScrollViewPage {
                             //Custom drop function for model manipulation that prevents the skip column
                             //from being removed
                             moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
-                                console.log("I get here")
                                 var value = oldModel.get(oldIndex);
 
                                 //Remove columns that aren't skip column
@@ -89,7 +89,6 @@ ScrollViewPage {
                         ColumnNameView {
                             model: csvManagerId.columnsModel
                             moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
-                                console.log("I get there")
                                 var value = oldModel.get(oldIndex);
                                 if(value.columnId !== csvManagerId.skipColumnId || oldModel === model) {
                                     //Only add columns that aren't skip columns since multiple columns can be skipped
@@ -140,7 +139,7 @@ ScrollViewPage {
 
                     unitModel: lengthId.unitNames
                     unit: csvManagerId.distanceUnit
-                    onUnitChanged: {
+                    onNewUnit: {
                         csvManagerId.distanceUnit = unit
                     }
                 }
@@ -151,28 +150,95 @@ ScrollViewPage {
             }
 
             GroupBox {
-                title: "Preview"
-                TableView {
+                title: "CSV Text"
+                ResizeableScrollView {
                     implicitWidth: 600
-                    implicitHeight: 300
-                    model: csvManagerId.lineModel
-                    delegate: Rectangle {
-                        border.width: 1
-                        border.color: "lightgrey"
-                        implicitWidth: textId.width + 6
-                        implicitHeight: textId.height + 6
+                    implicitHeight: 150
+                    TextArea {
+                        id: csvTextAreaId
+                        anchors.fill: parent
+                        text: csvManagerId.previewText
+                        font.family: "Courier"
+                    }
+                }
+            }
 
-                        Text {
-                            id: textId
-                            anchors.centerIn: parent
-                            text: displayRole == undefined ? "" : displayRole
+            GroupBox {
+                title: "Preview"
+
+                Item {
+                    implicitWidth: previewScrollViewId.implicitWidth
+                    implicitHeight: previewScrollViewId.implicitHeight
+
+                    ResizeableScrollView {
+                        id: previewScrollViewId
+                        implicitWidth: 600
+                        implicitHeight: 150
+                        TableView {
+                            model: csvManagerId.lineModel
+                            anchors.fill: parent
+                            delegate: Rectangle {
+                                border.width: 1
+                                border.color: "lightgrey"
+                                implicitWidth: textId.width + 6
+                                implicitHeight: textId.height + 6
+
+                                Text {
+                                    id: textId
+                                    anchors.centerIn: parent
+                                    text: displayRole == undefined ? "" : displayRole
+                                }
+                            }
                         }
+                    }
+
+                    Button {
+                        id: showAllButtonId
+                        anchors.right: previewScrollViewId.right
+                        anchors.rightMargin: previewScrollViewId.resizeHandleSize.width + 5
+                        anchors.bottom: previewScrollViewId.bottom
+
+                        states: [
+                            State {
+                                when: csvManagerId.previewLines > csvManagerId.lineCount
+                                PropertyChanges {
+                                    target: showAllButtonId
+                                    text: "Less"
+                                    visible: true
+                                    onClicked: {
+                                        csvManagerId.previewLines = csvManagerId.maxPreviewLines
+                                    }
+                                }
+
+                            },
+                            State {
+                                when: csvManagerId.previewLines < csvManagerId.lineCount
+                                PropertyChanges {
+                                    target: showAllButtonId
+                                    text: "More"
+                                    visible: true
+                                    onClicked: {
+                                        csvManagerId.previewLines = Number.MAX_VALUE
+                                    }
+                                }
+                            },
+                            State {
+                                when: csvManagerId.previewLines == csvManagerId.lineCount
+                                PropertyChanges {
+                                    target: showAllButtonId
+                                    visible: false
+                                }
+                            }
+                        ]
                     }
                 }
             }
 
             Button {
                 text: "Import"
+                onClicked: {
+
+                }
             }
         }
     }

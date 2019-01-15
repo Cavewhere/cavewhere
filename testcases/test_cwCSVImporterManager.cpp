@@ -125,6 +125,15 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
 
     CHECK(manager.lineModel()->rowCount() == 5);
     CHECK(manager.lineModel()->columnCount() == 5);
+
+    //Check that the preview lines works correctly
+    manager.setPreviewLines(2);
+    manager.waitToFinish();
+
+    CHECK(manager.lineModel()->rowCount() == 2); //1 row plus the header row
+    CHECK(manager.lineModel()->columnCount() == 5);
+
+    CHECK(manager.previewText().toStdString() == "From,To,Length,Compass,Clino\r\n1,2,30.4,20,-82\r\n");
 }
 
 TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporterManager]") {

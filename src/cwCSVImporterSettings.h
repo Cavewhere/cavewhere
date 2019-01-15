@@ -39,6 +39,9 @@ public:
     bool newTripOnEmptyLines() const;
     void setNewTripOnEmptyLines(bool newTripOnEmptyLines);
 
+    int previewLines() const;
+    void setPreviewLines(int previewLines);
+
 private:
     QSharedDataPointer<cwCSVImporterSettingsData> data;
 };

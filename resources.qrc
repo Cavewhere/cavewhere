@@ -88,5 +88,6 @@
         <file>icons/north.png</file>
         <file>icons/up.png</file>
         <file>icons/svg/dragAndDrop.svg</file>
+        <file>icons/svg/resizeCorner.svg</file>
     </qresource>
 </RCC>

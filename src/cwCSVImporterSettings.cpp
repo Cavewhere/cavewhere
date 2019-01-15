@@ -11,6 +11,7 @@ public:
     QList<cwColumnName> Columns;
     bool UseFromStationForLRUD = true;
     bool NewTripOnEmptyLines = false;
+    int PreviewLines = 20;
 };
 
 cwCSVImporterSettings::cwCSVImporterSettings() : data(new cwCSVImporterSettingsData)
@@ -103,4 +104,14 @@ bool cwCSVImporterSettings::newTripOnEmptyLines() const
 void cwCSVImporterSettings::setNewTripOnEmptyLines(bool newTripOnEmptyLines)
 {
     data->NewTripOnEmptyLines = newTripOnEmptyLines;
+}
+
+int cwCSVImporterSettings::previewLines() const
+{
+    return data->PreviewLines;
+}
+
+void cwCSVImporterSettings::setPreviewLines(int previewLines)
+{
+    data->PreviewLines = previewLines;
 }

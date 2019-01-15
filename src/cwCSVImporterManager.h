@@ -34,6 +34,9 @@ class CAVEWHERE_LIB_EXPORT cwCSVImporterManager : public QObject
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwCSVLineModel* lineModel READ lineModel CONSTANT)
     Q_PROPERTY(int skipColumnId READ skipColumnId CONSTANT)
+    Q_PROPERTY(int previewLines READ previewLines WRITE setPreviewLines NOTIFY previewLinesChanged)
+    Q_PROPERTY(QString previewText READ previewText NOTIFY previewTextChanged)
+    Q_PROPERTY(int lineCount READ lineCount NOTIFY lineCountChanged)
 
 public:
     cwCSVImporterManager(QObject* parent = nullptr);
@@ -59,6 +62,13 @@ public:
 
     int skipColumnId() const;
 
+    int previewLines() const;
+    void setPreviewLines(int previewLines);
+
+    QString previewText() const;
+
+    int lineCount() const;
+
     cwColumnNameModel* availableColumnsModel() const;
     cwColumnNameModel* columnsModel() const;
     cwErrorModel* errorModel() const;
@@ -75,6 +85,9 @@ signals:
     void seperatorChanged();
     void useFromStationForLRUDChanged();
     void newTripOnEmptyLinesChanged();
+    void previewLinesChanged();
+    void previewTextChanged();
+    void lineCountChanged();
 
 private:
     cwCSVImporterSettings Settings;
@@ -83,6 +96,8 @@ private:
     cwColumnNameModel* ColumnsModel; //!<
     cwErrorModel* ErrorModel; //!<
     cwCSVLineModel* LineModel; //!<
+    QString Text; //!<
+    int LineCount = 0;
 
     cwCSVImporterTask* Task;
 
@@ -107,7 +122,7 @@ inline bool cwCSVImporterManager::useFromStationForLRUD() const {
 }
 
 /**
-*
+* Returns the number of lines that will be skipped during parsing
 */
 inline int cwCSVImporterManager::skipHeaderLines() const {
     return Settings.skipHeaderLines();
@@ -163,6 +178,28 @@ inline cwErrorModel* cwCSVImporterManager::errorModel() const {
 */
 inline cwCSVLineModel* cwCSVImporterManager::lineModel() const {
     return LineModel;
+}
+
+/**
+* Returns the number of preview lines that are stored
+*/
+inline int cwCSVImporterManager::previewLines() const {
+    return Settings.previewLines();
+}
+
+/**
+* Returns the text that was read from disk. The text contains only the number of lines found
+* in previewLines.
+*/
+inline QString cwCSVImporterManager::previewText() const {
+    return Text;
+}
+
+/**
+* Returns the number of lines read in the csv file
+*/
+inline int cwCSVImporterManager::lineCount() const {
+    return LineCount;
 }
 
 #endif // CWCSVIMPORTERMANAGER_H

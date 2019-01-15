@@ -62,9 +62,20 @@ void cwCSVImporterTask::runTask()
     trip->calibrations()->setDistanceUnit(distanceUnit);
 
     int lineCount = 0;
-    auto readLine = [&file, &lineCount]() {
+
+    auto isPreviewLine = [&lineCount, this]() {
+        return lineCount <= Settings.previewLines();
+    };
+
+    auto readLine = [&file, &lineCount, this, isPreviewLine]() {
         lineCount++;
-        return file.readLine();
+        QString line = file.readLine();
+
+        if(isPreviewLine()) {
+            CSVOutput.text.append(line);
+        }
+
+        return line;
     };
 
     auto parseHeaderLines = [&]() {
@@ -142,7 +153,9 @@ void cwCSVImporterTask::runTask()
             }
         }
 
-        CSVOutput.lines.append(line);
+        if(isPreviewLine()) {
+            CSVOutput.lines.append(line);
+        }
     };
 
     auto setLastStationLRUD = [&](cwStation& from, cwStation& to, cwStation& lrudStation) {
@@ -189,7 +202,7 @@ void cwCSVImporterTask::runTask()
     parseHeaderLines();
 
     while(!file.atEnd()) {
-        QString line = QString::fromLocal8Bit(readLine());
+        QString line = readLine();
         QStringList readColumns = line.split(sepratator);
 
         if(readColumns.size() == 0) {
@@ -219,6 +232,7 @@ void cwCSVImporterTask::runTask()
     }
 
     CSVOutput.caves.append(cave);
+    CSVOutput.lineCount = lineCount;
 
     done();
 }
