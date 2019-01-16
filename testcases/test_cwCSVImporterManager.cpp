@@ -136,6 +136,37 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
     CHECK(manager.previewText().toStdString() == "From,To,Length,Compass,Clino\r\n1,2,30.4,20,-82\r\n");
 }
 
+TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImporterManager]") {
+    cwCSVImporterManager manager;
+    manager.setFilename("://datasets/test_cwCSVImporterManager/long.csv");
+    manager.waitToFinish();
+
+    CHECK(manager.errorModel()->fatalCount() == 0);
+    CHECK(manager.errorModel()->warningCount() == 0);
+
+    CHECK(manager.lineModel()->rowCount() == 20);
+    CHECK(manager.lineModel()->columnCount() == 5);
+    CHECK(manager.previewText().split("\n").size() == 21);
+
+    manager.setPreviewLines(cwCSVImporterManager::NoLines);
+    manager.waitToFinish();
+    CHECK(manager.lineModel()->rowCount() == 1);
+    CHECK(manager.lineModel()->columnCount() == 5);
+    CHECK(manager.previewText().split("\n").size() == 1);
+
+    manager.setPreviewLines(cwCSVImporterManager::AllLines);
+    manager.waitToFinish();
+    CHECK(manager.lineModel()->rowCount() == 100);
+    CHECK(manager.lineModel()->columnCount() == 5);
+    CHECK(manager.previewText().split("\n").size() == 101);
+
+    manager.setPreviewLines(50);
+    manager.waitToFinish();
+    CHECK(manager.lineModel()->rowCount() == 50);
+    CHECK(manager.lineModel()->columnCount() == 5);
+    CHECK(manager.previewText().split("\n").size() == 51);
+}
+
 TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
     manager.columnsModel()->clear();

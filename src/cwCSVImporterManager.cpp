@@ -203,7 +203,6 @@ void cwCSVImporterManager::setNewTripOnEmptyLines(bool newTripOnEmptyLines) {
 * to max int size will give you all the lines in the file. By default preview lines in 20
 */
  void cwCSVImporterManager::setPreviewLines(int previewLines) {
-     previewLines = std::max(0, previewLines);
      if(this->previewLines() != previewLines) {
          Settings.setPreviewLines(previewLines);
          emit previewLinesChanged();

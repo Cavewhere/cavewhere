@@ -64,7 +64,7 @@ void cwCSVImporterTask::runTask()
     int lineCount = 0;
 
     auto isPreviewLine = [&lineCount, this]() {
-        return lineCount <= Settings.previewLines();
+        return lineCount <= Settings.previewLines() || Settings.previewLines() < 0;
     };
 
     auto readLine = [&file, &lineCount, this, isPreviewLine]() {

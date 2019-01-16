@@ -39,6 +39,13 @@ class CAVEWHERE_LIB_EXPORT cwCSVImporterManager : public QObject
     Q_PROPERTY(int lineCount READ lineCount NOTIFY lineCountChanged)
 
 public:
+    enum PreviewLine {
+        AllLines = -1,
+        NoLines = 0
+    };
+
+    Q_ENUM(PreviewLine)
+
     cwCSVImporterManager(QObject* parent = nullptr);
     virtual ~cwCSVImporterManager();
 

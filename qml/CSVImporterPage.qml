@@ -45,7 +45,7 @@ ScrollViewPage {
         }
 
         ColumnLayout {
-            //            visible: csvManagerId.filename.length
+            visible: csvManagerId.filename.length
 
             GroupBox {
 
@@ -156,7 +156,6 @@ ScrollViewPage {
                     implicitHeight: 150
                     TextArea {
                         id: csvTextAreaId
-                        anchors.fill: parent
                         text: csvManagerId.previewText
                         font.family: "Courier"
                     }
@@ -167,8 +166,8 @@ ScrollViewPage {
                 title: "Preview"
 
                 Item {
-                    implicitWidth: previewScrollViewId.implicitWidth
-                    implicitHeight: previewScrollViewId.implicitHeight
+                    implicitWidth: previewScrollViewId.width
+                    implicitHeight: previewScrollViewId.height
 
                     ResizeableScrollView {
                         id: previewScrollViewId
@@ -200,7 +199,7 @@ ScrollViewPage {
 
                         states: [
                             State {
-                                when: csvManagerId.previewLines > csvManagerId.lineCount
+                                when: csvManagerId.previewLines == CSVImporterManager.AllLines
                                 PropertyChanges {
                                     target: showAllButtonId
                                     text: "Less"
@@ -212,21 +211,14 @@ ScrollViewPage {
 
                             },
                             State {
-                                when: csvManagerId.previewLines < csvManagerId.lineCount
+                                when: csvManagerId.previewLines !== CSVImporterManager.AllLines
                                 PropertyChanges {
                                     target: showAllButtonId
                                     text: "More"
                                     visible: true
                                     onClicked: {
-                                        csvManagerId.previewLines = Number.MAX_VALUE
+                                        csvManagerId.previewLines = CSVImporterManager.AllLines
                                     }
-                                }
-                            },
-                            State {
-                                when: csvManagerId.previewLines == csvManagerId.lineCount
-                                PropertyChanges {
-                                    target: showAllButtonId
-                                    visible: false
                                 }
                             }
                         ]

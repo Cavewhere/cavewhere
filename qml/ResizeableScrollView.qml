@@ -3,7 +3,7 @@ import QtQuick.Controls 2.5
 
 Item {
     id: rootItem
-    default property alias scrollBarData: scrollViewId.data
+    default property alias scrollBarData: scrollViewId.contentData
     property size minimumSize: Qt.size(200, 100)
     property size resizeHandleSize: Qt.size(30, 30);
 
