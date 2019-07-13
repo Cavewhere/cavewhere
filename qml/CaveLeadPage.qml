@@ -3,7 +3,7 @@ import QtQuick.Controls 1.2
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
-Rectangle {
+StandardPage {
     id: leadPage
 
     property Cave cave;

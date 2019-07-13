@@ -89,5 +89,7 @@
         <file>icons/up.png</file>
         <file>icons/lock.png</file>
         <file>icons/unlock.png</file>
+        <file>icons/svg/dragAndDrop.svg</file>
+        <file>icons/svg/resizeCorner.svg</file>
     </qresource>
 </RCC>

@@ -114,7 +114,6 @@ private:
 
     void privateSave();
 
-    QString convertFromURL(QString fileUrl) const;
 private slots:
     void updateRegionData();
     void startDeleteImageTask();

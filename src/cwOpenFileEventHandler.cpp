@@ -37,7 +37,7 @@ bool cwOpenFileEventHandler::eventFilter(QObject *obj, QEvent *event)
         Q_ASSERT(dynamic_cast<QFileOpenEvent*>(event) != nullptr);
         QFileOpenEvent* fileOpenEvent = static_cast<QFileOpenEvent*>(event);
         if(project() != nullptr) {
-            project()->loadFile(fileOpenEvent->file());\
+            project()->loadFile(fileOpenEvent->file());
             event->accept();
             return true;
         }

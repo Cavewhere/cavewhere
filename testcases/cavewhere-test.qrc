@@ -23,5 +23,16 @@
         <file>datasets/compass/compassImportExport.cw</file>
         <file>datasets/survex/issue118.svx</file>
         <file>datasets/survex/dakeng.svx</file>
+        <file>datasets/test_cwCSVImporterManager/defaultColumns.txt</file>
+        <file>datasets/test_cwCSVImporterManager/allCustomColumns.txt</file>
+        <file>datasets/test_cwCSVImporterManager/skipHeaderLines.txt</file>
+        <file>datasets/test_cwCSVImporterManager/seperator.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastLRUD.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastToLRUD.txt</file>
+        <file>datasets/test_cwCSVImporterManager/emptyFile.txt</file>
+        <file>datasets/test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt</file>
+        <file>datasets/test_cwCSVImporterManager/lastToLRUDError.txt</file>
+        <file>datasets/test_cwCSVImporterManager/long.csv</file>
+        <file>datasets/test_cwCSVImporterManager/newTrips.txt</file>
     </qresource>
 </RCC>

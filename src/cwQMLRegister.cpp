@@ -99,6 +99,9 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwTestcaseManager.h"
+#include "cwCSVImporterManager.h"
+#include "cwColumnNameModel.h"
+#include "cwCSVLineModel.h"
 #include "cwMainEntity.h"
 #include "cwLinePlotMesh.h"
 #include "cwScrapEntity.h"
@@ -128,6 +131,7 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
     qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
     qRegisterMetaType<QList <cwPage* > >("QList<cwPage*>");
+    qRegisterMetaType<QList <cwCave* > >("QList<cwCave*>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
@@ -230,6 +234,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
+    qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
+    qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
+    qmlRegisterType<cwCSVLineModel>("Cavewhere", 1, 0, "CSVLineModel");
     qmlRegisterType<cwLinePlotMesh>("Cavewhere", 1, 0, "LinePlotMesh");
     qmlRegisterType<cwMainEntity>("Cavewhere", 1, 0, "MainEntity");
     qmlRegisterType<cwScrapsEntity>("Cavewhere", 1, 0, "ScrapsEntity");

@@ -17,9 +17,11 @@ Item {
     property alias currentCave: exportManager.cave
     property alias currentRegion: exportManager.cavingRegion
     property alias importVisible: importButton.visible
+    property Page page //The page that the ExportImportButtons exist on
 
     implicitWidth: rowId.width
     implicitHeight: rowId.height
+
 
     SurveyExportManager {
         id: exportManager
@@ -144,6 +146,21 @@ Item {
                         importManager.importCompassDataFile(fileUrls);
                     }
                 }
+            },
+            State {
+                name: "IMPORT_CSV"
+                PropertyChanges {
+                    target: fileDialog
+                    title: "Import from CSV"
+                    nameFilters: ["All (*)", "Comma Seperated Value (*.csv)", "Text (*.txt)"]
+                    selectExisting: true
+                    selectMultiple: false
+                    onAccepted: {
+                        rootData.lastDirectory = fileUrl
+                        messageListDialog.title = "CSV Import"
+                        importManager.importCSV(fileUrl);
+                    }
+                }
             }
         ]
     }
@@ -257,7 +274,32 @@ Item {
                     text: "Walls (.srv)"
                     onTriggered: rootData.surveyImportManager.importWallsSrv()
                 }
+
+                Controls.MenuItem {
+                    text: "CSV (.csv)"
+                    onTriggered: {
+                        var oldImportExport = iconBar.page.childPage("CSV Import");
+                        if(oldImportExport !== rootData.pageSelectionModel.currentPage) {
+                            if(oldImportExport !== null) {
+                                rootData.pageSelectionModel.unregisterPage(oldImportExport);
+                            }
+
+                            var page = rootData.pageSelectionModel.registerPage(iconBar.page,
+                                                                                "CSV Importer",
+                                                                                csvImporterComponent,
+                                                                                {});
+                            rootData.pageSelectionModel.gotoPage(page);
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    Component {
+        id: csvImporterComponent
+        CSVImporterPage {
+
         }
     }
 }

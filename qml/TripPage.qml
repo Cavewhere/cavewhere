@@ -11,7 +11,7 @@ import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
-Rectangle {
+StandardPage {
     id: area
 
     property alias currentTrip: surveyEditor.currentTrip

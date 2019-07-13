@@ -61,7 +61,7 @@ void cwSurveyChunkGroupView::setTrip(cwTrip* trip) {
 
             if(Trip != nullptr) {
                 //Add chunks to the view
-                addChunks(0, Trip->numberOfChunks() - 1);
+                addChunks(0, Trip->chunkCount() - 1);
 
                 connect(Trip, SIGNAL(chunksInserted(int,int)), SLOT(addChunks(int,int)));
                 connect(Trip, SIGNAL(chunksRemoved(int,int)), SLOT(removeChunks(int,int)));
@@ -544,8 +544,8 @@ void cwSurveyChunkGroupView::forceAllocateChunk(int chunkIndex, int allocatedChu
   */
 void cwSurveyChunkGroupView::updateContentArea(int beginIndex, int endIndex) {
     //Make sure beginIndex and endIndex are good
-    if(beginIndex < 0 || beginIndex >= Trip->numberOfChunks()) { return; }
-    if(endIndex < 0 || endIndex >= Trip->numberOfChunks()) { return; }
+    if(beginIndex < 0 || beginIndex >= Trip->chunkCount()) { return; }
+    if(endIndex < 0 || endIndex >= Trip->chunkCount()) { return; }
     if(beginIndex > endIndex) { return; }
 
     //Calc the yOffset

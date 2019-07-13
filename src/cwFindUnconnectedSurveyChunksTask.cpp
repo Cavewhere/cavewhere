@@ -227,7 +227,7 @@ void cwFindUnconnectedSurveyChunksTask::updateResults()
 
     for(int t = 0; t < Cave->tripCount(); t++) {
         cwTrip* trip = Cave->trip(t);
-        for(int c = 0; c < trip->numberOfChunks(); c++) {
+        for(int c = 0; c < trip->chunkCount(); c++) {
             cwSurveyChunk* chunk = trip->chunk(c);
 
             if(!Connected.contains(chunk) && !chunk->isStationAndShotsEmpty()) {

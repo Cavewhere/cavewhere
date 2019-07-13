@@ -193,7 +193,7 @@ void cwTrip::removeChunks(int begin, int end) {
 
     //Clamp the end and the beginning
     begin = qMax(0, begin);
-    end = qMin(end, numberOfChunks());
+    end = qMin(end, chunkCount());
 
     emit chunksAboutToBeRemoved(begin, end);
 
@@ -229,7 +229,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
   \brief Adds the chunk to the trip
   */
  void cwTrip::addChunk(cwSurveyChunk* chunk) {
-     insertChunk(numberOfChunks(), chunk);
+     insertChunk(chunkCount(), chunk);
  }
 
  /**
@@ -270,7 +270,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
   */
 void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
     //Remove old chunks
-    removeChunks(0, numberOfChunks() - 1);
+    removeChunks(0, chunkCount() - 1);
 
     Chunks = chunks;
 
@@ -278,7 +278,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
         chunk->setParentTrip(this);
     }
 
-    emit chunksInserted(0, numberOfChunks() - 1);
+    emit chunksInserted(0, chunkCount() - 1);
 }
 
 /**
@@ -287,7 +287,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
   If i is out of bounds, this returns a null chunk
   */
 cwSurveyChunk* cwTrip::chunk(int i) const {
-    if(i < 0 || i > numberOfChunks()) {
+    if(i < 0 || i > chunkCount()) {
         return nullptr;
     }
     return Chunks[i];

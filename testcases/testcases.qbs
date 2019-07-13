@@ -11,6 +11,7 @@ CppApplication {
     consoleApplication: true
 
     Depends { name: "Qt"; submodules: ["test"] }
+    Depends { name: "bundle" }
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
 
@@ -22,6 +23,17 @@ CppApplication {
             "*.cpp",
             "*.h",
             "cavewhere-test.qrc"
+        ]
+    }
+
+    Group {
+        name: "datasets"
+        files: [
+            "datasets/compass/*",
+            "datasets/scrapAutoCalculate/*",
+            "datasets/scrapGuessNeighbor/*",
+            "datasets/survex/*",
+            "datasets/test_cwCSVImporterManager/*"
         ]
     }
 

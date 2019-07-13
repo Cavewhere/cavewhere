@@ -23,7 +23,7 @@
 #endif
 
 
-class cwGlobals
+class CAVEWHERE_LIB_EXPORT cwGlobals
 {
 public:
     cwGlobals();

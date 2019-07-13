@@ -47,6 +47,7 @@ public:
     };
 
     cwError();
+    cwError(const QString& message, ErrorType type = Warning);
     cwError(const cwError &);
     cwError &operator=(const cwError &);
     ~cwError();

@@ -5,15 +5,22 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0
+import QtQuick.Layouts 1.0
 
-Rectangle {
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.leftMargin: 10
-    anchors.rightMargin: 10
-    height: 1
-    color: "#4C4C4C"
+Item {
+    Layout.fillWidth: true
+
+    height: 20
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        height: 1
+        color: "#4C4C4C"
+    }
 }
 
