@@ -5,6 +5,7 @@ import QtQuick.Dialogs 1.2
 import Cavewhere 1.0
 
 ScrollViewPage {
+    property int defaultMinWidth: 600
 
     CSVImporterManager {
         id: csvManagerId
@@ -40,8 +41,8 @@ ScrollViewPage {
             }
         }
 
-        Item {
-            height: 5
+        BreakLine {
+            visible: csvManagerId.filename.length
         }
 
         ColumnLayout {
@@ -65,7 +66,9 @@ ScrollViewPage {
                         title: "Available Columns"
 
                         ColumnNameView {
+                            id: availableColumnViewId
                             model: csvManagerId.availableColumnsModel
+                            Layout.minimumWidth: defaultMinWidth
 
                             //Custom drop function for model manipulation that prevents the skip column
                             //from being removed
@@ -88,6 +91,7 @@ ScrollViewPage {
 
                         ColumnNameView {
                             model: csvManagerId.columnsModel
+                            Layout.minimumWidth: availableColumnViewId.Layout.minimumWidth
                             moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
                                 var value = oldModel.get(oldIndex);
                                 if(value.columnId !== csvManagerId.skipColumnId || oldModel === model) {
@@ -181,7 +185,7 @@ ScrollViewPage {
             GroupBox {
                 title: "CSV Text"
                 ResizeableScrollView {
-                    implicitWidth: 600
+                    implicitWidth: defaultMinWidth
                     implicitHeight: 150
 
                     RowLayout {
@@ -226,7 +230,7 @@ ScrollViewPage {
 
                     ResizeableScrollView {
                         id: previewScrollViewId
-                        implicitWidth: 600
+                        implicitWidth: defaultMinWidth
                         implicitHeight: 150
                         TableView {
                             model: csvManagerId.lineModel
@@ -315,7 +319,7 @@ ScrollViewPage {
                         }
 
                         ResizeableScrollView {
-                            implicitWidth: 600
+                            implicitWidth: defaultMinWidth
                             implicitHeight: 150
                             ErrorListView {
                                 model: csvManagerId.errorModel.errors
@@ -324,6 +328,8 @@ ScrollViewPage {
                     }
                 }
             }
+
+            BreakLine {}
 
             Button {
                 text: "Import"
@@ -335,6 +341,8 @@ ScrollViewPage {
                     //Go back to main page
                     rootData.pageSelectionModel.back()
                 }
+
+                font.bold: true
             }
         }
     }

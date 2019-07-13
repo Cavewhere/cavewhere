@@ -13,7 +13,7 @@ Item {
         model.insert(index + indexOffset, value);
     }
 
-    implicitWidth: layoutId.width
+    implicitWidth: Math.max(layoutId.width, root.Layout.minimumWidth)
     implicitHeight: layoutId.height
 
     Row {
@@ -59,21 +59,24 @@ Item {
                     drag.target: rectLayoutId
 
                     onPressed: {
-                        beginDrag = Qt.point(rectLayoutId.x, rectLayoutId.y);
+                        delegateId.beginDrag = Qt.point(rectLayoutId.x, rectLayoutId.y);
                         rectLayoutId.Drag.hotSpot = Qt.point(mouse.x, mouse.y)
-
-
                     }
 
                     onReleased: {
                         rectLayoutId.Drag.drop()
                         if(!delegateId.caught) {
+                            backAnim.stop()
                             backAnimX.from = rectLayoutId.x;
-                            backAnimX.to = beginDrag.x;
+                            backAnimX.to = delegateId.beginDrag.x;
                             backAnimY.from = rectLayoutId.y;
-                            backAnimY.to = beginDrag.y;
+                            backAnimY.to = delegateId.beginDrag.y;
                             backAnim.start()
+                        } else {
+                            rectLayoutId.x = delegateId.beginDrag.x;
+                            rectLayoutId.y = delegateId.beginDrag.y;
                         }
+
                         delegateId.caught = false
                     }
                 }
@@ -91,12 +94,6 @@ Item {
                     Drag.active: dragAreaId.drag.active
                     Drag.source: delegateId
                     Drag.supportedActions: Qt.MoveAction
-
-                    move: Transition {
-                        id: internalTransitionId
-                        enabled: false
-                        NumberAnimation { properties: "x"; }
-                    }
 
                     Item {
                         id: leftDropSpaceId
@@ -141,7 +138,6 @@ Item {
                     dragArea: dragAreaId
                     delegate: delegateId
                     model: root.model
-                    transitionsToBlock: [rowTransitionId, internalTransitionId] //Blocks transitions when drop has been completed
                     moveFunction: root.moveFunction
                 }
 
@@ -155,10 +151,21 @@ Item {
                     delegate: delegateId
                     model: root.model
                     indexOffset: 1 //Needs to be 1 because when inserting it needs to be right of the current item
-                    transitionsToBlock: insertLeftDropArea.transitionsToBlock //Block transition when drop has been complete
                     moveFunction: root.moveFunction
                 }
             }
         }
+    }
+
+    ColumnNameDropArea {
+
+        anchors.left: layoutId.right
+        anchors.right: parent.right
+
+        insertIndex: repeaterId.count
+        implicitHeight: layoutId.height
+
+        model: root.model
+        moveFunction: root.moveFunction
     }
 }
