@@ -117,8 +117,8 @@ StandardPage {
         notesModel: currentTrip.notes
         anchors.left: surveyEditor.right
         anchors.right: parent.right
-        anchors.top: area.top
-        anchors.bottom: area.bottom
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         clip: true
 
         onImagesAdded: {
