@@ -6,15 +6,10 @@
 **************************************************************************/
 
 import QtQuick 2.2
-import QtQuick.Controls 1.2 as Controls
+import QtQuick.Controls 2.0 as Controls
 
-Item {
+UnitBaseItem {
     id: unitInput
-    property var unitModel: null
-    property int unit
-    property bool readOnly: false
-
-    signal newUnit(int unit)
 
     width: textArea.width
     height: textArea.height
@@ -55,7 +50,6 @@ Item {
                 onObjectAdded: menuId.insertItem(index, object)
                 onObjectRemoved: menuId.removeItem(object)
             }
-
         }
     }
 }

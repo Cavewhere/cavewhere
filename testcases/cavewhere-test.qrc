@@ -33,5 +33,6 @@
         <file>datasets/test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt</file>
         <file>datasets/test_cwCSVImporterManager/lastToLRUDError.txt</file>
         <file>datasets/test_cwCSVImporterManager/long.csv</file>
+        <file>datasets/test_cwCSVImporterManager/newTrips.txt</file>
     </qresource>
 </RCC>

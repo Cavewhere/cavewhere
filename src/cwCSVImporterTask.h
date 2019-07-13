@@ -33,7 +33,7 @@ public:
 
     class Output {
     public:
-        QList<cwCave> caves;
+        QList<cwCave*> caves;
         QList<cwError> errors;
         QList<QStringList> lines;
         QString text;
@@ -47,7 +47,6 @@ public:
     cwCSVImporterSettings settings() const;
 
     Output output() const;
-//    QList<cwCave> caves() const;
 
 protected:
     void runTask();
@@ -64,5 +63,13 @@ private:
     int lrudStationIndex(const cwSurveyChunk *chunk, const cwStation& from, const cwStation& to) const;
 
 };
+
+/**
+ * Returns the settings for the importer task.
+ */
+inline cwCSVImporterSettings cwCSVImporterTask::settings() const
+{
+    return Settings;
+}
 
 #endif // CWCSVIMPORTERTASK_H

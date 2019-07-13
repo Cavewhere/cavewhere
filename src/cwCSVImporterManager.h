@@ -37,6 +37,7 @@ class CAVEWHERE_LIB_EXPORT cwCSVImporterManager : public QObject
     Q_PROPERTY(int previewLines READ previewLines WRITE setPreviewLines NOTIFY previewLinesChanged)
     Q_PROPERTY(QString previewText READ previewText NOTIFY previewTextChanged)
     Q_PROPERTY(int lineCount READ lineCount NOTIFY lineCountChanged)
+    Q_PROPERTY(QList<cwCave*> caves READ caves NOTIFY cavesChanged)
 
 public:
     enum PreviewLine {
@@ -83,7 +84,7 @@ public:
 
     void waitToFinish();
 
-    QList<cwCave> caves() const;
+    QList<cwCave*> caves() const;
 
 signals:
     void distanceUnitChanged();
@@ -95,6 +96,7 @@ signals:
     void previewLinesChanged();
     void previewTextChanged();
     void lineCountChanged();
+    void cavesChanged();
 
 private:
     cwCSVImporterSettings Settings;
@@ -105,13 +107,15 @@ private:
     cwCSVLineModel* LineModel; //!<
     QString Text; //!<
     int LineCount = 0;
+    QList<cwCave*> LastCaves;
 
     cwCSVImporterTask* Task;
 
+    void deleteOldCaves();
+
 private slots:
     void startParsing();
-    void updateErrorModel();
-    void updateLineModel();
+    void updateModel();
 };
 
 /**

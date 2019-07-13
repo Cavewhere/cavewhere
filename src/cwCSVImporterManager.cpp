@@ -37,10 +37,12 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
 
     LineModel->setColumnModel(ColumnsModel);
 
+    //This allows caves to be moved
+    Settings.setOutputThread(thread());
+
     //For restarts
     connect(Task, &cwTask::shouldRerun, this, &cwCSVImporterManager::startParsing);
-    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateErrorModel);
-    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateLineModel);
+    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateModel);
     connect(ColumnsModel, &QAbstractItemModel::modelReset, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsRemoved, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsInserted, this, &cwCSVImporterManager::startParsing);
@@ -128,12 +130,24 @@ void cwCSVImporterManager::waitToFinish()
  * Returns all the caves that were parsed. Caves will be avaliable when the underlying task
  * finishes
  */
-QList<cwCave> cwCSVImporterManager::caves() const
+QList<cwCave*> cwCSVImporterManager::caves() const
 {
     if(Task->isReady()) {
         return Task->output().caves;
     }
-    return QList<cwCave>();
+    return QList<cwCave*>();
+}
+
+/**
+ * Delete's all the old caves that or owned by the manager
+ */
+void cwCSVImporterManager::deleteOldCaves()
+{
+    for(auto cave : LastCaves) {
+        if(cave->parent() == this) {
+            cave->deleteLater();
+        }
+    }
 }
 
 /**
@@ -151,22 +165,14 @@ void cwCSVImporterManager::startParsing()
 }
 
 /**
- * Update the errors for the error model
+ * Updates the line model with new data
  */
-void cwCSVImporterManager::updateErrorModel()
+void cwCSVImporterManager::updateModel()
 {
     if(Task->isReady()) {
         ErrorModel->errors()->clear();
         ErrorModel->errors()->append(Task->output().errors);
-    }
-}
 
-/**
- * Updates the line model with new data
- */
-void cwCSVImporterManager::updateLineModel()
-{
-    if(Task->isReady()) {
         LineModel->setLines(Task->output().lines);
 
         Text = Task->output().text;
@@ -174,6 +180,12 @@ void cwCSVImporterManager::updateLineModel()
 
         LineCount = Task->output().lineCount;
         emit lineCountChanged();
+
+        deleteOldCaves();
+        LastCaves = Task->output().caves;
+        for(auto cave : LastCaves) {
+            cave->setParent(this);
+        }
     }
 }
 

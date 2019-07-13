@@ -130,7 +130,7 @@ ScrollViewPage {
                     text: "Length Unit"
                 }
 
-                UnitInput {
+                UnitCombo {
                     id: lengthUnits
 
                     Length {
@@ -141,6 +141,35 @@ ScrollViewPage {
                     unit: csvManagerId.distanceUnit
                     onNewUnit: {
                         csvManagerId.distanceUnit = unit
+                    }
+                }
+
+                Text {
+                    text: "Empty lines create new Trips"
+                }
+
+                CheckBox {
+                    id: emptyLineCheckBoxId
+                    checked: csvManagerId.newTripOnEmptyLines
+                    onCheckedChanged: {
+                        csvManagerId.newTripOnEmptyLines = checked
+                    }
+                }
+
+                Text {
+                    text: "Associate LRUDs with"
+                }
+
+                ComboBox {
+                    implicitWidth: 200
+                    model: ["From station", "To station"]
+                    currentIndex: csvManagerId.useFromStationForLRUD ? 0 : 1
+                    onCurrentIndexChanged: {
+                        if(currentIndex == 0) {
+                            csvManagerId.useFromStationForLRUD = true
+                        } else {
+                            csvManagerId.useFromStationForLRUD = false
+                        }
                     }
                 }
             }
@@ -154,10 +183,36 @@ ScrollViewPage {
                 ResizeableScrollView {
                     implicitWidth: 600
                     implicitHeight: 150
-                    TextArea {
-                        id: csvTextAreaId
-                        text: csvManagerId.previewText
-                        font.family: "Courier"
+
+                    RowLayout {
+                        spacing: 0
+
+                        ListView {
+                            implicitWidth: 75
+                            implicitHeight: csvTextAreaId.implicitHeight
+                            model: csvTextAreaId.lineCount
+                            delegate: Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                font.family: csvTextAreaId.font.family
+                                font.pointSize: csvTextAreaId.font.pointSize
+                                text: index + 1
+                                color: "grey"
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "#e8e8e8"
+                                z: -1
+                            }
+                        }
+
+                        TextArea {
+                            id: csvTextAreaId
+                            text: csvManagerId.previewText
+                            font.family: "Courier"
+                            leftPadding: 0
+                            topPadding: 0
+                        }
                     }
                 }
             }
@@ -226,10 +281,59 @@ ScrollViewPage {
                 }
             }
 
+            GroupBox {
+                title: "Status"
+                ColumnLayout {
+                    RowLayout {
+                        visible: csvManagerId.errorModel.errors.count == 0
+                        Image {
+                            source: "qrc:icons/good.png"
+                        }
+                        Text {
+                            text: "Success"
+                        }
+                    }
+
+                    ColumnLayout {
+                        visible: csvManagerId.errorModel.errors.count > 0
+                        RowLayout {
+                            Image {
+                                source: "qrc:icons/stopSignError.png"
+                            }
+                            Text {
+                                text: csvManagerId.errorModel.fatalCount + " errors"
+                            }
+
+                            Item { width: 1} //spacer
+
+                            Image {
+                                source: "qrc:icons/warning.png"
+                            }
+                            Text {
+                                text: csvManagerId.errorModel.warningCount + " warnings"
+                            }
+                        }
+
+                        ResizeableScrollView {
+                            implicitWidth: 600
+                            implicitHeight: 150
+                            ErrorListView {
+                                model: csvManagerId.errorModel.errors
+                            }
+                        }
+                    }
+                }
+            }
+
             Button {
                 text: "Import"
+                enabled: csvManagerId.errorModel.fatalCount == 0
                 onClicked: {
+                    //Add the caves
+                    rootData.region.addCaves(csvManagerId.caves);
 
+                    //Go back to main page
+                    rootData.pageSelectionModel.back()
                 }
             }
         }

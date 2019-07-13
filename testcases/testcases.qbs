@@ -11,6 +11,7 @@ CppApplication {
     consoleApplication: true
 
     Depends { name: "Qt"; submodules: ["test"] }
+    Depends { name: "bundle" }
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
 

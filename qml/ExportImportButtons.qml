@@ -290,9 +290,6 @@ Item {
                                                                                 {});
                             rootData.pageSelectionModel.gotoPage(page);
                         }
-
-//                        fileDialogItem.state = "IMPORT_CSV"
-//                        fileDialog.open()
                     }
                 }
             }

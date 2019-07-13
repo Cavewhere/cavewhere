@@ -34,6 +34,7 @@ Application {
     }
     Depends { name: "cavewhere-lib" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
+    Depends { name: "bundle" }
 
     cpp.cxxLanguageVersion: "c++11"
 
@@ -239,8 +240,6 @@ Application {
         qbs.install: true
         qbs.installSourceBase: product.buildDirectory
     }
-
-
 
     Rule {
         id: macIconCopier

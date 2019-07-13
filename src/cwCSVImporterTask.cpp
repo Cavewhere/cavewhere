@@ -49,9 +49,9 @@ void cwCSVImporterTask::runTask()
     cwTrip* trip = new cwTrip();
     trip->setName(tripStr.arg(tripCount));
 
-    cwCave cave;
-    cave.setName("Imported CSV Cave");
-    cave.addTrip(trip);
+    cwCave* cave = new cwCave();
+    cave->setName("Imported CSV Cave");
+    cave->addTrip(trip);
 
     //Settings
     int skipHeaderLines = Settings.skipHeaderLines();
@@ -75,7 +75,7 @@ void cwCSVImporterTask::runTask()
             CSVOutput.text.append(line);
         }
 
-        return line;
+        return line.trimmed();
     };
 
     auto parseHeaderLines = [&]() {
@@ -91,7 +91,7 @@ void cwCSVImporterTask::runTask()
             trip->setName(tripStr.arg(tripCount));
             trip->calibrations()->setDistanceUnit(distanceUnit);
 
-            cave.addTrip(trip);
+            cave->addTrip(trip);
         }
     };
 
@@ -205,7 +205,7 @@ void cwCSVImporterTask::runTask()
         QString line = readLine();
         QStringList readColumns = line.split(sepratator);
 
-        if(readColumns.size() == 0) {
+        if(line.isEmpty() && Settings.newTripOnEmptyLines()) {
             makeNewTrip();
             continue;
         }
@@ -231,8 +231,15 @@ void cwCSVImporterTask::runTask()
         CSVOutput.errors.append(error);
     }
 
+    //Remove last empty trip that exists
+    if(cave->tripCount() > 1 && cave->trips().last()->chunkCount() == 0) {
+        cave->removeTrip(cave->tripCount() - 1);
+    }
+
     CSVOutput.caves.append(cave);
     CSVOutput.lineCount = lineCount;
+
+    cave->moveToThread(settings().outputThread());
 
     done();
 }

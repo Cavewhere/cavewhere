@@ -128,6 +128,7 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
     qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
     qRegisterMetaType<QList <cwPage* > >("QList<cwPage*>");
+    qRegisterMetaType<QList <cwCave* > >("QList<cwCave*>");
     qRegisterMetaType<QModelIndex>("QModelIndex");
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");

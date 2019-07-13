@@ -95,6 +95,7 @@ TEST_CASE("cwCSVImporterManager should initilize correctly", "[cwCSVImporterMana
     CHECK(manager.lineModel() != nullptr);
     CHECK(manager.distanceUnit() == cwUnits::Meters);
     CHECK(manager.useFromStationForLRUD() == true);
+    CHECK(manager.newTripOnEmptyLines() == false);
 }
 
 TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporterManager]") {
@@ -102,7 +103,7 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
     manager.setFilename("://datasets/test_cwCSVImporterManager/defaultColumns.txt");
     manager.waitToFinish();
 
-     cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
     chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
     chunk1->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
     chunk1->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
@@ -119,7 +120,7 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 
@@ -138,13 +139,14 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
 
 TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImporterManager]") {
     cwCSVImporterManager manager;
+    manager.setSkipHeaderLines(0);
     manager.setFilename("://datasets/test_cwCSVImporterManager/long.csv");
     manager.waitToFinish();
 
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 
-    CHECK(manager.lineModel()->rowCount() == 20);
+    CHECK(manager.lineModel()->rowCount() == 21);
     CHECK(manager.lineModel()->columnCount() == 5);
     CHECK(manager.previewText().split("\n").size() == 21);
 
@@ -156,15 +158,41 @@ TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImport
 
     manager.setPreviewLines(cwCSVImporterManager::AllLines);
     manager.waitToFinish();
-    CHECK(manager.lineModel()->rowCount() == 100);
+    CHECK(manager.lineModel()->rowCount() == 101);
     CHECK(manager.lineModel()->columnCount() == 5);
     CHECK(manager.previewText().split("\n").size() == 101);
 
     manager.setPreviewLines(50);
     manager.waitToFinish();
-    CHECK(manager.lineModel()->rowCount() == 50);
+    CHECK(manager.lineModel()->rowCount() == 51);
     CHECK(manager.lineModel()->columnCount() == 5);
     CHECK(manager.previewText().split("\n").size() == 51);
+
+    manager.waitToFinish();
+
+    REQUIRE(manager.caves().size() == 1);
+    cwCave* cave = manager.caves().first();
+    REQUIRE(cave->trips().size() == 1);
+    cwTrip* trip = cave->trips().first();
+    REQUIRE(trip->chunks().size() == 1);
+    cwSurveyChunk* chunk = trip->chunks().first();
+
+    for(int i = 0; i < chunk->stationCount(); i++) {
+        auto station = chunk->station(i);
+        CHECK(station.name().toStdString() == QString("%1").arg(i + 1).toStdString());
+        CHECK(station.leftInputState() == cwDistanceStates::Empty);
+        CHECK(station.rightInputState() == cwDistanceStates::Empty);
+        CHECK(station.upInputState() == cwDistanceStates::Empty);
+        CHECK(station.downInputState() == cwDistanceStates::Empty);
+    }
+
+    for(const auto& shot : chunk->shots()) {
+        CHECK(shot.distance() == 100.0);
+        CHECK(shot.clino() == 23.0);
+        CHECK(shot.compass() == 101.0);
+        CHECK(shot.backCompassState() == cwCompassStates::Empty);
+        CHECK(shot.backClinoState() == cwClinoStates::Empty);
+    }
 }
 
 TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporterManager]") {
@@ -235,7 +263,7 @@ TEST_CASE("cwCSVImportManager should parse with custom columns", "[cwCSVImporter
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 }
@@ -246,7 +274,7 @@ TEST_CASE("cwCSVImageManager should skipHeaderLines correctly", "[cwCSVImporterM
     manager.setSkipHeaderLines(3);
     manager.waitToFinish();
 
-     cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
     chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
     chunk1->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
     chunk1->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
@@ -263,7 +291,7 @@ TEST_CASE("cwCSVImageManager should skipHeaderLines correctly", "[cwCSVImporterM
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 }
@@ -274,7 +302,7 @@ TEST_CASE("cwCSVImageManager should change seperator correctly", "[cwCSVImporter
     manager.setSeperator("|#");
     manager.waitToFinish();
 
-     cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
     chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
     chunk1->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
     chunk1->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
@@ -291,7 +319,7 @@ TEST_CASE("cwCSVImageManager should change seperator correctly", "[cwCSVImporter
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 }
@@ -302,7 +330,7 @@ TEST_CASE("cwCSVImageManager should set distance units correctly", "[cwCSVImport
     manager.setDistanceUnit(cwUnits::Feet);
     manager.waitToFinish();
 
-     cwSurveyChunk* chunk1 = new cwSurveyChunk();
+    cwSurveyChunk* chunk1 = new cwSurveyChunk();
     chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
     chunk1->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
     chunk1->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
@@ -320,7 +348,7 @@ TEST_CASE("cwCSVImageManager should set distance units correctly", "[cwCSVImport
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 }
@@ -399,7 +427,7 @@ TEST_CASE("cwCSVImageManager should process last shot LRUD data correctly", "[cw
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
 }
@@ -479,9 +507,74 @@ TEST_CASE("cwCSVImageManager should set UseFromStationForLRUD correctly", "[cwCS
 
     REQUIRE(manager.caves().size() == 1);
 
-    Checker::check(&testCave, &manager.caves().first());
+    Checker::check(&testCave, manager.caves().first());
     CHECK(manager.errorModel()->fatalCount() == 0);
     CHECK(manager.errorModel()->warningCount() == 0);
+}
+
+TEST_CASE("cwCSVImporterManager should handle new trip on empty lines correctly", "[cwCSVImporterManager]") {
+    cwCSVImporterManager manager;
+    manager.setFilename("://datasets/test_cwCSVImporterManager/newTrips.txt");
+    manager.waitToFinish();
+
+    SECTION("Default action") {
+        CHECK(manager.newTripOnEmptyLines() == false);
+
+        cwSurveyChunk* chunk1 = new cwSurveyChunk();
+        chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
+        chunk1->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
+        chunk1->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        chunk2->appendShot(cwStation("2"), cwStation("5"), cwShot("4", "5", QString(), "6", QString()));
+
+        cwTrip* trip = new cwTrip();
+        trip->addChunk(chunk1);
+        trip->addChunk(chunk2);
+
+        cwCave testCave;
+        testCave.addTrip(trip);
+
+        REQUIRE(manager.caves().size() == 1);
+        Checker::check(&testCave, manager.caves().first());
+    }
+
+    SECTION("New trips on empty lines") {
+        manager.setNewTripOnEmptyLines(true);
+        manager.waitToFinish();
+
+        CHECK(manager.newTripOnEmptyLines() == true);
+
+        cwSurveyChunk* chunk1 = new cwSurveyChunk();
+        chunk1->appendShot(cwStation("1"), cwStation("2"), cwShot("30.4", "20", QString(), "-82", QString()));
+
+        cwSurveyChunk* chunk2 = new cwSurveyChunk();
+        chunk2->appendShot(cwStation("2"), cwStation("3"), cwShot("20.2", "21.1", QString(), "4", QString()));
+
+        cwSurveyChunk* chunk3 = new cwSurveyChunk();
+        chunk3->appendShot(cwStation("3"), cwStation("4"), cwShot("1", "2", QString(), "3", QString()));
+
+        cwSurveyChunk* chunk4 = new cwSurveyChunk();
+        chunk4->appendShot(cwStation("2"), cwStation("5"), cwShot("4", "5", QString(), "6", QString()));
+
+        cwTrip* trip1 = new cwTrip();
+        trip1->addChunk(chunk1);
+
+        cwTrip* trip2 = new cwTrip();
+        trip2->addChunk(chunk2);
+
+        cwTrip* trip3 = new cwTrip();
+        trip3->addChunk(chunk3);
+        trip3->addChunk(chunk4);
+
+        cwCave testCave;
+        testCave.addTrip(trip1);
+        testCave.addTrip(trip2);
+        testCave.addTrip(trip3);
+
+        REQUIRE(manager.caves().size() == 1);
+        Checker::check(&testCave, manager.caves().first());
+    }
 }
 
 TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterManager]") {
@@ -506,7 +599,7 @@ TEST_CASE("cwCSVImageManager should handle errors properly", "[cwCSVImporterMana
 
         CHECK(manager.errorModel()->errors()->first().type() == cwError::Warning);
         CHECK(manager.errorModel()->errors()->first().message().toStdString() == "No lines read, file empty?");
-     }
+    }
 
     SECTION("Warning with columns miss aligned") {
         manager.setFilename("://datasets/test_cwCSVImporterManager/defaultColumnsColumnMissAlignment.txt");

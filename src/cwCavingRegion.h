@@ -49,7 +49,7 @@ public:
     Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;
 
     Q_INVOKABLE void addCave(cwCave* cave = nullptr);
-    void addCaves(QList<cwCave*> cave);
+    Q_INVOKABLE void addCaves(QList<cwCave*> cave);
     void insertCave(int index, cwCave* cave);
     Q_INVOKABLE void removeCave(int index);
     void removeCaves(int beginIndex, int endIndex);
