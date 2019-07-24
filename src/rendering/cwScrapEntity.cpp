@@ -18,8 +18,7 @@ using namespace Qt3DRender;
 cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         QEntity(parent),
         GeometryRenderer(new QGeometryRenderer()),
-        Material(new QMaterial()),
-        ScrapTextureImage(new cwTextureImage())
+        Material(new QMaterial())
 {
 
     QAttribute* pointAttribute = new QAttribute();
@@ -55,9 +54,8 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
 
     Material = new QMaterial();
 
-    QTexture2D* texture = new QTexture2D();
-    texture->addTextureImage(ScrapTextureImage);
-    Material->addParameter(new QParameter("scrapTexture", texture));
+    ScrapTexture = new QTexture2D();
+    Material->addParameter(new QParameter("scrapTexture", ScrapTexture));
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
 
     //Setup what type we are drawing
@@ -106,28 +104,6 @@ Qt3DRender::QMaterial* cwScrapEntity::material() const {
 }
 
 /**
-* @brief cwScrapEntity::setMaterial
-* @param material
-*/
-//void cwScrapEntity::setMaterial(Qt3DRender::QMaterial* material) {
-//    if(Material != material) {
-
-//        if(Material != nullptr) {
-//            removeComponent(Material);
-//        }
-
-//        Material = material;
-
-//        if(Material != nullptr) {
-//            qDebug() << "Adding material:" << Material;
-//            addComponent(Material);
-//        }
-
-//        emit materialChanged();
-//    }
-//}
-
-/**
  * @brief cwScrapEntity::updateGeometry
  */
 void cwScrapEntity::updateGeometry()
@@ -138,8 +114,6 @@ void cwScrapEntity::updateGeometry()
         Points = triangleData.points();
         TexCoords = triangleData.texCoords();
         Indices = triangleData.indices();
-
-        qDebug() << "Update geometry" << Scrap << Points.size() << TexCoords.size() << Indices.size();
 
         if(!Points.isEmpty() && !TexCoords.isEmpty() && !Indices.isEmpty()) {
             auto geometry = GeometryRenderer->geometry();
@@ -160,8 +134,41 @@ void cwScrapEntity::updateGeometry()
             indexAttribute->buffer()->setData(QByteArray(indexes, size)); //shallow copy
             indexAttribute->setCount(Indices.size());
 
-            ScrapTextureImage->setImage(triangleData.croppedImage());
+            updateTexture(triangleData.croppedImage());
         }
+    }
+}
+
+/**
+ * This sets up the texture to load all the mipmaps
+ */
+void cwScrapEntity::updateTexture(const cwImage &image)
+{
+    auto numberOfMipmaps = image.mipmaps().size();
+    auto oldNumberOfMipmaps = ScrapTexture->textureImages().size();
+    if(oldNumberOfMipmaps < numberOfMipmaps) {
+        //Add textures
+        for(int i = oldNumberOfMipmaps; i < numberOfMipmaps; i++) {
+            ScrapTexture->addTextureImage(new cwTextureImage());
+        }
+    } else if(oldNumberOfMipmaps > numberOfMipmaps) {
+        //Remove textures
+        for(int i = oldNumberOfMipmaps - 1; i >= numberOfMipmaps; i--) {
+            auto oldImage = ScrapTexture->textureImages().at(i);
+            ScrapTexture->removeTextureImage(oldImage);
+            oldImage->deleteLater();
+        }
+    }
+
+    Q_ASSERT(ScrapTexture->textureImages().size() == image.mipmaps().size());
+
+    for(int i = 0; i < image.mipmaps().size(); i++) {
+        Q_ASSERT(dynamic_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i)));
+        auto texture = static_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i));
+
+        texture->setProjectFilename(project());
+        texture->setImage(image);
+        texture->setMipLevel(i);
     }
 }
 
@@ -171,7 +178,13 @@ void cwScrapEntity::updateGeometry()
 */
 void cwScrapEntity::setProject(QString project) {
     if(this->project() != project) {
-        ScrapTextureImage->setProjectFilename(project);
+        Project = project;
+
+        for(auto textureImage : ScrapTexture->textureImages()) {
+            Q_ASSERT(dynamic_cast<cwTextureImage*>(textureImage));
+            auto texture = static_cast<cwTextureImage*>(textureImage);
+            texture->setProjectFilename(project);
+        }
         emit projectChanged();
     }
 }
@@ -181,7 +194,7 @@ void cwScrapEntity::setProject(QString project) {
 * @return
 */
 QString cwScrapEntity::project() const {
-    return ScrapTextureImage->projectFilename();
+    return Project;
 }
 
 /**

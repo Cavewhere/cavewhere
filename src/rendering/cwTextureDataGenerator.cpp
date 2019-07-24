@@ -14,10 +14,12 @@ cwTextureDataGenerator::cwTextureDataGenerator()
 
 cwTextureDataGenerator::cwTextureDataGenerator(const QString project,
                                                const cwImage& image,
+                                               int mipmapLevel,
                                                int gen,
                                                Qt3DCore::QNodeId texId) :
     Project(project),
     Image(image),
+    MipmapLevel(mipmapLevel),
     Generation(gen),
     TextureId(texId)
 {
@@ -38,9 +40,10 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     textureData->setTarget(QOpenGLTexture::Target2D);
 
     cwTextureUploadTask task;
-    task.setUsingThreadPool(false);
+    task.setUsingThreadPool(false); //This is already runnig on the thread pool for qt3d
     task.setImage(image());
     task.setProjectFilename(project());
+    task.setMipmapLevel(MipmapLevel);
     task.start();
 
     if(task.mipmaps().isEmpty()) {
@@ -48,24 +51,14 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     }
 
     auto mipmaps = task.mipmaps();
-    int totalBits = 0;
-    foreach(auto mipmap, mipmaps) {
-        totalBits += mipmap.first.size();
-    }
-
-    //All the mipmaps combined together
-    QByteArray compressedData;
-    compressedData.reserve(totalBits);
-    foreach(auto mipmap, mipmaps) {
-        compressedData.append(mipmap.first);
-    }
+    Q_ASSERT(mipmaps.size() == 1);
 
     auto firstMipmap = mipmaps.first();
 
     textureData->setWidth(firstMipmap.second.width());
     textureData->setHeight(firstMipmap.second.height());
-    textureData->setMipLevels(mipmaps.size());
-    textureData->setData(compressedData, 8, true);
+    textureData->setMipLevels(1);
+    textureData->setData(firstMipmap.first, 8, true);
 
     return textureData;
 }

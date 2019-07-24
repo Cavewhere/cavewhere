@@ -14,7 +14,11 @@ class cwTextureDataGenerator : public Qt3DRender::QTextureImageDataGenerator
 {
 public:
     cwTextureDataGenerator();
-    cwTextureDataGenerator(const QString project, const cwImage& image, int gen, Qt3DCore::QNodeId texId);
+    cwTextureDataGenerator(const QString project,
+                           const cwImage& image,
+                           int mipmapLevel,
+                           int gen,
+                           Qt3DCore::QNodeId texId);
 
     QString project() const;
     cwImage image() const;
@@ -27,6 +31,7 @@ public:
 private:
     QString Project;
     cwImage Image;
+    int MipmapLevel = -1;
     int Generation = -1;
     Qt3DCore::QNodeId TextureId;
 

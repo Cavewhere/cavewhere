@@ -77,8 +77,12 @@ void cwTextureUploadTask::loadMipmapsFromDisk()
     ScaleTexCoords = imageProvidor.scaleTexCoords(Image);
 
     QSize imageSize;
+
+    //Request only one mipmap or all of them depending if MipmapLevel is set
+    auto mipmapIds = MipmapLevel >= 0 ? QList<int>({Image.mipmaps().at(MipmapLevel)}) : Image.mipmaps();
+
     //Load all the mipmaps
-    foreach(int imageId, Image.mipmaps()) {
+    foreach(int imageId, mipmapIds) {
         if(!isRunning()) { return; }
         imageProvidor.data(imageId, true);
 

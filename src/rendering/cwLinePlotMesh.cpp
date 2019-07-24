@@ -59,12 +59,12 @@ void cwLinePlotMesh::setIndexes(QVector<unsigned int> indexData)
 {
     if(!indexData.isEmpty()) {
         IndexData = indexData;
-        qDebug() << "IndexData:" << IndexData;
+//        qDebug() << "IndexData:" << IndexData;
         auto indexAttribute = geometry()->attributes().at(IndexAttribute);
         const char* indexes = reinterpret_cast<const char*>(&IndexData[0]);
         int size = IndexData.size() * sizeof(unsigned int);
         indexAttribute->buffer()->setData(QByteArray(indexes, size)); //deep copy
-        qDebug() << "data when set:" << indexAttribute->buffer()->data();
+//        qDebug() << "data when set:" << indexAttribute->buffer()->data();
         indexAttribute->setCount(indexData.size());
     }
 }

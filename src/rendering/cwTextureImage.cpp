@@ -7,6 +7,8 @@ cwTextureImage::cwTextureImage(Qt3DCore::QNode* parent) :
     Generator(new cwTextureDataGenerator())
 {
 
+
+
 }
 
 /**
@@ -38,11 +40,11 @@ Qt3DRender::QTextureImageDataGeneratorPtr cwTextureImage::dataGenerator() const
  */
 void cwTextureImage::updateGenartor()
 {
-    qDebug() << "Update generator:" << ProjectFilename << Image.isValid() << Image.mipmaps().size();
     if(!ProjectFilename.isEmpty() && Image.isValid()) {
         GenerationCount++;
         Generator.reset(new cwTextureDataGenerator(projectFilename(),
                                                    image(),
+                                                   mipLevel(),
                                                    GenerationCount,
                                                    id()));
         notifyDataGeneratorChanged();

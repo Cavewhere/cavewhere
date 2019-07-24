@@ -16,6 +16,7 @@
 //Our includes
 class cwScrap;
 class cwTextureImage;
+#include "cwImage.h"
 
 class cwScrapEntity : public Qt3DCore::QEntity
 {
@@ -67,12 +68,17 @@ private:
     Qt3DRender::QTechnique* Technique; //!<
     Qt3DRender::QMaterial* Material; //!<
     Qt3DRender::QTexture2D* ScrapTexture;
-    cwTextureImage* ScrapTextureImage;
     Qt3DRender::QEffect* Effect; //!<
 
     QVector<QVector3D> Points;
     QVector<QVector2D> TexCoords;
     QVector<uint> Indices;
+
+    QString Project;
+
+    void updateTexture(const cwImage& image);
+
+
 };
 
 
