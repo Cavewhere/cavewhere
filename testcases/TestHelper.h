@@ -22,10 +22,12 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QSet>
+#include <QModelIndex>
 
 //Our includes
 #include "cwStationPositionLookup.h"
 #include "cwProject.h"
+#include "cwKeyword.h"
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -61,6 +63,29 @@ inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
 
 inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value ) {
     os << value.name() << " type:" << value.typeName();
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QModelIndex const& value) {
+
+    auto printIndex = [&]() {
+        os << "(" << value.row() << "," << value.column() << ")";
+    };
+
+    if(value.parent() != QModelIndex()) {
+        os << value.parent() << "->"; //Recursive printing
+        printIndex();
+        os;
+    } else {
+        os << "Model:" << value.model() << " ";
+        printIndex();
+    }
+
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, cwKeyword const& value) {
+    os << "(" << value.key() << "=" << value.value() << ")";
     return os;
 }
 

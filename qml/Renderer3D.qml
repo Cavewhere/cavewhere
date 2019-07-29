@@ -239,10 +239,10 @@ QQ2.Item {
                 //                    rotation: fromAxisAndAngle(Qt.vector3d(1, 0, 0), 45)
             }
 
-            Entity {
-                id: torusEntity
-                components: [ torusMesh, lineMaterial, torusTransform ]
-            }
+//            Entity {
+//                id: torusEntity
+//                components: [ torusMesh, lineMaterial, torusTransform ]
+//            }
 
             //                rooscrapsEntity,
 
@@ -296,25 +296,25 @@ QQ2.Item {
                 }
             }
 
-            Entity {
-                id: sphereEntityX
-                components: [ sphereMesh, materialX, sphereTransformX, inersectorId]
-            }
+//            Entity {
+//                id: sphereEntityX
+//                components: [ sphereMesh, materialX, sphereTransformX, inersectorId]
+//            }
 
-            Entity {
-                id: sphereEntityY
-                components: [ sphereMesh, materialY, sphereTransformY, inersectorId]
-            }
+//            Entity {
+//                id: sphereEntityY
+//                components: [ sphereMesh, materialY, sphereTransformY, inersectorId]
+//            }
 
-            Entity {
-                id: sphereEntityZ
-                components: [ sphereMesh, materialZ, sphereTransformZ, inersectorId]
-            }
+//            Entity {
+//                id: sphereEntityZ
+//                components: [ sphereMesh, materialZ, sphereTransformZ, inersectorId]
+//            }
 
-            Entity {
-                id: sphereEntityZ2
-                components: [ sphereMesh, materialZ, sphereTransformZ2, inersectorId]
-            }
+//            Entity {
+//                id: sphereEntityZ2
+//                components: [ sphereMesh, materialZ, sphereTransformZ2, inersectorId]
+//            }
 
             Entity {
                 id: cppEntities

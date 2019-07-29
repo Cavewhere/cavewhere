@@ -22,6 +22,8 @@ StandardPage {
     }
 
     function registerSubPages() {
+        console.log("Page changed:" + exportButton.page + " " + PageView.page)
+
         var oldCarpetPage = PageView.page.childPage("Leads")
         if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
             if(oldCarpetPage !== null) {
@@ -94,6 +96,11 @@ StandardPage {
                 id: exportButton
                 currentRegion: rootData.region
                 currentCave: cavePageArea.currentCave
+//                page: {
+//                    console.log("I get here!")
+//                    console.log("Export import button set Page:" + cavePageArea + " " + cavePageArea.PageView + " " + cavePageArea.PageView.page)
+//                    return cavePageArea.PageView.page
+//                }
             }
 
             CWButton {
@@ -282,7 +289,7 @@ StandardPage {
         }
 
         onObjectAdded: {
-            //In-ables the link
+            //Enables the link
             var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                 tripPageName(object.trip), //Name
                                                                 tripPageComponent, //component

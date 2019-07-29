@@ -18,6 +18,7 @@ SpyChecker::SpyChecker(const std::initializer_list<std::pair<QSignalSpy *, int> 
 void SpyChecker::checkSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
+        INFO("Spy name:" << iter.key()->objectName().toStdString());
         CHECK(iter.key()->size() == iter.value());
     }
 }
@@ -25,6 +26,7 @@ void SpyChecker::checkSpies() const
 void SpyChecker::requireSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
+        INFO("Spy name:" << iter.key()->objectName().toStdString());
         REQUIRE(iter.key()->size() == iter.value());
     }
 }

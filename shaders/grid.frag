@@ -33,8 +33,10 @@ float contour(float spacing, float widthPx) {
 }
 
 void main() {
+    float gridSize1 = 10.0; // * 0.3048;
+    float gridSize2 = 100.0; // * 0.3048;
 
-    float c = contour(100.0, 1.25) * contour(1000.0, 1.5);
+    float c = contour(gridSize1, 1.25) * contour(gridSize2, 1.5);
     c = 1.0 - min(1.0, c);
     gl_FragColor = vec4(c, c, c, c) * vec4(0.0, 0.0, 0.0, 1.0);
     gl_FragDepth = gl_FragColor.a >= 0.001 ? gl_FragCoord.z : 1.0;

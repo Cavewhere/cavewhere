@@ -37,8 +37,6 @@ RenderTargetSelector {
 
                     property var viewport: forwardRenderId.camera ? forwardRenderId.camera.viewport : null
 
-//                    width: 2048
-//                    height: 2048
                     width: viewport ? viewport.width : 1
                     height: viewport ? viewport.height : 1
 
