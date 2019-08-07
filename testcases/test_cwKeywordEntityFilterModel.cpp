@@ -14,35 +14,40 @@
 
 using namespace Qt3DCore;
 
+class ListElement {
+public:
+    ListElement() {}
+    ListElement(const QString& value, const QVector<QEntity*> entities) :
+        value(value),
+        entities(entities)
+    {}
+
+    QString value;
+    QVector<QEntity*> entities;
+};
+
+
+
 TEST_CASE("cwKeywordEntityFilterModel should initilize correctly", "[cwKeywordEntityFilterModel]") {
     cwKeywordEntityFilterModel model;
-    CHECK(model.rowCount(QModelIndex()) == 0);
+    CHECK(model.rowCount(QModelIndex()) == 1);
     CHECK(model.keywordModel() == nullptr);
-    CHECK(model.keys().isEmpty());
+    CHECK(model.keywords().size() == 0);
+    CHECK(model.lastKey().isEmpty());
+    CHECK(model.otherCategory().isEmpty() == false);
 }
 
 TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[cwKeywordEntityFilterModel]") {
 
     auto model = std::make_unique<cwKeywordEntityFilterModel>();
 
-    class ListElement {
-    public:
-        ListElement() {}
-        ListElement(const QString& value, const QVector<QEntity*> entities) :
-            value(value),
-            entities(entities)
-        {}
-
-        QString value;
-        QVector<QEntity*> entities;
-    };
-
-    auto check = [&model](const QModelIndex& root, const QVector<ListElement>& list) {
+    auto check = [&model](const QModelIndex& root, const QVector<ListElement>& list) {        
         REQUIRE(list.size() == model->rowCount(root));
         for(int i = 0; i < model->rowCount(root); i++) {
+            INFO("Index:" << i);
+
             auto index = model->index(i, 0, root);
             auto listElement = list.at(i);
-            INFO("Index:" << i);
             CHECK(index.data(cwKeywordEntityFilterModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
 
             auto entities = index.data(cwKeywordEntityFilterModel::EntitiesRole).value<QVector<QEntity*>>();
@@ -68,12 +73,14 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
     removeSpy.setObjectName("removeSpy");
     moveSpy.setObjectName("moveSpy");
     dataChangedSpy.setObjectName("dataChangedSpy");
+    resetSpy.setObjectName("resetSpy");
 
-    SpyChecker checker {
+    SpyChecker spyCheck {
         {&addSpy, 0},
         {&removeSpy, 0},
         {&moveSpy, 0},
         {&dataChangedSpy, 0},
+        {&resetSpy, 0}
     };
 
     auto component1 = new cwKeywordComponent();
@@ -131,61 +138,195 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
     keywordEntityModel->addComponent(component3);
     keywordEntityModel->addComponent(component4);
 
+    //CHECK default model
+    QVector<ListElement> lists {
+        {cwKeywordEntityFilterModel::otherCategory(), {}}
+    };
+    check(QModelIndex(), lists);
+
     model->setKeywordModel(keywordEntityModel.get());
+    model->waitForFinished();
 
     CHECK(model->rowCount(QModelIndex()) == 1);
 
-    QVector<ListElement> lists {
-        {"Everything Else", {entity1.get(), entity2.get(), entity3.get(), entity4.get()}}
+    lists = {
+        {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}}
     };
 
     check(QModelIndex(), lists);
 
-    SECTION("Add single key") {
-        model->addKey("type");
+    spyCheck[&resetSpy] = 1;
+    spyCheck.checkSpies();
+    spyCheck.clearSpyCounts();
 
-        QVector<ListElement> firstDepth {
-            {"Everything Else", {}},
+    SECTION("Add single key") {
+        model->setLastKey("type");
+        model->waitForFinished();
+
+        QVector<ListElement> modelData {
             {"line", {entity3.get()}},
             {"point", {entity4.get()}},
             {"scrap", {entity1.get(), entity2.get()}},
+            {cwKeywordEntityFilterModel::otherCategory(), {}},
         };
 
-        check(QModelIndex(), firstDepth);
+        check(QModelIndex(), modelData);
+
+        spyCheck[&resetSpy] = 1;
+        spyCheck.checkSpies();
+        spyCheck.clearSpyCounts();
+
+        SECTION("Same last key") {
+            model->setLastKey("type");
+            model->waitForFinished();
+
+            check(QModelIndex(), modelData);
+
+            //Should have no emit data, since model hasn't changed
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+        }
+
+        SECTION("Switch last key multiple times") {
+            //This testcase depends on this being fixed: https://github.com/benlau/asyncfuture/issues/13
+            model->setLastKey("cave");
+            model->setLastKey("unknown");
+            model->setLastKey("trip");
+
+            QVector<ListElement> modelData {
+                {"trip1", {entity1.get()}},
+                {"trip2", {entity2.get(), entity3.get()}},
+                {"trip3", {entity4.get()}},
+                {cwKeywordEntityFilterModel::otherCategory(), {}},
+            };
+
+            model->waitForFinished();
+
+            check(QModelIndex(), modelData);
+
+            spyCheck[&resetSpy] = 1;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+        }
+
+        SECTION("Switch to an unknown key") {
+            model->setLastKey("unknownKey");
+
+            model->waitForFinished();
+
+            QVector<ListElement> modelData {
+                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}},
+            };
+
+            check(QModelIndex(), modelData);
+
+            spyCheck[&resetSpy] = 1;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+        }
 
         SECTION("Second level") {
-            model->addKey("cave");
+            model->setKeywords({
+                                  {"cave", "cave1"}
+                               });
 
-            QVector<ListElement> secondDepth {
-                {"Everything Else", {}},
+            modelData = {
                 {"line", {entity3.get()}},
-                {"point", {entity4.get()}},
-                {"scrap", {entity1.get(), entity2.get()}},
+                {"scrap", {entity2.get()}},
+                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
             };
 
-            QVector<ListElement> firstDepth {
-                {"Everything Else", {}},
-                {"line", {entity3.get()}},
+            //Spies should be zero
+            spyCheck.checkSpies();
+
+            model->waitForFinished();
+
+            check(QModelIndex(), modelData);
+
+            spyCheck[&resetSpy] = 1;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+
+            SECTION("Add keyword") {
+                keywordModel1->add(cwKeyword({"cave", "cave1"}));
+
+                modelData = {
+                    {"line", {entity3.get()}},
+                    {"scrap", {entity2.get(), entity1.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity4.get()}},
+                };
+
+                check(QModelIndex(), modelData);
+
+                spyCheck[&dataChangedSpy] = 2;
+                spyCheck.requireSpies();
+
+                auto index1 = dataChangedSpy.at(0).at(0).value<QModelIndex>();
+                auto index2 = dataChangedSpy.at(0).at(1).value<QModelIndex>();
+                auto roles = dataChangedSpy.at(0).at(2).value<QVector<int>>();
+
+                CHECK(index1 == index2);
+                CHECK(index1.isValid() == true);
+                CHECK(index2.isValid() == true);
+
+                CHECK(roles.size() == 2);
+                CHECK(roles.contains(cwKeywordEntityFilterModel::EntitiesRole) == true);
+                CHECK(roles.contains(cwKeywordEntityFilterModel::EntitiesCountRole) == true);
+
+                auto otherIndex = dataChangedSpy.at(1).at(0).value<QModelIndex>();
+                CHECK(otherIndex.row() == model->rowCount() - 1);
+
+                spyCheck.clearSpyCounts();
+            }
+
+            SECTION("Add multikey") {
+
+            }
+
+            SECTION("Removed keyword") {
+
+            }
+
+            SECTION("Change value in keyword") {
+
+            }
+
+            SECTION("Change key in keyword") {
+
+            }
+
+            SECTION("Add entity") {
+
+            }
+
+            SECTION("Removed Entity") {
+
+            }
+        }
+
+        SECTION("Third level") {
+            model->setKeywords({
+                                  {"cave", "cave2"},
+                                  {"trip", "trip3"}
+                               });
+
+            modelData = {
                 {"point", {entity4.get()}},
-                {"scrap", {entity1.get(), entity2.get()}},
+                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get()}},
             };
 
-            QVector<ListElement> firstDepth {
-                {"Everything Else", {}},
-                {"line", {entity3.get()}},
-                {"point", {entity4.get()}},
-                {"scrap", {entity1.get(), entity2.get()}},
-            };
+            //Spies should be zero
+            spyCheck.checkSpies();
 
-            QVector<ListElement> firstDepth {
-                {"Everything Else", {}},
-                {"line", {entity3.get()}},
-                {"point", {entity4.get()}},
-                {"scrap", {entity1.get(), entity2.get()}},
-            };
+            model->waitForFinished();
+
+            check(QModelIndex(), modelData);
+
+            spyCheck[&resetSpy] = 1;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
         }
     }
-
 }
 
 

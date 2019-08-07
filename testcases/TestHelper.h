@@ -85,7 +85,7 @@ inline std::ostream& operator << ( std::ostream& os, QModelIndex const& value) {
 }
 
 inline std::ostream& operator << ( std::ostream& os, cwKeyword const& value) {
-    os << "(" << value.key() << "=" << value.value() << ")";
+    os << "(" << value.key() << "=" << value.value() << ")`";
     return os;
 }
 

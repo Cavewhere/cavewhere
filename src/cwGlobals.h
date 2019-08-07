@@ -26,7 +26,7 @@
 class CAVEWHERE_LIB_EXPORT cwGlobals
 {
 public:
-    cwGlobals();
+    cwGlobals() = delete;
 
     static const double PI;
     static const double RadiansToDegrees;

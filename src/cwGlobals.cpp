@@ -20,10 +20,6 @@ const double cwGlobals::PI = acos(-1.0);
 const double cwGlobals::RadiansToDegrees = 180.0 / cwGlobals::PI;
 const double cwGlobals::DegreesToRadians = cwGlobals::PI / 180.0;
 
-cwGlobals::cwGlobals()
-{
-}
-
 /**
   If filename doesn't have an extension, the this function will try to add the
   extensionHint to the filename.

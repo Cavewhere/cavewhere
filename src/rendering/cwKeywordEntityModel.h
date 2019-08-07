@@ -17,6 +17,7 @@ class CAVEWHERE_LIB_EXPORT cwKeywordEntityModel : public QAbstractItemModel
 public:
     enum Role {
         EntityRole,
+        KeywordsRole,
         KeyRole,
         ValueRole,
         KeywordRole
@@ -33,6 +34,7 @@ public:
     QModelIndex index(int row, int column, const QModelIndex& parent) const;
     QModelIndex parent(const QModelIndex& index) const;
     QModelIndex indexOf(Qt3DCore::QEntity *entity) const;
+
 
 private:
     class KeywordEntity {

@@ -4,22 +4,29 @@
 //Our include
 #include "cwKeywordEntityModel.h"
 #include "cwGlobals.h"
+#include "cwKeyword.h"
 
 //Qt includes
 #include <Qt3DCore/QEntity>
+#include <QList>
+#include <QAbstractListModel>
+#include <QFuture>
 
 //Std includes
 #include <memory>
 
-class CAVEWHERE_LIB_EXPORT cwKeywordEntityFilterModel : public QAbstractItemModel
+//AsyncFuture
+//#include "asyncfuture.h"
+
+class CAVEWHERE_LIB_EXPORT cwKeywordEntityFilterModel : public QAbstractListModel
 {
     Q_OBJECT
 
     Q_PROPERTY(cwKeywordEntityModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
-    Q_PROPERTY(QStringList keys READ keys NOTIFY keysChanged)
+    Q_PROPERTY(QList<cwKeyword> keywords READ keywords WRITE setKeywords NOTIFY keywordsChanged)
+    Q_PROPERTY(QString lastKey READ lastKey WRITE setLastKey NOTIFY keyLastChanged)
 
 public:
-
     enum Role {
         EntitiesRole,
         EntitiesCountRole,
@@ -29,73 +36,141 @@ public:
     Q_ENUM(Role)
 
     cwKeywordEntityFilterModel(QObject* parent = nullptr);
+    ~cwKeywordEntityFilterModel();
 
     cwKeywordEntityModel* keywordModel() const;
     void setKeywordModel(cwKeywordEntityModel* keywordModel);
 
-    void addKey(const QString& key);
-    void removeKey(int index);
-    QStringList keys() const;
+    QList<cwKeyword> keywords() const;
+    void setKeywords(QList<cwKeyword> keywords);
 
-    int rowCount(const QModelIndex& parent) const;
-    int columnCount(const QModelIndex& parent) const;
-    QModelIndex parent(const QModelIndex& index) const;
-    QModelIndex index(int row, int column, const QModelIndex& parent) const;
+    QString lastKey() const;
+    void setLastKey(QString lastKey);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
+
+    static QString otherCategory();
+
+    void waitForFinished();
 
 signals:
     void keywordModelChanged();
-    void keysChanged();
+    void keywordsChanged();
+    void keyLastChanged();
 
 private:
-
-    class List {
+    class Row {
     public:
-        List(QString value = QString()) :
-            value(value)
+        Row() {}
+        Row(const QString& value, QVector<Qt3DCore::QEntity*> entities) :
+            value(value),
+            entities(entities)
         {}
 
-        ~List();
-
-        List* parent = nullptr;
-        QVector<List*> children; //Sorted by value
-        QVector<Qt3DCore::QEntity*> entities;
         QString value;
-        int keyIndex = 0;
+        QVector<Qt3DCore::QEntity*> entities;
+        QVector<QPersistentModelIndex> indexes;
 
-        void clearChildren();
-        void deleteChildren();
-
-        void addChild(const QString& value, Qt3DCore::QEntity* entity);
-
-        static bool lessThan(const List* list, const QString& value) {
-            return list->value < value;
+        bool operator<(const Row& other) {
+            return value < other.value;
         }
     };
 
-    std::unique_ptr<List> RootList;
+    class EntityAndKeywords {
+    public:
+        EntityAndKeywords() = default;
+        EntityAndKeywords(const QModelIndex& entityIndex);
+
+        Qt3DCore::QEntity* entity = nullptr;
+        QVector<cwKeyword> keywords;
+    };
+
+    class ModelData {
+    public:
+        QVector<Row> Rows;
+        Row OtherRow = Row(cwKeywordEntityFilterModel::otherCategory(), {});
+
+        int otherRowIndex() const {
+            return size() - 1;
+        }
+
+        int size() const {
+            return Rows.size() + 1;
+        }
+
+        const Row& row(int index) const {
+            if(index < Rows.size()) {
+                return Rows.at(index);
+            }
+            return OtherRow;
+        }
+    };
+
+    class Filter {
+
+    public:
+        QList<cwKeyword> keywords;
+        QString lastKey;
+        ModelData* data;
+
+        std::function<void (int)> beginInsertFunction;
+        std::function<void ()> endInsertFunction;
+        std::function<void (int, QVector<int>)> dataChangedFunction;
+        std::function<void (int)> beginRemoveFuction;
+        std::function<void ()> endRemoveFunction;
+
+        void filterEntity(const EntityAndKeywords& pair);
+
+    private:
+        void addEntity(const QString& value, Qt3DCore::QEntity* entity);
+        void removeEntity(const QString& value, Qt3DCore::QEntity* entity);
+
+        void beginInsert(const QVector<Row>::iterator& iter) const;
+        void endInsert() const;
+        void beginRemove(const QVector<Row>::iterator& iter) const;
+        void endRemove() const;
+        void dataChanged(const QVector<Row>::iterator& iter) const;
+        void dataChanged(int index) const;
+
+        static bool lessThan(const Row& row, const QString& value);
+    };
+
+    QList<cwKeyword> Keywords; //!<
+    QString LastKey; //!<
+    ModelData Data;
+
+    QFuture<void> LastRun;
+    QFuture<ModelData> LastModelData;
 
     cwKeywordEntityModel* KeywordModel = nullptr; //!<
-    QStringList Keys;
 
-    void addEntity(const QModelIndex& entityIndex, List *rootList);
-    void addEntities(List* rootList);
+    void updateAllRows();
+    bool isRunning() const;
 
-    List* toList(const QModelIndex& index) const;
+    Filter createDefaultFilter();
+
 };
-
-/**
-*
-*/
-inline QStringList cwKeywordEntityFilterModel::keys() const {
-    return Keys;
-}
 
 /**
 *
 */
 inline cwKeywordEntityModel* cwKeywordEntityFilterModel::keywordModel() const {
     return KeywordModel;
+}
+
+/**
+*
+*/
+inline QList<cwKeyword> cwKeywordEntityFilterModel::keywords() const {
+    return Keywords;
+}
+
+/**
+*
+*/
+inline QString cwKeywordEntityFilterModel::lastKey() const {
+    return LastKey;
 }
 
 #endif // CWKEYWORDENTITYFILTERMODEL_H

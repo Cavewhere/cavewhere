@@ -25,6 +25,7 @@ public:
     void add(const cwKeyword& keyword);
     void remove(const cwKeyword& keyword);
     void removeAll(QString key);
+    QVector<cwKeyword> keywords() const;
 
     QVariant data(const QModelIndex& index, int role) const;
     bool setData(const QModelIndex& index, const QVariant& value, int role);
@@ -35,6 +36,14 @@ public:
 private:
     QVector<cwKeyword> Keywords;
 };
+
+/**
+ * Return all the keywords in the model
+ */
+inline QVector<cwKeyword> cwKeywordModel::keywords() const
+{
+    return Keywords;
+}
 
 /**
  * Returns the number of keywords that are in the model
