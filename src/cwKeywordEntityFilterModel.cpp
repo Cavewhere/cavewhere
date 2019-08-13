@@ -93,24 +93,34 @@ void cwKeywordEntityFilterModel::setKeywordModel(cwKeywordEntityModel* keywordMo
                     return;
                 }
 
-                auto pairs = createPairs(parent, begin, end);
+                auto removePairs = createPairs(parent, begin, end);
+                auto filter = createDefaultFilter();
 
-                connect(KeywordModel, &cwKeywordEntityFilterModel::rowsAboutToBeRemoved,
-                        this, [this, pairs](const QModelIndex& parent, int begin, int end)
+                auto removeKeywords = [&filter](const QVector<cwKeyword>::iterator& begin,
+                        const QVector<cwKeyword>::iterator& end,
+                        Qt3DCore::QEntity* entity
+                        )
                 {
-                    Q_UNUSED(parent);
-                    Q_UNUSED(begin);
-                    Q_UNUSED(end);
-
-                    auto filter = createDefaultFilter();
-                    for(auto pair : pairs) {
-                        filter.filterEntity(pair);
+                    for(auto iter = begin; iter != end; iter++) {
+                        filter.removeEntity(iter->value(), entity);
                     }
+                };
 
-                    //Disconnect the current slot
-                    disconnect(KeywordModel, &cwKeywordEntityFilterModel::rowsAboutToBeRemoved,
-                               this, nullptr);
-                });
+                if(parent == QModelIndex()) {
+                    //Entities removed
+                    for(auto pair : removePairs) {
+                        filter.dataChangedFunction = nullptr; //Ignore data changes, because we're removing a whole entity
+                        removeKeywords(pair.keywords.begin(), pair.keywords.end(), pair.entity);
+                    }
+                } else {
+                    Q_ASSERT(removePairs.size() == 1);
+                    auto& pair = removePairs.first();
+
+                    //If pair is currently in the filterModel
+                    auto beginIter = pair.keywords.begin() + begin;
+                    auto endIter = pair.keywords.begin() + end + 1;
+                    removeKeywords(beginIter, endIter, pair.entity);
+                }
             });
         }
 
@@ -270,16 +280,17 @@ void cwKeywordEntityFilterModel::setLastKey(QString keyLast) {
 }
 
 void cwKeywordEntityFilterModel::Filter::addEntity(const QString &value,
-                                                      QEntity *entity)
+                                                   QEntity *entity)
 {
     auto& rows = data->Rows;
-
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
-        //Add to an existing row, dataChanged
-        iter->entities.append(entity);
-        dataChanged(iter);
+        if(!iter->entities.contains(entity)) {
+            //Add to an existing row, dataChanged
+            iter->entities.append(entity);
+            dataChanged(iter);
+        }
     } else {
         beginInsert(iter);
         rows.insert(iter, Row(value, {entity}));
@@ -290,6 +301,12 @@ void cwKeywordEntityFilterModel::Filter::addEntity(const QString &value,
     if(removed) {
         dataChanged(data->otherRowIndex());
     }
+}
+
+void cwKeywordEntityFilterModel::Filter::addEntityToOther(QEntity *entity)
+{
+    data->OtherRow.entities.append(entity);
+    dataChanged(data->otherRowIndex());
 }
 
 void cwKeywordEntityFilterModel::Filter::removeEntity(const QString &value, QEntity *entity)
@@ -309,9 +326,20 @@ void cwKeywordEntityFilterModel::Filter::removeEntity(const QString &value, QEnt
                 dataChanged(iter);
             }
 
-            data->OtherRow.entities.append(entity);
-            dataChanged(data->otherRowIndex());
+            bool stillContainsEntity = false;
+            for(auto row : rows) {
+                if(row.entities.contains(entity)) {
+                    stillContainsEntity = true;
+                    break;
+                }
+            }
+
+            if(!stillContainsEntity) {
+                addEntityToOther(entity);
+            }
         }
+    } else {
+        addEntityToOther(entity);
     }
 }
 
@@ -340,8 +368,8 @@ void cwKeywordEntityFilterModel::Filter::beginRemove(const QVector<Row>::iterato
 
 void cwKeywordEntityFilterModel::Filter::endRemove() const
 {
-    if(endInsertFunction) {
-        endInsertFunction();
+    if(endRemoveFunction) {
+        endRemoveFunction();
     }
 }
 
@@ -365,32 +393,46 @@ bool cwKeywordEntityFilterModel::Filter::lessThan(const cwKeywordEntityFilterMod
 
 void cwKeywordEntityFilterModel::Filter::filterEntity(const cwKeywordEntityFilterModel::EntityAndKeywords &pair)
 {
-    bool hasAllKeywords = true;
+
+    if(keywords.isEmpty()) {
+        addEntityToOther(pair.entity);
+    }
+
     for(auto keyword : keywords) {
-        hasAllKeywords = hasAllKeywords && pair.keywords.contains(keyword);
-        if(!hasAllKeywords) {
+        if(!pair.keywords.contains(keyword)) {
             //Missing one of the keywords
             removeEntity(keyword.value(), pair.entity);
-            break;
+            return;
         }
     }
 
-    if(hasAllKeywords) {
-        hasAllKeywords = false;
-        for(auto keyword : pair.keywords) {
-            if(keyword.key() == lastKey) {
+    //Existing values for the entity
+    QSet<QString> oldValues = entityValues(pair.entity);
+
+    for(auto keyword : pair.keywords) {
+        if(keyword.key() == lastKey) {
+            if(!oldValues.contains(keyword.value())) {
                 addEntity(keyword.value(), pair.entity);
-                hasAllKeywords = true;
-                break;
+            } else {
+                oldValues.remove(keyword.value());
             }
         }
     }
 
-    if(!hasAllKeywords) {
-        //Add the entity to the Other row
-        removeEntity(lastKey, pair.entity);
-        data->OtherRow.entities.append(pair.entity);
+    for(auto valueToRemove : oldValues) {
+        removeEntity(valueToRemove, pair.entity);
     }
+}
+
+QSet<QString> cwKeywordEntityFilterModel::Filter::entityValues(QEntity *entity) const
+{
+    QSet<QString> valuesOfEntity;
+    for(auto row : data->Rows) {
+        if(row.entities.contains(entity)) {
+            valuesOfEntity.insert(row.value);
+        }
+    }
+    return valuesOfEntity;
 }
 
 cwKeywordEntityFilterModel::EntityAndKeywords::EntityAndKeywords(const QModelIndex &entityIndex)

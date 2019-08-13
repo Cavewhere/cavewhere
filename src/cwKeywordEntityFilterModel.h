@@ -70,7 +70,6 @@ private:
 
         QString value;
         QVector<Qt3DCore::QEntity*> entities;
-        QVector<QPersistentModelIndex> indexes;
 
         bool operator<(const Row& other) {
             return value < other.value;
@@ -121,10 +120,12 @@ private:
         std::function<void ()> endRemoveFunction;
 
         void filterEntity(const EntityAndKeywords& pair);
+        QSet<QString> entityValues(Qt3DCore::QEntity* entity) const;
+        void removeEntity(const QString& value, Qt3DCore::QEntity* entity);
 
     private:
         void addEntity(const QString& value, Qt3DCore::QEntity* entity);
-        void removeEntity(const QString& value, Qt3DCore::QEntity* entity);
+        void addEntityToOther(Qt3DCore::QEntity* entity);
 
         void beginInsert(const QVector<Row>::iterator& iter) const;
         void endInsert() const;

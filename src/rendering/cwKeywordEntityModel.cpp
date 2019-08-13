@@ -34,7 +34,7 @@ void cwKeywordEntityModel::addComponent(cwKeywordComponent *component)
             if(keywordModel == nullptr) { return;};
 
             connect(keywordModel, &cwKeywordModel::rowsAboutToBeInserted,
-                    entity, [entity, this](const QModelIndex& parent, int first, int last)
+                    entity, [keywordModel, entity, this](const QModelIndex& parent, int first, int last)
             {
                 Q_UNUSED(parent);
                 auto index = indexOf(entity);
@@ -127,7 +127,7 @@ QVariant cwKeywordEntityModel::data(const QModelIndex &index, int role) const
             auto model = keywordModel(index);
             return QVariant::fromValue(model->keywords());
         }
-        }
+    }
     }
 
     auto model = keywordModel(index.parent());

@@ -91,7 +91,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
     component1->setObjectName("component1");
     component2->setObjectName("component2");
     component3->setObjectName("component3");
-    component4->setObjectName("component3");
+    component4->setObjectName("component4");
 
     cwKeywordModel* keywordModel1 = component1->keywordModel();
     cwKeywordModel* keywordModel2 = component2->keywordModel();
@@ -203,10 +203,6 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             model->waitForFinished();
 
             check(QModelIndex(), modelData);
-
-            spyCheck[&resetSpy] = 1;
-            spyCheck.checkSpies();
-            spyCheck.clearSpyCounts();
         }
 
         SECTION("Switch to an unknown key") {
@@ -280,27 +276,130 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             }
 
             SECTION("Add multikey") {
+                keywordModel2->add(cwKeyword({"type", "line"}));
 
-            }
+                modelData = {
+                    {"line", {entity3.get(), entity2.get()}},
+                    {"scrap", {entity2.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                };
 
-            SECTION("Removed keyword") {
+                check(QModelIndex(), modelData);
 
+                spyCheck[&dataChangedSpy] = 1;
+                spyCheck.requireSpies();
+                spyCheck.clearSpyCounts();
+
+                SECTION("Removed keyword") {
+                    keywordModel2->remove(cwKeyword({"type", "line"}));
+
+                    modelData = {
+                        {"line", {entity3.get()}},
+                        {"scrap", {entity2.get()}},
+                        {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                    };
+
+                    check(QModelIndex(), modelData);
+
+                    spyCheck[&dataChangedSpy] = 1;
+                    spyCheck.checkSpies();
+                    spyCheck.clearSpyCounts();
+
+                    SECTION("Remove last keyword") {
+                        keywordModel2->remove(cwKeyword({"type", "scrap"}));
+
+                        modelData = {
+                            {"line", {entity3.get()}},
+                            {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
+                        };
+
+                        check(QModelIndex(), modelData);
+
+                        spyCheck[&dataChangedSpy] = 1; //Other row
+                        spyCheck[&removeSpy] = 1;
+                        spyCheck.checkSpies();
+                        spyCheck.clearSpyCounts();
+                    }
+                }
             }
 
             SECTION("Change value in keyword") {
+                auto firstIndex = keywordModel2->index(0);
+                keywordModel2->setData(firstIndex, "line", cwKeywordModel::ValueRole);
 
+                modelData = {
+                    {"line", {entity3.get(), entity2.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                };
+
+                check(QModelIndex(), modelData);
+
+                spyCheck[&dataChangedSpy] = 1;
+                spyCheck[&removeSpy] = 1;
+                spyCheck.requireSpies();
+                spyCheck.clearSpyCounts();
             }
 
             SECTION("Change key in keyword") {
+                auto firstIndex = keywordModel2->index(0);
+                keywordModel2->setData(firstIndex, "type2", cwKeywordModel::KeyRole);
 
+                modelData = {
+                    {"line", {entity3.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
+                };
+
+                check(QModelIndex(), modelData);
+
+                spyCheck[&dataChangedSpy] = 1;
+                spyCheck[&removeSpy] = 1;
+                spyCheck.requireSpies();
+                spyCheck.clearSpyCounts();
             }
 
             SECTION("Add entity") {
+                auto component5 = new cwKeywordComponent();
+                component5->setObjectName("component5");
 
+                cwKeywordModel* keywordModel5 = component5->keywordModel();
+                keywordModel5->setObjectName("keywordModel5");
+
+                keywordModel5->add({"type", "point"});
+                keywordModel5->add({"trip", "trip3"});
+                keywordModel5->add({"cave", "cave1"});
+
+                auto entity5 = std::make_unique<QEntity>();
+                entity5->setObjectName("entity5");
+
+                entity5->addComponent(component5);
+
+                keywordEntityModel->addComponent(component5);
+
+                modelData = {
+                    {"line", {entity3.get()}},
+                    {"point", {entity5.get()}},
+                    {"scrap", {entity2.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                };
+
+                check(QModelIndex(), modelData);
+
+                spyCheck[&addSpy] = 1;
+                spyCheck.checkSpies();
+                spyCheck.clearSpyCounts();
             }
 
             SECTION("Removed Entity") {
+                keywordEntityModel->removeComponent(component2);
 
+                modelData = {
+                    {"line", {entity3.get()}},
+                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                };
+
+                spyCheck[&removeSpy] = 1;
+                spyCheck.checkSpies();
+                spyCheck.clearSpyCounts();
             }
         }
 
