@@ -365,6 +365,54 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                 CHECK(dataChanged.first().at(2).value<QVector<int>>().contains(cwKeywordModel::ValueRole) == true);
                 CHECK(dataChanged.first().at(2).value<QVector<int>>().contains(cwKeywordModel::KeywordRole) == true);
             }
+
+            SECTION("Check deletion 1") {
+                delete keywordModelTrip;
+
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                     });
+
+                checkRows(keywordModelScrap);
+                spyChecker[&aboutRemovedSpy] = 1;
+                spyChecker[&removeSpy] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(removeSpy.at(0).size() == 3);
+                CHECK(removeSpy.at(0).at(1).toInt() == 1);
+                CHECK(removeSpy.at(0).at(2).toInt() == 6);
+
+                REQUIRE(aboutRemovedSpy.at(0).size() == 3);
+                CHECK(aboutRemovedSpy.at(0).at(1).toInt() == 1);
+                CHECK(aboutRemovedSpy.at(0).at(2).toInt() == 6);
+            }
+
+            SECTION("Check deletion 2") {
+                delete keywordModelCave;
+
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                         {"Trip", "Trip1"},
+                                         {"Surveyor", "Philip Schuchardt"},
+                                         {"Surveyor", "Sara"},
+                                         {"Date", "2019-08-22"}
+                                     });
+
+                checkRows(keywordModelScrap);
+                spyChecker[&aboutRemovedSpy] = 1;
+                spyChecker[&removeSpy] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(removeSpy.at(0).size() == 3);
+                CHECK(removeSpy.at(0).at(1).toInt() == 5);
+                CHECK(removeSpy.at(0).at(2).toInt() == 6);
+
+                REQUIRE(aboutRemovedSpy.at(0).size() == 3);
+                CHECK(aboutRemovedSpy.at(0).at(1).toInt() == 5);
+                CHECK(aboutRemovedSpy.at(0).at(2).toInt() == 6);
+            }
         }
     }
 }

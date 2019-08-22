@@ -244,7 +244,7 @@ void cwKeywordModel::removeExtension(cwKeywordModel *model)
         }
     }
 
-    int modelLastIndex = model->rowCount() - lastCount;
+    int modelLastIndex = rowCount() - lastCount - 1;
     int count = modelLastIndex - modelFirstIndex + 1;
 
     beginRemoveRows(QModelIndex(), modelFirstIndex, modelLastIndex);
