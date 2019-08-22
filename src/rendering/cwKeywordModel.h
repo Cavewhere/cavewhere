@@ -23,6 +23,7 @@ public:
     cwKeywordModel(QObject* parent = nullptr);
 
     void add(const cwKeyword& keyword);
+    void add(const QVector<cwKeyword>& keywords);
     void remove(const cwKeyword& keyword);
     void removeAll(QString key);
     QVector<cwKeyword> keywords() const;
@@ -31,10 +32,21 @@ public:
     bool setData(const QModelIndex& index, const QVariant& value, int role);
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
 
+    void addExtension(cwKeywordModel* model);
+    void removeExtension(cwKeywordModel* model);
+
     QHash<int, QByteArray> roleNames() const;
 
 private:
+    QVector<cwKeywordModel*> Extentions;
     QVector<cwKeyword> Keywords;
+    int CachedRowCount = 0;
+
+    int firstIndex(cwKeywordModel* model) const;
+    int localIndex(cwKeywordModel* model, int index) const;
+    std::pair<cwKeywordModel *, int> modelAt(const QModelIndex& index) const;
+    void updateRowCount();
+    bool canKeywordBeAdded(const cwKeyword& keyword);
 };
 
 /**
@@ -45,13 +57,6 @@ inline QVector<cwKeyword> cwKeywordModel::keywords() const
     return Keywords;
 }
 
-/**
- * Returns the number of keywords that are in the model
- */
-inline int cwKeywordModel::rowCount(const QModelIndex &parent) const
-{
-    Q_UNUSED(parent);
-    return Keywords.size();
-}
+
 
 #endif // CWKEYWORDMODEL_H

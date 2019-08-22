@@ -15,9 +15,6 @@
 //Std includes
 #include <memory>
 
-//AsyncFuture
-//#include "asyncfuture.h"
-
 class CAVEWHERE_LIB_EXPORT cwKeywordEntityFilterModel : public QAbstractListModel
 {
     Q_OBJECT

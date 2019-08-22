@@ -26,7 +26,6 @@ class cwScrapEntity : public Qt3DCore::QEntity
     Q_PROPERTY(Qt3DRender::QEffect* effect READ effect WRITE setEffect NOTIFY effectChanged)
     Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
 
-
 public:
     cwScrapEntity(Qt3DCore::QNode* parent = nullptr);
 
@@ -36,14 +35,10 @@ public:
     QString project() const;
     void setProject(QString project);
 
-//    Qt3DRender::QTechnique* technique() const;
-//    void setTechnique(Qt3DRender::QTechnique* technique);
-
     Qt3DRender::QEffect* effect() const;
     void setEffect(Qt3DRender::QEffect* effect);
 
     Qt3DRender::QMaterial* material() const;
-//    void setMaterial(Qt3DRender::QMaterial* material);
 
 signals:
     void scrapChanged();

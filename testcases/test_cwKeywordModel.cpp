@@ -4,6 +4,7 @@
 //Our includes
 #include "cwKeywordModel.h"
 #include "TestHelper.h"
+#include "SpyChecker.h"
 
 //Qt includes
 #include <QSignalSpy>
@@ -57,7 +58,6 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
     }
 
     SECTION("Add many values") {
-
         QVector<cwKeyword> keywords {
             {"key1", "value1"},
             {"key1", "value1"}, //Duplicate
@@ -80,16 +80,16 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
         modelKeywords.removeAt(2);
         modelKeywords.removeAt(1);
 
-        auto checkRows = [&model, &modelKeywords]() {
-            REQUIRE(model.rowCount() == modelKeywords.size());
+        auto checkRows = [&modelKeywords](cwKeywordModel* model) {
+            REQUIRE(model->rowCount() == modelKeywords.size());
 
-            for(int i = 0; i < model.rowCount(); i++) {
-                auto index = model.index(i);
+            for(int i = 0; i < model->rowCount(); i++) {
+                auto index = model->index(i);
                 auto modelKeyword = modelKeywords.at(i);
-                INFO("Comparing:" << model.data(index, cwKeywordModel::KeywordRole).value<cwKeyword>() << " to " << modelKeyword);
-                CHECK(model.data(index, cwKeywordModel::KeyRole).toString().toStdString() == modelKeyword.key().toStdString());
-                CHECK(model.data(index, cwKeywordModel::ValueRole).toString().toStdString() == modelKeyword.value().toStdString());
-                CHECK(model.data(index, cwKeywordModel::KeywordRole).value<cwKeyword>() == modelKeyword);
+                INFO("Comparing:" << model->data(index, cwKeywordModel::KeywordRole).value<cwKeyword>() << " to " << modelKeyword);
+                CHECK(model->data(index, cwKeywordModel::KeyRole).toString().toStdString() == modelKeyword.key().toStdString());
+                CHECK(model->data(index, cwKeywordModel::ValueRole).toString().toStdString() == modelKeyword.value().toStdString());
+                CHECK(model->data(index, cwKeywordModel::KeywordRole).value<cwKeyword>() == modelKeyword);
             }
         };
 
@@ -98,7 +98,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
         CHECK(removeSpy.size() == 0);
         CHECK(aboutRemovedSpy.size() == 0);
 
-        checkRows();
+        checkRows(&model);
 
         insertSpy.clear();
         aboutinsertSpy.clear();
@@ -114,7 +114,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             CHECK(removeSpy.size() == 3);
             CHECK(aboutRemovedSpy.size() == 3);
 
-            checkRows();
+            checkRows(&model);
         }
 
         SECTION("Remove a specific keyword") {
@@ -127,7 +127,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             CHECK(removeSpy.size() == 1);
             CHECK(aboutRemovedSpy.size() == 1);
 
-            checkRows();
+            checkRows(&model);
         }
 
         SECTION("Test setData") {
@@ -136,31 +136,31 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             auto index = model.index(1);
             CHECK(model.setData(index, "value2", cwKeywordModel::ValueRole) == true);
             modelKeywords[1].setValue("value2");
-            checkRows();
+            checkRows(&model);
             CHECK(dataChangedSpy.size() == 1);
 
             //Changing the value to an existing key pair
             CHECK(model.setData(index, "value1", cwKeywordModel::ValueRole) == false);
             CHECK(dataChangedSpy.size() == 1);
-            checkRows();
+            checkRows(&model);
 
             //Change the key
             CHECK(model.setData(index, "key5", cwKeywordModel::KeyRole) == true);
             CHECK(dataChangedSpy.size() == 2);
             modelKeywords[1].setKey("key5");
-            checkRows();
+            checkRows(&model);
 
             //Changing the value to an existing key pair
             CHECK(model.setData(index, "key2", cwKeywordModel::KeyRole) == false);
             CHECK(dataChangedSpy.size() == 2);
-            checkRows();
+            checkRows(&model);
 
             //Change the keyword
             auto newKeyword = cwKeyword("sauce", "test");
             modelKeywords[1] = newKeyword;
             CHECK(model.setData(index, QVariant::fromValue(newKeyword), cwKeywordModel::KeywordRole));
             CHECK(dataChangedSpy.size() == 3);
-            checkRows();
+            checkRows(&model);
         }
 
         SECTION("Adding invalid keywords") {
@@ -171,7 +171,200 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             CHECK(insertSpy.size() == 0);
             CHECK(removeSpy.size() == 0);
 
-            checkRows();
+            checkRows(&model);
+        }
+
+        SECTION("cwKeywordModel should handle cwKeywordModel extentions propertly") {
+            cwKeywordModel* keywordModelCave = new cwKeywordModel;
+            cwKeywordModel* keywordModelTrip = new cwKeywordModel;
+            cwKeywordModel* keywordModelScrap = new cwKeywordModel;
+
+            keywordModelCave->setObjectName("keywordModelCave");
+            keywordModelTrip->setObjectName("keywordModelTrip");
+            keywordModelScrap->setObjectName("keywordModelScrap");
+
+            keywordModelCave->add({
+                                      {"Cave", "Sauce cave"},
+                                      {"Country", "USA"}
+                                  });
+
+            keywordModelTrip->add({
+                                      {"Trip", "Trip1"},
+                                      {"Surveyor", "Philip Schuchardt"},
+                                      {"Surveyor", "Sara"},
+                                      {"Date", "2019-08-22"}
+                                  });
+
+            keywordModelScrap->add({
+                                       {"Type", "scrap"}
+                                   });
+
+            keywordModelTrip->addExtension(keywordModelCave);
+            keywordModelScrap->addExtension(keywordModelTrip);
+
+            modelKeywords.clear();
+            modelKeywords.append({
+                                     {"Cave", "Sauce cave"},
+                                     {"Country", "USA"}
+                                 });
+
+            checkRows(keywordModelCave);
+
+            modelKeywords.clear();
+            modelKeywords.append({
+                                     {"Trip", "Trip1"},
+                                     {"Surveyor", "Philip Schuchardt"},
+                                     {"Surveyor", "Sara"},
+                                     {"Date", "2019-08-22"},
+                                     {"Cave", "Sauce cave"},
+                                     {"Country", "USA"}
+                                 });
+
+            checkRows(keywordModelTrip);
+
+            modelKeywords.clear();
+            modelKeywords.append({
+                                     {"Type", "scrap"},
+                                     {"Trip", "Trip1"},
+                                     {"Surveyor", "Philip Schuchardt"},
+                                     {"Surveyor", "Sara"},
+                                     {"Date", "2019-08-22"},
+                                     {"Cave", "Sauce cave"},
+                                     {"Country", "USA"}
+                                 });
+
+            checkRows(keywordModelScrap);
+
+            QSignalSpy aboutinsertSpy(keywordModelScrap, &cwKeywordModel::rowsAboutToBeInserted);
+            QSignalSpy insertSpy(keywordModelScrap, &cwKeywordModel::rowsInserted);
+            QSignalSpy aboutRemovedSpy(keywordModelScrap, &cwKeywordModel::rowsAboutToBeRemoved);
+            QSignalSpy removeSpy(keywordModelScrap, &cwKeywordModel::rowsRemoved);
+            QSignalSpy dataChanged(keywordModelScrap, &cwKeywordModel::dataChanged);
+
+            SpyChecker spyChecker {
+                {&aboutinsertSpy, 0},
+                {&insertSpy, 0},
+                {&aboutRemovedSpy, 0},
+                {&removeSpy, 0},
+                {&dataChanged, 0}
+            };
+
+            spyChecker.checkSpies();
+
+            SECTION("Check single add") {
+                keywordModelCave->add({"test", "sauce"});
+
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                         {"Trip", "Trip1"},
+                                         {"Surveyor", "Philip Schuchardt"},
+                                         {"Surveyor", "Sara"},
+                                         {"Date", "2019-08-22"},
+                                         {"Cave", "Sauce cave"},
+                                         {"Country", "USA"},
+                                         {"test", "sauce"}
+                                     });
+
+                checkRows(keywordModelScrap);
+                spyChecker[&aboutinsertSpy] = 1;
+                spyChecker[&insertSpy] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(aboutinsertSpy.at(0).size() == 3);
+                CHECK(aboutinsertSpy.at(0).at(1).toInt() == 7);
+                CHECK(aboutinsertSpy.at(0).at(2).toInt() == 7);
+
+                REQUIRE(insertSpy.at(0).size() == 3);
+                CHECK(insertSpy.at(0).at(1).toInt() == 7);
+                CHECK(insertSpy.at(0).at(2).toInt() == 7);
+            }
+
+            SECTION("Check multi add") {
+                keywordModelTrip->add({
+                                          {"test1", "sauce1"},
+                                          {"test2", "sauce2"}
+                                      });
+
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                         {"Trip", "Trip1"},
+                                         {"Surveyor", "Philip Schuchardt"},
+                                         {"Surveyor", "Sara"},
+                                         {"Date", "2019-08-22"},
+                                         {"test1", "sauce1"},
+                                         {"test2", "sauce2"},
+                                         {"Cave", "Sauce cave"},
+                                         {"Country", "USA"},
+                                     });
+
+                checkRows(keywordModelScrap);
+                spyChecker[&aboutinsertSpy] = 1;
+                spyChecker[&insertSpy] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(insertSpy.at(0).size() == 3);
+                CHECK(insertSpy.at(0).at(1).toInt() == 5);
+                CHECK(insertSpy.at(0).at(2).toInt() == 6);
+
+                REQUIRE(aboutinsertSpy.at(0).size() == 3);
+                CHECK(aboutinsertSpy.at(0).at(1).toInt() == 5);
+                CHECK(aboutinsertSpy.at(0).at(2).toInt() == 6);
+            }
+
+            SECTION("Check remove") {
+                keywordModelCave->removeAll("Cave");
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                         {"Trip", "Trip1"},
+                                         {"Surveyor", "Philip Schuchardt"},
+                                         {"Surveyor", "Sara"},
+                                         {"Date", "2019-08-22"},
+                                         {"Country", "USA"},
+                                     });
+
+                checkRows(keywordModelScrap);
+                spyChecker[&aboutRemovedSpy] = 1;
+                spyChecker[&removeSpy] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(removeSpy.at(0).size() == 3);
+                CHECK(removeSpy.at(0).at(1).toInt() == 5);
+                CHECK(removeSpy.at(0).at(2).toInt() == 5);
+
+                REQUIRE(aboutRemovedSpy.at(0).size() == 3);
+                CHECK(aboutRemovedSpy.at(0).at(1).toInt() == 5);
+                CHECK(aboutRemovedSpy.at(0).at(2).toInt() == 5);
+            }
+
+            SECTION("Check setData") {
+                keywordModelCave->setData(keywordModelCave->index(1), "Greenland", cwKeywordModel::ValueRole);
+
+                modelKeywords.clear();
+                modelKeywords.append({
+                                         {"Type", "scrap"},
+                                         {"Trip", "Trip1"},
+                                         {"Surveyor", "Philip Schuchardt"},
+                                         {"Surveyor", "Sara"},
+                                         {"Date", "2019-08-22"},
+                                         {"Cave", "Sauce cave"},
+                                         {"Country", "Greenland"}
+                                     });
+
+                checkRows(keywordModelScrap);
+
+                spyChecker[&dataChanged] = 1;
+                spyChecker.requireSpies();
+
+                REQUIRE(dataChanged.first().size() == 3);
+                CHECK(dataChanged.first().at(0).value<QModelIndex>().row() == 6);
+                CHECK(dataChanged.first().at(1).value<QModelIndex>().row() == 6);
+                REQUIRE(dataChanged.first().at(2).value<QVector<int>>().size() == 2);
+                CHECK(dataChanged.first().at(2).value<QVector<int>>().contains(cwKeywordModel::ValueRole) == true);
+                CHECK(dataChanged.first().at(2).value<QVector<int>>().contains(cwKeywordModel::KeywordRole) == true);
+            }
         }
     }
 }
