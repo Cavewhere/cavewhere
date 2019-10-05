@@ -50,19 +50,19 @@ void cwImageTexture::initialize()
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
 
-#ifdef Q_OS_WIN
-    //Only upload one texture, GL_LINEAR, because some intel cards,
-    //don't support npot dxt1 copression, so we just used GL_LINEAR
-    //FIXME: ADD to rendering settings! Use mipmaps.
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-#else
+//#ifdef Q_OS_WIN
+//    //Only upload one texture, GL_LINEAR, because some intel cards,
+//    //don't support npot dxt1 copression, so we just used GL_LINEAR
+//    //FIXME: ADD to rendering settings! Use mipmaps.
+//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+//#else
     //All other platforms
     GLfloat fLargest;
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
 
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
-#endif
+//#endif
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
@@ -160,11 +160,11 @@ void cwImageTexture::updateData() {
 
             trueMipmapLevel++;
 
-#ifdef Q_OS_WIN
+//#ifdef Q_OS_WIN
             //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
             //FIXME: ADD to rendering settings!
-            break;
-#endif //Q_OS_WIN
+//            break;
+//#endif //Q_OS_WIN
         }
     }
 

@@ -48,6 +48,7 @@ void cwLinePlotMesh::setPoints(QVector<QVector3D> pointData)
         const char* points = reinterpret_cast<const char*>(&PointData[0]);
         int size = PointData.size() * sizeof(QVector3D);
         pointAttribute->buffer()->setData(QByteArray(points, size)); //Deep copy
+        emit pointsChanged();
     }
 }
 
@@ -66,5 +67,6 @@ void cwLinePlotMesh::setIndexes(QVector<unsigned int> indexData)
         indexAttribute->buffer()->setData(QByteArray(indexes, size)); //deep copy
 //        qDebug() << "data when set:" << indexAttribute->buffer()->data();
         indexAttribute->setCount(indexData.size());
+        emit indexesChanged();
     }
 }

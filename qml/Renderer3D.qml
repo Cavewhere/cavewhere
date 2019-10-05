@@ -137,11 +137,16 @@ QQ2.Item {
                 ]
             }
 
+            CW.LinePlotMesh {
+                id: linePlotMeshId
+                points: rootData.renderEntity.linePlotMesh.points
+                indexes: rootData.renderEntity.linePlotMesh.indexes
+            }
 
             Entity {
                 id: linePlotEntity
                 components: [
-                    rootData.renderEntity.linePlotMesh,
+                    linePlotMeshId,
                     lineMaterial,
                     inersectorId
                 ]

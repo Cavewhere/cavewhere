@@ -34,6 +34,7 @@
 #include <QtConcurrentMap>
 #include <QOpenGLContext>
 #include <QOffscreenSurface>
+#include <QOpenGLFunctions_2_1>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -426,14 +427,14 @@ int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
 int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
     //Convert and compress using dxt1
     //20 times slower on my computer
-#ifdef Q_OS_WIN
+//#ifdef Q_OS_WIN
     //FIXME: Need to have settings to use opengl dxt1 compression!
     //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
-    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
-#else
+//    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+//#else
     //FIXME: This is commented out because this breaks hard on old intel graphics cards
     QByteArray outputData = openglDxt1Compression(image);
-#endif
+//#endif
 
     if(outputData.isEmpty()) {
         return -1;
@@ -617,7 +618,7 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
  *
  * This assumes that the opengl context is bound
  */
-#ifndef Q_OS_WIN
+//#ifndef Q_OS_WIN
 QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
 {
     glBindTexture(GL_TEXTURE_2D, Texture);
@@ -643,7 +644,10 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);
         QByteArray compressedByteArray(compressed_size, 0);
-        glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
+
+        QOpenGLFunctions_2_1 functions;
+        functions.initializeOpenGLFunctions();
+        functions.glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
 
         return compressedByteArray;
     }
@@ -651,7 +655,7 @@ QByteArray cwAddImageTask::openglDxt1Compression(QImage image)
     qDebug() << "Error: Couldn't compress image" << LOCATION;
     return QByteArray();
 }
-#endif
+//#endif
 
 
 /**
