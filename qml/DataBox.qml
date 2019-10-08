@@ -292,8 +292,8 @@ Item {
 
     Keys.onSpacePressed: {
         var trip = surveyChunk.parentTrip;
-        if(trip.numberOfChunks > 0) {
-            var lastChunkIndex = trip.numberOfChunks - 1
+        if(trip.chunkCount > 0) {
+            var lastChunkIndex = trip.chunkCount - 1
             var lastChunk = trip.chunk(lastChunkIndex);
             if(lastChunk.isStationAndShotsEmpty()) {
                 surveyChunkView.parent.setFocus(lastChunkIndex)

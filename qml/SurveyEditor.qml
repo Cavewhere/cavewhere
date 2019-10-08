@@ -178,7 +178,7 @@ Item {
 
                     anchors.horizontalCenter: view.horizontalCenter
 
-                    visible: currentTrip !== null && currentTrip.numberOfChunks > 0
+                    visible: currentTrip !== null && currentTrip.chunkCount > 0
 
                     Text {
                         anchors.centerIn: parent
@@ -198,7 +198,8 @@ Item {
                     id: addSurveyData
                     text: "Add Survey Data"
                     anchors.horizontalCenter: view.horizontalCenter
-                    visible: currentTrip !== null && currentTrip.numberOfChunks === 0
+//                    visible: true
+                    visible: currentTrip !== null && currentTrip.chunkCount === 0
 
                     onClicked: {
                         currentTrip.addNewChunk()
