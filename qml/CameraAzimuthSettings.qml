@@ -90,7 +90,71 @@ ColumnLayout {
             enabled: turnTableInteraction.azimuth !== 180.0
         }
         Item { width:1; height:1 }
+    }
 
+    GroupBox {
+        title: "Animate"
+
+        RowLayout {
+
+            Button {
+                id: animateAzimuthButton
+                text: checked ? "Stop" : "Start"
+                checkable: true
+                onCheckedChanged: {
+                    if(checked) {
+                        fullRotationAnimation.startCurrentPosition()
+                    } else {
+                        fullRotationAnimation.stop()
+                    }
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Label {
+                text: "Duration"
+            }
+
+            TextField {
+                id: durationTextField
+                implicitWidth: 200
+                text: fullRotationAnimation.duration
+                onEditingFinished: {
+                    var animationRunning = fullRotationAnimation.running
+
+                    fullRotationAnimation.duration = Number(text)
+                    fullRotationAnimation.stop();
+                    if(animationRunning) {
+                        fullRotationAnimation.startCurrentPosition()
+                    }
+                }
+
+                validator: IntValidator {
+                    bottom: 0
+                }
+            }
+
+            Label {
+                text: "ms"
+            }
+        }
+    }
+
+    NumberAnimation {
+        id: fullRotationAnimation
+        target: turnTableInteraction
+        property: "azimuth"
+        duration: 10000
+        loops: Animation.Infinite
+
+        function startCurrentPosition() {
+            fullRotationAnimation.from = turnTableInteraction.azimuth
+            fullRotationAnimation.to = turnTableInteraction.azimuth + 359.999
+            fullRotationAnimation.start()
+        }
     }
 
     NumberAnimation {
