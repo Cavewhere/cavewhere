@@ -449,21 +449,21 @@ Rectangle {
         note: currentNote
     }
 
-    Rectangle {
-        id: renderViewId
-        width: 1024
-        height: width
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.margins: 10
-        border.width: 1
-        visible: false
+//    Rectangle {
+//        id: renderViewId
+//        width: 1024
+//        height: width
+//        anchors.bottom: parent.bottom
+//        anchors.left: parent.left
+//        anchors.margins: 10
+//        border.width: 1
+//        visible: false
 
-        Renderer3D {
-            id: renderer3DId
-            anchors.fill: parent
-        }
-    }
+//        Renderer3D {
+//            id: renderer3DId
+//            anchors.fill: parent
+//        }
+//    }
 
     SequentialAnimation {
         id: noteRotationAnimation
