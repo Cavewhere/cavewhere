@@ -1,6 +1,6 @@
 import QtQuick 2.2 as QQ2
 import Qt3D.Core 2.1
-import Qt3D.Render 2.1
+import Qt3D.Render 2.12
 import Qt3D.Input 2.1
 import Qt3D.Extras 2.1
 import QtQuick.Scene3D 2.0
@@ -96,6 +96,11 @@ QQ2.Item {
 
                             renderPasses: [
                                 RenderPass {
+                                    renderStates: [
+                                    LineWidth {
+                                            value: 5
+                                        }
+                                    ]
                                     shaderProgram: ShaderProgram {
                                         vertexShaderCode: loadSource("qrc:/shaders/LinePlot.vert")
                                         fragmentShaderCode: loadSource("qrc:/shaders/LinePlot.frag")
