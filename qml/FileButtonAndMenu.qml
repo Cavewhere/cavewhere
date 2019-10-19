@@ -112,9 +112,8 @@ MenuBar {
             text: "Scraps Visible"
             checked: regionSceneManager.scraps.visible
             checkable: true
-            onTriggered: {
-                regionSceneManager.scraps.visible = !regionSceneManager.scraps.visible
-                terrainRenderer.update()
+            onCheckedChanged: {
+                rootData.scrapManager.scrapsEntity.enabled = checked
             }
         }
 
