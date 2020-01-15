@@ -40,8 +40,14 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
     Depth(0.0),
     Length(0.0),
-    StationPostionsChanged(false)
+    StationPostionsChanged(false),
+    NetworkChanged(false)
 {
+}
+
+bool cwLinePlotTask::LinePlotCaveData::hasNetworkChanged() const
+{
+    return NetworkChanged;
 }
 
 cwLinePlotTask::cwLinePlotTask(QObject *parent) :
@@ -98,8 +104,7 @@ void cwLinePlotTask::setData(const cwCavingRegion& region) {
     SurvexExporter->setData(*Region);
 
     //Populate the original pointers
-     RegionOriginalPointers = RegionDataPtrs(region);
-
+    RegionOriginalPointers = RegionDataPtrs(region);
 }
 
 /**
@@ -142,12 +147,9 @@ void cwLinePlotTask::runTask() {
 
         done();
 
-    } catch(QString) {
+    } catch(QString error) {
         done();
-        return;
     }
-
-
 }
 
 /**
@@ -299,7 +301,7 @@ void cwLinePlotTask::checkForErrors()
     for(int i = 0; i < Region->caveCount(); i++) {
         cwCave* cave = Region->cave(i);
         if(cave->errorModel()->fatalCount() > 0) {
-            throw QString("Found error in cave");
+            throw QString("Found error in cave:\"%1\"").arg(cave->name());
         }
     }
 
@@ -349,8 +351,6 @@ void cwLinePlotTask::initializeCaveStationLookups()
  */
 void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
 {
-//    cwCave* cave = Region->cave(caveIndex);  //Get the local copy of the cave
-
     //Add the cave to the results with empty station lookup
     addEmptyStationLookup(caveIndex);
 
@@ -502,7 +502,7 @@ void cwLinePlotTask::updateInteralCaveStationLookups(QVector<cwStationPositionLo
         cwStationPositionLookup& oldLookup = CaveStationLookups[i];
 
         if(newLookup.positions().size() != oldLookup.positions().size()) {
-            //This adds the station lookup as changed if the new looup has delete or added stations
+            //This adds the station lookup as changed if the new lookup has delete or added stations
             addEmptyStationLookup(i);
         }
 
@@ -583,7 +583,17 @@ void cwLinePlotTask::updateCaveNetworks()
         cwCave* cave = caves.at(i);
         cwSurveyNetwork network = createNetwork(cave);
         cwCave* externalCave = RegionOriginalPointers.Caves.at(i).Cave;
-        Result.Caves[externalCave].setNetwork(network);
+
+        if(network != cave->network()) {
+            Result.Caves[externalCave].setNetwork(network);
+
+            auto changedStations = cwSurveyNetwork::changedStations(cave->network(), network);
+            Q_ASSERT(!changedStations.isEmpty());
+
+            for(auto station : changedStations) {
+                setStationAsChanged(i, station);
+            }
+        }
     }
 }
 
@@ -605,8 +615,6 @@ void cwLinePlotTask::addEmptyStationLookup(int caveIndex)
         Result.Caves.insert(externalCave, LinePlotCaveData());
     }
 }
-
-
 
 /**
  * @brief cwLinePlotTask::TripDataPtrs::TripDataPtrs
@@ -682,7 +690,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
                 //Add trip to the multi hash
-                MapStationToTrip.insertMulti(station.name(), tripIndex);
+                MapStationToTrip.insertMulti(station.name().toUpper(), tripIndex);
             }
         }
 
@@ -692,7 +700,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
                 cwScrap* scrap = note->scrap(i);
 
                 foreach(cwNoteStation noteStation, scrap->stations()) {
-                    MapStationToScrap.insertMulti(noteStation.name(), QPair<int, int>(tripIndex, scrapIndex));
+                    MapStationToScrap.insertMulti(noteStation.name().toUpper(), QPair<int, int>(tripIndex, scrapIndex));
                 }
 
                 scrapIndex++;

@@ -54,9 +54,7 @@ DynamicLibrary {
         cpp.rpaths: [product.rpath]
         cpp.includePaths: [
             ".",
-            "utils",
-            buildDirectory + "/serialization",
-            buildDirectory + "/versionInfo"
+            "utils"
         ]
 
         Depends { name: "Qt";
@@ -68,12 +66,12 @@ DynamicLibrary {
                 "opengl",
                 "xml",
                 "concurrent",
-                "svg"
+                "svg",
             ]
         }
 
         Depends { name: "libqtqmltricks-qtqmlmodels" }
-
+        Depends { name: "protobuf" }
     }
 
     Group {
@@ -88,8 +86,8 @@ DynamicLibrary {
     cpp.includePaths: [
         ".",
         "utils",
-        buildDirectory + "/serialization",
-        buildDirectory + "/versionInfo"
+        product.buildDirectory + "/serialization",
+        product.buildDirectory + "/versionInfo"
     ]
 
     Properties {
@@ -295,6 +293,4 @@ DynamicLibrary {
             return cmd;
         }
     }
-
-
 }

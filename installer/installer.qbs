@@ -41,6 +41,10 @@ Project {
                     args = ["--qmldir",
                             project.installDir + "/qml",
                             "-sql",
+                            "-xml",
+                            "-opengl",
+                            "-concurrent",
+                            "-no-angle",
                             project.installDir + "/" + inputs.application[0].fileName]
                 } else if(targetOS.contains("osx")) {
                     deploymentApp = "macdeployqt"
@@ -185,10 +189,10 @@ Project {
             var arch
             switch(qbs.architecture) {
             case "x86":
-                arch = "vcredist_x86.exe";
+                arch = "vc_redist.x86.exe";
                 break;
             case "x86_64":
-                arch = "vcredist_x64.exe";
+                arch = "vc_redist.x64.exe";
                 break;
             default:
                 arch = "Unknown Arch";
@@ -201,10 +205,10 @@ Project {
             var arch
             switch(qbs.architecture) {
             case "x86":
-                arch = "VC_2013_REDIST_X86_ADD";
+                arch = "VC_2017_REDIST_X86_ADD";
                 break;
             case "x86_64":
-                arch = "VC_2013_REDIST_X64_ADD";
+                arch = "VC_2017_REDIST_X64_ADD";
                 break;
             default:
                 arch = "Unknown Arch";
@@ -223,23 +227,23 @@ Project {
             ]
         }
 
-        Group {
-            name: "redist x86"
-            fileTags: "redistributableExe"
-            files: [
-                "windows/vcredist/vcredist_x86.exe"
-            ]
-            qbs.install: qbs.architecture == "x86"
-        }
+//        Group {
+//            name: "redist x86"
+//            fileTags: "redistributableExe"
+//            files: [
+//                "windows/vcredist/vcredist_x86.exe"
+//            ]
+//            qbs.install: qbs.architecture == "x86"
+//        }
 
-        Group {
-            name: "redist x64"
-            fileTags: "redistributableExe"
-            files: [
-                "windows/vcredist/vcredist_x64.exe"
-            ]
-            qbs.install: qbs.architecture == "x86_64"
-        }
+//        Group {
+//            name: "redist x64"
+//            fileTags: "redistributableExe"
+//            files: [
+//                "windows/vcredist/vcredist_x64.exe"
+//            ]
+//            qbs.install: qbs.architecture == "x86_64"
+//        }
 
         Rule {
             inputs: ["innoOriginal"]
@@ -290,18 +294,11 @@ innoInputFile
             }
 
             prepare: {
-                var cmd = new Command("C:/Program Files (x86)/Inno Setup 5/ISCC.exe")
+                var cmd = new Command("C:/Program Files (x86)/Inno Setup 6/ISCC.exe")
                 cmd.arguments = [input.filePath]
                 cmd.description = "running ISCC.exe"
                 return cmd
             }
         }
     }
-
-//    CppApplication {
-//        id: qtApp
-//        name: "QtApp"
-//        Depends { name: "Qt"; submodules: ["core"] }
-//    }
-
 }

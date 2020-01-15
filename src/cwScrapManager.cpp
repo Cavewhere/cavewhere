@@ -416,8 +416,6 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
  */
 void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
-    if(scraps.isEmpty()) { return; }
-
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     foreach(cwScrap* scrap, scraps) {
         connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
@@ -485,91 +483,6 @@ QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(
     }
     return stations;
 }
-
-/**
- * @brief cwScrapManager::tripsInsertedHelper
- * @param parentCave
- * @param begin
- * @param end
- */
-//void cwScrapManager::tripsInsertedHelper(cwCave *parentCave, int begin, int end)
-//{
-//    for(int i = begin; i <= end; i++) {
-//        cwTrip* trip = parentCave->trip(i);
-//        connectTrip(trip);
-
-//        if(trip->notes()->hasNotes()) {
-//            notesInsertedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
-//        }
-//    }
-//}
-
-/**
- * @brief cwScrapManager::tripsRemovedHelper
- * @param parentCave
- * @param begin
- * @param end
- */
-//void cwScrapManager::tripsRemovedHelper(cwCave *parentCave, int begin, int end)
-//{
-//    for(int i = begin; i <= end; i++) {
-//        cwTrip* trip = parentCave->trip(i);
-//        disconnectTrip(trip);
-
-//        if(trip->notes()->hasNotes()) {
-//            notesRemovedHelper(trip->notes(), QModelIndex(), 0, trip->notes()->rowCount() - 1);
-//        }
-//    }
-//}
-
-/**
- * @brief cwScrapManager::notesInsertedHelper
- * @param noteModel
- * @param parent
- * @param begin
- * @param end
- */
-//void cwScrapManager::notesInsertedHelper(cwSurveyNoteModel *noteModel,
-//                                         QModelIndex parent,
-//                                         int begin,
-//                                         int end)
-//{
-//    Q_UNUSED(parent);
-
-//    for(int i = begin; i <= end; i++) {
-//        cwNote* note = noteModel->notes().at(i);
-//        connectNote(note);
-
-//        if(note->hasScraps()) {
-//            scrapInsertedHelper(note, 0, note->scraps().size() - 1);
-//        }
-//    }
-
-//}
-
-/**
- * @brief cwScrapManager::notesRemovedHelper
- * @param noteModel
- * @param parent
- * @param begin
- * @param end
- */
-//void cwScrapManager::notesRemovedHelper(cwSurveyNoteModel *noteModel,
-//                                        QModelIndex parent,
-//                                        int begin,
-//                                        int end)
-//{
-//    Q_UNUSED(parent);
-
-//    for(int i = begin; i <= end; i++) {
-//        cwNote* note = noteModel->notes().at(i);
-//        disconnectNote(note);
-
-//        if(note->hasScraps()) {
-//            scrapRemovedHelper(note, 0, note->scraps().size() - 1);
-//        }
-//    }
-//}
 
 /**
  * @brief cwScrapManager::scrapInsertedHelper
@@ -840,7 +753,6 @@ void cwScrapManager::taskFinished() {
         //Removed all cropped image data
         foreach(cwScrap* scrap, validScraps) {
             cwImage image = scrap->triangulationData().croppedImage();
-            qDebug() << "Image is valid:" << image.isValid();
             if(image.isValid()) {
                 imagesToRemove.append(image);
             }

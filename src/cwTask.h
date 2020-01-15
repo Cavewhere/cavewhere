@@ -37,7 +37,8 @@ public:
         PreparingToStart,
         Running,
         Stopped,
-        Restart
+        Restart,
+        Restarting, //Same as ready
     };
     Q_ENUM(Status)
 
@@ -98,7 +99,6 @@ private:
     mutable QReadWriteLock ProgressLocker;
     mutable QReadWriteLock NameLocker;
     QMutex WaitToFinishLocker;
-    QWaitCondition WaitToFinishCondition;
 
     int NumberOfSteps;
     int Progress; //!<
@@ -118,6 +118,7 @@ private:
     bool isParentsRunning();
 
     bool needsRestart() const;
+    bool isReadyPrivate() const;
 
 private:
     Q_INVOKABLE void startOnCurrentThread();
@@ -125,12 +126,6 @@ private:
 
 };
 
-/**
-  Returns if the task is ready
-  */
-inline bool cwTask::isReady() const {
-    return status() == Ready;
-}
 
 
 

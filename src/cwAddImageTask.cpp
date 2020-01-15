@@ -46,9 +46,24 @@
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
+    auto createSurface = [this]() {
+        Surface = new QOffscreenSurface();
+        Surface->create();
+    };
 
+    if(QThread::currentThread() == QCoreApplication::instance()->thread()) {
+        createSurface();
+    } else {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), createSurface, Qt::BlockingQueuedConnection);
+    }
 
     MipmapOnly = false;
+}
+
+cwAddImageTask::~cwAddImageTask()
+{
+    auto surface = Surface;
+    QMetaObject::invokeMethod(Surface, [surface](){surface->deleteLater();});
 }
 
 /**
@@ -58,9 +73,6 @@ cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
   */
 void cwAddImageTask::runTask() {
     CompressionContext = new QOpenGLContext();
-    Window = new QWindow();
-    Window->setSurfaceType(QSurface::OpenGLSurface);
-    Window->create();
     Texture = 0;
 
     //Clear all previous data
@@ -79,14 +91,12 @@ void cwAddImageTask::runTask() {
         return;
     }
 
-    bool couldMakeCurrent = CompressionContext->makeCurrent(Window);
+    bool couldMakeCurrent = CompressionContext->makeCurrent(Surface);
     if(!couldMakeCurrent) {
         qDebug() << "Could make curernt: " << couldMakeCurrent << LOCATION;
         done();
         return;
     }
-
-    
 
     if(Texture == 0) {
         glGenTextures(1, &Texture);
@@ -112,7 +122,6 @@ void cwAddImageTask::runTask() {
     CompressionContext->doneCurrent();
 
     delete CompressionContext;
-    delete Window;
 
     //Finished
     done();

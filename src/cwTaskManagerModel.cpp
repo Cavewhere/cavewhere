@@ -94,6 +94,8 @@ QHash<int, QByteArray> cwTaskManagerModel::roleNames() const
  */
 void cwTaskManagerModel::addTask(cwTask *task)
 {
+    qDebug() << "Add task:" << task;
+
     if(!WatchingTasks.contains(task)) {
         WatchingTasks.insert(task);
 
@@ -185,7 +187,9 @@ void cwTaskManagerModel::removeActiveTask(cwTask *task)
  */
 void cwTaskManagerModel::addActiveTask(cwTask *task)
 {
-    Q_ASSERT(!RunningTasks.contains(task));
+    if(RunningTasks.contains(task)) {
+        return;
+    }
 
     QTimer* timer = TaskToTimer.value(task);
     timer->stop();

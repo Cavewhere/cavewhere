@@ -34,5 +34,7 @@
         <file>datasets/test_cwCSVImporterManager/lastToLRUDError.txt</file>
         <file>datasets/test_cwCSVImporterManager/long.csv</file>
         <file>datasets/test_cwCSVImporterManager/newTrips.txt</file>
+        <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw</file>
     </qresource>
 </RCC>

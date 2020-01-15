@@ -92,6 +92,7 @@ cwCave& cwCave::Copy(const cwCave& object) {
     *Depth = *(object.Depth);
 
     StationPositionModelStale = object.StationPositionModelStale;
+    Network = object.Network;
 
     return *this;
 }

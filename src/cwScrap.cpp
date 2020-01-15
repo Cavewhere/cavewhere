@@ -471,26 +471,13 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     if(parentNote() == nullptr || parentNote()->parentTrip() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
     if(parentCave() == nullptr) { return QList< QPair<cwNoteStation, cwNoteStation> >(); }
 
-    //    //Find the valid stations
-    //    QSet<cwNoteStation> validStationsSet;
-    //    cwStationPositionLookup stationPositionLookup = parentCave()->stationPositionLookup();
-    //    foreach(cwNoteStation noteStation, Stations) {
-    //        if(stationPositionLookup.hasPosition(noteStation)) { // && noteStation.station().cave() != nullptr) {
-    //            validStationsSet.insert(noteStation);
-    //        }
-    //    }
-
-    //Get the parent trip of for these notes
-    cwTrip* trip = parentNote()->parentTrip();
-
     //Go through all the valid stations get the
     QList<cwNoteStation> validStationList = stations(); //validStationsSet.toList();
 
     //Generate all the neighbor list for each station
-    QList< QSet< cwStation > > stationNeighbors;
+    QList< QStringList > stationNeighbors;
     foreach(cwNoteStation station, validStationList) {
-        QSet<cwStation> neighbors = trip->neighboringStations(station.name());
-        stationNeighbors.append(neighbors);
+        stationNeighbors.append(allNeighborStations(station.name()));
     }
 
     QList< QPair<cwNoteStation, cwNoteStation> > shotList;
@@ -500,11 +487,11 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
             cwNoteStation station2 = validStationList[j];
 
             //Get neigbor lookup
-            QSet< cwStation > neighborsStation1 = stationNeighbors[i];
-            QSet< cwStation > neighborsStation2 = stationNeighbors[j];
+            auto neighborsStation1 = stationNeighbors[i];
+            auto neighborsStation2 = stationNeighbors[j];
 
             //See if they make up a shot
-            if(neighborsStation1.contains(station2.name().toLower()) && neighborsStation2.contains(station1.name().toLower())) {
+            if(neighborsStation1.contains(station2.name().toUpper()) && neighborsStation2.contains(station1.name().toUpper())) {
                 shotList.append(QPair<cwNoteStation, cwNoteStation>(station1, station2));
             }
         }
@@ -831,12 +818,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     cwCave* parentCave = parentNote()->parentTrip()->parentCave();
     cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
 
-    QSet<cwStation> neigborStations;
-
-    foreach(cwTrip* trip, parentCave->trips()) {
-        QSet<cwStation> tripStations = trip->neighboringStations(previousStation.name());
-        neigborStations.unite(tripStations);
-    }
+    auto neigborStations = allNeighborStations(previousStation.name());
 
     //Make sure we have neigbors
     if(neigborStations.isEmpty()) {
@@ -1159,6 +1141,25 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     emit stationsReset();
 
     return *this;
+}
+
+/**
+ * Returns all the neighbor stations for station name in the scrap, by iterating through the
+ * all the trips in the parent cave.
+ */
+QStringList cwScrap::allNeighborStations(const QString &stationName) const
+{
+    //If this is slow, could replace this with cwSurveyNetwork found in the parent cave
+    //The survey network is calculate in a seperate th
+    return parentCave()->network().neighbors(stationName);
+
+//Below is a slower but doesn't require the threading to run
+//    QSet<cwStation> neigborStations;
+//    foreach(cwTrip* trip, parentCave()->trips()) {
+//        QSet<cwStation> tripStations = trip->neighboringStations(stationName);
+//        neigborStations.unite(tripStations);
+//    }
+//    return neigborStations;
 }
 
 /**

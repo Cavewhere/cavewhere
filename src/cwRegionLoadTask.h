@@ -32,8 +32,39 @@ class cwLength;
 #include "cwLead.h"
 
 //Google protobuffer
-#include "cavewhere.pb.h"
-#include "qt.pb.h"
+namespace CavewhereProto {
+    class CavingRegion;
+    class Cave;
+    class Trip;
+    class SurveyNoteModel;
+    class TripCalibration;
+    class SurveyChunk;
+    class Team;
+    class Note;
+    class Image;
+    class Scrap;
+    class ImageResolution;
+    class NoteStation;
+    class NoteTranformation;
+    class TriangulatedData;
+    class Length;
+    class TeamMember;
+    class Station;
+    class Shot;
+    class StationPositionLookup;
+    class Lead;
+};
+
+namespace QtProto {
+    class QString;
+    class QDate;
+    class QSizeF;
+    class QSize;
+    class QPointF;
+    class QVector3D;
+    class QVector2D;
+    class QStringList;
+};
 
 class cwRegionLoadTask : public cwRegionIOTask
 {

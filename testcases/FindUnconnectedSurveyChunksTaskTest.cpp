@@ -16,7 +16,7 @@
 #include "cwShot.h"
 #include "cwSurveyChunk.h"
 
-TEST_CASE("Test the find unconnected survey chunks") {
+TEST_CASE("Test the find unconnected survey chunks", "[FindUnconnectedSurveyChunksTask]") {
 
     cwCave* cave = new cwCave();
     cwTrip* trip = new cwTrip();

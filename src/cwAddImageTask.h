@@ -19,9 +19,9 @@
 #include <QDir>
 #include <QSqlDatabase>
 #include <QAtomicInt>
-#include <QWindow>
 #include <QDebug>
 #include <QOpenGLContext>
+#include <QOffscreenSurface>
 
 //Squish includes
 #include <squish.h>
@@ -36,6 +36,7 @@ class cwAddImageTask : public cwProjectIOTask
 
 public:
     cwAddImageTask(QObject* parent = nullptr);
+    ~cwAddImageTask();
 
     //////////////// Parameters //////////////////
 //    void setProjectPath(QString projectPath);
@@ -91,7 +92,7 @@ private:
 
     QAtomicInt Progress;
     QOpenGLContext* CompressionContext;
-    QWindow* Window;
+    QOffscreenSurface* Surface;
     GLuint Texture;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);

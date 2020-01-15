@@ -22,13 +22,7 @@
 #include "cwImageResolution.h"
 #include "cwSQLManager.h"
 #include "cwDebug.h"
-
-////Serielization includes
-//#include "cwSerialization.h"
-//#include "cwQtSerialization.h"
-
-//Boost includes
-//#include <boost/archive/xml_archive_exception.hpp>
+#include "cwSurveyNetwork.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -38,6 +32,11 @@
 
 //Std includes
 #include <sstream>
+
+//Protobuf
+#include "cavewhere.pb.h"
+#include "qt.pb.h"
+
 
 cwRegionLoadTask::cwRegionLoadTask(QObject *parent) :
     cwRegionIOTask(parent)
@@ -199,6 +198,24 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
 
     if(protoCave.has_stationpositionlookup()) {
         cave->setStationPositionLookupStale(protoCave.stationpositionlookupstale());
+    }
+
+    if(protoCave.has_network()) {
+        auto protoNetwork = protoCave.network();
+        cwSurveyNetwork network;
+        for(int i = 0; i < protoNetwork.stations_size(); i++) {
+            auto stationItem = protoNetwork.stations(i);
+
+            auto stationName = loadString(stationItem.stationname());
+            auto neighbors = loadStringList(stationItem.neighbors());
+
+            for(auto neighbor : neighbors) {
+                network.addShot(stationName, neighbor);
+            }
+        }
+        cave->setSurveyNetwork(network);
+    } else {
+        cave->setStationPositionLookupStale(false);
     }
 }
 
