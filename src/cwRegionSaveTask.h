@@ -29,10 +29,43 @@ class cwStation;
 class cwShot;
 class cwStationPositionLookup;
 class cwLead;
+class cwSurveyNetwork;
 
 //Google protobuffer
-#include "cavewhere.pb.h"
-#include "qt.pb.h"
+namespace CavewhereProto {
+    class CavingRegion;
+    class Cave;
+    class Trip;
+    class SurveyNoteModel;
+    class TripCalibration;
+    class SurveyChunk;
+    class Team;
+    class Note;
+    class Image;
+    class Scrap;
+    class ImageResolution;
+    class NoteStation;
+    class NoteTranformation;
+    class TriangulatedData;
+    class Length;
+    class TeamMember;
+    class Station;
+    class Shot;
+    class StationPositionLookup;
+    class Lead;
+    class SurveyNetwork;
+};
+
+namespace QtProto {
+    class QString;
+    class QDate;
+    class QSizeF;
+    class QSize;
+    class QPointF;
+    class QVector3D;
+    class QVector2D;
+    class QStringList;
+};
 
 class cwRegionSaveTask : public cwRegionIOTask
 {
@@ -86,6 +119,8 @@ private:
     void saveStationLookup(CavewhereProto::StationPositionLookup* positionLookup,
                            const cwStationPositionLookup& stationLookup);
     void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);
+    void saveSurveyNetwork(CavewhereProto::SurveyNetwork* protoSurveyNetwork,
+                           const cwSurveyNetwork& network);
 
     //Utils
     void saveString(QtProto::QString* protoString, QString string);

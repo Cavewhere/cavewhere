@@ -1,3 +1,4 @@
+syntax = "proto2";
 package QtProto;
 
 message QVector3D {

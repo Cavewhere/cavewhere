@@ -33,6 +33,14 @@ void cwCSVImporterTask::runTask()
 {
     CSVOutput = Output(); //Clear the output from last time
 
+    if(!QFileInfo::exists(Settings.filename())) {
+        cwError error(QStringLiteral("Can't open \"%1\". %2").arg(Settings.filename()).arg("The system cannot find the file specified."),
+                      cwError::Fatal);
+        CSVOutput.errors.append(error);
+        done();
+        return;
+    }
+
     QFile file(Settings.filename());
     bool okay = file.open(QFile::ReadOnly);
     if(!okay) {

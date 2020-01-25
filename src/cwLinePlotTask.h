@@ -54,6 +54,7 @@ public:
 
         bool hasDepthLengthChanged() const;
         bool hasStationPositionsChanged() const;
+        bool hasNetworkChanged() const;
 
     private:
         bool DepthLengthChanged;
@@ -62,6 +63,7 @@ public:
         QList<cwFindUnconnectedSurveyChunksTask::Result> UnconnectedChunksErrors;
 
         bool StationPostionsChanged;
+        bool NetworkChanged;
         cwStationPositionLookup Lookup;
         cwSurveyNetwork Network;
     };
@@ -399,6 +401,7 @@ inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwF
 inline void cwLinePlotTask::LinePlotCaveData::setNetwork(cwSurveyNetwork network)
 {
     Network = network;
+    NetworkChanged = true;
 }
 
 /**

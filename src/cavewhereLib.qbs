@@ -57,8 +57,6 @@ DynamicLibrary {
             ".",
             "utils",
             "rendering",
-            buildDirectory + "/serialization",
-            buildDirectory + "/versionInfo"
         ]
 
         Depends { name: "Qt";
@@ -70,14 +68,14 @@ DynamicLibrary {
                 "opengl",
                 "xml",
                 "concurrent",
+                "svg",
                 "3dcore",
                 "3drender",
-                "svg"
             ]
         }
 
         Depends { name: "libqtqmltricks-qtqmlmodels" }
-
+        Depends { name: "protobuf" }
     }
 
     Group {
@@ -93,8 +91,8 @@ DynamicLibrary {
         ".",
         "utils",
         "rendering",
-        buildDirectory + "/serialization",
-        buildDirectory + "/versionInfo"
+        product.buildDirectory + "/serialization",
+        product.buildDirectory + "/versionInfo"
     ]
 
     Properties {
@@ -303,6 +301,4 @@ DynamicLibrary {
             return cmd;
         }
     }
-
-
 }

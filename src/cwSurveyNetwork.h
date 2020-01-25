@@ -28,6 +28,13 @@ public:
     void clear();
     void addShot(QString from, QString to);
     QStringList neighbors(QString stationName) const;
+    QStringList stations() const;
+    bool isEmpty() const;
+
+    static QStringList changedStations(const cwSurveyNetwork& n1, const cwSurveyNetwork& n2);
+
+    bool operator==(const cwSurveyNetwork& other) const ;
+    bool operator!=(const cwSurveyNetwork& other) const { return !operator==(other); }
 
 private:
     QSharedDataPointer<cwSurveyNetworkData> data;

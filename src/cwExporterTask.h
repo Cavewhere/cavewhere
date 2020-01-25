@@ -25,7 +25,6 @@ Q_OBJECT
 
 public:
     explicit cwExporterTask(QObject* object);
-    ~cwExporterTask() { qDebug() << "Deleted:" << this; }
 
     void setParentSurvexExporter(cwExporterTask* parent);
 

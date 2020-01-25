@@ -142,7 +142,6 @@ inline bool cwStation::checkLRUDValue(double value) const
     return cwDistanceValidator::check(value);
 }
 
-
 inline bool cwStation::operator ==(const cwStation &station) const
 {
     return station.name().compare(station.name()) == 0;
@@ -152,6 +151,14 @@ inline bool cwStation::operator !=(const cwStation &station) const
 {
     return ! operator ==(station);
 }
+
+inline QDebug operator<<(QDebug debug, const cwStation &station)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace() << station.name();
+    return debug;
+}
+
 
 
 #endif // cwStation_H

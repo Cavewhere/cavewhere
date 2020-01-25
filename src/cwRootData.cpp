@@ -53,22 +53,22 @@ cwRootData::cwRootData(QObject *parent) :
     Region->setUndoStack(undoStack());
 
     //Setup the region tree
-    RegionTreeModel = new cwRegionTreeModel(this);
+    RegionTreeModel = new cwRegionTreeModel(Project);
     RegionTreeModel->setCavingRegion(Region);
 
     //Setup the loop closer
-    LinePlotManager = new cwLinePlotManager(this);
+    LinePlotManager = new cwLinePlotManager(Project);
     LinePlotManager->setRegion(Region);
 
     //Setup the scrap manager
-    ScrapManager = new cwScrapManager(this);
+    ScrapManager = new cwScrapManager(Project);
     ScrapManager->setProject(Project);
     ScrapManager->setRegionTreeModel(RegionTreeModel);
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setTaskManager(TaskManagerModel);
 
     //Setup the survey import manager
-    SurveyImportManager = new cwSurveyImportManager(this);
+    SurveyImportManager = new cwSurveyImportManager(Project);
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
 

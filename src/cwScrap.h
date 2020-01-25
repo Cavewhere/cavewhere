@@ -20,6 +20,7 @@
 #include "cwNoteStation.h"
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
+#include "cwStation.h"
 class cwNote;
 class cwCave;
 
@@ -227,6 +228,8 @@ private:
     cwNoteTranformation runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
+
+    QStringList allNeighborStations(const QString& stationName) const;
 
 private slots:
 //    void updateStationsWithNewCave();

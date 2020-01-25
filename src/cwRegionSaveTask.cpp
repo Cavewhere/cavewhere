@@ -30,11 +30,11 @@
 #include "cwImageResolution.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
-#include "cwLead.h"
 
-////Serielization includes
-//#include "cwSerialization.h"
-//#include "cwQtSerialization.h"
+//Google protobuffer
+#include "cavewhere.pb.h"
+#include "qt.pb.h"
+#include "cwLead.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -132,6 +132,7 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
 
     saveStationLookup(protoCave->mutable_stationpositionlookup(), cave->stationPositionLookup());
     protoCave->set_stationpositionlookupstale(cave->isStationPositionLookupStale());
+    saveSurveyNetwork(protoCave->mutable_network(), cave->network());
 }
 
 /**
@@ -549,4 +550,14 @@ void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &l
     saveString(protoLead->mutable_description(), lead.desciption());
     saveSizeF(protoLead->mutable_size(), lead.size());
     protoLead->set_completed(lead.completed());
+}
+
+void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSurveyNetwork, const cwSurveyNetwork &network)
+{
+    for(auto station : network.stations()) {
+        auto neighbors = network.neighbors(station);
+        auto newStationItem = protoSurveyNetwork->add_stations();
+        saveString(newStationItem->mutable_stationname(), station);
+        saveStringList(newStationItem->mutable_neighbors(), neighbors);
+    }
 }

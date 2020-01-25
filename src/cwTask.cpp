@@ -57,7 +57,7 @@ void cwTask::setParentTask(cwTask* parentTask) {
         setUsingThreadPool(false);
     }
 
-     //Reparent this task to parentTask
+    //Reparent this task to parentTask
     setParent(parentTask); //For memory management and prevent stall pointers
     ParentTask = parentTask;
     ParentTask->ChildTasks.append(this);
@@ -144,7 +144,7 @@ void cwTask::stop() {
 void cwTask::start() {
     {
         QWriteLocker locker(&StatusLocker);
-        if(CurrentStatus != Ready) {
+        if(!isReadyPrivate()) {
             qDebug() << "Can't start the task because it isn't ready, CurrentStatus:" << CurrentStatus << LOCATION;
             return;
         }
@@ -159,15 +159,6 @@ void cwTask::start() {
     } else {
         run();
     }
-
-//    if(ParentTask != nullptr) {
-//        startOnCurrentThread();
-//    } else {
-//        //Start the task, by calling startOnCurrentThread, this is queue on Qt event loop
-//        //This is an asycranous call
-//        QMetaObject::invokeMethod(this, "startOnCurrentThread", Qt::AutoConnection);
-//    }
-
 }
 
 /**
@@ -177,7 +168,7 @@ void cwTask::restart() {
 
     StatusLocker.lockForWrite();
 
-    if(CurrentStatus != Ready) {
+    if(!isReadyPrivate()) {
         //Stop the tasks, and it's children
         privateStop();
 
@@ -198,7 +189,6 @@ void cwTask::restart() {
   */
 void cwTask::setNumberOfSteps(int steps) {
     QWriteLocker locker(&NumberOfStepsLocker);
-    //    qDebug() << "Setting the number of steps:" << steps << NumberOfSteps;
     if(steps != NumberOfSteps) {
         NumberOfSteps = steps;
         emit numberOfStepsChanged(steps);
@@ -240,9 +230,8 @@ void cwTask::done() {
 
     //If the task is still running, this means that the task has finished, without error
     if(CurrentStatus == Restart) {
-        CurrentStatus = Ready;
+        CurrentStatus = Restarting;
         locker.unlock();
-        emit stopped();
         emit shouldRerun();
     } else if(CurrentStatus == Stopped) {
         privateStop();
@@ -254,8 +243,6 @@ void cwTask::done() {
         locker.unlock();
         emit finished();
     }
-
-    WaitToFinishCondition.wakeAll();
 }
 
 /**
@@ -275,7 +262,7 @@ void cwTask::startOnCurrentThread() {
     {
         QWriteLocker locker(&StatusLocker);
 
-        Q_ASSERT(CurrentStatus != Running); //The thread should definitally not me running here
+        Q_ASSERT(!isReadyPrivate()); //The thread should definitally not me running here
 
         if(CurrentStatus != PreparingToStart) {
             done();
@@ -351,6 +338,11 @@ bool cwTask::needsRestart() const
     return NeedsRestart;
 }
 
+bool cwTask::isReadyPrivate() const
+{
+    return CurrentStatus == Ready || CurrentStatus == Restarting;
+}
+
 /**
 * @brief cwTask::setName
 * @param name - The new name of the task
@@ -382,7 +374,7 @@ void cwTask::run()
     {
         QWriteLocker locker(&StatusLocker);
 
-        Q_ASSERT(CurrentStatus != Running); //The thread should definitally not me running here
+        Q_ASSERT(!isReadyPrivate()); //The thread should definitally not me running here
 
         if(CurrentStatus != PreparingToStart) {
             done();
@@ -405,31 +397,36 @@ void cwTask::run()
 
 /**
  * @brief cwTask::waitToFinish
+ *
+ * This blocks the current thread until the cwTask finishes, ei. emit finished signal
  */
 void cwTask::waitToFinish()
 {
-   QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    if(isUsingThreadPool()) {
+        //We need to process the events because there could be events that cause the status to change
+        QCoreApplication::processEvents();
 
-   if(isUsingThreadPool()) {
-       switch (status()) {
-       case Ready:
-           break;
-       case PreparingToStart:
-       case Running:
-       case Stopped:
-           QThreadPool::globalInstance()->waitForDone();
-           Q_ASSERT(isReady());
-           break;
-       case Restart:
-           while(!isReady()) {
-               QThreadPool::globalInstance()->waitForDone();
-               QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-           }
-           break;
-       }
-   }
+        {
+            QReadLocker locker(&StatusLocker);
+            switch (CurrentStatus) {
+            case Ready:
+                break;
+            case PreparingToStart:
+            case Running:
+            case Stopped:
+            case Restarting:
+            case Restart:
+                QEventLoop loop;
+                QObject::connect(this, &cwTask::finished, &loop, &QEventLoop::quit);
+                QObject::connect(this, &cwTask::stopped, &loop, &QEventLoop::quit);
+                locker.unlock();
+                loop.exec();
+                break;
+            }
+        }
 
-   QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        QCoreApplication::processEvents();
+    }
 }
 
 /**
@@ -451,4 +448,12 @@ QString cwTask::name() const {
 int cwTask::progress() const {
     QReadLocker locker(&ProgressLocker);
     return Progress;
+}
+
+/**
+  Returns true if the task is ready, otherwise false
+  */
+bool cwTask::isReady() const {
+    QReadLocker locker(&StatusLocker);
+    return isReadyPrivate();
 }

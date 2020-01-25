@@ -53,7 +53,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
 
     LinePlotTask = new cwLinePlotTask();
     connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(rerunSurvex())); //So the task is rerun
-    connect(LinePlotTask, SIGNAL(finished()), SLOT(updateLinePlot()));
+    connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlot);
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
@@ -239,6 +239,7 @@ void cwLinePlotManager::runSurvex() {
             LinePlotTask->restart();
         }
     }
+
 }
 
 /**
@@ -269,6 +270,9 @@ void cwLinePlotManager::updateLinePlot() {
 
         if(caveData.hasStationPositionsChanged()) {
             cave->setStationPositionLookup(caveData.stationPositions());
+        }
+
+        if(caveData.hasNetworkChanged()) {
             cave->setSurveyNetwork(caveData.network());
         }
 

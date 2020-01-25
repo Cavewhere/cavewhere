@@ -185,7 +185,9 @@ void cwTaskManagerModel::removeActiveTask(cwTask *task)
  */
 void cwTaskManagerModel::addActiveTask(cwTask *task)
 {
-    Q_ASSERT(!RunningTasks.contains(task));
+    if(RunningTasks.contains(task)) {
+        return;
+    }
 
     QTimer* timer = TaskToTimer.value(task);
     timer->stop();

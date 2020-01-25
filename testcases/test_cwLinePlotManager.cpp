@@ -57,7 +57,6 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
 
 TEST_CASE("Changing data adding and removing caves trips survey chunks should run plotting", "[LinePlotManager]")
 {
-
     cwCavingRegion region;
 
     cwCave* cave = new cwCave();
@@ -188,6 +187,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 chunk->appendShot(chunk->stations().last(), station, shot);
 
                 plotManager->waitToFinish();
+
+                INFO("i:" << i);
 
                 CHECK(cave->length()->value() == Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
                 CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));

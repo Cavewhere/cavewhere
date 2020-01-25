@@ -18,6 +18,8 @@
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwCavingRegion.h"
+#include "cwLinePlotManager.h"
+#include "cwRootData.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -57,21 +59,25 @@ public:
     double ScaleEpsilon;
 };
 
-cwScrap* firstScrap(const cwProject* project) {
-    REQUIRE(project->cavingRegion()->caveCount() == 1);
-    cwCave* cave = project->cavingRegion()->cave(0);
+cwScrap* scrap(const cwProject* project, int caveIndex, int tripIndex, int noteIndex, int scrapIndex) {
+    REQUIRE(project->cavingRegion()->caveCount() >= caveIndex + 1);
+    cwCave* cave = project->cavingRegion()->cave(caveIndex);
 
-    REQUIRE(cave->tripCount() == 1);
-    cwTrip* trip = cave->trip(0);
+    REQUIRE(cave->tripCount() >= tripIndex + 1);
+    cwTrip* trip = cave->trip(tripIndex);
     cwSurveyNoteModel* noteModel = trip->notes();
 
-    REQUIRE(noteModel->rowCount() == 1);
-    cwNote* note = noteModel->notes().first();
+    REQUIRE(noteModel->rowCount() >= noteIndex + 1);
+    cwNote* note = noteModel->notes().at(noteIndex);
 
-    REQUIRE(note->scraps().size() == 1);
-    cwScrap* scrap = note->scrap(0);
+    REQUIRE(note->scraps().size() >= scrapIndex + 1);
+    cwScrap* scrap = note->scrap(scrapIndex);
 
     return scrap;
+}
+
+cwScrap* firstScrap(const cwProject* project) {
+    return scrap(project, 0, 0, 0, 0);
 }
 
 void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
@@ -97,6 +103,10 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
     foreach(TestRow row, rows) {
         cwProject* project = fileToProject(row.Filename);
         cwScrap* scrap = firstScrap(project);
+
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(project->cavingRegion());
+        plotManager->waitToFinish();
 
         //Force recalculation
         CHECK(scrap->calculateNoteTransform() == false);
@@ -124,6 +134,10 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
         cwProject* project = fileToProject(row.Filename);
         cwScrap* scrap = firstScrap(project);
 
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(project->cavingRegion());
+        plotManager->waitToFinish();
+
         //Force recalculation
         INFO("Filename:" << row.Filename.toStdString());
         CHECK(scrap->calculateNoteTransform() == false);
@@ -136,6 +150,34 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
         }
 
         delete project;
+    }
+}
+
+TEST_CASE("Check that auto calculate work outside of trip", "[ScrapTest]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 30.13, 1606.3, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw", 30.13, 1606.3, 0.05, 0.005));
+
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = scrap(project, 0, 1, 0, 0);
+
+        auto plotManager = root->linePlotManager();
+        plotManager->waitToFinish();
+
+        INFO("Finished after plotManager!");
+        checkScrapTransform(currentScrap, row);
+
+        currentScrap->setCalculateNoteTransform(false);
+
+        //Force recalculation
+        INFO("Filename:" << row.Filename.toStdString());
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == true);
+        checkScrapTransform(currentScrap, row);
     }
 }
 
@@ -163,6 +205,10 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
         cwProject* planProject = fileToProject(row.Filename);
         cwScrap* scrap = firstScrap(planProject);
 
+        auto plotManager = std::make_unique<cwLinePlotManager>();
+        plotManager->setRegion(planProject->cavingRegion());
+        plotManager->waitToFinish();
+
         REQUIRE(scrap->stations().size() >= 1);
         cwNoteStation centerStation = scrap->stations().first();
 
@@ -184,7 +230,7 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
 
                 QString guessedName = scrap->guessNeighborStationName(noteStation, neighborNoteStation.positionOnNote());
 
-                CHECK(neighborNoteStation.name().toStdString() == guessedName.toStdString());
+                CHECK(neighborNoteStation.name().toUpper().toStdString() == guessedName.toStdString());
             }
         }
 

@@ -1,3 +1,4 @@
+syntax = "proto2";
 import "qt.proto";
 
 package CavewhereProto;
@@ -14,6 +15,7 @@ message Cave {
     optional Units.LengthUnit depthUnit = 4;
     optional StationPositionLookup stationPositionLookup = 5;
     optional bool stationPositionLookupStale = 6;
+    optional SurveyNetwork network = 7;
 }
 
 message Trip {
@@ -209,4 +211,13 @@ message Lead {
     optional QtProto.QString description = 2;
     optional QtProto.QSizeF size = 3;
     optional bool completed = 4;
+}
+
+message SurveyNetwork {
+    repeated StationLookupItem stations = 1;
+
+    message StationLookupItem {
+        required QtProto.QString stationName = 1;
+        required QtProto.QStringList neighbors = 2;
+    }
 }
