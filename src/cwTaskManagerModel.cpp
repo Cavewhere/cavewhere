@@ -94,8 +94,6 @@ QHash<int, QByteArray> cwTaskManagerModel::roleNames() const
  */
 void cwTaskManagerModel::addTask(cwTask *task)
 {
-    qDebug() << "Add task:" << task;
-
     if(!WatchingTasks.contains(task)) {
         WatchingTasks.insert(task);
 

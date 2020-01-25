@@ -116,9 +116,17 @@ cwCavingRegion& cwCavingRegion::copy(const cwCavingRegion& object) {
 
         //Strange copying to make sure the newCaves are
         //On the correct thread
-        cwCave* newCave = new cwCave(*cave);
+        bool threadIsNull = thread() == nullptr;
+        if(threadIsNull) {
+            moveToThread(QThread::currentThread());
+        }
 
+        cwCave* newCave = new cwCave(*cave);
         newCave->setParent(this);  //Uncomment because this cause problems with QML
+
+        if(threadIsNull) {
+            moveToThread(nullptr);
+        }
 
         Caves.append(newCave);
     }
