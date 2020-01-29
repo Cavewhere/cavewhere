@@ -3,9 +3,9 @@
 
 //Our includes
 #include "SpyChecker.h"
-#include "cwKeywordEntityFilterModel.h"
-#include "cwKeywordEntityModel.h"
-#include "cwKeywordComponent.h"
+#include "cwKeywordItemFilterModel.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
 
 //Qt includes
@@ -28,8 +28,8 @@ public:
 
 
 
-TEST_CASE("cwKeywordEntityFilterModel should initilize correctly", "[cwKeywordEntityFilterModel]") {
-    cwKeywordEntityFilterModel model;
+TEST_CASE("cwKeywordItemFilterModel should initilize correctly", "[cwKeywordItemFilterModel]") {
+    cwKeywordItemFilterModel model;
     CHECK(model.rowCount(QModelIndex()) == 1);
     CHECK(model.keywordModel() == nullptr);
     CHECK(model.keywords().size() == 0);
@@ -37,9 +37,9 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly", "[cwKeywordEn
     CHECK(model.otherCategory().isEmpty() == false);
 }
 
-TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[cwKeywordEntityFilterModel]") {
+TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwKeywordItemFilterModel]") {
 
-    auto model = std::make_unique<cwKeywordEntityFilterModel>();
+    auto model = std::make_unique<cwKeywordItemFilterModel>();
 
     auto check = [&model](const QModelIndex& root, const QVector<ListElement>& list) {        
         REQUIRE(list.size() == model->rowCount(root));
@@ -48,10 +48,10 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
 
             auto index = model->index(i, 0, root);
             auto listElement = list.at(i);
-            CHECK(index.data(cwKeywordEntityFilterModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
+            CHECK(index.data(cwKeywordItemFilterModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
 
-            auto entities = index.data(cwKeywordEntityFilterModel::EntitiesRole).value<QVector<QEntity*>>();
-            int entitiesCount = index.data(cwKeywordEntityFilterModel::EntitiesCountRole).value<int>();
+            auto entities = index.data(cwKeywordItemFilterModel::EntitiesRole).value<QVector<QEntity*>>();
+            int entitiesCount = index.data(cwKeywordItemFilterModel::EntitiesCountRole).value<int>();
             CHECK(entities.size() == entitiesCount);
             CHECK(entities.size() == listElement.entities.size());
 
@@ -61,13 +61,13 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
         }
     };
 
-    auto keywordEntityModel = std::make_unique<cwKeywordEntityModel>();
+    auto keywordEntityModel = std::make_unique<cwKeywordItemModel>();
 
-    QSignalSpy addSpy(model.get(), &cwKeywordEntityFilterModel::rowsInserted);
-    QSignalSpy removeSpy(model.get(), &cwKeywordEntityFilterModel::rowsRemoved);
-    QSignalSpy moveSpy(model.get(), &cwKeywordEntityFilterModel::rowsMoved);
-    QSignalSpy dataChangedSpy(model.get(), &cwKeywordEntityFilterModel::dataChanged);
-    QSignalSpy resetSpy(model.get(), &cwKeywordEntityFilterModel::modelReset);
+    QSignalSpy addSpy(model.get(), &cwKeywordItemFilterModel::rowsInserted);
+    QSignalSpy removeSpy(model.get(), &cwKeywordItemFilterModel::rowsRemoved);
+    QSignalSpy moveSpy(model.get(), &cwKeywordItemFilterModel::rowsMoved);
+    QSignalSpy dataChangedSpy(model.get(), &cwKeywordItemFilterModel::dataChanged);
+    QSignalSpy resetSpy(model.get(), &cwKeywordItemFilterModel::modelReset);
 
     addSpy.setObjectName("addSpy");
     removeSpy.setObjectName("removeSpy");
@@ -83,10 +83,10 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
         {&resetSpy, 0}
     };
 
-    auto component1 = new cwKeywordComponent();
-    auto component2 = new cwKeywordComponent();
-    auto component3 = new cwKeywordComponent();
-    auto component4 = new cwKeywordComponent();
+    auto component1 = new cwKeywordItem();
+    auto component2 = new cwKeywordItem();
+    auto component3 = new cwKeywordItem();
+    auto component4 = new cwKeywordItem();
 
     component1->setObjectName("component1");
     component2->setObjectName("component2");
@@ -128,19 +128,19 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
     keywordModel4->add({"trip", "trip3"});
     keywordModel4->add({"cave", "cave2"});
 
-    entity1->addComponent(component1);
-    entity2->addComponent(component2);
-    entity3->addComponent(component3);
-    entity4->addComponent(component4);
+    component1->setObject(entity1.get());
+    component2->setObject(entity2.get());
+    component3->setObject(entity3.get());
+    component4->setObject(entity4.get());
 
-    keywordEntityModel->addComponent(component1);
-    keywordEntityModel->addComponent(component2);
-    keywordEntityModel->addComponent(component3);
-    keywordEntityModel->addComponent(component4);
+    keywordEntityModel->addItem(component1);
+    keywordEntityModel->addItem(component2);
+    keywordEntityModel->addItem(component3);
+    keywordEntityModel->addItem(component4);
 
     //CHECK default model
     QVector<ListElement> lists {
-        {cwKeywordEntityFilterModel::otherCategory(), {}}
+        {cwKeywordItemFilterModel::otherCategory(), {}}
     };
     check(QModelIndex(), lists);
 
@@ -150,7 +150,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
     CHECK(model->rowCount(QModelIndex()) == 1);
 
     lists = {
-        {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}}
+        {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}}
     };
 
     check(QModelIndex(), lists);
@@ -167,7 +167,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             {"line", {entity3.get()}},
             {"point", {entity4.get()}},
             {"scrap", {entity1.get(), entity2.get()}},
-            {cwKeywordEntityFilterModel::otherCategory(), {}},
+            {cwKeywordItemFilterModel::otherCategory(), {}},
         };
 
         check(QModelIndex(), modelData);
@@ -197,7 +197,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                 {"trip1", {entity1.get()}},
                 {"trip2", {entity2.get(), entity3.get()}},
                 {"trip3", {entity4.get()}},
-                {cwKeywordEntityFilterModel::otherCategory(), {}},
+                {cwKeywordItemFilterModel::otherCategory(), {}},
             };
 
             model->waitForFinished();
@@ -211,7 +211,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             model->waitForFinished();
 
             QVector<ListElement> modelData {
-                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}},
+                {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}},
             };
 
             check(QModelIndex(), modelData);
@@ -229,7 +229,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             modelData = {
                 {"line", {entity3.get()}},
                 {"scrap", {entity2.get()}},
-                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
             };
 
             //Spies should be zero
@@ -249,7 +249,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                 modelData = {
                     {"line", {entity3.get()}},
                     {"scrap", {entity2.get(), entity1.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity4.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity4.get()}},
                 };
 
                 check(QModelIndex(), modelData);
@@ -266,8 +266,8 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                 CHECK(index2.isValid() == true);
 
                 CHECK(roles.size() == 2);
-                CHECK(roles.contains(cwKeywordEntityFilterModel::EntitiesRole) == true);
-                CHECK(roles.contains(cwKeywordEntityFilterModel::EntitiesCountRole) == true);
+                CHECK(roles.contains(cwKeywordItemFilterModel::EntitiesRole) == true);
+                CHECK(roles.contains(cwKeywordItemFilterModel::EntitiesCountRole) == true);
 
                 auto otherIndex = dataChangedSpy.at(1).at(0).value<QModelIndex>();
                 CHECK(otherIndex.row() == model->rowCount() - 1);
@@ -281,7 +281,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                 modelData = {
                     {"line", {entity3.get(), entity2.get()}},
                     {"scrap", {entity2.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
                 };
 
                 check(QModelIndex(), modelData);
@@ -296,7 +296,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                     modelData = {
                         {"line", {entity3.get()}},
                         {"scrap", {entity2.get()}},
-                        {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                        {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
                     };
 
                     check(QModelIndex(), modelData);
@@ -310,7 +310,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
 
                         modelData = {
                             {"line", {entity3.get()}},
-                            {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
+                            {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
                         };
 
                         check(QModelIndex(), modelData);
@@ -329,7 +329,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
 
                 modelData = {
                     {"line", {entity3.get(), entity2.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
                 };
 
                 check(QModelIndex(), modelData);
@@ -346,7 +346,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
 
                 modelData = {
                     {"line", {entity3.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get(), entity2.get()}},
                 };
 
                 check(QModelIndex(), modelData);
@@ -358,7 +358,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             }
 
             SECTION("Add entity") {
-                auto component5 = new cwKeywordComponent();
+                auto component5 = new cwKeywordItem();
                 component5->setObjectName("component5");
 
                 cwKeywordModel* keywordModel5 = component5->keywordModel();
@@ -371,15 +371,15 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
                 auto entity5 = std::make_unique<QEntity>();
                 entity5->setObjectName("entity5");
 
-                entity5->addComponent(component5);
+                component5->setObject(entity5.get());
 
-                keywordEntityModel->addComponent(component5);
+                keywordEntityModel->addItem(component5);
 
                 modelData = {
                     {"line", {entity3.get()}},
                     {"point", {entity5.get()}},
                     {"scrap", {entity2.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
                 };
 
                 check(QModelIndex(), modelData);
@@ -390,11 +390,11 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
             }
 
             SECTION("Removed Entity") {
-                keywordEntityModel->removeComponent(component2);
+                keywordEntityModel->removeItem(component2);
 
                 modelData = {
                     {"line", {entity3.get()}},
-                    {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
+                    {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity4.get()}},
                 };
 
                 spyCheck[&removeSpy] = 1;
@@ -411,7 +411,7 @@ TEST_CASE("cwKeywordEntityFilterModel should initilize correctly with keys", "[c
 
             modelData = {
                 {"point", {entity4.get()}},
-                {cwKeywordEntityFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get()}},
+                {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get()}},
             };
 
             //Spies should be zero

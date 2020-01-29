@@ -2,7 +2,7 @@
 #define CWKEYWORDENTITYFILTERMODEL_H
 
 //Our include
-#include "cwKeywordEntityModel.h"
+#include "cwKeywordItemModel.h"
 #include "cwGlobals.h"
 #include "cwKeyword.h"
 
@@ -15,11 +15,11 @@
 //Std includes
 #include <memory>
 
-class CAVEWHERE_LIB_EXPORT cwKeywordEntityFilterModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwKeywordItemFilterModel : public QAbstractListModel
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwKeywordEntityModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
+    Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
     Q_PROPERTY(QList<cwKeyword> keywords READ keywords WRITE setKeywords NOTIFY keywordsChanged)
     Q_PROPERTY(QString lastKey READ lastKey WRITE setLastKey NOTIFY keyLastChanged)
 
@@ -32,11 +32,11 @@ public:
 
     Q_ENUM(Role)
 
-    cwKeywordEntityFilterModel(QObject* parent = nullptr);
-    ~cwKeywordEntityFilterModel();
+    cwKeywordItemFilterModel(QObject* parent = nullptr);
+    ~cwKeywordItemFilterModel();
 
-    cwKeywordEntityModel* keywordModel() const;
-    void setKeywordModel(cwKeywordEntityModel* keywordModel);
+    cwKeywordItemModel* keywordModel() const;
+    void setKeywordModel(cwKeywordItemModel* keywordModel);
 
     QList<cwKeyword> keywords() const;
     void setKeywords(QList<cwKeyword> keywords);
@@ -85,7 +85,7 @@ private:
     class ModelData {
     public:
         QVector<Row> Rows;
-        Row OtherRow = Row(cwKeywordEntityFilterModel::otherCategory(), {});
+        Row OtherRow = Row(cwKeywordItemFilterModel::otherCategory(), {});
 
         int otherRowIndex() const {
             return size() - 1;
@@ -141,7 +141,7 @@ private:
     QFuture<void> LastRun;
     QFuture<ModelData> LastModelData;
 
-    cwKeywordEntityModel* KeywordModel = nullptr; //!<
+    cwKeywordItemModel* KeywordModel = nullptr; //!<
 
     void updateAllRows();
     bool isRunning() const;
@@ -153,21 +153,21 @@ private:
 /**
 *
 */
-inline cwKeywordEntityModel* cwKeywordEntityFilterModel::keywordModel() const {
+inline cwKeywordItemModel* cwKeywordItemFilterModel::keywordModel() const {
     return KeywordModel;
 }
 
 /**
 *
 */
-inline QList<cwKeyword> cwKeywordEntityFilterModel::keywords() const {
+inline QList<cwKeyword> cwKeywordItemFilterModel::keywords() const {
     return Keywords;
 }
 
 /**
 *
 */
-inline QString cwKeywordEntityFilterModel::lastKey() const {
+inline QString cwKeywordItemFilterModel::lastKey() const {
     return LastKey;
 }
 
