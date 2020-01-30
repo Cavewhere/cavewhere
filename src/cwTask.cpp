@@ -302,7 +302,7 @@ void cwTask::changeThreads(QThread* thread) {
   calling this function
   */
 void cwTask::privateStop() {
-    if(CurrentStatus == Running || CurrentStatus == PreparingToStart) {
+    if(CurrentStatus == Running || CurrentStatus == PreparingToStart || CurrentStatus == Restart) {
         CurrentStatus = Stopped;
 
         //Go through all children and stop them
