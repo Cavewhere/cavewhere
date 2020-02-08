@@ -14,7 +14,7 @@ public:
     QPointF Position;
     QString Description;
     QSizeF Size;
-    bool Completed;
+    bool Completed = false;
 
 };
 

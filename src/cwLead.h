@@ -16,10 +16,11 @@
 
 //Our includes
 #include "cwUnits.h"
+#include "cwGlobals.h"
 
 class cwLeadData;
 
-class cwLead
+class CAVEWHERE_LIB_EXPORT cwLead
 {
 public:
     cwLead();
