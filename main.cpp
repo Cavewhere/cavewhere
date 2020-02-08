@@ -31,13 +31,10 @@
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
-QUrl mainWindowSourcePath() {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
-}
-
 int main(int argc, char *argv[])
 {    
     QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
 
@@ -63,14 +60,12 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
-    QUrl mainWindowPath = mainWindowSourcePath();
+    QUrl mainWindowPath = cwGlobalDirectory::mainWindowSourcePath();
     QQmlApplicationEngine applicationEnigine;
 
     rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
 
-//    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
-//    rootData->project()->load(QDir::homePath() + "/test.cw");
-    QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
+    QQmlContext* context =  applicationEnigine.rootContext();
 
     context->setContextObject(rootData);
     context->setContextProperty("rootData", rootData);

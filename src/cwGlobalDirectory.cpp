@@ -55,3 +55,7 @@ void cwGlobalDirectory::setupBaseDirectory() {
 
     }
 }
+
+QUrl cwGlobalDirectory::mainWindowSourcePath() {
+    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
+}
