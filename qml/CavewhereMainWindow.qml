@@ -112,7 +112,6 @@ ApplicationWindow {
         id: globalDialogHandler
     }
 
-    //
     Item {
         id: rootPopupItem
         anchors.fill: parent
@@ -124,8 +123,12 @@ ApplicationWindow {
     }
 
     onClosing: {
-        askToSaveDialog.askToSave();
-        close.accepted = false;
+        if(rootData.project.isModified()) {
+            askToSaveDialog.askToSave();
+            close.accepted = false;
+        } else {
+            close.accepted = true;
+        }
     }
 
     Component.onCompleted: {

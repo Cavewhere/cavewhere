@@ -73,6 +73,8 @@ class cwRegionSaveTask : public cwRegionIOTask
 public:
     explicit cwRegionSaveTask(QObject *parent = 0);
 
+    QByteArray serializedData();
+
 signals:
 
 public slots:

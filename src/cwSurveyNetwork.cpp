@@ -9,6 +9,7 @@
 #include "cwSurveyNetwork.h"
 
 //Qt includes
+#include <QHash>
 #include <QSet>
 
 class cwSurveyNetworkData : public QSharedData

@@ -49,6 +49,20 @@ cwRegionSaveTask::cwRegionSaveTask(QObject *parent) :
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 }
 
+QByteArray cwRegionSaveTask::serializedData()
+{
+    CavewhereProto::CavingRegion region;
+    saveCavingRegion(region);
+
+    std::string regionString = region.SerializeAsString();
+
+    QByteArray regionByteArray;
+    if(!regionString.empty()) {
+        regionByteArray = QByteArray(&regionString[0], regionString.size());
+    }
+    return regionByteArray;
+}
+
 void cwRegionSaveTask::runTask() {
 
     //Open a datebase connection
@@ -58,8 +72,6 @@ void cwRegionSaveTask::runTask() {
         cwProject::createDefaultSchema(Database);
 
         saveToProtoBuffer();
-
-//        xmlSerialization();
 
         Database.close();
     }
@@ -83,15 +95,7 @@ void cwRegionSaveTask::saveToProtoBuffer()
 {
     cwSQLManager::Transaction transaction(&Database);
 
-    CavewhereProto::CavingRegion region;
-    saveCavingRegion(region);
-
-    std::string regionString = region.SerializeAsString();
-
-    QByteArray regionByteArray;
-    if(!regionString.empty()) {
-        regionByteArray = QByteArray(&regionString[0], regionString.size());
-    }
+    QByteArray regionByteArray = serializedData();
 
     QSqlQuery insertCavingRegion(Database);
     QString queryStr =
@@ -554,8 +558,12 @@ void cwRegionSaveTask::saveLead(CavewhereProto::Lead *protoLead, const cwLead &l
 
 void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSurveyNetwork, const cwSurveyNetwork &network)
 {
-    for(auto station : network.stations()) {
+    auto stations = network.stations();
+    std::sort(stations.begin(), stations.end());
+    for(auto station : stations) {
         auto neighbors = network.neighbors(station);
+        std::sort(neighbors.begin(), neighbors.end());
+
         auto newStationItem = protoSurveyNetwork->add_stations();
         saveString(newStationItem->mutable_stationname(), station);
         saveStringList(newStationItem->mutable_neighbors(), neighbors);

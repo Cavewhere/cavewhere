@@ -304,7 +304,6 @@ cwTaskManagerModel *cwProject::taskManager() const
   Loads the project, loads all the files to the project
   */
 void cwProject::loadFile(QString filename) {
-
     if(filename.isEmpty()) { return; }
 
     if(LoadTask == nullptr) {
@@ -597,6 +596,26 @@ void cwProject::waitSaveToFinish()
     if(SaveTask != nullptr) {
         SaveTask->waitToFinish();
     }
+}
+
+/**
+ * Returns true if the user has modified the file, and false if haven't
+ */
+bool cwProject::isModified() const
+{
+    cwRegionSaveTask saveTask;
+    saveTask.setCavingRegion(*Region);
+    QByteArray saveData = saveTask.serializedData();
+
+    if(isTemporaryProject()) {
+        return Region->caveCount() > 0;
+    }
+
+    cwRegionLoadTask loadTask;
+    loadTask.setDatabaseFilename(filename());
+    QByteArray currentData = loadTask.readSeralizedData();
+
+    return saveData != currentData;
 }
 
 /**
