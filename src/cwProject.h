@@ -74,6 +74,8 @@ public:
     void waitLoadToFinish();
     void waitSaveToFinish();
 
+    Q_INVOKABLE bool isModified() const;
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();

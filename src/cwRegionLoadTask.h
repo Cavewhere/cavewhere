@@ -72,6 +72,8 @@ class cwRegionLoadTask : public cwRegionIOTask
 public:
     explicit cwRegionLoadTask(QObject *parent = 0);
 
+    QByteArray readSeralizedData();
+
 signals:
     void finishedLoading();
 
@@ -124,6 +126,16 @@ private:
     QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
     QStringList loadStringList(const QtProto::QStringList& protoStringList);
 
+    template<typename F>
+    void runAfterConnected(F func) {
+        bool connected = connectToDatabase("loadRegionTask");
+        if(connected) {
+            //This makes sure that sqlite is clean up after it self
+            insureVacuuming();
+
+            func();
+        }
+    }
 
 //    QString readXMLFromDatabase();
 //    bool loadFromBoostSerialization();

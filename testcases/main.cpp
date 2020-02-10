@@ -15,6 +15,12 @@
 int main( int argc, char* argv[] )
 {
   QApplication app(argc, argv);
+
+  QApplication::setOrganizationName("Vadose Solutions");
+  QApplication::setOrganizationDomain("cavewhere.com");
+  QApplication::setApplicationName("cavewhere-test");
+  QApplication::setApplicationVersion("1.0");
+
   app.thread()->setObjectName("Main QThread");
 
   int result = Catch::Session().run( argc, argv );

@@ -44,29 +44,32 @@ cwRegionLoadTask::cwRegionLoadTask(QObject *parent) :
 
 }
 
+QByteArray cwRegionLoadTask::readSeralizedData()
+{
+    QByteArray data;
+
+    runAfterConnected([this, &data](){
+        bool okay;
+        data = readProtoBufferFromDatabase(&okay);
+    });
+
+    return data;
+}
+
 /**
   Loads the region data
   */
 void cwRegionLoadTask::runTask() {
     //Clear region
-    bool connected = connectToDatabase("loadRegionTask");
-    if(connected) {
-        //This makes sure that sqlite is clean up after it self
-        insureVacuuming();
-
+    runAfterConnected([this](){
         //Try loading Proto Buffer
         bool success = loadFromProtoBuffer();
-
-//        if(!success) {
-//            qDebug() << "Warning loading from XML serialization!" << LOCATION;
-//            success = loadFromBoostSerialization();
-//        }
 
         if(!success) {
             qDebug() << "Couldn't load from any format!";
             stop();
         }
-    }
+    });
 
     if(isRunning()) {
         emit finishedLoading();

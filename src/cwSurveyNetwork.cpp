@@ -9,6 +9,7 @@
 #include "cwSurveyNetwork.h"
 
 //Qt includes
+#include <QHash>
 #include <QSet>
 
 class cwSurveyNetworkData : public QSharedData
@@ -139,6 +140,6 @@ QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork &n1, const cw
  */
 bool cwSurveyNetwork::operator==(const cwSurveyNetwork &other) const
 {
-    return data == other.data || data->Network == other.data->Network;
+    return data == other.data || data->Network == other.data->Network || changedStations(*this, other).isEmpty();
 }
 

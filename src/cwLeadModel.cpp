@@ -450,7 +450,7 @@ QString cwLeadModel::nearestStation(cwScrap *scrap, int leadIndex) const
 QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
 {
     auto iter = OffsetToScrap.lowerBound(index.row());
-    if(iter.key() > index.row()) {
+    if(iter.key() > index.row() || iter == OffsetToScrap.end()) {
         iter--;
     }
 

@@ -32,13 +32,10 @@
 #define CAVEWHERE_VERSION "Sauce-Release"
 #endif
 
-QUrl mainWindowSourcePath() {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
-}
-
 int main(int argc, char *argv[])
 {    
     QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
     a.setAttribute(Qt::AA_DisableShaderDiskCache);
@@ -73,7 +70,6 @@ int main(int argc, char *argv[])
 //    format.setSamples(4);
     QSurfaceFormat::setDefaultFormat(format);
 
-    QUrl mainWindowPath = mainWindowSourcePath();
     QQmlApplicationEngine applicationEnigine;
 
     rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
@@ -106,9 +102,7 @@ int main(int argc, char *argv[])
     checkFormat();
 
 
-//    rootData->project()->load(QDir::homePath() + "/Dropbox/quanko.cw");
-//    rootData->project()->load(QDir::homePath() + "/test.cw");
-    QQmlContext* context =  applicationEnigine.rootContext(); //view.rootContext();
+    QQmlContext* context =  applicationEnigine.rootContext();
 
     context->setContextObject(rootData);
     context->setContextProperty("rootData", rootData);
@@ -127,6 +121,7 @@ int main(int argc, char *argv[])
     //Allow the engine to quit the application
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
+    auto mainWindowPath = cwGlobalDirectory::mainWindowSourcePath();
     if(!mainWindowPath.isEmpty()) {
         applicationEnigine.load(mainWindowPath);
     } else {

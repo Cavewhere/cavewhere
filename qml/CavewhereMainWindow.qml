@@ -9,25 +9,18 @@ import QtQuick 2.0
 import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
 import QtQuick.Dialogs 1.2
+import Cavewhere 1.0;
+import Qt.labs.settings 1.1
 
 ApplicationWindow {
     id: applicationWindowId
     objectName: "applicationWindow"
 
-    visible: license.hasReadLicenseAgreement
-    visibility: Window.Maximized
-
+    visible: false
     width: 1024
-    height: 800
+    height: 576
 
     title: "Cavewhere - " + version
-
-    Loader {
-        source: "LicenseWindow.qml"
-        visible: !license.hasReadLicenseAgreement
-        active: visible
-        asynchronous: true
-    }
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
@@ -42,6 +35,12 @@ ApplicationWindow {
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
         }
+    }
+
+    ScreenSizeSaver {
+        id: screenSizeSaverId
+        window: applicationWindowId
+        windowName: "mainWindow"
     }
 
     Loader {
@@ -113,7 +112,6 @@ ApplicationWindow {
         id: globalDialogHandler
     }
 
-    //
     Item {
         id: rootPopupItem
         anchors.fill: parent
@@ -125,12 +123,17 @@ ApplicationWindow {
     }
 
     onClosing: {
-        askToSaveDialog.askToSave();
-        close.accepted = false;
+        if(rootData.project.isModified()) {
+            askToSaveDialog.askToSave();
+            close.accepted = false;
+        } else {
+            close.accepted = true;
+        }
     }
 
     Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindowId
+        screenSizeSaverId.resize();
     }
 }
 
