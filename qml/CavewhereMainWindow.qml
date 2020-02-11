@@ -20,7 +20,7 @@ ApplicationWindow {
     width: 1024
     height: 576
 
-    title: "Cavewhere - " + version
+    title: "CaveWhere - " + version
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
@@ -89,7 +89,7 @@ ApplicationWindow {
 
     FileDialog {
         id: loadFileDialogId
-        nameFilters: ["Cavewhere File (*.cw)"]
+        nameFilters: ["CaveWhere File (*.cw)"]
         folder: rootData.lastDirectory
         onAccepted: {
             rootData.lastDirectory = fileUrl

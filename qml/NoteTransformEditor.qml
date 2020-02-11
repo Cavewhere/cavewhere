@@ -67,7 +67,7 @@ Item {
 
             HelpArea {
                 id: scrapTypeHelpId
-                text: "The scrap type designates how Cavewhere will interperate the scrap. A running
+                text: "The scrap type designates how CaveWhere will interperate the scrap. A running
                         profile will warp the scrap vertically along the centerline. Plan will warp
                         the scrap in plan view"
                 width: columnLayoutId.width

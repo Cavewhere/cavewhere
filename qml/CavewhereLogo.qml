@@ -9,7 +9,7 @@ Row {
     }
 
     Text {
-        text: "Cavewhere"
+        text: "CaveWhere"
         font.pointSize: 40
         anchors.verticalCenter: imageId.verticalCenter
     }

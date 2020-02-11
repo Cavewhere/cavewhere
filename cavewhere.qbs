@@ -31,7 +31,7 @@ Project {
     qbsSearchPaths: ["qbsModules"]
 
     CavewhereApp {
-        name: "Cavewhere"
+        name: "CaveWhere"
 
         Group {
             name: "main"
@@ -52,7 +52,7 @@ Project {
             var object = {"CFBundleIconFile":"cavewhereIcon.icns",
                 "CFBundleDocumentTypes":[
                     {
-                        "CFBundleTypeName": "Cavewhere Project File",
+                        "CFBundleTypeName": "CaveWhere Project File",
                         "CFBundleTypeExtensions": ["cw"],
                         "CFBundleTypeIconFile": "cavewhereIcon",
                         "LSHandlerRank": "Owner"

@@ -33,7 +33,7 @@
 
 int main(int argc, char *argv[])
 {    
-    QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
@@ -52,8 +52,8 @@ int main(int argc, char *argv[])
 
     QApplication::setOrganizationName("Vadose Solutions");
     QApplication::setOrganizationDomain("cavewhere.com");
-    QApplication::setApplicationName("Cavewhere");
-    QApplication::setApplicationVersion("0.1");
+    QApplication::setApplicationName("CaveWhere");
+    QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
     cwGlobalDirectory::setupBaseDirectory();
 
@@ -88,8 +88,8 @@ int main(int argc, char *argv[])
         applicationEnigine.load(mainWindowPath);
     } else {
         QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
-                                              "Cavewhere Failed to Load Main Window",
-                                              "ಠ_ರೃ Cavewhere has failed to load its main window... <br><b>This is a bug!</b>",
+                                              "CaveWhere Failed to Load Main Window",
+                                              "ಠ_ರೃ CaveWhere has failed to load its main window... <br><b>This is a bug!</b>",
                                               QMessageBox::Close);
         mainWindowNotFoundMessage.exec();
         return 1;

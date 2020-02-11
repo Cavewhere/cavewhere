@@ -49,7 +49,7 @@ void cwGlobalDirectory::setupBaseDirectory() {
 
         QMessageBox::critical(nullptr,
                               "Installation is Broke Sauce",
-                              QString("<b>Installation is broken!!!</b><br><br>Cavewhere couldn't find <i>%1</i>").arg(findFile),
+                              QString("<b>Installation is broken!!!</b><br><br>CaveWhere couldn't find <i>%1</i>").arg(findFile),
                               QMessageBox::Close
                               );
 

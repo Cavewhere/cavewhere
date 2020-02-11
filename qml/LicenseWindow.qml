@@ -37,7 +37,7 @@ Window {
             anchors.right: parent.right
 
             Button {
-                text: "Close Cavewhere"
+                text: "Close CaveWhere"
                 onClicked: {
                     license.hasReadLicenseAgreement = false
                     Qt.quit()

@@ -3,8 +3,8 @@ import QtQuick.Dialogs 1.2
 
 FileDialog {
     id: saveAsFileDialogId
-    nameFilters: ["Cavewhere Project (*.cw)"]
-    title: "Save Cavewhere Project As"
+    nameFilters: ["CaveWhere Project (*.cw)"]
+    title: "Save CaveWhere Project As"
     selectExisting: false
     folder: rootData.lastDirectory
     onAccepted: {

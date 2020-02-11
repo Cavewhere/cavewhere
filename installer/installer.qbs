@@ -16,7 +16,7 @@ Project {
 
         property var qt: Qt.core.binPath
 
-        Depends { name: "Cavewhere" }
+        Depends { name: "CaveWhere" }
         Depends { name: "Qt.core" }
 
         Rule {
@@ -110,7 +110,7 @@ Project {
             multiplex: true
 
             Artifact {
-                filePath: "Cavewhere " + product.version + ".dmg"
+                filePath: "CaveWhere " + product.version + ".dmg"
                 fileTags: "shellInstaller"
             }
 
