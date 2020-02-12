@@ -56,20 +56,20 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
     CHECK(root->region()->caveCount() == 0);
 
-//    root->project()->loadFile(filename);
-//    root->project()->waitLoadToFinish();
-//    REQUIRE(root->region()->caveCount() == 1);
+    root->project()->loadFile(filename);
+    root->project()->waitLoadToFinish();
+    REQUIRE(root->region()->caveCount() == 1);
 
-//    auto loadCave = root->region()->cave(0);
-//    auto network = loadCave->network();
+    auto loadCave = root->region()->cave(0);
+    auto network = loadCave->network();
 
-//    auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
-//        auto foundNeighbors = network.neighbors(stationName).toSet();
-//        auto checkNeigbbors = neighbors.toSet();
-//        CHECK(foundNeighbors == checkNeigbbors);
-//    };
+    auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
+        auto foundNeighbors = network.neighbors(stationName).toSet();
+        auto checkNeigbbors = neighbors.toSet();
+        CHECK(foundNeighbors == checkNeigbbors);
+    };
 
-//    testStationNeigbors("a1", {"A2"});
-//    testStationNeigbors("a2", {"A1", "A3"});
-//    testStationNeigbors("a3", {"A2"});
+    testStationNeigbors("a1", {"A2"});
+    testStationNeigbors("a2", {"A1", "A3"});
+    testStationNeigbors("a3", {"A2"});
 }
