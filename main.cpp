@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QQmlApplicationEngine>
 #include <QThreadPool>
+#include <QQuickWindow>
 
 //Our includes
 //#include "cwMainWindow.h"
@@ -33,7 +34,7 @@
 
 int main(int argc, char *argv[])
 {    
-    QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+    QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
@@ -54,6 +55,11 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationDomain("cavewhere.com");
     QApplication::setApplicationName("CaveWhere");
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
+
+    //TODO: Add rendering dialog, for checking bad text
+    //Fixes text rendering issues on windows for bad graphics cards
+    //https://stackoverflow.com/questions/29733711/blurred-qt-quick-text
+    //QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
 
     cwGlobalDirectory::setupBaseDirectory();
 

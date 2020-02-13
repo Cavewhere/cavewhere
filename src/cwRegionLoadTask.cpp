@@ -56,24 +56,48 @@ QByteArray cwRegionLoadTask::readSeralizedData()
     return data;
 }
 
+cwRegionLoadResult cwRegionLoadTask::load()
+{
+    cwRegionLoadResult results;
+
+    runAfterConnected([this, &results](){
+        auto region = cwCavingRegionPtr(new cwCavingRegion);
+
+        //Try loading Proto Buffer
+        bool success = loadFromProtoBuffer(region.data());
+
+        if(!success) {
+            addError(cwError("Couldn't load from any format!", cwError::Fatal));
+            results.setErrors(errors());
+            return results;
+        }
+
+        region->moveToThread(nullptr);
+        results.setCavingRegion(region);
+        return results;
+    });
+
+    return results;
+}
+
 /**
   Loads the region data
   */
 void cwRegionLoadTask::runTask() {
-    //Clear region
-    runAfterConnected([this](){
-        //Try loading Proto Buffer
-        bool success = loadFromProtoBuffer();
+//    //Clear region
+//    runAfterConnected([this](){
+//        //Try loading Proto Buffer
+//        bool success = loadFromProtoBuffer(Region);
 
-        if(!success) {
-            qDebug() << "Couldn't load from any format!";
-            stop();
-        }
-    });
+//        if(!success) {
+//            addError(cwError("Couldn't load from any format!", cwError::Fatal));
+//            stop();
+//        }
+//    });
 
-    if(isRunning()) {
-        emit finishedLoading();
-    }
+//    if(isRunning()) {
+//        emit finishedLoading();
+//    }
 
     done();
 }
@@ -82,7 +106,7 @@ void cwRegionLoadTask::runTask() {
  * @brief cwRegionLoadTask::loadFromProtoBuffer
  * @return
  */
-bool cwRegionLoadTask::loadFromProtoBuffer()
+bool cwRegionLoadTask::loadFromProtoBuffer(cwCavingRegion* region)
 {
     bool okay;
     QByteArray protoBufferData = readProtoBufferFromDatabase(&okay);
@@ -91,22 +115,21 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
         return false;
     }
 
-    CavewhereProto::CavingRegion region;
-    bool couldParse = region.ParseFromArray(protoBufferData.data(), protoBufferData.size());
+    CavewhereProto::CavingRegion regionProto;
+    bool couldParse = regionProto.ParseFromArray(protoBufferData.data(), protoBufferData.size());
 
     if(!couldParse) {
-        qDebug() << "Couldn't read proto buffer. Corrupted?!";
-        //Don't close the Database here because, the xml loader needs it
+        addError(cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
         return false;
     }
 
-    loadCavingRegion(region);
+    loadCavingRegion(regionProto, region);
 
     //Clean up old images
     cwImageCleanupTask imageCleanupTask;
     imageCleanupTask.setUsingThreadPool(false);
     imageCleanupTask.setDatabaseFilename(databaseFilename());
-    imageCleanupTask.setRegion(Region);
+    imageCleanupTask.setRegion(region);
     imageCleanupTask.start();
 
     Database.close();
@@ -127,7 +150,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
 
     bool couldPrepare = selectObjectData.prepare(queryStr);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare select Caving Region:" << selectObjectData.lastError().databaseText() << queryStr;
+        addError({QString("Couldn't prepare select Caving Region: %1 %2").arg(selectObjectData.lastError().databaseText()).arg(queryStr), cwError::Fatal});
     }
 
     //Extract the data
@@ -135,7 +158,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
     QSqlRecord record = selectObjectData.record();
 
     if(record.isEmpty()) {
-        qDebug() << "Hmmmm, no caving regions to load from protoBuffer";
+        addError({QString("Hmmmm, no caving regions to load from protoBuffer"), cwError::Fatal});
         *okay = false;
         return QByteArray();
     }
@@ -152,24 +175,20 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  * @brief cwRegionLoadTask::loadCavingRegion
  * @param region
  */
-void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
+void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &protoRegion, cwCavingRegion *region)
 {
-    Region->moveToThread(QThread::currentThread());
-    Region->clearCaves();
-
     QList<cwCave*> caves;
-    caves.reserve(region.caves_size());
+    caves.reserve(protoRegion.caves_size());
 
-    for(int i = 0; i < region.caves_size(); i++) {
-        const CavewhereProto::Cave& protoCave = region.caves(i);
+    for(int i = 0; i < protoRegion.caves_size(); i++) {
+        const CavewhereProto::Cave& protoCave = protoRegion.caves(i);
         cwCave* cave = new cwCave();
         loadCave(protoCave, cave);
 
         caves.append(cave);
     }
 
-    Region->addCaves(caves);
-    Region->moveToThread(nullptr);
+    region->addCaves(caves);
 }
 
 /**
@@ -312,7 +331,7 @@ void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoC
     }
 
     if(stations.count() - 1 != shots.count()) {
-        qDebug() << "Shot, station count mismatch, survey chunk invalid:" << stations.count() << shots.count();
+        addError(cwError("Shot, station count mismatch, survey chunk invalid: %1 %2", cwError::Warning));
         return;
     }
 
@@ -709,73 +728,6 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
     return list;
 }
 
-
-/**
-  Reads the region data from the database
-
-  This return a QString filed with XML data
-  */
-//QString cwRegionLoadTask::readXMLFromDatabase() {
-//    QSqlQuery selectCavingRegion(Database);
-//    QString queryStr =
-//            QString("SELECT qCompress_XML FROM CavingRegion where id = 1");
-
-//    bool couldPrepare = selectCavingRegion.prepare(queryStr);
-//    if(!couldPrepare) {
-//        qDebug() << "Couldn't prepare select Caving Region:" << selectCavingRegion.lastError().databaseText() << queryStr;
-//    }
-
-//    //Extract the data
-//    selectCavingRegion.exec();
-//    QSqlRecord record = selectCavingRegion.record();
-
-//    if(record.isEmpty()) {
-//        qDebug() << "Hmmmm, no caving regions to load";
-//        return QString();
-//    }
-
-//    //Get the first row
-//    selectCavingRegion.next();
-
-//    QString xmlData = selectCavingRegion.value(0).toString();
-//    return xmlData;
-//}
-
-/**
- * @brief cwRegionLoadTask::loadFromBoostSerialization
- * @return
- */
-//bool cwRegionLoadTask::loadFromBoostSerialization()
-//{        //Get the xmlData from the database
-//    QString xmlData = readXMLFromDatabase();
-//    Database.close();
-
-//    //Add the string data to the stream
-//    std::stringstream stream(xmlData.toStdString());
-
-//    //Parse xml the string data
-//    try {
-//        boost::archive::xml_iarchive xmlLoadArchive(stream);
-
-//        cwCavingRegion region;
-//        xmlLoadArchive >> BOOST_SERIALIZATION_NVP(region);
-//        *Region = region;
-
-//        //Clean up old images
-//        cwImageCleanupTask imageCleanupTask;
-//        imageCleanupTask.setDatabaseFilename(databaseFilename());
-//        imageCleanupTask.setRegion(Region);
-//        imageCleanupTask.start();
-//        return true;
-
-//    } catch(boost::archive::archive_exception exception) {
-//        qDebug() << "Couldn't load data from XML!" << exception.what();
-//        return false;
-//    }
-//}
-
-
-
 /**
  * @brief cwRegionLoadTask::insureVacuuming
  *
@@ -785,8 +737,6 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
  */
 void cwRegionLoadTask::insureVacuuming()
 {
-//    cwSQLManager::Transaction transaction(&Database);
-
     int vacuum = -1;
 
     {

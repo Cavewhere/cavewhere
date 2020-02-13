@@ -41,6 +41,7 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     CHECK(project.isModified() == false);
 
     SECTION("Load file") {
+        //If this fails, this is probably because of a version change
         fileToProject(&project, "://datasets/network.cw");
         project.waitLoadToFinish();
         CHECK(project.isModified() == false);
@@ -51,6 +52,5 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
         cwTrip* firstTrip = project.cavingRegion()->cave(0)->trip(0);
         firstTrip->setName("Sauce!");
         CHECK(project.isModified() == true);
-
     }
 }

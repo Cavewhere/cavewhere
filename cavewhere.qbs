@@ -25,7 +25,8 @@ Project {
         "installer/installer.qbs",
         "testcases/testcases.qbs",
         "dewalls/dewalls.qbs",
-        "qt-qml-models/QtQmlModels.qbs"
+        "qt-qml-models/QtQmlModels.qbs",
+        "asyncfuture/asyncfuture.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]

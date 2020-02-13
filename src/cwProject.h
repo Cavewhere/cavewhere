@@ -13,6 +13,7 @@
 #include "cwImage.h"
 #include "cwImageData.h"
 #include "cwGlobals.h"
+#include "cwRegionLoadResult.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
@@ -28,6 +29,7 @@ class cwRegionSaveTask;
 #include <QMap>
 #include <QHash>
 #include <QPointer>
+#include <QFuture>
 class QUndoStack;
 
 /**
@@ -95,7 +97,9 @@ private:
     //The region that this project looks after
     cwCavingRegion* Region;
 
-    cwRegionLoadTask* LoadTask;
+    QFuture<cwRegionLoadResult> LoadFuture;
+
+//    cwRegionLoadTask* LoadTask;
     cwRegionSaveTask* SaveTask;
     //The undo stack
     QUndoStack* UndoStack;
@@ -117,7 +121,6 @@ private:
     void privateSave();
 
 private slots:
-    void updateRegionData();
     void startDeleteImageTask();
     void deleteImageTask();
 

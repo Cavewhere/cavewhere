@@ -42,6 +42,7 @@ DynamicLibrary {
     Depends { name: "z" }
     Depends { name: "dewalls" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
+    Depends { name: "asyncfuture" }
 
     GitProbe {
         id: git

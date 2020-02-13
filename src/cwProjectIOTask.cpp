@@ -27,6 +27,11 @@ cwProjectIOTask::cwProjectIOTask(QObject* parent) :
 {
 }
 
+QList<cwError> cwProjectIOTask::errors() const
+{
+    return Errors;
+}
+
 /**
   This connects to a mysql database
 
@@ -39,7 +44,7 @@ bool cwProjectIOTask::connectToDatabase(QString connectionName) {
     Database.setDatabaseName(DatabasePath);
     bool connected = Database.open();
     if(!connected) {
-        qDebug() << "Couldn't connect to database for" << connectionName << DatabasePath << LOCATION;
+        addError(cwError(QString("Couldn't connect to database for %1 %2 %3").arg(connectionName).arg(DatabasePath), cwError::Fatal));
         stop();
     }
 
@@ -69,4 +74,14 @@ void cwProjectIOTask::endTransation() {
         //Roll back the commited images
         cwSQLManager::instance()->endTransaction(Database, cwSQLManager::RollBack);
     }
+}
+
+void cwProjectIOTask::addError(const cwError &error)
+{
+    Errors.append(error);
+}
+
+void cwProjectIOTask::clearErrors()
+{
+    Errors.clear();
 }

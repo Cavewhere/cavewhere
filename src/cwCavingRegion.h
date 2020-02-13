@@ -15,6 +15,7 @@
 #include <QWeakPointer>
 #include <QAbstractListModel>
 #include <QDebug>
+#include <QSharedPointer>
 
 //Our includes
 class cwCave;
@@ -113,10 +114,9 @@ private:
         virtual void redo();
         virtual void undo();
     };
-
-
-
 };
+
+typedef QSharedPointer<cwCavingRegion> cwCavingRegionPtr;
 
 /**
   \brief Get's the number of caves in the region

@@ -34,3 +34,6 @@
 [submodule "qt-qml-models"]
 	path = qt-qml-models
 	url = git@github.com:Cavewhere/qt-qml-models.git
+[submodule "asyncfuture"]
+	path = asyncfuture
+	url = git@github.com:vpicaver/asyncfuture.git

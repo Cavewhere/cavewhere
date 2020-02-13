@@ -10,11 +10,14 @@
 
 //Our includes
 #include "cwTask.h"
+#include "cwError.h"
 class cwCavingRegion;
+
 
 //Qt includes
 #include <QSqlDatabase>
 #include <QAtomicInt>
+#include <QList>
 
 /**
   cXMLProjectLoadTask
@@ -22,11 +25,14 @@ class cwCavingRegion;
 class cwProjectIOTask : public cwTask
 {
     Q_OBJECT
+
 public:
     cwProjectIOTask(QObject* parent = nullptr);
 
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
+
+    QList<cwError> errors() const;
 
 protected:
     //For database access
@@ -38,6 +44,12 @@ protected:
     bool connectToDatabase(QString connectionName);
     bool beginTransation();
     void endTransation();
+
+    void addError(const cwError& error);
+    void clearErrors();
+
+private:
+    QList<cwError> Errors;
 
 };
 

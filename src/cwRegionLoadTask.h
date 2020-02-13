@@ -30,6 +30,7 @@ class cwLength;
 #include "cwImage.h"
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
+#include "cwRegionLoadResult.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -69,10 +70,12 @@ namespace QtProto {
 class cwRegionLoadTask : public cwRegionIOTask
 {
     Q_OBJECT
-public:
+public:   
     explicit cwRegionLoadTask(QObject *parent = 0);
 
     QByteArray readSeralizedData();
+
+    cwRegionLoadResult load();
 
 signals:
     void finishedLoading();
@@ -83,10 +86,10 @@ protected:
     void runTask();
 
 private:
-    bool loadFromProtoBuffer();
+    bool loadFromProtoBuffer(cwCavingRegion *region);
     QByteArray readProtoBufferFromDatabase(bool* okay);
 
-    void loadCavingRegion(const CavewhereProto::CavingRegion& region);
+    void loadCavingRegion(const CavewhereProto::CavingRegion& protoRegion, cwCavingRegion* region);
     void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave);
     void loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip* trip);
     void loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel& protoNoteModel,

@@ -19,6 +19,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
+#include "cwAsyncFuture.h"
 
 //Qt includes
 #include <QDir>
@@ -31,6 +32,10 @@
 #include <QFileDialog>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QtConcurrent>
+
+//Async Future
+#include <asyncfuture.h>
 
 QAtomicInt cwProject::ConnectionCounter;
 
@@ -41,7 +46,6 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
     Region(new cwCavingRegion(this)),
-    LoadTask(nullptr),
     SaveTask(nullptr),
     UndoStack(new QUndoStack(this))
 {
@@ -306,39 +310,35 @@ cwTaskManagerModel *cwProject::taskManager() const
 void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
-    if(LoadTask == nullptr) {
-        LoadTask = new cwRegionLoadTask();
+    //Only load one file at a time
+    LoadFuture.cancel();
 
-        //Load the region task
-        connect(LoadTask, &cwRegionLoadTask::finishedLoading,
-                this, &cwProject::updateRegionData);
+    filename = cwGlobals::convertFromURL(filename);
 
-        filename = cwGlobals::convertFromURL(filename);
+    //Run the load task async
+    auto loadFuture = QtConcurrent::run([filename](){
+        cwRegionLoadTask loadTask;
+        loadTask.setDatabaseFilename(filename);
+        return loadTask.load();
+    });
 
-        //Set the data for the project
-        LoadTask->setDatabaseFilename(filename);
+    AsyncFuture::observe(loadFuture)
+            .subscribe([loadFuture, filename, this]()
+    {
+        auto result = loadFuture.result();
+        if(result.errors().isEmpty()) {
+            TempProject = false;
+            setFilename(filename);
+            *Region = *(result.cavingRegion().data());
+            emit temporaryProjectChanged();
+        } else {
+            //TODO: Do something with the errors
+        }
+    });
 
-        //Start the save thread
-        LoadTask->start();
-    }
+    LoadFuture = loadFuture;
 }
 
-/**
-  Update the project with new region data
-
-  This should only be called by cwRegionLoadTask
-  */
-void cwProject::updateRegionData() {
-    TempProject = false;
-
-    //Update the project filename
-    setFilename(LoadTask->databaseFilename());
-
-    //Copy the data from the loaded region
-    LoadTask->copyRegionTo(*Region);
-
-    emit temporaryProjectChanged();
-}
 
 /**
  * @brief cwProject::deleteImageTask
@@ -580,9 +580,7 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
  */
 void cwProject::waitLoadToFinish()
 {
-    if(LoadTask != nullptr) {
-        LoadTask->waitToFinish();
-    }
+    cwAsyncFuture::waitForFinished(LoadFuture);
 }
 
 /**
