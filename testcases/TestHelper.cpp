@@ -1,4 +1,5 @@
 #include "TestHelper.h"
+#include "catch.hpp"
 
 cwProject *fileToProject(QString filename) {
     cwProject* project = new cwProject();
@@ -81,5 +82,11 @@ std::ostream &operator <<(std::ostream &os, const QStringList &value) {
     } else {
         os << "[]";
     }
+    return os;
+}
+
+std::ostream &operator <<(std::ostream &os, const cwError &error) {
+    QMetaEnum metaEnum = QMetaEnum::fromType<cwError::ErrorType>();
+    os << "(typeId:" << error.errorTypeId() << ", " << metaEnum.valueToKey(error.type()) << ", \'" << error.message().toStdString() << "'" << ", suppressed:" << error.suppressed() << ")";
     return os;
 }

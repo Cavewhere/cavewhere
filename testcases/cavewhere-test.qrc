@@ -36,5 +36,7 @@
         <file>datasets/test_cwCSVImporterManager/newTrips.txt</file>
         <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw</file>
         <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw</file>
+        <file>datasets/test_ProtoBufferSaveLoad/badFile.cw</file>
+        <file>datasets/test_ProtoBufferSaveLoad/corrupted.cw</file>
     </qresource>
 </RCC>

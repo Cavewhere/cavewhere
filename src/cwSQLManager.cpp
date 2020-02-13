@@ -143,12 +143,11 @@ QReadWriteLock* cwSQLManager::fetchDatabaseMutex(QString databaseName)
  * transaction on the database.
  *
  */
-cwSQLManager::Transaction::Transaction(const QSqlDatabase* database, QueryType type) :
+cwSQLManager::Transaction::Transaction(const QSqlDatabase& database, QueryType type) :
     Database(database),
     RolledBack(false)
 {
-    Q_ASSERT(Database != nullptr);
-    cwSQLManager::instance()->beginTransaction(*Database, type);
+    cwSQLManager::instance()->beginTransaction(Database, type);
 }
 
 /**
@@ -160,7 +159,7 @@ cwSQLManager::Transaction::Transaction(const QSqlDatabase* database, QueryType t
 cwSQLManager::Transaction::~Transaction()
 {
     if(!RolledBack) {
-        cwSQLManager::instance()->endTransaction(*Database, cwSQLManager::Commit);
+        cwSQLManager::instance()->endTransaction(Database, cwSQLManager::Commit);
     }
 }
 
@@ -171,7 +170,7 @@ cwSQLManager::Transaction::~Transaction()
  */
 void cwSQLManager::Transaction::rollBack()
 {
-    cwSQLManager::instance()->endTransaction(*Database, cwSQLManager::Commit);
+    cwSQLManager::instance()->endTransaction(Database, cwSQLManager::Commit);
     RolledBack = true;
 }
 

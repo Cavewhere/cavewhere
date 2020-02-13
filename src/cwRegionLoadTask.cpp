@@ -60,15 +60,19 @@ cwRegionLoadResult cwRegionLoadTask::load()
 {
     cwRegionLoadResult results;
 
+    if(!QFileInfo::exists(databaseFilename())) {
+        results.addError(cwError(QString("Couldn't open '%1' because it doesn't exist").arg(databaseFilename()), cwError::Fatal));
+        return results;
+    }
+
     runAfterConnected([this, &results](){
         auto region = cwCavingRegionPtr(new cwCavingRegion);
 
         //Try loading Proto Buffer
-        bool success = loadFromProtoBuffer(region.data());
+        loadFromProtoBuffer(region.data());
 
-        if(!success) {
-            addError(cwError("Couldn't load from any format!", cwError::Fatal));
-            results.setErrors(errors());
+        results.setErrors(errors());
+        if(cwError::containsFatal(results.errors())) {
             return results;
         }
 
@@ -84,21 +88,6 @@ cwRegionLoadResult cwRegionLoadTask::load()
   Loads the region data
   */
 void cwRegionLoadTask::runTask() {
-//    //Clear region
-//    runAfterConnected([this](){
-//        //Try loading Proto Buffer
-//        bool success = loadFromProtoBuffer(Region);
-
-//        if(!success) {
-//            addError(cwError("Couldn't load from any format!", cwError::Fatal));
-//            stop();
-//        }
-//    });
-
-//    if(isRunning()) {
-//        emit finishedLoading();
-//    }
-
     done();
 }
 
@@ -132,7 +121,7 @@ bool cwRegionLoadTask::loadFromProtoBuffer(cwCavingRegion* region)
     imageCleanupTask.setRegion(region);
     imageCleanupTask.start();
 
-    Database.close();
+    disconnectToDatabase();
     return true;
 }
 
@@ -142,15 +131,16 @@ bool cwRegionLoadTask::loadFromProtoBuffer(cwCavingRegion* region)
  */
 QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
 {
-    cwSQLManager::Transaction transaction(&Database, cwSQLManager::ReadOnly);
+    cwSQLManager::Transaction transaction(database(), cwSQLManager::ReadOnly);
 
-    QSqlQuery selectObjectData(Database);
+    QSqlQuery selectObjectData(database());
     QString queryStr =
             QString("SELECT protoBuffer FROM ObjectData where id = 1");
 
     bool couldPrepare = selectObjectData.prepare(queryStr);
     if(!couldPrepare) {
-        addError({QString("Couldn't prepare select Caving Region: %1 %2").arg(selectObjectData.lastError().databaseText()).arg(queryStr), cwError::Fatal});
+        addError({QString("Couldn't prepare select Caving Region:'%1' sql:'%2'").arg(selectObjectData.lastError().databaseText()).arg(queryStr), cwError::Fatal});
+        return QByteArray();
     }
 
     //Extract the data
@@ -741,7 +731,7 @@ void cwRegionLoadTask::insureVacuuming()
 
     {
         QString SQL = "PRAGMA auto_vacuum";
-        QSqlQuery isVaccumingQuery(SQL, Database);
+        QSqlQuery isVaccumingQuery(SQL, database());
 
         if(isVaccumingQuery.next()) {
             vacuum = isVaccumingQuery.value(0).toInt();
@@ -752,7 +742,7 @@ void cwRegionLoadTask::insureVacuuming()
     case 0: {
         //Vacuum is off
         //Turn on full Vacuum
-        QSqlQuery turnOnFullVacuum(Database);
+        QSqlQuery turnOnFullVacuum(database());
 
         bool success = turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
         if(!success) {
@@ -763,6 +753,8 @@ void cwRegionLoadTask::insureVacuuming()
         if(!success) {
             qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
         }
+
+        break;
     }
     case 1:
         //Full Vacuum
@@ -770,7 +762,7 @@ void cwRegionLoadTask::insureVacuuming()
     case 2: {
         //Incremental Vacuum
         QString SQL = "PRAGMA auto_vacuum 1";
-        QSqlQuery turnOnFullVacuum(Database);
+        QSqlQuery turnOnFullVacuum(database());
         turnOnFullVacuum.exec(SQL);
     }
     }

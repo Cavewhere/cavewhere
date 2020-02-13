@@ -1,0 +1,69 @@
+import QtQuick 2.0
+//import QtQuick.Dialogs 1.2
+import QtQuick.Layouts 1.12
+import QtQuick.Controls 2.12
+import Cavewhere 1.0
+
+Loader {
+    id: loadedId
+    anchors.centerIn: parent
+
+    property ErrorListModel model
+
+    function openDialog() {
+        loadedId.sourceComponent = null;
+        loadedId.sourceComponent = dialogComponent;
+        loadedId.item.errorDialog.open();
+    }
+
+    Connections {
+        ignoreUnknownSignals: true
+        target: model
+        onCountChanged: {
+            if(model.count === 0) {
+                loadedId.sourceComponent = null;
+            } else {
+                openDialog();
+            }
+        }
+    }
+
+    Component {
+        id: dialogComponent
+
+        Item {
+            id: itemId
+            property alias errorDialog: errorDialogId
+
+            anchors.centerIn: parent
+
+            Dialog {
+                id: errorDialogId
+
+                anchors.centerIn: parent
+                modal: true
+                width: 600
+                clip: true
+
+                standardButtons: Dialog.Ok
+                title: model.count + " issue" + ((model.count > 1) ? "s" : "") + " has occurred"
+
+                onAccepted: {
+                    model.clear()
+                }
+
+                onRejected:  {
+                    model.clear();
+                }
+
+                ErrorListView {
+                    id: view
+                    Layout.fillHeight: true
+                    Layout.fillWidth: true
+
+                    model: loadedId.model
+                }
+            }
+        }
+    }
+}

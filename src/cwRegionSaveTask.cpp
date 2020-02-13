@@ -69,11 +69,11 @@ void cwRegionSaveTask::runTask() {
     bool connected = connectToDatabase("saveRegionTask");
     if(connected) {      
 
-        cwProject::createDefaultSchema(Database);
+        cwProject::createDefaultSchema(database());
 
         saveToProtoBuffer();
 
-        Database.close();
+        disconnectToDatabase();
     }
 
     //Clear the region of data
@@ -93,11 +93,11 @@ void cwRegionSaveTask::runTask() {
  */
 void cwRegionSaveTask::saveToProtoBuffer()
 {
-    cwSQLManager::Transaction transaction(&Database);
+    cwSQLManager::Transaction transaction(database());
 
     QByteArray regionByteArray = serializedData();
 
-    QSqlQuery insertCavingRegion(Database);
+    QSqlQuery insertCavingRegion(database());
     QString queryStr =
             QString("INSERT OR REPLACE INTO ObjectData ") +
             QString("(id, protoBuffer) ") +

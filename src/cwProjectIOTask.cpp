@@ -51,6 +51,8 @@ bool cwProjectIOTask::connectToDatabase(QString connectionName) {
     return connected;
 }
 
+
+
 /**
   \brief Begins a transaction for sql statements
 

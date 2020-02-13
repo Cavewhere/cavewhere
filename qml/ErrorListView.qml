@@ -26,8 +26,10 @@ ScrollView {
                 }
             }
 
-            Text {
+            TextEdit {
                 text: message
+                readOnly: true
+                selectByMouse: true
             }
         }
     }

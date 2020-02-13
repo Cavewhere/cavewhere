@@ -35,13 +35,12 @@ public:
     QList<cwError> errors() const;
 
 protected:
-    //For database access
-    QString DatabasePath;
-    QSqlDatabase Database; //sqlite database
-
     static QAtomicInt DatabaseConnectionCounter;
 
+    QSqlDatabase database() const;
+
     bool connectToDatabase(QString connectionName);
+    void disconnectToDatabase();
     bool beginTransation();
     void endTransation();
 
@@ -50,6 +49,10 @@ protected:
 
 private:
     QList<cwError> Errors;
+
+    //For database access
+    QString DatabasePath;
+    QSqlDatabase Database; //sqlite database
 
 };
 
@@ -65,6 +68,16 @@ inline void cwProjectIOTask::setDatabaseFilename(QString filename) {
   */
 inline QString cwProjectIOTask::databaseFilename() const {
     return DatabasePath;
+}
+
+inline QSqlDatabase cwProjectIOTask::database() const
+{
+    return Database;
+}
+
+inline void cwProjectIOTask::disconnectToDatabase()
+{
+    Database.close();
 }
 
 #endif // CXMLPROJECTLOADTASK_H

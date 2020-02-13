@@ -135,9 +135,9 @@ private:
         if(connected) {
             //This makes sure that sqlite is clean up after it self
             insureVacuuming();
-
             func();
         }
+        disconnectToDatabase();
     }
 
 //    QString readXMLFromDatabase();

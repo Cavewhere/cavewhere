@@ -34,7 +34,7 @@ void cwRemoveImageTask::runTask()
         tryToRemoveImages();
 
         //Close the database
-        Database.close();
+        disconnectToDatabase();
     }
 
     done();
@@ -53,7 +53,7 @@ void cwRemoveImageTask::tryToRemoveImages()
 
     foreach(cwImage image, Images) {
         if(image.isValid()) {
-            cwProject::removeImage(Database, image, false);
+            cwProject::removeImage(database(), image, false);
         }
     }
 

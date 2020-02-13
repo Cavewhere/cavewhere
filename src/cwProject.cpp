@@ -20,6 +20,7 @@
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwAsyncFuture.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QDir>
@@ -47,7 +48,8 @@ cwProject::cwProject(QObject* parent) :
     TempProject(true),
     Region(new cwCavingRegion(this)),
     SaveTask(nullptr),
-    UndoStack(new QUndoStack(this))
+    UndoStack(new QUndoStack(this)),
+    ErrorModel(new cwErrorListModel(this))
 {
     newProject();
 }
@@ -322,23 +324,30 @@ void cwProject::loadFile(QString filename) {
         return loadTask.load();
     });
 
+    auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+        TempProject = false;
+        setFilename(filename);
+        *Region = *(result.cavingRegion().data());
+        emit temporaryProjectChanged();
+    };
+
     AsyncFuture::observe(loadFuture)
-            .subscribe([loadFuture, filename, this]()
+            .subscribe([loadFuture, updateRegion, this]()
     {
         auto result = loadFuture.result();
         if(result.errors().isEmpty()) {
-            TempProject = false;
-            setFilename(filename);
-            *Region = *(result.cavingRegion().data());
-            emit temporaryProjectChanged();
+            updateRegion(result);
         } else {
-            //TODO: Do something with the errors
+            if(!cwError::containsFatal(result.errors())) {
+                //Just warnings, we should be able to load
+                updateRegion(result);
+            }
+            ErrorModel->append(result.errors());
         }
     });
 
     LoadFuture = loadFuture;
 }
-
 
 /**
  * @brief cwProject::deleteImageTask
@@ -423,7 +432,7 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
   This returns the id of the image in the database
   */
 int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
-    cwSQLManager::Transaction transaction(&database);
+    cwSQLManager::Transaction transaction(database);
 
     QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "
             "VALUES (?, ?, ?, ?, ?, ?)";
@@ -457,7 +466,7 @@ int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageDa
  */
 bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
 {
-    cwSQLManager::Transaction transaction(&database);
+    cwSQLManager::Transaction transaction(database);
 
     QString SQL("UPDATE Images SET type=?, width=?, height=?, dotsPerMeter=?, imageData=? where id=?");
 
@@ -534,7 +543,7 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
     QString query = QString("PRAGMA auto_vacuum = 1");
     vacuumQuery.exec(query);
 
-    cwSQLManager::Transaction transaction(&database);
+    cwSQLManager::Transaction transaction(database);
 
     //Create the caving region
     QString objectDataQuery =

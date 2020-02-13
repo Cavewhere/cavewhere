@@ -1,5 +1,5 @@
 import QtQuick 2.0
-import QtQuick.Dialogs 1.2
+import QtQuick.Controls 2.12
 
 Loader {
     id: loaderId
@@ -12,11 +12,15 @@ Loader {
         loaderId.item.askToSaveDialog.open();
     }
 
+    anchors.centerIn: parent
+
     Component {
         id: dialogComponent
         Item {
             id: itemId
             property alias askToSaveDialog: askToSaveDialogId
+
+            anchors.centerIn: parent
 
             Connections {
                 target: loaderId.saveAsDialog
@@ -27,8 +31,9 @@ Loader {
 
             Dialog {
                 id: askToSaveDialogId
-                modality: Qt.ApplicationModal
-                standardButtons: StandardButton.Save | StandardButton.Discard | StandardButton.Cancel
+                anchors.centerIn: parent
+                modal: true
+                standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
                 title: "Save before quiting?"
                 onAccepted: {
                     //Save an close
@@ -40,13 +45,9 @@ Loader {
                     }
                 }
 
-                onDiscard: {
+                onDiscarded:  {
                     //Close
                     Qt.quit();
-                }
-
-                Text {
-                    text: askToSaveDialogId.title
                 }
             }
         }

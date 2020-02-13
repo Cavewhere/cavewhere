@@ -110,7 +110,7 @@ void cwAddImageTask::runTask() {
         tryAddingImagesToDatabase();
 
         //Close the database
-        Database.close();
+        disconnectToDatabase();
 
         if(isRunning()) {
             emit addedImages(images());
@@ -326,7 +326,7 @@ cwImage cwAddImageTask::addImageToDatabase(const QImage &image,
 
     //Write the image to the database
     cwImageData originalImageData(image.size(), dotsPerMeter, format, imageData);
-    int imageId = cwProject::addImage(Database, originalImageData);
+    int imageId = cwProject::addImage(database(), originalImageData);
 
     cwImage imageIdContainer;
     imageIdContainer.setOriginal(imageId);
@@ -367,7 +367,7 @@ void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwI
 
     //Write the data to database
     cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
-    int imageId = cwProject::addImage(Database, iconImageData);
+    int imageId = cwProject::addImage(database(), iconImageData);
     imageIds->setIcon(imageId);
 }
 
@@ -464,10 +464,10 @@ int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
     int imageId;
     if(id == -1) {
         //Add the image
-        imageId = cwProject::addImage(Database, iconImageData);
+        imageId = cwProject::addImage(database(), iconImageData);
     } else {
         imageId = id;
-        cwProject::updateImage(Database, iconImageData, id);
+        cwProject::updateImage(database(), iconImageData, id);
     }
 
     return imageId;

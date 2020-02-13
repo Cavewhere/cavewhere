@@ -65,7 +65,7 @@ cwImage cwCropImageTask::croppedImage() const {
   */
 void cwCropImageTask::runTask() {
 
-    ImageProvider.setProjectPath(DatabasePath);
+    ImageProvider.setProjectPath(databaseFilename());
 
     cwImageData imageData = ImageProvider.data(Original.original());
     QRect cropArea = mapNormalizedToIndex(CropRect, imageData.size());

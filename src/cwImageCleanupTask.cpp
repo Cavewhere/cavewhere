@@ -47,7 +47,7 @@ void cwImageCleanupTask::runTask()
         beginTransation();
 
         QString SQL("DELETE FROM Images WHERE id == ?");
-        QSqlQuery removeImageIdQuery(Database);
+        QSqlQuery removeImageIdQuery(database());
 
         bool successful = removeImageIdQuery.prepare(SQL);
         if(!successful) {
@@ -65,7 +65,7 @@ void cwImageCleanupTask::runTask()
         endTransation();
 
         //Close the database
-        Database.close();
+        disconnectToDatabase();
     }
 
     done();
@@ -77,10 +77,10 @@ void cwImageCleanupTask::runTask()
  */
 void cwImageCleanupTask::tryFetchAllImageIds()
 {
-    cwSQLManager::Transaction transaction(&Database, cwSQLManager::ReadOnly);
+    cwSQLManager::Transaction transaction(database(), cwSQLManager::ReadOnly);
 
     QString sql("select id from images");
-    QSqlQuery imageIdsQuery(sql, Database);
+    QSqlQuery imageIdsQuery(sql, database());
 
     QSet<int> ids;
     while(imageIdsQuery.next()) {

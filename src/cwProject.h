@@ -22,6 +22,7 @@ class cwScrapManager;
 class cwTaskManagerModel;
 class cwRegionLoadTask;
 class cwRegionSaveTask;
+class cwErrorListModel;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -42,6 +43,7 @@ Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(bool temporaryProject READ isTemporaryProject NOTIFY temporaryProjectChanged)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
     cwProject(QObject* parent = nullptr);
@@ -78,6 +80,8 @@ public:
 
     Q_INVOKABLE bool isModified() const;
 
+    cwErrorListModel* errorModel() const;
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
@@ -106,6 +110,8 @@ private:
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
+
+    cwErrorListModel* ErrorModel; //!<
 
     //For keeping database connection unique
     static QAtomicInt ConnectionCounter;
@@ -155,5 +161,10 @@ inline QString cwProject::filename() const {
 inline bool cwProject::isTemporaryProject() const {
     return TempProject;
 }
+
+inline cwErrorListModel* cwProject::errorModel() const {
+    return ErrorModel;
+}
+
 
 #endif // CWXMLPROJECT_H

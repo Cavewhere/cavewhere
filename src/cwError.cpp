@@ -67,6 +67,7 @@ cwError::ErrorType cwError::type() const
 }
 
 
+
 void cwError::setType(cwError::ErrorType type)
 {
     data->Type = type;

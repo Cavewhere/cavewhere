@@ -1,5 +1,5 @@
-//catch includes
-#include "catch.hpp"
+//Test includes
+#include "TestHelper.h"
 
 //Our includes
 #include "cwRegionLoadTask.h"
@@ -12,12 +12,17 @@
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "cwSurveyNetwork.h"
+#include "cwErrorListModel.h"
 
 //std includes
 #include <memory>
+#include <iostream>
 
 //Qt includes
 #include <QUuid>
+
+//catch includes
+#include "catch.hpp"
 
 TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
@@ -72,4 +77,49 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
     testStationNeigbors("a1", {"A2"});
     testStationNeigbors("a2", {"A1", "A3"});
     testStationNeigbors("a3", {"A2"});
+}
+
+TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+
+    SECTION("Bad file name that doesn't exist") {
+        QString filename = "badFileName.cw";
+        REQUIRE(!QFile::exists(filename));
+        auto fullPath = QDir::current().absoluteFilePath(filename);
+
+        auto errorModel = root->project()->errorModel();
+        CHECK(errorModel->size() == 0);
+
+        root->project()->loadFile(filename);
+        root->project()->waitLoadToFinish();
+
+        REQUIRE(errorModel->size() == 1);
+        CHECK(errorModel->at(0) == cwError(QString("Couldn't open '%1' because it doesn't exist").arg(filename), cwError::Fatal));
+
+        CHECK(!QFile::exists(filename));
+    }
+
+    SECTION("Bad file that does exist") {
+        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/badFile.cw");
+        root->project()->waitLoadToFinish();
+        auto errorModel = root->project()->errorModel();
+
+        REQUIRE(errorModel->size() == 1);
+
+        CHECK(errorModel->at(0) == cwError("Couldn't prepare select Caving Region:'file is not a database' sql:'SELECT protoBuffer FROM ObjectData where id = 1'", cwError::Fatal));
+
+        CHECK(root->project()->isTemporaryProject());
+    }
+
+    SECTION("Detect thet protoBuf is corrupt") {
+        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/corrupted.cw");
+        root->project()->waitLoadToFinish();
+        auto errorModel = root->project()->errorModel();
+
+        REQUIRE(errorModel->size() == 1);
+
+        CHECK(errorModel->at(0) == cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
+
+        CHECK(root->project()->isTemporaryProject());
+    }
 }

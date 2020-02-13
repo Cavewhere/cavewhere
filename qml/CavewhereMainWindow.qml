@@ -87,6 +87,11 @@ ApplicationWindow {
         id: saveAsFileDialogId
     }
 
+    ProjectErrorDialog {
+        id: projectErrorDialog
+        model: rootData.project.errorModel
+    }
+
     FileDialog {
         id: loadFileDialogId
         nameFilters: ["CaveWhere File (*.cw)"]

@@ -9,9 +9,6 @@
 #ifndef STREAMOPERATOR
 #define STREAMOPERATOR
 
-//Catch includes
-#include "catch.hpp"
-
 //Qt includes
 #include <QVector3D>
 #include <QString>
@@ -22,10 +19,13 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QSet>
+#include <QMetaEnum>
+#include <QTextStream>
 
 //Our includes
 #include "cwStationPositionLookup.h"
 #include "cwProject.h"
+#include "cwError.h"
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -52,6 +52,8 @@ inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value 
     os << value.name() << " type:" << value.typeName();
     return os;
 }
+
+std::ostream &operator << ( std::ostream& os, cwError const& error);
 
 void propertyCompare(QObject* tc1, QObject* tc2);
 
