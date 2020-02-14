@@ -44,6 +44,7 @@ Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
+    Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
     Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
@@ -88,6 +89,7 @@ signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
     void canSaveDirectlyChanged();
+    void isTemporaryProjectChanged();
     void regionChanged();
     void fileSaved();
 
@@ -130,6 +132,7 @@ private:
     void privateSave();
 
     bool saveWillCauseDataLoss() const;
+    void setTemporaryProject(bool isTemp);
 
 private slots:
     void startDeleteImageTask();

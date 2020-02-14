@@ -20,7 +20,11 @@ ApplicationWindow {
     width: 1024
     height: 576
 
-    title: "CaveWhere - " + version
+    title: {
+        var baseName = "CaveWhere - " + version
+        var filename = rootData.project.isTemporaryProject ? "New File" : rootData.project.filename;
+        return baseName + "   " + filename
+    }
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton

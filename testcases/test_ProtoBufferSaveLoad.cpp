@@ -65,6 +65,7 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
     root->project()->loadFile(filename);
     root->project()->waitLoadToFinish();
     REQUIRE(root->region()->caveCount() == 1);
+    CHECK(root->project()->isTemporaryProject() == false);
 
     auto loadCave = root->region()->cave(0);
     auto network = loadCave->network();

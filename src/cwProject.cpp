@@ -77,7 +77,8 @@ void cwProject::createTempProjectFile() {
             .arg(QDir::tempPath())
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
     setFilename(projectFile);
-    TempProject = true;
+
+    setTemporaryProject(true);
 
     //Create and open a new database connection
     int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
@@ -237,6 +238,14 @@ bool cwProject::saveWillCauseDataLoss() const
     return FileVersion > cwRegionIOTask::protoVersion();
 }
 
+void cwProject::setTemporaryProject(bool isTemp)
+{
+    if(TempProject != isTemp) {
+        TempProject = isTemp;
+        emit isTemporaryProjectChanged();
+    }
+}
+
 /**
   Saves the project as a new file
 
@@ -281,7 +290,7 @@ void cwProject::saveAs(QString newFilename){
 
     //Update the project filename
     setFilename(newFilename);
-    TempProject = false;
+    setTemporaryProject(false);
 
     //Save the current data
     privateSave();
@@ -342,10 +351,10 @@ void cwProject::loadFile(QString filename) {
     });
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
-        TempProject = false;
         setFilename(filename);
         *Region = *(result.cavingRegion().data());\
         FileVersion = result.fileVersion();
+        setTemporaryProject(false);
         emit canSaveDirectly();
     };
 
