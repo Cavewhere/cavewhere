@@ -128,6 +128,10 @@ ApplicationWindow {
         saveAsDialog: saveAsFileDialogId
     }
 
+    SaveFeedbackHelpBox {
+        anchors.centerIn: parent
+    }
+
     onClosing: {
         askToSaveDialogId.taskName = "quiting"
         askToSaveDialogId.afterSaveFunc = function() {

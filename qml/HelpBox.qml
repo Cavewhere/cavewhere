@@ -12,6 +12,7 @@ ShadowRectangle {
 
     property alias text: textId.text
     property alias font: textId.font
+    property alias animateHide: hideTransitionId.enabled
 
     width: textId.width + 10
     height: textId.height + 10
@@ -23,6 +24,7 @@ ShadowRectangle {
     color: "#85c1f4"
     radius: 5
 
+    property bool _hiding: false
 
     Text {
         id: textId
@@ -32,10 +34,15 @@ ShadowRectangle {
         horizontalAlignment: Text.AlignHCenter
     }
 
+    onVisibleChanged: {
+        if(!_hiding) {
+            state = visible ? "VISIBLE" : ""
+        }
+    }
+
     states: [
         State {
             name: "VISIBLE"
-            when: visible
         }
     ]
 
@@ -49,33 +56,46 @@ ShadowRectangle {
                 to: 1.0;
                 duration: 200
             }
-        }
+        },
 
         //FIXME: This transition doesn't work (check in beta if it works)
-//        Transition {
-//            from: "VISIBLE"
-//            SequentialAnimation {
-//                PropertyAction {
-//                    target: helpBox
-//                    property: "visible"
-//                    value: true
-//                }
+        Transition {
+            id: hideTransitionId
+            enabled: false
+            from: "VISIBLE"
+            SequentialAnimation {
+                PropertyAction {
+                    target: helpBox
+                    property: "_hiding"
+                    value: true
+                }
 
-//                NumberAnimation {
-//                    target: helpBox;
-//                    property: "opacity";
-//                    from: 1.0
-//                    to: 0.0;
-//                    duration: 200
-//                }
+                PropertyAction {
+                    target: helpBox
+                    property: "visible"
+                    value: true
+                }
 
-//                PropertyAction {
-//                    target: helpBox
-//                    property: "visible"
-//                    value: false
-//                }
-//            }
-//        }
+                NumberAnimation {
+                    target: helpBox;
+                    property: "opacity";
+                    from: 1.0
+                    to: 0.0;
+                    duration: 200
+                }
+
+                PropertyAction {
+                    target: helpBox
+                    property: "visible"
+                    value: false
+                }
+
+                PropertyAction {
+                    target: helpBox
+                    property: "_hiding"
+                    value: false
+                }
+            }
+        }
     ]
-
 }

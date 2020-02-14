@@ -20,7 +20,7 @@ Loader {
     }
 
     function closeDialog() {
-        if(loaderId.item.askToSaveDialog) {
+        if(loaderId.item) {
             loaderId.item.askToSaveDialog.close();
         }
         loaderId.sourceComponent = null;
