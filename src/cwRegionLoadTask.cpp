@@ -23,6 +23,7 @@
 #include "cwSQLManager.h"
 #include "cwDebug.h"
 #include "cwSurveyNetwork.h"
+#include "cavewhereVersion.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -167,6 +168,21 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  */
 void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &protoRegion, cwCavingRegion *region)
 {
+
+    auto fileVersion = protoRegion.has_version() ? protoRegion.version() : 0;
+    auto fileCavewhereVersion = protoRegion.has_cavewhereversion() ? loadString(protoRegion.cavewhereversion()) : "";
+
+    if(fileVersion > protoVersion()) {
+        //Add a warning
+        QString upgradeStr = fileCavewhereVersion.isEmpty() ? QString() : QString(" to %1").arg(fileCavewhereVersion);
+
+        addError(cwError(QString("Upgrade CaveWhere to %1 to load this file! Current file version is %2. CaveWhere %3 supports up to file version %4. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
+                         .arg(fileCavewhereVersion)
+                         .arg(fileVersion)
+                         .arg(CavewhereVersion)
+                         .arg(protoVersion())));
+    }
+
     QList<cwCave*> caves;
     caves.reserve(protoRegion.caves_size());
 
@@ -189,8 +205,8 @@ void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &prot
 void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *cave)
 {
     QString name = loadString(protoCave.name());
-    cwUnits::LengthUnit lengthUnit = (cwUnits::LengthUnit)protoCave.lengthunit();
-    cwUnits::LengthUnit depthUnit = (cwUnits::LengthUnit)protoCave.depthunit();
+    cwUnits::LengthUnit lengthUnit = static_cast<cwUnits::LengthUnit>(protoCave.lengthunit());
+    cwUnits::LengthUnit depthUnit = static_cast<cwUnits::LengthUnit>(protoCave.depthunit());
 
     QList<cwTrip*> trips;
     trips.reserve(protoCave.trips_size());

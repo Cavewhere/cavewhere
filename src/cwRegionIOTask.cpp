@@ -48,8 +48,24 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
  * @brief cwRegionIOTask::version
  * @return Returns the current version
  */
-int cwRegionIOTask::version()
+int cwRegionIOTask::protoVersion()
 {
     return 2;
+}
+
+/**
+ * @brief cwRegionIOTask::toVersion
+ * @param protoVersion
+ * @return
+ */
+QString cwRegionIOTask::toVersion(int protoVersion)
+{
+    static const QHash<int, QString> protoToVersionString = {
+        {0, "0.07"},
+        {1, "0.08"},
+        {2, "0.09"},
+    };
+
+    return protoToVersionString.value(protoVersion, "Unknown Version");
 }
 

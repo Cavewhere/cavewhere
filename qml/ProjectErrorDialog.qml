@@ -43,7 +43,6 @@ Loader {
                 anchors.centerIn: parent
                 modal: true
                 width: 600
-                clip: true
 
                 standardButtons: Dialog.Ok
                 title: model.count + " issue" + ((model.count > 1) ? "s" : "") + " has occurred"
@@ -56,12 +55,20 @@ Loader {
                     model.clear();
                 }
 
-                ErrorListView {
-                    id: view
-                    Layout.fillHeight: true
-                    Layout.fillWidth: true
+                GroupBox {
+                    anchors.fill: parent
+                    implicitHeight: 150
 
-                    model: loadedId.model
+                    ScrollView {
+                        clip: true
+                        anchors.fill: parent
+
+                        ErrorListView {
+                            id: view
+                            anchors.fill: parent
+                            model: loadedId.model
+                        }
+                    }
                 }
             }
         }

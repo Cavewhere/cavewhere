@@ -13,6 +13,7 @@
 #include "cwProject.h"
 #include "cwSurveyNetwork.h"
 #include "cwErrorListModel.h"
+#include "cavewhereVersion.h"
 
 //std includes
 #include <memory>
@@ -121,5 +122,24 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         CHECK(errorModel->at(0) == cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
 
         CHECK(root->project()->isTemporaryProject());
+    }
+
+    SECTION("New version should be detected propertly") {
+        CHECK(root->project()->cavingRegion()->caveCount() == 0);
+
+        fileToProject(root->project(), "://datasets/test_ProtoBufferSaveLoad/newerVersion.cw");
+        root->project()->waitLoadToFinish();
+        auto errorModel = root->project()->errorModel();
+
+        REQUIRE(errorModel->size() == 1);
+
+//        qDebug() << "Error:" << errorModel->at(0).message();
+        QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
+                .arg(CavewhereVersion)
+                .arg(cwRegionIOTask::protoVersion());
+        CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Warning));
+
+        CHECK(root->project()->cavingRegion()->caveCount() == 1);
+        CHECK(root->project()->isTemporaryProject() == false);
     }
 }

@@ -30,6 +30,7 @@
 #include "cwImageResolution.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
+#include "cavewhereVersion.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -517,7 +518,8 @@ void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
         saveCave(protoCave, cave);
     }
 
-    region.set_version(version());
+    region.set_version(protoVersion());
+    saveString(region.mutable_cavewhereversion(), CavewhereVersion);
 }
 
 /**

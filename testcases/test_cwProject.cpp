@@ -41,7 +41,7 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     CHECK(project.isModified() == false);
 
     SECTION("Load file") {
-        //If this fails, this is probably because of a version change
+        //If this fails, this is probably because of a version change, or other save changes
         fileToProject(&project, "://datasets/network.cw");
         project.waitLoadToFinish();
         CHECK(project.isModified() == false);

@@ -54,7 +54,8 @@ DynamicLibrary {
         cpp.rpaths: [product.rpath]
         cpp.includePaths: [
             ".",
-            "utils"
+            "utils",
+            product.buildDirectory + "/versionInfo"
         ]
 
         Depends { name: "Qt";
