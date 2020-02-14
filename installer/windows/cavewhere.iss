@@ -18,8 +18,7 @@ OutputDir=.
 OutputBaseFilename="Cavewhere {#MyAppVersion} {#Arch}"
 Compression=lzma
 SolidCompression=yes
-
-
+ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,6 +34,12 @@ Source: "{#releaseDirectory}\{#MyRedistributableExe}"; DestDir: {tmp}; Flags: de
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKLM; Subkey: "Software\Classes\.cw"; ValueType: string; ValueName: ""; ValueData: "CaveWhereProjectFile"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile"; ValueType: string; ValueName: ""; ValueData: "CaveWhere File"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\CaveWhere.EXE,0"
+Root: HKLM; Subkey: "Software\Classes\CaveWhereProjectFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\CaveWhere.EXE"" ""%1"""
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
@@ -110,10 +115,10 @@ const
   VC_2015_REDIST_X64_ADD = '{BC958BD2-5DAC-3862-BB1A-C1BE0790438D}';
 
   { Visual C++ 2017 Redistributable 14.16.27024 }
-  VC_2017_REDIST_X84_ADD = '{7258184A-EC44-4B1A-A7D3-68D85A35BFD0}';
-  VC_2017_REDIST_X84_MIN = '{5EEFCEFB-E5F7-4C82-99A5-813F04AA4FBD}';
+  VC_2017_REDIST_X86_ADD = '{7E9FAE12-5BBF-47FB-B944-09C49E75C061}';
+  VC_2017_REDIST_X86_MIN = '{5EEFCEFB-E5F7-4C82-99A5-813F04AA4FBD}';
 
-  VC_2017_REDIST_X64_ADD = '{9D29FC96-9EEE-4253-943F-96B3BBFDD0B6}';
+  VC_2017_REDIST_X64_ADD = '{95ac1cfa-f4fb-4d1b-8912-7f9d5fbb140d}';
   VC_2017_REDIST_X64_MIN = '{F1B0FB3A-E0EA-47A6-9383-3650655403B0}';
 
 function MsiQueryProductState(szProduct: string): INSTALLSTATE;
