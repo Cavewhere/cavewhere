@@ -5,11 +5,30 @@ Loader {
     id: loaderId
 
     property SaveAsDialog saveAsDialog
+    property var afterSaveFunc
+    property string taskName
 
     function askToSave() {
+        if(rootData.project.isModified()) {
+            loaderId.sourceComponent = null;
+            loaderId.sourceComponent = dialogComponent;
+            loaderId.item.askToSaveDialog.open();
+        } else {
+            afterSaveFunc();
+            closeDialog();
+        }
+    }
+
+    function closeDialog() {
+        if(loaderId.item.askToSaveDialog) {
+            loaderId.item.askToSaveDialog.close();
+        }
         loaderId.sourceComponent = null;
-        loaderId.sourceComponent = dialogComponent;
-        loaderId.item.askToSaveDialog.open();
+    }
+
+    function _privateAfterSave() {
+        afterSaveFunc();
+        closeDialog();
     }
 
     anchors.centerIn: parent
@@ -23,9 +42,16 @@ Loader {
             anchors.centerIn: parent
 
             Connections {
-                target: loaderId.saveAsDialog
-                onAccepted: {
-                    Qt.quit();
+                target: rootData.project
+                onFileSaved: _privateAfterSave();
+            }
+
+            Connections {
+                target: rootData.project.errorModel
+                onCountChanged: {
+                    if(rootData.project.errorModel.count > 0) {
+                        closeDialog();
+                    }
                 }
             }
 
@@ -34,21 +60,17 @@ Loader {
                 anchors.centerIn: parent
                 modal: true
                 standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
-                title: "Save before quiting?"
+                title: "Save before " + taskName + "?"
                 onAccepted: {
                     //Save an close
-                    if(!project.temporaryProject) {
+                    if(project.canSaveDirectly) {
                         project.save();
-                        Qt.quit();
                     } else {
                         saveAsDialog.open()
                     }
                 }
 
-                onDiscarded:  {
-                    //Close
-                    Qt.quit();
-                }
+                onDiscarded: _privateAfterSave();
             }
         }
     }

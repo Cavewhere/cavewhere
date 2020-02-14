@@ -86,10 +86,21 @@ protected:
     void runTask();
 
 private:
-    bool loadFromProtoBuffer(cwCavingRegion *region);
+    class LoadData {
+    public:
+        LoadData() {}
+        LoadData(cwCavingRegion* region, int fileVersion) :
+            region(region), fileVersion(fileVersion)
+        {}
+
+        cwCavingRegionPtr region;
+        int fileVersion = 0;
+    };
+
+    LoadData loadFromProtoBuffer();
     QByteArray readProtoBufferFromDatabase(bool* okay);
 
-    void loadCavingRegion(const CavewhereProto::CavingRegion& protoRegion, cwCavingRegion* region);
+    LoadData loadCavingRegion(const CavewhereProto::CavingRegion& protoRegion);
     void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave);
     void loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip* trip);
     void loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel& protoNoteModel,
@@ -118,6 +129,7 @@ private:
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
+    int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
 
     //Utils
     QString loadString(const QtProto::QString& protoString);

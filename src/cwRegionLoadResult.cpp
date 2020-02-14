@@ -9,6 +9,7 @@ class cwRegionLoadResultData : public QSharedData
 public:
     QList<cwError> errors;
     cwCavingRegionPtr region;
+    int version = 0;
 };
 
 cwRegionLoadResult::cwRegionLoadResult() : data(new cwRegionLoadResultData)
@@ -56,4 +57,14 @@ void cwRegionLoadResult::setCavingRegion(const cwCavingRegionPtr &region)
 cwCavingRegionPtr cwRegionLoadResult::cavingRegion() const
 {
     return data->region;
+}
+
+void cwRegionLoadResult::setFileVersion(int version)
+{
+    data->version = version;
+}
+
+int cwRegionLoadResult::fileVersion() const
+{
+    return data->version;
 }

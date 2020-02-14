@@ -50,12 +50,12 @@ cwRegionSaveTask::cwRegionSaveTask(QObject *parent) :
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 }
 
-QByteArray cwRegionSaveTask::serializedData()
+QByteArray cwRegionSaveTask::serializedData(cwCavingRegion* region)
 {
-    CavewhereProto::CavingRegion region;
-    saveCavingRegion(region);
+    CavewhereProto::CavingRegion protoRegion;
+    saveCavingRegion(protoRegion, region);
 
-    std::string regionString = region.SerializeAsString();
+    std::string regionString = protoRegion.SerializeAsString();
 
     QByteArray regionByteArray;
     if(!regionString.empty()) {
@@ -64,27 +64,25 @@ QByteArray cwRegionSaveTask::serializedData()
     return regionByteArray;
 }
 
-void cwRegionSaveTask::runTask() {
-
+QList<cwError> cwRegionSaveTask::save(cwCavingRegion* region)
+{
     //Open a datebase connection
     bool connected = connectToDatabase("saveRegionTask");
-    if(connected) {      
+    if(connected) {
 
         cwProject::createDefaultSchema(database());
 
-        saveToProtoBuffer();
+        saveToProtoBuffer(region);
 
         disconnectToDatabase();
     }
 
-    //Clear the region of data
-    *Region = cwCavingRegion();
+    return errors();
+}
 
-    qDebug() << "Finished saving!!!";
-
+void cwRegionSaveTask::runTask() {
     //Finished
     done();
-
 }
 
 /**
@@ -92,11 +90,11 @@ void cwRegionSaveTask::runTask() {
  *
  * Save cavewhere object data usingo google protobuffer
  */
-void cwRegionSaveTask::saveToProtoBuffer()
+void cwRegionSaveTask::saveToProtoBuffer(cwCavingRegion* region)
 {
     cwSQLManager::Transaction transaction(database());
 
-    QByteArray regionByteArray = serializedData();
+    QByteArray regionByteArray = serializedData(region);
 
     QSqlQuery insertCavingRegion(database());
     QString queryStr =
@@ -106,7 +104,7 @@ void cwRegionSaveTask::saveToProtoBuffer()
 
     bool successful = insertCavingRegion.prepare(queryStr);
     if(!successful) {
-        qDebug() << "Couldn't create query to insert region proto buffer data:" << insertCavingRegion.lastError();
+        addError(cwError(QString("Couldn't create query to insert region proto buffer data:") + insertCavingRegion.lastError().text(), cwError::Fatal));
         stop();
     }
 
@@ -114,9 +112,8 @@ void cwRegionSaveTask::saveToProtoBuffer()
     bool success = insertCavingRegion.exec();
 
     if(!success) {
-        qDebug()  << "Couldn't execute query:" << insertCavingRegion.lastError().databaseText() << queryStr << LOCATION;
+        addError(cwError(QString("Couldn't execute query:") + insertCavingRegion.lastError().databaseText() + " " + queryStr + " " + LOCATION_STR, cwError::Fatal));
     }
-
 }
 
 /**
@@ -511,15 +508,15 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
  * @brief cwRegionSaveTask::saveCavingRegion
  * @param region
  */
-void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
+void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &protoRegion, cwCavingRegion* region)
 {
-    foreach(cwCave* cave, Region->caves()) {
-        CavewhereProto::Cave* protoCave = region.add_caves();
+    foreach(cwCave* cave, region->caves()) {
+        CavewhereProto::Cave* protoCave = protoRegion.add_caves();
         saveCave(protoCave, cave);
     }
 
-    region.set_version(protoVersion());
-    saveString(region.mutable_cavewhereversion(), CavewhereVersion);
+    protoRegion.set_version(protoVersion());
+    saveString(protoRegion.mutable_cavewhereversion(), CavewhereVersion);
 }
 
 /**

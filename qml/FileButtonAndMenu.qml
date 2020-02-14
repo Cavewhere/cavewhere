@@ -18,6 +18,7 @@ MenuBar {
     property FileDialog loadFileDialog;
     property FileDialog saveAsFileDialog;
     property ApplicationWindow applicationWindow;
+    property AskToSaveDialog askToSaveDialog;
 
     signal openAboutWindow;
 
@@ -40,7 +41,11 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                loadFileDialog.open()
+                askToSaveDialog.taskName = "opening";
+                askToSaveDialog.afterSaveFunc = function() {
+                    loadFileDialog.open()
+                }
+                askToSaveDialog.askToSave();
             }
         }
 
@@ -50,7 +55,7 @@ MenuBar {
             text: "Save"
             shortcut: "Ctrl+S"
             onTriggered: {
-                if(!project.temporaryProject) {
+                if(project.canSaveDirectly) {
                     project.save();
                 } else {
                     saveAsFileDialog.open()

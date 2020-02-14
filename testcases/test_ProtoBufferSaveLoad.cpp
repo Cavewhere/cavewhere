@@ -133,13 +133,25 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
         REQUIRE(errorModel->size() == 1);
 
-//        qDebug() << "Error:" << errorModel->at(0).message();
         QString expectErrorMessage = QString("Upgrade CaveWhere to 0.08-70-g20d1d7c to load this file! Current file version is 10000. CaveWhere %1 supports up to file version %2. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
                 .arg(CavewhereVersion)
                 .arg(cwRegionIOTask::protoVersion());
         CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Warning));
+        errorModel->clear();
 
         CHECK(root->project()->cavingRegion()->caveCount() == 1);
         CHECK(root->project()->isTemporaryProject() == false);
+        CHECK(root->project()->canSaveDirectly() == false);
+
+        SECTION("Check that saveAs fails to the file") {
+            root->project()->saveAs(root->project()->filename());
+            REQUIRE(errorModel->size() == 1);
+            expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
+            CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
+
+            //The file should be different because of the different version
+            //This should do a binary change to test, that it hasn't changed
+            CHECK(root->project()->isModified() == true);
+        }
     }
 }

@@ -46,8 +46,8 @@ QAtomicInt cwProject::ConnectionCounter;
 cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
+    FileVersion(cwRegionIOTask::protoVersion()),
     Region(new cwCavingRegion(this)),
-    SaveTask(nullptr),
     UndoStack(new QUndoStack(this)),
     ErrorModel(new cwErrorListModel(this))
 {
@@ -92,7 +92,7 @@ void cwProject::createTempProjectFile() {
     //Create default schema
     createDefaultSchema();
 
-    emit temporaryProjectChanged();
+    emit canSaveDirectlyChanged();
 }
 
 /**
@@ -203,7 +203,7 @@ void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QS
  call saveAs(filename) instead
   */
 void cwProject::save() {
-    Q_ASSERT(!isTemporaryProject());
+    Q_ASSERT(canSaveDirectly());
     privateSave();
 }
 
@@ -212,17 +212,29 @@ void cwProject::save() {
   Save the project, writes all files to the project
   */
 void cwProject::privateSave() {
-    if(SaveTask == nullptr) {
-        SaveTask = new cwRegionSaveTask();
-    }
 
-    //Set the data for the project
-    qDebug() << "Saving project to:" << ProjectFile;
-    SaveTask->setCavingRegion(*Region);
-    SaveTask->setDatabaseFilename(ProjectFile);
+    cwCavingRegion* region = new cwCavingRegion(*Region);
+    QString filename = this->filename();
+    region->moveToThread(nullptr);
 
-    //Start the save thread
-    SaveTask->start();
+    auto future = QtConcurrent::run([region, filename]() {
+        cwRegionSaveTask saveTask;
+        saveTask.setDatabaseFilename(filename);
+        return saveTask.save(region);
+    });
+
+    AsyncFuture::observe(future).subscribe([future, this](){
+        auto errors = future.result();
+        ErrorModel->append(errors);
+        if(!cwError::containsFatal(errors)) {
+            emit fileSaved();
+        }
+    });
+}
+
+bool cwProject::saveWillCauseDataLoss() const
+{
+    return FileVersion > cwRegionIOTask::protoVersion();
 }
 
 /**
@@ -236,8 +248,13 @@ void cwProject::saveAs(QString newFilename){
     newFilename = cwGlobals::addExtension(newFilename, "cw");
     newFilename = cwGlobals::convertFromURL(newFilename);
 
+    if(QFileInfo(newFilename) == QFileInfo(filename()) && saveWillCauseDataLoss()) {
+        errorModel()->append(cwError(QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(filename()), cwError::Fatal));
+        return;
+    }
+
     //Just save it the user is overwritting it
-    if(newFilename == filename()) {
+    if(QFileInfo(newFilename) == QFileInfo(filename())) {
         privateSave();
         return;
     }
@@ -246,7 +263,7 @@ void cwProject::saveAs(QString newFilename){
     if(QFileInfo(newFilename).exists()) {
         bool couldRemove = QFile::remove(newFilename);
         if(!couldRemove) {
-            qDebug() << "Couldn't remove " << newFilename;
+            errorModel()->append(cwError(QString("Couldn't remove %1").arg(newFilename), cwError::Fatal));
             return;
         }
     }
@@ -254,7 +271,7 @@ void cwProject::saveAs(QString newFilename){
     //Copy the old file to the new location
     bool couldCopy = QFile::copy(filename(), newFilename);
     if(!couldCopy) {
-        qDebug() << "Couldn't copy " << filename() << "to" << newFilename;
+        errorModel()->append(cwError(QString("Couldn't copy %1 to %2").arg(filename()).arg(newFilename), cwError::Fatal));
         return;
     }
 
@@ -269,7 +286,7 @@ void cwProject::saveAs(QString newFilename){
     //Save the current data
     privateSave();
 
-    emit temporaryProjectChanged();
+//    emit canSaveDirectly();
 }
 
 /**
@@ -327,8 +344,9 @@ void cwProject::loadFile(QString filename) {
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         TempProject = false;
         setFilename(filename);
-        *Region = *(result.cavingRegion().data());
-        emit temporaryProjectChanged();
+        *Region = *(result.cavingRegion().data());\
+        FileVersion = result.fileVersion();
+        emit canSaveDirectly();
     };
 
     AsyncFuture::observe(loadFuture)
@@ -600,9 +618,7 @@ void cwProject::waitLoadToFinish()
  */
 void cwProject::waitSaveToFinish()
 {
-    if(SaveTask != nullptr) {
-        SaveTask->waitToFinish();
-    }
+    cwAsyncFuture::waitForFinished(SaveFuture);
 }
 
 /**
@@ -611,8 +627,7 @@ void cwProject::waitSaveToFinish()
 bool cwProject::isModified() const
 {
     cwRegionSaveTask saveTask;
-    saveTask.setCavingRegion(*Region);
-    QByteArray saveData = saveTask.serializedData();
+    QByteArray saveData = saveTask.serializedData(Region);
 
     if(isTemporaryProject()) {
         return Region->caveCount() > 0;
@@ -637,3 +652,8 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
         emit undoStackChanged();
     }
 }
+
+/**
+ * Returns true if save() can be call directly and false if saveAs() must be called first
+ */
+

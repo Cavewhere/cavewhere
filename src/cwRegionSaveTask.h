@@ -73,7 +73,8 @@ class cwRegionSaveTask : public cwRegionIOTask
 public:
     explicit cwRegionSaveTask(QObject *parent = 0);
 
-    QByteArray serializedData();
+    QByteArray serializedData(cwCavingRegion *region);
+    QList<cwError> save(cwCavingRegion *region);
 
 signals:
 
@@ -84,7 +85,7 @@ protected:
 
 private:
 
-    void saveToProtoBuffer();
+    void saveToProtoBuffer(cwCavingRegion* region);
     void saveCave(CavewhereProto::Cave* protoCave, cwCave* cave);
     void saveTrip(CavewhereProto::Trip* protoTrip, cwTrip* trip);
     void saveSurveyNoteModel(CavewhereProto::SurveyNoteModel* protoNoteModel,
@@ -117,7 +118,7 @@ private:
                      const cwStation& station);
     void saveShot(CavewhereProto::Shot* protoShot,
                   const cwShot& shot);
-    void saveCavingRegion(CavewhereProto::CavingRegion& region);
+    void saveCavingRegion(CavewhereProto::CavingRegion& protoRegion, cwCavingRegion* region);
     void saveStationLookup(CavewhereProto::StationPositionLookup* positionLookup,
                            const cwStationPositionLookup& stationLookup);
     void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);

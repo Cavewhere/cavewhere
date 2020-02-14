@@ -14,6 +14,7 @@
 #include "cwImageData.h"
 #include "cwGlobals.h"
 #include "cwRegionLoadResult.h"
+#include "cwError.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
@@ -42,7 +43,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 Q_OBJECT
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
-    Q_PROPERTY(bool temporaryProject READ isTemporaryProject NOTIFY temporaryProjectChanged)
+    Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
@@ -73,8 +74,6 @@ public:
 
     static void createDefaultSchema(const QSqlDatabase& database);
 
-    bool isTemporaryProject() const;
-
     void waitLoadToFinish();
     void waitSaveToFinish();
 
@@ -82,11 +81,15 @@ public:
 
     cwErrorListModel* errorModel() const;
 
+    bool canSaveDirectly() const;
+    bool isTemporaryProject() const;
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
-    void temporaryProjectChanged();
+    void canSaveDirectlyChanged();
     void regionChanged();
+    void fileSaved();
 
 public slots:
      void loadFile(QString filename);
@@ -97,14 +100,14 @@ private:
     bool TempProject;
     QString ProjectFile;
     QSqlDatabase ProjectDatabase;
+    int FileVersion;
 
     //The region that this project looks after
     cwCavingRegion* Region;
 
     QFuture<cwRegionLoadResult> LoadFuture;
+    QFuture<QList<cwError>> SaveFuture;
 
-//    cwRegionLoadTask* LoadTask;
-    cwRegionSaveTask* SaveTask;
     //The undo stack
     QUndoStack* UndoStack;
 
@@ -126,6 +129,8 @@ private:
 
     void privateSave();
 
+    bool saveWillCauseDataLoss() const;
+
 private slots:
     void startDeleteImageTask();
     void deleteImageTask();
@@ -143,8 +148,6 @@ inline QUndoStack *cwProject::undoStack() const
 {
     return UndoStack;
 }
-
-
 
 /**
   \brief Returns the open project path
@@ -165,6 +168,11 @@ inline bool cwProject::isTemporaryProject() const {
 inline cwErrorListModel* cwProject::errorModel() const {
     return ErrorModel;
 }
+
+inline bool cwProject::canSaveDirectly() const {
+    return !saveWillCauseDataLoss() && !isTemporaryProject();
+}
+
 
 
 #endif // CWXMLPROJECT_H

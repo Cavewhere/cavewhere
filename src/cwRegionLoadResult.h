@@ -25,6 +25,9 @@ public:
     void setCavingRegion(const cwCavingRegionPtr& region);
     cwCavingRegionPtr cavingRegion() const;
 
+    void setFileVersion(int fileVersion);
+    int fileVersion() const;
+
 private:
     QSharedDataPointer<cwRegionLoadResultData> data;
 };

@@ -70,15 +70,16 @@ cwRegionLoadResult cwRegionLoadTask::load()
         auto region = cwCavingRegionPtr(new cwCavingRegion);
 
         //Try loading Proto Buffer
-        loadFromProtoBuffer(region.data());
+        auto data = loadFromProtoBuffer();
 
         results.setErrors(errors());
         if(cwError::containsFatal(results.errors())) {
             return results;
         }
 
-        region->moveToThread(nullptr);
-        results.setCavingRegion(region);
+        data.region->moveToThread(nullptr);
+        results.setCavingRegion(data.region);
+        results.setFileVersion(data.fileVersion);
         return results;
     });
 
@@ -96,13 +97,13 @@ void cwRegionLoadTask::runTask() {
  * @brief cwRegionLoadTask::loadFromProtoBuffer
  * @return
  */
-bool cwRegionLoadTask::loadFromProtoBuffer(cwCavingRegion* region)
+cwRegionLoadTask::LoadData cwRegionLoadTask::loadFromProtoBuffer()
 {
     bool okay;
     QByteArray protoBufferData = readProtoBufferFromDatabase(&okay);
 
     if(!okay) {
-        return false;
+        return {};
     }
 
     CavewhereProto::CavingRegion regionProto;
@@ -110,20 +111,20 @@ bool cwRegionLoadTask::loadFromProtoBuffer(cwCavingRegion* region)
 
     if(!couldParse) {
         addError(cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
-        return false;
+        return {};
     }
 
-    loadCavingRegion(regionProto, region);
+    auto data = loadCavingRegion(regionProto);
 
     //Clean up old images
     cwImageCleanupTask imageCleanupTask;
     imageCleanupTask.setUsingThreadPool(false);
     imageCleanupTask.setDatabaseFilename(databaseFilename());
-    imageCleanupTask.setRegion(region);
+    imageCleanupTask.setRegion(data.region.data());
     imageCleanupTask.start();
 
     disconnectToDatabase();
-    return true;
+    return data;
 }
 
 /**
@@ -166,19 +167,20 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  * @brief cwRegionLoadTask::loadCavingRegion
  * @param region
  */
-void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &protoRegion, cwCavingRegion *region)
+cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &protoRegion)
 {
+    LoadData data(new cwCavingRegion(), loadFileVersion(protoRegion));
 
-    auto fileVersion = protoRegion.has_version() ? protoRegion.version() : 0;
+    data.fileVersion = loadFileVersion(protoRegion);
     auto fileCavewhereVersion = protoRegion.has_cavewhereversion() ? loadString(protoRegion.cavewhereversion()) : "";
 
-    if(fileVersion > protoVersion()) {
+    if(data.fileVersion > protoVersion()) {
         //Add a warning
         QString upgradeStr = fileCavewhereVersion.isEmpty() ? QString() : QString(" to %1").arg(fileCavewhereVersion);
 
         addError(cwError(QString("Upgrade CaveWhere to %1 to load this file! Current file version is %2. CaveWhere %3 supports up to file version %4. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
                          .arg(fileCavewhereVersion)
-                         .arg(fileVersion)
+                         .arg(data.fileVersion)
                          .arg(CavewhereVersion)
                          .arg(protoVersion())));
     }
@@ -194,7 +196,9 @@ void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &prot
         caves.append(cave);
     }
 
-    region->addCaves(caves);
+    data.region->addCaves(caves);
+
+    return data;
 }
 
 /**
@@ -640,6 +644,11 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
     lead.setSize(loadSizeF(protoLead.size()));
     lead.setCompleted(protoLead.completed());
     return lead;
+}
+
+int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)
+{
+    return protoRegion.has_version() ? protoRegion.version() : 0;
 }
 
 /**

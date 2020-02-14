@@ -31,6 +31,7 @@ ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadFileDialogId
         applicationWindow: applicationWindowId
+        askToSaveDialog: askToSaveDialogId
 
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
@@ -123,17 +124,18 @@ ApplicationWindow {
     }
 
     AskToSaveDialog {
-        id: askToSaveDialog
+        id: askToSaveDialogId
         saveAsDialog: saveAsFileDialogId
     }
 
     onClosing: {
-        if(rootData.project.isModified()) {
-            askToSaveDialog.askToSave();
-            close.accepted = false;
-        } else {
-            close.accepted = true;
+        askToSaveDialogId.taskName = "quiting"
+        askToSaveDialogId.afterSaveFunc = function() {
+            Qt.quit();
         }
+
+        askToSaveDialogId.askToSave();
+        close.accepted = false;
     }
 
     Component.onCompleted: {
