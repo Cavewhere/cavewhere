@@ -126,6 +126,7 @@ ColumnLayout {
 
     HelpArea {
         id: directionHelpAreaId
+        Layout.fillWidth: true
         text: "The views azimuth (in degrees between 0.0 and 360.0) is
              the compass direction that the view is facing.
             <ul><li>0.0° for North<li>90.0° for East<li>180.0° for South<li>270.0° for West</ul>";

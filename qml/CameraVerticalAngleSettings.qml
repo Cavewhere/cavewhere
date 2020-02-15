@@ -65,6 +65,7 @@ ColumnLayout {
 
     HelpArea {
         id: helpAreaId
+        Layout.fillWidth: true
         text: "The vertical angle is the (in degrees between -90.0 and 90.0) clinometer direction that the view is facing.
 <br><br>Clicking on plan, will cause the view to look down at a 90.0°.
 <br>Clicking on profile, will cause the view to look at 0.0°."
