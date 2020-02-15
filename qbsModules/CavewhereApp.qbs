@@ -36,6 +36,13 @@ Application {
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "bundle" }
 
+    consoleApplication: {
+        if(qbs.targetOS.contains("windows")) {
+            return qbs.buildVariant == "debug"
+        }
+        return false
+    }
+
     cpp.cxxLanguageVersion: "c++11"
 
     cpp.includePaths: [
@@ -189,51 +196,6 @@ Application {
         ]
         fileTags: ["icns-in"]
     }
-
-//    Group {
-//        name: "windowsDLLs-debug"
-//        condition: qbs.targetOS == "windows" && qbs.buildVariant == "debug"
-//        qbs.install: !product.consoleApplication
-//        files:[
-//            Qt.core.binPath + "/Qt5Concurrentd.dll",
-//            Qt.core.binPath + "/Qt5Cored.dll",
-//            Qt.core.binPath + "/Qt5Guid.dll",
-//            Qt.core.binPath + "/Qt5OpenGLd.dll",
-//            Qt.core.binPath + "/Qt5Qmld.dll",
-//            Qt.core.binPath + "/Qt5Quickd.dll",
-//            Qt.core.binPath + "/Qt5Sqld.dll",
-//            Qt.core.binPath + "/Qt5Widgetsd.dll",
-//            Qt.core.binPath + "/Qt5Networkd.dll",
-//            Qt.core.binPath + "/Qt5Xmld.dll",
-//            Qt.core.binPath + "/Qt5Testd.dll",
-//            Qt.core.binPath + "/icuin*.dll",
-//            Qt.core.binPath + "/icuuc*.dll",
-//            Qt.core.binPath + "/icudt*.dll"
-//        ]
-//    }
-
-//    Group {
-//        name: "windowsDLLs-release"
-//        condition: qbs.targetOS == "windows" && qbs.buildVariant == "release"
-//        qbs.install: !product.consoleApplication
-//        files: [
-//            Qt.core.binPath + "/Qt5Concurrent.dll",
-//            Qt.core.binPath + "/Qt5Core.dll",
-//            Qt.core.binPath + "/Qt5Gui.dll",
-//            Qt.core.binPath + "/Qt5OpenGL.dll",
-//            Qt.core.binPath + "/Qt5Qml.dll",
-//            Qt.core.binPath + "/Qt5Quick.dll",
-//            Qt.core.binPath + "/Qt5Sql.dll",
-//            Qt.core.binPath + "/Qt5Widgets.dll",
-//            Qt.core.binPath + "/Qt5Network.dll",
-//            Qt.core.binPath + "/Qt5Xml.dll",
-//            Qt.core.binPath + "/Qt5Test.dll",
-//            Qt.core.binPath + "/icuin*.dll",
-//            Qt.core.binPath + "/icuuc*.dll",
-//            Qt.core.binPath + "/icudt*.dll"
-//        ]
-
-//    }
 
     Group {
         fileTagsFilter: bundle.isBundle ? ["bundle.content"] : ["application"]
