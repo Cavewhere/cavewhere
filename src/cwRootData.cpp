@@ -36,8 +36,7 @@
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     DefaultTrip(new cwTrip(this)),
-    DefaultTripCalibration(new cwTripCalibration(this)),
-    LeadsVisible(true)
+    DefaultTripCalibration(new cwTripCalibration(this))
 {
 
     //Task Manager, allows the users to see running tasks
@@ -129,6 +128,16 @@ void cwRootData::setLeadsVisible(bool leadsVisible) {
     if(LeadsVisible != leadsVisible) {
         LeadsVisible = leadsVisible;
         emit leadsVisibleChanged();
+    }
+}
+
+/**
+*
+*/
+void cwRootData::setStationVisible(bool stationsVisible) {
+    if(StationVisible != stationsVisible) {
+        StationVisible = stationsVisible;
+        emit stationsVisibleChanged();
     }
 }
 

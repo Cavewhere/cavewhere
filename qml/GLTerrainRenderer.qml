@@ -39,6 +39,7 @@ RegionViewer {
         anchors.fill: parent
         camera: renderer.camera
         region: rootData.region
+        visible: rootData.stationsVisible
     }
 
     LeadView {

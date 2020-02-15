@@ -23,6 +23,9 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
     SelectionMananger(new cwSelectionManager(this))
 {
     connect(TransformUpdater, &cwTransformUpdater::cameraChanged, this, &cwLeadView::cameraChanged);
+    connect(this, &cwLeadView::visibleChanged, this, [this](){
+        TransformUpdater->setEnabled(isVisible());
+    });
 
 }
 

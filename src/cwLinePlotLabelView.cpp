@@ -15,6 +15,7 @@ cwLinePlotLabelView::cwLinePlotLabelView(QQuickItem *parent) :
     cwLabel3dView(parent),
     Region(nullptr)
 {
+
 }
 
 /**

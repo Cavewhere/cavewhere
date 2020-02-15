@@ -67,6 +67,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+    Q_PROPERTY(bool stationsVisible READ stationsVisible WRITE setStationVisible NOTIFY stationsVisibleChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -96,6 +97,9 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool leadsVisible);
 
+    bool stationsVisible() const;
+    void setStationVisible(bool stationsVisible);
+
     QUrl lastDirectory() const;
     void setLastDirectory(QUrl lastDirectory);
 
@@ -115,6 +119,7 @@ signals:
     void regionSceneManagerChanged();
     void leadsVisibleChanged();
     void lastDirectoryChanged();
+    void stationsVisibleChanged();
 
 public slots:
 
@@ -138,7 +143,8 @@ private:
     cwTripCalibration* DefaultTripCalibration;
 
     //Temperary property should be move layer
-    bool LeadsVisible; //!<
+    bool LeadsVisible = true; //!<
+    bool StationVisible = true; //!<
 
 };
 
@@ -269,5 +275,11 @@ inline bool cwRootData::leadsVisible() const {
     return LeadsVisible;
 }
 
+/**
+*
+*/
+inline bool cwRootData::stationsVisible() const {
+    return StationVisible;
+}
 
 #endif // CWGLOBALQMLDATA_H

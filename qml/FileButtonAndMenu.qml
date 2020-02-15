@@ -132,6 +132,16 @@ MenuBar {
             }
         }
 
+
+        MenuItem {
+            text: "Station Labels Visible"
+            checked: rootData.stationsVisible
+            checkable: true
+            onTriggered: {
+                rootData.stationsVisible = !rootData.stationsVisible
+            }
+        }
+
         MenuItem {
             text: "Testcases"
             onTriggered: {

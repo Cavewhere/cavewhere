@@ -23,7 +23,11 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     Component(nullptr),
     Camera(nullptr)
 {
-
+    connect(this, &cwLabel3dView::visibleChanged, this, [this]() {
+        if(isVisible()) {
+            updatePositions();
+        }
+    });
 }
 
 /**
@@ -187,13 +191,15 @@ void cwLabel3dView::updatePositions()
 {
     if(Camera == nullptr) { return; }
 
-    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-    while(iter.hasNext()) {
-        cwLabel3dGroup* group = iter.next();
-        updateGroupPositions(group);
-    }
+    if(isVisible()) {
+        QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
+        while(iter.hasNext()) {
+            cwLabel3dGroup* group = iter.next();
+            updateGroupPositions(group);
+        }
 
-    LabelKdTree.clear();
+        LabelKdTree.clear();
+    }
 }
 
 /**
