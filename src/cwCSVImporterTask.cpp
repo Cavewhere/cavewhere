@@ -78,6 +78,7 @@ void cwCSVImporterTask::runTask()
     auto readLine = [&file, &lineCount, this, isPreviewLine]() {
         lineCount++;
         QString line = file.readLine();
+        line.remove('\r');
 
         if(isPreviewLine()) {
             CSVOutput.text.append(line);

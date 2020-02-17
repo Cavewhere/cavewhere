@@ -107,8 +107,8 @@ private:
     //The region that this project looks after
     cwCavingRegion* Region;
 
-    QFuture<cwRegionLoadResult> LoadFuture;
-    QFuture<QList<cwError>> SaveFuture;
+    QFuture<void> LoadFuture;
+    QFuture<void> SaveFuture;
 
     //The undo stack
     QUndoStack* UndoStack;

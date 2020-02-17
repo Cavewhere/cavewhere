@@ -14,8 +14,34 @@ CppApplication {
     Depends { name: "bundle" }
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
+    Depends { name: "CaveWhere" }
 
     cpp.includePaths: ["catch"]
+    cpp.cxxLanguageVersion: "c++14"
+
+    Properties {
+        condition: qbs.targetOS.contains("linux") || qbs.targetOS.contains("macos")
+        cpp.cxxFlags: {
+            var flags = [
+                        "-Werror", //Treat warnings as errors
+                    ];
+
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address");
+                flags.push("-fno-omit-frame-pointer");
+            }
+
+            return flags;
+        }
+
+        cpp.driverFlags: {
+            var flags = [];
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address")
+            }
+            return flags;
+        }
+    }
 
     Group {
         name: "testcases"

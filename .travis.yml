@@ -1,0 +1,51 @@
+language : cpp
+dist: bionic
+env:
+#  - QT_VERSION="5.12.7" TARGET_PACKAGE="qt.qt5.51207.gcc_64"
+git:
+  submodules: true
+  depth: false
+services:
+    - xvfb
+#addons:
+#  apt:
+#    packages:
+#    - qbs
+#    - xvfb
+#    - valgrind
+#    - jq
+compiler:
+  - gcc
+before_install:
+    #This PPA has all the QT versions, just update it to change versions
+    #Full list here: https://launchpad.net/~beineri
+     - sudo add-apt-repository -y ppa:beineri/opt-qt-5.12.7-bionic
+     - sudo apt-get -y update
+     - sudo apt-get -y install qt512-meta-minimal
+     - sudo apt-get -y install qt512svg
+     - sudo apt-get -y install qt512quickcontrols
+     - sudo apt-get -y install qt512quickcontrols2
+     - sudo apt-get -y install qt512graphicaleffects
+     - sudo apt-get -y install qt512script
+     - sudo apt-get -y install libgl1-mesa-glx
+     - sudo apt-get -y install libgl1-mesa-dev
+     - ls -l /usr/lib/x86_64-linux-gnu/libGL.*
+#     - sudo ln -s /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/libGL.so
+     - git clone https://github.com/qbs/qbs.git
+     - cd qbs
+     - git checkout v1.15.0
+     - /opt/qt512/bin/qmake -r qbs.pro && make -j `nproc`
+     - sudo make install
+     - cd ..
+     - qbs --version
+script:
+    - echo $TARGET_NAME
+    - ulimit -c unlimited
+    - ulimit -a
+    - qbs setup-toolchains --detect
+    - qbs setup-qt /opt/qt512/bin/qmake qt5
+    - qbs config profiles.qt5.baseProfile x86_64-linux-gnu-gcc-7
+    - qbs config defaultProfile qt5
+    - qbs resolve profile:qt5 config:release
+    - qbs build --products cavewhere-test profile:qt5 config:release
+    - qbs run --products cavewhere-test profile:qt5 config:release

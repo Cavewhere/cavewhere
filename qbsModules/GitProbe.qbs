@@ -8,7 +8,10 @@ Probe {
 
     property path sourceDirectory
     readonly property string productVersion: ""
-    readonly property string execPath: utils.findIfExisting(["C:/Program Files/Git/cmd/git.exe",                                                                                       "/usr/local/bin/git"],
+    readonly property string execPath: utils.findIfExisting(["C:/Program Files/Git/cmd/git.exe",
+                                                             "/usr/local/bin/git",
+                                                             "/usr/bin/git"
+                                                            ],
                                                             "git")
     configure: {
         //Use git to query the version

@@ -101,7 +101,7 @@ private:
     QMutex WaitToFinishLocker;
 
     int NumberOfSteps;
-    int Progress; //!<
+    int Progress = 0; //!<
 
     Status CurrentStatus;
     bool NeedsRestart;

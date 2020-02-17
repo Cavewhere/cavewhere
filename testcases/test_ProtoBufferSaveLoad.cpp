@@ -150,9 +150,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
             expectErrorMessage = QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(root->project()->filename());
             CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
 
-            //The file should be different because of the different version
-            //This should do a binary change to test, that it hasn't changed
-            CHECK(root->project()->isModified() == true);
+            CHECK(root->project()->isModified() == false);
         }
     }
 }

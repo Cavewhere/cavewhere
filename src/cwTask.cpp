@@ -409,6 +409,7 @@ void cwTask::waitToFinish()
         {
             QReadLocker locker(&StatusLocker);
             switch (CurrentStatus) {
+            qDebug() << "Current status:" << CurrentStatus;
             case Ready:
                 break;
             case PreparingToStart:

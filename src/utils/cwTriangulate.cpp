@@ -137,7 +137,10 @@ bool cwTriangulate::Process(const QVector<QPointF> &contour,QVector<QPointF> &re
       m++;
 
       /* remove v from remaining polygon */
-      for(s=v,t=v+1;t<nv;s++,t++) V[s] = V[t]; nv--;
+      for(s=v,t=v+1;t<nv;s++,t++) {
+          V[s] = V[t];
+      }
+      nv--;
 
       /* resest error detection counter */
       count = 2*nv;

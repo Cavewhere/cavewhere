@@ -224,13 +224,13 @@ void cwProject::privateSave() {
         return saveTask.save(region);
     });
 
-    AsyncFuture::observe(future).subscribe([future, this](){
+    SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
         auto errors = future.result();
         ErrorModel->append(errors);
         if(!cwError::containsFatal(errors)) {
             emit fileSaved();
         }
-    });
+    }).future();
 }
 
 bool cwProject::saveWillCauseDataLoss() const
@@ -358,7 +358,7 @@ void cwProject::loadFile(QString filename) {
         emit canSaveDirectly();
     };
 
-    AsyncFuture::observe(loadFuture)
+    LoadFuture = AsyncFuture::observe(loadFuture)
             .subscribe([loadFuture, updateRegion, this]()
     {
         auto result = loadFuture.result();
@@ -371,9 +371,7 @@ void cwProject::loadFile(QString filename) {
             }
             ErrorModel->append(result.errors());
         }
-    });
-
-    LoadFuture = loadFuture;
+    }).future();
 }
 
 /**
@@ -644,7 +642,10 @@ bool cwProject::isModified() const
 
     cwRegionLoadTask loadTask;
     loadTask.setDatabaseFilename(filename());
-    QByteArray currentData = loadTask.readSeralizedData();
+    auto result = loadTask.load();
+    loadTask.waitToFinish();
+
+    QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
 
     return saveData != currentData;
 }

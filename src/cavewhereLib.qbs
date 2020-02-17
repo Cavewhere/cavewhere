@@ -82,7 +82,8 @@ DynamicLibrary {
     }
 
     cpp.rpaths: [Qt.core.libPath]
-    cpp.cxxLanguageVersion: "c++11"
+    cpp.cxxLanguageVersion: "c++14"
+    Qt.quick.compilerAvailable: false
 
     cpp.includePaths: [
         ".",
@@ -129,9 +130,30 @@ DynamicLibrary {
 
     Properties {
         condition: qbs.targetOS.contains("linux")
-        cpp.cxxFlags: [
-            "-Werror" //Treat warnings as errors
-        ]
+
+        cpp.cxxFlags: {
+            var flags = [
+                    ];
+
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address");
+                flags.push("-fno-omit-frame-pointer");
+            }
+
+            return flags;
+        }
+
+        cpp.driverFlags: {
+            var flags = [];
+            if(qbs.buildVariant == "debug") {
+                flags.push("-fsanitize=address")
+            }
+            return flags;
+        }
+
+//        cpp.cxxFlags: [
+//            "-Werror" //Treat warnings as errors
+//        ]
     }
 
     Properties {

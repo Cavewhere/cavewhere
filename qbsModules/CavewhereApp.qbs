@@ -35,6 +35,7 @@ Application {
     Depends { name: "cavewhere-lib" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "bundle" }
+    Depends { name: "cavern" }
 
     consoleApplication: {
         if(qbs.targetOS.contains("windows")) {
@@ -44,6 +45,7 @@ Application {
     }
 
     cpp.cxxLanguageVersion: "c++11"
+    cpp.treatWarningsAsErrors: true
 
     cpp.includePaths: [
         applicationId.prefix + "/src",
@@ -65,13 +67,9 @@ Application {
     }
 
     Properties {
-        condition: qbs.targetOS.contains("osx")
+        condition: qbs.targetOS.contains("osx") || qbs.targetOS.contains("linux")
         cpp.cxxFlags: {
             var flags = [
-//                        "-stdlib=libc++", //Needed for protoc
-//                        "-std=c++11", //For c++11 support
-                        "-Werror", //Treat warnings as errors
-
                     ];
 
             if(qbs.buildVariant == "debug") {
@@ -89,14 +87,6 @@ Application {
             }
             return flags;
         }
-    }
-
-    Properties {
-        condition: qbs.targetOS.contains("linux")
-        cpp.cxxFlags: [
-            "-std=c++11", //For c++11 support
-            "-Werror" //Treat warnings as errors
-        ]
     }
 
     Properties {
