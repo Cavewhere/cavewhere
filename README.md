@@ -78,6 +78,9 @@ qbs run --products cavewhere-test profile:qt5 config:release
 ### Building CaveWhere and running in debug
 
 ```{sh}
+git clone --branch=master https://github.com/Cavewhere/cavewhere.git cavewhere
+cd cavewhere
+git submodule update --init --recursive
 qbs resolve profile:qt5 config:debug
 qbs build --products profile:qt5 config:debug
 qbs run --products CaveWhere profile:qt5 config:debug
