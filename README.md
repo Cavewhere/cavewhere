@@ -1,10 +1,10 @@
-# cavewhere
+# CaveWhere
 
 [![Build Status](https://travis-ci.org/Cavewhere/cavewhere.svg?branch=master)](https://travis-ci.org/Cavewhere/cavewhere)
 
 ![CaveWhere Logo](/icons/githubPage.png)
 
-# Cave Mapping software
+## Cave Mapping software
 
 CaveWhere is a cave mapping software with an intuitive design that enables building and visualizing underground cave maps.
 Using it’s advanced 3D engine, CaveWhere automatically morphs your 2D cave notes in 3D.
