@@ -239,3 +239,12 @@ QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
     return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
                      originalSize.height() / (double)firstMipmapSize.height());
 }
+
+cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompressData)
+{
+    //Compress the dxt1FileData using zlib
+    auto outputData = qCompress(uncompressData, 9);
+
+    //Add the image to the database
+    return cwImageData(size, 0, cwImageProvider::Dxt1_GZ_Extension, outputData);
+}

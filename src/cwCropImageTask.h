@@ -13,6 +13,7 @@
 #include "cwImage.h"
 #include "cwImageProvider.h"
 #include "cwProjectIOTask.h"
+#include "cwGlobals.h"
 class cwAddImageTask;
 
 //Qt includes
@@ -22,12 +23,12 @@ class cwAddImageTask;
 /**
   \brief This will crop a cwImage using normalize coordinates of the original
   */
-class cwCropImageTask : public cwProjectIOTask
+class CAVEWHERE_LIB_EXPORT cwCropImageTask : public cwProjectIOTask
 {
     Q_OBJECT
 
 public:
-    cwCropImageTask(QObject* parent = 0);
+    cwCropImageTask(QObject* parent = nullptr);
 
     //Inputs
     void setOriginal(cwImage image);
@@ -54,8 +55,10 @@ private:
     //For writting the cropped image
     cwAddImageTask* AddImageTask;
 
-    QRect mapNormalizedToIndex(QRectF normalized, QSize size) const;
+    static QRect mapNormalizedToIndex(QRectF normalized, QSize size);
+    static QRect nearestDXT1Rect(QRect rect);
 
 };
 
 #endif // CWCROPIMAGETASK_H
+

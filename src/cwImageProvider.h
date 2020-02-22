@@ -37,6 +37,8 @@ public:
     QImage image(int id) const;
     QVector2D scaleTexCoords(const cwImage &image) const;
 
+    static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);
+
 public slots:
     void setProjectPath(QString projectPath);
 

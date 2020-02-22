@@ -114,7 +114,7 @@ void cwImageItem::setRotation(float degrees) {
   The image has complete loading it self
   */
 void cwImageItem::imageFinishedLoading() {
-    QSize imageSize = Image.origianlSize();
+    QSize imageSize = Image.originalSize();
     resizeGL();
 
     QMatrix4x4 newViewMatrix;
@@ -222,7 +222,7 @@ void cwImageItem::initializeTexture() {
 void cwImageItem::resizeGL() {
 
 
-    QSize imageSize = Image.origianlSize();
+    QSize imageSize = Image.originalSize();
     if(!imageSize.isValid()) { return; }
 
     QSize windowSize(width(), height());

@@ -54,7 +54,8 @@ void cwImageTexture::initialize()
     //Only upload one texture, GL_LINEAR, because some intel cards,
     //don't support npot dxt1 copression, so we just used GL_LINEAR
     //FIXME: ADD to rendering settings! Use mipmaps.
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 #else
     //All other platforms
     GLfloat fLargest;
@@ -96,7 +97,7 @@ void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
 
-        if(Image.isValid()) {
+        if(Image.isMipmapsValid()) {
             startLoadingImage();
         } else {
             DeleteTexture = true;
@@ -154,6 +155,7 @@ void cwImageTexture::updateData() {
         QSize size = image.second;
 
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
+            qDebug() << "Uploading level:" << trueMipmapLevel << size;
             glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                    size.width(), size.height(), 0,
                                    imageData.size(), imageData.data());
@@ -163,7 +165,7 @@ void cwImageTexture::updateData() {
 #ifdef Q_OS_WIN
             //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
             //FIXME: ADD to rendering settings!
-            break;
+//            break;
 #endif //Q_OS_WIN
         }
     }
@@ -182,7 +184,7 @@ void cwImageTexture::updateData() {
  */
 void cwImageTexture::startLoadingImage()
 {
-    if(Image.isValid() && !project().isEmpty()) {
+    if(Image.isMipmapsValid() && !project().isEmpty()) {
 
         if(TextureUploadTask == nullptr) {
             TextureUploadTask = new cwTextureUploadTask();

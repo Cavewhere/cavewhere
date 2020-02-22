@@ -260,7 +260,6 @@ void cwTaskManagerModel::taskHasFinished(QObject *taskObject)
  */
 void cwTaskManagerModel::taskIsActive(QObject *taskObject)
 {
-    qDebug() << "TaskIsActive" << taskObject;
     cwTask* task = convertToTask(taskObject);
     addActiveTask(task);
 }

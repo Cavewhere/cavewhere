@@ -11,6 +11,8 @@
 #include "cwImageData.h"
 #include "cwImageProvider.h"
 #include "cwDebug.h"
+#include "cwDXT1Compresser.h"
+#include "cwAsyncFuture.h"
 //#include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
@@ -43,6 +45,9 @@
 
 //Zlib includes
 #include <zlib.h>
+
+//Async includes
+#include <asyncfuture.h>
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
@@ -163,7 +168,7 @@ void cwAddImageTask::calculateNumberOfSteps() {
             int iterHeight = imageSize.height() / 4 + 1;
 
             numberOfSteps += iterWidth * iterHeight;
-            imageSize = halfSize(imageSize);
+            imageSize = half(imageSize);
         }
     }
 
@@ -391,6 +396,9 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
 
     bool regeneratingMipmaps = numberOfLevels == imageIds->mipmaps().size();
 
+    QList<int> generatedMipmapIds;
+    QList<QImage> scaledImages;
+
     for(int i = 0; i < numberOfLevels && isRunning(); i++) {
         emit statusMessage(QString("Compressing %1 of %2 bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
 
@@ -402,17 +410,36 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
             mipmapId = imageIds->mipmaps().at(i);
         }
 
-        //Export the image to DXT1 format
-        mipmapId = saveToDXT1Format(scaledImage, mipmapId);
-
-        //Add the path to the mipmapPath
-        if(!regeneratingMipmaps) {
-            mipmapIds.append(mipmapId);
-        }
+        generatedMipmapIds.append(mipmapId);
+        scaledImages.append(scaledImage);
 
         //Create the new width and height, by halfing them
-        scaledImageSize = halfSize(scaledImageSize);
+        scaledImageSize = half(scaledImageSize);
     }
+
+    cwDXT1Compresser compresser;
+    auto future = compresser.compress(scaledImages);
+    auto images = compresser.results(future);
+
+//    auto finishedFuture = AsyncFuture::observe(future).context(this, [&generatedMipmapIds, future, regeneratingMipmaps, this](){
+//        auto images = future.results();
+
+        Q_ASSERT(images.size() == generatedMipmapIds.size());
+
+        //Export the image to DXT1 format
+        for(int i = 0; i < images.size(); i++) {
+            int mipmapId = generatedMipmapIds.at(i);
+            cwDXT1Compresser::CompressedImage image = images.at(i);
+            mipmapId = saveToDXT1Format(image, mipmapId);
+
+            //Add the path to the mipmapPath
+            if(!regeneratingMipmaps) {
+                mipmapIds.append(mipmapId);
+            }
+        }
+//    }).future();
+
+//    cwAsyncFuture::waitForFinished(finishedFuture);
 
     imageIds->setMipmaps(mipmapIds);
 }
@@ -422,52 +449,51 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
   make up.
 
   This takes the largest dimension and takes the log2 of it.
-  */
-int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) const {
-    double largestDimension = (double)qMax(imageSize.width(), imageSize.height());
-    return (int)log2(largestDimension) + 1;
-}
 
+  OPENGL IS EXTREMELY SENSITVE WITH THE NUMBER OF MIPMAPS NEEDED, don't modify
+  */
+int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) {
+    double largestDimension = static_cast<double>(std::max(imageSize.width(), imageSize.height()));
+    return std::max(1, static_cast<int>(log2(largestDimension)) + 1);
+}
 
 /**
   \brief Saves the image to the path using the dxt1 format from squish
 
-  The image will be firsted compress using dxt1 compression 1:6.  Then it'll
+  The image will be firsted compress using dxt1 compression 1:4.  Then it'll
   be compressed with zlib to gunzip.  This will compress the image by another
   35% by default.
 
   \param image - The image that'll be converted
   \param id - The id that'll be overwritten by the task
   */
-int cwAddImageTask::saveToDXT1Format(QImage image, int id) {
+int cwAddImageTask::saveToDXT1Format(const cwDXT1Compresser::CompressedImage &image, int id) {
+
     //Convert and compress using dxt1
     //20 times slower on my computer
-#ifdef Q_OS_WIN
-    //FIXME: Need to have settings to use opengl dxt1 compression!
-    //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
-    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
-#else
-    //FIXME: This is commented out because this breaks hard on old intel graphics cards
-    QByteArray outputData = openglDxt1Compression(image);
-#endif
+//#ifdef Q_OS_WIN
+//    //FIXME: Need to have settings to use opengl dxt1 compression!
+//    //FIXME: This should be used on gl es 2 implementations only. We should check to see if we have glGetCompressTexture
+//    QByteArray outputData = squishCompressImageThreaded(image, squish::kDxt1 | squish::kColourIterativeClusterFit);
+//#else
+//    //FIXME: This is commented out because this breaks hard on old intel graphics cards
+//    QByteArray outputData = openglDxt1Compression(image);
+//#endif
 
-    if(outputData.isEmpty()) {
-        return -1;
-    }
-
-    //Compress the dxt1FileData using zlib
-    outputData = qCompress(outputData, 9);
+//    if(outputData.isEmpty()) {
+//        return -1;
+//    }
 
     //Add the image to the database
-    cwImageData iconImageData(image.size(), 0, cwImageProvider::Dxt1_GZ_Extension, outputData);
+    cwImageData imageData = cwImageProvider::createDxt1(image.size, image.data);
 
     int imageId;
     if(id == -1) {
         //Add the image
-        imageId = cwProject::addImage(database(), iconImageData);
+        imageId = cwProject::addImage(database(), imageData);
     } else {
         imageId = id;
-        cwProject::updateImage(database(), iconImageData, id);
+        cwProject::updateImage(database(), imageData, id);
     }
 
     return imageId;
@@ -500,67 +526,67 @@ public:
     void* BlockData;
 };
 
-/**
-  \brief This class compresses a signle block.  This allow squish library to be
-  threaded.
-  */
-class CompressImageKernal {
-public:
-    CompressImageKernal(cwAddImageTask* task, QSize imageSize, int flags, float* metric) {
-        Task = task;
-        ImageSize = imageSize;
-        Flags = flags;
-        Metric = metric;
-    }
+///**
+//  \brief This class compresses a signle block.  This allow squish library to be
+//  threaded.
+//  */
+//class CompressImageKernal {
+//public:
+//    CompressImageKernal(cwAddImageTask* task, QSize imageSize, int flags, float* metric) {
+//        Task = task;
+//        ImageSize = imageSize;
+//        Flags = flags;
+//        Metric = metric;
+//    }
 
-    cwAddImageTask* Task;
-    QSize ImageSize;
-    int Flags;
-    float* Metric;
+//    cwAddImageTask* Task;
+//    QSize ImageSize;
+//    int Flags;
+//    float* Metric;
 
 
-    void operator()(Block block) {
+//    void operator()(Block block) {
 
-        if(!Task->isRunning()) { return; }
+//        if(!Task->isRunning()) { return; }
 
-        // build the 4x4 block of pixels
-        u8 sourceRgba[16*4];
-        u8* targetPixel = sourceRgba;
-        int mask = 0;
-        for( int py = 0; py < 4; ++py )
-        {
-            for( int px = 0; px < 4; ++px )
-            {
-                // get the source pixel in the image
-                int sx = block.Position.x() + px;
-                int sy = block.Position.y() + py;
+//        // build the 4x4 block of pixels
+//        u8 sourceRgba[16*4];
+//        u8* targetPixel = sourceRgba;
+//        int mask = 0;
+//        for( int py = 0; py < 4; ++py )
+//        {
+//            for( int px = 0; px < 4; ++px )
+//            {
+//                // get the source pixel in the image
+//                int sx = block.Position.x() + px;
+//                int sy = block.Position.y() + py;
 
-                // enable if we're in the image
-                if( sx < ImageSize.width() && sy < ImageSize.height() )
-                {
-                    // copy the rgba value
-                    u8 const* sourcePixel = block.RGBA + 4*( ImageSize.width() * sy + sx );
-                    for( int i = 0; i < 4; ++i ) {
-                        *targetPixel++ = *sourcePixel++;
-                    }
+//                // enable if we're in the image
+//                if( sx < ImageSize.width() && sy < ImageSize.height() )
+//                {
+//                    // copy the rgba value
+//                    u8 const* sourcePixel = block.RGBA + 4*( ImageSize.width() * sy + sx );
+//                    for( int i = 0; i < 4; ++i ) {
+//                        *targetPixel++ = *sourcePixel++;
+//                    }
 
-                    // enable this pixel
-                    mask |= ( 1 << ( 4*py + px ) );
-                }
-                else
-                {
-                    // skip this pixel as its outside the image
-                    targetPixel += 4;
-                }
-            }
-        }
+//                    // enable this pixel
+//                    mask |= ( 1 << ( 4*py + px ) );
+//                }
+//                else
+//                {
+//                    // skip this pixel as its outside the image
+//                    targetPixel += 4;
+//                }
+//            }
+//        }
 
-        CompressMasked(sourceRgba, mask, block.BlockData, Flags);
+//        CompressMasked(sourceRgba, mask, block.BlockData, Flags);
 
-        emit Task->IncreaseProgress();
-    }
+//        emit Task->IncreaseProgress();
+//    }
 
-};
+//};
 
 
 
@@ -621,7 +647,7 @@ QByteArray cwAddImageTask::squishCompressImageThreaded( QImage image, int flags,
     }
 
     //This takes all the compute blocks and compresses them using squish
-    QtConcurrent::blockingMap(computeBlocks, CompressImageKernal(this, image.size(), flags, metric));
+//    QtConcurrent::blockingMap(computeBlocks, CompressImageKernal(this, image.size(), flags, metric));
 
     return outputData;
 }

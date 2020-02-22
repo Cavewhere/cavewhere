@@ -10,6 +10,7 @@
 
 //Our includes
 class cwProject;
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QString>
@@ -25,7 +26,7 @@ class cwProject;
   It stores the image path to original in the database,
   all the mipmap levels, and a icon version that's less than 512 by 512 pixels
   */
-class cwImage {
+class CAVEWHERE_LIB_EXPORT cwImage {
 public:
     cwImage();
 
@@ -41,7 +42,7 @@ public:
     int original() const;
 
     void setOriginalSize(QSize size);
-    QSize origianlSize() const;
+    QSize originalSize() const;
 
     void setOriginalDotsPerMeter(int dotsPerMeter);
     int originalDotsPerMeter() const;
@@ -50,7 +51,8 @@ public:
     bool operator !=(const cwImage& other) const;
 
     bool isValid() const;
-    bool iconIsValid() const;
+    bool isMipmapsValid() const;
+    bool isIconValid() const;
 
 private:
     class PrivateData : public QSharedData {
@@ -64,6 +66,8 @@ private:
 
         QList<int> Mipmaps;
     };
+
+    static bool isIdValid(int id);
 
     QSharedDataPointer<PrivateData> Data;
 };
@@ -144,7 +148,7 @@ inline void cwImage::setOriginalSize(QSize size) {
 /**
   \brief Gets the original size of the image
   */
-inline QSize cwImage::origianlSize() const {
+inline QSize cwImage::originalSize() const {
     return Data->OriginalSize;
 }
 
@@ -166,16 +170,20 @@ inline int cwImage::originalDotsPerMeter() const {
   \brief Returns false if the image isn't valid and true if it is valid.
   */
 inline bool cwImage::isValid() const {
-    return Data->OriginalId > -1;
+    return isIdValid(Data->OriginalId);
 }
 
 /**
- * @brief cwImage::iconIsValid
  * @return returns true if the icon id is valid
  */
-inline bool cwImage::iconIsValid() const
+inline bool cwImage::isIconValid() const
 {
-    return Data->IconId > -1;
+    return isIdValid(Data->IconId);
+}
+
+inline bool cwImage::isIdValid(int id)
+{
+    return id > -1;
 }
 
 

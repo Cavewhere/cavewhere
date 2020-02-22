@@ -164,7 +164,7 @@ cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, c
 
     cwNoteTranformation noteTransform = scrapData.noteTransform();
 
-    QSize scrapImageSize = scrapData.noteImage().origianlSize();
+    QSize scrapImageSize = scrapData.noteImage().originalSize();
     double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
@@ -775,7 +775,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     };
 
 
-    QSize imageSize = croppedImage.origianlSize();
+    QSize imageSize = croppedImage.originalSize();
     double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
 
     //For right now try to map

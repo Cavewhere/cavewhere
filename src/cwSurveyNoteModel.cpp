@@ -84,7 +84,7 @@ QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) con
     QList<cwNote*> validNotes;
     foreach(cwNote* note, notes) {
         if(note != nullptr) {
-            if(note->image().isValid() && note->image().iconIsValid()) {
+            if(note->image().isValid() && note->image().isIconValid()) {
                 validNotes.append(note);
             } else {
                 note->deleteLater();

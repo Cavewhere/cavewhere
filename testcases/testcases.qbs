@@ -15,6 +15,7 @@ CppApplication {
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
     Depends { name: "CaveWhere" }
+    Depends { name: "asyncfuture" }
 
     cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++14"
@@ -49,6 +50,13 @@ CppApplication {
             "*.cpp",
             "*.h",
             "cavewhere-test.qrc"
+        ]
+    }
+
+    Group {
+        name: "dxt"
+        files: [
+            "s3tc-dxt-decompression/s3tc.cpp"
         ]
     }
 

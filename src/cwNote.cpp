@@ -132,7 +132,7 @@ void cwNote::setParentTrip(cwTrip* trip) {
   \brief Gets the scaling matrix for the orignial size of the notes
   */
 QMatrix4x4 cwNote::scaleMatrix() const {
-    QSize size = ImageIds.origianlSize();
+    QSize size = ImageIds.originalSize();
     QMatrix4x4 matrix;
     matrix.scale(size.width(), size.height(), 1.0);
     return matrix;

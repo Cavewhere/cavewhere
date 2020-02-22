@@ -257,7 +257,7 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
     protoImage->set_originalid(image.original());
     protoImage->set_iconid(image.icon());
     protoImage->set_dotpermeter(image.originalDotsPerMeter());
-    saveSize(protoImage->mutable_size(), image.origianlSize());
+    saveSize(protoImage->mutable_size(), image.originalSize());
     foreach(int mipmapId, image.mipmaps()) {
         protoImage->add_mipmapids(mipmapId);
     }

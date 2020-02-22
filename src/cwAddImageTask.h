@@ -11,6 +11,8 @@
 //Our includes
 #include "cwProjectIOTask.h"
 #include "cwImage.h"
+#include "cwGlobals.h"
+#include "cwDXT1Compresser.h"
 
 //Qt includes
 #include <QStringList>
@@ -19,16 +21,12 @@
 #include <QDir>
 #include <QSqlDatabase>
 #include <QAtomicInt>
-#include <QDebug>
 #include <QOpenGLContext>
 #include <QOffscreenSurface>
 
-//Squish includes
-#include <squish.h>
-
 class CompressImageKernal;
 
-class cwAddImageTask : public cwProjectIOTask
+class CAVEWHERE_LIB_EXPORT cwAddImageTask : public cwProjectIOTask
 {
     friend class CompressImageKernal;
 
@@ -55,6 +53,12 @@ public:
 
     ///////////// Results ///////////////////
     QList<cwImage> images();
+
+    //Until functions
+    static int numberOfMipmapLevels(QSize imageSize);
+    static QSize half(QSize size);
+    static QRect half(QRect size);
+    static QPoint half(QPoint point);
 
 signals:
     void addedImages(QList<cwImage> images);
@@ -101,19 +105,19 @@ private:
 
     void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
-    int saveToDXT1Format(QImage image, int id = -1);
+    int saveToDXT1Format(const cwDXT1Compresser::CompressedImage& image, int id = -1);
     QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
     QByteArray openglDxt1Compression(QImage image);
     QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
 
     void calculateNumberOfSteps();
-    int numberOfMipmapLevels(QSize imageSize) const;
-    QSize halfSize(QSize size) const;
     int dotsPerMeter(QImage image) const;
 
     void regenerateMipmaps();
 
     void IncreaseProgress();
+
+    static int half(int value);
 
 private slots:
     void tryAddingImagesToDatabase();
@@ -180,9 +184,28 @@ inline QList<cwImage> cwAddImageTask::images() {
   This halves the size.  The size that's returned will always be valid.
   If the half size is less than 1, then the dimension below 1 is set to 1
   */
-inline QSize cwAddImageTask::halfSize(QSize size) const {
+inline QSize cwAddImageTask::half(QSize size) {
      //Create the new width and height
-    return QSize(qMax(size.width() / 2, 1), qMax(size.height() / 2, 1));
+    return QSize(half(size.width()), half(size.height()));
+}
+
+
+
+inline QRect cwAddImageTask::half(QRect rect)
+{
+    return QRect(QPoint(half(rect.x()),
+                        half(rect.y())),
+                 half(rect.size()));
+}
+
+inline QPoint cwAddImageTask::half(QPoint point)
+{
+    return QPoint(half(point.x()), half(point.y()));
+}
+
+inline int cwAddImageTask::half(int value)
+{
+    return std::max(1, value / 2);
 }
 
 

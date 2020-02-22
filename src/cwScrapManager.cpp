@@ -442,6 +442,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         TriangulateTask->start();
     } else {
         //Isn't ready!, restart the task
+        qDebug() << "Restarting triangulation method!";
         TriangulateTask->restart();
     }
 }

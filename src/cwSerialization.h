@@ -361,7 +361,7 @@ namespace boost {
         int originalId = image.original();
         int iconId = image.icon();
         QList<int> mipmapIds = image.mipmaps();
-        QSize size = image.origianlSize();
+        QSize size = image.originalSize();
         int dotPerMeter = image.originalDotsPerMeter();
 
         archive << BOOST_SERIALIZATION_NVP(originalId);

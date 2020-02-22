@@ -9,7 +9,7 @@
 #define CWDEBUG_H
 
 #define LOCATION __FILE__ << __LINE__
-#define LOCATION_STR QString("%1 %2").arg(__FILE__).arg(__LINE__)
+#define LOCATION_STR QString("%1 %2").arg(__FILE__).arg(__LINE__).toLocal8Bit()
 
 //Qt includes
 #include <QQmlComponent>

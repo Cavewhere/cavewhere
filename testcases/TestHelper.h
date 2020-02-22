@@ -53,6 +53,16 @@ inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value 
     return os;
 }
 
+inline std::ostream& operator << ( std::ostream& os, QSize const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QSizeF const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
+
 std::ostream &operator << ( std::ostream& os, cwError const& error);
 
 void propertyCompare(QObject* tc1, QObject* tc2);
