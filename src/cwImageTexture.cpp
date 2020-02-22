@@ -54,8 +54,8 @@ void cwImageTexture::initialize()
     //Only upload one texture, GL_LINEAR, because some intel cards,
     //don't support npot dxt1 copression, so we just used GL_LINEAR
     //FIXME: ADD to rendering settings! Use mipmaps.
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 #else
     //All other platforms
     GLfloat fLargest;
@@ -165,7 +165,7 @@ void cwImageTexture::updateData() {
 #ifdef Q_OS_WIN
             //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
             //FIXME: ADD to rendering settings!
-//            break;
+            break;
 #endif //Q_OS_WIN
         }
     }

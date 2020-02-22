@@ -2,6 +2,7 @@
 #include <catch.hpp>
 
 //Our includes
+#include "TestHelper.h"
 #include "DXT1BlockCompare.h"
 #include "cwImageData.h"
 

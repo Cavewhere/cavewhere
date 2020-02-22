@@ -34,18 +34,14 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 
     auto image = addImage(image16x16);
 
-//    struct Size {
-//        QSize dim;
-//        int bytes;
-//        QVector<QColor> blockColors;
-//    };
-
     QVector<QColor> colors = {
         {QColor("#000000"), QColor("#ff0000"), QColor("#ff00f7"), QColor("#00ff00"),
-         QColor("#aa0000"), QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
-         QColor("#00aa00"), QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
-         QColor("#0000aa"), QColor("#0000bb"), QColor("#0000cc"), QColor("#0000dd")}
+        QColor("#aa0000"), QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
+        QColor("#00aa00"), QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
+        QColor("#0000aa"), QColor("#0000bb"), QColor("#0000cc"), QColor("#0000dd")}
     };
+
+    QColor("#000c73");
 
     QVector<DXT1BlockCompare::TestImage> sizes = {
         {{16, 16}, 128, colors},
@@ -114,11 +110,13 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cwImage croppedImageId = cropImageTask.croppedImage();
 
             QVector<QColor> croppedColors = {
-                {blockColors.at(yBlock * blockSize.width() + xBlock)},
+                {blockColors.at((blockSize.height() - 1 - yBlock) * blockSize.width() + xBlock)},
             };
 
             QVector<DXT1BlockCompare::TestImage> croppedSizes = {
                 {{4, 4}, 8, croppedColors},
+                {{2, 2}, 8, {}},
+                {{1, 1}, 8, {}},
             };
 
             //Check the output
@@ -152,196 +150,221 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         };
 
         //16x16 pixel image
-//        checkCropSinglePixel(image, colors);
+        checkCropSinglePixel(image, colors);
 
-//        SECTION("Vertical aspect image") {
-//            QImage vImage = image16x16.copy(0, 0, 1, image16x16.height());
-//            auto addedVImage = addImage(vImage);
+        SECTION("Vertical aspect image") {
+            QImage vImage = image16x16.copy(0, 0, 1, image16x16.height());
+            auto addedVImage = addImage(vImage);
 
-//            QVector<QColor> colors = {
-//                QColor("#000000"),
-//                QColor("#aa0000"),
-//                QColor("#00aa00"),
-//                QColor("#0000aa"),
-//            };
+            QVector<QColor> colors = {
+                QColor("#000000"),
+                QColor("#aa0000"),
+                QColor("#00aa00"),
+                QColor("#0000aa"),
+            };
 
-//            checkCropSinglePixel(addedVImage, colors);
-//        }
+            checkCropSinglePixel(addedVImage, colors);
+        }
 
-//        SECTION("Horizontal aspect image") {
-//            QImage hImage = image16x16.copy(0, 0, image16x16.width(), 1);
-//            auto addedHImage = addImage(hImage);
+        SECTION("Horizontal aspect image") {
+            QImage hImage = image16x16.copy(0, 0, image16x16.width(), 1);
+            auto addedHImage = addImage(hImage);
 
-//            QVector<QColor> colors = {
-//                QColor("#000000"),
-//                QColor("#aa0000"),
-//                QColor("#00aa00"),
-//                QColor("#0000aa"),
-//            };
+            QVector<QColor> colors = {
+                QColor("#000000"),
+                QColor("#aa0000"),
+                QColor("#00aa00"),
+                QColor("#0000aa"),
+            };
 
-//            checkCropSinglePixel(addedHImage, colors);
-//        }
-
-
-//        SECTION("Crop larger area top left") {
-//            QVector<QColor> croppedColors = {
-//                {QColor("#000000"), QColor("#ff0000"),
-//                 QColor("#aa0000"), QColor("#bb0000"),
-//                 QColor("#00aa00"), QColor("#00bb00"),
-//                }
-//            };
-
-//            QVector<Size> croppedSizes = {
-//                {{8, 12}, 48, croppedColors},
-//                {{4, 4}, 8, {}},
-//            };
-
-//            //Check the output
-//            cwImage croppedImageId = cropImage(QRectF(0.0, 0.0, 0.5, 0.75));
-//            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//        }
-
-//        SECTION("Crop larger area low right") {
-//            QVector<QColor> croppedColors = {
-//                {QColor("#cc0000"), QColor("#dd0000"),
-//                 QColor("#00cc00"), QColor("#00dd00"),
-//                 QColor("#0000cc"), QColor("#0000dd")
-//                }
-//            };
-
-//            QVector<Size> croppedSizes = {
-//                {{8, 12}, 48, croppedColors},
-//                {{4, 4}, 8, {}},
-//            };
-
-//            //Check the output
-//            cwImage croppedImageId = cropImage(QRectF(0.5, 0.25, 0.5, 0.75));
-//            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//        }
-
-//        SECTION("Crop larger area middle") {
-//            QVector<QColor> croppedColors = {
-//                {
-//                    QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
-//                    QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
-//                }
-//            };
-
-//            QVector<Size> croppedSizes = {
-//                {{12, 8}, 48, croppedColors},
-//                {{4, 4}, 8, {}},
-//            };
-
-//            //Check the output
-//            cwImage croppedImageId = cropImage(QRectF(0.25, 0.25, 0.75, 0.5));
-//            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//        }
-
-//        SECTION("Crop bad box") {
-
-//            SECTION("Top left") {
-//                QVector<QColor> croppedColors = {
-//                    {
-//                        QColor("#000000"), QColor("#ff0000")
-//                    }
-//                };
-
-//                QVector<Size> croppedSizes = {
-//                    {{8, 4}, 16, croppedColors},
-//                };
-
-//                //Check the output
-//                cwImage croppedImageId = cropImage(QRectF(-0.25, -0.25, 0.75, 0.5));
-//                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//            }
-
-//            SECTION("Top Right") {
-//                QVector<QColor> croppedColors = {
-//                    {
-//                        QColor("#ff00f7"), QColor("#00ff00")
-//                    }
-//                };
-
-//                QVector<Size> croppedSizes = {
-//                    {{8, 4}, 16, croppedColors},
-//                };
-
-//                //Check the output
-//                cwImage croppedImageId = cropImage(QRectF(0.5, -0.25, 0.75, 0.5));
-//                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//            }
-
-//            SECTION("Bottom Left") {
-//                QVector<QColor> croppedColors = {
-//                    {
-//                        QColor("#0000aa"), QColor("#0000bb")
-//                    }
-//                };
-
-//                QVector<Size> croppedSizes = {
-//                    {{8, 4}, 16, croppedColors},
-//                };
-
-//                //Check the output
-//                cwImage croppedImageId = cropImage(QRectF(-0.25, 0.75, 0.75, 0.5));
-//                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//            }
-
-//            SECTION("Bottom Right") {
-//                QVector<QColor> croppedColors = {
-//                    {
-//                        QColor("#0000cc"), QColor("#0000dd")
-//                    }
-//                };
-
-//                QVector<Size> croppedSizes = {
-//                    {{8, 4}, 16, croppedColors},
-//                };
-
-//                //Check the output
-//                cwImage croppedImageId = cropImage(QRectF(0.5, 0.75, 0.75, 0.5));
-//                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//            }
-//        }
-
-//        SECTION("No crop") {
-//            QVector<QColor> croppedColors = {
-//                {
-//                    QColor("#000000"), QColor("#ff0000"), QColor("#ff00f7"), QColor("#00ff00"),
-//                    QColor("#aa0000"), QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
-//                    QColor("#00aa00"), QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
-//                    QColor("#0000aa"), QColor("#0000bb"), QColor("#0000cc"), QColor("#0000dd")
-//                }
-//            };
-
-//            QVector<Size> croppedSizes = {
-//                {{16, 16}, 128, colors},
-//                {{8, 8}, 32, {}},
-//                {{4, 4}, 8, {}}
-//            };
-
-//            //Check the output
-//            cwImage croppedImageId = cropImage(QRectF(QPointF(-0.1, -0.53), QPointF(1.1, 1.4)));
-//            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//        }
+            checkCropSinglePixel(addedHImage, colors);
+        }
 
 
-//        SECTION("Weird area") {
-//            QVector<QColor> croppedColors = {
-//                {
-//                    QColor("#00aa00"),
-//                    QColor("#0000aa"),
-//                }
-//            };
+        SECTION("Crop larger area top left") {
+            QVector<QColor> croppedColors = {
+                {QColor("#aa0000"), QColor("#bb0000"),
+                 QColor("#00aa00"), QColor("#00bb00"),
+                 QColor("#0000aa"), QColor("#0000bb"),
+                }
+            };
 
-//            QVector<Size> croppedSizes = {
-//                {{4, 8}, 16, croppedColors},
-//            };
+            QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                {{8, 12}, 48, croppedColors},
+                {{4, 6}, 16, {}},
+                {{2, 3}, 8, {}},
+                {{1, 1}, 8, {}},
+            };
 
-//            //Check the output
-//            cwImage croppedImageId = cropImage(QRectF(0.1, 0.3, 0.45, 0.7));
-//            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
-//        }
+            //Check the output
+            cwImage croppedImageId = cropImage(QRectF(0.0, 0.0, 0.5, 0.75));
+            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+        }
+
+        SECTION("Crop larger area low right") {
+            QVector<QColor> croppedColors = {
+                {
+                 QColor("#ff00f7"), QColor("#00ff00"),
+                 QColor("#cc0000"), QColor("#dd0000"),
+                 QColor("#00cc00"), QColor("#00dd00"),
+                }
+            };
+
+            QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                {{8, 12}, 48, croppedColors},
+                {{4, 6}, 16, {}},
+                {{2, 3}, 8, {}},
+                {{1, 1}, 8, {}},
+            };
+
+            //Check the output
+            cwImage croppedImageId = cropImage(QRectF(0.5, 0.25, 0.5, 0.75));
+            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+        }
+
+        SECTION("Crop larger area middle") {
+            QVector<QColor> croppedColors = {
+                {
+                    QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
+                    QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
+                }
+            };
+
+            QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                {{12, 8}, 48, croppedColors},
+                {{6, 4}, 16, {}},
+                {{3, 2}, 8, {}},
+                {{1, 1}, 8, {}},
+            };
+
+            //Check the output
+            cwImage croppedImageId = cropImage(QRectF(0.25, 0.25, 0.75, 0.5));
+            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+        }
+
+        SECTION("Crop bad box") {
+
+            SECTION("Bottom left") {
+                QVector<QColor> croppedColors = {
+                    {
+                        QColor("#0000aa"), QColor("#0000bb")
+                    }
+                };
+
+                QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                    {{8, 4}, 16, croppedColors},
+                    {{4, 2}, 8, {}},
+                    {{2, 1}, 8, {}},
+                    {{1, 1}, 8, {}},
+                };
+
+                //Check the output
+                cwImage croppedImageId = cropImage(QRectF(-0.25, -0.25, 0.75, 0.5));
+                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+            }
+
+            SECTION("Bottom Right") {
+                QVector<QColor> croppedColors = {
+                    {
+                        QColor("#0000cc"), QColor("#0000dd")
+                    }
+                };
+
+                QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                    {{8, 4}, 16, croppedColors},
+                    {{4, 2}, 8, {}},
+                    {{2, 1}, 8, {}},
+                    {{1, 1}, 8, {}},
+                };
+
+                //Check the output
+                cwImage croppedImageId = cropImage(QRectF(0.5, -0.25, 0.75, 0.5));
+                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+            }
+
+            SECTION("Top Left") {
+                QVector<QColor> croppedColors = {
+                    {
+                        QColor("#000000"), QColor("#ff0000")
+                    }
+                };
+
+                QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                    {{8, 4}, 16, croppedColors},
+                    {{4, 2}, 8, {}},
+                    {{2, 1}, 8, {}},
+                    {{1, 1}, 8, {}},
+                };
+
+                //Check the output
+                cwImage croppedImageId = cropImage(QRectF(-0.25, 0.75, 0.75, 0.5));
+                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+            }
+
+            SECTION("Top Right") {
+                QVector<QColor> croppedColors = {
+                    {
+                        QColor("#ff00f7"), QColor("#00ff00")
+                    }
+                };
+
+                QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                    {{8, 4}, 16, croppedColors},
+                    {{4, 2}, 8, {}},
+                    {{2, 1}, 8, {}},
+                    {{1, 1}, 8, {}},
+                };
+
+                //Check the output
+                cwImage croppedImageId = cropImage(QRectF(0.5, 0.75, 0.75, 0.5));
+                checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+            }
+        }
+
+        SECTION("No crop") {
+            QVector<QColor> croppedColors = {
+                {
+                    QColor("#000000"), QColor("#ff0000"), QColor("#ff00f7"), QColor("#00ff00"),
+                    QColor("#aa0000"), QColor("#bb0000"), QColor("#cc0000"), QColor("#dd0000"),
+                    QColor("#00aa00"), QColor("#00bb00"), QColor("#00cc00"), QColor("#00dd00"),
+                    QColor("#0000aa"), QColor("#0000bb"), QColor("#0000cc"), QColor("#0000dd")
+                }
+            };
+
+            QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                {{16, 16}, 128, colors},
+                {{8, 8}, 32, {}},
+                {{4, 4}, 8, {}},
+                {{2, 2}, 8, {}},
+                {{1, 1}, 8, {}}
+            };
+
+            //Check the output
+            cwImage croppedImageId = cropImage(QRectF(QPointF(-0.1, -0.53), QPointF(1.1, 1.4)));
+            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+        }
+
+
+        SECTION("Weird area") {
+            QVector<QColor> croppedColors = {
+                {
+                    QColor("#000000"), QColor("#ff0000"),
+                    QColor("#aa0000"), QColor("#ba0000"),
+                    QColor("#00aa00"), QColor("#00bb00"),
+                }
+            };
+
+            QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                {{8, 12}, 48, croppedColors},
+                {{4, 6}, 16, {}},
+                {{2, 3}, 8, {}},
+                {{1, 1}, 8, {}},
+            };
+
+            //Check the output
+            cwImage croppedImageId = cropImage(QRectF(0.1, 0.3, 0.45, 0.7));
+            checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+        }
 
         SECTION("Crop real image") {
             //Don't changes thes values, they have been verified with squish compression

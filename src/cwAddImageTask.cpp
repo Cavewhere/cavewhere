@@ -103,9 +103,9 @@ void cwAddImageTask::runTask() {
         return;
     }
 
-    if(Texture == 0) {
-        glGenTextures(1, &Texture);
-    }
+//    if(Texture == 0) {
+//        glGenTextures(1, &Texture);
+//    }
 
     //Connect to the database
     bool connected = connectToDatabase("AddImagesTask");
@@ -305,7 +305,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
   */
 void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
 {
-    QByteArray format = "jpg";
+    QByteArray format = "png";
     QByteArray imageData;
 
     if(!MipmapOnly) {
