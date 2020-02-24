@@ -16,14 +16,13 @@ void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cw
 
     if(!size.blockColors.isEmpty()) {
         //DXT1 decompression makes this assumption
-        REQUIRE(sizeof(long) == sizeof(int));
 
-        QVector<unsigned long> image(size.dim.width() * size.dim.height(), 0);
+        QVector<unsigned int> image(size.dim.width() * size.dim.height(), 0);
 
         BlockDecompressImageDXT1(size.dim.width(), size.dim.height(),
                                  reinterpret_cast<const unsigned char*>(mipmap.data().constData()), image.data());
 
-        auto toQRgba = [](unsigned long color) {
+        auto toQRgba = [](unsigned int color) {
             //Get shifty
             int r = (color & 0xFF000000) >> 24;
             int g = (color & 0x00FF0000) >> 16;
