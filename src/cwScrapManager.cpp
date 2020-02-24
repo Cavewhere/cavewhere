@@ -251,7 +251,7 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
  */
 bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
-    if(scrap->triangulationData().croppedImage().isValid()) {
+    if(scrap->triangulationData().croppedImage().isMipmapsValid()) {
         //Should be in the database
         foreach(int mipmap, scrap->triangulationData().croppedImage().mipmaps()) {
             cwImageData imageData = ImageProvider.data(mipmap, true);
