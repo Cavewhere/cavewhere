@@ -26,6 +26,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwProject.h"
 #include "cwError.h"
+#include "cwImageData.h"
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -62,6 +63,18 @@ inline std::ostream& operator << ( std::ostream& os, QSizeF const& value ) {
     os << "(" << value.width() << "x" << value.height() << ")";
     return os;
 }
+
+inline std::ostream& operator << ( std::ostream& os, cwImageData const& value ) {
+    return os << "[size=" << value.size() << "]";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {
+    for(auto image : value) {
+        os << image << ",";
+    }
+    return os;
+}
+
 
 std::ostream &operator << ( std::ostream& os, cwError const& error);
 

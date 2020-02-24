@@ -95,9 +95,6 @@ private:
     cwImage RegenerateImage; //This updates the mipmaps for the image
 
     QAtomicInt Progress;
-    QOpenGLContext* CompressionContext;
-    QOffscreenSurface* Surface;
-    GLuint Texture;
 
     QImage copyOriginalImage(QString image, cwImage* imageIds);
     void copyOriginalImage(const QImage& image, cwImage* imageIds);
@@ -118,6 +115,8 @@ private:
     void IncreaseProgress();
 
     static int half(int value);
+
+    cwImage originalMetaData(const QImage& image) const;
 
 private slots:
     void tryAddingImagesToDatabase();

@@ -234,7 +234,7 @@ QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
         return QVector2D(1.0, 1.0);
     }
 
-    QSize originalSize = data(image.original(), true).size();
+    QSize originalSize = image.originalSize();
     QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
     return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
                      originalSize.height() / (double)firstMipmapSize.height());

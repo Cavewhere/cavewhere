@@ -57,7 +57,7 @@ void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cw
                 int imageIndex = (size.dim.height() - 1 - r) * size.dim.width() + c;
                 QRgb decompressedColor = toQRgba(image.at(imageIndex));
 
-                INFO("BlockIndex:" << blockIndex << " ImageIndex:" << imageIndex);
+                INFO("BlockIndex:" << blockIndex << " ImageIndex:" << imageIndex << " Image block index:" << imageIndex / 16);
                 INFO("Color:" << color.name().toStdString() << " DecompressedColor:" << QColor(decompressedColor).name().toStdString());
                 fuzzyCompareColors(color, decompressedColor);
             }

@@ -58,8 +58,6 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         cwImageProvider provider;
         provider.setProjectPath(filename);
 
-        REQUIRE(mipmaps.size() == sizes.size());
-
         QList<cwImageData> mipmapImageData;
         mipmapImageData.reserve(mipmaps.size());
         std::transform(mipmaps.begin(), mipmaps.end(), std::back_inserter(mipmapImageData),
@@ -67,6 +65,10 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         {
             return provider.data(id);
         });
+
+        INFO("Mipmaps:" << mipmapImageData);
+
+        REQUIRE(mipmaps.size() == sizes.size());
 
         for(int i = 0; i < mipmapImageData.size(); i++) {
             INFO("mipmap:" << i)
@@ -131,6 +133,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
                     cropSinglePixel(x, y, image, colors);
                 }
             }
+//            cropSinglePixel(1, 0, image, colors);
         };
 
         auto cropSpecificImage = [filename](const cwImage& image, const QRectF& cropArea) {
@@ -180,8 +183,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             checkCropSinglePixel(addedHImage, colors);
         }
 
-
-        SECTION("Crop larger area top left") {
+        SECTION("Crop larger area bottom right") {
             QVector<QColor> croppedColors = {
                 {QColor("#aa0000"), QColor("#bb0000"),
                  QColor("#00aa00"), QColor("#00bb00"),
@@ -386,6 +388,14 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             //Check the output
             cwImage croppedImageId = cropSpecificImage(realImage, QRectF(0.25, 0.25, 0.5, 0.5));
             checkMipmaps(croppedImageId.mipmaps(), croppedSizes);
+
+            cwImageProvider provider;
+            provider.setProjectPath(filename);
+
+            QVector2D scaleTex = provider.scaleTexCoords(croppedImageId);
+
+            CHECK(scaleTex.x() == 1.0);
+            CHECK(scaleTex.y() == 1.0);
         }
     }
 }

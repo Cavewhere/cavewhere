@@ -77,9 +77,12 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::openglCompression(c
         future = AsyncFuture::observe(concurrentFuture).context(this, [concurrentFuture](){
             return AsyncFuture::completed(concurrentFuture.result());
         }).future();
-
-    } else {
+    } else if(QOpenGLContext::supportsThreadedOpenGL() || thread() == QCoreApplication::instance()->thread()){
         future = AsyncFuture::completed(compressImages());
+    } else {
+        QList<cwDXT1Compresser::CompressedImage> images;
+        QMetaObject::invokeMethod(QCoreApplication::instance(), compressImages, Qt::BlockingQueuedConnection, &images);
+        future = AsyncFuture::completed(images);
     }
 
     return future;
