@@ -28,11 +28,14 @@ MenuBar {
         MenuItem {
             text: "New"
             shortcut: "Ctrl+N"
-            onTriggered:{
-//                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
-                rootData.pageSelectionModel.clearHistory()
-                rootData.pageSelectionModel.gotoPageByName(null, "View")
-                project.newProject();
+            onTriggered: {
+                askToSaveDialog.taskName = "creating a new file"
+                askToSaveDialog.afterSaveFunc = function() {
+                    rootData.pageSelectionModel.clearHistory()
+                    rootData.pageSelectionModel.gotoPageByName(null, "View")
+                    project.newProject();
+                }
+                askToSaveDialog.askToSave();
             }
         }
 
