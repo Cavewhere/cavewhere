@@ -60,4 +60,41 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         CHECK(image.isIconValid() == false);
         CHECK(image.isValid() == false);
     }
+
+}
+
+TEST_CASE("cwImage ==operator should work correctly", "[cwImage]") {
+
+    cwImage image;
+    image.setOriginal(1);
+    image.setMipmaps({2, 3, 4});
+    image.setIcon(5);
+    image.setOriginalSize(QSize(50, 51));
+    image.setOriginalDotsPerMeter(1000);
+
+    cwImage image2 = image;
+    CHECK(image == image2);
+
+    cwImage image3 = image;
+
+    SECTION("Set icon") {
+        image.setIcon(6);
+        CHECK(image != image3);
+    }
+    SECTION("Set original") {
+        image.setOriginal(-1);
+        CHECK(image != image3);
+    }
+    SECTION("Set Mips") {
+        image.setMipmaps({72});
+        CHECK(image != image3);
+    }
+    SECTION("Set icon") {
+        image.setOriginalSize(QSize(54, 30));
+        CHECK(image != image3);
+    }
+    SECTION("Set icon") {
+        image.setOriginalDotsPerMeter(200);
+        CHECK(image != image3);
+    }
 }

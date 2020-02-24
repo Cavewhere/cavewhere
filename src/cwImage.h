@@ -127,9 +127,7 @@ inline int cwImage::original() const {
 /**
   Returns true if the original ids are equal
   */
-inline bool cwImage::operator ==(const cwImage& other) const {
-    return Data->OriginalId == other.Data->OriginalId;
-}
+
 
 /**
   Returns true if the original ids aren't equal

@@ -40,3 +40,16 @@ cwImage::PrivateData::PrivateData() {
     OriginalDotsPerMeter = 0;
 }
 
+
+bool cwImage::operator ==(const cwImage &other) const {
+
+    if(Data == other.Data) {
+        return true;
+    }
+
+    return Data->OriginalId == other.Data->OriginalId
+            && Data->Mipmaps == other.Data->Mipmaps
+            && Data->IconId == other.Data->IconId
+            && Data->OriginalSize == other.Data->OriginalSize
+            && Data->OriginalDotsPerMeter == other.Data->OriginalDotsPerMeter;
+}
