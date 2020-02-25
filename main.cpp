@@ -67,11 +67,11 @@ int main(int argc, char *argv[])
     cwQMLRegister::registerQML();
 
     QUrl mainWindowPath = cwGlobalDirectory::mainWindowSourcePath();
-    QQmlApplicationEngine applicationEnigine;
+    QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
 
-    rootData->qmlReloader()->setApplicationEngine(&applicationEnigine);
+    rootData->qmlReloader()->setApplicationEngine(applicationEnigine);
 
-    QQmlContext* context =  applicationEnigine.rootContext();
+    QQmlContext* context = applicationEnigine->rootContext();
 
     context->setContextObject(rootData);
     context->setContextProperty("rootData", rootData);
@@ -82,7 +82,8 @@ int main(int argc, char *argv[])
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
     context->engine()->addImageProvider(cwImageProvider::Name, imageProvider);
 
-    auto quit = [&a, rootData]() {
+    auto quit = [&a, rootData, applicationEnigine]() {
+        delete applicationEnigine;
         delete rootData;
         QThreadPool::globalInstance()->waitForDone();
         a.quit();
@@ -92,7 +93,7 @@ int main(int argc, char *argv[])
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
     if(!mainWindowPath.isEmpty()) {
-        applicationEnigine.load(mainWindowPath);
+        applicationEnigine->load(mainWindowPath);
     } else {
         QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
                                               "CaveWhere Failed to Load Main Window",
