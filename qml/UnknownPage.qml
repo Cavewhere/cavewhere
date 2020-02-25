@@ -5,8 +5,6 @@ ScrollViewPage {
     QQ.Rectangle {
         radius: 5
 
-        anchors.centerIn: parent
-
         width: columnLayoutId.width + 30
         height: columnLayoutId.height + 30
 
@@ -30,6 +28,7 @@ ScrollViewPage {
 
             QQ.Image {
                 source: "qrc:/icons/unknownPage.png"
+                sourceSize: Qt.size(400, 0);
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -43,4 +42,5 @@ ScrollViewPage {
         }
     }
 }
+
 

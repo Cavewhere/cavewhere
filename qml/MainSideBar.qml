@@ -28,9 +28,11 @@ QQ.Rectangle {
         var history = rootData.pageSelectionModel.history;
         for(var i = history.length - 1; i >= 0; i--) {
             var page = history[i];
-            var fullAddress = page.fullname();
-            if(fullAddress.search(pageType) === 0) {
-                return fullAddress;
+            if(page) {
+                var fullAddress = page.fullname();
+                if(fullAddress.search(pageType) === 0) {
+                    return fullAddress;
+                }
             }
         }
         return pageType;
