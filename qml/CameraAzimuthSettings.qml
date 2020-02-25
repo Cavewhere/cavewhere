@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
@@ -27,7 +27,7 @@ ColumnLayout {
             enabled: turnTableInteraction.azimuth !== 0.0
         }
 
-        Item { width:1; height:1 }
+        QQ.Item { width:1; height:1 }
 
         Button {
             id: westButton
@@ -72,7 +72,7 @@ ColumnLayout {
             enabled: turnTableInteraction.azimuth !== 90.0
         }
 
-        Item { width:1; height:1 }
+        QQ.Item { width:1; height:1 }
         Button {
             id: southButton
             text: "South"
@@ -82,16 +82,16 @@ ColumnLayout {
             }
             enabled: turnTableInteraction.azimuth !== 180.0
         }
-        Item { width:1; height:1 }
+        QQ.Item { width:1; height:1 }
 
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: azimuthAnimationId
         target: turnTableInteraction;
         property: "azimuth";
         duration: 200;
-        easing.type: Easing.InOutQuad
+        easing.type: QQ.Easing.InOutQuad
 
         function restartRotation(toRotation) {
 

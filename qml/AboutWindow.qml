@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Window 2.0
 
 Window {
@@ -16,7 +16,7 @@ Window {
     color: "#E8E8E8"
     visible: true
 
-    Column {
+    QQ.Column {
         id: columnId
         anchors.topMargin: 10
         anchors.top: parent.top

@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.4
 import QtQuick.Dialogs 1.2
 import QtQuick.Layouts 1.2
@@ -8,7 +8,7 @@ Dialog {
     property alias messages: messagesModel
     property font font: {family: 'Helvetica'}
 
-    ListModel {
+    QQ.ListModel {
         id: messagesModel
     }
 
@@ -34,8 +34,8 @@ Dialog {
                 role: "severity"
                 title: ""
                 width: 25
-                delegate: Item {
-                    Image {
+                delegate: QQ.Item {
+                    QQ.Image {
                         anchors.centerIn: parent
                         width: 14
                         height: 14
@@ -96,7 +96,7 @@ Dialog {
             readOnly: true
             font: messageListDialog.font
 
-            Connections {
+            QQ.Connections {
                 target: messagesTable.selection
                 onSelectionChanged: {
                     var selectionText = ''

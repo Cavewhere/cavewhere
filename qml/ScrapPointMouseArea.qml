@@ -5,13 +5,13 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 
 /**
 This is used for the scrap outline point and the note point to move the point around
   */
-MouseArea {
+QQ.MouseArea {
     id: stationMouseArea
 
     property variant lastPoint;

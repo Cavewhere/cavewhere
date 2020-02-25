@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.1
@@ -72,7 +72,7 @@ StandardPage {
         visible: true
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: collapseRectangleId
         anchors.left: parent.left
         anchors.top: parent.top
@@ -95,7 +95,7 @@ StandardPage {
                 }
             }
 
-            Item {
+            QQ.Item {
 
                 implicitWidth: tripNameVerticalText.implicitHeight
                 implicitHeight: tripNameVerticalText.implicitWidth
@@ -140,25 +140,25 @@ StandardPage {
 
 
 
-//    Component.onCompleted: {
+//    QQ.Component.onCompleted: {
 //        registerSubPages()
 //    }
 
     states: [
-        State {
+        QQ.State {
             name: "COLLAPSE"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: collapseRectangleId
                 visible: true
             }
 
-            AnchorChanges {
+            QQ.AnchorChanges {
                 target: notesGallery
                 anchors.left: collapseRectangleId.right
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: surveyEditor
                 visible: false
             }
@@ -166,50 +166,50 @@ StandardPage {
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             from: ""
             to: "COLLAPSE"
 
-            PropertyAction { target: surveyEditor; property: "visible"; value: true }
-            PropertyAction { target: collapseRectangleId; property: "visible"; value: false }
+            QQ.PropertyAction { target: surveyEditor; property: "visible"; value: true }
+            QQ.PropertyAction { target: collapseRectangleId; property: "visible"; value: false }
 
 
-            PropertyAction {
+            QQ.PropertyAction {
                 target: surveyEditor; property: "clip"; value: true
             }
 
-            ParallelAnimation {
-                AnchorAnimation {
+            QQ.ParallelAnimation {
+                QQ.AnchorAnimation {
                     targets: [ notesGallery ]
                 }
 
-                NumberAnimation {
+                QQ.NumberAnimation {
                     target: surveyEditor
                     property: "width"
                     to: 0
                 }
             }
 
-            PropertyAction {
+            QQ.PropertyAction {
                 target: surveyEditor; property: "clip"; value: false
             }
 
-            PropertyAction { target: collapseRectangleId; property: "visible"; value: true }
+            QQ.PropertyAction { target: collapseRectangleId; property: "visible"; value: true }
         },
 
-        Transition {
+         QQ.Transition {
             from: "COLLAPSE"
             to: ""
 
 
-            PropertyAction { target: notesGallery; property: "anchors.left"; value: surveyEditor.right}
+            QQ.PropertyAction { target: notesGallery; property: "anchors.left"; value: surveyEditor.right}
 
-            ParallelAnimation {
-                AnchorAnimation {
+            QQ.ParallelAnimation {
+                QQ.AnchorAnimation {
                     targets: [ notesGallery ]
                 }
 
-                NumberAnimation {
+                QQ.NumberAnimation {
                     target: surveyEditor
                     property: "width"
                     to: surveyEditor.contentWidth

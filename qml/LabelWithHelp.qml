@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
 Text {
     id: label
@@ -15,7 +15,7 @@ Text {
 //    font.bold: true
     font.underline: false
 
-    MouseArea {
+    QQ.MouseArea {
         id: textMouseArea
         anchors.fill: parent
         hoverEnabled: true
@@ -26,11 +26,11 @@ Text {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "HOVER"
             when: textMouseArea.containsMouse
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: label
                 color: "blue"
                 font.underline: true

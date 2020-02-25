@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-QtObject {
+QQ.QtObject {
     id: listener
 
     property Scrap scrap;
@@ -14,8 +14,8 @@ QtObject {
     property int unit;
 
     //Private properties
-    property Connections _scrapConnection:
-        Connections {
+    property QQ.Connections _scrapConnection:
+        QQ.Connections {
         target: scrap === null ? null : scrap
         onLeadsDataChanged: updateData(begin, end, roles);
         ignoreUnknownSignals: true

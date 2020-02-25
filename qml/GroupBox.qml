@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
 
     property color backgroundColor: "white"
     property alias text: titleText.text
@@ -18,7 +18,7 @@ Item {
 
     height: titleText.height + contentHeight + 3
 
-    Rectangle {
+    QQ.Rectangle {
         id: checkBoxGroup
         border.width: 1
         border.color: "gray"
@@ -30,7 +30,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        Item {
+        QQ.Item {
             id: contentArea
             anchors.top: checkBoxGroup.top
             anchors.left: parent.left
@@ -44,7 +44,7 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         color: backgroundColor
         anchors.fill: titleText
     }

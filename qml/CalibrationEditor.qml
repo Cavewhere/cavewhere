@@ -5,20 +5,20 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 import "Theme.js" as Theme
 
-Rectangle {
+QQ.Rectangle {
     id: calibrationEditor
     property Calibration calibration
 
     radius: 8
     height: childrenRect.height
 
-    Column {
+    QQ.Column {
 
         anchors.left: parent.left
         anchors.right: parent.right
@@ -29,7 +29,7 @@ Rectangle {
             text: "Calibration"
         }
 
-        Item {
+        QQ.Item {
             anchors.left: parent.left
             anchors.right: parent.right
             height: childrenRect.height
@@ -49,7 +49,7 @@ Rectangle {
         }
 
 
-        Item {
+        QQ.Item {
             anchors.left: parent.left
             anchors.right: parent.right
 

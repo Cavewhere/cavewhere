@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
@@ -41,7 +41,7 @@ DataBox {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: guessAreaBackground
 //        radius: 5
         color: Theme.floatingWidgetColor
@@ -49,7 +49,7 @@ DataBox {
         visible: false
         border.color: "#888888"
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             onClicked: {
                 commitAutoStation()
@@ -57,7 +57,7 @@ DataBox {
         }
     }
 
-    Column {
+    QQ.Column {
         id: guessArea
         anchors.centerIn: parent
 
@@ -67,7 +67,7 @@ DataBox {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#444444"
             text: "Press Tab"
-            font.pixelSize: 10
+            font.pointSize: 10
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
         }
@@ -81,10 +81,10 @@ DataBox {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "AutoNameState"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: stationBox
 
                 onTabPressed: {
@@ -103,12 +103,12 @@ DataBox {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: guessArea
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: guessAreaBackground
                 visible: true
                 width: guessArea.width + 6

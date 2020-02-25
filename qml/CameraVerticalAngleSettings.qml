@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
@@ -55,12 +55,12 @@ ColumnLayout {
         }
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: pitchAnimation
         target: turnTableInteraction;
         property: "pitch";
         duration: 200;
-        easing.type: Easing.InOutQuad
+        easing.type: QQ.Easing.InOutQuad
     }
 
     HelpArea {

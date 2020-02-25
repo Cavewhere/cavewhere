@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 2.5
 
-Rectangle {
+QQ.Rectangle {
     default property alias scollData: itemId.data
 
     anchors.fill: parent
@@ -10,7 +10,7 @@ Rectangle {
         anchors.fill: parent
         clip: true
 
-        Item {
+        QQ.Item {
             id: itemId
             x: 10
             y: x

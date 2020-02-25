@@ -1,16 +1,16 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.1
+import QtQuick.Controls 1.4 as QC
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: itemId
 
     implicitWidth: columnLayoutId.width
 
     property GLTerrainRenderer viewer
 
-    ScrollView {
+    QC.ScrollView {
         anchors.fill: parent
 
         ColumnLayout {
@@ -25,9 +25,9 @@ Item {
             anchors.top: parent.top
             anchors.margins: 5
 
-            GroupBox {
+            QC.GroupBox {
                 title: "Azimuth"
-                Item {
+                QQ.Item {
                     width: columnLayoutId.maxWidth
                     height: azimuthSettingsId.height
                     CameraAzimuthSettings {
@@ -39,10 +39,10 @@ Item {
                 }
             }
 
-            GroupBox {
+            QC.GroupBox {
                 title: "Vertical Angle"
 
-                Item {
+                QQ.Item {
                     width: columnLayoutId.maxWidth
                     height: verticalAngleSettingsId.height
                     CameraVerticalAngleSettings {
@@ -54,10 +54,10 @@ Item {
                 }
             }
 
-            GroupBox {
+            QC.GroupBox {
                 title: "Projection"
 
-                Item {
+                QQ.Item {
                     width: columnLayoutId.maxWidth
                     height: projectionSettingsId.height
                     CameraProjectionSettings {

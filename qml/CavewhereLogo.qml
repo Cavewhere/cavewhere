@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Row {
+QQ.Row {
     spacing: 10
 
-    Image {
+    QQ.Image {
         id: imageId
         source: "qrc:/icons/cave-64x64.png"
     }

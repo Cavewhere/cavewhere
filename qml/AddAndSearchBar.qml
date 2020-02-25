@@ -1,6 +1,5 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.2 as Controls
 
 RowLayout {
 
@@ -20,7 +19,7 @@ RowLayout {
         }
     }
 
-    Item { Layout.fillWidth: true }
+    QQ.Item { Layout.fillWidth: true }
 
     //TODO: Add me back in, and implement!
 //    Controls.TextField {

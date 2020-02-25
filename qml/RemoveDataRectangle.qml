@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: rect
     color: "red"
     opacity: .5
@@ -18,7 +18,7 @@ Rectangle {
         }
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: opacityAnimation
         target: rect
         property: "opacity"

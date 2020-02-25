@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
@@ -44,7 +44,7 @@ StandardPage {
         registerSubPages()
     }
 
-    Component {
+    QQ.Component {
         id: caveLeadsPage
         CaveLeadPage {
             anchors.fill: parent
@@ -70,7 +70,7 @@ StandardPage {
                 }
             }
 
-            Rectangle {
+            QQ.Rectangle {
                 id: lengthDepthContainerId
 
                 color: "lightgray"
@@ -105,7 +105,7 @@ StandardPage {
             }
 
 
-//            Rectangle {
+//            QQ.Rectangle {
 //                color: "gray"
 
 //                width: 100
@@ -116,7 +116,7 @@ StandardPage {
 //                    text: "Leads"
 //                }
 
-//                MouseArea {
+//                QQ.MouseArea {
 //                    anchors.fill: parent
 //                    onClicked:  {
 //            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
@@ -153,16 +153,16 @@ StandardPage {
                 //            anchors.top: parent.top
                 //            anchors.bottom: parent.bottom
 
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; width: 100 }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Length"; width: 100 }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Trip"; }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Date"; }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Survey"; width: 100 }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Length"; width: 100 }
 
                 itemDelegate:
-                    Item {
+                    QQ.Item {
                     clip: true
 
-                    Connections {
+                    QQ.Connections {
                         target: tableViewId
                         onCurrentRowChanged: {
                             if(tableViewId.currentRow === styleData.row) {
@@ -184,7 +184,7 @@ StandardPage {
                         onlyLargestRange: true
                     }
 
-                    Item {
+                    QQ.Item {
                         visible: styleData.column === 0
 
                         anchors.fill: parent
@@ -275,7 +275,7 @@ StandardPage {
     Instantiator {
         id: instantiatorId
 
-        delegate: QtObject {
+        delegate: QQ.QtObject {
             id: delegateObjectId
             property Trip trip: tripObjectRole
             property Page page
@@ -301,7 +301,7 @@ StandardPage {
         }
     }
 
-    Component {
+    QQ.Component {
         id: tripPageComponent
         TripPage {
             anchors.fill: parent

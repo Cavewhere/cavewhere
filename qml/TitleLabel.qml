@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     property alias text: textArea.text
 
     width: textArea.width + 20

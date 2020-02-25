@@ -1,7 +1,7 @@
-import QtQuick 2.0
-import QtQuick.Controls 2.12
+import QtQuick 2.0 as QQ
+import QtQuick.Controls 2.12 as QC
 
-Loader {
+QQ.Loader {
     id: loaderId
 
     property SaveAsDialog saveAsDialog
@@ -33,20 +33,20 @@ Loader {
 
     anchors.centerIn: parent
 
-    Component {
+    QQ.Component {
         id: dialogComponent
-        Item {
+        QQ.Item {
             id: itemId
             property alias askToSaveDialog: askToSaveDialogId
 
             anchors.centerIn: parent
 
-            Connections {
+            QQ.Connections {
                 target: rootData.project
                 onFileSaved: _privateAfterSave();
             }
 
-            Connections {
+            QQ.Connections {
                 target: rootData.project.errorModel
                 onCountChanged: {
                     if(rootData.project.errorModel.count > 0) {
@@ -55,11 +55,11 @@ Loader {
                 }
             }
 
-            Dialog {
+            QC.Dialog {
                 id: askToSaveDialogId
                 anchors.centerIn: parent
                 modal: true
-                standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
+                standardButtons: QC.Dialog.Save | QC.Dialog.Discard | QC.Dialog.Cancel
                 title: "Save before " + taskName + "?"
                 onAccepted: {
                     //Save an close

@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.2
 import QtQuick.Layouts 1.1
@@ -21,7 +21,7 @@ PointItem {
         scrap: point.scrap
     }
 
-    Image {
+    QQ.Image {
         id: questionImage
         source: "qrc:/icons/question.png"
         anchors.centerIn: parent
@@ -29,20 +29,20 @@ PointItem {
         visible: !lead.completed || selected
         opacity: lead.completed ? 0.6 : 1.0
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             onClicked: selected = !selected
         }
     }
 
-    Component {
+    QQ.Component {
         id: quoteBoxComponent
         QuoteBox {
             pointAtObject: questionImage
             pointAtObjectPosition: Qt.point(Math.floor(questionImage.width * .5),
                                             questionImage.height)
 
-            Item {
+            QQ.Item {
                 width: columnLayout.width
                 height: columnLayout.height
 
@@ -61,7 +61,7 @@ PointItem {
                         checked: lead.completed
                         onCheckedChanged: lead.completed = checked
 
-                        Connections {
+                        QQ.Connections {
                             target: lead
                             onCompletedChanged: checkBox.checked = lead.completed
                         }
@@ -94,7 +94,7 @@ PointItem {
         }
     }
 
-    Loader {
+    QQ.Loader {
         sourceComponent: selected ? quoteBoxComponent : null
         asynchronous: true
     }

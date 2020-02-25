@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
@@ -17,12 +17,12 @@ GroupBox {
     contentHeight: column.height
     text: "Declination"
 
-    Column {
+    QQ.Column {
         id: column
         anchors.left: parent.left
         anchors.right: parent.right
 
-        Row {
+        QQ.Row {
             spacing: 3
 
             LabelWithHelp {

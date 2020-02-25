@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 FocusScope {
@@ -16,7 +16,7 @@ FocusScope {
     anchors.left: parent.left
     anchors.right: parent.right
 
-    Rectangle {
+    QQ.Rectangle {
         id: caveDelegate
 
         property bool selected: index === view.currentIndex;
@@ -39,13 +39,13 @@ FocusScope {
             }
         }
 
-        MouseArea {
+        QQ.MouseArea {
 
             id: caveMouseArea
             anchors.fill: parent;
             hoverEnabled: true;
 
-            Row {
+            QQ.Row {
                 id: rowId
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left;
@@ -54,7 +54,7 @@ FocusScope {
                 //anchors.topMargin: 5
                 spacing: 2
 
-                Rectangle {
+                QQ.Rectangle {
                     id: removeHolder
                     width:  16
                     height: 16
@@ -73,7 +73,7 @@ FocusScope {
 
                 }
 
-                Image {
+                QQ.Image {
                     id: icon
                     //anchors.left: parent.left
                     //anchors.leftMargin: 7
@@ -155,31 +155,31 @@ FocusScope {
 
 
             states: [
-                State {
+                QQ.State {
                     name: "showTripButton";
                     when: caveMouseArea.containsMouse | caveDelegate.selected;
-                    PropertyChanges { target: tripsButton; opacity: 1.0; }
+                    QQ.PropertyChanges { target: tripsButton; opacity: 1.0; }
                 }
             ]
 
             transitions: [
-                Transition {
-                    NumberAnimation { target: tripsButton; properties: "opacity"; duration: 100 }
+                 QQ.Transition {
+                    QQ.NumberAnimation { target: tripsButton; properties: "opacity"; duration: 100 }
                 }
             ]
         }
 
         states: [
 
-            State {
+            QQ.State {
                 name: "editDate";
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target:  dateTextInput
                     visible: true
                     focus: true
                 }
 
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: dateText
                     visible: false
                 }

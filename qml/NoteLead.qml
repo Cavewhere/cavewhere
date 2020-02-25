@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 ScrapPointItem {
@@ -13,7 +13,7 @@ ScrapPointItem {
         visible: selected && scrapItem.selected
     }
 
-    Image {
+    QQ.Image {
         id: questionImage
         source: "qrc:/icons/question.png"
         anchors.centerIn: parent
@@ -29,11 +29,11 @@ ScrapPointItem {
         }
     }
 
-    Keys.onDeletePressed: {
+    QQ.Keys.onDeletePressed: {
         scrap.removeLead(pointIndex);
     }
 
-    Keys.onPressed: {
+    QQ.Keys.onPressed: {
         if(event.key === Qt.Key_Backspace) {
             scrap.removeLead(pointIndex);
         }

@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
 ShadowRectangle {
     id: helpBox
@@ -41,15 +41,15 @@ ShadowRectangle {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "VISIBLE"
         }
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             to: "VISIBLE"
-            NumberAnimation {
+            QQ.NumberAnimation {
                 target: helpBox;
                 property: "opacity";
                 from: 0.0
@@ -59,24 +59,24 @@ ShadowRectangle {
         },
 
         //FIXME: This transition doesn't work (check in beta if it works)
-        Transition {
+         QQ.Transition {
             id: hideTransitionId
             enabled: false
             from: "VISIBLE"
-            SequentialAnimation {
-                PropertyAction {
+            QQ.SequentialAnimation {
+                QQ.PropertyAction {
                     target: helpBox
                     property: "_hiding"
                     value: true
                 }
 
-                PropertyAction {
+                QQ.PropertyAction {
                     target: helpBox
                     property: "visible"
                     value: true
                 }
 
-                NumberAnimation {
+                QQ.NumberAnimation {
                     target: helpBox;
                     property: "opacity";
                     from: 1.0
@@ -84,13 +84,13 @@ ShadowRectangle {
                     duration: 200
                 }
 
-                PropertyAction {
+                QQ.PropertyAction {
                     target: helpBox
                     property: "visible"
                     value: false
                 }
 
-                PropertyAction {
+                QQ.PropertyAction {
                     target: helpBox
                     property: "_hiding"
                     value: false

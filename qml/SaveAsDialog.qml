@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Dialogs 1.2
 
 FileDialog {

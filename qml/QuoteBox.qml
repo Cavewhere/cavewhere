@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtGraphicalEffects 1.0
 
@@ -13,7 +13,7 @@ import QtGraphicalEffects 1.0
 
 
 
-Item {
+QQ.Item {
     id: root
     default property alias defaultChildren: childrenContainer.children
     property alias color: boxColorOverlay.color
@@ -37,7 +37,7 @@ Item {
 
     //These two properties will position the QuoteBox's arrow to point to pointAtObject with
     //and offset of pointAtObjectPosition
-    property Item pointAtObject
+    property QQ.Item pointAtObject
     property point pointAtObjectPosition
 
     function updatePosition() {
@@ -76,14 +76,14 @@ Item {
         updatePosition()
     }
 
-    Item {
+    QQ.Item {
         id: itemWithoutShadow
         visible: false
 
         width: boxOutlineColorOverlay.width + shadowPadding * 2
         height: boxOutlineColorOverlay.height + shadowPadding * 2
 
-        Item {
+        QQ.Item {
             id: boxOutline
 
             visible: false
@@ -93,7 +93,7 @@ Item {
             x: shadowPadding
             y: shadowPadding
 
-            Image {
+            QQ.Image {
                 id: triangleItem
                 x: rectangleItem.width * triangleOffset
                 source: "qrc:/icons/quoteTriangle.png"
@@ -101,7 +101,7 @@ Item {
                 smooth: true
             }
 
-            Rectangle {
+            QQ.Rectangle {
                 id: rectangleItem
                 width: {
                     switch(triangleEdge) {
@@ -133,7 +133,7 @@ Item {
             }
         }
 
-        Item {
+        QQ.Item {
             id: box
 
             property int borderWidth: 1.0
@@ -144,7 +144,7 @@ Item {
             height: triangleItem.height + rectangleItem.height
             visible: false
 
-            Image {
+            QQ.Image {
                 id: triangleItemBorder
                 x: triangleItem.x
                 y: box.borderWidth
@@ -154,7 +154,7 @@ Item {
                 smooth: true
             }
 
-            Rectangle {
+            QQ.Rectangle {
                 id: rectangleItemBorder
                 width: rectangleItem.width - box.borderWidth * 2
                 height: rectangleItem.height - box.borderWidth * 2
@@ -201,14 +201,14 @@ Item {
 
         //This item is used to position the QuoteBox. This item is locate at the tip of the
         //arrow of the quotebox
-        Item {
+        QQ.Item {
             id: arrowTipId
             x: rectangleItem.width * triangleOffset + triangleItem.implicitWidth * 0.5 + shadowPadding
             y: shadowPadding - 2
         }
 
         transform: [
-            Rotation {
+            QQ.Rotation {
                 id: rotationId
                 angle:  {
                     switch(triangleEdge) {
@@ -232,7 +232,7 @@ Item {
                 }
             },
 
-            Translate {
+            QQ.Translate {
                 x: {
                     switch(triangleEdge) {
                     case Qt.TopEdge:
@@ -275,7 +275,7 @@ Item {
 
     }
 
-    Item {
+    QQ.Item {
         id: childrenContainer
         width: childrenRect.width + margin
         height: childrenRect.height + margin
@@ -283,7 +283,7 @@ Item {
         y: rectangleItem.y + margin + shadowPadding
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         root.updatePosition()
     }
 }

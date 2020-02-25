@@ -1,4 +1,4 @@
-import QtQuick 2.1
+import QtQuick 2.1 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
@@ -38,12 +38,12 @@ ColumnLayout {
             text: "°"
         }
 
-        NumberAnimation {
+        QQ.NumberAnimation {
             id: fieldOfViewAnimationId
             target: viewer.perspectiveProjection;
             property: "fieldOfView";
             duration: 200;
-            easing.type: Easing.InOutQuad }
+            easing.type: QQ.Easing.InOutQuad }
 
     }
 

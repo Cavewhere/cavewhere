@@ -45,18 +45,18 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
     property alias color : rectangle.color
     property alias radius: rectangle.radius
 
-    BorderImage {
+    QQ.BorderImage {
         anchors.fill: rectangle
         anchors { leftMargin: -6; topMargin: -6; rightMargin: -8; bottomMargin: -8 }
         border { left: 10; top: 10; right: 10; bottom: 10 }
         source: "qrc:/icons/shadow.png"; smooth: true
     }
 
-    Rectangle { id: rectangle; anchors.fill: parent }
+    QQ.Rectangle { id: rectangle; anchors.fill: parent }
 }

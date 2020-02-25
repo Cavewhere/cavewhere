@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 RegionViewer {
@@ -50,7 +50,7 @@ RegionViewer {
         visible: rootData.leadsVisible
     }
 
-    Row {
+    QQ.Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20
         anchors.right: parent.right

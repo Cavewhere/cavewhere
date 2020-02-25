@@ -5,11 +5,12 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 
 Text {
     color: "white"
     style: Text.Outline;
     styleColor: "black"
+    font.pointSize: 14
 }

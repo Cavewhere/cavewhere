@@ -5,13 +5,13 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
-Item {
+QQ.Item {
     id: clipArea
 
     property alias currentTrip: view.trip
@@ -39,7 +39,7 @@ Item {
         width: flickableAreaId.contentWidth
         visible: true
 
-        Flickable {
+        QQ.Flickable {
             id: flickableAreaId
 
             contentHeight: column.height
@@ -56,7 +56,7 @@ Item {
                 flickableAreaId.contentY = contentY;
             }
 
-            Column {
+            QQ.Column {
                 id: column
 
                 spacing: 5
@@ -64,7 +64,7 @@ Item {
                 ColumnLayout {
                     width: view.contentWidth
 
-                    Item {
+                    QQ.Item {
                         Layout.fillWidth: true
                         implicitHeight: collapseButton.height
                         SectionLabel {
@@ -97,7 +97,7 @@ Item {
                             }
                         }
 
-                        Item {
+                        QQ.Item {
                             Layout.fillWidth: true
                         }
 
@@ -172,7 +172,7 @@ Item {
                     }
                 }
 
-                Image {
+                QQ.Image {
                     id: spaceAddBar
                     source: "qrc:icons/spacebar.png"
 
@@ -185,7 +185,7 @@ Item {
                         text: "Press <b>Space</b> to add another data block";
                     }
 
-                    MouseArea {
+                    QQ.MouseArea {
                         anchors.fill: parent
 
                         onClicked: {
@@ -209,7 +209,7 @@ Item {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: scrollAreaId
         onPressed: {
             scrollAreaId.forceActiveFocus()

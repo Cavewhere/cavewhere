@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.1
 import QtQuick.Layouts 1.1
 
@@ -31,10 +31,10 @@ GroupBox {
     }
 
 
-    Item {
+    QQ.Item {
         width: marginLayoutId.width
         height: marginLayoutId.height
-        Rectangle {
+        QQ.Rectangle {
             width: Math.round(marginLayoutId.width * 2 / 3)
             height: Math.round(marginLayoutId.height * 2 / 3)
             x: Math.round(marginLayoutId.width / 6)
@@ -47,7 +47,7 @@ GroupBox {
             rows: 3
             columns: 3
 
-            Item { width: 1; height: 1}
+            QQ.Item { width: 1; height: 1}
 
             PaperMarginSpinBox {
                 id: topId
@@ -55,7 +55,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            Item { width: 1; height: 1 }
+            QQ.Item { width: 1; height: 1 }
 
             PaperMarginSpinBox {
                 id: leftId
@@ -82,7 +82,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            Item { width:1; height:1 }
+            QQ.Item { width:1; height:1 }
 
             PaperMarginSpinBox {
                 id: bottomId
@@ -90,7 +90,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            Item { width:1; height:1 }
+            QQ.Item { width:1; height:1 }
         }
     }
 

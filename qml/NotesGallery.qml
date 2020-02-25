@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
-Rectangle {
+QQ.Rectangle {
     id: noteGallery
 
     property alias notesModel: galleryView.model;
@@ -64,10 +64,10 @@ Rectangle {
     /**
       For displaying the note as icons in a gallery
       */
-    Component {
+    QQ.Component {
         id: listDelegate
 
-        Item {
+        QQ.Item {
             id: container
 
             property int border: 6
@@ -77,7 +77,7 @@ Rectangle {
             width: maxImageWidth
             height: maxImageWidth
 
-            Image {
+            QQ.Image {
                 id: imageItem
                 asynchronous: true
 
@@ -86,7 +86,7 @@ Rectangle {
                 source: model.imageIconPath
                 width: container.maxImageWidth - 2 * container.border
                 height: width;
-                fillMode: Image.PreserveAspectFit
+                fillMode: QQ.Image.PreserveAspectFit
                 rotation: model.noteObject.rotate
                 smooth: true
 
@@ -115,12 +115,12 @@ Rectangle {
                     updateHeight();
                 }
 
-                Component.onCompleted: {
+                QQ.Component.onCompleted: {
                     updateHeight();
                 }
             }
 
-            Image {
+            QQ.Image {
                 id: removeImageId
 
                 source: "qrc:/icons/red-cancel.png"
@@ -135,7 +135,7 @@ Rectangle {
 
                 opacity: removeImageMouseArea.containsMouse ? 1.0 : .75;
 
-                MouseArea {
+                QQ.MouseArea {
                     id: removeImageMouseArea
                     anchors.fill: parent
                     hoverEnabled: true
@@ -155,27 +155,27 @@ Rectangle {
             /**
                   Probably could be allocated and deleted on the fly
                   */
-            Image {
+            QQ.Image {
                 id: statusImage
                 anchors.centerIn: parent
-                visible: imageItem.status == Image.Loading
+                visible: imageItem.status == QQ.Image.Loading
 
                 source: "qrc:icons/loadingSwirl.png"
 
-                NumberAnimation {
-                    running: imageItem.status == Image.Loading
+                QQ.NumberAnimation {
+                    running: imageItem.status == QQ.Image.Loading
                     target: statusImage;
                     property: "rotation";
                     from: 0
                     to: 360
                     duration: 1500
-                    loops: Animation.Infinite
+                    loops: QQ.Animation.Infinite
                 }
             }
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: galleryContainer
         anchors.bottom: parent.bottom
         anchors.top:  mainButtonArea.bottom
@@ -201,7 +201,7 @@ Rectangle {
 
             color: "red";
 
-            Column {
+            QQ.Column {
                 id: errorColumnId
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
@@ -231,7 +231,7 @@ Rectangle {
             id: imageValidator
         }
 
-        ListView {
+        QQ.ListView {
             id: galleryView
 
             anchors.left: parent.left
@@ -245,9 +245,9 @@ Rectangle {
 
             clip: true
 
-            orientation: ListView.Vertical
+            orientation: QQ.ListView.Vertical
 
-            highlight: Rectangle {
+            highlight: QQ.Rectangle {
                 color: "#418CFF"
                 radius:  3
                 width: galleryView.width
@@ -269,7 +269,7 @@ Rectangle {
                 }
             }
 
-            MouseArea {
+            QQ.MouseArea {
                 anchors.fill: parent
 
                 propagateComposedEvents: true
@@ -310,7 +310,7 @@ Rectangle {
         radius: Theme.floatingWidgetRadius
         color: Theme.floatingWidgetColor
 
-        Row {
+        QQ.Row {
             id: mainToolBar
             property size iconSize: Qt.size(42, 42)
 
@@ -366,7 +366,7 @@ Rectangle {
 
         radius: mainButtonArea.radius
         color: "#EEEEEE"
-        Row {
+        QQ.Row {
             id: carpetRowId
             spacing: 3
 
@@ -449,55 +449,55 @@ Rectangle {
         note: currentNote
     }
 
-    SequentialAnimation {
+    QQ.SequentialAnimation {
         id: noteRotationAnimation
 
         property alias to: subAnimation.to
         property alias from: subAnimation.from
 
-        ScriptAction {
+        QQ.ScriptAction {
             script: noteArea.updateRotationCenter()
         }
 
-        PropertyAnimation {
+        QQ.PropertyAnimation {
             id: subAnimation
             target: currentNote
             property: "rotate"
-            easing.type: Easing.InOutCubic
+            easing.type: QQ.Easing.InOutCubic
         }
     }
 
     states: [
 
-        State {
+        QQ.State {
             name: "NO_NOTES"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: loadNoteWidgetId
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: galleryContainer
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: mainButtonArea
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: carpetButtonArea
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: galleryView
                 onCountChanged: {
                     if(count > 0) {
@@ -511,89 +511,89 @@ Rectangle {
             }
         },
 
-        State {
+        QQ.State {
             name: "CARPET"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: loadNoteWidgetId
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: mainButtonArea
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: carpetButtonArea
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: galleryContainer
                 anchors.top:  carpetButtonArea.bottom
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 scrapsVisible: true
             }
 
         },
 
-        State {
+        QQ.State {
             name: "SELECT"
             extend: "CARPET"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: selectObjectId
                 selected: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 state: "SELECT"
             }
         },
 
-        State {
+        QQ.State {
             name: "ADD-STATION"
             extend:  "CARPET"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: addStationId
                 selected: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 state: "ADD-STATION"
             }
         },
 
-        State {
+        QQ.State {
             name: "ADD-LEAD"
             extend:  "CARPET"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: addLeadId
                 selected: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 state: "ADD-LEAD"
             }
         },
 
-        State {
+        QQ.State {
             name:  "ADD-SCRAP"
             extend:  "CARPET"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: addScrapId
                 selected: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: noteArea
                 state: "ADD-SCRAP"
             }
@@ -601,59 +601,59 @@ Rectangle {
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             from: ""
             to: "SELECT"
 
-            PropertyAnimation {
+            QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.rightMargin"
                 from: carpetButtonArea.mapFromItem(carpetButtonId, carpetButtonId.width + 20, 0.0).x - carpetButtonArea.width
                 to: 0
             }
 
-            PropertyAnimation {
+            QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.topMargin"
                 from: carpetButtonArea.mapFromItem(carpetButtonId, 0.0, carpetButtonId.height).y - carpetButtonArea.height
                 to: 0
             }
 
-            PropertyAction { target: mainButtonArea; property: "visible"; value: true }
-            PropertyAnimation {
+            QQ.PropertyAction { target: mainButtonArea; property: "visible"; value: true }
+            QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"
                 from: 0.0
                 to: 1.0
-                easing.type: Easing.OutQuad
+                easing.type: QQ.Easing.OutQuad
             }
         },
 
-        Transition {
+         QQ.Transition {
             to: ""
             from: "CARPET"
 
-            PropertyAnimation {
+            QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.rightMargin"
                 to: carpetButtonArea.mapFromItem(carpetButtonId, carpetButtonId.width + 20, 0.0).x - carpetButtonArea.width
                 from: 0
             }
 
-            PropertyAnimation {
+            QQ.PropertyAnimation {
                 target: carpetButtonArea;
                 property: "anchors.topMargin"
                 to: carpetButtonArea.mapFromItem(carpetButtonId, 0.0, carpetButtonId.height).y - carpetButtonArea.height
                 from: 0
             }
 
-            PropertyAction { target: carpetButtonArea; property: "visible"; value: true }
-            PropertyAnimation {
+            QQ.PropertyAction { target: carpetButtonArea; property: "visible"; value: true }
+            QQ.PropertyAnimation {
                 target: carpetButtonArea
                 properties: "scale"
                 from: 1.0
                 to: 0.0
-                easing.type: Easing.InQuad
+                easing.type: QQ.Easing.InQuad
             }
         }
     ]

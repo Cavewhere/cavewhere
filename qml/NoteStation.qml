@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 /**
@@ -35,11 +35,11 @@ ScrapPointItem {
     onScrapChanged: updateItem()
     onPointIndexChanged: updateItem()
 
-    Keys.onDeletePressed: {
+    QQ.Keys.onDeletePressed: {
         scrap.removeStation(pointIndex);
     }
 
-    Keys.onPressed: {
+    QQ.Keys.onPressed: {
         if(event.key === Qt.Key_Backspace) {
             scrap.removeStation(pointIndex);
         }
@@ -56,7 +56,7 @@ ScrapPointItem {
         visible: selected && scrapItem.selected
     }
 
-    Image {
+    QQ.Image {
         id: stationImage
         anchors.centerIn: parent
         source: "qrc:icons/stationGood.png"
@@ -93,7 +93,7 @@ ScrapPointItem {
             noteStation.forceActiveFocus();
         }
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             propagateComposedEvents: true
             onClicked: select()

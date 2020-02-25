@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import "Utils.js" as Utils
 
-Item {
+QQ.Item {
     id: handle
 
     width: imageId.width
@@ -15,20 +15,20 @@ Item {
     signal dragDelta(var delta)
 //    signal mousePositionChanged(var position)
 
-    Image {
+    QQ.Image {
         id: imageId
         visible: !mouseArea.containsMouse
         source: imageSource
     }
 
-    Image {
+    QQ.Image {
         id: selectImageId
         rotation: imageId.rotation
         visible: mouseArea.containsMouse
         source: selectedImageSource
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseArea
 
         property point oldPoint;

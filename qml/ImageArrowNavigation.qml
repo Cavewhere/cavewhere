@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 
-Image {
+QQ.Image {
     id: image
 
     property string highlightedImageSource
@@ -21,7 +21,7 @@ Image {
     opacity: 0.75
     scale: 1.0
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseAreaPrevious
         anchors.fill: parent
 
@@ -32,16 +32,16 @@ Image {
         }
     }
 
-    Behavior on scale {
-        NumberAnimation { duration: 50 }
+    QQ.Behavior on scale {
+        QQ.NumberAnimation { duration: 50 }
     }
 
     states: [
-        State {
+        QQ.State {
             name: "hoverState"
             when: mouseAreaPrevious.containsMouse
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: image
                 scale: 1.1
             }

@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import QtGraphicalEffects 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: button
     property alias text:  buttonText.text
     property alias iconSource: icon.source
@@ -33,9 +33,9 @@ Rectangle {
     border.width: 1
     border.color: "#7A7A7A"
 
-    gradient: Gradient {
-        GradientStop {id: stop1; position:0.0; color:"#FAFAFA" }
-        GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
+    gradient: QQ.Gradient {
+        QQ.GradientStop {id: stop1; position:0.0; color:"#FAFAFA" }
+        QQ.GradientStop {id: stop2; position:1.0; color:"#D3D3D3" }
     }
 
     state: "enabledState"
@@ -46,7 +46,7 @@ Rectangle {
         anchors.centerIn: parent
         visible: false;
 
-        Image {
+        QQ.Image {
             id: icon
             visible: iconOnTheLeft
         }
@@ -57,7 +57,7 @@ Rectangle {
             color: "black"
         }
 
-        Image {
+        QQ.Image {
             id: iconRightId
             source: icon.source
             sourceSize: icon.sourceSize
@@ -75,7 +75,7 @@ Rectangle {
         lightness: 0.5
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseArea
         anchors.fill: parent
 
@@ -101,7 +101,7 @@ Rectangle {
             mousePressed = false
         }
 
-        Connections {
+        QQ.Connections {
             target: troggled ? globalDialogHandler : null
 
             onClicked: {
@@ -114,54 +114,54 @@ Rectangle {
 
 
     states: [
-        State {
+        QQ.State {
             name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled && !troggled
             extend: "enabledState"
-            PropertyChanges { target: stop1; color: "#E6E6E6" }
-            PropertyChanges { target: stop2; color: "#B3B3B3" }
+            QQ.PropertyChanges { target: stop1; color: "#E6E6E6" }
+            QQ.PropertyChanges { target: stop2; color: "#B3B3B3" }
         },
 
-        State {
+        QQ.State {
             name: "mousePressedState";
             extend: "enabledState"
             when: (mouseArea.containsMouse && mousePressed && enabled) || troggled
-            PropertyChanges { target: stop1; color: "#B3B3B3" }
-            PropertyChanges { target: stop2; color: "#B3B3B3" }
+            QQ.PropertyChanges { target: stop1; color: "#B3B3B3" }
+            QQ.PropertyChanges { target: stop2; color: "#B3B3B3" }
         },
 
-//        State {
+//        QQ.State {
 //            name: "toggledState"
 //            extend: "enabledState"
 //            when: troggled
-//            PropertyChanges { target: stop1; color: "#D3D3D3" }
-//            PropertyChanges { target: stop2; color: "#FAFAFA" }
+//            QQ.PropertyChanges { target: stop1; color: "#D3D3D3" }
+//            QQ.PropertyChanges { target: stop2; color: "#FAFAFA" }
 //        },
 
-        State {
+        QQ.State {
             name: "enabledState"
             when: enabled
-            PropertyChanges { target: stop1; color: "#FAFAFA" }
-            PropertyChanges { target: stop2; color: "#D3D3D3" }
-            PropertyChanges {
+            QQ.PropertyChanges { target: stop1; color: "#FAFAFA" }
+            QQ.PropertyChanges { target: stop2; color: "#D3D3D3" }
+            QQ.PropertyChanges {
                 target: mouseArea
                 enabled: true
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: colorizeEffect
                 visible: false
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: buttonLayoutId
                 visible: true
             }
         },
 
-        State {
+        QQ.State {
             name: "disabledState"
             when: !enabled
-            PropertyChanges {target: stop1; color:"#FAFAFA" }
-            PropertyChanges {target: stop2; color:"#D3D3D3" }
-            PropertyChanges {
+            QQ.PropertyChanges {target: stop1; color:"#FAFAFA" }
+            QQ.PropertyChanges {target: stop2; color:"#D3D3D3" }
+            QQ.PropertyChanges {
                 target: mouseArea
                 enabled: false
             }

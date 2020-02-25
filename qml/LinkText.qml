@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 Text {
@@ -13,7 +13,7 @@ Text {
     color:  pallete.inputTextColor
     font.underline: mouseAreaId.containsMouse
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseAreaId
         anchors.fill: parent
         hoverEnabled: true

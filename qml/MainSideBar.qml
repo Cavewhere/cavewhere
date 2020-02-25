@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 
-Rectangle {
+QQ.Rectangle {
     id: sidebarArea
     width: 80
     color: "#ffffff"
@@ -55,7 +55,7 @@ Rectangle {
         rootData.pageSelectionModel.currentPageAddress = page;
     }
 
-    Connections {
+    QQ.Connections {
         target: rootData.pageSelectionModel
 
         onCurrentPageAddressChanged: {
@@ -71,18 +71,18 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: sideBarBackground
         border.width: 0
        // border.color: "#000000"
         height: parent.width
-        gradient: Gradient {
-            GradientStop {
+        gradient: QQ.Gradient {
+            QQ.GradientStop {
                 position: 1
                 color: "#616469"
             }
 
-            GradientStop {
+            QQ.GradientStop {
                 position: 0
                 color: "#1b2331"
             }
@@ -91,13 +91,13 @@ Rectangle {
         x: -parent.height / 2
         y: parent.height / 2
         rotation: -90
-        transformOrigin: Item.Top
+        transformOrigin: QQ.Item.Top
 
     }
 
 
 
-    Column {
+    QQ.Column {
         id: buttonBar
         anchors.left: parent.left
         anchors.right: parent.right
@@ -128,7 +128,7 @@ Rectangle {
 //        }
     }
 
-    ListView {
+    QQ.ListView {
         id: taskListView
         anchors.left: parent.left
         anchors.right: parent.right
@@ -136,9 +136,9 @@ Rectangle {
         anchors.bottom: parent.bottom
 
         model: rootData.taskManagerModel
-        verticalLayoutDirection: ListView.BottomToTop
+        verticalLayoutDirection: QQ.ListView.BottomToTop
 
-        delegate: Rectangle {
+        delegate: QQ.Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
 
@@ -157,18 +157,15 @@ Rectangle {
                     text: nameRole
                 }
 
-                Rectangle {
+                QQ.Rectangle {
                     border.width: 1
                     border.color: "black"
 
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 5
-                    anchors.rightMargin: 5
+                    Layout.fillWidth: true
 
                     implicitHeight: 12
 
-                    Rectangle {
+                    QQ.Rectangle {
                         property double precentComplete: progressRole / numberOfStepsRole
                         x: 1
                         y: 1

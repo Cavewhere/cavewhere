@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.1
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
@@ -9,14 +9,14 @@ TabView {
     property GLTerrainRenderer viewer
     property Tab viewTab
 
-    Component {
+    QQ.Component {
         id: cameraOptionsTabComponentId
         CameraOptionsTab {
 
         }
     }
 
-    Component {
+    QQ.Component {
         id: exportTabComponentId
         ExportViewTab {
             view: viewer
@@ -35,7 +35,7 @@ TabView {
         resizeCurrentTab()
     }
 
-    Connections {
+    QQ.Connections {
         target: {
             var tab = getTab(currentIndex)
             if(!tab) {
@@ -49,14 +49,14 @@ TabView {
         }
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         addTab("View", cameraOptionsTabComponentId);
         addTab("Export", exportTabComponentId);
 
         viewTab = getTab(0)
     }
 
-    Connections {
+    QQ.Connections {
         target: viewTab
         onLoaded: {
             viewTab.item.viewer = viewer

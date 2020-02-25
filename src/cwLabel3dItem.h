@@ -17,10 +17,7 @@ class cwLabel3dItem
 {
 public:
     cwLabel3dItem();
-    cwLabel3dItem(QString text, QVector3D position, QFont font = QFont());
-
-    void setFont(QFont font);
-    QFont font() const;
+    cwLabel3dItem(QString text, QVector3D position);
 
     void setText(QString text);
     QString text() const;
@@ -34,16 +31,6 @@ private:
     QVector3D Position;
 
 };
-
-inline void cwLabel3dItem::setFont(QFont font)
-{
-    Font = font;
-}
-
-inline QFont cwLabel3dItem::font() const
-{
-    return Font;
-}
 
 inline void cwLabel3dItem::setText(QString text)
 {

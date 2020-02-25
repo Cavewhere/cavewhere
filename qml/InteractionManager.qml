@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
 
     property var interactions: []
     property Interaction defaultInteraction
@@ -61,7 +61,7 @@ Item {
         interaction.deactivated.connect(activeDefaultInteraction);
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         for(var i = 0; i < interactions.length; i++) {
             var interaction = interactions[i];
             connectInteraction(interaction);

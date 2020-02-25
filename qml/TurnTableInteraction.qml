@@ -1,10 +1,10 @@
-import QtQuick 2.4
+import QtQuick 2.4 as QQ
 import Cavewhere 1.0
 
 BaseTurnTableInteraction {
     id: interactionId
 
-    MultiPointTouchArea {
+    QQ.MultiPointTouchArea {
         id: multiTouchArea
 
         property bool subMouseEnabled: true
@@ -98,7 +98,7 @@ BaseTurnTableInteraction {
             }
         }
 
-        MouseArea {
+        QQ.MouseArea {
             id: mouseArea
             enabled: multiTouchArea.subMouseEnabled
             anchors.fill: parent;
@@ -121,9 +121,9 @@ BaseTurnTableInteraction {
             }
 
             states: [
-                State {
+                QQ.State {
                     name: "panState"
-                    PropertyChanges {
+                    QQ.PropertyChanges {
                         target: mouseArea;
 
                         onPositionChanged: {
@@ -139,9 +139,9 @@ BaseTurnTableInteraction {
                     }
                 },
 
-                State {
+                QQ.State {
                     name: "rotateState"
-                    PropertyChanges {
+                    QQ.PropertyChanges {
                         target: mouseArea;
 
                         onPositionChanged: {

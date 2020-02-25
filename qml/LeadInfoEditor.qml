@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import QtQuick.Controls 1.2
 import Cavewhere 1.0
@@ -32,12 +32,12 @@ FloatingGroupBox {
 
         TextArea {
             id: leadDescriptionArea
-            KeyNavigation.backtab: sizeEditor.heightTextObject
+            QQ.KeyNavigation.backtab: sizeEditor.heightTextObject
             implicitHeight: 100
             onTextChanged: lead.description = text
             text: lead.description
 
-            Connections {
+            QQ.Connections {
                 target: lead
                 onDescriptionChanged: {
                     leadDescriptionArea.text = lead.description

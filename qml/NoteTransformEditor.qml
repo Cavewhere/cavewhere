@@ -5,13 +5,14 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
+import QtQml 2.2
 import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
     id: editor
 
     property Scrap scrap
@@ -127,15 +128,15 @@ Item {
     }
 
     states: [
-        State {
+        QQ.State {
             when: scrap !== null
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: editor
                 noteTransform: scrap.noteTransformation
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: checkableBoxId
                 checked: scrap.calculateNoteTransform
                 onCheckedChanged: scrap.calculateNoteTransform = checked

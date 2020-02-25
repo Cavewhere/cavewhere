@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.2
 import QtQuick.Layouts 1.1
 
 
-Item {
+QQ.Item {
 
     property TextArea textArea
     property alias category: sectionLabel.text
@@ -12,7 +12,7 @@ Item {
     implicitWidth: 150
     implicitHeight: backgroundRectangle.height
 
-    Rectangle {
+    QQ.Rectangle {
         id: backgroundRectangle
         anchors.left: parent.left
         anchors.right: parent.right
@@ -32,12 +32,12 @@ Item {
                 font.underline: true
             }
 
-            Flow {
+            QQ.Flow {
                 id: flow
                 spacing: 3
                 Layout.fillWidth: true
 
-                Repeater {
+                QQ.Repeater {
                     model: keywords
 
                     delegate:

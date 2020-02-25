@@ -1,8 +1,8 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: mainContentId
 
 //    property alias dataPage: dataMainPageId
@@ -49,8 +49,8 @@ Item {
         //For animating which page is shown
         property real pageShownReal: pageShown;
 
-        Behavior on pageShownReal {
-            NumberAnimation {
+        QQ.Behavior on pageShownReal {
+            QQ.NumberAnimation {
                 duration: 150
             }
         }
@@ -58,7 +58,7 @@ Item {
 
     }
 
-    Item {
+    QQ.Item {
         id: container;
         anchors.top: linkBar.bottom
         anchors.bottom: parent.bottom
@@ -75,7 +75,7 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: renderingComponent
         RenderingView {
             width:  parent.width
@@ -85,7 +85,7 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: dataMainPageComponent
         DataMainPage {
             width:  parent.width
@@ -95,21 +95,21 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: unknownPageComponent
         UnknownPage {
             anchors.fill: parent
         }
     }
 
-    Component {
+    QQ.Component {
         id: testcasesPageComponent
         TestcasePage {
             anchors.fill: parent
         }
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);

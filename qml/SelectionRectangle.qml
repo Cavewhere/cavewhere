@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
 
-Rectangle {
+QQ.Rectangle {
     id: selectionRectangleId
 
     property int mouseBuffer: 5
@@ -11,7 +11,7 @@ Rectangle {
     border.width: 1
     border.color: "#676767"
 
-    MouseArea {
+    QQ.MouseArea {
         id: leftSide
         width: selectionRectangleId.mouseBuffer
         anchors.horizontalCenter: parent.left
@@ -35,7 +35,7 @@ Rectangle {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: rightSide
         width: selectionRectangleId.mouseBuffer
         anchors.horizontalCenter: parent.right
@@ -58,7 +58,7 @@ Rectangle {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: topSide
         height: selectionRectangleId.mouseBuffer
         anchors.left: parent.left
@@ -82,7 +82,7 @@ Rectangle {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: bottomSide
         height: selectionRectangleId.mouseBuffer
         anchors.left: parent.left

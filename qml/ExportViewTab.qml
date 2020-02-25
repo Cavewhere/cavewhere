@@ -1,11 +1,11 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import QtQuick.Controls 1.1
 import Cavewhere 1.0
 import QtQuick.Dialogs 1.0 as Dialogs
 import "Utils.js" as Utils
 
-Item {
+QQ.Item {
     id: exportViewTabId
 
     implicitWidth: quickSceneView.implicitWidth + sidebarColumnId.implicitWidth
@@ -141,7 +141,7 @@ Item {
 
             }
 
-            Item {
+            QQ.Item {
                 width: 1
                 visible: !optionsScrollViewId.visible
                 Layout.fillHeight: true //!optionsScrollViewId.visible
@@ -194,7 +194,7 @@ Item {
                                     updateDefaultMargins()
                                 }
 
-                                Component.onCompleted: {
+                                QQ.Component.onCompleted: {
                                     updatePaperRectangleFromModel()
                                     updateDefaultMargins()
                                 }
@@ -254,7 +254,7 @@ Item {
                                         screenCaptureManagerId.resolution = value
                                     }
 
-                                    Connections {
+                                    QQ.Connections {
                                         target: screenCaptureManagerId
                                         onResolutionChanged: resolutionSpinBoxId.value = screenCaptureManagerId.resolution
                                     }
@@ -307,7 +307,7 @@ Item {
                         title: "Layers"
 
                         ScrollView {
-                            ListView {
+                            QQ.ListView {
                                 id: layerListViewId
 
                                 model: screenCaptureManagerId
@@ -331,7 +331,7 @@ Item {
                                     anchors.leftMargin: 5
                                     text: layerNameRole
 
-                                    MouseArea{
+                                    QQ.MouseArea {
                                         anchors.fill: parent
                                         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
@@ -346,14 +346,14 @@ Item {
                                     }
                                 }
 
-                                highlight: Rectangle {
+                                highlight: QQ.Rectangle {
                                     color: "#8AC6FF"
                                     radius: 3
                                 }
 
                                 onCurrentIndexChanged: updateLayerPropertyWidget()
 
-                                Connections {
+                                QQ.Connections {
                                     target: screenCaptureManagerId
                                     onRowsInserted: layerListViewId.updateLayerPropertyWidget()
                                     onRowsRemoved: layerListViewId.updateLayerPropertyWidget()
@@ -367,17 +367,17 @@ Item {
                         title: "Layer Groups"
 
                         ScrollView {
-                            ListView {
+                            QQ.ListView {
                                 id: groupListViewId
                                 model: screenCaptureManagerId.groupModel
 
-                                delegate: Rectangle {
+                                delegate: QQ.Rectangle {
 
                                     width: 100
                                     height: 100
                                     //                                color: "red"
 
-                                    VisualDataModel {
+                                    QQ.VisualDataModel {
                                         id: visualModel
                                         model: screenCaptureManagerId.groupModel
                                         rootIndex: screenCaptureManagerId.groupModel.index(index)
@@ -387,7 +387,7 @@ Item {
                                         }
                                     }
 
-                                    ListView {
+                                    QQ.ListView {
                                         model: visualModel
                                         anchors.fill: parent
 
@@ -475,21 +475,21 @@ Item {
                         }
 
                         states: [
-                            State {
+                            QQ.State {
                                 when: typeof(layerProperties.layerObject) !== "undefined" && layerProperties.layerObject !== null
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: layerProperties
                                     title: "Properies of " + layerObject.name
                                     visible: true
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: paperScaleInputId
                                     scaleObject: layerProperties.layerObject.scaleOrtho
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: sizeWidthInputId
                                     text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
                                     onFinishedEditting: {
@@ -497,7 +497,7 @@ Item {
                                     }
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: sizeHeightInputId
                                     text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
                                     onFinishedEditting: {
@@ -505,7 +505,7 @@ Item {
                                     }
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: posXInputId
                                     text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
                                     onFinishedEditting: {
@@ -514,7 +514,7 @@ Item {
                                     }
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: posYInputId
                                     text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
                                     onFinishedEditting: {
@@ -523,7 +523,7 @@ Item {
                                     }
                                 }
 
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: rotationInput
                                     text: Utils.fixed(layerProperties.layerObject.rotation, 2);
                                     onFinishedEditting: {
@@ -553,10 +553,10 @@ Item {
         }
     }
 
-    ListModel {
+    QQ.ListModel {
         id: paperSizeModel
 
-        ListElement {
+        QQ.ListElement {
             name: "Letter"
             width: 8.5
             height: 11
@@ -567,7 +567,7 @@ Item {
             defaultBottomMargin: 1.0
         }
 
-        ListElement {
+        QQ.ListElement {
             name: "Legal"
             width: 8.5
             height: 14
@@ -578,7 +578,7 @@ Item {
             defaultBottomMargin: 1.0
         }
 
-        ListElement {
+        QQ.ListElement {
             name: "A4"
             width: 8.26772
             height: 11.6929
@@ -589,7 +589,7 @@ Item {
             defaultBottomMargin: 1.0
         }
 
-        ListElement {
+        QQ.ListElement {
             name: "Custom Size"
             width: 8.5
             height: 11

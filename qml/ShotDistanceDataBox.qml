@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0 as Controls
 import Cavewhere 1.0
 
@@ -14,7 +14,7 @@ DataBox {
 
     property bool distanceIncluded: true //This show's if the distance is include (true) or excluded
 
-    Rectangle {
+    QQ.Rectangle {
         visible: !distanceIncluded
 
         anchors.bottom: parent.bottom
@@ -32,7 +32,7 @@ DataBox {
             anchors.verticalCenterOffset: 1
 
             font.family: "monospace"
-            font.pixelSize: 10
+            font.pointSize: 10
             font.bold: true
             color: "#EEEEEE"
             text: "Excluded"

@@ -1,11 +1,11 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     default property alias pageItemData: pageItemId.data
 
     anchors.fill: parent
 
-    Item {
+    QQ.Item {
         id: pageItemId
         anchors.fill: parent
         anchors.margins: 10

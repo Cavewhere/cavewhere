@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
 
     property alias noteModel: view.model
 
@@ -20,13 +20,13 @@ Item {
         onFilesSelected: imagesAdded(images)
     }
 
-    ListView {
+    QQ.ListView {
         id: view
 
         anchors.fill: parent
 
-        snapMode: ListView.SnapOneItem
-        orientation: ListView.Horizontal
+        snapMode: QQ.ListView.SnapOneItem
+        orientation: QQ.ListView.Horizontal
         spacing: 10
         interactive: false
         highlightMoveDuration: 200

@@ -1,5 +1,5 @@
-import QtQuick 2.12
-import QtQuick.Controls 2.5
+import QtQuick 2.12 as QQ
+import QtQuick.Controls 2.5 as QC
 import QtQuick.Layouts 1.0
 import QtQuick.Dialogs 1.2
 import Cavewhere 1.0
@@ -48,10 +48,10 @@ ScrollViewPage {
         ColumnLayout {
             visible: csvManagerId.filename.length
 
-            GroupBox {
+            QC.GroupBox {
 
                 label: RowLayout {
-                    Image {
+                    QQ.Image {
                         source: "qrc:/icons/svg/dragAndDrop.svg"
                         sourceSize: Qt.size(50, 50)
                     }
@@ -62,7 +62,7 @@ ScrollViewPage {
                 }
 
                 ColumnLayout {
-                    GroupBox {
+                    QC.GroupBox {
                         title: "Available Columns"
 
                         ColumnNameView {
@@ -86,7 +86,7 @@ ScrollViewPage {
                         }
                     }
 
-                    GroupBox {
+                    QC.GroupBox {
                         title: "Used Columns"
 
                         ColumnNameView {
@@ -112,7 +112,7 @@ ScrollViewPage {
                     text: "Skip header lines"
                 }
 
-                SpinBox {
+                QC.SpinBox {
                     value: csvManagerId.skipHeaderLines
                     onValueChanged: {
                         csvManagerId.skipHeaderLines = value
@@ -123,7 +123,7 @@ ScrollViewPage {
                     text: "Seperator"
                 }
 
-                TextField {
+                QC.TextField {
                     text: csvManagerId.seperator
                     onEditingFinished: {
                         csvManagerId.seperator = text
@@ -164,7 +164,7 @@ ScrollViewPage {
                     text: "Associate LRUDs with"
                 }
 
-                ComboBox {
+                QC.ComboBox {
                     implicitWidth: 200
                     model: ["From station", "To station"]
                     currentIndex: csvManagerId.useFromStationForLRUD ? 0 : 1
@@ -178,11 +178,11 @@ ScrollViewPage {
                 }
             }
 
-            Item {
+            QQ.Item {
                 height: 10
             }
 
-            GroupBox {
+            QC.GroupBox {
                 title: "CSV Text"
                 ResizeableScrollView {
                     implicitWidth: defaultMinWidth
@@ -191,7 +191,7 @@ ScrollViewPage {
                     RowLayout {
                         spacing: 0
 
-                        ListView {
+                        QQ.ListView {
                             implicitWidth: 75
                             implicitHeight: csvTextAreaId.implicitHeight
                             model: csvTextAreaId.lineCount
@@ -203,14 +203,14 @@ ScrollViewPage {
                                 color: "grey"
                             }
 
-                            Rectangle {
+                            QQ.Rectangle {
                                 anchors.fill: parent
                                 color: "#e8e8e8"
                                 z: -1
                             }
                         }
 
-                        TextArea {
+                        QC.TextArea {
                             id: csvTextAreaId
                             text: csvManagerId.previewText
                             font.family: "Courier"
@@ -221,10 +221,10 @@ ScrollViewPage {
                 }
             }
 
-            GroupBox {
+            QC.GroupBox {
                 title: "Preview"
 
-                Item {
+                QQ.Item {
                     implicitWidth: previewScrollViewId.width
                     implicitHeight: previewScrollViewId.height
 
@@ -232,10 +232,10 @@ ScrollViewPage {
                         id: previewScrollViewId
                         implicitWidth: defaultMinWidth
                         implicitHeight: 150
-                        TableView {
+                        QQ.TableView {
                             model: csvManagerId.lineModel
                             anchors.fill: parent
-                            delegate: Rectangle {
+                            delegate: QQ.Rectangle {
                                 border.width: 1
                                 border.color: "lightgrey"
                                 implicitWidth: textId.width + 6
@@ -257,9 +257,9 @@ ScrollViewPage {
                         anchors.bottom: previewScrollViewId.bottom
 
                         states: [
-                            State {
+                            QQ.State {
                                 when: csvManagerId.previewLines == CSVImporterManager.AllLines
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: showAllButtonId
                                     text: "Less"
                                     visible: true
@@ -269,9 +269,9 @@ ScrollViewPage {
                                 }
 
                             },
-                            State {
+                            QQ.State {
                                 when: csvManagerId.previewLines !== CSVImporterManager.AllLines
-                                PropertyChanges {
+                                QQ.PropertyChanges {
                                     target: showAllButtonId
                                     text: "More"
                                     visible: true
@@ -285,12 +285,12 @@ ScrollViewPage {
                 }
             }
 
-            GroupBox {
+            QC.GroupBox {
                 title: "Status"
                 ColumnLayout {
                     RowLayout {
                         visible: csvManagerId.errorModel.errors.count == 0
-                        Image {
+                        QQ.Image {
                             source: "qrc:icons/good.png"
                         }
                         Text {
@@ -301,16 +301,16 @@ ScrollViewPage {
                     ColumnLayout {
                         visible: csvManagerId.errorModel.errors.count > 0
                         RowLayout {
-                            Image {
+                            QQ.Image {
                                 source: "qrc:icons/stopSignError.png"
                             }
                             Text {
                                 text: csvManagerId.errorModel.fatalCount + " errors"
                             }
 
-                            Item { width: 1} //spacer
+                            QQ.Item { width: 1} //spacer
 
-                            Image {
+                            QQ.Image {
                                 source: "qrc:icons/warning.png"
                             }
                             Text {
@@ -331,7 +331,7 @@ ScrollViewPage {
 
             BreakLine {}
 
-            Button {
+            QC.Button {
                 text: "Import"
                 enabled: csvManagerId.errorModel.fatalCount == 0
                 onClicked: {

@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 
-Rectangle {
+QQ.Rectangle {
     id: helpArea
 
     property alias text: helpText.text
@@ -44,7 +44,7 @@ Rectangle {
         anchors.top: parent.top
 
 
-        Image {
+        QQ.Image {
             id: icon
             //        source: "qrc:icons/Information20x20.png"
             width: sourceSize.width
@@ -65,16 +65,16 @@ Rectangle {
         }
     }
 
-    QtObject {
+    QQ.QtObject {
         id: privateData
         property bool inTransition: false
     }
 
     states: [
-        State {
+        QQ.State {
             name: "VISIBLE"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: helpArea
                 implicitHeight: helpText.height + 10
             }
@@ -82,42 +82,42 @@ Rectangle {
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             from: ""
             to: "VISIBLE"
 
-            SequentialAnimation {
+            QQ.SequentialAnimation {
 
-                PropertyAction { target: privateData; property: "inTransition"; value: true }
-                PropertyAnimation {
+                QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
+                QQ.PropertyAnimation {
                     target: helpArea
                     property: "implicitHeight"
                     from: 0
                     to: helpText.height
                     duration: animationToVisible ? 200 : 0
                 }
-                PropertyAction { target: privateData; property: "inTransition"; value: false }
+                QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
         },
 
-        Transition {
+         QQ.Transition {
             from: "VISIBLE"
             to: ""
 
-            SequentialAnimation {
+            QQ.SequentialAnimation {
 
-                PropertyAction { target: privateData; property: "inTransition"; value: true }
-                PropertyAction { target: helpArea; property: "visible"; value: true }
+                QQ.PropertyAction { target: privateData; property: "inTransition"; value: true }
+                QQ.PropertyAction { target: helpArea; property: "visible"; value: true }
 
-                NumberAnimation {
+                QQ.NumberAnimation {
                     target: helpArea
                     property: "implicitHeight"
                     to: 0
                     duration: animationToInvisible ? 200 : 0
                 }
 
-                PropertyAction { target: helpArea; property: "visible"; value: false }
-                PropertyAction { target: privateData; property: "inTransition"; value: false }
+                QQ.PropertyAction { target: helpArea; property: "visible"; value: false }
+                QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
         }
     ]

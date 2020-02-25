@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 import "VectorMath.js" as VectorMath
 
-Rectangle {
+QQ.Rectangle {
     id: interactionId
 
     property CaptureItem captureItem: null;
@@ -18,7 +18,7 @@ Rectangle {
       This find the maxium delta from the x and y.
 
       @param delta - Qt.point() that's the mouse change in position
-      @param fixedPoint - Item.TransformOrigin (ie. Item.TopLeft for example). This will
+      @param fixedPoint - QQ.Item.TransformOrigin (ie. QQ.Item.TopLeft for example). This will
       control the sign of the dragLength that's returned.
       @return The maximium drag length. This is used for resizing the CaptureItem
       */
@@ -27,17 +27,17 @@ Rectangle {
         var sign = 1.0;
 
         switch(fixedPosition) {
-        case Item.TopLeft:
+        case QQ.Item.TopLeft:
             sign = -1;
             break;
-        case Item.TopRight:
+        case QQ.Item.TopRight:
             delta.y = -delta.y;
             break;
-        case Item.BottomLeft:
+        case QQ.Item.BottomLeft:
             delta.y = -delta.y;
             sign = -1;
             break;
-        case Item.BottomRight:
+        case QQ.Item.BottomRight:
             //Do nothing
             break
         default:
@@ -62,21 +62,21 @@ Rectangle {
 
     /**
       This converts the fixedPoint to a Qt.Point
-      @param fixedPoint - Item.TransformOrigin. Only supports Item.TopLeft, Item.BottomLeft,
-      Item.BottomLeft, and Item.TopLeft
+      @param fixedPoint - QQ.Item.TransformOrigin. Only supports QQ.Item.TopLeft, QQ.Item.BottomLeft,
+      QQ.Item.BottomLeft, and QQ.Item.TopLeft
       */
     function fixedPositionToPoint(fixedPosition) {
         var position = Qt.point(x / captureScale, y / captureScale) //captureItem.positionOnPaper
         var size = Qt.size(width / captureScale, height / captureScale) //captureItem.paperSizeOfItem
 
         switch(fixedPosition) {
-        case Item.TopLeft:
+        case QQ.Item.TopLeft:
             return position;
-        case Item.TopRight:
+        case QQ.Item.TopRight:
             return Qt.point(position.x + size.width, position.y);
-        case Item.BottomLeft:
+        case QQ.Item.BottomLeft:
             return Qt.point(position.x, position.y + size.height);
-        case Item.BottomRight:
+        case QQ.Item.BottomRight:
             return Qt.point(position.x + size.width, position.y + size.height);
         default:
             return Qt.point(0.0, 0.0);
@@ -96,7 +96,7 @@ Rectangle {
       This handles the drag Resize of the catpureItem
 
       @param delta - Qt.point() with the delta of the mouse movement
-      @param fixedPoint - Item.TransformOrigin
+      @param fixedPoint - QQ.Item.TransformOrigin
       */
     function dragResizeHandler(delta, fixedPoint) {
         var length = dragLength(delta, fixedPoint)
@@ -141,7 +141,7 @@ Rectangle {
 
     //This item is used to calculate the center of the interaction capture.
     //It is used for the rotation of the item
-    Item {
+    QQ.Item {
         id: centerItemId
         anchors.centerIn: parent
     }
@@ -167,7 +167,7 @@ Rectangle {
         state = captureItem === null ? "" : "INIT_STATE"
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: selectMouseAreaId
 
         property point lastPoint;
@@ -210,10 +210,10 @@ Rectangle {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "INIT_STATE"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: interactionId
                 width: captureItem.boundingBox.width * captureScale
                 height: captureItem.boundingBox.height * captureScale;
@@ -221,7 +221,7 @@ Rectangle {
                 y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * captureScale
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: selectMouseAreaId
 
                 onPressed: {
@@ -248,11 +248,11 @@ Rectangle {
             }
         },
 
-        State {
+        QQ.State {
             name: "SELECTED_RESIZE_STATE"
             extend: "INIT_STATE"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: selectMouseAreaId
 
                 onReleased: {
@@ -263,54 +263,54 @@ Rectangle {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: topLeftHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
                 imageRotation: 0
                 onDragDelta: {
                     //Since we're moving to topleft, make the bottom right fixed
-                    dragResizeHandler(delta, Item.BottomRight)
+                    dragResizeHandler(delta, QQ.Item.BottomRight)
                 }
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: topRightHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
                 imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the top right, make the bottom left fixed
-                    dragResizeHandler(delta, Item.BottomLeft)
+                    dragResizeHandler(delta, QQ.Item.BottomLeft)
                 }
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: bottomLeftHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
                 imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the bottom left, make the top right fixed
-                    dragResizeHandler(delta, Item.TopRight)
+                    dragResizeHandler(delta, QQ.Item.TopRight)
                 }
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: bottomRightHandle
                 imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
                 imageRotation: 0
                 onDragDelta: {
                     //Since we're moving the bottom right, make the top left fixed
-                    dragResizeHandler(delta, Item.TopLeft)
+                    dragResizeHandler(delta, QQ.Item.TopLeft)
                 }
             }
 
         },
 
-        State {
+        QQ.State {
             name: "SELECTED_ROTATE_STATE"
             extend: "INIT_STATE"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: selectMouseAreaId
 
                 onReleased: {
@@ -321,28 +321,28 @@ Rectangle {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: topLeftHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 90
                 onDragDelta: dragRotationHandler(delta, oldPoint)
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: topRightHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 180
                 onDragDelta: dragRotationHandler(delta, oldPoint)
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: bottomLeftHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
                 imageRotation: 0
                 onDragDelta: dragRotationHandler(delta, oldPoint)
             }
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: bottomRightHandle
                 imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
                 selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"

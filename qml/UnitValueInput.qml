@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
-Row {
+QQ.Row {
     property var unitValue: null
     property alias valueVisible: clickInput.visible
     property alias valueReadOnly: clickInput.readOnly
@@ -76,7 +76,7 @@ Row {
         }
     }
 
-    QtObject {
+    QQ.QtObject {
         id: privateData
         property var customUnitsToValue: []
         property var valueToCustomUnits: []
@@ -90,7 +90,7 @@ Row {
         updateMap()
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         updateMap()
     }
 }

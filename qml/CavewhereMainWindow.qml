@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
 import QtQuick.Dialogs 1.2
@@ -48,32 +48,32 @@ ApplicationWindow {
         windowName: "mainWindow"
     }
 
-    Loader {
+    QQ.Loader {
         id: loadAboutWindowId
     }
 
-    Loader {
+    QQ.Loader {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
         asynchronous: true
-        visible: status == Loader.Ready
+        visible: status == QQ.Loader.Ready
 
 //        onLoaded: {
 //            fileMenuButton.dataPage = item.dataPage
 //        }
     }
 
-    Column {
+    QQ.Column {
         anchors.centerIn: parent
-        visible: loadAboutWindowId.status != Loader.Ready
+        visible: loadAboutWindowId.status != QQ.Loader.Ready
 
         Text {
             text: {
                 switch(loadMainContentsId.status) {
-                case Loader.Error:
+                case QQ.Loader.Error:
                     return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
-                case Loader.Loading:
+                case QQ.Loader.Loading:
                     return "Loading"
                 }
                 return "";
@@ -84,7 +84,7 @@ ApplicationWindow {
             minimumValue: 0
             maximumValue: 100
             value: loadMainContentsId.progress * 100.
-            visible: loadMainContentsId.status == Loader.Loading
+            visible: loadMainContentsId.status == QQ.Loader.Loading
         }
     }
 
@@ -122,7 +122,7 @@ ApplicationWindow {
         id: globalDialogHandler
     }
 
-    Item {
+    QQ.Item {
         id: rootPopupItem
         anchors.fill: parent
     }
@@ -146,7 +146,7 @@ ApplicationWindow {
         close.accepted = false;
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindowId
         screenSizeSaverId.resize();
     }

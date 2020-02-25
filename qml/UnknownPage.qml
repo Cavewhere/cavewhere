@@ -1,8 +1,8 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 
 ScrollViewPage {
-    Rectangle {
+    QQ.Rectangle {
         radius: 5
 
         anchors.centerIn: parent
@@ -28,7 +28,7 @@ ScrollViewPage {
                 visible: text.length > 0
             }
 
-            Image {
+            QQ.Image {
                 source: "qrc:/icons/unknownPage.png"
                 Layout.alignment: Qt.AlignHCenter
             }

@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
    id: labelValueUnit
 
    property alias label: labelId.text

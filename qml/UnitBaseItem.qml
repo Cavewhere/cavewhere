@@ -1,6 +1,6 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
     property var unitModel: null
     property int unit
     property bool readOnly: false

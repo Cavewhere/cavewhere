@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQml 2.12
 import Cavewhere 1.0
 
@@ -19,7 +19,7 @@ HelpBox {
         }
     }
 
-    Connections {
+    QQ.Connections {
         target: rootData.project
         onFileSaved: {
             savedHelpBoxId.visible = true;

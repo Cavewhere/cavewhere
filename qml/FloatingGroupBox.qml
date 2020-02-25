@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
     id: floatingGroupBoxId
 
     property int margin: 3
@@ -40,7 +40,7 @@ Item {
     }
 
 
-    Rectangle {
+    QQ.Rectangle {
         id: boxGroupId
 
         x: margin
@@ -53,7 +53,7 @@ Item {
         width: container.width + margin * 2;
         height: container.height + margin * 2;
 
-        Item {
+        QQ.Item {
             id: container
             x: margin
             y: margin

@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: clickTextInput
     property alias text: textAreaId.text
     property alias font: textAreaId.font
@@ -133,27 +133,27 @@ Item {
 //            textChangedAnimation.restart()
 //        }
 
-//        SequentialAnimation {
+//        QQ.SequentialAnimation {
 //            id: textChangedAnimation
-//            NumberAnimation {
+//            QQ.NumberAnimation {
 //                target: textAreaId;
 //                property: "scale";
-//                easing.type: Easing.OutInElastic
+//                easing.type: QQ.Easing.OutInElastic
 //                from: 1.0;
 //                to: 1.2
 //                duration: 100
 //            }
-//            NumberAnimation {
+//            QQ.NumberAnimation {
 //                target: textAreaId;
 //                property: "scale";
-//                easing.type: Easing.OutInElastic
+//                easing.type: QQ.Easing.OutInElastic
 //                to: 1.0
 //                duration: 100
 //            }
 //        }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: doubleClickArea
 
         anchors.fill: parent
@@ -162,22 +162,22 @@ Item {
 
 
         states: [
-            State {
+            QQ.State {
                 name: "DOUBLE-CLICK"
                 when: doubleClickEdit && !clickTextInput.readOnly
 
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: doubleClickArea
                     propagateComposedEvents: !acceptMousePress
                     onDoubleClicked: openEditor()
                 }
             },
 
-            State {
+            QQ.State {
                 name: "SIGNLE-CLICK"
                 when: !doubleClickEdit && !clickTextInput.readOnly
 
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: doubleClickArea
                     onClicked: openEditor()
                 }

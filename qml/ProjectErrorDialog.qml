@@ -1,10 +1,10 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 //import QtQuick.Dialogs 1.2
 import QtQuick.Layouts 1.12
 import QtQuick.Controls 2.12
 import Cavewhere 1.0
 
-Loader {
+QQ.Loader {
     id: loadedId
     anchors.centerIn: parent
 
@@ -16,7 +16,7 @@ Loader {
         loadedId.item.errorDialog.open();
     }
 
-    Connections {
+    QQ.Connections {
         ignoreUnknownSignals: true
         target: model
         onCountChanged: {
@@ -28,10 +28,10 @@ Loader {
         }
     }
 
-    Component {
+    QQ.Component {
         id: dialogComponent
 
-        Item {
+        QQ.Item {
             id: itemId
             property alias errorDialog: errorDialogId
 

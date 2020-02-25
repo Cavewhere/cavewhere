@@ -109,7 +109,6 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
         QQuickItem* item = group->LabelItems.at(i);
 
         item->setProperty("text", label.text());
-        item->setProperty("font", label.font());
     }
 
     //Update all the positions

@@ -1,5 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
+import QtQml 2.2
 import QtQuick.Controls 1.2
+import QtQuick.Controls 2.12 as QC
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
@@ -29,7 +31,7 @@ StandardPage {
                 implicitWidth: 150
             }
 
-            Item { implicitWidth: 50 }
+            QQ.Item { implicitWidth: 50 }
 
             Text {
                 text: "Lead Distance from:"
@@ -92,7 +94,7 @@ StandardPage {
             TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
 
             section.property: "leadCompleted"
-            section.delegate: Rectangle {
+            section.delegate: QQ.Rectangle {
                 width: tableView.width
                 height: childrenRect.height
 
@@ -104,8 +106,8 @@ StandardPage {
                 }
             }
 
-            itemDelegate: Item {
-                Loader {
+            itemDelegate: QQ.Item {
+                QQ.Loader {
                     sourceComponent: {
                         switch(tableView.getColumn(styleData.column).role) {
                         case "leadCompleted":
@@ -122,7 +124,7 @@ StandardPage {
                     }
                 }
 
-                Component {
+                QQ.Component {
                     id: checkboxComponent
                     CheckBox {
                         id: checkbox
@@ -142,7 +144,7 @@ StandardPage {
                     }
                 }
 
-                Component {
+                QQ.Component {
                     id: lengthComponent
                     Text {
                         text: Math.round(styleData.value) + " m"
@@ -150,7 +152,7 @@ StandardPage {
                     }
                 }
 
-                Component {
+                QQ.Component {
                     id: textComponent
                     Text {
                         text: styleData.value
@@ -158,7 +160,7 @@ StandardPage {
                     }
                 }
 
-                Component {
+                QQ.Component {
                     id: gotoViewComponent
                     LinkText {
                         text: "Goto"

@@ -1,6 +1,6 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-MouseArea {
+QQ.MouseArea {
     anchors.fill: parent
     onPressed: mouse.accepted = true
     onWheel: wheel.accepted = true

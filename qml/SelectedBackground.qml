@@ -1,6 +1,6 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: selectedBackground
 
     anchors.margins: -2

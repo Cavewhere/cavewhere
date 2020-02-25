@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import QtQuick.Dialogs 1.2
 
@@ -14,7 +14,7 @@ MenuBar {
     id: menuBarId
     property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
-    property Loader mainContentLoader;
+    property QQ.Loader mainContentLoader;
     property FileDialog loadFileDialog;
     property FileDialog saveAsFileDialog;
     property ApplicationWindow applicationWindow;
@@ -110,7 +110,7 @@ MenuBar {
                 qmlReloader.reload();
                 mainContentLoader.source = currentSource;
 
-                console.log("Loader status:" + mainContentLoader.status + "Loader:" + Loader.Ready + " " + currentAddress)
+                console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
 
                 rootData.pageSelectionModel.currentPageAddress = currentAddress;
             }

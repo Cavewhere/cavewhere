@@ -5,16 +5,16 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: tabWidget
 
     default property alias content: pageArea.children
     property int currentPageIndex: 0
 
     onCurrentPageIndexChanged: setVisible()
-    Component.onCompleted: setVisible()
+    QQ.Component.onCompleted: setVisible()
 
     function setVisible() {
         for (var i = 0; i < pageArea.children.length; ++i) {
@@ -22,7 +22,7 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: header
 
         anchors.left: parent.left
@@ -31,8 +31,8 @@ Rectangle {
 
         height: 70
 
-        Image {
-            fillMode: Image.TileHorizontally
+        QQ.Image {
+            fillMode: QQ.Image.TileHorizontally
             source: "qrc:icons/horizontalLine.png"
             anchors.bottom: header.bottom
             anchors.left: header.left
@@ -44,21 +44,21 @@ Rectangle {
 //        border.width: 1
 
         //Create the tab bar for the widget
-        Row {
+        QQ.Row {
            // clip: true
             spacing: 2
 
-            Repeater {
+            QQ.Repeater {
                 model: pageArea.children.length
 
-                delegate: Rectangle {
+                delegate: QQ.Rectangle {
                     width:  ((icon.width > iconText.width) ? icon.width + 15 : iconText.width + 15)
                     height: header.height // - 5
 
                     color: "#00000000"
                     state: tabWidget.currentPageIndex == index ? "selected" : " "
 
-                    Rectangle {
+                    QQ.Rectangle {
                         id: tabBackground
                         width: parent.width
                         height: parent.height
@@ -76,10 +76,10 @@ Rectangle {
 
                     }
 
-                    Image {
+                    QQ.Image {
                         id: icon
                         source: pageArea.children[index].icon
-                        fillMode: Image.PreserveAspectFit
+                        fillMode: QQ.Image.PreserveAspectFit
                         smooth: true
 
                         anchors.topMargin: 5
@@ -89,8 +89,8 @@ Rectangle {
                         anchors.top:  parent.top
                         anchors.bottom: iconText.top
 
-                        Behavior on scale {
-                            NumberAnimation {
+                        QQ.Behavior on scale {
+                            QQ.NumberAnimation {
                                 duration: 50
                             }
                         }
@@ -109,7 +109,7 @@ Rectangle {
                         font.bold: tabWidget.currentPageIndex == index
                     }
 
-                    MouseArea {
+                    QQ.MouseArea {
                         anchors.fill: parent
 
                         onClicked: {
@@ -128,10 +128,10 @@ Rectangle {
                     }
 
                     states: [
-                        State {
+                        QQ.State {
                             name:  "selected"
 
-                            PropertyChanges {
+                            QQ.PropertyChanges {
                                 target: tabBackground
                                 y: parent.y
                                 visible: true
@@ -140,8 +140,8 @@ Rectangle {
                     ]
 
                     transitions: [
-                        Transition {
-                            NumberAnimation { target: tabBackground; property: "y"; duration: 100 }
+                         QQ.Transition {
+                            QQ.NumberAnimation { target: tabBackground; property: "y"; duration: 100 }
                         }
 
                     ]
@@ -150,12 +150,12 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         anchors.left: parent.left; anchors.right:  parent.right
         anchors.top: header.bottom; anchors.bottom: parent.bottom
         clip: true //This causes rendering problems for the Intel 950 Graphics card
 
-        Item {
+        QQ.Item {
             id: pageArea
             anchors.fill: parent;
         }

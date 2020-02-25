@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
 DataBox {
     id: readBox;
@@ -18,6 +18,6 @@ DataBox {
         anchors.left: parent.left
         anchors.leftMargin: 2
         anchors.topMargin: 1
-        font.pixelSize: 10
+        font.pointSize: 10
     }
 }

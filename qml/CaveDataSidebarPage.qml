@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: page
 
     property variant currentIndex //ModelIndex
@@ -42,13 +42,13 @@ Rectangle {
         view.currentIndex = cavesElement.viewIndex
     }
 
-    Component.onCompleted: {
+    QQ.Component.onCompleted: {
         regionModel.rowsAboutToBeRemoved.connect(modelRemovingIndexes);
     }
 
-    Image {
+    QQ.Image {
         id: splitter
-        fillMode: Image.TileVertically
+        fillMode: QQ.Image.TileVertically
         source: "qrc:icons/verticalLine.png"
         anchors.bottom: parent.bottom
         anchors.top: parent.top
@@ -63,7 +63,7 @@ Rectangle {
         height: 35
     }
 
-    Column {
+    QQ.Column {
         id: staticElements
         anchors.left: parent.left
         anchors.right: parent.right
@@ -163,7 +163,7 @@ Rectangle {
     }
 
 
-    ListView {
+    QQ.ListView {
         id: view
         anchors.left: parent.left
         anchors.right: parent.right

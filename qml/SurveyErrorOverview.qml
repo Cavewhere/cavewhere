@@ -1,8 +1,8 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Layouts 1.1
 
-Item {
+QQ.Item {
     id: overviewId
 
     property Trip trip: null
@@ -16,7 +16,7 @@ Item {
 
     visible: false
 
-    Rectangle {
+    QQ.Rectangle {
         id: borderRectangle
 
         border.width: 1
@@ -28,13 +28,13 @@ Item {
             id: layoutId
             anchors.centerIn: parent
 
-            Image {
+            QQ.Image {
                 id: stopImage
                 source: "qrc:icons/stopSignError.png"
                 visible: _numErrors > 0
             }
 
-            Image {
+            QQ.Image {
                 id: warningImage
                 source: "qrc:icons/warning.png"
                 visible: _numWarnings > 0
@@ -49,75 +49,75 @@ Item {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "noErrorsOrWarnings"
             when: _numErrors == 0 && _numWarnings == 0
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: overviewId
                 visible: false
             }
         },
 
-        State {
+        QQ.State {
             name: "hasErrorOrWarning"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: overviewId
                 visible: true
             }
         },
 
-        State {
+        QQ.State {
             name: "hasError"
             extend: "hasErrorOrWarning"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: borderRectangle
                 border.color: "#930100"
                 color: "#FAB8B9"
             }
         },
 
-        State {
+        QQ.State {
             name: "hasWarning"
             extend: "hasErrorOrWarning"
 
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: borderRectangle
                 border.color: "#E06841"
                 color: "#FFFDBC"
             }
         },
 
-        State {
+        QQ.State {
             name: "onlyErrors"
             when: _numErrors > 0 && _numWarnings == 0
             extend: "hasError"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: errorText
                 text: "There are <b>" + _numErrors + " errors</b>"
             }
         },
 
-        State {
+        QQ.State {
             name: "onlyWarnings"
             when: _numErrors == 0 && _numWarnings > 0
             extend: "hasWarning"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: errorText
                 text: "There are " + _numWarnings + " warnings"
             }
         },
 
-        State {
+        QQ.State {
             name: "ErrorsAndWarnings"
             when: _numErrors > 0 && _numWarnings > 0
             extend: "hasError"
 
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: errorText
                 text: "There are <b>" + _numErrors + " errors</b> and " + _numWarnings + " warnings"
             }

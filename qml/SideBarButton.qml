@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: button
     width: 100
-    height: 80
+    height: 85
     color: "#00000000"
     clip: true;
 
@@ -41,10 +41,10 @@ Rectangle {
         anchors.bottomMargin: 3
         font.bold: true
         horizontalAlignment: Text.AlignHCenter
-        font.pixelSize: 14
+        font.pointSize: 14
     }
 
-    Image {
+    QQ.Image {
         id: icon
         width: 94
         height: 52
@@ -54,37 +54,37 @@ Rectangle {
         anchors.rightMargin: 3
         anchors.left: parent.left
         anchors.leftMargin: 3
-        fillMode: Image.PreserveAspectFit
+        fillMode: QQ.Image.PreserveAspectFit
         smooth: true
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: hoverBackground
         x: -parent.height / 2
         y: parent.height / 2
         width: parent.height
         height: parent.width
         z: -2
-        gradient: Gradient {
-            GradientStop {
+        gradient: QQ.Gradient {
+            QQ.GradientStop {
                 id: gradientstop1
                 position: 0
                 color: "#00d1d1d1"
             }
 
-            GradientStop {
+            QQ.GradientStop {
                 id: gradientstop2
                 position: 0.47
                 color: "#96b5b5b5"
             }
 
-            GradientStop {
+            QQ.GradientStop {
                 id: gradientstop3
                 position: 1
                 color: "#00000000"
             }
         }
-        transformOrigin: Item.Top
+        transformOrigin: QQ.Item.Top
         rotation: -90
         visible: false
         opacity: 1
@@ -92,7 +92,7 @@ Rectangle {
 
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseArea
         anchors.fill: parent;
         hoverEnabled: true;
@@ -102,7 +102,7 @@ Rectangle {
         onClicked: buttonIsTroggled();
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: borderRectangle
         width: parent.width + 4
         anchors.top: parent.top
@@ -116,78 +116,78 @@ Rectangle {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "toggledState"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop1
                 position: 0
                 color: "#ffffff"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop2
                 position: 1
                 color: "#000000"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop3
                 position: 1
                 color: "#c8c0c0c0"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: hoverBackground
                 z: -1
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: textLabel
                 color: "#000000"
                 styleColor: "#aaaaaa"
                 style: "Raised"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: borderRectangle
                 border.color: "#313131"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: mouseArea
                 onEntered: {}
                 onExited: {}
             }
         },
-        State {
+        QQ.State {
             name: "hoverState"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: hoverBackground
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop1
                 position: 0
                 color: "#00d1d1d1"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop2
                 position: 0.47
                 color: "#32b5b5b5"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: gradientstop3
                 position: 1
                 color: "#00000000"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: borderRectangle
                 border.color: "#ffffff"
             }
