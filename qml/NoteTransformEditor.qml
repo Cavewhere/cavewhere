@@ -20,12 +20,19 @@ QQ.Item {
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
-    property int scrapType: scrap ? scrap.type : -1
+    property int scrapType: currentScrapType()
+
+    //This function is useful for Binding in the combobox. The combobox
+    //doesn't update correctly if bound to just scrapType
+    function currentScrapType() {
+        return scrap ? scrap.type : -1
+    }
 
     visible: noteTransform !== null
 
     height: childrenRect.height
     width: childrenRect.width
+
 
     Binding {
         target: northInteraction
@@ -61,7 +68,7 @@ QQ.Item {
                     Binding {
                         target: typeComboBox
                         property: "currentIndex"
-                        value: scrapType
+                        value: currentScrapType()
                     }
                 }
             }
