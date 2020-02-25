@@ -88,6 +88,7 @@ StandardPage {
             }
 
             QC1.TableViewColumn { role: "leadCompleted"; title: "Completed"; width: 60 }
+            QC1.TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
             QC1.TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65}
             QC1.TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
             QC1.TableViewColumn {
@@ -95,8 +96,7 @@ StandardPage {
                 title: "Distance to " + leadModel.referanceStation;
                 width: 100
             }
-            QC1.TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
-            QC1.TableViewColumn { role: "leadNotes"; title: "Notes"; width: 40 }
+            QC1.TableViewColumn { role: "leadTrip"; title: "Trip"; width: 40 }
             QC1.TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
 
             section.property: "leadCompleted"
@@ -120,6 +120,9 @@ StandardPage {
             itemDelegate: QQ.Item {
                 QQ.Loader {
                     anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    clip: true
                     sourceComponent: {
                         switch(tableView.getColumn(styleData.column).role) {
                         case "leadCompleted":
@@ -130,7 +133,7 @@ StandardPage {
                             return textComponent
                         case "leadPosition":
                             return gotoViewComponent
-                        case "leadNotes":
+                        case "leadTrip":
                             return noteViewComponent
                         case "leadDistanceToReferanceStation":
                             return lengthComponent
@@ -207,27 +210,12 @@ StandardPage {
                     id: noteViewComponent
                     LinkText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Notes"
+                        text: styleData.value
                         onClicked: {
                             var index = tableView.model.index(styleData.row);
                             var scrap = tableView.model.data(index, LeadModel.LeadScrap);
-
                             linkGenerator.gotoScrap(scrap)
-//                            console.log("scrap:" + scrap + scrap.parent)
-
-//                            var leadIndex = tableView.model.data(index, LeadModel.LeadIndexInScrap);
-
-//                            //This is a work around, just passing styleData.value to TurnTableInteraction.centerOn()
-//                            //doesn't work, and it centerOn (0, 0, 0)
-//                            var pos = Qt.vector3d(styleData.value.x, styleData.value.y, styleData.value.z )
-
-//                            //Change to the view page, animate to the lead position, and select it
-//                            rootData.pageSelectionModel.currentPageAddress = "View"
-//                            pageView.currentPageItem.turnTableInteraction.centerOn(pos, true);
-//                            pageView.currentPageItem.leadView.select(scrap, leadIndex);
                         }
-
-
                     }
                 }
             }

@@ -14,6 +14,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwSurveyChunk.h"
+#include "cwTrip.h"
 
 //Std includes
 #include <limits>
@@ -95,6 +96,8 @@ QVariant cwLeadModel::data(const QModelIndex &index, int role) const
         return leadIndex;
     case LeadDistanceToReferanceStation:
         return leadDistance(scrap, leadIndex);
+    case LeadTrip:
+        return scrap->parentNote()->parentTrip()->name();
     default:
         return QVariant();
     }
@@ -149,6 +152,7 @@ QHash<int, QByteArray> cwLeadModel::roleNames() const
     names.insert(LeadSizeAsString, "leadSizeAsString");
     names.insert(LeadNearestStation, "leadNearestStation");
     names.insert(LeadDistanceToReferanceStation, "leadDistanceToReferanceStation");
+    names.insert(LeadTrip, "leadTrip");
     return names;
 }
 
