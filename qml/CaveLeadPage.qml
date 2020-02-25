@@ -1,6 +1,6 @@
 import QtQuick 2.0 as QQ
 import QtQml 2.2
-import QtQuick.Controls 1.2
+import QtQuick.Controls 1.2 as QC1
 import QtQuick.Controls 2.12 as QC
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
@@ -20,7 +20,7 @@ StandardPage {
         anchors.fill: parent
 
         RowLayout {
-            TextField {
+            QC.TextField {
                 id: searchBox
 
                 placeholderText: "Filter..."
@@ -55,7 +55,12 @@ StandardPage {
             }
         }
 
-        TableView {
+        LinkGenerator {
+            id: linkGenerator
+            pageSelectionModel: rootData.pageSelectionModel
+        }
+
+        QC1.TableView {
             id: tableView
 
             property bool blockChanges: false
@@ -82,16 +87,17 @@ StandardPage {
                 filterRole: ""
             }
 
-            TableViewColumn { role: "leadCompleted"; width: 20 }
-            TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65}
-            TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
-            TableViewColumn {
+            QC1.TableViewColumn { role: "leadCompleted"; title: "Completed"; width: 60 }
+            QC1.TableViewColumn { role: "leadNearestStation"; title: "Station"; width: 65}
+            QC1.TableViewColumn { role: "leadSizeAsString"; title: "Size"; width: 50 }
+            QC1.TableViewColumn {
                 role: "leadDistanceToReferanceStation";
                 title: "Distance to " + leadModel.referanceStation;
                 width: 100
             }
-            TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
-            TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
+            QC1.TableViewColumn { role: "leadPosition"; title: "Goto"; width: 40 }
+            QC1.TableViewColumn { role: "leadNotes"; title: "Notes"; width: 40 }
+            QC1.TableViewColumn { role: "leadDescription"; title: "Description"; width: 400 }
 
             section.property: "leadCompleted"
             section.delegate: QQ.Rectangle {
@@ -106,8 +112,14 @@ StandardPage {
                 }
             }
 
+            rowDelegate: QQ.Rectangle {
+                height: 30
+                color: styleData.row % 2 ? "white" : "#f2f2f2"
+            }
+
             itemDelegate: QQ.Item {
                 QQ.Loader {
+                    anchors.verticalCenter: parent.verticalCenter
                     sourceComponent: {
                         switch(tableView.getColumn(styleData.column).role) {
                         case "leadCompleted":
@@ -118,6 +130,8 @@ StandardPage {
                             return textComponent
                         case "leadPosition":
                             return gotoViewComponent
+                        case "leadNotes":
+                            return noteViewComponent
                         case "leadDistanceToReferanceStation":
                             return lengthComponent
                         }
@@ -126,20 +140,26 @@ StandardPage {
 
                 QQ.Component {
                     id: checkboxComponent
-                    CheckBox {
-                        id: checkbox
-                        Binding {
-                            target: checkbox
-                            property: "checked"
-                            value: styleData.value
-                        }
+                    QQ.Item {
+                        height: 30
+                        width: 40
+                        CheckBox {
+                            id: checkbox
+                            anchors.verticalCenter: parent.verticalCenter
 
-                        onCheckedChanged: {
-                            if(styleData.value !== "") {
-                                var index = tableView.model.index(styleData.row);
-                                tableView.model.setData(index, checked, LeadModel.LeadCompleted);
+                            Binding {
+                                target: checkbox
+                                property: "checked"
+                                value: styleData.value
                             }
 
+                            onCheckedChanged: {
+                                if(styleData.value !== "") {
+                                    var index = tableView.model.index(styleData.row);
+                                    tableView.model.setData(index, checked, LeadModel.LeadCompleted);
+                                }
+
+                            }
                         }
                     }
                 }
@@ -155,6 +175,7 @@ StandardPage {
                 QQ.Component {
                     id: textComponent
                     Text {
+                        anchors.verticalCenter: parent.verticalCenter
                         text: styleData.value
                         x: 3
                     }
@@ -163,6 +184,7 @@ StandardPage {
                 QQ.Component {
                     id: gotoViewComponent
                     LinkText {
+                        anchors.verticalCenter: parent.verticalCenter
                         text: "Goto"
                         onClicked: {
                             var index = tableView.model.index(styleData.row);
@@ -178,6 +200,34 @@ StandardPage {
                             pageView.currentPageItem.turnTableInteraction.centerOn(pos, true);
                             pageView.currentPageItem.leadView.select(scrap, leadIndex);
                         }
+                    }
+                }
+
+                QQ.Component {
+                    id: noteViewComponent
+                    LinkText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Notes"
+                        onClicked: {
+                            var index = tableView.model.index(styleData.row);
+                            var scrap = tableView.model.data(index, LeadModel.LeadScrap);
+
+                            linkGenerator.gotoScrap(scrap)
+//                            console.log("scrap:" + scrap + scrap.parent)
+
+//                            var leadIndex = tableView.model.data(index, LeadModel.LeadIndexInScrap);
+
+//                            //This is a work around, just passing styleData.value to TurnTableInteraction.centerOn()
+//                            //doesn't work, and it centerOn (0, 0, 0)
+//                            var pos = Qt.vector3d(styleData.value.x, styleData.value.y, styleData.value.z )
+
+//                            //Change to the view page, animate to the lead position, and select it
+//                            rootData.pageSelectionModel.currentPageAddress = "View"
+//                            pageView.currentPageItem.turnTableInteraction.centerOn(pos, true);
+//                            pageView.currentPageItem.leadView.select(scrap, leadIndex);
+                        }
+
+
                     }
                 }
             }

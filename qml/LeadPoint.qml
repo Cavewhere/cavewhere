@@ -1,6 +1,5 @@
-import QtQuick 2.0 as QQ
+import QtQuick 2.12 as QQ
 import Cavewhere 1.0
-import QtQuick.Controls 1.2
 import QtQuick.Layouts 1.1
 
 PointItem {

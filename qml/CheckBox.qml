@@ -10,7 +10,6 @@ QC.CheckBox {
         implicitHeight: 18
         x: control.leftPadding
         y: parent.height / 2 - height / 2
-        radius: 3
         border.color: control.down ? "#4a4a4a" : "#1f1f1f"
 
         QQ.Rectangle {
