@@ -355,8 +355,8 @@ void cwLinePlotTask::setStationAsChanged(int caveIndex, QString stationName)
     addEmptyStationLookup(caveIndex);
 
     const StationTripScrapLookup& lookup = TripLookups[caveIndex];
-    QList<int> tripIndexes = lookup.trips(stationName);
-    QList<QPair<int, int> > scrapIndexes = lookup.scraps(stationName);
+    QList<int> tripIndexes = lookup.trips(stationName.toUpper());
+    QList<QPair<int, int> > scrapIndexes = lookup.scraps(stationName.toUpper());
 
     foreach(int tripIndex, tripIndexes) {
         //Get the trip that has been updated

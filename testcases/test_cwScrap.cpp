@@ -20,6 +20,7 @@
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
 #include "cwRootData.h"
+#include "cwSurveyChunk.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -92,7 +93,7 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
     CHECK(transform->northUp() == Approx(row.Rotation).epsilon(row.RotationEpsilon));
 }
 
-TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
+TEST_CASE("Auto Calculate Note Transform", "[Scrap]") {
 
     QList<TestRow> rows;
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 87.8004635984, 176.349));
@@ -118,7 +119,7 @@ TEST_CASE("Auto Calculate Note Transform", "[ScrapTest]") {
     }
 }
 
-TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
+TEST_CASE("Exact Auto Calculate Note Transform", "[Scrap]") {
 
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.155, 5795.0, 0.05, 0.005));
@@ -153,7 +154,7 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[ScrapTest]") {
     }
 }
 
-TEST_CASE("Check that auto calculate work outside of trip", "[ScrapTest]") {
+TEST_CASE("Check that auto calculate work outside of trip", "[Scrap]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 30.13, 1606.3, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw", 30.13, 1606.3, 0.05, 0.005));
@@ -181,8 +182,45 @@ TEST_CASE("Check that auto calculate work outside of trip", "[ScrapTest]") {
     }
 }
 
+TEST_CASE("Auto calculate if survey station change position", "[Scrap]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 354.13, 16063.06, 0.05, 0.005));
 
-TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = scrap(project, 0, 1, 0, 0);
+
+        REQUIRE(project->cavingRegion()->caves().size() > 0);
+        REQUIRE(project->cavingRegion()->caves().first()->trips().size() > 0);
+        REQUIRE(project->cavingRegion()->caves().first()->trips().first()->chunks().size() > 0);
+
+        auto chunk = project->cavingRegion()->cave(0)->trip(0)->chunk(0);
+        REQUIRE(chunk->shotCount() > 0);
+        CHECK(chunk->data(cwSurveyChunk::ShotDistanceRole, 0).toDouble() == 100.0);
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 1000);
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, 45);
+
+        auto plotManager = root->linePlotManager();
+        plotManager->waitToFinish();
+
+        INFO("Finished after plotManager!");
+        checkScrapTransform(currentScrap, row);
+
+        currentScrap->setCalculateNoteTransform(false);
+
+        //Force recalculation
+        INFO("Filename:" << row.Filename.toStdString());
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == true);
+        checkScrapTransform(currentScrap, row);
+    }
+}
+
+
+TEST_CASE("Guess neighbor station name", "[Scrap]") {
     class TestRow {
     public:
         TestRow(QString filename) :
@@ -241,7 +279,7 @@ TEST_CASE("Guess neighbor station name", "[ScrapTest]") {
 /**
  * This test the profileViewRotation() function in cwScrap
  */
-TEST_CASE("Test profile view rotation", "[ScrapTest]") {
+TEST_CASE("Test profile view rotation", "[Scrap]") {
 
     class TestRow {
     public:
@@ -285,3 +323,4 @@ TEST_CASE("Test profile view rotation", "[ScrapTest]") {
         checkQVector3D(calculatedResult, row.Result, 5);
     }
 }
+
