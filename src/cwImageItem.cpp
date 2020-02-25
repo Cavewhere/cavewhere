@@ -294,7 +294,7 @@ void cwImageItem::paint(QPainter* painter) {
  */
 void cwImageItem::releaseResources()
 {
-    GLResources->deleteLater();
+    delete GLResources;
 }
 
 /**
