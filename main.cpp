@@ -82,7 +82,8 @@ int main(int argc, char *argv[])
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
     context->engine()->addImageProvider(cwImageProvider::Name, imageProvider);
 
-    auto quit = [&a]() {
+    auto quit = [&a, rootData]() {
+        delete rootData;
         QThreadPool::globalInstance()->waitForDone();
         a.quit();
     };
