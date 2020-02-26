@@ -22,7 +22,7 @@ cwTriangulateTask::cwTriangulateTask(QObject *parent) :
     CropTask(new cwCropImageTask(this))
 {
     CropTask->setParentTask(this);
-    CropTask->setMipmapOnly(true);
+//    CropTask->setMipmapOnly(true);
     CropTask->setUsingThreadPool(false);
 
 }
