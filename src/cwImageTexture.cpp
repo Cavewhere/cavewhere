@@ -208,9 +208,12 @@ void cwImageTexture::startLoadingImage()
         uploadTask.setType(TextureType);
         UploadedTextureFuture = QtConcurrent::run(uploadTask);
 
-        AsyncFuture::observe(UploadedTextureFuture).context(this, [this](){
-           markAsDirty();
-           emit textureUploaded();
+        auto context = QSharedPointer<QObject>::create();
+
+        AsyncFuture::observe(UploadedTextureFuture).context(context.get(), [context, this](){
+            Q_ASSERT(context->thread() == QThread::currentThread());
+            markAsDirty();
+            emit textureUploaded();
         });
 
         DeleteTexture = false;
