@@ -24,6 +24,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwMainEntity.h"
+#include "cwKeywordItemModel.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -37,6 +38,7 @@
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     RenderEntity(new cwMainEntity),
+    KeywordItemModel(new cwKeywordItemModel(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this)),
     LeadsVisible(true)
@@ -66,6 +68,7 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setRegionTreeModel(RegionTreeModel);
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setTaskManager(TaskManagerModel);
+    ScrapManager->setKeywordItemModel(KeywordItemModel);
 
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);

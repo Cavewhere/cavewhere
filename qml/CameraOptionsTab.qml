@@ -17,12 +17,6 @@ Item {
         ColumnLayout {
             id: columnLayoutId
 
-//            property double maxWidth: Math.max(azimuthSettingsId.implicitWidth,
-//                                               Math.max(verticalAngleSettingsId.implicitWidth,
-//                                                        projectionSettingsId.implicitWidth))
-
-//            x: 5
-//            width: childrenRect.width + x * 2
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.margins: 5
@@ -41,7 +35,6 @@ Item {
                     id: azimuthSettingsId
                     turnTableInteraction: itemId.turnTableInteraction
                     Layout.fillWidth: true
-
                 }
             }
 
@@ -54,7 +47,6 @@ Item {
                     turnTableInteraction: itemId.turnTableInteraction
                     anchors.left: parent.left
                     anchors.right: parent.right
-
                 }
             }
 

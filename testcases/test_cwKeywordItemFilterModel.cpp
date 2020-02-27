@@ -50,8 +50,8 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
             auto listElement = list.at(i);
             CHECK(index.data(cwKeywordItemFilterModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
 
-            auto entities = index.data(cwKeywordItemFilterModel::EntitiesRole).value<QVector<QEntity*>>();
-            int entitiesCount = index.data(cwKeywordItemFilterModel::EntitiesCountRole).value<int>();
+            auto entities = index.data(cwKeywordItemFilterModel::ObjectsRole).value<QVector<QEntity*>>();
+            int entitiesCount = index.data(cwKeywordItemFilterModel::ObjectCountRole).value<int>();
             CHECK(entities.size() == entitiesCount);
             CHECK(entities.size() == listElement.entities.size());
 
@@ -68,19 +68,22 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
     QSignalSpy moveSpy(model.get(), &cwKeywordItemFilterModel::rowsMoved);
     QSignalSpy dataChangedSpy(model.get(), &cwKeywordItemFilterModel::dataChanged);
     QSignalSpy resetSpy(model.get(), &cwKeywordItemFilterModel::modelReset);
+    QSignalSpy possibleKeysSpy(model.get(), &cwKeywordItemFilterModel::possibleKeysChanged);
 
     addSpy.setObjectName("addSpy");
     removeSpy.setObjectName("removeSpy");
     moveSpy.setObjectName("moveSpy");
     dataChangedSpy.setObjectName("dataChangedSpy");
     resetSpy.setObjectName("resetSpy");
+    possibleKeysSpy.setObjectName("possibleKeysSpy");
 
     SpyChecker spyCheck {
         {&addSpy, 0},
         {&removeSpy, 0},
         {&moveSpy, 0},
         {&dataChangedSpy, 0},
-        {&resetSpy, 0}
+        {&resetSpy, 0},
+        {&possibleKeysSpy, 0}
     };
 
     auto component1 = new cwKeywordItem();
@@ -147,6 +150,8 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
     model->setKeywordModel(keywordEntityModel.get());
     model->waitForFinished();
 
+    CHECK(model->possibleKeys() == QStringList({"cave", "trip", "type"}));
+
     CHECK(model->rowCount(QModelIndex()) == 1);
 
     lists = {
@@ -156,6 +161,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
     check(QModelIndex(), lists);
 
     spyCheck[&resetSpy] = 1;
+    spyCheck[&possibleKeysSpy] = 1;
     spyCheck.checkSpies();
     spyCheck.clearSpyCounts();
 
@@ -237,9 +243,12 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
 
             model->waitForFinished();
 
+            CHECK(model->possibleKeys() == QStringList({"trip", "type"}));
+
             check(QModelIndex(), modelData);
 
             spyCheck[&resetSpy] = 1;
+            spyCheck[&possibleKeysSpy] = 1;
             spyCheck.checkSpies();
             spyCheck.clearSpyCounts();
 
@@ -266,8 +275,8 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
                 CHECK(index2.isValid() == true);
 
                 CHECK(roles.size() == 2);
-                CHECK(roles.contains(cwKeywordItemFilterModel::EntitiesRole) == true);
-                CHECK(roles.contains(cwKeywordItemFilterModel::EntitiesCountRole) == true);
+                CHECK(roles.contains(cwKeywordItemFilterModel::ObjectsRole) == true);
+                CHECK(roles.contains(cwKeywordItemFilterModel::ObjectCountRole) == true);
 
                 auto otherIndex = dataChangedSpy.at(1).at(0).value<QModelIndex>();
                 CHECK(otherIndex.row() == model->rowCount() - 1);
@@ -422,6 +431,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
             check(QModelIndex(), modelData);
 
             spyCheck[&resetSpy] = 1;
+            spyCheck[&possibleKeysSpy] = 1;
             spyCheck.checkSpies();
             spyCheck.clearSpyCounts();
         }

@@ -8,7 +8,6 @@
 
 //Qt includes
 #include <QtConcurrent>
-using namespace Qt3DCore;
 
 cwKeywordItemFilterModel::cwKeywordItemFilterModel(QObject *parent) :
     QAbstractListModel(parent)
@@ -98,7 +97,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
 
                 auto removeKeywords = [&filter](const QVector<cwKeyword>::iterator& begin,
                         const QVector<cwKeyword>::iterator& end,
-                        Qt3DCore::QEntity* entity
+                        QObject* entity
                         )
                 {
                     for(auto iter = begin; iter != end; iter++) {
@@ -143,15 +142,25 @@ QVariant cwKeywordItemFilterModel::data(const QModelIndex &index, int role) cons
     auto row = Data.row(index.row());
 
     switch(role) {
-    case EntitiesRole:
+    case ObjectsRole:
         return QVariant::fromValue(row.entities);
-    case EntitiesCountRole:
+    case ObjectCountRole:
         return row.entities.size();
     case ValueRole:
         return row.value;
     }
 
     return QVariant();
+}
+
+QHash<int, QByteArray> cwKeywordItemFilterModel::roleNames() const
+{
+    static const QHash<int, QByteArray> roles = {
+        {ObjectsRole, "objectsRole" },
+        {ObjectCountRole, "objectCountRole"},
+        {ValueRole, "valueRole"},
+    };
+    return roles;
 }
 
 QString cwKeywordItemFilterModel::otherCategory()
@@ -190,9 +199,27 @@ void cwKeywordItemFilterModel::updateAllRows()
         insertRow.lastKey = lastKey;
         insertRow.data = &newModelData;
 
+        QSet<QString> possibleKeys;
+        auto addKeys = [&possibleKeys](const EntityAndKeywords& objectKeywords) {
+            for(auto keyword : objectKeywords.keywords) {
+                possibleKeys.insert(keyword.key());
+            }
+        };
+
+        auto removeKeys = [&possibleKeys](QList<cwKeyword> keywords) {
+            for(auto keyword : keywords) {
+                possibleKeys.remove(keyword.key());
+            }
+        };
+
         for(auto entity : entities) {
             insertRow.filterEntity(entity);
+            addKeys(entity);
         }
+
+        removeKeys(keywords);
+        newModelData.PossibleKeys = possibleKeys.toList();
+        std::sort(newModelData.PossibleKeys.begin(), newModelData.PossibleKeys.end());
 
         return newModelData;
     };
@@ -210,8 +237,13 @@ void cwKeywordItemFilterModel::updateAllRows()
     {
         //Updated the model will new filtered results
         beginResetModel();
+        auto oldPossibleKeys = Data.PossibleKeys;
         Data = runFuture.result();
         endResetModel();
+
+        if(oldPossibleKeys != Data.PossibleKeys) {
+            emit possibleKeysChanged();
+        }
     }
     ).future();
 }
@@ -280,7 +312,7 @@ void cwKeywordItemFilterModel::setLastKey(QString keyLast) {
 }
 
 void cwKeywordItemFilterModel::Filter::addEntity(const QString &value,
-                                                   QEntity *entity)
+                                                   QObject *entity)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
@@ -303,13 +335,13 @@ void cwKeywordItemFilterModel::Filter::addEntity(const QString &value,
     }
 }
 
-void cwKeywordItemFilterModel::Filter::addEntityToOther(QEntity *entity)
+void cwKeywordItemFilterModel::Filter::addEntityToOther(QObject *entity)
 {
     data->OtherRow.entities.append(entity);
     dataChanged(data->otherRowIndex());
 }
 
-void cwKeywordItemFilterModel::Filter::removeEntity(const QString &value, QEntity *entity)
+void cwKeywordItemFilterModel::Filter::removeEntity(const QString &value, QObject *entity)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
@@ -382,7 +414,7 @@ void cwKeywordItemFilterModel::Filter::dataChanged(const QVector<Row>::iterator 
 void cwKeywordItemFilterModel::Filter::dataChanged(int index) const
 {
     if(dataChangedFunction) {
-        dataChangedFunction(index, {EntitiesRole, EntitiesCountRole});
+        dataChangedFunction(index, {ObjectsRole, ObjectCountRole});
     }
 }
 
@@ -424,7 +456,7 @@ void cwKeywordItemFilterModel::Filter::filterEntity(const cwKeywordItemFilterMod
     }
 }
 
-QSet<QString> cwKeywordItemFilterModel::Filter::entityValues(QEntity *entity) const
+QSet<QString> cwKeywordItemFilterModel::Filter::entityValues(QObject *entity) const
 {
     QSet<QString> valuesOfEntity;
     for(auto row : data->Rows) {
@@ -438,6 +470,6 @@ QSet<QString> cwKeywordItemFilterModel::Filter::entityValues(QEntity *entity) co
 cwKeywordItemFilterModel::EntityAndKeywords::EntityAndKeywords(const QModelIndex &entityIndex)
 {
     Q_ASSERT(entityIndex.parent() == QModelIndex());
-    entity = entityIndex.data(cwKeywordItemModel::ObjectRole).value<QEntity*>();
+    entity = entityIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
     keywords = entityIndex.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
 }

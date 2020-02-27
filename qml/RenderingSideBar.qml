@@ -1,66 +1,58 @@
 import QtQuick 2.0
-import QtQuick.Controls 1.1
-import QtQuick.Layouts 1.1
+import QtQuick.Controls 2.12
+import QtQuick.Layouts 1.12
 import Cavewhere 1.0
 
-TabView {
-    id: tabViewId
-
+Item {
+    id: containerId
     property Renderer3D viewer
-    property TurnTableInteraction turnTableInteraction
-    property Tab viewTab
+    property alias turnTableInteraction: cameraOptionsTabId.turnTableInteraction
 
-    Component {
-        id: cameraOptionsTabComponentId
-        CameraOptionsTab {
+    width: stackLayoutId.implicitWidth
 
-        }
-    }
+    ColumnLayout {
+        spacing:  0
 
-    Component {
-        id: exportTabComponentId
-        ExportViewTab {
-            view: viewer
-        }
-    }
+        anchors.fill: parent
 
-    function resizeCurrentTab() {
-        resizing = true
-        tabViewId.Layout.maximumWidth = getTab(currentIndex).implicitWidth
-        tabViewId.Layout.minimumWidth = getTab(currentIndex).implicitWidth
-        tabViewId.Layout.maximumWidth = Number.MAX_VALUE
-        resizing = false
-    }
+        TabBar {
+            id: tabBarId
 
-    onCurrentIndexChanged: {
-        resizeCurrentTab()
-    }
+            Layout.fillWidth: true
 
-    Connections {
-        target: {
-            var tab = getTab(currentIndex)
-            if(!tab) {
-                return null
+            TabButton {
+                text: "View"
             }
-            return getTab(currentIndex).item
+
+            TabButton {
+                text: "Layers"
+            }
+
+            TabButton {
+                text: "Export"
+            }
         }
-        ignoreUnknownSignals: true
-        onImplicitWidthChanged: {
-            resizeCurrentTab()
-        }
-    }
 
-    Component.onCompleted: {
-        addTab("View", cameraOptionsTabComponentId);
-        addTab("Export", exportTabComponentId);
+        StackLayout {
+            id: stackLayoutId
 
-        viewTab = getTab(0)
-    }
+            Layout.fillHeight: true
+            Layout.fillWidth: true
 
-    Connections {
-        target: viewTab
-        onLoaded: {
-            viewTab.item.turnTableInteraction = turnTableInteraction
+            currentIndex: tabBarId.currentIndex
+
+            CameraOptionsTab {
+                id: cameraOptionsTabId
+            }
+
+            KeywordTab {
+               id: keywordTabId
+            }
+
+            ExportViewTab {
+                id: exportViewTabId
+                view: viewer
+            }
         }
     }
 }

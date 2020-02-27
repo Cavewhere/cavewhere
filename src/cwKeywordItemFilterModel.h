@@ -22,11 +22,12 @@ class CAVEWHERE_LIB_EXPORT cwKeywordItemFilterModel : public QAbstractListModel
     Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
     Q_PROPERTY(QList<cwKeyword> keywords READ keywords WRITE setKeywords NOTIFY keywordsChanged)
     Q_PROPERTY(QString lastKey READ lastKey WRITE setLastKey NOTIFY keyLastChanged)
+    Q_PROPERTY(QStringList possibleKeys READ possibleKeys NOTIFY possibleKeysChanged)
 
 public:
     enum Role {
-        EntitiesRole,
-        EntitiesCountRole,
+        ObjectsRole,
+        ObjectCountRole,
         ValueRole,
     };
 
@@ -44,8 +45,12 @@ public:
     QString lastKey() const;
     void setLastKey(QString lastKey);
 
+    QStringList possibleKeys() const;
+
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
+
+    QHash<int, QByteArray> roleNames() const;
 
     static QString otherCategory();
 
@@ -55,18 +60,19 @@ signals:
     void keywordModelChanged();
     void keywordsChanged();
     void keyLastChanged();
+    void possibleKeysChanged();
 
 private:
     class Row {
     public:
         Row() {}
-        Row(const QString& value, QVector<Qt3DCore::QEntity*> entities) :
+        Row(const QString& value, QList<QObject*> entities) :
             value(value),
             entities(entities)
         {}
 
         QString value;
-        QVector<Qt3DCore::QEntity*> entities;
+        QList<QObject*> entities;
 
         bool operator<(const Row& other) {
             return value < other.value;
@@ -78,7 +84,7 @@ private:
         EntityAndKeywords() = default;
         EntityAndKeywords(const QModelIndex& entityIndex);
 
-        Qt3DCore::QEntity* entity = nullptr;
+        QObject* entity = nullptr;
         QVector<cwKeyword> keywords;
     };
 
@@ -86,6 +92,7 @@ private:
     public:
         QVector<Row> Rows;
         Row OtherRow = Row(cwKeywordItemFilterModel::otherCategory(), {});
+        QStringList PossibleKeys;
 
         int otherRowIndex() const {
             return size() - 1;
@@ -117,12 +124,12 @@ private:
         std::function<void ()> endRemoveFunction;
 
         void filterEntity(const EntityAndKeywords& pair);
-        QSet<QString> entityValues(Qt3DCore::QEntity* entity) const;
-        void removeEntity(const QString& value, Qt3DCore::QEntity* entity);
+        QSet<QString> entityValues(QObject* entity) const;
+        void removeEntity(const QString& value, QObject* entity);
 
     private:
-        void addEntity(const QString& value, Qt3DCore::QEntity* entity);
-        void addEntityToOther(Qt3DCore::QEntity* entity);
+        void addEntity(const QString& value, QObject* entity);
+        void addEntityToOther(QObject* entity);
 
         void beginInsert(const QVector<Row>::iterator& iter) const;
         void endInsert() const;
@@ -136,6 +143,7 @@ private:
 
     QList<cwKeyword> Keywords; //!<
     QString LastKey; //!<
+    QStringList PossibleKeys; //!<
     ModelData Data;
 
     QFuture<void> LastRun;
@@ -169,6 +177,14 @@ inline QList<cwKeyword> cwKeywordItemFilterModel::keywords() const {
 */
 inline QString cwKeywordItemFilterModel::lastKey() const {
     return LastKey;
+}
+
+
+/**
+*
+*/
+inline QStringList cwKeywordItemFilterModel::possibleKeys() const {
+    return Data.PossibleKeys;
 }
 
 #endif // CWKEYWORDENTITYFILTERMODEL_H

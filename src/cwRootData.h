@@ -37,6 +37,7 @@ class cwEventRecorderModel;
 class cwTaskManagerModel;
 class cwPageSelectionModel;
 class cwMainEntity;
+class cwKeywordItemModel;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -66,6 +67,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
+    Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel CONSTANT)
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
@@ -89,6 +91,7 @@ public:
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
     cwMainEntity* renderEntity() const;
+    cwKeywordItemModel* keywordItemModel() const;
 
     void setQuickView(QQuickView* quickView);
 
@@ -138,6 +141,7 @@ private:
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
     cwMainEntity* RenderEntity; //!<
+    cwKeywordItemModel* KeywordItemModel; //!<
 
     //Default class, aren't used exept to prevent qml from complaining
     cwTrip* DefaultTrip;
@@ -281,6 +285,13 @@ inline bool cwRootData::leadsVisible() const {
 */
 inline cwMainEntity* cwRootData::renderEntity() const {
     return RenderEntity;
+}
+
+/**
+* Returns the keyword item model
+*/
+inline cwKeywordItemModel* cwRootData::keywordItemModel() const {
+    return KeywordItemModel;
 }
 
 #endif // CWGLOBALQMLDATA_H

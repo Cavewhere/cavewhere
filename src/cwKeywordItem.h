@@ -23,14 +23,6 @@ public:
     QObject* object() const;
     void setObject(QObject* object);
 
-//    bool operator<(const cwKeywordItem* other) const {
-//        return object() < other->object();
-//    }
-
-//    bool operator==(const cwKeywordItem* other) const {
-//        return object() == other->object();
-//    }
-
 private:
     cwKeywordModel* KeywordModel; //!<
     QObject* Object = nullptr;

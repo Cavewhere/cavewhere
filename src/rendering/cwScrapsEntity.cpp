@@ -1,6 +1,10 @@
 //Our inculdes
 #include "cwScrapsEntity.h"
 #include "cwScrapEntity.h"
+#include "cwKeywordItem.h"
+#include "cwKeywordModel.h"
+#include "cwKeywordItemModel.h"
+#include "cwScrap.h"
 
 using namespace Qt3DCore;
 using namespace Qt3DRender;
@@ -23,6 +27,14 @@ void cwScrapsEntity::addScrap(cwScrap* scrap)
         entity->setScrap(scrap);
         entity->setEffect(Effect);
         entity->setProject(Project);
+
+        if(keywordItemModel()) {
+            auto keywordItem = new cwKeywordItem();
+            keywordItem->setObject(entity);
+            keywordItem->keywordModel()->addExtension(scrap->keywordModel());
+            keywordItemModel()->addItem(keywordItem);
+        }
+
         ScrapToEntity.insert(scrap, entity);
     }
 }
@@ -81,3 +93,14 @@ void cwScrapsEntity::setProject(QString project) {
         emit projectChanged();
     }
 }
+
+/**
+*
+*/
+void cwScrapsEntity::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
+    if(KeywordItemModel != keywordItemModel) {
+        KeywordItemModel = keywordItemModel;
+        emit keywordItemModelChanged();
+    }
+}
+

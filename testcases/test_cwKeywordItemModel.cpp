@@ -9,6 +9,9 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordModel.h"
+#include "cwRootData.h"
+#include "cwLinePlotManager.h"
+#include "cwScrapEntity.h"
 
 //Std includes
 #include <memory>
@@ -17,6 +20,7 @@
 #include <Qt3DCore/QEntity>
 #include <QVector>
 #include <QSignalSpy>
+#include <QMetaObject>
 
 using namespace Qt3DCore;
 
@@ -106,9 +110,6 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
         CHECK(parentIndex.data(cwKeywordItemModel::ObjectRole).value<QEntity*>() == item->object());
 
         auto keywordModel = parentIndex.data(cwKeywordItemModel::KeywordModelRole).value<cwKeywordModel*>();
-
-//        REQUIRE(entity->components().size() == 1);
-//        auto keywordComponent = dynamic_cast<cwKeywordItem*>(entity->components().first());
 
         INFO("Keyword:" << keywordModel)
 
@@ -314,4 +315,87 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
             CHECK(!model->indexOf(item2).isValid());
         }
     }
+}
+
+TEST_CASE("cwKeywordItemModel should populate correctly from loaded file", "[cwKeywordItemModel]") {
+    cwRootData root;
+    fileToProject(root.project(), "://datasets/keywordScrap.cw");
+
+    class Row {
+    public:
+        Row(const QByteArray& type,
+            const QString& key,
+            const QString& value) :
+            type(type),
+            key(key),
+            value(value)
+        {}
+
+        QByteArray type;
+        QString key;
+        QString value;
+    };
+
+    QVector<Row> rows = {
+        {
+            cwScrapEntity::staticMetaObject.className(),
+            "Type",
+            "Plan"
+        },
+        {
+            cwScrapEntity::staticMetaObject.className(),
+            "Type",
+            "Running Profile"
+        }
+    };
+
+
+    auto contains = [rows, &root](const QModelIndex& index) {
+        for(auto row : rows) {
+            auto className = index.data(cwKeywordItemModel::ObjectRole).value<QObject*>()->metaObject()->className();
+            if(className != row.type) {
+                break;
+            }
+
+            for(int i = 0; root.keywordItemModel()->rowCount(index); i++) {
+                auto keywordIndex = root.keywordItemModel()->index(i, 0, index);
+                if(keywordIndex.data(cwKeywordItemModel::KeyRole).value<QString>() != row.key) {
+                    break;
+                }
+
+                if(keywordIndex.data(cwKeywordItemModel::ValueRole).value<QString>() != row.value) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    REQUIRE(root.keywordItemModel()->rowCount() == rows.size());
+    for(int i = 0; i < rows.size(); i++) {
+        auto objectIndex = root.keywordItemModel()->index(i, 0, QModelIndex());
+        CHECK(contains(objectIndex));
+    }
+}
+
+TEST_CASE("Extented cwKeywordModels should work correctly with cwKeywordItemModel", "[cwKeywordItemModel]") {
+
+    auto model = std::make_unique<cwKeywordItemModel>();
+
+    cwKeywordModel keywordModel1;
+    keywordModel1.add(cwKeyword("sauce", "dude"));
+
+    cwKeywordItem* item = new cwKeywordItem();
+    item->keywordModel()->addExtension(&keywordModel1);
+    item->setObject(new QObject(model.get()));
+
+    model->addItem(item);
+
+    REQUIRE(model->rowCount() == 1);
+
+    auto index = model->index(0, 0, QModelIndex());
+    QVector<cwKeyword> keywords = index.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+
+    REQUIRE(keywords.size() == 1);
+    CHECK(keywords.first() == cwKeyword("sauce", "dude"));
 }

@@ -37,6 +37,8 @@ public:
 
     QHash<int, QByteArray> roleNames() const;
 
+    static const QString TypeKey;
+
 private:
     QVector<cwKeywordModel*> Extentions;
     QVector<cwKeyword> Keywords;
@@ -49,13 +51,7 @@ private:
     bool canKeywordBeAdded(const cwKeyword& keyword);
 };
 
-/**
- * Return all the keywords in the model
- */
-inline QVector<cwKeyword> cwKeywordModel::keywords() const
-{
-    return Keywords;
-}
+
 
 
 

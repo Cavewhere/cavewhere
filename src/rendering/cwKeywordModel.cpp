@@ -4,6 +4,8 @@
 //Qt includes
 #include <QDebug>
 
+const QString cwKeywordModel::TypeKey = "Type";
+
 cwKeywordModel::cwKeywordModel(QObject *parent) :
     QAbstractListModel (parent)
 {
@@ -146,7 +148,7 @@ bool cwKeywordModel::setData(const QModelIndex &index, const QVariant &value, in
 }
 
 /**
- * Extend this keyword model with mode
+ * Extend this keyword model with model
  */
 void cwKeywordModel::addExtension(cwKeywordModel *model)
 {
@@ -314,4 +316,18 @@ bool cwKeywordModel::canKeywordBeAdded(const cwKeyword &keyword)
 int cwKeywordModel::rowCount(const QModelIndex &parent) const
 {
     return CachedRowCount;
+}
+
+/**
+ * Return all the keywords in the model
+ */
+QVector<cwKeyword> cwKeywordModel::keywords() const
+{
+    QVector<cwKeyword> keywords;
+    keywords.reserve(rowCount());
+    for(int i = 0; i < rowCount(); i++) {
+        auto keyword = index(i).data(KeywordRole).value<cwKeyword>();
+        keywords.append(keyword);
+    }
+    return keywords;
 }

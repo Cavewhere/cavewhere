@@ -16,9 +16,10 @@
 //Our includes
 class cwScrap;
 class cwTextureImage;
+#include "cwGlobals.h"
 #include "cwImage.h"
 
-class cwScrapEntity : public Qt3DCore::QEntity
+class CAVEWHERE_LIB_EXPORT cwScrapEntity : public Qt3DCore::QEntity
 {
     Q_OBJECT
 

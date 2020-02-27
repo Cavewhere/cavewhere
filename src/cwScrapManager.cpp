@@ -146,6 +146,11 @@ void cwScrapManager::setTaskManager(cwTaskManagerModel *taskManager)
     }
 }
 
+void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
+{
+    ScrapsEntity->setKeywordItemModel(keywordItemModel);
+}
+
 /**
   This function is for testing
 

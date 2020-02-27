@@ -36,7 +36,7 @@ QQ2.Item {
             components: [
                 RenderSettings {
                     id: sceneRootRenderPolicy
-                    renderPolicy: RenderSettings.Always //RenderSettings.OnDemand
+                    renderPolicy: RenderSettings.OnDemand //RenderSettings.Always //RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
 
                         RenderSurfaceSelector {

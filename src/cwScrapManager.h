@@ -31,6 +31,7 @@ class cwLinePlotManager;
 class cwTaskManagerModel;
 class cwRegionTreeModel;
 class cwScrapsEntity;
+class cwKeywordItemModel;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
@@ -54,6 +55,7 @@ public:
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setTaskManager(cwTaskManagerModel* taskManager);
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
@@ -84,6 +86,7 @@ private:
     cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
     cwTaskManagerModel* TaskManagerModel;
+    cwKeywordItemModel* KeywordItemModel;
 
     //The gl scraps that need updating
     cwScrapsEntity* ScrapsEntity; //!<

@@ -23,6 +23,7 @@
 #include "cwStation.h"
 class cwNote;
 class cwCave;
+class cwKeywordModel;
 
 /**
   cwScrap holds a polygon of points that represents a scrap
@@ -38,6 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
     Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QStringList types READ types CONSTANT)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
     Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
@@ -76,6 +78,8 @@ public:
     ScrapType type() const;
     void setType(ScrapType type);
     QStringList types() const;
+
+    cwKeywordModel* keywordModel() const;
 
     void addPoint(QPointF point);
     Q_INVOKABLE void insertPoint(int index, QPointF point);
@@ -211,6 +215,10 @@ private:
     //For rendering, points in note coordinates
     cwTriangulatedData TriangulationData;
     bool TriangulationDataDirty;
+
+    //For visiblity and object orginization
+    cwKeywordModel* KeywordModel = nullptr;
+    void updateTypeKeyword();
 
     //Clamps a pointF that's in note coordinates to the scrap
     QPointF clampToScrap(QPointF point);
@@ -348,6 +356,13 @@ inline cwScrap::ScrapType cwScrap::type() const {
 */
 inline QStringList cwScrap::types() const {
     return QStringList() << "Plan" << "Running Profile";
+}
+
+/**
+* Returns the keywords for the scrap
+*/
+inline cwKeywordModel* cwScrap::keywordModel() const {
+    return KeywordModel;
 }
 
 

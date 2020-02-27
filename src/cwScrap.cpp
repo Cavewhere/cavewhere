@@ -15,6 +15,7 @@
 #include "cwGlobals.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwKeywordModel.h"
 
 //Qt includes
 #include <QDebug>
@@ -32,8 +33,10 @@ cwScrap::cwScrap(QObject *parent) :
     Type(Plan),
     ParentNote(nullptr),
     ParentCave(nullptr),
-    TriangulationDataDirty(false)
+    TriangulationDataDirty(false),
+    KeywordModel(new cwKeywordModel(this))
 {
+    updateTypeKeyword();
     setCalculateNoteTransform(true);
 }
 
@@ -43,7 +46,8 @@ cwScrap::cwScrap(const cwScrap& other)
       CalculateNoteTransform(false),
       ParentNote(nullptr),
       ParentCave(nullptr),
-      TriangulationDataDirty(false)
+      TriangulationDataDirty(false),
+      KeywordModel(new cwKeywordModel(this))
 {
     setCalculateNoteTransform(true);
     copy(other);
@@ -456,6 +460,11 @@ void cwScrap::updateNoteTransformation() {
     cwNoteTranformation averageTransformation = averageFunc(this, shotStations);
     NoteTransformation->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
+}
+
+void cwScrap::updateTypeKeyword()
+{
+    KeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, types().at(type())));
 }
 
 /**
@@ -1138,6 +1147,8 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     TriangulationData = other.TriangulationData;
     Type = other.Type;
 
+    updateTypeKeyword();
+
     emit stationsReset();
 
     return *this;
@@ -1223,6 +1234,7 @@ QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStat
 void cwScrap::setType(ScrapType type) {
     if(Type != type) {
         Type = type;
+        updateTypeKeyword();
         updateNoteTransformation();
         emit typeChanged();
     }

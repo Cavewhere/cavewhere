@@ -109,6 +109,10 @@
 #include "cwInersecter.h"
 #include "cwScreenCaptureCommand.h"
 #include "cwCompassEntry.h"
+#include "cwKeywordItemFilterModel.h"
+#include "cwKeywordItemModel.h"
+#include "cwKeyword.h"
+#include "cwKeywordItem.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -244,5 +248,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwInersecter>("Cavewhere", 1, 0, "Inersecter");
     qmlRegisterType<cwScreenCaptureCommand>("Cavewhere", 1, 0, "ScreenCaptureCommand");
     qmlRegisterType<cwCompassEntry>("Cavewhere", 1, 0, "CompassEntry");
+    qmlRegisterType<cwKeywordItemModel>("Cavewhere", 1, 0, "KeywordItemModel");
+    qmlRegisterType<cwKeywordItemFilterModel>("Cavewhere", 1, 0, "KeywordItemFilterModel");
+    qmlRegisterType<cwKeywordItem>("Cavewhere", 1, 0, "KeywordItem");
+    qmlRegisterType<cwKeyword>();
 
 }

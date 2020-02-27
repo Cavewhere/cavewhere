@@ -8,6 +8,7 @@
 //Cavewhere includes
 class cwScrap;
 class cwScrapEntity;
+class cwKeywordItemModel;
 
 class cwScrapsEntity : public Qt3DCore::QEntity
 {
@@ -15,6 +16,7 @@ class cwScrapsEntity : public Qt3DCore::QEntity
 
     Q_PROPERTY(Qt3DRender::QEffect* effect READ effect WRITE setEffect NOTIFY effectChanged)
     Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
+    Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel WRITE setKeywordItemModel NOTIFY keywordItemModelChanged)
 
 public:
     cwScrapsEntity(QNode* parent = nullptr);
@@ -28,14 +30,19 @@ public:
     void addScrap(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
 
+    cwKeywordItemModel* keywordItemModel() const;
+    void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
+
 signals:
     void effectChanged();
     void projectChanged();
+    void keywordItemModelChanged();
 
 private:
     Qt3DRender::QEffect* Effect; //!<
     QHash<cwScrap*, cwScrapEntity*> ScrapToEntity;
     QString Project; //!<
+    cwKeywordItemModel* KeywordItemModel = nullptr; //!<
 
 };
 
@@ -45,6 +52,13 @@ private:
 */
 inline QString cwScrapsEntity::project() const {
     return Project;
+}
+
+/**
+*
+*/
+inline cwKeywordItemModel* cwScrapsEntity::keywordItemModel() const {
+    return KeywordItemModel;
 }
 
 #endif // CWSCRAPESENTITY_H
