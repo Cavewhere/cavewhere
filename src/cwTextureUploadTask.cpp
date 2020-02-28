@@ -32,7 +32,6 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
     cwImageProvider imageProvidor;
     imageProvidor.setProjectPath(ProjectFilename);
 
-
     int firstLevel = Image.mipmaps().first();
     QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
 
@@ -91,9 +90,11 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
 
     switch(type) {
     case OpenGL_RGBA:
+        results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
         results.mipmaps = loadRGB();
         break;
     case DXT1Mipmaps:
+        results.scaleTexCoords = imageProvidor.scaleTexCoords(Image);
         results.mipmaps = loadDXT1Mipmap();
     }
 

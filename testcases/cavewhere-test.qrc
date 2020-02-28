@@ -41,5 +41,7 @@
         <file>datasets/test_ProtoBufferSaveLoad/newerVersion.cw</file>
         <file>datasets/dx1Cropping/16x16.png</file>
         <file>datasets/dx1Cropping/scanCrop.png</file>
+        <file>datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw</file>
+        <file>datasets/test_cwTextureUploadTask/PhakeCave.PNG</file>
     </qresource>
 </RCC>

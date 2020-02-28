@@ -11,6 +11,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwImage.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QOpenGLFunctions>
@@ -19,7 +20,7 @@
 class QOpenGLContext;
 class QSurface;
 
-class cwTextureUploadTask
+class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
 {
 public:
     enum Type {
