@@ -9,10 +9,10 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
 
     SECTION("Original") {
         image.setOriginal(3);
-        CHECK(image.isValid() == true);
+        CHECK(image.isValid() == false);
 
         image.setOriginal(0);
-        CHECK(image.isValid() == true);
+        CHECK(image.isValid() == false);
 
         image.setOriginal(-1);
         CHECK(image.isValid() == false);

@@ -54,8 +54,6 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
 
     UploadResult results;
 
-    results.scaleTexCoords = imageProvidor.scaleTexCoords(Image);
-
     auto loadDXT1Mipmap = [this, &imageProvidor]() {
         QList< QPair< QByteArray, QSize > > mipmaps;
         //Load all the mipmaps
@@ -96,6 +94,7 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
     case DXT1Mipmaps:
         results.scaleTexCoords = imageProvidor.scaleTexCoords(Image);
         results.mipmaps = loadDXT1Mipmap();
+        break;
     }
 
     results.type = type;
