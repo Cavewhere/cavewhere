@@ -33,7 +33,7 @@ before_install:
      - git clone https://github.com/qbs/qbs.git
      - cd qbs
      - git checkout v1.15.0
-     - /opt/qt512/bin/qmake -r qbs.pro && make -j `nproc`
+     - /opt/qt514/bin/qmake -r qbs.pro && make -j `nproc`
      - sudo make install
      - cd ..
      - qbs --version
