@@ -224,7 +224,9 @@ void cwProject::privateSave() {
         return saveTask.save(region);
     });
 
-    FutureManager->addJob({future, "Saving"});
+    if(FutureManager) {
+        FutureManager->addJob({future, "Saving"});
+    }
 
     SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
         auto errors = future.result();
@@ -352,7 +354,9 @@ void cwProject::loadFile(QString filename) {
         return loadTask.load();
     });
 
-    FutureManager->addJob({loadFuture, "Loading"});
+    if(FutureManager) {
+        FutureManager->addJob({loadFuture, "Loading"});
+    }
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(filename);

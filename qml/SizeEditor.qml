@@ -6,8 +6,8 @@ RowLayout {
 
     property alias widthText: widthTextId.text
     property alias heightText: heightTextId.text
-    property alias unit: unit.unit
-    property alias unitModel: unit.unitModel
+    property alias unit: unitId.unit
+    property alias unitModel: unitId.unitModel
     property alias readOnly: widthTextId.readOnly
     property alias backgroundColor: rect1.color
     property QQ.Item nextTab: null
@@ -49,7 +49,7 @@ RowLayout {
     }
 
     UnitInput {
-        id: unit
+        id: unitId
         readOnly: true
     }
 }

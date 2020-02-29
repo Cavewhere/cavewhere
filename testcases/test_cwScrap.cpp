@@ -21,6 +21,7 @@
 #include "cwLinePlotManager.h"
 #include "cwRootData.h"
 #include "cwSurveyChunk.h"
+#include "cwTripCalibration.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -322,5 +323,32 @@ TEST_CASE("Test profile view rotation", "[Scrap]") {
 
         checkQVector3D(calculatedResult, row.Result, 5);
     }
+}
+
+TEST_CASE("Distance lead unit should return the index supported units", "[cwScrap]") {
+    auto project = std::unique_ptr<cwProject>(new cwProject);
+    fileToProject(project.get(), "://datasets/test_cwScrap/leadLengthCheck.cw");
+
+    auto trip = project->cavingRegion()->cave(0)->trip(0);
+    auto scrap = trip->notes()->notes().at(0)->scrap(0);
+    REQUIRE(scrap->leads().size() == 1);
+
+    auto checkUnit = [=](QString unit) {
+
+        bool okay;
+        int supportedUnitIndex = scrap->leadData(cwScrap::LeadUnits, 0).toInt(&okay);
+        CHECK(okay);
+        REQUIRE(supportedUnitIndex >= 0);
+        auto supportedUnits = scrap->leadData(cwScrap::LeadSupportedUnits, 0).toStringList();
+        REQUIRE(supportedUnitIndex < supportedUnits.size());
+        INFO("Supported Units:" << supportedUnits << "unit:" << unit);
+        CHECK(supportedUnits.at(supportedUnitIndex).toStdString() == unit.toStdString());
+    };
+
+    trip->calibrations()->setDistanceUnit(cwUnits::Meters);
+    checkUnit("m");
+
+    trip->calibrations()->setDistanceUnit(cwUnits::Feet);
+    checkUnit("ft");
 }
 
