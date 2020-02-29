@@ -31,7 +31,7 @@ class cwTaskManagerModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
-    explicit cwTaskManagerModel(QObject *parent = 0);
+    explicit cwTaskManagerModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;

@@ -42,6 +42,7 @@ public:
     };
 
     cwFutureManagerModel(QObject* parent = nullptr);
+    ~cwFutureManagerModel() {}
 
     int interval() const;
     void setInterval(int interval);

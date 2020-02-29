@@ -224,6 +224,8 @@ void cwProject::privateSave() {
         return saveTask.save(region);
     });
 
+    FutureManager->addJob({future, "Saving"});
+
     SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
         auto errors = future.result();
         ErrorModel->append(errors);
@@ -349,6 +351,8 @@ void cwProject::loadFile(QString filename) {
         loadTask.setDatabaseFilename(filename);
         return loadTask.load();
     });
+
+    FutureManager->addJob({loadFuture, "Loading"});
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(filename);
@@ -663,7 +667,14 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
     }
 }
 
-/**
- * Returns true if save() can be call directly and false if saveAs() must be called first
- */
+void cwProject::setFutureManagerModel(cwFutureManagerModel* futureManager) {
+    if(FutureManager != futureManager) {
+        FutureManager = futureManager;
+    }
+}
+
+cwFutureManagerModel* cwProject::futureManagerModel() const {
+    return FutureManager;
+}
+
 

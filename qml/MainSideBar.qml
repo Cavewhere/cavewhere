@@ -6,7 +6,9 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
+import QtQuick.Controls 2.12 as QC
 import QtQuick.Layouts 1.1
+import Cavewhere 1.0
 
 QQ.Rectangle {
     id: sidebarArea
@@ -137,7 +139,17 @@ QQ.Rectangle {
         anchors.top: buttonBar.bottom
         anchors.bottom: parent.bottom
 
-        model: rootData.taskManagerModel
+        TaskFutureCombineModel {
+            id: taskModelCombinerId
+            models: [rootData.taskManagerModel, rootData.futureManagerModel]
+        }
+
+        FutureFilterModel {
+            id: futureFilterId
+            sourceModel: taskModelCombinerId
+        }
+
+        model: taskModelCombinerId
         verticalLayoutDirection: QQ.ListView.BottomToTop
 
         delegate: QQ.Rectangle {
@@ -157,24 +169,13 @@ QQ.Rectangle {
                 Text {
                     id: nameText
                     text: nameRole
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                 }
 
-                QQ.Rectangle {
-                    border.width: 1
-                    border.color: "black"
-
-                    Layout.fillWidth: true
-
-                    implicitHeight: 12
-
-                    QQ.Rectangle {
-                        property double precentComplete: progressRole / numberOfStepsRole
-                        x: 1
-                        y: 1
-                        width: (parent.width - 2) * precentComplete
-                        height: parent.height - 2
-                        color: "red"
-                    }
+                QC.ProgressBar {
+                    value: !indeterminate ? progressRole / numberOfStepsRole : 0
+                    indeterminate: numberOfStepsRole <= 0
                 }
             }
         }
