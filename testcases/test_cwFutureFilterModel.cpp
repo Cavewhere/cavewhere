@@ -9,8 +9,6 @@
 #include <QStandardItemModel>
 
 TEST_CASE("cwFutureFilterModel should filter rows correctly", "[cwFutureFilterModel]") {
-
-
     QStandardItemModel model;
 
     QStandardItem* row1 = new QStandardItem();
