@@ -162,7 +162,6 @@ void cwImageTexture::updateData() {
         QSize size = image.second;
 
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
-            qDebug() << "Uploading level:" << trueMipmapLevel << size;
             switch(results.type) {
             case cwTextureUploadTask::DXT1Mipmaps:
                 glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,

@@ -16,7 +16,7 @@
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
-#include <QGLWidget>
+#include <QTimer>
 
 //Std includes
 #include "cwMath.h"

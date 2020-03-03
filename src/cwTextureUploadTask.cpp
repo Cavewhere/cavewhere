@@ -78,7 +78,7 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
         QImage image;
         bool loadedOkay = image.loadFromData(imageData.data());
         if(loadedOkay) {
-            image = image.convertToFormat(QImage::Format_RGBA8888).mirrored();
+            image = cwOpenGLUtils::toGLTexture(image);
             QByteArray data(reinterpret_cast<char*>(image.bits()),
                             static_cast<int>(image.sizeInBytes()));
             return {{data, imageData.size()}};

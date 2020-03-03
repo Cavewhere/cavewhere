@@ -436,7 +436,6 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
     //Create a new image task
     foreach(QUrl url, noteImagePath) {
         QString path = url.toLocalFile();
-        qDebug() << "Adding image:" << path;
 
         cwAddImageTask* addImageTask = new cwAddImageTask();
 

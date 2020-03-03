@@ -2,6 +2,7 @@
 #include "cwDXT1Compresser.h"
 #include "cwDebug.h"
 #include "cwAsyncFuture.h"
+#include "cwOpenGLUtils.h"
 
 //Qt includes
 #include <QPoint>
