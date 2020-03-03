@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
+import QtQuick.Controls 2.12 as QC
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
@@ -152,25 +153,9 @@ QQ.Rectangle {
                 }
             }
 
-            /**
-                  Probably could be allocated and deleted on the fly
-                  */
-            QQ.Image {
-                id: statusImage
+            QC.BusyIndicator {
                 anchors.centerIn: parent
-                visible: imageItem.status == QQ.Image.Loading
-
-                source: "qrc:icons/loadingSwirl.png"
-
-                QQ.NumberAnimation {
-                    running: imageItem.status == QQ.Image.Loading
-                    target: statusImage;
-                    property: "rotation";
-                    from: 0
-                    to: 360
-                    duration: 1500
-                    loops: QQ.Animation.Infinite
-                }
+                running: imageItem.status == QQ.Image.Loading
             }
         }
     }
@@ -505,6 +490,7 @@ QQ.Rectangle {
                         galleryContainer.visible = true
                         mainButtonArea.visible = true
                         noteArea.visible = true
+                        currentIndex = 0;
                     }
                     updateCurrentNote()
                 }
