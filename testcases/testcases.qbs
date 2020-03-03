@@ -24,7 +24,6 @@ CppApplication {
         condition: qbs.targetOS.contains("linux") || qbs.targetOS.contains("macos")
         cpp.cxxFlags: {
             var flags = [
-                        "-Werror", //Treat warnings as errors
                     ];
 
             if(qbs.buildVariant == "debug") {

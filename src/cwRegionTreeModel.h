@@ -22,6 +22,8 @@ class cwScrap;
 #include <QDebug>
 #include <QPointer>
 
+#define INVOKE_MEMBER(object,ptrToMember)  ((*object).*(ptrToMember))
+
 /**
  * @brief The cwRegionTreeModel class
  *
@@ -80,7 +82,7 @@ public:
         QList<ReturnType> objects;
         for(int row = 0; row < rowCount(parent); row++) {
             auto rowIndex = index(row, 0, parent);
-            ReturnType obj = std::invoke(func, this, rowIndex);
+            ReturnType obj = INVOKE_MEMBER(this, func)(rowIndex); //std::invoke(func, this, rowIndex);
             if(obj) {
                 objects.append(obj);
             }
