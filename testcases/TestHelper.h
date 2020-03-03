@@ -42,7 +42,7 @@ inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
  std::ostream& operator << ( std::ostream& os, QStringList const& value );
 
 inline std::ostream& operator << ( std::ostream& os, QSet<QString> const& value ) {
-    return operator <<(os, value.toList());
+    return operator <<(os, value.values());
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
