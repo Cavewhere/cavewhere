@@ -20,9 +20,9 @@ CaveWhere is built around Qt and QBS.
 
 ### Get all dependencies
 ```{sh}
-sudo add-apt-repository -y ppa:beineri/opt-qt-5.12.7-bionic
+sudo add-apt-repository -y ppa:beineri/opt-qt-5.14.1-bionic
 sudo apt-get -y update
-sudo apt-get -y install git build-essential qt512-meta-minimal qt512svg qt512quickcontrols qt512quickcontrols2 qt512graphicaleffects qt512script libgl1-mesa-glx libgl1-mesa-dev
+sudo apt-get -y install git build-essential qt514-meta-minimal qt514svg qt514quickcontrols qt514quickcontrols2 qt514graphicaleffects qt514script libgl1-mesa-glx libgl1-mesa-dev
 ```
 
 ### Make sure libGL.so exists.
@@ -56,7 +56,7 @@ Once Qt and QBS have been installed, you can build CaveWhere with the following:
 
 ```{sh}
 qbs setup-toolchains --detect
-qbs setup-qt /opt/qt512/bin/qmake qt5
+qbs setup-qt /opt/qt514/bin/qmake qt5
 qbs config profiles.qt5.baseProfile x86_64-linux-gnu-gcc-7
 qbs config defaultProfile qt5
 qbs resolve profile:qt5 config:release
