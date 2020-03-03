@@ -227,7 +227,7 @@ cwDXT1Compresser::CompressedImage cwDXT1Compresser::squishCompressImageThreaded(
     outputData.resize(outputFileSize);
 
     //Convert the image to a real format
-    QImage convertedFormat = QGLWidget::convertToGLFormat(image);
+    QImage convertedFormat = cwOpenGLUtils::toGLTexture(image);
 
     // fix any bad flags
     flags = FixFlags( flags );
@@ -271,7 +271,7 @@ cwDXT1Compresser::CompressedImage cwDXT1Compresser::OpenGLCompresser::openglDxt1
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
 
-    QImage convertedImage = QGLWidget::convertToGLFormat(image);
+    QImage convertedImage = cwOpenGLUtils::toGLTexture(image);
     CompressedImage outputImage;
 
     glTexImage2D(GL_TEXTURE_2D,

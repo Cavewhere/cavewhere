@@ -11,11 +11,11 @@
 #include "cwDebug.h"
 #include "cwAddImageTask.h"
 #include "cwMath.h"
+#include "cwOpenGLUtils.h"
 
 //Qt includes
 #include <QDebug>
 #include <QWindow>
-#include <QGLWidget>
 
 //Std includes
 #include <math.h>

@@ -24,7 +24,6 @@
 //Qt includes
 #include <QString>
 #include <QImage>
-#include <QGLWidget>
 #include <QDebug>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -35,6 +34,7 @@
 #include <QBuffer>
 #include <QtConcurrentMap>
 #include <QOpenGLContext>
+#include <QPainter>
 
 //TODO: REMOVE for testing only
 #include <QFile>

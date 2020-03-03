@@ -11,7 +11,6 @@
 //Qt includes
 #include <QObject>
 #include <QGuiApplication>
-class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
 class QQuickView;
