@@ -142,6 +142,10 @@ void cwImageTexture::updateData() {
         return;
     }
 
+    if(TextureId == 0) {
+        initialize();
+    }
+
     //Load the data into opengl
     bind();
 
