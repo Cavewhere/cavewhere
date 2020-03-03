@@ -44,5 +44,6 @@
         <file>datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw</file>
         <file>datasets/test_cwTextureUploadTask/PhakeCave.PNG</file>
         <file>datasets/test_cwScrap/leadLengthCheck.cw</file>
+        <file>datasets/test_cwRegionTreeModel/testAllFunction.cw</file>
     </qresource>
 </RCC>
