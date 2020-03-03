@@ -374,6 +374,10 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
         scaledImageSize = half(scaledImageSize);
     }
 
+    if(!isRunning()) {
+        return;
+    }
+
     cwDXT1Compresser compresser;
     auto future = compresser.compress(scaledImages);
     auto images = compresser.results(future);
@@ -381,7 +385,7 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
     Q_ASSERT(images.size() == generatedMipmapIds.size());
 
     //Export the image to DXT1 format
-    for(int i = 0; i < images.size(); i++) {
+    for(int i = 0; i < images.size() && isRunning(); i++) {
         int mipmapId = generatedMipmapIds.at(i);
         cwDXT1Compresser::CompressedImage image = images.at(i);
         mipmapId = saveToDXT1Format(image, mipmapId);
