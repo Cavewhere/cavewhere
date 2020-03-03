@@ -14,6 +14,7 @@ class cwTrip;
 class cwCave;
 class cwNote;
 class cwScrap;
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -27,7 +28,7 @@ class cwScrap;
  * The regionTreeModel allows for global access to cwRegion via a QAbstractItemModel tree. Currently
  * the tree model supports signaling support for add and removing cwCave, cwTrip, cwNote, cwScrap.
  */
-class cwRegionTreeModel : public QAbstractItemModel
+class CAVEWHERE_LIB_EXPORT cwRegionTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
     Q_ENUMS(ItemType)
@@ -73,6 +74,20 @@ public:
     Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
     Q_INVOKABLE bool isCave(const QModelIndex& index) const;
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
+
+    template <typename ReturnType, typename GetFunc>
+    QList<ReturnType> all(const QModelIndex& parent, GetFunc func) const {
+        QList<ReturnType> objects;
+        for(int row = 0; row < rowCount(parent); row++) {
+            auto rowIndex = index(row, 0, parent);
+            ReturnType obj = std::invoke(func, this, rowIndex);
+            if(obj) {
+                objects.append(obj);
+            }
+            objects += all<ReturnType>(rowIndex, func);
+        }
+        return objects;
+    }
 
     virtual QHash<int, QByteArray> roleNames() const;
 

@@ -24,6 +24,7 @@ class cwTaskManagerModel;
 class cwRegionLoadTask;
 class cwRegionSaveTask;
 class cwErrorListModel;
+class cwFutureManagerModel;
 
 //Qt includes
 #include <QSqlDatabase>
@@ -45,7 +46,7 @@ Q_OBJECT
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
-    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(`cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
     cwProject(QObject* parent = nullptr);
@@ -66,6 +67,9 @@ public:
 
     void setTaskManager(cwTaskManagerModel* manager);
     cwTaskManagerModel* taskManager() const;
+
+    cwFutureManagerModel* futureManagerModel() const;
+    void setFutureManagerModel(cwFutureManagerModel* futureManagerModel);
 
     void addImages(QList<QUrl> noteImagePath, QObject* reciever, const char* slot);
 
@@ -115,6 +119,7 @@ private:
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
+    QPointer<cwFutureManagerModel> FutureManager; //!<
 
     cwErrorListModel* ErrorModel; //!<
 
@@ -175,6 +180,7 @@ inline cwErrorListModel* cwProject::errorModel() const {
 inline bool cwProject::canSaveDirectly() const {
     return !saveWillCauseDataLoss() && !isTemporaryProject();
 }
+
 
 
 

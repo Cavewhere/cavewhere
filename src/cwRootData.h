@@ -11,7 +11,6 @@
 //Qt includes
 #include <QObject>
 #include <QGuiApplication>
-class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
 class QQuickView;
@@ -35,6 +34,7 @@ class cwRegionSceneManager;
 class cwScreen;
 class cwEventRecorderModel;
 class cwTaskManagerModel;
+class cwFutureManagerModel;
 class cwPageSelectionModel;
 
 #ifndef CAVEWHERE_VERSION
@@ -61,6 +61,9 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
+    Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
+
+
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
@@ -85,6 +88,7 @@ public:
     QScreen* primaryScreen() const;
     cwEventRecorderModel* eventRecorderModel() const;
     cwTaskManagerModel* taskManagerModel() const;
+    cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
 
@@ -135,6 +139,7 @@ private:
     cwRegionSceneManager* RegionSceneManager; //!<
     cwEventRecorderModel* EventRecorderModel; //!<
     cwTaskManagerModel* TaskManagerModel; //!<
+    cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
 
@@ -276,10 +281,16 @@ inline bool cwRootData::leadsVisible() const {
 }
 
 /**
-*
+* Returns true if station labels are visible, otherwise false and invisilbe
 */
 inline bool cwRootData::stationsVisible() const {
     return StationVisible;
 }
 
+/**
+* Returns the current future manager
+*/
+inline cwFutureManagerModel* cwRootData::futureManagerModel() const {
+    return FutureManagerModel;
+}
 #endif // CWGLOBALQMLDATA_H

@@ -251,7 +251,7 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
  */
 bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
-    if(scrap->triangulationData().croppedImage().isMipmapsValid()) {
+    if(scrap->triangulationData().croppedImage().isValid()) {
         //Should be in the database
         foreach(int mipmap, scrap->triangulationData().croppedImage().mipmaps()) {
             cwImageData imageData = ImageProvider.data(mipmap, true);
@@ -442,7 +442,6 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         TriangulateTask->start();
     } else {
         //Isn't ready!, restart the task
-        qDebug() << "Restarting triangulation method!";
         TriangulateTask->restart();
     }
 }

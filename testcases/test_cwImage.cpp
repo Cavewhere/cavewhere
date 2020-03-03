@@ -9,6 +9,8 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
 
     SECTION("Original") {
         image.setOriginal(3);
+        image.setMipmaps({2});
+        image.setIcon(4);
         CHECK(image.isValid() == true);
 
         image.setOriginal(0);
@@ -19,8 +21,8 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
 
         image.setOriginal(-10);
         CHECK(image.isValid() == false);
-        CHECK(image.isIconValid() == false);
-        CHECK(image.isMipmapsValid() == false);
+        CHECK(image.isIconValid() == true);
+        CHECK(image.isMipmapsValid() == true);
     }
 
     SECTION("Icon") {

@@ -15,15 +15,11 @@
 #include "cwImageTexture.h"
 #include "cwProjection.h"
 #include "cwGLImageItemResources.h"
+#include "cwDebug.h"
 
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
-
-QOpenGLShaderProgram* cwImageItem::ImageProgram = nullptr;
-int cwImageItem::vVertex = -1;
-int cwImageItem::ModelViewProjectionMatrix = -1;
-int cwImageItem::CropAreaUniform = -1;
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLViewer(parent),
@@ -32,6 +28,10 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     RotationCenter(0.5, 0.5),
     GLResources(nullptr)
 {
+    ImageProgram = nullptr;
+    vVertex = -1;
+    ModelViewProjectionMatrix = -1;
+    CropAreaUniform = -1;
 
     ImageProperties->setImage(Image);
 
@@ -137,6 +137,8 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
+    initializeOpenGLFunctions();
+
     GLResources = new cwGLImageItemResources();
     GLResources->setContext(QOpenGLContext::currentContext());
 

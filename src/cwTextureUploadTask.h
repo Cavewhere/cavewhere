@@ -11,6 +11,7 @@
 //Our includes
 #include "cwTask.h"
 #include "cwImage.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QOpenGLFunctions>
@@ -19,37 +20,41 @@
 class QOpenGLContext;
 class QSurface;
 
-class cwTextureUploadTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
 {
-    Q_OBJECT
 public:
-    explicit cwTextureUploadTask(QObject *parent = 0);
+    enum Type {
+        DXT1Mipmaps,
+        OpenGL_RGBA
+    };
+
+    class UploadResult {
+    public:
+        QList< QPair< QByteArray, QSize > > mipmaps;
+        QVector2D scaleTexCoords;
+        Type type;
+    };
+
+    explicit cwTextureUploadTask();
 
     //Inputs
     void setImage(cwImage image);
     void setProjectFilename(QString filename);
+    void setType(Type type);
 
-    //Outputs
-    QList< QPair< QByteArray, QSize > > mipmaps() const;
-    QVector2D scaleTexCoords() const;
+    UploadResult operator()() const;
 
     static bool isDivisibleBy4(QSize size);
 
-protected:
-    void runTask();
-
 private:
+    Type type = OpenGL_RGBA;
     cwImage Image;
     QString ProjectFilename;
 
-    QList< QPair< QByteArray, QSize > > Mipmaps;
-    QVector2D ScaleTexCoords;
 
     void loadMipmapsFromDisk();
 
     void updateScaleTexCoords();
-
-signals:
     
 };
 
@@ -71,6 +76,10 @@ inline void cwTextureUploadTask::setProjectFilename(QString filename)
 }
 
 
+inline void cwTextureUploadTask::setType(cwTextureUploadTask::Type type)
+{
+    this->type = type;
+}
 
 
 

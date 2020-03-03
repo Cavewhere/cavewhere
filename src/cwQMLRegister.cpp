@@ -106,6 +106,9 @@
 #include "cwCSVImporterManager.h"
 #include "cwColumnNameModel.h"
 #include "cwCSVLineModel.h"
+#include "cwTaskFutureCombineModel.h"
+#include "cwFutureFilterModel.h"
+#include "cwFutureManagerModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -238,5 +241,9 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
     qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
     qmlRegisterType<cwCSVLineModel>("Cavewhere", 1, 0, "CSVLineModel");
+    qmlRegisterType<cwFutureFilterModel>("Cavewhere", 1, 0, "FutureFilterModel");
+    qmlRegisterType<cwFutureManagerModel>("Cavewhere", 1, 0, "FutureManagerModel");
+    qmlRegisterType<cwTaskFutureCombineModel>("Cavewhere", 1, 0, "TaskFutureCombineModel");
+
 
 }

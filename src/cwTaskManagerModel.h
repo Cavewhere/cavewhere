@@ -19,6 +19,7 @@
 
 //Our includes
 class cwTask;
+#include "cwFutureManagerModel.h"
 
 /**
  * @brief The cwTaskManagerModel class
@@ -30,13 +31,7 @@ class cwTaskManagerModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
-    enum Roles {
-        NameRole,
-        ProgressRole,
-        NumberOfStepRole
-    };
-
-    explicit cwTaskManagerModel(QObject *parent = 0);
+    explicit cwTaskManagerModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
@@ -68,7 +63,7 @@ private:
     void removeActiveTask(cwTask* task);
     void addActiveTask(cwTask* task);
 
-    void updateTask(QObject* taskObject, Roles role);
+    void updateTask(QObject* taskObject, cwFutureManagerModel::Roles role);
 private slots:
     void taskDeleted(QObject* taskObject);
     void taskHasStarted(QObject* taskObject);

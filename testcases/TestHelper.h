@@ -21,6 +21,7 @@
 #include <QSet>
 #include <QMetaEnum>
 #include <QTextStream>
+#include <QVector2D>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -66,6 +67,10 @@ inline std::ostream& operator << ( std::ostream& os, QSizeF const& value ) {
 
 inline std::ostream& operator << ( std::ostream& os, cwImageData const& value ) {
     return os << "[size=" << value.size() << "]";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QVector2D const& value ) {
+    return os << "(" << value.x() << ", " << value.y() << ")";
 }
 
 inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {

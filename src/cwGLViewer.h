@@ -18,7 +18,6 @@
 #include <QOpenGLFramebufferObject>
 #include <QQuickPaintedItem>
 #include <QPointer>
-class QGLWidget;
 
 //Our includes
 #include "cwCamera.h"

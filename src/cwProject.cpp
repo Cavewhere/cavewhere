@@ -224,6 +224,10 @@ void cwProject::privateSave() {
         return saveTask.save(region);
     });
 
+    if(FutureManager) {
+        FutureManager->addJob({future, "Saving"});
+    }
+
     SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
         auto errors = future.result();
         ErrorModel->append(errors);
@@ -350,6 +354,10 @@ void cwProject::loadFile(QString filename) {
         return loadTask.load();
     });
 
+    if(FutureManager) {
+        FutureManager->addJob({loadFuture, "Loading"});
+    }
+
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(filename);
         *Region = *(result.cavingRegion().data());\
@@ -428,7 +436,6 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
     //Create a new image task
     foreach(QUrl url, noteImagePath) {
         QString path = url.toLocalFile();
-        qDebug() << "Adding image:" << path;
 
         cwAddImageTask* addImageTask = new cwAddImageTask();
 
@@ -663,7 +670,14 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
     }
 }
 
-/**
- * Returns true if save() can be call directly and false if saveAs() must be called first
- */
+void cwProject::setFutureManagerModel(cwFutureManagerModel* futureManager) {
+    if(FutureManager != futureManager) {
+        FutureManager = futureManager;
+    }
+}
+
+cwFutureManagerModel* cwProject::futureManagerModel() const {
+    return FutureManager;
+}
+
 

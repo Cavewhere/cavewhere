@@ -41,10 +41,12 @@ cwRootData::cwRootData(QObject *parent) :
 
     //Task Manager, allows the users to see running tasks
     TaskManagerModel = new cwTaskManagerModel(this);
+    FutureManagerModel = new cwFutureManagerModel(this);
 
     //Create the project, this saves and load data
     Project = new cwProject(this);
     Project->setTaskManager(TaskManagerModel);
+    Project->setFutureManagerModel(FutureManagerModel);
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());

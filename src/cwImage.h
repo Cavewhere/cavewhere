@@ -168,7 +168,7 @@ inline int cwImage::originalDotsPerMeter() const {
   \brief Returns false if the image isn't valid and true if it is valid.
   */
 inline bool cwImage::isValid() const {
-    return isIdValid(Data->OriginalId);
+    return isIdValid(Data->OriginalId) && isMipmapsValid() && isIconValid();
 }
 
 /**

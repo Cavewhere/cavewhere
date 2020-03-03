@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QOpenGLFunctions>
 
 //Our includes
 class cwCamera;
@@ -19,13 +20,14 @@ class cwScene;
 class cwUpdateDataCommand;
 #include "cwGeometryItersecter.h"
 
-class cwGLObject : public QObject
+class cwGLObject : public QObject, protected QOpenGLFunctions
 {
 public:
     cwGLObject(QObject* parent = nullptr);
     ~cwGLObject();
 
     //These methods should only be called in the rendering thread
+    void initilizeGLFunctions();
     virtual void initialize() = 0;
     virtual void draw() = 0;
     virtual void updateData();
@@ -39,11 +41,6 @@ public:
 
     void markDataAsDirty();
 
-//    bool isDirty() const;
-
-//protected:
-//    void setDirty(bool isDirty);
-
 private:
     cwScene* Scene;
 
@@ -51,15 +48,7 @@ private:
     //Then this command
     cwUpdateDataCommand* QueuedDataCommand;
 
-//    bool Dirty;
 };
-
-//inline bool cwGLObject::isDirty() const
-//{
-//    return Dirty;
-//}
-
-
 
 /**
  * @brief cwGLObject::scene

@@ -11,6 +11,7 @@
 //Qt includes
 #include <QString>
 #include <QFutureWatcher>
+#include <QOpenGLFunctions>
 
 //Our includes
 #include "cwGLViewer.h"
@@ -20,7 +21,7 @@ class cwGLImageItemResources;
 class cwImageTexture;
 class cwImageProperties;
 
-class cwImageItem : public cwGLViewer
+class cwImageItem : public cwGLViewer, protected QOpenGLFunctions
 {
     Q_OBJECT
 
@@ -82,11 +83,11 @@ private:
 
     //For rendering
     cwGLImageItemResources* GLResources;
-    static int vVertex; //!< The attribute location of the vVertex
-    static int ModelViewProjectionMatrix; //!< The uniform location for modelViewProjection matrix
-    static int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
+    int vVertex; //!< The attribute location of the vVertex
+    int ModelViewProjectionMatrix; //!< The uniform location for modelViewProjection matrix
+    int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
 //    cwImageTexture* NoteTexture;
-    static QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
+    QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
 //    QOpenGLBuffer GeometryVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();

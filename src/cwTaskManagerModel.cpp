@@ -53,7 +53,6 @@ int cwTaskManagerModel::rowCount(const QModelIndex &parent) const
 QVariant cwTaskManagerModel::data(const QModelIndex &index, int role) const
 {
     Q_UNUSED(index);
-    Q_UNUSED(role);
 
     if(!index.isValid()) {
         return QVariant();
@@ -62,11 +61,11 @@ QVariant cwTaskManagerModel::data(const QModelIndex &index, int role) const
     cwTask* task = RunningTasks.at(index.row());
 
     switch(role) {
-    case NameRole:
+    case cwFutureManagerModel::NameRole:
         return task->name();
-    case NumberOfStepRole:
+    case cwFutureManagerModel::NumberOfStepRole:
         return task->numberOfSteps();
-    case ProgressRole:
+    case cwFutureManagerModel::ProgressRole:
         return task->progress();
     default:
         break;
@@ -81,11 +80,7 @@ QVariant cwTaskManagerModel::data(const QModelIndex &index, int role) const
  */
 QHash<int, QByteArray> cwTaskManagerModel::roleNames() const
 {
-    QHash<int, QByteArray> roles;
-    roles.insert(NameRole, "nameRole");
-    roles.insert(ProgressRole, "progressRole");
-    roles.insert(NumberOfStepRole, "numberOfStepsRole");
-    return roles;
+    return cwFutureManagerModel::defaultRoles();
 }
 
 /**
@@ -272,7 +267,7 @@ void cwTaskManagerModel::taskIsActive(QObject *taskObject)
  */
 void cwTaskManagerModel::updateTaskProgress(QObject *taskObject)
 {
-    updateTask(taskObject, ProgressRole);
+    updateTask(taskObject, cwFutureManagerModel::ProgressRole);
 }
 
 /**
@@ -283,7 +278,7 @@ void cwTaskManagerModel::updateTaskProgress(QObject *taskObject)
  */
 void cwTaskManagerModel::updateTaskNumberOfSteps(QObject *taskObject)
 {
-    updateTask(taskObject, NumberOfStepRole);
+    updateTask(taskObject, cwFutureManagerModel::NumberOfStepRole);
 }
 
 /**
@@ -294,7 +289,7 @@ void cwTaskManagerModel::updateTaskNumberOfSteps(QObject *taskObject)
  */
 void cwTaskManagerModel::updateTaskName(QObject *taskObject)
 {
-    updateTask(taskObject, NameRole);
+    updateTask(taskObject, cwFutureManagerModel::NameRole);
 }
 
 /**
@@ -304,7 +299,7 @@ void cwTaskManagerModel::updateTaskName(QObject *taskObject)
  *
  * This is a helper function to signal that the model's data has been updated
  */
-void cwTaskManagerModel::updateTask(QObject *taskObject, cwTaskManagerModel::Roles role)
+void cwTaskManagerModel::updateTask(QObject *taskObject, cwFutureManagerModel::Roles role)
 {
     cwTask* task = convertToTask(taskObject);
     int index = RunningTasks.indexOf(task);

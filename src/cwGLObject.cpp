@@ -16,13 +16,16 @@ cwGLObject::cwGLObject(QObject* parent) :
     Scene(nullptr),
     QueuedDataCommand(nullptr)
 {
-//    Dirty = false;
-    //    Scene = nullptr;
 }
 
 cwGLObject::~cwGLObject()
 {
 
+}
+
+void cwGLObject::initilizeGLFunctions()
+{
+    initializeOpenGLFunctions();
 }
 
 /**
@@ -94,16 +97,3 @@ void cwGLObject::setScene(cwScene *scene)
 {
     return Scene == nullptr ? nullptr : Scene->geometryItersecter();
 }
-
-// /**
-//  * @brief cwGLObject::setDirty
-//  * @param isDirty - Set the cwGLObject to dirty.
-//  */
-// void cwGLObject::setDirty(bool isDirty)
-// {
-//     Dirty = isDirty;
-//     if(Scene != nullptr) {
-//         Scene->update();
-//     }
-// }
-

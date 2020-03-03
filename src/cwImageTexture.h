@@ -20,17 +20,17 @@
 
 //Our includes
 #include "cwImage.h"
-class cwTextureUploadTask;
+#include "cwTextureUploadTask.h"
 
 class cwImageTexture : public QObject, private QOpenGLFunctions
 {
     Q_OBJECT
+    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
+    Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
+
 public:
     explicit cwImageTexture(QObject *parent = 0);
     ~cwImageTexture();
-
-    Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
-    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
 
     void initialize();
 
@@ -64,10 +64,15 @@ private:
     bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
 
-    cwTextureUploadTask* TextureUploadTask;
+    cwTextureUploadTask::Type TextureType = cwTextureUploadTask::DXT1Mipmaps;
 
-    void deleteLoadNoteTask();
+    QFuture<cwTextureUploadTask::UploadResult> UploadedTextureFuture;
+
     void deleteGLTexture();
+
+    void updateTextureType();
+
+    void setTextureType(cwTextureUploadTask::Type type);
 
 private slots:
     void startLoadingImage();
@@ -98,19 +103,5 @@ inline cwImage cwImageTexture::image() const {
     return Image;
 }
 
-///**
-//  This binds the texture to current texture unit
-//  */
-//inline void cwImageTexture::bind() {
-//    glActiveTexture(GL_TEXTURE0);
-//    glBindTexture(GL_TEXTURE_2D, TextureId);
-//}
-
-///**
-//    Releases the texture
-//  */
-//inline void cwImageTexture::release() {
-//    glBindTexture(GL_TEXTURE_2D, 0);
-//}
 
 #endif // CWIMAGETEXTURE_H
