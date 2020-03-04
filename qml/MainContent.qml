@@ -109,11 +109,19 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: aboutPageComponent
+        AboutPage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         rootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
+        rootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         rootData.pageSelectionModel.gotoPage(viewPage);
     }
 }

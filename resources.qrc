@@ -89,5 +89,7 @@
         <file>icons/up.png</file>
         <file>icons/svg/dragAndDrop.svg</file>
         <file>icons/svg/resizeCorner.svg</file>
+        <file>icons/cavewhere_about.png</file>
+        <file>icons/cave512x512.png</file>
     </qresource>
 </RCC>

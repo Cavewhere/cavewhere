@@ -1,16 +1,38 @@
 import QtQuick 2.0 as QQ
 
 QQ.Row {
-    spacing: 10
+    spacing: 0
 
     QQ.Image {
         id: imageId
-        source: "qrc:/icons/cave-64x64.png"
+        source: "qrc:/icons/cave512x512.png"
+        width: 96
+        height: 96
+    }
+
+    QQ.Item {
+       width: 10
+       height: 1
     }
 
     Text {
-        text: "CaveWhere"
+        id: caveTextId
+        QQ.FontLoader { id: fontBold; source: "qrc:/fonts/YanoneKaffeesatz-Bold.ttf"        }
+
+        text: "CAVE"
         font.pointSize: 40
         anchors.verticalCenter: imageId.verticalCenter
+        font.family: fontBold.name
+        font.letterSpacing: 3
+
+    }
+
+    Text {
+        QQ.FontLoader { id: fontThin; source: "qrc:/fonts/YanoneKaffeesatz-Thin.ttf" }
+
+        text: "WHERE"
+        font.pointSize: caveTextId.font.pointSize
+        anchors.verticalCenter: imageId.verticalCenter
+        font.family: fontThin.name
     }
 }

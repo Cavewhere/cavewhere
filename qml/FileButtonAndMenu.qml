@@ -78,7 +78,9 @@ MenuBar {
 
         MenuItem {
             text: "About Cavewhere"
-            onTriggered: openAboutWindow();
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "About");
+            }
         }
 
         MenuItem {

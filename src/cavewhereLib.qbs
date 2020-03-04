@@ -230,7 +230,8 @@ DynamicLibrary {
     Group {
         name: "qrcFiles"
         files: [
-            "../resources.qrc"
+            "../resources.qrc",
+            "../fonts/fonts.qrc"
         ]
     }
 
