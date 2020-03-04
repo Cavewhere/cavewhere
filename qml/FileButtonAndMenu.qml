@@ -77,7 +77,7 @@ MenuBar {
         MenuSeparator {}
 
         MenuItem {
-            text: "About Cavewhere"
+            text: "About"
             onTriggered: {
                 rootData.pageSelectionModel.gotoPageByName(null, "About");
             }
