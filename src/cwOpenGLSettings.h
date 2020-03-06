@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QSettings>
 
 //Our includes
 #include "cwGlobals.h"
@@ -70,7 +71,7 @@ public:
     Q_ENUM(MinFilter)
     Q_ENUM(DXT1Algorithm)
 
-    cwOpenGLSettings(QObject* parent = nullptr);
+    cwOpenGLSettings(const cwOpenGLSettings& other) = delete;
 
     bool dxt1Supported() const;
     bool anisotropySupported() const;
@@ -113,8 +114,16 @@ public:
 
     static void initialize();
     static cwOpenGLSettings* instance();
+    static void cleanup();
 
     static Renderer perviousRenderer();
+
+    void setToDefault();
+
+    static QString key(const QString& subKey);
+    QString rootKey(const QString &subKey) const;
+    QString keyWithDevice(const QString& subKey) const;
+
 
 signals:
     void useDXT1CompressionChanged();
@@ -128,13 +137,37 @@ signals:
     void dxt1AlgorithmChanged();
 
 private:
+    class TesterSettings {
+    public:
+        TesterSettings() {
+            setSettings(true);
+        }
+
+        ~TesterSettings() {
+            setSettings(false);
+        }
+
+        static bool crashedOnTest() {
+            QSettings settings;
+            return settings.value(cwOpenGLSettings::key(cwOpenGLSettings::TestingKey), false).toBool();
+        }
+
+    private:
+        void setSettings(bool value) {
+            QSettings settings;
+            settings.setValue(cwOpenGLSettings::key(cwOpenGLSettings::TestingKey), value);
+        }
+    };
+
+    cwOpenGLSettings(QObject* parent = nullptr);
+
     //Texture settings
     bool DXT1Supported = false; //!<
     bool AnisotropySupported = false; //!<
     bool DXT1Compression = true; //!<
     bool UseAnisotropy = true; //!<
     bool Mipmaps = true; //!<
-    bool GPUGeneratedDXT1Supported = false; //!<
+    bool GPUGeneratedDXT1Supported = true; //!<
     DXT1Algorithm mDXT1Algorithm = DXT1_Squish; //!<
     MagFilter mMagFilter = MagNearest; //!<
     MinFilter mMinFilter = MinNearest_Mipmap_Linear; //!<
@@ -153,12 +186,30 @@ private:
     bool NeedsRestart = false; //!<
 
     static const QString BaseKey;
-    static const QString CrashWhenTestingKey;
+    static const QString TestingKey;
     static const QString RendererKey;
+    static const QString DXT1CompressionKey;
+    static const QString MipmapsKey;
+    static const QString NativeTextRenderingKey;
+    static const QString UseAnisotropyKey;
+    static const QString MagFilterKey;
+    static const QString MinFilterKey;
+    static const QString DXT1GenerateAlgroKey;
 
     static cwOpenGLSettings* Singleton; //This singlton isn't threadsafe
 
     static bool testGPU_DXT1();
+
+    void setNeedsRestart();
+    void updateSettingsWithDevice(const QString& key, const QVariant& value);
+    static void updateSettings(const QString& key, const QVariant& value);
+
+    template<typename T, typename KeyFunc, typename Func>
+    void load(T& value, T defaultValue, const QString& keyName, KeyFunc keyFunc, Func variantFunc) {
+        QSettings setting;
+        QVariant settingsValue = setting.value(std::invoke(keyFunc, this, keyName), defaultValue);
+        value = static_cast<T>(std::invoke(variantFunc, settingsValue));
+    }
 };
 
 
@@ -219,7 +270,7 @@ inline cwOpenGLSettings::MinFilter cwOpenGLSettings::minFilter() const {
 }
 
 inline bool cwOpenGLSettings::gpuGeneratedDXT1Supported() const {
-    return GPUGeneratedDXT1Supported;
+    return dxt1Supported() && GPUGeneratedDXT1Supported;
 }
 
 inline cwOpenGLSettings::DXT1Algorithm cwOpenGLSettings::dxt1Algorithm() const {

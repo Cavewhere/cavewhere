@@ -83,7 +83,7 @@ DynamicLibrary {
     }
 
     cpp.rpaths: [Qt.core.libPath]
-    cpp.cxxLanguageVersion: "c++14"
+    cpp.cxxLanguageVersion: "c++17"
     Qt.quick.compilerAvailable: false
 
     cpp.includePaths: [
