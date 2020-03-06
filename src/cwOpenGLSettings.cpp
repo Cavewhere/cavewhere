@@ -96,8 +96,8 @@ QVector<cwOpenGLSettings::Renderer> cwOpenGLSettings::supportedRenders() const
             Software};
 #else
     return {Auto,
-                Destop,
-                Software}
+                GPU,
+                Software};
 #endif
 }
 
@@ -188,6 +188,8 @@ bool cwOpenGLSettings::testGPU_DXT1()
 
     QVector<unsigned int> openGLImage(size.width() * size.height(), 0);
     QVector<unsigned int> squishImage(size.width() * size.height(), 0);
+
+    qDebug() << "Data: " << openGLResult.data.size() << squishResult.data.size() << squishImage.size();
 
     s3tc::BlockDecompressImageDXT1(size.width(), size.height(),
                              reinterpret_cast<const unsigned char*>(openGLResult.data.constData()), openGLImage.data());
