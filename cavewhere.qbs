@@ -27,7 +27,8 @@ Project {
         "dewalls/dewalls.qbs",
         "qt-qml-models/QtQmlModels.qbs",
         "asyncfuture/asyncfuture.qbs",
-        "autoBuild/autoBuild.qbs"
+        "autoBuild/autoBuild.qbs",
+        "testcases/s3tc-dxt-decompression/s3tc-dxt-decompression.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]

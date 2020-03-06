@@ -38,24 +38,28 @@ class CAVEWHERE_LIB_EXPORT cwOpenGLSettings : public QObject
     Q_PROPERTY(bool needsRestart READ needsRestart NOTIFY needsRestartChanged)
 
 public:
+    //Don't change order because this will mess-up QSettings
     enum Renderer {
         Auto,
         Angles,
-        Destop,
+        GPU,
         Software
     };
 
+    //Don't change order because this will mess-up QSettings
     enum MagFilter {
         MagNearest,
         MagLinear
     };
 
+    //Don't change order because this will mess-up QSettings
     enum MinFilter {
         MinLinear,
         MinNearest_Mipmap_Linear,
         MinLinear_Mipmap_Linear
     };
 
+    //Don't change order because this will mess-up QSettings
     enum DXT1Algorithm {
         DXT1_GPU,
         DXT1_Squish
@@ -110,6 +114,8 @@ public:
     static void initialize();
     static cwOpenGLSettings* instance();
 
+    static Renderer perviousRenderer();
+
 signals:
     void useDXT1CompressionChanged();
     void useMipmapsChanged();
@@ -146,7 +152,13 @@ private:
 
     bool NeedsRestart = false; //!<
 
+    static const QString BaseKey;
+    static const QString CrashWhenTestingKey;
+    static const QString RendererKey;
+
     static cwOpenGLSettings* Singleton; //This singlton isn't threadsafe
+
+    static bool testGPU_DXT1();
 };
 
 
@@ -168,10 +180,6 @@ inline bool cwOpenGLSettings::useDXT1Compression() const {
 
 inline bool cwOpenGLSettings::useAnisotropy() const {
     return UseAnisotropy && anisotropySupported();
-}
-
-inline cwOpenGLSettings::Renderer cwOpenGLSettings::rendererType() const {
-    return RendererType;
 }
 
 inline bool cwOpenGLSettings::anisotropySupported() const {
