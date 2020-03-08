@@ -51,7 +51,7 @@ ApplicationWindow {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
-        asynchronous: true
+        asynchronous: false
         visible: status == Loader.Ready
 
 //        onLoaded: {
