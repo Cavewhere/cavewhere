@@ -23,7 +23,7 @@ public:
     cwKeywordModel(QObject* parent = nullptr);
 
     void add(const cwKeyword& keyword);
-    void add(const QVector<cwKeyword>& keywords);
+    void addKeywords(const QVector<cwKeyword>& keywords);
     void remove(const cwKeyword& keyword);
     void removeAll(QString key);
     QVector<cwKeyword> keywords() const;

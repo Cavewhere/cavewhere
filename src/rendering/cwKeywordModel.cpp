@@ -29,7 +29,7 @@ void cwKeywordModel::add(const cwKeyword &keyword)
 /**
  Adds multiple keywords to the model
  */
-void cwKeywordModel::add(const QVector<cwKeyword> &keywords)
+void cwKeywordModel::addKeywords(const QVector<cwKeyword> &keywords)
 {
     QVector<cwKeyword> validKeywords;
     validKeywords.reserve(keywords.size());

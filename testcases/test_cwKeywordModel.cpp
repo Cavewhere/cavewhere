@@ -183,19 +183,19 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             keywordModelTrip->setObjectName("keywordModelTrip");
             keywordModelScrap->setObjectName("keywordModelScrap");
 
-            keywordModelCave->add({
+            keywordModelCave->addKeywords({
                                       {"Cave", "Sauce cave"},
                                       {"Country", "USA"}
                                   });
 
-            keywordModelTrip->add({
+            keywordModelTrip->addKeywords({
                                       {"Trip", "Trip1"},
                                       {"Surveyor", "Philip Schuchardt"},
                                       {"Surveyor", "Sara"},
                                       {"Date", "2019-08-22"}
                                   });
 
-            keywordModelScrap->add({
+            keywordModelScrap->addKeywords({
                                        {"Type", "scrap"}
                                    });
 
@@ -281,7 +281,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             }
 
             SECTION("Check multi add") {
-                keywordModelTrip->add({
+                keywordModelTrip->addKeywords({
                                           {"test1", "sauce1"},
                                           {"test2", "sauce2"}
                                       });
