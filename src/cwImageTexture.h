@@ -60,6 +60,7 @@ private:
     cwImage Image; //!< The image that this texture represent
     QVector2D ScaleTexCoords; //!< How the texture should be scalede
 
+    bool ReloadTexture; //If true reload the texture, delete and re-initilize
     bool TextureDirty; //!< true when the image needs to be updated
     bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
@@ -69,8 +70,6 @@ private:
     QFuture<cwTextureUploadTask::UploadResult> UploadedTextureFuture;
 
     void deleteGLTexture();
-
-    void updateTextureType();
 
     void setTextureType(cwTextureUploadTask::Type type);
 

@@ -22,7 +22,7 @@
 
 cwOpenGLSettings* cwOpenGLSettings::Singleton = nullptr;
 
-const QString cwOpenGLSettings::BaseKey = "renderingSettings.%1";
+const QString cwOpenGLSettings::BaseKey = "renderingSettings-%1";
 const QString cwOpenGLSettings::TestingKey = "testing";
 const QString cwOpenGLSettings::RendererKey = "renderer";
 const QString cwOpenGLSettings::DXT1CompressionKey = "useDxt1Compression";
@@ -68,7 +68,7 @@ void cwOpenGLSettings::setNativeTextRendering(bool useNativeTextRendering) {
 }
 
 void cwOpenGLSettings::setRendererType(cwOpenGLSettings::Renderer rendererType) {
-    if(RendererType != rendererType) {
+    if(RendererType != rendererType && supportedRenders().contains(rendererType)) {
         Q_ASSERT(thread() == QThread::currentThread());
         RendererType = rendererType;
         updateSettings(RendererKey, RendererType);
@@ -108,9 +108,9 @@ QVector<cwOpenGLSettings::Renderer> cwOpenGLSettings::supportedRenders() const
 {
 #ifdef Q_OS_WIN
     return {Auto,
-            Angles,
-            GPU,
-            Software};
+                GPU,
+                Angles,
+                Software};
 #else
     return {Auto,
                 GPU,
@@ -202,7 +202,7 @@ void cwOpenGLSettings::initialize()
                             toInt);
 
             Singleton->load(Singleton->mDXT1Algorithm,
-                            defaultSettings.mDXT1Algorithm,
+                            Singleton->GPUGeneratedDXT1Supported ? DXT1_GPU : DXT1_Squish,
                             DXT1GenerateAlgroKey,
                             &cwOpenGLSettings::keyWithDevice,
                             toInt);
@@ -316,9 +316,9 @@ bool cwOpenGLSettings::testGPU_DXT1()
         }
     }
 
-    auto diff = sqrt(sumOfSquares) / static_cast<double>(size.height() * size.width());
+    auto diff = sqrt(sumOfSquares / static_cast<double>(size.height() * size.width()));
 
-    return diff < 0.01;
+    return diff < 5.0;
 }
 
 void cwOpenGLSettings::setNeedsRestart()
@@ -346,12 +346,32 @@ QString cwOpenGLSettings::key(const QString& subKey)
 
 QString cwOpenGLSettings::keyWithDevice(const QString &subKey) const
 {
-    return QString(BaseKey + ".%2").arg(renderer()).arg(subKey);
+    auto deviceKey = renderer().remove(QRegularExpression("\\s+|/|-|\\."));
+    return QString(BaseKey + "-%2").arg(deviceKey).arg(subKey);
+}
+
+void cwOpenGLSettings::setApplicationRenderer()
+{
+    switch (perviousRenderer()) {
+
+    case Auto:
+        break;
+    case Angles:
+        QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+        break;
+    case GPU:
+        QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+        break;
+    case Software:
+        QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+        break;
+    }
 }
 
 void cwOpenGLSettings::setDXT1Algorithm(DXT1Algorithm dxt1Algorithm) {
     if(mDXT1Algorithm != dxt1Algorithm) {
         mDXT1Algorithm = dxt1Algorithm;
+        updateSettingsWithDevice(DXT1GenerateAlgroKey, mDXT1Algorithm);
         emit dxt1AlgorithmChanged();
     }
 }
@@ -359,3 +379,67 @@ void cwOpenGLSettings::setDXT1Algorithm(DXT1Algorithm dxt1Algorithm) {
 cwOpenGLSettings::Renderer cwOpenGLSettings::rendererType() const {
     return RendererType;
 }
+
+QStringList cwOpenGLSettings::magFilterModel() const {
+    return {
+        "Nearest",
+        "Linear"
+    };
+}
+
+QStringList cwOpenGLSettings::minFilterModel() const {
+    return {
+        "Linear",
+        "Nearest Mipmap Linear",
+        "Linear Mipmap Linear"
+    };
+}
+
+QStringList cwOpenGLSettings::rendererModel() const {
+    auto toString = [](Renderer type)->QString {
+        switch(type) {
+        case Auto:
+            return "Automatic";
+        case GPU:
+            return "OpenGL";
+        case Angles:
+            return "OpenGL via DirectX";
+        case Software:
+            return "Software";
+        }
+        return "";
+    };
+
+    auto supported = supportedRenders();
+    QStringList renderers;
+    renderers.reserve(supported.size());
+    std::transform(supported.begin(), supported.end(), std::back_inserter(renderers), toString);
+    return renderers;
+}
+
+inline int cwOpenGLSettings::currentSupportedRenderer() const {
+    return supportedRenders().indexOf(rendererType());
+}
+
+void cwOpenGLSettings::setCurrentSupportedRender(int currentSupportedRenderer) {
+    if(this->currentSupportedRenderer() != currentSupportedRenderer) {
+        auto supported = supportedRenders();
+        auto type = supported.at(currentSupportedRenderer);
+        setRendererType(type);
+        emit currentSupportedRendererChanged();
+    }
+}
+
+QString cwOpenGLSettings::allVersionInfo() const {
+    QStringList values = {
+        QString("Version: %1").arg(version()),
+        QString("Shader Version: %2").arg(shadingVersion()),
+        QString("Vendor: %1").arg(vendor()),
+        QString("Renderer: %1").arg(renderer()),
+        QString("Extensions:")
+    };
+
+    values.append(extentions());
+    return values.join("\n");
+}
+

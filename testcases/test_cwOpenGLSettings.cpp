@@ -27,7 +27,11 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
         CHECK(settings.useNativeTextRendering() == false);
         CHECK(settings.minFilter() == cwOpenGLSettings::MinNearest_Mipmap_Linear);
         CHECK(settings.magFilter() == cwOpenGLSettings::MagNearest);
-        CHECK(settings.dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish);
+        if(settings.gpuGeneratedDXT1Supported()) {
+            CHECK(settings.dxt1Algorithm() == cwOpenGLSettings::DXT1_GPU);
+        } else {
+            CHECK(settings.dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish);
+        }
     };
 
     SECTION("Singleton initilization should work correctly") {
@@ -47,6 +51,8 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
         QSignalSpy magFilterSpy(initSettings, &cwOpenGLSettings::magFilterChanged);
         QSignalSpy minFilterSpy(initSettings, &cwOpenGLSettings::minFilterChanged);
         QSignalSpy dxt1AlgoSpy(initSettings, &cwOpenGLSettings::dxt1AlgorithmChanged);
+        QSignalSpy rendererSpy(initSettings, &cwOpenGLSettings::rendererTypeChanged);
+        QSignalSpy currentSupportedSpy(initSettings, &cwOpenGLSettings::currentSupportedRendererChanged);
 
         restartSpy.setObjectName("restartSpy");
         dxt1ComprossedSpy.setObjectName("dxt1CompressedSpy");
@@ -56,6 +62,8 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
         magFilterSpy.setObjectName("magFilterSpy");
         minFilterSpy.setObjectName("minFilterSpy");
         dxt1AlgoSpy.setObjectName("dxt1AlgoSpy");
+        rendererSpy.setObjectName("rendererSpy");
+        currentSupportedSpy.setObjectName("currentSupportedSpy");
 
         SpyChecker checker = {
             {&restartSpy, 0},
@@ -65,7 +73,9 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
             {&nativeTextRenderingSpy, 0},
             {&magFilterSpy, 0},
             {&minFilterSpy, 0},
-            {&dxt1AlgoSpy, 0}
+            {&dxt1AlgoSpy, 0},
+            {&rendererSpy, 0},
+            {&currentSupportedSpy, 0}
         };
 
         CHECK(initSettings->vendor().isEmpty() == false);
@@ -96,6 +106,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
             settings.setValue(crashWhenTestingKey, false);
             initSettings->setRendererType(cwOpenGLSettings::GPU);
             checker[&restartSpy]++;
+            checker[&rendererSpy]++;
             checker.checkSpies();
 
             CHECK(settings.value(crashWhenTestingKey).toBool() == false);
@@ -181,7 +192,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
 
             SECTION("DXT1 Algorithm") {
                 if(initSettings->gpuGeneratedDXT1Supported()) {
-                    initSettings->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+                    initSettings->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
                     checker[&dxt1AlgoSpy]++;
 
                     CHECK(initSettings->dxt1Algorithm() == settings.value(initSettings->keyWithDevice("DXT1GenerateAlgroKey")).toInt());
@@ -232,7 +243,52 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
             }
         }
 
+        SECTION("Mag filter should return correctly") {
+            //Don't reorder, if this fails make sure you don't reorder these options
+            CHECK(initSettings->magFilterModel() == QStringList({
+                                                               "Nearest",
+                                                               "Linear"
+                                                           }));
+        }
+
+        SECTION("Min filter should return correctly") {
+            //Don't reorder, if this fails make sure you don't reorder these options
+            CHECK(initSettings->minFilterModel() == QStringList({
+                                                                    "Linear",
+                                                                    "Nearest Mipmap Linear",
+                                                                    "Linear Mipmap Linear"
+                                                                }));
+        }
+
+        SECTION("rendererModel should return correctly") {
+            QStringList renderers;
+#ifdef Q_OS_WIN
+            renderers = QStringList({
+                "Automatic",
+                "OpenGL",
+                "OpenGL via DirectX",
+                "Software"
+            });
+#else
+            renderers = QStringList({
+                                        "Automatic",
+                                        "OpenGL",
+                                        "Software"
+                                    });
+#endif
+            CHECK(initSettings->rendererModel() == renderers);
+
+            CHECK(initSettings->currentSupportedRenderer() == 0);
+            initSettings->setCurrentSupportedRender(initSettings->supportedRenders().size() - 1);
+            CHECK(initSettings->rendererType() == initSettings->supportedRenders().last());
+            checker[&rendererSpy]++;
+            checker[&currentSupportedSpy]++;
+            checker[&restartSpy]++;
+            checker.checkSpies();
+        }
+
         settings.clear();
         initSettings->cleanup();
+
     }
 }

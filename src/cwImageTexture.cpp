@@ -10,6 +10,7 @@
 #include "cwImageProvider.h"
 #include "cwTextureUploadTask.h"
 #include "cwDebug.h"
+#include "cwOpenGLSettings.h"
 
 //QT includes
 #include <QtConcurrentRun>
@@ -29,6 +30,21 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     DeleteTexture(false),
     TextureId(0)
 {
+    auto settings = cwOpenGLSettings::instance();
+
+    auto reloadTexture = [this]() {
+        ReloadTexture = true;
+        markAsDirty();
+    };
+
+    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture]() {
+        startLoadingImage();
+        reloadTexture();
+    });
+    connect(settings, &cwOpenGLSettings::useAnisotropyChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::useMipmapsChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::magFilterChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::minFilterChanged, this, reloadTexture);
 }
 
 /**
@@ -52,26 +68,48 @@ void cwImageTexture::initialize()
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
 
-#ifdef Q_OS_WIN
-    //Only upload one texture, GL_LINEAR, because some intel cards,
-    //don't support npot dxt1 copression, so we just used GL_LINEAR
-    //FIXME: ADD to rendering settings! Use mipmaps.
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-#else
-    //All other platforms
-    GLfloat fLargest;
-    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
+    auto toMinFilter = [](cwOpenGLSettings::MinFilter filter) {
+        switch (filter) {
+        case cwOpenGLSettings::MinLinear:
+            return GL_LINEAR;
+        case cwOpenGLSettings::MinNearest_Mipmap_Linear:
+            return GL_NEAREST_MIPMAP_LINEAR;
+        case cwOpenGLSettings::MinLinear_Mipmap_Linear:
+            return GL_NEAREST_MIPMAP_LINEAR;
+        }
+        return GL_LINEAR;
+    };
 
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
-#endif
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    auto toMagFilter = [](cwOpenGLSettings::MagFilter filter) {
+        switch (filter) {
+        case cwOpenGLSettings::MagNearest:
+            return GL_NEAREST;
+        case cwOpenGLSettings::MagLinear:
+            return GL_LINEAR;
+        }
+        return GL_NEAREST;
+    };
+
+    auto settings = cwOpenGLSettings::instance();
+
+    if(settings->useMipmaps()) {
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, toMinFilter(settings->minFilter()));
+    } else {
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
+
+    if(settings->useAnisotropy()) {
+        GLfloat fLargest;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
+    }
+
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, toMagFilter(settings->magFilter()));
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    updateTextureType();
+    setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
 }
 
 /**
@@ -124,6 +162,13 @@ void cwImageTexture::updateData() {
         return;
     }
 
+    if(ReloadTexture) {
+        deleteGLTexture();
+        initialize();
+        ReloadTexture = false;
+        return;
+    }
+
     if(UploadedTextureFuture.isRunning()) {
         return;
     }
@@ -153,6 +198,8 @@ void cwImageTexture::updateData() {
     GLint maxTextureSize;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
 
+    bool useMipmaps = cwOpenGLSettings::instance()->useMipmaps();
+
     int trueMipmapLevel = 0;
     for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
 
@@ -175,17 +222,18 @@ void cwImageTexture::updateData() {
                              0, GL_RGBA, GL_UNSIGNED_BYTE,
                              imageData.data());
                 Q_ASSERT_X(mipmaps.size() == 1, LOCATION_STR, "There should only be one mipmap for GL_RGBA types");
-                glGenerateMipmap(GL_TEXTURE_2D);
+
+                if(useMipmaps) {
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                }
                 break;
             }
 
             trueMipmapLevel++;
 
-#ifdef Q_OS_WIN
-            //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
-            //FIXME: ADD to rendering settings!
-            break;
-#endif //Q_OS_WIN
+            if(!useMipmaps) {
+                break;
+            }
         }
     }
 
@@ -235,16 +283,6 @@ void cwImageTexture::deleteGLTexture()
         TextureId = 0;
         DeleteTexture = false;
         markAsDirty();
-    }
-}
-
-void cwImageTexture::updateTextureType()
-{
-    auto context = QOpenGLContext::currentContext();
-    if(context->hasExtension("GL_EXT_texture_compression_dxt1")) {
-        setTextureType(cwTextureUploadTask::DXT1Mipmaps);
-    } else {
-        setTextureType(cwTextureUploadTask::OpenGL_RGBA);
     }
 }
 

@@ -77,6 +77,13 @@ MenuBar {
         MenuSeparator {}
 
         MenuItem {
+            text: "Settings"
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "Settings");
+            }
+        }
+
+        MenuItem {
             text: "About"
             onTriggered: {
                 rootData.pageSelectionModel.gotoPageByName(null, "About");

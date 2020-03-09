@@ -4,6 +4,7 @@
 //Qt includes
 #include <QObject>
 #include <QSettings>
+#include <QDebug>
 
 //Our includes
 #include "cwGlobals.h"
@@ -29,12 +30,19 @@ class CAVEWHERE_LIB_EXPORT cwOpenGLSettings : public QObject
     Q_PROPERTY(bool useNativeTextRendering READ useNativeTextRendering WRITE setNativeTextRendering NOTIFY useNativeTextRenderingChanged)
     Q_PROPERTY(cwOpenGLSettings::Renderer rendererType READ rendererType WRITE setRendererType NOTIFY rendererTypeChanged)
 
+    //For QML
+    Q_PROPERTY(QStringList magFilterModel READ magFilterModel CONSTANT)
+    Q_PROPERTY(QStringList minFilterModel READ minFilterModel CONSTANT)
+    Q_PROPERTY(QStringList rendererModel READ rendererModel CONSTANT)
+    Q_PROPERTY(int currentSupportedRenderer READ currentSupportedRenderer WRITE setCurrentSupportedRender NOTIFY currentSupportedRendererChanged)
+
     //OpenGL information
     Q_PROPERTY(QString vendor READ vendor CONSTANT)
     Q_PROPERTY(QString version READ version CONSTANT)
     Q_PROPERTY(QString renderer READ renderer CONSTANT)
     Q_PROPERTY(QString shadingVersion READ shadingVersion CONSTANT)
     Q_PROPERTY(QStringList extentions READ extentions CONSTANT)
+    Q_PROPERTY(QString allVersionInfo READ allVersionInfo CONSTANT)
 
     Q_PROPERTY(bool needsRestart READ needsRestart NOTIFY needsRestartChanged)
 
@@ -42,8 +50,8 @@ public:
     //Don't change order because this will mess-up QSettings
     enum Renderer {
         Auto,
-        Angles,
         GPU,
+        Angles,
         Software
     };
 
@@ -102,13 +110,21 @@ public:
     cwOpenGLSettings::Renderer rendererType() const;
     void setRendererType(cwOpenGLSettings::Renderer rendererType);
 
+    int currentSupportedRenderer() const;
+    void setCurrentSupportedRender(int currentSupportedRenderer);
+
     bool needsRestart() const;
+
+    QStringList magFilterModel() const;
+    QStringList minFilterModel() const;
+    QStringList rendererModel() const;
 
     QString vendor() const;
     QString version() const;
     QString renderer() const;
     QString shadingVersion() const;
     QStringList extentions() const;
+    QString allVersionInfo() const;
 
     QVector<Renderer> supportedRenders() const;
 
@@ -124,12 +140,15 @@ public:
     QString rootKey(const QString &subKey) const;
     QString keyWithDevice(const QString& subKey) const;
 
+    static void setApplicationRenderer();
+
 
 signals:
     void useDXT1CompressionChanged();
     void useMipmapsChanged();
     void useNativeTextRenderingChanged();
     void rendererTypeChanged();
+    void currentSupportedRendererChanged();
     void needsRestartChanged();
     void useAnisotropyChanged();
     void magFilterChanged();
@@ -207,10 +226,13 @@ private:
     template<typename T, typename KeyFunc, typename Func>
     void load(T& value, T defaultValue, const QString& keyName, KeyFunc keyFunc, Func variantFunc) {
         QSettings setting;
-        QVariant settingsValue = setting.value(std::invoke(keyFunc, this, keyName), defaultValue);
+        auto key = std::invoke(keyFunc, this, keyName);
+        QVariant settingsValue = setting.value(key, defaultValue);
         value = static_cast<T>(std::invoke(variantFunc, settingsValue));
     }
 };
+
+Q_DECLARE_METATYPE(QVector<cwOpenGLSettings::Renderer>)
 
 
 inline bool cwOpenGLSettings::useMipmaps() const {

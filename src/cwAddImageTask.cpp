@@ -264,12 +264,13 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
   */
 void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
 {
-    QByteArray format = "png";
+    QByteArray format = "WEBP";
     QByteArray imageData;
 
     if(!MipmapOnly) {
         QBuffer buffer(&imageData);
         QImageWriter writer(&buffer, format);
+        writer.setCompression(1);
         writer.write(image);
     }
 

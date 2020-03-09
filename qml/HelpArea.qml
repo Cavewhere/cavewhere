@@ -14,6 +14,7 @@ QQ.Rectangle {
     property alias text: helpText.text
     property alias pointSize: helpText.font.pointSize
     property alias imageSource: icon.source
+    property alias helpImageSource: helpImageId.source
     property bool animationToVisible: true
     property bool animationToInvisible: true
 
@@ -42,26 +43,40 @@ QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
+        implicitHeight: contentId.height
 
 
         QQ.Image {
             id: icon
-            //        source: "qrc:icons/Information20x20.png"
             width: sourceSize.width
             height: sourceSize.height
 
         }
 
-        Text {
-            id: helpText
-
+        ColumnLayout {
+            id: contentId
             Layout.fillWidth: true
 
-            textFormat: Text.RichText
-            wrapMode: Text.WordWrap
-            font.pointSize: 10
+            QQ.Image {
+                id: helpImageId
+                Layout.fillWidth: true
+                fillMode: QQ.Image.PreserveAspectFit
+                smooth: true
+//                implicitHeight: helpImageId.paintedHeight
+//                implicitWidth: helpImageId.paintedWidth
+            }
 
-            text: "No documentation"
+            Text {
+                id: helpText
+
+                Layout.fillWidth: true
+
+                textFormat: Text.RichText
+                wrapMode: Text.WordWrap
+                font.pointSize: 10
+
+                text: "No documentation"
+            }
         }
     }
 
@@ -76,7 +91,7 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 target: helpArea
-                implicitHeight: helpText.height + 10
+                implicitHeight: contentId.height + 10
             }
         }
     ]
@@ -93,7 +108,7 @@ QQ.Rectangle {
                     target: helpArea
                     property: "implicitHeight"
                     from: 0
-                    to: helpText.height
+                    to: contentId.height
                     duration: animationToVisible ? 200 : 0
                 }
                 QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }

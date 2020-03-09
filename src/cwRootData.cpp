@@ -23,6 +23,7 @@
 #include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -88,6 +89,8 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+    cwOpenGLSettings::initialize(); //Init's a singleton
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }
@@ -167,4 +170,8 @@ void cwRootData::setLastDirectory(QUrl lastDirectory) {
         settings.setValue("LastDirectory", dir);
         emit lastDirectoryChanged();
     }
+}
+
+cwOpenGLSettings *cwRootData::renderingSettings() const {
+    return cwOpenGLSettings::instance();
 }

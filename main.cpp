@@ -27,6 +27,7 @@
 #include "cwDebug.h"
 #include "cwApplication.h"
 #include "cwUsedStationsTask.h"
+#include "cwOpenGLSettings.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release"
@@ -34,8 +35,13 @@
 
 int main(int argc, char *argv[])
 {    
-    QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    //This needs to be first for QSettings
+    QApplication::setOrganizationName("Vadose Solutions");
+    QApplication::setOrganizationDomain("cavewhere.com");
+    QApplication::setApplicationName("CaveWhere");
+    QApplication::setApplicationVersion(CAVEWHERE_VERSION);
+
+    cwOpenGLSettings::setApplicationRenderer();
 
     cwApplication a(argc, argv);
 
@@ -51,15 +57,10 @@ int main(int argc, char *argv[])
     openFileHandler->setProject(rootData->project());
     a.installEventFilter(openFileHandler);
 
-    QApplication::setOrganizationName("Vadose Solutions");
-    QApplication::setOrganizationDomain("cavewhere.com");
-    QApplication::setApplicationName("CaveWhere");
-    QApplication::setApplicationVersion(CAVEWHERE_VERSION);
-
     //TODO: Add rendering dialog, for checking bad text
     //Fixes text rendering issues on windows for bad graphics cards
     //https://stackoverflow.com/questions/29733711/blurred-qt-quick-text
-    //QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
+    QQuickWindow::setTextRenderType(cwOpenGLSettings::instance()->useNativeTextRendering() ? QQuickWindow::NativeTextRendering : QQuickWindow::QtTextRendering);
 
     cwGlobalDirectory::setupBaseDirectory();
 

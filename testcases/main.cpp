@@ -12,6 +12,9 @@
 #include <QApplication>
 #include <QThread>
 
+//Our includes
+#include "cwOpenGLSettings.h"
+
 int main( int argc, char* argv[] )
 {
   QApplication app(argc, argv);
@@ -20,6 +23,8 @@ int main( int argc, char* argv[] )
   QApplication::setOrganizationDomain("cavewhere.com");
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
+
+  cwOpenGLSettings::initialize();
 
   app.thread()->setObjectName("Main QThread");
 

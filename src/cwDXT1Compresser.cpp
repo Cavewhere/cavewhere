@@ -3,13 +3,14 @@
 #include "cwDebug.h"
 #include "cwAsyncFuture.h"
 #include "cwOpenGLUtils.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QPoint>
 #include <QGLWidget>
 #include <QtConcurrent>
 #include <QOffscreenSurface>
-#include <QOpenGLFunctions_2_1>
+#include <QOpenGLFunctions>
 
 //For creating compressed DXT texture maps
 #include <squish.h>
@@ -29,9 +30,14 @@ cwDXT1Compresser::~cwDXT1Compresser()
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::compress(const QList<QImage> &images)
 {
-    //FIXME: This should be replace with the current computer setting for compression
+    switch(cwOpenGLSettings::instance()->dxt1Algorithm()) {
+    case cwOpenGLSettings::DXT1_GPU:
+        return openglCompression(images, false);
+    case cwOpenGLSettings::DXT1_Squish:
+        return squishCompression(images, true);
+    }
+
     return squishCompression(images, true);
-//        return openglCompression(images, true);
 }
 
 
@@ -252,7 +258,6 @@ cwDXT1Compresser::CompressedImage cwDXT1Compresser::squishCompressImageThreaded(
 
     //This takes all the compute blocks and compresses them using squish
     QtConcurrent::blockingMap(computeBlocks, CompressImageKernal(image.size(), flags, metric));
-//    std::for_each(computeBlocks.begin(), computeBlocks.end(), CompressImageKernal(image.size(), flags, metric));
 
     return CompressedImage(outputData, image.size());
 }
@@ -264,18 +269,24 @@ cwDXT1Compresser::CompressedImage cwDXT1Compresser::squishCompressImageThreaded(
  *
  * This assumes that the opengl context is bound
  */
-//#ifndef Q_OS_WIN
 cwDXT1Compresser::CompressedImage cwDXT1Compresser::OpenGLCompresser::openglDxt1Compression(QImage image)
 {
+    auto gl = std::make_unique<QOpenGLFunctions_2_1>();
+    bool couldInit = gl->initializeOpenGLFunctions();
+
+    if(!couldInit) {
+        return CompressedImage();
+    }
+
     GLuint texture;
 
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    gl->glGenTextures(1, &texture);
+    gl->glBindTexture(GL_TEXTURE_2D, texture);
 
     QImage convertedImage = cwOpenGLUtils::toGLTexture(image);
     CompressedImage outputImage;
 
-    glTexImage2D(GL_TEXTURE_2D,
+    gl->glTexImage2D(GL_TEXTURE_2D,
                  0, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                  image.width(), image.height(),
                  0, GL_RGBA,
@@ -284,23 +295,22 @@ cwDXT1Compresser::CompressedImage cwDXT1Compresser::OpenGLCompresser::openglDxt1
 
 
     GLint compressed;
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_ARB, &compressed);
+    gl->glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_ARB, &compressed);
     // if the compression has been successful
     if (compressed == GL_TRUE)
     {
         //        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_INTERNAL_FORMAT,
         //                                 &internalformat);
         GLint compressed_size;
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
+        gl->glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_COMPRESSED_IMAGE_SIZE_ARB,
                                  &compressed_size);
         QByteArray compressedByteArray(compressed_size, 0);
-        glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
+        gl->glGetCompressedTexImage(GL_TEXTURE_2D, 0, compressedByteArray.data());
 
         outputImage = CompressedImage(compressedByteArray, image.size());
     }
 
-    glDeleteTextures(1, &texture);
+    gl->glDeleteTextures(1, &texture);
 
     return outputImage;
 }
-//#endif
