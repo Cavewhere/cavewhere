@@ -130,30 +130,6 @@ ScrollViewPage {
             title: "OpenGL Info"
 
             ColumnLayout {
-//                LabeledInfo {
-//                    title: "Version"
-//                    text: rootData.renderingSettings.version
-//                }
-
-//                LabeledInfo {
-//                    title: "Shader Version"
-//                    text: rootData.renderingSettings.shadingVersion
-//                }
-
-//                LabeledInfo {
-//                    title: "Vendor"
-//                    text: rootData.renderingSettings.vendor
-//                }
-
-//                LabeledInfo {
-//                    title: "Renderer"
-//                    text: rootData.renderingSettings.renderer
-//                }
-
-//                Text {
-//                    text: "Extensions:"
-//                }
-
                 ResizeableScrollView {
                     implicitWidth: 400
                     implicitHeight: 150
