@@ -12,8 +12,17 @@
 
 TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
     auto checkUserDefaults = [](const cwOpenGLSettings& settings) {
-        CHECK(settings.useDXT1Compression() == true);
-        CHECK(settings.useAnisotropy() == true);
+        if(settings.dxt1Supported()) {
+            CHECK(settings.useDXT1Compression() == true);
+        } else {
+            CHECK(settings.useDXT1Compression() == false);
+        }
+
+        if(settings.anisotropySupported()) {
+            CHECK(settings.useAnisotropy() == true);
+        } else {
+            CHECK(settings.useAnisotropy() == false);
+        }
         CHECK(settings.useMipmaps() == true);
         CHECK(settings.useNativeTextRendering() == false);
         CHECK(settings.minFilter() == cwOpenGLSettings::MinNearest_Mipmap_Linear);
