@@ -19,7 +19,7 @@ CppApplication {
     Depends { name: "s3tc-dxt-decompression" }
 
     cpp.includePaths: ["catch"]
-    cpp.cxxLanguageVersion: "c++14"
+    cpp.cxxLanguageVersion: "c++17"
 
     Properties {
         condition: qbs.targetOS.contains("linux") || qbs.targetOS.contains("macos")
