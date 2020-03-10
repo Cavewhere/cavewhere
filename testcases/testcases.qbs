@@ -14,7 +14,6 @@ CppApplication {
     Depends { name: "bundle" }
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
-    Depends { name: "CaveWhere" }
     Depends { name: "asyncfuture" }
     Depends { name: "s3tc-dxt-decompression" }
 

@@ -36,6 +36,7 @@ Application {
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "bundle" }
     Depends { name: "cavern" }
+    Depends { name: "cavewhere-test" }
 
     consoleApplication: {
         if(qbs.targetOS.contains("windows")) {
