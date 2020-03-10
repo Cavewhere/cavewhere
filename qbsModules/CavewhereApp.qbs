@@ -45,7 +45,7 @@ Application {
         return false
     }
 
-    cpp.cxxLanguageVersion: "c++11"
+    cpp.cxxLanguageVersion: "c++17"
     cpp.treatWarningsAsErrors: true
 
     cpp.includePaths: [
