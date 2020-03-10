@@ -270,7 +270,7 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
     if(!MipmapOnly) {
         QBuffer buffer(&imageData);
         QImageWriter writer(&buffer, format);
-        writer.setCompression(1);
+        writer.setQuality(100); //Lossless
         writer.write(image);
     }
 
