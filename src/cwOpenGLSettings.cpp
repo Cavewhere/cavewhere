@@ -417,7 +417,7 @@ QStringList cwOpenGLSettings::rendererModel() const {
     return renderers;
 }
 
-inline int cwOpenGLSettings::currentSupportedRenderer() const {
+int cwOpenGLSettings::currentSupportedRenderer() const {
     return supportedRenders().indexOf(rendererType());
 }
 
