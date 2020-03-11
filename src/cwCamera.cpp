@@ -208,3 +208,13 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
      projection.setPerspective(55, viewport.width() / (float)viewport.height(), 1, 10000);
      return projection;
  }
+
+ /**
+* Sets the device pixel ratio for the screen that the camera is rendering too
+*/
+ void cwCamera::setDevicePixelRatio(double devicePixelRatio) {
+     if(DevicePixelRatio != devicePixelRatio) {
+         DevicePixelRatio = devicePixelRatio;
+         emit devicePixelRatioChanged();
+     }
+ }

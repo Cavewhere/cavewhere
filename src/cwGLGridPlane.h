@@ -48,6 +48,7 @@ private:
     int vVertex;
     int UniformModelViewProjectionMatrix;
     int UniformModelMatrix;
+    int UniformDevicePixelRatio;
 
     void initializeGeometry();
     void initializeShaders();

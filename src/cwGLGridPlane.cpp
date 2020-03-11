@@ -42,6 +42,7 @@ void cwGLGridPlane::draw() {
 
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * ModelMatrix);
     Program->setUniformValue(UniformModelMatrix, ModelMatrix);
+    Program->setUniformValue(UniformDevicePixelRatio, static_cast<GLfloat>(camera()->devicePixelRatio()));
 
     TriangleVertexBuffer.bind();
 
@@ -125,6 +126,7 @@ void cwGLGridPlane::initializeShaders() {
     vVertex = Program->attributeLocation("vVertex");
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     UniformModelMatrix = Program->uniformLocation("ModelMatrix");
+    UniformDevicePixelRatio = Program->uniformLocation("devicePixelRatio");
 
 //    Program->setUniformValue("colorBG", Qt::gray);
 }

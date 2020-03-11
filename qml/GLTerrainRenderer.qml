@@ -7,6 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import Cavewhere 1.0
+import QtQuick.Window 2.14
 
 RegionViewer {
     id: renderer
@@ -17,7 +18,11 @@ RegionViewer {
 
     clip: true
 
-
+    QQ.Binding {
+        target: camera
+        property: "devicePixelRatio"
+        value: Screen.devicePixelRatio
+    }
 
     TurnTableInteraction {
         id: turnTableInteractionId

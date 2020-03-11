@@ -24,12 +24,16 @@ class cwCamera : public QObject
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)
     Q_PROPERTY(double zoomScale READ zoomScale WRITE setZoomScale NOTIFY zoomScaleChanged)
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
+    Q_PROPERTY(double devicePixelRatio READ devicePixelRatio WRITE setDevicePixelRatio NOTIFY devicePixelRatioChanged)
 
 public:
     explicit cwCamera(QObject *parent = 0);
 
     double zoomScale() const;
     void setZoomScale(double zoomScale);
+
+    double devicePixelRatio() const;
+    void setDevicePixelRatio(double devicePixelRatio);
 
     void setViewport(QRect viewport);
     QRect viewport() const;
@@ -68,6 +72,7 @@ signals:
     void viewMatrixChanged();
     void pixelsPerMeterChanged();
     void zoomScaleChanged();
+    void devicePixelRatioChanged();
 
 public slots:
 
@@ -76,6 +81,7 @@ private:
     QMatrix4x4 ViewMatrix;
     QMatrix4x4 ViewProjectionMatrix;
     cwProjection Projection;
+    double DevicePixelRatio = 1.0; //!<
 
     double ZoomScale; //!<
 
@@ -156,5 +162,12 @@ inline QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 m
 */
 inline double cwCamera::zoomScale() const {
     return ZoomScale;
+}
+
+/**
+*
+*/
+inline double cwCamera::devicePixelRatio() const {
+    return DevicePixelRatio;
 }
 #endif // CWCAMERA_H

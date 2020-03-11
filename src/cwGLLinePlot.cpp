@@ -14,6 +14,7 @@
 #include "cwGLShader.h"
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
+#include "cwScene.h"
 
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
@@ -81,7 +82,7 @@ void cwGLLinePlot::initializeBuffers() {
 void cwGLLinePlot::draw() {
     if(Points.size() <= 0) { return; }
 
-    glLineWidth(1.0);
+    glLineWidth(1.0 * camera()->devicePixelRatio());
 
     ShaderProgram->bind();
 

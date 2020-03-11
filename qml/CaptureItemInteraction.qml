@@ -1,4 +1,5 @@
 import QtQuick 2.0 as QQ
+import QtQuick.Window 2.12
 import Cavewhere 1.0
 import "Utils.js" as Utils
 import "VectorMath.js" as VectorMath
@@ -12,7 +13,7 @@ QQ.Rectangle {
     property bool selected: false
 
     //Private properties
-    property double originalRotation: 0
+    property double _scale: captureScale * Screen.devicePixelRatio
 
     /**
       This find the maxium delta from the x and y.
@@ -44,7 +45,6 @@ QQ.Rectangle {
             console.error("FixedPosition is invalid:" + fixedPosition);
         }
 
-
         var length = 0;
         if(delta.y >= 0 && delta.x >= 0) {
             length = Math.max(delta.y, delta.x);
@@ -66,8 +66,8 @@ QQ.Rectangle {
       QQ.Item.BottomLeft, and QQ.Item.TopLeft
       */
     function fixedPositionToPoint(fixedPosition) {
-        var position = Qt.point(x / captureScale, y / captureScale) //captureItem.positionOnPaper
-        var size = Qt.size(width / captureScale, height / captureScale) //captureItem.paperSizeOfItem
+        var position = Qt.point(x / _scale, y / _scale) //captureItem.positionOnPaper
+        var size = Qt.size(width / _scale, height / _scale) //captureItem.paperSizeOfItem
 
         switch(fixedPosition) {
         case QQ.Item.TopLeft:
@@ -89,7 +89,7 @@ QQ.Rectangle {
       @return double - in paper Units
       */
     function pixelToPaper(numberOfPixels) {
-        return numberOfPixels / interactionId.captureScale
+        return numberOfPixels / (interactionId._scale)
     }
 
     /**
@@ -215,10 +215,10 @@ QQ.Rectangle {
 
             QQ.PropertyChanges {
                 target: interactionId
-                width: captureItem.boundingBox.width * captureScale
-                height: captureItem.boundingBox.height * captureScale;
-                x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * captureScale;
-                y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * captureScale
+                width: captureItem.boundingBox.width * _scale
+                height: captureItem.boundingBox.height * _scale;
+                x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
+                y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
             }
 
             QQ.PropertyChanges {

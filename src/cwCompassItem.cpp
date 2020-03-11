@@ -488,7 +488,7 @@ void cwCompassItem::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatr
     QMatrix4x4 orthoMatrix;
     orthoMatrix.ortho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
 
-    glViewport(0, 0, width(), height()); //camera()->viewport().width(), camera()->viewport().height());
+    glViewport(0, 0, width() * camera()->devicePixelRatio(), height() * camera()->devicePixelRatio()); //camera()->viewport().width(), camera()->viewport().height());
 
     ShadowOutputProgram->bind();
     ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);

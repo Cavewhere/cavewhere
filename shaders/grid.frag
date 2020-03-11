@@ -15,6 +15,7 @@ precision highp float;
 
 varying vec4 vPosition;
 varying vec4 projectedPosition;
+uniform float devicePixelRatio;
 
 float contour(float spacing, float widthPx) {
 
@@ -34,7 +35,8 @@ float contour(float spacing, float widthPx) {
 
 void main() {
 
-    float c = contour(100.0, 1.25) * contour(1000.0, 1.5);
+    float c = contour(100.0, 1.0 * devicePixelRatio)
+            * contour(1000.0, 1.5 * devicePixelRatio);
     c = 1.0 - min(1.0, c);
     gl_FragColor = vec4(c, c, c, c) * vec4(0.0, 0.0, 0.0, 1.0);
 
