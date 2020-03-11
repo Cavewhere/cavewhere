@@ -71,8 +71,9 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
     auto network = loadCave->network();
 
     auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
-        auto foundNeighbors = network.neighbors(stationName).toSet();
-        auto checkNeigbbors = neighbors.toSet();
+        auto neighborsAtStation = network.neighbors(stationName);
+        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
         CHECK(foundNeighbors == checkNeigbbors);
     };
 

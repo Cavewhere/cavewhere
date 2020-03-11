@@ -204,8 +204,8 @@ bool lessThanChunkRect(QRectF first, QRectF second) {
   \brief Get's the visable range of which chunks should be shown
   */
 QPair<int, int> cwSurveyChunkGroupView::VisableRange() {
-    QList<QRectF>::iterator firstIter = qLowerBound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.topLeft(), QSize(1, 1)), lessThanChunkRect);
-    QList<QRectF>::iterator lastIter = qLowerBound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.bottomLeft(), QSize(1, 1)), lessThanChunkRect);
+    QList<QRectF>::iterator firstIter = std::lower_bound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.topLeft(), QSize(1, 1)), lessThanChunkRect);
+    QList<QRectF>::iterator lastIter = std::lower_bound(ChunkBoundingRects.begin(), ChunkBoundingRects.end(), QRectF(ViewportArea.bottomLeft(), QSize(1, 1)), lessThanChunkRect);
 
    // qDebug() << "First: " << firstIter - ChunkBoundingRects.begin() << " Second: " << lastIter - ChunkBoundingRects.begin() << ViewportArea;
 //    if(firstIter != ChunkBoundingRects.end()) {

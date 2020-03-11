@@ -35,6 +35,21 @@ public:
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);
     static QString findExecutable(QStringList executables);
+
+
 };
 
+namespace cw {
+
+template<typename T>
+static QSet<T> toSet(const QList<T>& list) {
+    return QSet<T>(list.begin(), list.end());
+}
+
+template<typename T>
+static QList<T> toList(const QSet<T>& set) {
+    return QList<T>(set.begin(), set.end());
+}
+
+}
 #endif // CWGLOBALS_H

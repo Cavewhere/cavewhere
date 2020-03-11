@@ -368,7 +368,7 @@ void cwBaseTurnTableInteraction::updateRotationMatrix()
     QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, Pitch);
     QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, Azimuth);
     QQuaternion newQuat = pitchQuat * azimuthQuat;
-    QQuaternion rotationDifferance = CurrentRotation.conjugate() * newQuat;
+    QQuaternion rotationDifferance = CurrentRotation.conjugated() * newQuat;
     setCurrentRotation(newQuat);
 
     QMatrix4x4 viewMatrix = Camera->viewMatrix();
@@ -494,7 +494,7 @@ void cwBaseTurnTableInteraction::zoomOrtho()
 Gets rotation current global rotation
 */
 QQuaternion cwBaseTurnTableInteraction::rotation() const {
-    return defaultRotation().conjugate() * CurrentRotation;
+    return defaultRotation().conjugated() * CurrentRotation;
 }
 
 /**

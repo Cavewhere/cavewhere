@@ -288,7 +288,7 @@ void cwLinePlotManager::updateLinePlot() {
     setCaveStationLookupAsStale(false);
 
     emit stationPositionInCavesChanged(resultData.caveData().keys());
-    emit stationPositionInTripsChanged(resultData.trips().toList());
-    emit stationPositionInScrapsChanged(resultData.scraps().toList());
+    emit stationPositionInTripsChanged(cw::toList(resultData.trips()));
+    emit stationPositionInScrapsChanged(cw::toList(resultData.scraps()));
 }
 

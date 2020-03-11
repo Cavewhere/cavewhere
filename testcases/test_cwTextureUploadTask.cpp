@@ -82,7 +82,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
 
         QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
         image = image.convertToFormat(QImage::Format_RGBA8888).mirrored();
-        CHECK(results.mipmaps.first().first == QByteArray(reinterpret_cast<const char*>(image.bits()), image.byteCount()));
+        CHECK(results.mipmaps.first().first == QByteArray(reinterpret_cast<const char*>(image.bits()), image.sizeInBytes()));
     }
 }
 

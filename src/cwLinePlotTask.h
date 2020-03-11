@@ -27,7 +27,7 @@ class cwCave;
 //Qt includes
 #include <QTemporaryFile>
 #include <QVector3D>
-#include <QTime>
+#include <QElapsedTimer>
 #include <QVector>
 #include <QSet>
 
@@ -210,7 +210,7 @@ private:
     LinePlotResultData Result;
 
     //For performance testing
-    QTime Time;
+    QElapsedTimer Time;
 
     void checkForErrors();
     void encodeCaveNames();

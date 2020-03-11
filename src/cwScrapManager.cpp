@@ -197,7 +197,7 @@ void cwScrapManager::updateStationPositionChangedForScraps(QList<cwScrap *> scra
 
 void cwScrapManager::rerunDirtyScraps()
 {
-    updateScrapGeometry(DirtyScraps.toList());
+    updateScrapGeometry({DirtyScraps.begin(), DirtyScraps.end()});
 }
 
 /**

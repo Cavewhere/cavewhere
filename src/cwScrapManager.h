@@ -146,7 +146,7 @@ private slots:
  */
 inline uint qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
-    return qHash(scrapPointer.data());
+    return qHash(scrapPointer.toStrongRef().data());
 }
 
 /**

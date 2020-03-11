@@ -1087,11 +1087,11 @@ QPointF cwScrap::clampToScrap(QPointF point) {
 
     //Left intersection
     QPointF leftIntersectionPoint;
-    QLineF::IntersectType leftType = leftNormal.intersect(leftLine, &leftIntersectionPoint);
+    QLineF::IntersectType leftType = leftNormal.intersects(leftLine, &leftIntersectionPoint);
 
     //Right intersection
     QPointF rightIntersectionPoint;
-    QLineF::IntersectType rightType = rightNormal.intersect(rightLine, &rightIntersectionPoint);
+    QLineF::IntersectType rightType = rightNormal.intersects(rightLine, &rightIntersectionPoint);
 
     if(leftType != QLineF::NoIntersection && pointOnLine(leftLine, leftIntersectionPoint)) {
         //Point is on the left line

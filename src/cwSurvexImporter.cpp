@@ -228,12 +228,12 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
     }
 
     //Make sure we don't reopen the same file twice
-    if(qFind(IncludeFiles, filename) != IncludeFiles.end() && !IncludeFiles.empty()) {
+    if(std::find(IncludeFiles.begin(), IncludeFiles.end(), filename) != IncludeFiles.end() && !IncludeFiles.empty()) {
         //File has already been included... Do nothing
         return false;
     }
 
-    QStringList::iterator iter = qLowerBound(IncludeFiles.begin(), IncludeFiles.end(), filename);
+    QStringList::iterator iter = std::lower_bound(IncludeFiles.begin(), IncludeFiles.end(), filename);
     IncludeFiles.insert(iter, filename);
     return true;
 }

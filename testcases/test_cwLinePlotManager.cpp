@@ -42,8 +42,9 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     cwSurveyNetwork network = cave->network();
 
     auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
-        auto foundNeighbors = network.neighbors(stationName).toSet();
-        auto checkNeigbbors = neighbors.toSet();
+        auto neighborsAtStation = network.neighbors(stationName);
+        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
         CHECK(foundNeighbors == checkNeigbbors);
     };
 

@@ -173,7 +173,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwInteraction>("Cavewhere", 1, 0, "Interaction");
     qmlRegisterType<cwNorthArrowItem>("Cavewhere", 1, 0, "NorthArrowItem");
     qmlRegisterType<cwPositioner3D>("Cavewhere", 1, 0, "Positioner3D");
-    qmlRegisterType<cwAbstract2PointItem>();
+    qmlRegisterAnonymousType<cwAbstract2PointItem>("Cavewhere", 1);
     qmlRegisterType<cwScaleLengthItem>("Cavewhere", 1 ,0, "ScaleLengthItem");
     qmlRegisterType<cwImageProperties>("Cavewhere", 1, 0, "ImageProperties");
     qmlRegisterType<cwUnits>("Cavewhere", 1, 0, "Units");
@@ -189,10 +189,10 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLabel3dView>("Cavewhere", 1, 0, "Label3dView");
     qmlRegisterType<cwLinePlotLabelView>("Cavewhere", 1, 0, "LinePlotLabelView");
     qmlRegisterType<cwScrapItem>("Cavewhere", 1, 0, "ScrapItem");
-    qmlRegisterType<cwAbstractPointManager>();
+    qmlRegisterAnonymousType<cwAbstractPointManager>("Cavewhere", 1);
     qmlRegisterType<cwScrapOutlinePointView>("Cavewhere", 1, 0, "ScrapControlPointView");
     qmlRegisterType<cwSelectionManager>("Cavewhere", 1, 0, "SelectionManager");
-    qmlRegisterType<cwUnitValue>();
+    qmlRegisterAnonymousType<cwUnitValue>("Cavewhere", 1);
     qmlRegisterType<cwImageResolution>("Cavewhere", 1, 0, "ImageResolution");
     qmlRegisterType<cwSceneToImageTask>("Cavewhere", 1, 0, "ExportRegioonViewerToImageTask");
     qmlRegisterType<cwOrthogonalProjection>("Cavewhere", 1, 0, "OrthogonalProjection");
@@ -208,7 +208,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwScene>("Cavewhere", 1, 0, "Scene");
     qmlRegisterType<cwGLViewer>("Cavewhere", 1, 0, "GLViewer");
     qmlRegisterType<QQuickView>("Cavewhere", 1, 0, "QQuickView");
-    qmlRegisterType<QScreen>();
+    qmlRegisterAnonymousType<QScreen>("Cavewhere", 1);
     qmlRegisterType<cwScale>("Cavewhere", 1, 0, "Scale");
     qmlRegisterType<cwBaseTurnTableInteraction>("Cavewhere", 1, 0, "BaseTurnTableInteraction");
     qmlRegisterType<cwCaptureViewport>("Cavewhere", 1, 0, "CaptureViewport");
@@ -223,11 +223,11 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");
     qmlRegisterType<cwPage>("Cavewhere", 1, 0, "Page");
     qmlRegisterType<QUndoStack>("Cavawhere", 1, 0, "UndoStack");
-    qmlRegisterType<cwPageViewAttachedType>();
-    qmlRegisterType<cwBaseNotePointInteraction>();
+    qmlRegisterAnonymousType<cwPageViewAttachedType>("Cavewhere", 1);
+    qmlRegisterAnonymousType<cwBaseNotePointInteraction>("Cavewhere", 1);
     qmlRegisterType<cwBaseNoteLeadInteraction>("Cavewhere", 1, 0, "BaseNoteLeadInteraction");
     qmlRegisterType<cwScrapLeadView>("Cavewhere", 1, 0, "ScrapLeadView");
-    qmlRegisterType<cwScrapPointView>();
+    qmlRegisterAnonymousType<cwScrapPointView>("Cavewhere", 1);
     qmlRegisterType<cwRegionTreeModel>("Cavewhere", 1, 0, "RegionTreeModel");
     qmlRegisterType<cwLeadView>("Cavewhere", 1, 0, "LeadView");
     qmlRegisterType<cwLinkGenerator>("Cavewhere", 1, 0, "LinkGenerator");

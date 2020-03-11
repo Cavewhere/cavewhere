@@ -19,6 +19,7 @@ CppApplication {
 
     cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++17"
+    cpp.treatWarningsAsErrors: true
 
     Properties {
         condition: qbs.targetOS.contains("linux") || qbs.targetOS.contains("macos")

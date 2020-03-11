@@ -115,18 +115,18 @@ QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork &n1, const cw
         return QStringList();
     }
 
-    auto stations1 = n1.stations().toSet();
-    auto stations2 = n2.stations().toSet();
+    auto stations1 = cw::toSet(n1.stations());
+    auto stations2 = cw::toSet(n2.stations());
 
     auto newStations1 = stations1 - stations2;
     auto newStations2 = stations2 - stations1;
     auto sameStations = stations1 & stations2;
 
-    QStringList changedStations = newStations1.toList() + newStations2.toList();
+    QStringList changedStations = cw::toList(newStations1) + cw::toList(newStations2);
 
     for(auto station : sameStations) {
-        auto neighbors1 = n1.neighbors(station).toSet();
-        auto neighbors2 = n2.neighbors(station).toSet();
+        auto neighbors1 = cw::toSet(n1.neighbors(station));
+        auto neighbors2 = cw::toSet(n2.neighbors(station));
         if(neighbors1 != neighbors2) {
             changedStations.append(station);
         }

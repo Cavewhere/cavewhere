@@ -505,7 +505,7 @@ QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon) const
 
         if(!newPoints.isEmpty()) {
             //Sort new points by distance to line.p1()
-            qStableSort(newPoints.begin(), newPoints.end(), distanceLessThan);
+            std::stable_sort(newPoints.begin(), newPoints.end(), distanceLessThan);
 
             //Add the sorted points into realIntersectionPolygon
             for(int ii = 0; ii < newPoints.size(); ii++) {
@@ -850,7 +850,7 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
         //Do all the intersections
         QPointF intersectionPoint;
         foreach(QLineF line, polygonLines) {
-            if(ray.intersect(line, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(ray.intersects(line, &intersectionPoint) == QLineF::BoundedIntersection) {
                 double percentX = fabs(intersectionPoint.x() - point2D.x()) / point2D.x();
                 double percentY = fabs(intersectionPoint.y() - point2D.y()) / point2D.y();
 
@@ -1076,7 +1076,7 @@ bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& qua
     for(int i = 0; i < polygon.size() - 1; i++) {
         QLineF polygonEdge(polygon.at(i), polygon.at(i + 1));
         foreach(QLineF edge, edges) {
-            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(polygonEdge.intersects(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
                 return true;
             }
         }
@@ -1085,7 +1085,7 @@ bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& qua
     if(!polygon.isClosed()) {
         QLineF polygonEdge(polygon.first(), polygon.last());
         foreach(QLineF edge, edges) {
-            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(polygonEdge.intersects(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
                 return true;
             }
         }

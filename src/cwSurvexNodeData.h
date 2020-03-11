@@ -39,7 +39,7 @@ private:
  */
 inline QStringList cwSurvexNodeData::exportStations() const
 {
-    return QStringList(ExportStations.toList());
+    return QStringList(ExportStations.begin(), ExportStations.end());
 }
 
 /**

@@ -189,10 +189,10 @@ QList<cwUsedStationsTask::SurveyGroup> cwUsedStationsTask::SurveyGroup::createCo
     }
 
     //Sort the non-numeric stations by string
-    qSort(numericStations);
+    std::sort(numericStations.begin(), numericStations.end());
 
     //Sort the numericStations by number, use stable sort because items are mostely sorted
-    qStableSort(numericStations.begin(), numericStations.end(), lessThanForNumericStation);
+    std::stable_sort(numericStations.begin(), numericStations.end(), lessThanForNumericStation);
 
     //Group the numericStations into contious groups
     QList<SurveyGroup> continousGroups;
