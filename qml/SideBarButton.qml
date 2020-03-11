@@ -6,11 +6,11 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
+import QtQuick.Layouts 1.12
 
 QQ.Rectangle {
     id: button
-    width: 100
-    height: 85
+    height: columnLayoutId.height + 10
     color: "#00000000"
     clip: true;
 
@@ -25,37 +25,28 @@ QQ.Rectangle {
     //Called when troggle is true
     signal buttonIsTroggled()
 
-    Text {
-        id: textLabel
-        color: "#ffffff"
-        text: "text"
-        smooth: true
-        style: Text.Sunken
-        anchors.top: icon.bottom
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.topMargin: 3
-        anchors.rightMargin: 0
-        anchors.leftMargin: 0
-        anchors.bottomMargin: 3
-        font.bold: true
-        horizontalAlignment: Text.AlignHCenter
-        font.pointSize: 14
-    }
+    ColumnLayout {
+        id: columnLayoutId
+        anchors.centerIn: parent
 
-    QQ.Image {
-        id: icon
-        width: 94
-        height: 52
-        anchors.top: parent.top
-        anchors.topMargin: 3
-        anchors.right: parent.right
-        anchors.rightMargin: 3
-        anchors.left: parent.left
-        anchors.leftMargin: 3
-        fillMode: QQ.Image.PreserveAspectFit
-        smooth: true
+        QQ.Image {
+            id: icon
+            width: 94
+            height: 52
+            fillMode: QQ.Image.PreserveAspectFit
+            smooth: true
+        }
+
+        Text {
+            id: textLabel
+            color: "#ffffff"
+            text: "text"
+            smooth: true
+            style: Text.Sunken
+            font.bold: true
+            Layout.alignment: Qt.AlignHCenter
+            font.pointSize: 14
+        }
     }
 
     QQ.Rectangle {
