@@ -285,7 +285,6 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
     }
 
     *imageIds = addImageToDatabase(image, format, imageData);
-    qDebug() << "Adding image to database:" << imageIds->original();
 }
 
 /**
