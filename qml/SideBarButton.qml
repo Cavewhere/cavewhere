@@ -31,11 +31,9 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
-            width: 94
-            height: 52
-            fillMode: QQ.Image.PreserveAspectFit
             smooth: true
         }
+
 
         Text {
             id: textLabel

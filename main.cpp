@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(CAVEWHERE_VERSION);
 
     cwOpenGLSettings::setApplicationRenderer();
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     cwApplication a(argc, argv);
 

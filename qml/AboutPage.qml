@@ -1,9 +1,10 @@
 import QtQuick 2.0 as QQ
+import QtQuick.Layouts 1.12
 import Cavewhere 1.0
 
 StandardPage {
 
-    QQ.Column {
+    ColumnLayout {
         id: columnId
         anchors.centerIn: parent
 
