@@ -195,7 +195,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
                     initSettings->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
                     checker[&dxt1AlgoSpy]++;
 
-                    CHECK(initSettings->dxt1Algorithm() == settings.value(initSettings->keyWithDevice("DXT1GenerateAlgroKey")).toInt());
+                    CHECK(initSettings->dxt1Algorithm() == settings.value(initSettings->keyWithDevice("dxt1GenerateAlgroKey")).toInt());
 
                     checker.checkSpies();
                 }

@@ -370,6 +370,7 @@ void cwOpenGLSettings::setApplicationRenderer()
 
 void cwOpenGLSettings::setDXT1Algorithm(DXT1Algorithm dxt1Algorithm) {
     if(mDXT1Algorithm != dxt1Algorithm) {
+        Q_ASSERT(thread() == QThread::currentThread());
         mDXT1Algorithm = dxt1Algorithm;
         updateSettingsWithDevice(DXT1GenerateAlgroKey, mDXT1Algorithm);
         emit dxt1AlgorithmChanged();
@@ -436,6 +437,7 @@ QString cwOpenGLSettings::allVersionInfo() const {
         QString("Shader Version: %2").arg(shadingVersion()),
         QString("Vendor: %1").arg(vendor()),
         QString("Renderer: %1").arg(renderer()),
+        QString("Threaded Rendering: %1").arg(QOpenGLContext::supportsThreadedOpenGL() ? "Yes" : "No"),
         QString("Extensions:")
     };
 
