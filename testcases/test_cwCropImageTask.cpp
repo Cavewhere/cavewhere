@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QColor>
+#include <QColorSpace>
 
 TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask]") {
 
@@ -396,6 +397,13 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 
             CHECK(scaleTex.x() == 1.0);
             CHECK(scaleTex.y() == 1.0);
+
+
+            QSize originalSize;
+            QImage croppedImageOriginal = provider.requestImage(QString::number(croppedImageId.original()), &originalSize, QSize());
+            CHECK(croppedImageOriginal.size() == originalSize);
+            CHECK(croppedImageOriginal.size() == croppedSizes.first().dim);
+
         }
     }
 }

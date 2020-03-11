@@ -35,6 +35,7 @@
 #include <QtConcurrentMap>
 #include <QOpenGLContext>
 #include <QPainter>
+#include <QColorSpace>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -264,17 +265,27 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
   */
 void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
 {
-    QByteArray format = "WEBP";
+    QByteArray format = "webp";
     QByteArray imageData;
 
     if(!MipmapOnly) {
+
         QBuffer buffer(&imageData);
+        buffer.open(QIODevice::WriteOnly);
         QImageWriter writer(&buffer, format);
-        writer.setQuality(100); //Lossless
-        writer.write(image);
+        writer.setQuality(100);
+
+        //FIXME: QImage doesn't support QColorSpaces correctly
+        //https://bugreports.qt.io/browse/QTBUG-82803
+        QImage colorSpaceImage = image;
+        colorSpaceImage.setColorSpace(QColorSpace());
+
+        bool writeSuccessful = writer.write(colorSpaceImage);
+        Q_ASSERT(writeSuccessful);
     }
 
     *imageIds = addImageToDatabase(image, format, imageData);
+    qDebug() << "Adding image to database:" << imageIds->original();
 }
 
 /**

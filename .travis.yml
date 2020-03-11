@@ -26,6 +26,7 @@ before_install:
      - sudo apt-get -y install qt514quickcontrols2
      - sudo apt-get -y install qt514graphicaleffects
      - sudo apt-get -y install qt514script
+     - sudo apt-get -y install qt514imageformats
      - sudo apt-get -y install libgl1-mesa-glx
      - sudo apt-get -y install libgl1-mesa-dev
      - ls -l /usr/lib/x86_64-linux-gnu/libGL.*
