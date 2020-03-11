@@ -22,7 +22,7 @@ CaveWhere is built around Qt and QBS.
 ```{sh}
 sudo add-apt-repository -y ppa:beineri/opt-qt-5.14.1-bionic
 sudo apt-get -y update
-sudo apt-get -y install git build-essential qt514-meta-minimal qt514svg qt514quickcontrols qt514quickcontrols2 qt514graphicaleffects qt514script libgl1-mesa-glx libgl1-mesa-dev
+sudo apt-get -y install git build-essential qt514-meta-minimal qt514svg qt514quickcontrols qt514quickcontrols2 qt514graphicaleffects qt514script qt514imageformats libgl1-mesa-glx libgl1-mesa-dev
 ```
 
 ### Make sure libGL.so exists.
@@ -45,7 +45,7 @@ building it from source is the way to go.
 git clone https://github.com/qbs/qbs.git
 cd qbs
 git checkout v1.15.0
-/opt/qt512/bin/qmake -r qbs.pro && make -j `nproc`
+/opt/qt514/bin/qmake -r qbs.pro && make -j `nproc`
 sudo make install
 cd ..
 qbs --version
