@@ -117,14 +117,15 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
 
     auto filename = copyToTempFolder("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw");
 
-    rootData->project()->loadFile(filename);
-    rootData->project()->waitLoadToFinish();
 
     QEventLoop loop;
-    QTimer::singleShot(2000, [firstAppEngine, &loop]() {
+    QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
+        rootData->project()->loadFile(filename);
 
-        delete firstAppEngine;
-        loop.quit();
+        QTimer::singleShot(2000, [firstAppEngine, &loop](){
+            delete firstAppEngine;
+            loop.quit();
+        });
     });
 
     loop.exec();
