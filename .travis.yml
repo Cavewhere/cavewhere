@@ -19,6 +19,7 @@ before_install:
     #This PPA has all the QT versions, just update it to change versions
     #Full list here: https://launchpad.net/~beineri
      - sudo add-apt-repository -y ppa:beineri/opt-qt-5.14.1-bionic
+     - sudo add-apt-repository -y ppa:mardy/qbs-on-lts
      - sudo apt-get -y update
      - sudo apt-get -y install qt514-meta-minimal
      - sudo apt-get -y install qt514svg
@@ -29,14 +30,16 @@ before_install:
      - sudo apt-get -y install qt514imageformats
      - sudo apt-get -y install libgl1-mesa-glx
      - sudo apt-get -y install libgl1-mesa-dev
+     - sudo apt-get -y install qbs
      - ls -l /usr/lib/x86_64-linux-gnu/libGL.*
+
 #     - sudo ln -s /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/libGL.so
-     - git clone https://github.com/qbs/qbs.git
-     - cd qbs
-     - git checkout v1.15.0
-     - /opt/qt514/bin/qmake -r qbs.pro && make -j `nproc`
-     - sudo make install
-     - cd ..
+#     - git clone https://github.com/qbs/qbs.git
+#     - cd qbs
+#     - git checkout v1.15.0
+#     - /opt/qt514/bin/qmake -r qbs.pro && make -j `nproc`
+#     - sudo make install
+#     - cd ..
      - qbs --version
 script:
     - echo $TARGET_NAME
