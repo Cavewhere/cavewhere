@@ -1,8 +1,6 @@
 leak:*libGLX_mesa.so*
-leak:*dewalls*
 leak:*libfontconfig.so*
 leak:*libfreetype.so*
-leak:QArrayData::allocate
 leak:*libwebp.so*
-leak:QListData::realloc_grow(int)
-leak:QListData::detach_grow(int*, int)
+
+leak:<unknown module>
