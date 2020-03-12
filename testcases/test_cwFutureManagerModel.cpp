@@ -110,7 +110,7 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
             combine << row.future;
         }
 
-        CHECK(cwAsyncFuture::waitForFinished(combine.future(), 2000));
+        CHECK(cwAsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
 
         CHECK(model.rowCount() == 0);
         spyChecker[&rowsRemovedSpy] = numberOfTasks;
