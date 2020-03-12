@@ -246,56 +246,6 @@ void cwTask::done() {
 }
 
 /**
-  \brief Starts running the task on the task's thread
-
-  THIS should only be called from start()
-  */
-void cwTask::startOnCurrentThread() {
-
-    if(!isParentsRunning()) {
-        //Parent task aren't running
-        stop(); //Stop
-        done(); //We are finished
-        return;
-    }
-
-    {
-        QWriteLocker locker(&StatusLocker);
-
-        Q_ASSERT(!isReadyPrivate()); //The thread should definitally not me running here
-
-        if(CurrentStatus != PreparingToStart) {
-            done();
-            return;
-        }
-
-        //Make sure we are preparing to start
-        CurrentStatus = Running;
-
-        NeedsRestart = false;
-    }
-
-    //Set the progress to zero
-    setProgress(0);
-
-    if(isUsingThreadPool()) {
-        QThreadPool::globalInstance()->start(this);
-    } else {
-        run();
-    }
-}
-
-/**
-  \brief Moves the task to the thread
-
-  This moves this task and all it children to the thread
-  */
-void cwTask::changeThreads(QThread* thread) {
-    moveToThread(thread);
-    emit threadChanged();
-}
-
-/**
   \brief For internal use only
 
   This isn't thread safe function, make it thread safe by locking StatusLocker, before
@@ -400,7 +350,7 @@ void cwTask::run()
  *
  * This blocks the current thread until the cwTask finishes, ei. emit finished signal
  */
-void cwTask::waitToFinish()
+void cwTask::waitToFinish(cwTask::WaitToFinishType type)
 {
     if(isUsingThreadPool()) {
         //We need to process the events because there could be events that cause the status to change
@@ -408,7 +358,13 @@ void cwTask::waitToFinish()
 
         {
             QReadLocker locker(&StatusLocker);
-            switch (CurrentStatus) {
+
+            int currentStatus = CurrentStatus;
+            if(type == IgnoreRestart && (CurrentStatus == Restarting || CurrentStatus == Restart)) {
+                currentStatus = Ready;
+            }
+
+            switch (currentStatus) {
             case Ready:
                 break;
             case PreparingToStart:

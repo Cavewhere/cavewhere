@@ -50,13 +50,13 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
     LinePlotTask = new cwLinePlotTask();
-    connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(rerunSurvex())); //So the task is rerun
+    connect(LinePlotTask, SIGNAL(shouldRerun()), this, SLOT(rerunSurvex())); //So the task is rerun
     connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlot);
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
     LinePlotTask->stop();
-    LinePlotTask->waitToFinish();
+    LinePlotTask->waitToFinish(cwTask::IgnoreRestart);
 
     delete LinePlotTask;
 }

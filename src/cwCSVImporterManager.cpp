@@ -40,9 +40,6 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
 
     LineModel->setColumnModel(ColumnsModel);
 
-    //This allows caves to be moved
-    Settings.setOutputThread(thread());
-
     //For restarts
     connect(ColumnsModel, &QAbstractItemModel::modelReset, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsRemoved, this, &cwCSVImporterManager::startParsing);
@@ -177,6 +174,7 @@ void cwCSVImporterManager::startParsing()
 
         LastCaves = output->takeCaves();
         for(auto cave : LastCaves) {
+            cave->moveToThread(thread());
             cave->setParent(this);
         }
     }

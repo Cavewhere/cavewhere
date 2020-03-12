@@ -12,6 +12,9 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 
+//Qt includes
+#include <QThread>
+
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
     Length(new cwLength(this)),
@@ -50,7 +53,7 @@ cwCave& cwCave::operator=(const cwCave& object) {
 }
 
 cwCave::~cwCave() {
-//    qDebug() << "Cave:" << this;
+    Q_ASSERT(thread() == QThread::currentThread() || thread() == nullptr);
 }
 
 /**

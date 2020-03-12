@@ -66,7 +66,7 @@ cwImportTreeDataDialog::cwImportTreeDataDialog(Names names, cwTreeDataImporter* 
 
 cwImportTreeDataDialog::~cwImportTreeDataDialog() {
     Importer->stop();
-    Importer->waitToFinish();
+    Importer->waitToFinish(cwTask::IgnoreRestart);
     delete Importer;
 }
 

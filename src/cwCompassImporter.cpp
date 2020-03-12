@@ -59,6 +59,10 @@ void cwCompassImporter::runTask()
         }
     }
 
+    for(auto& cave : Caves) {
+        cave.moveToThread(nullptr);
+    }
+
     done();
 }
 

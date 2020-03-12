@@ -34,11 +34,7 @@ public:
     class Output {
     public:
 
-        ~Output() {
-            for(auto cave : caves) {
-                delete cave;
-            }
-        }
+        ~Output();
 
         QList<cwCave*> takeCaves() {
             auto cavesToTake = caves;

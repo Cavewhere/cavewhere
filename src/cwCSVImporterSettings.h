@@ -43,9 +43,6 @@ public:
     int previewLines() const;
     void setPreviewLines(int previewLines);
 
-    QThread* outputThread() const;
-    void setOutputThread(QThread* thread);
-
 private:
     QSharedDataPointer<cwCSVImporterSettingsData> data;
 };

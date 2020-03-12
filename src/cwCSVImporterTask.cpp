@@ -9,6 +9,10 @@
 #include "cwTripCalibration.h"
 #include "cwColumnNameModel.h"
 
+//Qt includes
+#include <QThread>
+#include <QMetaObject>
+
 cwCSVImporterTask::cwCSVImporterTask()
 {
 
@@ -238,7 +242,7 @@ cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
     output->caves.append(cave);
     output->lineCount = lineCount;
 
-    cave->moveToThread(settings().outputThread());
+    cave->moveToThread(nullptr);
 
     return output;
 }
@@ -263,4 +267,10 @@ int cwCSVImporterTask::lrudStationIndex(const cwSurveyChunk *chunk, const cwStat
     }
 
     return -1;
+}
+
+cwCSVImporterTask::Output::~Output() {
+    for(auto cave : caves) {
+        delete cave;
+    }
 }
