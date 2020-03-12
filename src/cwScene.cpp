@@ -29,6 +29,9 @@ cwScene::cwScene(QObject *parent) :
 cwScene::~cwScene()
 {
     delete GeometryItersecter;
+    for(auto command : CommandQueue) {
+        delete command;
+    }
 }
 
 /**
@@ -66,6 +69,7 @@ void cwScene::addItem(cwGLObject *item)
     if(!RenderingObjects.contains(item)) {
         RenderingObjects.append(item);
         item->setScene(this);
+        item->setParent(this);
         update();
     }
 }
@@ -164,5 +168,12 @@ void cwScene::checkForGLError(const QByteArray& location)
     auto error = glGetError();
     if(error != GL_NO_ERROR) {
         qDebug() << "GL Error:" << hex << error << location;
+    }
+}
+
+void cwScene::releaseResources()
+{
+    for(auto object : RenderingObjects) {
+        object->releaseResources();
     }
 }

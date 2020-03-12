@@ -34,6 +34,7 @@
 #include <QSettings>
 #include <QCoreApplication>
 #include <QtConcurrent>
+#include <QSharedPointer>
 
 //Async Future
 #include <asyncfuture.h>
@@ -214,14 +215,14 @@ void cwProject::save() {
   */
 void cwProject::privateSave() {
 
-    cwCavingRegion* region = new cwCavingRegion(*Region);
+    auto region = QSharedPointer<cwCavingRegion>::create(*Region);
     QString filename = this->filename();
     region->moveToThread(nullptr);
 
     auto future = QtConcurrent::run([region, filename]() {
         cwRegionSaveTask saveTask;
         saveTask.setDatabaseFilename(filename);
-        return saveTask.save(region);
+        return saveTask.save(region.get());
     });
 
     if(FutureManager) {

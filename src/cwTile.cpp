@@ -26,6 +26,13 @@ void cwTile::initialize() {
     vVertex = Program->attributeLocation("vVertex");
 }
 
+void cwTile::releaseResources()
+{
+    deleteShaders(Program);
+    TriangleIndexBuffer.destroy();
+    TriangleVertexBuffer.destroy();
+}
+
 /**
   \brief Draws the
   */

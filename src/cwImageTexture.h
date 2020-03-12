@@ -33,6 +33,7 @@ public:
     ~cwImageTexture();
 
     void initialize();
+    void releaseResources();
 
     void bind();
     void release();

@@ -13,7 +13,7 @@
 
 TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
 
-    std::unique_ptr<cwProject> project(fileToProject("://datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw"));
+    auto project = fileToProject("://datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw");
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 

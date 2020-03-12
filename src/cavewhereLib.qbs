@@ -152,10 +152,6 @@ DynamicLibrary {
             }
             return flags;
         }
-
-//        cpp.cxxFlags: [
-//            "-Werror" //Treat warnings as errors
-//        ]
     }
 
     Properties {

@@ -11,6 +11,9 @@
 #include "cwInitCommand.h"
 #include "cwUpdateDataCommand.h"
 
+//Qt includes
+#include <QOpenGLShaderProgram>
+
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent),
     Scene(nullptr),
@@ -87,6 +90,16 @@ void cwGLObject::setScene(cwScene *scene)
      QueuedDataCommand = new cwUpdateDataCommand();
      QueuedDataCommand->setGLObject(this);
      Scene->addSceneCommand(QueuedDataCommand);
+ }
+
+ void cwGLObject::deleteShaders(QOpenGLShaderProgram *program)
+ {
+     if(program) {
+         for(auto shader : program->shaders()) {
+             delete shader;
+         }
+         delete program;
+     }
  }
 
 /**

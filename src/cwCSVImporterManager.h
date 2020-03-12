@@ -4,12 +4,14 @@
 //Qt includes
 #include <QObject>
 #include <QList>
+#include <QtConcurrent>
 
 //Our includes
 class cwColumnNameModel;
 class cwCSVImporterTask;
 class cwErrorModel;
 class cwCSVLineModel;
+#include "cwCSVImporterTask.h"
 #include "cwCSVImporterSettings.h"
 #include "cwGlobals.h"
 #include "cwCave.h"
@@ -109,13 +111,13 @@ private:
     int LineCount = 0;
     QList<cwCave*> LastCaves;
 
-    cwCSVImporterTask* Task;
+    QFuture<void> CSVFinishedFuture;
+    QFuture<void> CSVRunFuture;
 
     void deleteOldCaves();
 
 private slots:
     void startParsing();
-    void updateModel();
 };
 
 /**

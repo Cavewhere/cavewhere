@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QPointer>
 class QQuickItem;
 
 //Our includes
@@ -37,7 +38,7 @@ signals:
 public slots:
 
 private:
-    cwLabel3dView* ParentView;
+    QPointer<cwLabel3dView> ParentView;
     QList<cwLabel3dItem> Labels;
     QList<QQuickItem*> LabelItems;
     

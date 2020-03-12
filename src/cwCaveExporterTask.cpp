@@ -21,7 +21,7 @@ cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
 
 cwCaveExporterTask::~cwCaveExporterTask()
 {
-    Cave->deleteLater();
+    delete Cave;
 }
 
 /**

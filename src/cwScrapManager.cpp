@@ -44,6 +44,7 @@ cwScrapManager::~cwScrapManager()
 {
     TriangulateTask->stop();
     TriangulateTask->waitToFinish();
+    delete TriangulateTask;
 }
 
 /**

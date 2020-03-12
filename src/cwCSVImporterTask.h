@@ -12,9 +12,9 @@ class cwSurveyChunk;
 //Qt includes
 #include <QString>
 
-class CAVEWHERE_LIB_EXPORT cwCSVImporterTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwCSVImporterTask
 {
-    Q_OBJECT
+
 public:
     enum Column {
         ToStation,
@@ -33,6 +33,19 @@ public:
 
     class Output {
     public:
+
+        ~Output() {
+            for(auto cave : caves) {
+                delete cave;
+            }
+        }
+
+        QList<cwCave*> takeCaves() {
+            auto cavesToTake = caves;
+            caves.clear();
+            return cavesToTake;
+        }
+
         QList<cwCave*> caves;
         QList<cwError> errors;
         QList<QStringList> lines;
@@ -40,24 +53,19 @@ public:
         int lineCount = 0;
     };
 
+    typedef QSharedPointer<Output> OutputPtr;
+
     cwCSVImporterTask();
     virtual ~cwCSVImporterTask() {}
 
     void setSettings(const cwCSVImporterSettings& settings);
     cwCSVImporterSettings settings() const;
 
-    Output output() const;
-
-protected:
-    void runTask();
+    OutputPtr operator()() const;
 
 private:
-
     //Input
     cwCSVImporterSettings Settings;
-
-    //Output
-    Output CSVOutput;
 
     //Helper functions
     int lrudStationIndex(const cwSurveyChunk *chunk, const cwStation& from, const cwStation& to) const;

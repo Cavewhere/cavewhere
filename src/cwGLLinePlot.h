@@ -24,6 +24,7 @@ public:
     explicit cwGLLinePlot(QObject *parent = 0);
 
     virtual void initialize();
+    void releaseResources();
     virtual void draw();
 
     void setPoints(QVector<QVector3D> pointData);

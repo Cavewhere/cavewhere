@@ -50,6 +50,7 @@ cwCave& cwCave::operator=(const cwCave& object) {
 }
 
 cwCave::~cwCave() {
+//    qDebug() << "Cave:" << this;
 }
 
 /**
@@ -261,8 +262,8 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
 
 cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
-        foreach(cwTrip* trip, Trips) {
-            trip->deleteLater();
+        for(auto trip : Trips) {
+            delete trip;
         }
     }
 }

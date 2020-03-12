@@ -30,7 +30,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
     QString datasetFile = copyToTempFolder(":/datasets/compass/compassImportExport.cw");
 
-    cwProject* project = new cwProject();
+    auto project = std::make_unique<cwProject>();
     project->loadFile(datasetFile);
 
     project->waitLoadToFinish();
@@ -44,7 +44,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     INFO("Exporting cave to " << exportFile);
     cwCave* loadedCave = project->cavingRegion()->cave(0);
 
-    cwCompassExportCaveTask* exportToCompass = new cwCompassExportCaveTask();
+    auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
     exportToCompass->setData(*loadedCave);
     exportToCompass->setOutputFile(exportFile);
     exportToCompass->start();
@@ -53,8 +53,8 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     REQUIRE(QFileInfo::exists(exportFile) == true);
 
 
-    cwCompassImporter* importFromCompass = new cwCompassImporter();
-    QSignalSpy messageSpy(importFromCompass, SIGNAL(statusMessage(QString)));
+    auto importFromCompass = std::make_unique<cwCompassImporter>();
+    QSignalSpy messageSpy(importFromCompass.get(), SIGNAL(statusMessage(QString)));
     importFromCompass->setCompassDataFiles(QStringList() << exportFile);
     importFromCompass->start();
     importFromCompass->waitToFinish();
@@ -73,15 +73,15 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
     QList<cwCave> caves = importFromCompass->caves();
     REQUIRE(caves.size() == 1);
 
-    cwCavingRegion* importedRegion = new cwCavingRegion();
+    auto importedRegion = std::make_unique<cwCavingRegion>();
     importedRegion->addCave(new cwCave(caves.first()));
     CHECK(importedRegion->caveCount() == 1);
 
-    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(project->cavingRegion());
     plotManager->waitToFinish();
 
-    plotManager->setRegion(importedRegion);
+    plotManager->setRegion(importedRegion.get());
     plotManager->waitToFinish();
 
     cwCave* importedCave = importedRegion->cave(0);
@@ -95,7 +95,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
 
     QString datasetFile = copyToTempFolder(":/datasets/compass/compassExportMissingLRUD.cw");
 
-    cwProject* project = new cwProject();
+    auto project = std::make_unique<cwProject>();
     project->loadFile(datasetFile);
 
     project->waitLoadToFinish();
@@ -109,7 +109,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     INFO("Exporting cave to " << exportFile);
     cwCave* loadedCave = project->cavingRegion()->cave(0);
 
-    cwCompassExportCaveTask* exportToCompass = new cwCompassExportCaveTask();
+    auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
     exportToCompass->setData(*loadedCave);
     exportToCompass->setOutputFile(exportFile);
     exportToCompass->start();
@@ -128,7 +128,7 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
     CHECK(validatedFile.atEnd() == true);
     CHECK(exportedFile.atEnd() == true);
 
-    cwCompassImporter* importFromCompass = new cwCompassImporter();
+    auto importFromCompass = std::make_unique<cwCompassImporter>();
     importFromCompass->setCompassDataFiles(QStringList() << exportFile);
     importFromCompass->start();
     importFromCompass->waitToFinish();

@@ -55,7 +55,6 @@ cwImageTexture::cwImageTexture(QObject *parent) :
  */
 cwImageTexture::~cwImageTexture()
 {
-    deleteGLTexture();
 }
 
 /**
@@ -110,6 +109,11 @@ void cwImageTexture::initialize()
     glBindTexture(GL_TEXTURE_2D, 0);
 
     setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
+}
+
+void cwImageTexture::releaseResources()
+{
+    deleteGLTexture();
 }
 
 /**
@@ -279,7 +283,9 @@ void cwImageTexture::startLoadingImage()
 void cwImageTexture::deleteGLTexture()
 {
     if(TextureId > 0) {
-        glDeleteTextures(0, &TextureId);
+        if(QOpenGLContext::currentContext()) {
+            glDeleteTextures(0, &TextureId);
+        }
         TextureId = 0;
         DeleteTexture = false;
         markAsDirty();

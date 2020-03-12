@@ -1,9 +1,9 @@
 #include "TestHelper.h"
 #include "catch.hpp"
 
-cwProject *fileToProject(QString filename) {
-    cwProject* project = new cwProject();
-    fileToProject(project, filename);
+std::shared_ptr<cwProject> fileToProject(QString filename) {
+    auto project = std::make_shared<cwProject>();
+    fileToProject(project.get(), filename);
     return project;
 }
 

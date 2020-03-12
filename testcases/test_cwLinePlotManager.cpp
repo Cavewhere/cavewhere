@@ -28,14 +28,14 @@
 #include <QApplication>
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
-    cwProject* project = fileToProject(":/datasets/network.cw");
+    auto project = fileToProject(":/datasets/network.cw");
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 
     cwCave* cave = project->cavingRegion()->cave(0);
     cave->setStationPositionLookup(cwStationPositionLookup());
 
-    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(project->cavingRegion());
     plotManager->waitToFinish();
 
@@ -80,7 +80,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
     chunk->appendShot(s1, s2, shot1);
 
-    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    auto plotManager = std::make_unique<cwLinePlotManager>();
 
     SECTION("Setting the region should run line plot generation") {
         plotManager->setRegion(&region);

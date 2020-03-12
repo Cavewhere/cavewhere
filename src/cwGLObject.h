@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QOpenGLFunctions>
+class QOpenGLShaderProgram;
 
 //Our includes
 class cwCamera;
@@ -29,6 +30,7 @@ public:
     //These methods should only be called in the rendering thread
     void initilizeGLFunctions();
     virtual void initialize() = 0;
+    virtual void releaseResources() = 0;
     virtual void draw() = 0;
     virtual void updateData();
 
@@ -41,12 +43,17 @@ public:
 
     void markDataAsDirty();
 
+    static void deleteShaders(QOpenGLShaderProgram* program);
+
+
 private:
     cwScene* Scene;
 
     //This is the last QueuedDataCommand, if this isn't nullptr
     //Then this command
     cwUpdateDataCommand* QueuedDataCommand;
+
+protected:
 
 };
 

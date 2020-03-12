@@ -29,6 +29,8 @@ cwTrip::cwTrip(QObject *parent) :
     ErrorModel = new cwErrorModel(this);
 
     Notes->setParentTrip(this);
+
+//    qDebug() << "Creating:" << this;
 }
 
 void cwTrip::Copy(const cwTrip& object)
@@ -92,6 +94,7 @@ cwTrip& cwTrip::operator=(const cwTrip& object) {
 
 cwTrip::~cwTrip()
 {
+//    qDebug() << "Deleting trip:" << this;
 }
 
 /**

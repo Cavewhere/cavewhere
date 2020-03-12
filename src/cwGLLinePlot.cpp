@@ -31,6 +31,13 @@ void cwGLLinePlot::initialize() {
     initializeBuffers();
 }
 
+void cwGLLinePlot::releaseResources()
+{
+    deleteShaders(ShaderProgram);
+    LinePlotIndexBuffer.destroy();
+    LinePlotVertexBuffer.destroy();
+}
+
 /**
   This initializes all the shaders for the line plot
   */
