@@ -8,14 +8,17 @@
 #ifndef CWSURVERYCHUNKGROUP_H
 #define CWSURVERYCHUNKGROUP_H
 
+#include <QPointer>
+
 //Our includes
 #include "cwUnits.h"
 #include "cwStation.h"
 #include "cwError.h"
 #include "cwGlobals.h"
 #include "cwUndoer.h"
+#include "cwCave.h"
 class cwSurveyChunk;
-class cwCave;
+//class cwCave;
 class cwTeam;
 class cwTripCalibration;
 class cwSurveyNoteModel;
@@ -111,7 +114,7 @@ protected:
     QDate Date;
     cwTeam* Team;
     cwTripCalibration* Calibration;
-    cwCave* ParentCave;
+    QPointer<cwCave> ParentCave;
     cwSurveyNoteModel* Notes;
     cwErrorModel* ErrorModel; //!<
 
