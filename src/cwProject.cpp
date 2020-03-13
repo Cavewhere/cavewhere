@@ -384,34 +384,6 @@ void cwProject::loadFile(QString filename) {
 }
 
 /**
- * @brief cwProject::deleteImageTask
- *
- * This will start the process of deleting the image task. This will first move the image task
- * from the other thread to the main thread. Once it's moved, it will delete it using deletImageTask
- */
-void cwProject::startDeleteImageTask()
-{
-    Q_ASSERT(sender() != nullptr);
-    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
-
-    cwAddImageTask* task = static_cast<cwAddImageTask*>(sender());
-    connect(task, &cwTask::threadChanged, this, &cwProject::deleteImageTask);
-}
-
-/**
- * @brief cwProject::deleteImageTask
- *
- * This deletes the image task
- */
-void cwProject::deleteImageTask()
-{
-    Q_ASSERT(sender() != nullptr);
-    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
-    Q_ASSERT(sender()->thread() == thread());
-    sender()->deleteLater();
-}
-
-/**
   \brief Sets the current project file
 
   \param newFilename - The new filename that this project will be moved to.

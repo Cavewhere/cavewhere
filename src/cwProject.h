@@ -138,11 +138,6 @@ private:
 
     bool saveWillCauseDataLoss() const;
     void setTemporaryProject(bool isTemp);
-
-private slots:
-    void startDeleteImageTask();
-    void deleteImageTask();
-
 };
 
 /**
