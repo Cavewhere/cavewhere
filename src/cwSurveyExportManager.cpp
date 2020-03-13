@@ -228,7 +228,7 @@ void cwSurveyExportManager::setCave(cwCave* cave) {
             Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
             setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
         }
-            updateActions();
+        updateActions();
 
         emit caveChanged();
     }
