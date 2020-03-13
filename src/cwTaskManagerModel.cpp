@@ -206,8 +206,6 @@ void cwTaskManagerModel::addActiveTask(cwTask *task)
 void cwTaskManagerModel::taskDeleted(QObject *taskObject)
 {
     Q_UNUSED(taskObject);
-
-    qDebug() << "Task delete!" << taskObject;
 }
 
 /**

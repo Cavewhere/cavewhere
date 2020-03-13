@@ -442,9 +442,13 @@ void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const ch
 
         TaskManager->addTask(addImageTask);
 
+        auto deleteImageTask = [addImageTask]() {
+            addImageTask->deleteLater();
+        };
+
         connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-        connect(addImageTask, &cwTask::finished, this, &cwProject::startDeleteImageTask);
-        connect(addImageTask, &cwTask::stopped, this, &cwProject::startDeleteImageTask);
+        connect(addImageTask, &cwTask::finished, addImageTask, deleteImageTask);
+        connect(addImageTask, &cwTask::stopped, addImageTask, deleteImageTask);
 
         //Set the project path
         addImageTask->setDatabaseFilename(filename());
