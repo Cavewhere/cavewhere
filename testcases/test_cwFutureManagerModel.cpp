@@ -120,7 +120,8 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
         //Progress changes for all tasks.
         int progressChanges = numberOfTasks;
         int timeOutChanges = numberOfTasks * sleepScale / model.interval();
-        CHECK(dataChangedSpy->size() >= (progressChanges + timeOutChanges));
+        int buffer = 1;
+        CHECK(dataChangedSpy->size() >= (progressChanges + timeOutChanges) - buffer);
     }
 }
 
