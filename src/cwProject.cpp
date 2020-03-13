@@ -649,6 +649,7 @@ bool cwProject::isModified() const
 
     cwRegionLoadTask loadTask;
     loadTask.setDatabaseFilename(filename());
+    loadTask.setDeleteOldImages(false);
     auto result = loadTask.load();
     loadTask.waitToFinish();
 

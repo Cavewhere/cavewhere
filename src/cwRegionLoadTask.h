@@ -75,6 +75,8 @@ public:
 
     QByteArray readSeralizedData();
 
+    void setDeleteOldImages(bool deleteImages);
+
     cwRegionLoadResult load();
 
 signals:
@@ -96,6 +98,8 @@ private:
         cwCavingRegionPtr region;
         int fileVersion = 0;
     };
+
+    bool DeleteOldImages = true;
 
     LoadData loadFromProtoBuffer();
     QByteArray readProtoBufferFromDatabase(bool* okay);
@@ -156,7 +160,6 @@ private:
 //    bool loadFromBoostSerialization();
 
     void insureVacuuming();
-
 
 };
 

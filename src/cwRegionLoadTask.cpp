@@ -57,6 +57,11 @@ QByteArray cwRegionLoadTask::readSeralizedData()
     return data;
 }
 
+void cwRegionLoadTask::setDeleteOldImages(bool deleteImages)
+{
+    DeleteOldImages = deleteImages;
+}
+
 cwRegionLoadResult cwRegionLoadTask::load()
 {
     cwRegionLoadResult results;
@@ -117,11 +122,13 @@ cwRegionLoadTask::LoadData cwRegionLoadTask::loadFromProtoBuffer()
     auto data = loadCavingRegion(regionProto);
 
     //Clean up old images
-    cwImageCleanupTask imageCleanupTask;
-    imageCleanupTask.setUsingThreadPool(false);
-    imageCleanupTask.setDatabaseFilename(databaseFilename());
-    imageCleanupTask.setRegion(data.region.data());
-    imageCleanupTask.start();
+    if(DeleteOldImages) {
+        cwImageCleanupTask imageCleanupTask;
+        imageCleanupTask.setUsingThreadPool(false);
+        imageCleanupTask.setDatabaseFilename(databaseFilename());
+        imageCleanupTask.setRegion(data.region.data());
+        imageCleanupTask.start();
+    }
 
     disconnectToDatabase();
     return data;

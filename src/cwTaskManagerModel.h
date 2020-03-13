@@ -20,6 +20,7 @@
 //Our includes
 class cwTask;
 #include "cwFutureManagerModel.h"
+#include "cwGlobals.h"
 
 /**
  * @brief The cwTaskManagerModel class
@@ -27,7 +28,7 @@ class cwTask;
  * This class show active task. Tasks that take longer than 2 seconds are shown as
  * active tasks. This class allows the gui to visualize running task, stop, and stop them
  */
-class cwTaskManagerModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwTaskManagerModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
@@ -39,6 +40,8 @@ public:
 
     void addTask(cwTask* task);
     void removeTask(cwTask* task);
+
+    void waitForTasks();
 
 signals:
 

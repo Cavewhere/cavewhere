@@ -149,6 +149,13 @@ void cwTaskManagerModel::removeTask(cwTask *task)
     }
 }
 
+void cwTaskManagerModel::waitForTasks()
+{
+    for(auto task : WatchingTasks) {
+        task->waitToFinish();
+    }
+}
+
 /**
  * @brief cwTaskManagerModel::convertToTask
  * @param task

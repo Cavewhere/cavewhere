@@ -16,9 +16,10 @@
 //Our includes
 #include "cwNote.h"
 #include "cwImage.h"
+#include "cwGlobals.h"
 class cwProject;
 
-class cwSurveyNoteModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public QAbstractListModel
 {
     Q_OBJECT
 

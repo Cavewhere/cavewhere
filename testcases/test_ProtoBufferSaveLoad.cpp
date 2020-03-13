@@ -14,6 +14,9 @@
 #include "cwSurveyNetwork.h"
 #include "cwErrorListModel.h"
 #include "cavewhereVersion.h"
+#include "cwSurveyNoteModel.h"
+#include "cwTaskManagerModel.h"
+#include "cwImageProvider.h"
 
 //std includes
 #include <memory>
@@ -70,7 +73,8 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
     auto loadCave = root->region()->cave(0);
     auto network = loadCave->network();
 
-    auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
+    auto testStationNeigbors = [=](QString stationName, QStringList
+            neighbors) {
         auto neighborsAtStation = network.neighbors(stationName);
         auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
         auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
