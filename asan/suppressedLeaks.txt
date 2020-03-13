@@ -2,4 +2,4 @@ leak:*libGLX_mesa.so*
 leak:*libfontconfig.so*
 leak:*libfreetype.so*
 leak:*libwebp.so*
-leak:unknown module
+leak:*<unknown module>*
