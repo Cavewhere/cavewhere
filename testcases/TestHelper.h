@@ -113,7 +113,7 @@ QString copyToTempFolder(QString filename);
  * @param filename
  * @return A new project generate from filename
  */
-cwProject* fileToProject(QString filename);
+std::shared_ptr<cwProject> fileToProject(QString filename);
 void fileToProject(cwProject* project, const QString& filename);
 
 #endif // STREAMOPERATOR

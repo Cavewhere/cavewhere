@@ -49,7 +49,8 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
-    void paint(QPainter *painter);
+    void paint(QPainter *painter) override;
+    void releaseResources() override;
 signals:
     void glWidgetChanged();
     void cameraChanged();

@@ -18,6 +18,7 @@ class CAVEWHERE_LIB_EXPORT cwRegionIOTask : public cwProjectIOTask
     Q_OBJECT
 public:
     cwRegionIOTask(QObject* parent = nullptr);
+    ~cwRegionIOTask();
 
     void setCavingRegion(const cwCavingRegion& region);
 

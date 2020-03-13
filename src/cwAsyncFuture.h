@@ -12,9 +12,9 @@ public:
     cwAsyncFuture() = delete;
 
     template<class T>
-    static void waitForFinished(QFuture<T> future, int timeout = -1) {
+    static bool waitForFinished(QFuture<T> future, int timeout = -1) {
         if (future.isFinished()) {
-            return;
+            return true;
         }
 
         QFutureWatcher<T> watcher;
@@ -29,6 +29,8 @@ public:
         watcher.setFuture(future);
 
         loop.exec();
+
+        return watcher.isFinished();
     }
 };
 

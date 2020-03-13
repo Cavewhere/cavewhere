@@ -67,6 +67,10 @@ cwSurveyChunk::cwSurveyChunk(const cwSurveyChunk& chunk) :
     }
 }
 
+cwSurveyChunk::~cwSurveyChunk()
+{
+}
+
 /**
   \brief Checks if the survey Chunk is valid
   */

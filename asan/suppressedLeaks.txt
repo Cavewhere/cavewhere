@@ -1,0 +1,5 @@
+leak:libGLX_mesa.so
+leak:libfontconfig.so
+leak:libfreetype.so
+leak:libwebp.so
+leak:__interceptor_calloc

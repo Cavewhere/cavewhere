@@ -18,24 +18,24 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
 
     cwFutureManagerModel model;
 
-    auto rowsInsertedSpy = new QSignalSpy(&model, &cwFutureManagerModel::rowsInserted);
-    auto rowsRemovedSpy = new QSignalSpy(&model, &cwFutureManagerModel::rowsRemoved);
-    auto rowsMovedSpy = new QSignalSpy(&model, &cwFutureManagerModel::rowsMoved);
-    auto columnsInsertedSpy = new QSignalSpy(&model, &cwFutureManagerModel::columnsInserted);
-    auto columnsRemovedSpy = new QSignalSpy(&model, &cwFutureManagerModel::columnsRemoved);
-    auto columnsMovedSpy = new QSignalSpy(&model, &cwFutureManagerModel::columnsMoved);
-    auto dataChangedSpy = new QSignalSpy(&model, &cwFutureManagerModel::dataChanged);
-    auto intervalChangedSpy = new QSignalSpy(&model, &cwFutureManagerModel::intervalChanged);
+    QSignalSpy rowsInsertedSpy(&model, &cwFutureManagerModel::rowsInserted);
+    QSignalSpy rowsRemovedSpy(&model, &cwFutureManagerModel::rowsRemoved);
+    QSignalSpy rowsMovedSpy(&model, &cwFutureManagerModel::rowsMoved);
+    QSignalSpy columnsInsertedSpy(&model, &cwFutureManagerModel::columnsInserted);
+    QSignalSpy columnsRemovedSpy(&model, &cwFutureManagerModel::columnsRemoved);
+    QSignalSpy columnsMovedSpy(&model, &cwFutureManagerModel::columnsMoved);
+    QSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+    QSignalSpy intervalChangedSpy(&model, &cwFutureManagerModel::intervalChanged);
 
     SpyChecker spyChecker({
-                              {rowsInsertedSpy, 0},
-                              {rowsRemovedSpy, 0},
-                              {rowsMovedSpy, 0},
-                              {columnsMovedSpy, 0},
-                              {columnsRemovedSpy, 0},
-                              {columnsInsertedSpy, 0},
-                              {dataChangedSpy, 0},
-                              {intervalChangedSpy, 0}
+                              {&rowsInsertedSpy, 0},
+                              {&rowsRemovedSpy, 0},
+                              {&rowsMovedSpy, 0},
+                              {&columnsMovedSpy, 0},
+                              {&columnsRemovedSpy, 0},
+                              {&columnsInsertedSpy, 0},
+                              {&dataChangedSpy, 0},
+                              {&intervalChangedSpy, 0}
                           });
 
     class Row {
@@ -72,7 +72,7 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
         SECTION("Set the interval to 120") {
             model.setInterval(120);
             CHECK(model.interval() == 120);
-            spyChecker[intervalChangedSpy]++;
+            spyChecker[&intervalChangedSpy]++;
             spyChecker.checkSpies();
             spyChecker.clearSpyCounts();
         }
@@ -100,7 +100,7 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
         }
 
         CHECK(model.rowCount() == numberOfTasks);
-        spyChecker[rowsInsertedSpy] = numberOfTasks;
+        spyChecker[&rowsInsertedSpy] = numberOfTasks;
         spyChecker.checkSpies();
 
         checkRows(rows);
@@ -110,18 +110,18 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
             combine << row.future;
         }
 
-        cwAsyncFuture::waitForFinished(combine.future());
+        CHECK(cwAsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
 
         CHECK(model.rowCount() == 0);
-        spyChecker[rowsRemovedSpy] = numberOfTasks;
+        spyChecker[&rowsRemovedSpy] = numberOfTasks;
 
-        CHECK(dataChangedSpy->size() > 0);
+        CHECK(dataChangedSpy.size() > 0);
 
         //Progress changes for all tasks.
         int progressChanges = numberOfTasks;
         int timeOutChanges = numberOfTasks * sleepScale / model.interval();
         int buffer = 1;
-        CHECK(dataChangedSpy->size() >= (progressChanges + timeOutChanges) - buffer);
+        CHECK(dataChangedSpy.size() >= (progressChanges + timeOutChanges) - buffer);
     }
 }
 

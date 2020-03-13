@@ -19,6 +19,10 @@ cwRegionIOTask::cwRegionIOTask(QObject* parent) :
     Region->moveToThread(nullptr);
 }
 
+cwRegionIOTask::~cwRegionIOTask()
+{
+    delete Region;
+}
 
 /**
       This does a deap copy of the region, so it make a snapshot

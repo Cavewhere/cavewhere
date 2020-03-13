@@ -37,6 +37,12 @@ void cwGLGridPlane::initialize()
 
 }
 
+void cwGLGridPlane::releaseResources()
+{
+    deleteShaders(Program);
+    TriangleVertexBuffer.destroy();
+}
+
 void cwGLGridPlane::draw() {
     Program->bind();
 

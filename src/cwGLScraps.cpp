@@ -33,6 +33,16 @@ void cwGLScraps::initialize() {
     initializeShaders();
 }
 
+void cwGLScraps::releaseResources()
+{
+    deleteShaders(Program);
+
+    for(auto scrap : Scraps) {
+        scrap.releaseResources();
+    }
+
+}
+
 void cwGLScraps::draw() {
     if(Scraps.isEmpty()) { return; }
     if(!visible()) { return; }
@@ -280,9 +290,10 @@ void cwGLScraps::GLScrap::update(const cwTriangulatedData &data)
 
 void cwGLScraps::GLScrap::releaseResources()
 {
-    PointBuffer.release();
-    IndexBuffer.release();
-    TexCoords.release();
+    PointBuffer.destroy();
+    IndexBuffer.destroy();
+    TexCoords.destroy();
+    Texture->releaseResources();
     delete Texture;
 }
 

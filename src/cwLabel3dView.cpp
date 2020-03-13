@@ -37,14 +37,17 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
  */
 cwLabel3dView::~cwLabel3dView()
 {
-    //Delete all the child groups
-    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-    while(iter.hasNext()) {
-        cwLabel3dGroup* group = iter.next();
-        group->Labels.clear();
-        group->setParentView(nullptr);
-        group->deleteLater();
-    }
+//    for(auto groups : LabelGroups) {
+//        groups->setParentView(nullptr);
+//    }
+//    //Delete all the child groups
+//    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
+//    while(iter.hasNext()) {
+//        cwLabel3dGroup* group = iter.next();
+//        group->Labels.clear();
+//        group->setParentView(nullptr);
+//        group->deleteLater();
+//    }
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {

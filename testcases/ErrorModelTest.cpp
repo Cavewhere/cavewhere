@@ -19,18 +19,18 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 
-TEST_CASE("Fatal and warning count changing changing") {
+TEST_CASE("Fatal and warning count changing changing", "[ErrorModelTest]") {
 
 
-    cwErrorModel* parent = new cwErrorModel();
-    cwErrorModel* child = new cwErrorModel();
-    cwErrorModel* grandChild = new cwErrorModel();
+    auto parent = std::make_unique<cwErrorModel>();
+    auto child = std::make_unique<cwErrorModel>();
+    auto grandChild = std::make_unique<cwErrorModel>();
 
-    grandChild->setParentModel(child);
-    child->setParentModel(parent);
+    grandChild->setParentModel(child.get());
+    child->setParentModel(parent.get());
 
-    QSignalSpy parentFatalSpy(parent, SIGNAL(fatalCountChanged()));
-    QSignalSpy parentWarningSpy(parent, SIGNAL(warningCountChanged()));
+    QSignalSpy parentFatalSpy(parent.get(), SIGNAL(fatalCountChanged()));
+    QSignalSpy parentWarningSpy(parent.get(), SIGNAL(warningCountChanged()));
 
     int size = 10;
     for(int i = 0; i < size; i++) {

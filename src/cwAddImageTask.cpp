@@ -265,7 +265,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
   */
 void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds)
 {
-    QByteArray format = "webp";
+    QByteArray format = "png"; //Alternative is to use "webp", but it seems to be pretty memory leaky
     QByteArray imageData;
 
     if(!MipmapOnly) {

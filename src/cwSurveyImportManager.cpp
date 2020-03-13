@@ -35,8 +35,8 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
 cwSurveyImportManager::~cwSurveyImportManager()
 {
     CompassImporter->stop();
-    CompassImporter->waitToFinish();
-    CompassImporter->deleteLater();
+    CompassImporter->waitToFinish(cwTask::IgnoreRestart);
+    delete CompassImporter;
 }
 
 void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)

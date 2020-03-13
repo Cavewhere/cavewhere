@@ -58,6 +58,9 @@ cwSurvexImporter::~cwSurvexImporter()
 
 void cwSurvexImporter::runTask() {
     RootBlock->moveToThread(QThread::currentThread());
+    if(GlobalData != nullptr) {
+        GlobalData->deleteLater();
+    }
     GlobalData = new cwSurvexGlobalData();
 
     if (!RootFilenames.isEmpty()) {
@@ -627,7 +630,7 @@ void cwSurvexImporter::addCalibrationToCurrentChunk(cwTripCalibration *calibrati
     //Couldn't find a valid shot to add the calibration
     //Copy the calibration into CurrentBlock's calibration
     *CurrentBlock->calibration() = *calibration;
-    calibration->deleteLater();
+    delete calibration;
 }
 
 /**

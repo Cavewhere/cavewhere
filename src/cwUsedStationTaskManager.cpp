@@ -23,7 +23,7 @@ cwUsedStationTaskManager::cwUsedStationTaskManager(QObject *parent) :
 
 cwUsedStationTaskManager::~cwUsedStationTaskManager() {
     Task->stop();
-    Task->waitToFinish();
+    Task->waitToFinish(cwTask::IgnoreRestart);
     delete Task;
 }
 

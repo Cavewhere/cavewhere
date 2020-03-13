@@ -103,8 +103,8 @@ TEST_CASE("Auto Calculate Note Transform", "[Scrap]") {
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
 
     foreach(TestRow row, rows) {
-        cwProject* project = fileToProject(row.Filename);
-        cwScrap* scrap = firstScrap(project);
+        auto project = fileToProject(row.Filename);
+        cwScrap* scrap = firstScrap(project.get());
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
         plotManager->setRegion(project->cavingRegion());
@@ -115,8 +115,6 @@ TEST_CASE("Auto Calculate Note Transform", "[Scrap]") {
         scrap->setCalculateNoteTransform(true);
 
         checkScrapTransform(scrap, row);
-
-        delete project;
     }
 }
 
@@ -133,8 +131,8 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[Scrap]") {
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw", 270, 5795.0, 0.05, 0.005));
 
     foreach(TestRow row, rows) {
-        cwProject* project = fileToProject(row.Filename);
-        cwScrap* scrap = firstScrap(project);
+        auto project = fileToProject(row.Filename);
+        cwScrap* scrap = firstScrap(project.get());
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
         plotManager->setRegion(project->cavingRegion());
@@ -150,8 +148,6 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[Scrap]") {
             INFO("Removing station:" << scrap->station(scrap->stations().size() - 1).name().toStdString());
             scrap->removeStation(scrap->stations().size() - 1);
         }
-
-        delete project;
     }
 }
 
@@ -241,8 +237,8 @@ TEST_CASE("Guess neighbor station name", "[Scrap]") {
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
 
-        cwProject* planProject = fileToProject(row.Filename);
-        cwScrap* scrap = firstScrap(planProject);
+        auto planProject = fileToProject(row.Filename);
+        cwScrap* scrap = firstScrap(planProject.get());
 
         auto plotManager = std::make_unique<cwLinePlotManager>();
         plotManager->setRegion(planProject->cavingRegion());
@@ -272,8 +268,6 @@ TEST_CASE("Guess neighbor station name", "[Scrap]") {
                 CHECK(neighborNoteStation.name().toUpper().toStdString() == guessedName.toStdString());
             }
         }
-
-        delete planProject;
     }
 }
 

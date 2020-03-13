@@ -57,6 +57,14 @@ Project {
             ]
         }
 
+        Group {
+            name: "asan"
+            qbs.install: qbs.targetOS.contains("macos") || qbs.targetOS.contains("linux")
+            files: [
+                "asan/suppressedLeaks.txt",
+            ]
+        }
+
         //Create the plist info for the icon
         bundle.infoPlist: {
             var object = {"CFBundleIconFile":"cavewhereIcon.icns",

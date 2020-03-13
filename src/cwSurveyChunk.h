@@ -62,6 +62,7 @@ public:
 
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);
+    virtual ~cwSurveyChunk();
 
     bool isValid() const;
     bool canAddShot(const cwStation& fromStation, const cwStation& toStation);

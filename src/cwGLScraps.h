@@ -37,9 +37,10 @@ public:
 
     void setCavingRegion(cwCavingRegion* region);
 
-    void initialize();
-    void draw();
-    void updateData();
+    void initialize() override;
+    void releaseResources() override;
+    void draw() override;
+    void updateData() override;
 
     void addScrapToUpdate(cwScrap* scrap);
     void removeScrap(cwScrap* scrap);
@@ -102,7 +103,6 @@ private:
         void update(const cwTriangulatedData& data);
 
         void releaseResources();
-
     };
 
     cwProject* Project; //!< The project file for loading textures
@@ -111,7 +111,7 @@ private:
     QHash<cwScrap*, PendingScrapCommand> PendingChanges;
 
     //Data in the rendering thread
-    QOpenGLShaderProgram* Program;
+    QOpenGLShaderProgram* Program = nullptr;
     int UniformModelViewProjectionMatrix;
     int UniformScaleTexCoords;
     int vVertex;

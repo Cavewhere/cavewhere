@@ -12,6 +12,9 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 
+//Qt includes
+#include <QThread>
+
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
     Length(new cwLength(this)),
@@ -50,6 +53,7 @@ cwCave& cwCave::operator=(const cwCave& object) {
 }
 
 cwCave::~cwCave() {
+    Q_ASSERT(thread() == QThread::currentThread() || thread() == nullptr);
 }
 
 /**
@@ -261,8 +265,8 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
 
 cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
-        foreach(cwTrip* trip, Trips) {
-            trip->deleteLater();
+        for(auto trip : Trips) {
+            delete trip;
         }
     }
 }
