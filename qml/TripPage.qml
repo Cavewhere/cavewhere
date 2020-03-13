@@ -19,16 +19,18 @@ StandardPage {
     property alias currentNoteIndex: notesGallery.currentNoteIndex
 
     function registerSubPages() {
-        var oldCarpetPage = PageView.page.childPage("Carpet")
-        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
-            if(oldCarpetPage !== null) {
-                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
-            }
+        if(currentTrip) {
+            var oldCarpetPage = PageView.page.childPage("Carpet")
+            if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+                if(oldCarpetPage !== null) {
+                    rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+                }
 
-            if(PageView.page.name !== "Carpet") {
-                var page = rootData.pageSelectionModel.registerSubPage(area.PageView.page,
-                                                                       "Carpet",
-                                                                       {"viewMode":"CARPET"});
+                if(PageView.page.name !== "Carpet") {
+                    var page = rootData.pageSelectionModel.registerSubPage(area.PageView.page,
+                                                                           "Carpet",
+                                                                           {"viewMode":"CARPET"});
+                }
             }
         }
 

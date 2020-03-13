@@ -200,7 +200,9 @@ cwTrip* cwSurveyExportManager::trip() const {
 void cwSurveyExportManager::setTrip(cwTrip* trip) {
     if(Trip != trip) {
         Trip = trip;
-        setCave(Trip->parentCave());
+        if(!Trip.isNull()) {
+            setCave(Trip->parentCave());
+        }
         updateActions();
         emit tripChanged();
     }
@@ -222,9 +224,12 @@ cwCave* cwSurveyExportManager::cave() const {
 void cwSurveyExportManager::setCave(cwCave* cave) {
     if(Cave != cave) {
         Cave = cave;
-        Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
-        setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
-        updateActions();
+        if(!Cave.isNull()) {
+            Q_ASSERT(qobject_cast<cwCavingRegion*>(Cave->parent()) != nullptr);
+            setCavingRegion(qobject_cast<cwCavingRegion*>(Cave->parent()));
+        }
+            updateActions();
+
         emit caveChanged();
     }
 }

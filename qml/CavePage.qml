@@ -22,17 +22,19 @@ StandardPage {
     }
 
     function registerSubPages() {
-        var oldCarpetPage = PageView.page.childPage("Leads")
-        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
-            if(oldCarpetPage !== null) {
-                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
-            }
+        if(currentCave) {
+            var oldCarpetPage = PageView.page.childPage("Leads")
+            if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+                if(oldCarpetPage !== null) {
+                    rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+                }
 
-            if(PageView.page.name !== "Leads") {
-                var page = rootData.pageSelectionModel.registerPage(PageView.page,
-                                                                    "Leads",
-                                                                    caveLeadsPage,
-                                                                    {"cave":currentCave});
+                if(PageView.page.name !== "Leads") {
+                    var page = rootData.pageSelectionModel.registerPage(PageView.page,
+                                                                        "Leads",
+                                                                        caveLeadsPage,
+                                                                        {"cave":currentCave});
+                }
             }
         }
     }
