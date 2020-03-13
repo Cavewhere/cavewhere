@@ -116,6 +116,17 @@ StandardPage {
                                 return null
                             }
                         }
+                        unitModel: {
+                            switch(styleData.column) {
+                            case 1:
+                                return UnitDefaults.lengthModel
+                            case 2:
+                                return UnitDefaults.depthModel
+                            default:
+                                return null
+                            }
+                        }
+
                         valueReadOnly: true
                     }
 

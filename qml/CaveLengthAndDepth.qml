@@ -15,14 +15,14 @@ QQ.Column {
         id: caveLengthId
         text: "Length:"
         unitValue: currentCave !== null ? currentCave.length : null
-        unitModel: ["m", "km", "ft", "mi"]
+        unitModel: UnitDefaults.lengthModel
     }
 
     CaveLengthComponent {
         id: caveDepth
         text: "Depth:"
         unitValue: currentCave !== null ? currentCave.depth : null
-        unitModel: ["m", "ft"]
+        unitModel: UnitDefaults.depthModel
     }
 
 }

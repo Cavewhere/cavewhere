@@ -246,6 +246,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwFutureManagerModel>("Cavewhere", 1, 0, "FutureManagerModel");
     qmlRegisterType<cwTaskFutureCombineModel>("Cavewhere", 1, 0, "TaskFutureCombineModel");
     qmlRegisterUncreatableType<cwOpenGLSettings>("Cavewhere", 1, 0, "OpenGLSettings", "Should only be created in cwRootData also is static across the application");
+    qmlRegisterSingletonType( QUrl("qrc:/qml/UnitDefaults.qml"), "Cavewhere", 1, 0, "UnitDefaults");
 
 
 }
