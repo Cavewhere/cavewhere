@@ -19,7 +19,7 @@
 #include "cwShaderDebugger.h"
 #include "cwGlobalDirectory.h"
 #include "cwProject.h"
-
+#include "cwScene.h"
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
@@ -111,6 +111,8 @@ void cwGLScraps::updateData()
                 GLScrap glScrap(command.triangulatedData(), project());
                 glScrap.ScrapId = MaxScrapId++;
                 scrapId = glScrap.ScrapId;
+                connect(glScrap.Texture, &cwImageTexture::needsUpdate,
+                        scene(), &cwScene::update);
                 Scraps.insert(command.scrap(), glScrap);
             }
 
@@ -140,6 +142,7 @@ void cwGLScraps::updateData()
         }
     }
 
+    scene()->update();
     PendingChanges.clear();
 }
 

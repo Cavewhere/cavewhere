@@ -163,6 +163,7 @@ void cwImageTexture::updateData() {
     if(DeleteTexture) {
         deleteGLTexture();
         TextureDirty = false;
+        emit needsUpdate();
         return;
     }
 
@@ -170,6 +171,7 @@ void cwImageTexture::updateData() {
         deleteGLTexture();
         initialize();
         ReloadTexture = false;
+        emit needsUpdate();
         return;
     }
 
@@ -243,6 +245,7 @@ void cwImageTexture::updateData() {
 
     release();
 
+    emit needsUpdate();
     TextureDirty = false;
 }
 
@@ -269,6 +272,7 @@ void cwImageTexture::startLoadingImage()
             Q_ASSERT(context->thread() == QThread::currentThread());
             markAsDirty();
             emit textureUploaded();
+            emit needsUpdate();
         });
 
         DeleteTexture = false;
@@ -303,6 +307,7 @@ void cwImageTexture::setTextureType(cwTextureUploadTask::Type type)
 void cwImageTexture::markAsDirty()
 {
     TextureDirty = true;
+    emit needsUpdate();
 }
 
 /**

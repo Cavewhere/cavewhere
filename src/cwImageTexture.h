@@ -52,6 +52,7 @@ signals:
     void projectChanged();
     void imageChanged();
     void textureUploaded();
+    void needsUpdate();
 
 public slots:
     void updateData();

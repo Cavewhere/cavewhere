@@ -176,4 +176,6 @@ void cwGLLinePlot::updateData() {
         //FIXME: This could potentially slow down the rendering.
         geometryItersecter()->addObject(geometryObject);
     }
+
+    scene()->update();
 }

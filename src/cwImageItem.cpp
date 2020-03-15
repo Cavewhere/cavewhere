@@ -149,6 +149,7 @@ void cwImageItem::initializeGL() {
     //Called when the image is finished loading
     connect(GLResources->NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
     connect(GLResources->NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
+    connect(GLResources->NoteTexture, &cwImageTexture::needsUpdate, this, [this](){update();});
 
     initializeShaders();
     initializeVertexBuffers();
