@@ -142,11 +142,6 @@ void cwAddImageTask::calculateNumberOfSteps() {
   \brief This tries to add the image to the database
   */
 void cwAddImageTask::tryAddingImagesToDatabase() {
-//    bool good = beginTransation(SLOT(tryAddingImagesToDatabase()));
-//    if(!good) {
-//        qDebug() << "Couldn't begin transaction!";
-//        return;
-//    }
 
     //Database image, original image
     QList< PrivateImageData > images;
@@ -171,16 +166,18 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
     for(int i = 0; i < NewImages.size() && isRunning(); i++) {
         QImage originalImage = NewImages[i];
 
-        //Where the database image ideas are stored
-        cwImage imageIds;
+        if(!originalImage.isNull()) {
+            //Where the database image ideas are stored
+            cwImage imageIds;
 
-        if(!MipmapOnly) {
-            copyOriginalImage(originalImage, &imageIds);
-        } else {
-            imageIds = originalMetaData(originalImage);
+            if(!MipmapOnly) {
+                copyOriginalImage(originalImage, &imageIds);
+            } else {
+                imageIds = originalMetaData(originalImage);
+            }
+
+            images.append(PrivateImageData(imageIds, originalImage));
         }
-
-        images.append(PrivateImageData(imageIds, originalImage));
     }
 
     //Go through all the images
@@ -214,8 +211,6 @@ void cwAddImageTask::tryAddingImagesToDatabase() {
             createMipmaps(originalImage, "", &RegenerateImage);
         }
     }
-
-//    endTransation();
 }
 
 

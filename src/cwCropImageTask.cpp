@@ -77,10 +77,11 @@ void cwCropImageTask::runTask() {
 
     AddImageTask->setDatabaseFilename(databaseFilename());
     AddImageTask->setNewImages({croppedImage});
-//    AddImageTask->setMipmapsOnly(true);
     AddImageTask->start();
     if(isRunning()) {
-        CroppedImage = AddImageTask->images().first();
+        if(!AddImageTask->images().isEmpty()) {
+            CroppedImage = AddImageTask->images().first();
+        }
     }
     done();
 }
