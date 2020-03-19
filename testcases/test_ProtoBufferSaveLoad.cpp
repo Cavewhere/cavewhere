@@ -56,7 +56,7 @@ TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 
     CHECK(root->project()->isTemporaryProject() == true);
 
-    auto filename = QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw";
+    auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
     root->project()->saveAs(filename);
     root->project()->waitSaveToFinish();
 

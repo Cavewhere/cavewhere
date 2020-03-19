@@ -310,11 +310,11 @@ void cwCave::InsertRemoveTrip::removeTrips() {
 
 
 cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
-                                             QList<cwTrip*> Trips,
+                                             QList<cwTrip*> trips,
                                              int index) :
-    cwCave::InsertRemoveTrip(cave, index, index + Trips.size() -1)
+    cwCave::InsertRemoveTrip(cave, index, index + trips.size() -1)
 {
-    Trips = Trips;
+    Trips = trips;
 
     if(Trips.size() == 1) {
         setText(QString("Add %1").arg(Trips.first()->name()));

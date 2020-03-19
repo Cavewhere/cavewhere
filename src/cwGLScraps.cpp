@@ -200,10 +200,10 @@ void cwGLScraps::removeScrap(cwScrap *scrap)
   */
 void cwGLScraps::initializeShaders() {
     cwGLShader* scrapVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    scrapVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.vert");
+    scrapVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/scrap.vert");
 
     cwGLShader* scrapFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
+    scrapFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/scrap.frag");
 
 //    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
 //    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");

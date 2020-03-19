@@ -76,7 +76,7 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
     if(Component == nullptr) {
         //Create the component that will generate all the labels
         QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
-        Component = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/Label3d.qml", this);
+        Component = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/Label3d.qml", this);
 
         if(Component == nullptr) {
             qDebug() << "Component is nullptr" << LOCATION;

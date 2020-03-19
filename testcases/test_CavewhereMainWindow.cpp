@@ -62,13 +62,13 @@ TEST_CASE("Test that the cavewhere main window remember size and position", "[Ca
         auto mainWindow = MainHelper::findMainWidow(firstAppEngine);
         REQUIRE(mainWindow->objectName().toStdString() == "applicationWindow");
 
-        mainWindow->setProperty("x", 0);
-        mainWindow->setProperty("y", 20);
+        mainWindow->setProperty("x", 75);
+        mainWindow->setProperty("y", 50);
 
         CHECK(mainWindow->property("width").toInt() == 1024);
         CHECK(mainWindow->property("height").toInt() == 576);
-        CHECK(mainWindow->property("x").toInt() == 0);
-        CHECK(mainWindow->property("y").toInt() == 20);
+        CHECK(mainWindow->property("x").toInt() == 75);
+        CHECK(mainWindow->property("y").toInt() == 50);
 
         mainWindow->setProperty("width", 250);
         mainWindow->setProperty("height", 200);
