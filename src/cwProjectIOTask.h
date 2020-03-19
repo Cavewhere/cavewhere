@@ -13,7 +13,6 @@
 #include "cwError.h"
 class cwCavingRegion;
 
-
 //Qt includes
 #include <QSqlDatabase>
 #include <QAtomicInt>
@@ -39,6 +38,7 @@ protected:
 
     QSqlDatabase database() const;
 
+    static QSqlDatabase createDatabase(const QString& connectionName, const QString &databasePath);
     bool connectToDatabase(QString connectionName);
     void disconnectToDatabase();
     bool beginTransation();

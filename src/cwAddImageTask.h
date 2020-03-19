@@ -45,14 +45,14 @@ public:
     //Option 2 for using
     void setNewImages(QList<QImage> images);
 
-    //Options for adding
-    void setMipmapsOnly(bool mipmapOnly);
+//    //Options for adding
+//    void setMipmapsOnly(bool mipmapOnly);
 
     //Regenerate mipmaps
-    void regenerateMipmapsOn(cwImage image);
+//    void regenerateMipmapsOn(cwImage image);
 
-    ///////////// Results ///////////////////
-    QList<cwImage> images();
+    //Process the images
+    QFuture<cwImage> images() const;
 
     //Until functions
     static int numberOfMipmapLevels(QSize imageSize);
@@ -96,27 +96,36 @@ private:
 
     QAtomicInt Progress;
 
-    QImage copyOriginalImage(QString image, cwImage* imageIds);
-    void copyOriginalImage(const QImage& image, cwImage* imageIds);
-    cwImage addImageToDatabase(const QImage& image, const QByteArray& format, const QByteArray& imageData);
+    static QImage copyOriginalImage(QString image,
+                                    cwImage* imageIds,
+                                    QSqlDatabase database);
+
+    static void copyOriginalImage(const QImage& image,
+                                  cwImage* imageIds,
+                                  QSqlDatabase database);
+
+    static cwImage addImageToDatabase(const QImage& image,
+                                      const QByteArray& format,
+                                      const QByteArray& imageData,
+                                      QSqlDatabase database);
 
     void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
     void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
     int saveToDXT1Format(const cwDXT1Compresser::CompressedImage& image, int id = -1);
     QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
     QByteArray openglDxt1Compression(QImage image);
-    QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
+    static QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
 
     void calculateNumberOfSteps();
     int dotsPerMeter(QImage image) const;
 
     void regenerateMipmaps();
 
-    void IncreaseProgress();
+//    void IncreaseProgress();
 
     static int half(int value);
 
-    cwImage originalMetaData(const QImage& image) const;
+    static cwImage originalMetaData(const QImage& image);
 
 private slots:
     void tryAddingImagesToDatabase();
@@ -156,28 +165,28 @@ inline void cwAddImageTask::setNewImages(QList<QImage> images) {
  * This will not save the original image's data, and it will not resize
  * the icon data either. Or save the icon.
  */
-inline void cwAddImageTask::setMipmapsOnly(bool mipmapOnly)
-{
-    MipmapOnly = mipmapOnly;
-}
+//inline void cwAddImageTask::setMipmapsOnly(bool mipmapOnly)
+//{
+//    MipmapOnly = mipmapOnly;
+//}
 
-/**
- * @brief cwAddImageTask::regenerateMipmapsOn
- * @param image
- */
-inline void cwAddImageTask::regenerateMipmapsOn(cwImage image)
-{
-   RegenerateImage = image;
-}
+///**
+// * @brief cwAddImageTask::regenerateMipmapsOn
+// * @param image
+// */
+//inline void cwAddImageTask::regenerateMipmapsOn(cwImage image)
+//{
+//   RegenerateImage = image;
+//}
 
 /**
   Get's all the images that have been put into the database
 
   \brief This should only be called when the task is not running
   */
-inline QList<cwImage> cwAddImageTask::images() {
-    return Images;
-}
+//inline QList<cwImage> cwAddImageTask::images() {
+//    return Images;
+//}
 
 /**
   This halves the size.  The size that's returned will always be valid.

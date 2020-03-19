@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QRunnable>
 #include <QWaitCondition>
+#include <QFuture>
 
 //Our includes
 #include "cwGlobals.h"
@@ -68,6 +69,9 @@ public:
     void run();
 
     void waitToFinish(WaitToFinishType type = WaitForRestart);
+
+    void addFuture(QFuture<void> future);
+    void addFutures(QVector<QFuture<void>> futures);
 
     //Do not move this to a slot!!! You will break things
     //TODO: figure out why this is bad...

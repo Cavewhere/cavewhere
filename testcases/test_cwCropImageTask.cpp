@@ -8,6 +8,7 @@
 #include "cwImageProvider.h"
 #include "TestHelper.h"
 #include "DXT1BlockCompare.h"
+#include "cwAsyncFuture.h"
 
 //Qt includes
 #include <QColor>
@@ -24,13 +25,15 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         cwAddImageTask addImageTask;
         addImageTask.setNewImages({image});
         addImageTask.setDatabaseFilename(filename);
-        addImageTask.setUsingThreadPool(false);
-        addImageTask.start();
+//        addImageTask.setUsingThreadPool(false);
+//        addImageTask.start();
 
-        auto images = addImageTask.images();
-        REQUIRE(images.size() == 1);
+        auto imageFuture = addImageTask.images();
+        CHECK(cwAsyncFuture::waitForFinished(imageFuture, 3000));
 
-        return images.first();
+        REQUIRE(imageFuture.results().size() == 1);
+
+        return imageFuture.results().first();
     };
 
     auto image = addImage(image16x16);
@@ -108,9 +111,12 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(QRectF(origin, pixelBlockSize)); //First pixel
             cropImageTask.setOriginal(image);
-            cropImageTask.start();
+//            cropImageTask.start();
 
-            cwImage croppedImageId = cropImageTask.croppedImage();
+            auto cropFuture = cropImageTask.crop();
+            CHECK(cwAsyncFuture::waitForFinished(cropFuture, 3000));
+
+            cwImage croppedImageId = cropFuture.result();
 
             QVector<QColor> croppedColors = {
                 {blockColors.at((blockSize.height() - 1 - yBlock) * blockSize.width() + xBlock)},
@@ -143,9 +149,12 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(cropArea); //First pixel
             cropImageTask.setOriginal(image);
-            cropImageTask.start();
+//            cropImageTask.start();
 
-            cwImage croppedImageId = cropImageTask.croppedImage();
+            auto cropFuture = cropImageTask.crop();
+            CHECK(cwAsyncFuture::waitForFinished(cropFuture, 3000));
+
+            cwImage croppedImageId = cropFuture.result();
             return croppedImageId;
         };
 

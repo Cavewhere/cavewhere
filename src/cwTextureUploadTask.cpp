@@ -36,11 +36,13 @@ cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
     QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
 
     if(!isDivisibleBy4(firstLevelSize)) {
+        //Fixme: fix this!
+        Q_ASSERT(false);
         //Regenerate the mipmaps
         cwAddImageTask addImageTask;
         addImageTask.setUsingThreadPool(false);
         addImageTask.setDatabaseFilename(ProjectFilename);
-        addImageTask.regenerateMipmapsOn(Image);
+//        addImageTask.regenerateMipmapsOn(Image);
         addImageTask.start();
 
         //Double check if it successful

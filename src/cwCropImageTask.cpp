@@ -26,11 +26,14 @@
 //Std includes
 #include <algorithm>
 
+//Async Future
+#include <asyncfuture.h>
+
 cwCropImageTask::cwCropImageTask(QObject* parent) :
     cwProjectIOTask(parent) {
-    AddImageTask = new cwAddImageTask(this);
-    AddImageTask->setParentTask(this);
-    AddImageTask->setUsingThreadPool(false);
+//    AddImageTask = new cwAddImageTask(this);
+//    AddImageTask->setParentTask(this);
+//    AddImageTask->setUsingThreadPool(false);
 
 }
 
@@ -53,37 +56,82 @@ void cwCropImageTask::setRectF(QRectF cropTo) {
  * @brief cwCropImageTask::setMipmapOnly
  * @param mipmapOnly - This make the crop image task only create images with mipmaps
  */
-void cwCropImageTask::setMipmapOnly(bool mipmapOnly)
+//void cwCropImageTask::setMipmapOnly(bool mipmapOnly)
+//{
+//    AddImageTask->setMipmapsOnly(mipmapOnly);
+//}
+
+QFuture<cwImage> cwCropImageTask::crop()
 {
-    AddImageTask->setMipmapsOnly(mipmapOnly);
+    auto filename = databaseFilename();
+    auto originalImage = Original;
+    auto cropRect = CropRect;
+
+    auto cropImage = [filename, originalImage, cropRect]()->QImage {
+            cwImageProvider provider;
+            provider.setProjectPath(filename);
+            cwImageData imageData = provider.data(originalImage.original());
+            QImage image = QImage::fromData(imageData.data(), imageData.format());
+            QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
+                                                                  originalImage.originalSize()));
+            QImage croppedImage = image.copy(cropArea);
+            return croppedImage;
+    };
+
+    auto cropFuture = QtConcurrent::run(cropImage);
+
+    auto addImages = QSharedPointer<cwAddImageTask>::create();
+    addImages->setParent(this);
+    addImages->setDatabaseFilename(filename);
+
+    auto addImageFuture = AsyncFuture::observe(cropFuture).context(this, [addImages, cropFuture, filename]() {
+        addImages->setNewImages({cropFuture.result()});
+        return addImages->images();
+    }).future();
+
+
+    auto finishedFuture = AsyncFuture::observe(addImageFuture).context(this,
+                                             [addImageFuture](){
+        auto images = addImageFuture.results();
+        if(!images.isEmpty()) {
+            return images.first();
+        }
+        return cwImage();
+    }).future();
+
+    return finishedFuture;
+
+//    addFutures({cropImage, addImages, finishedFuture});
 }
 
 /**
   This gets the finished cropped image.  This should be called when the task has completed
   */
-cwImage cwCropImageTask::croppedImage() const {
-    return CroppedImage;
-}
+//cwImage cwCropImageTask::croppedImage() const {
+//    return CroppedImage;
+//}
 
 /**
   \brief This does the the cropping
   */
 void cwCropImageTask::runTask() {
-    ImageProvider.setProjectPath(databaseFilename());
-    cwImageData imageData = ImageProvider.data(Original.original());
-    QImage image = QImage::fromData(imageData.data(), imageData.format());
-    QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(CropRect, Original.originalSize()));
-    QImage croppedImage = image.copy(cropArea);
+    Q_ASSERT_X(false, "Use cwCropImageTask::crop() instead", LOCATION_STR);
 
-    AddImageTask->setDatabaseFilename(databaseFilename());
-    AddImageTask->setNewImages({croppedImage});
-    AddImageTask->start();
-    if(isRunning()) {
-        if(!AddImageTask->images().isEmpty()) {
-            CroppedImage = AddImageTask->images().first();
-        }
-    }
-    done();
+//    ImageProvider.setProjectPath(databaseFilename());
+//    cwImageData imageData = ImageProvider.data(Original.original());
+//    QImage image = QImage::fromData(imageData.data(), imageData.format());
+//    QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(CropRect, Original.originalSize()));
+//    QImage croppedImage = image.copy(cropArea);
+
+//    AddImageTask->setDatabaseFilename(databaseFilename());
+//    AddImageTask->setNewImages({croppedImage});
+//    AddImageTask->start();
+//    if(isRunning()) {
+//        if(!AddImageTask->images().isEmpty()) {
+//            CroppedImage = AddImageTask->images().first();
+//        }
+//    }
+//    done();
 }
 
 /**

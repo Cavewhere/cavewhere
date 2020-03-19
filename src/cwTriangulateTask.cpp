@@ -10,6 +10,7 @@
 #include "cwCropImageTask.h"
 #include "cwDebug.h"
 #include "utils/cwTriangulate.h"
+#include "cwAsyncFuture.h"
 
 //Utils includes
 #include "utils/Forsyth.h"
@@ -82,10 +83,14 @@ void cwTriangulateTask::cropScraps() {
         CropTask->setOriginal(data.noteImage());
         CropTask->setRectF(cropArea);
         CropTask->setDatabaseFilename(ProjectFilename);
-        CropTask->start();
+//        CropTask->start();
+
+        //FIXME: Don't wait convert to async
+        auto cropFuture = CropTask->crop();
+        cwAsyncFuture::waitForFinished(cropFuture);
 
         cwTriangulatedData triangulatedData;
-        triangulatedData.setCroppedImage(CropTask->croppedImage());
+        triangulatedData.setCroppedImage(cropFuture.result());
         TriangulatedScraps.append(triangulatedData);
 
         setProgress(i + 1);

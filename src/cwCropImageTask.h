@@ -19,6 +19,7 @@ class cwAddImageTask;
 //Qt includes
 #include <QRectF>
 #include <QString>
+#include <QtConcurrent>
 
 /**
   \brief This will crop a cwImage using normalize coordinates of the original
@@ -35,8 +36,10 @@ public:
     void setRectF(QRectF cropTo);
     void setMipmapOnly(bool mipmapOnly);
 
+    QFuture<cwImage> crop();
+
     //Output
-    cwImage croppedImage() const;
+//    cwImage croppedImage() const;
 
 protected:
     virtual void runTask();
@@ -50,10 +53,10 @@ private:
     cwImage CroppedImage;
 
     //For extracting image data from the database
-    cwImageProvider ImageProvider;
+//    cwImageProvider ImageProvider;
 
     //For writting the cropped image
-    cwAddImageTask* AddImageTask;
+//    cwAddImageTask* AddImageTask;
 
     static QRect mapNormalizedToIndex(QRectF normalized, QSize size);
     static QRect nearestDXT1Rect(QRect rect);
