@@ -17,10 +17,10 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     QString filename = project.filename();
     auto addImageTask = std::make_unique<cwAddImageTask>();
 
-//    SECTION("With Squish") {
-//        REQUIRE(cwOpenGLSettings::instance());
-//        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-//    }
+    SECTION("With Squish") {
+        REQUIRE(cwOpenGLSettings::instance());
+        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+    }
 
     SECTION("With GPU") {
         REQUIRE(cwOpenGLSettings::instance());
@@ -94,4 +94,10 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         cwImageData mipmap = provider.data(image.mipmaps().at(i));
         CHECK(halfSizes.at(i) == mipmap.size());
     }
+}
+
+TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
+    cwAddImageTask task;
+    auto future = task.images();
+    CHECK(future.resultCount() == 0);
 }

@@ -38,9 +38,6 @@ public:
 
     QFuture<cwImage> crop();
 
-    //Output
-//    cwImage croppedImage() const;
-
 protected:
     virtual void runTask();
 
@@ -52,15 +49,8 @@ private:
     //Output
     cwImage CroppedImage;
 
-    //For extracting image data from the database
-//    cwImageProvider ImageProvider;
-
-    //For writting the cropped image
-//    cwAddImageTask* AddImageTask;
-
     static QRect mapNormalizedToIndex(QRectF normalized, QSize size);
     static QRect nearestDXT1Rect(QRect rect);
-
 };
 
 #endif // CWCROPIMAGETASK_H

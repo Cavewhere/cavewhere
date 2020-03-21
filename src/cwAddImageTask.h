@@ -37,19 +37,14 @@ public:
     ~cwAddImageTask();
 
     //////////////// Parameters //////////////////
-//    void setProjectPath(QString projectPath);
-
     //Option 1 for using
     void setNewImagesPath(QStringList imagePaths);
 
     //Option 2 for using
     void setNewImages(QList<QImage> images);
 
-//    //Options for adding
-//    void setMipmapsOnly(bool mipmapOnly);
-
-    //Regenerate mipmaps
-//    void regenerateMipmapsOn(cwImage image);
+    //Option 3 - Regenerate mipmaps
+    void setRegenerateMipmapsOn(cwImage image);
 
     //Process the images
     QFuture<cwImage> images() const;
@@ -84,17 +79,10 @@ private:
         QString Name;
     };
 
+    //Possible image sources
     QStringList NewImagePaths;
     QList<QImage> NewImages;
-
-    QList<cwImage> Images;
-    QStringList Errors;
-
-    bool MipmapOnly; //Doesn't save the original or create an icon
-
-    cwImage RegenerateImage; //This updates the mipmaps for the image
-
-    QAtomicInt Progress;
+    cwImage RegenerateMipmap;
 
     static QImage copyOriginalImage(QString image,
                                     cwImage* imageIds,
@@ -116,30 +104,12 @@ private:
     QByteArray openglDxt1Compression(QImage image);
     static QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
 
-    void calculateNumberOfSteps();
     int dotsPerMeter(QImage image) const;
-
-    void regenerateMipmaps();
-
-//    void IncreaseProgress();
 
     static int half(int value);
 
     static cwImage originalMetaData(const QImage& image);
-
-private slots:
-    void tryAddingImagesToDatabase();
-
 };
-
-/**
-  \brief Sets the project directory for the images
-
-  The images will store the relitive path to the project directory
-  */
-//inline void cwAddImageTask::setProjectPath(QString projectPath) {
-//    DatabasePath = projectPath;
-//}
 
 /**
   \brief Sets the databasePath
@@ -159,36 +129,6 @@ inline void cwAddImageTask::setNewImages(QList<QImage> images) {
 }
 
 /**
- * @brief cwAddImageTask::setMipmapsOnly
- * @param mipmapOnly - Will only generate the mipmaps of the image
- *
- * This will not save the original image's data, and it will not resize
- * the icon data either. Or save the icon.
- */
-//inline void cwAddImageTask::setMipmapsOnly(bool mipmapOnly)
-//{
-//    MipmapOnly = mipmapOnly;
-//}
-
-///**
-// * @brief cwAddImageTask::regenerateMipmapsOn
-// * @param image
-// */
-//inline void cwAddImageTask::regenerateMipmapsOn(cwImage image)
-//{
-//   RegenerateImage = image;
-//}
-
-/**
-  Get's all the images that have been put into the database
-
-  \brief This should only be called when the task is not running
-  */
-//inline QList<cwImage> cwAddImageTask::images() {
-//    return Images;
-//}
-
-/**
   This halves the size.  The size that's returned will always be valid.
   If the half size is less than 1, then the dimension below 1 is set to 1
   */
@@ -196,8 +136,6 @@ inline QSize cwAddImageTask::half(QSize size) {
      //Create the new width and height
     return QSize(half(size.width()), half(size.height()));
 }
-
-
 
 inline QRect cwAddImageTask::half(QRect rect)
 {

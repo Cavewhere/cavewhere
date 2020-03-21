@@ -1,5 +1,6 @@
 //Our includes
 #include "cwFutureManagerModel.h"
+#include "cwAsyncFuture.h"
 
 //Qt includes
 #include <QFutureWatcher>
@@ -86,6 +87,13 @@ QVariant cwFutureManagerModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> cwFutureManagerModel::roleNames() const
 {
     return defaultRoles();
+}
+
+void cwFutureManagerModel::waitForFinished()
+{
+    for(auto watcher : Watchers) {
+        cwAsyncFuture::waitForFinished(watcher.job.future());
+    }
 }
 
 QHash<int, QByteArray> cwFutureManagerModel::defaultRoles()

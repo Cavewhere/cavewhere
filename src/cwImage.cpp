@@ -53,3 +53,11 @@ bool cwImage::operator ==(const cwImage &other) const {
             && Data->OriginalSize == other.Data->OriginalSize
             && Data->OriginalDotsPerMeter == other.Data->OriginalDotsPerMeter;
 }
+
+
+QDebug operator<<(QDebug debug, const cwImage &image)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace() << "(original:" << image.original() << " icon:" << image.icon() << " mipmaps:" << image.mipmaps() << " size:" << image.originalSize() << " dotPerMeter:" << image.originalDotsPerMeter();;
+    return debug;
+}

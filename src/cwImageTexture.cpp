@@ -264,7 +264,7 @@ void cwImageTexture::startLoadingImage()
         uploadTask.setImage(image());
         uploadTask.setProjectFilename(ProjectFilename);
         uploadTask.setType(TextureType);
-        UploadedTextureFuture = QtConcurrent::run(uploadTask);
+        UploadedTextureFuture = uploadTask.mipmaps();
 
         auto context = QSharedPointer<QObject>::create();
 

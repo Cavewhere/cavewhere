@@ -658,19 +658,20 @@ void cwProject::addImages(QList<QUrl> noteImagePath,
     for(QUrl url : noteImagePath) {
         QString path = url.toLocalFile();
 
-        auto addImageTask = QSharedPointer<cwAddImageTask>::create();
-        addImageTask->setDatabaseFilename(filename());
+        cwAddImageTask addImageTask;
+        addImageTask.setDatabaseFilename(filename());
+        addImageTask.setContext(context);
 
         //Set all the noteImagePath
-        addImageTask->setNewImagesPath({path}); //noteImagePath);
+        addImageTask.setNewImagesPath({path}); //noteImagePath);
 
-        auto imagesFuture = addImageTask->images();
+        auto imagesFuture = addImageTask.images();
 
         FutureManager->addJob({imagesFuture, "Adding Image"});
 
         AsyncFuture::observe(imagesFuture)
                 .context(context,
-                         [imagesFuture, addImageTask, func]()
+                         [imagesFuture, func]()
         {
             func(imagesFuture.results());
         });

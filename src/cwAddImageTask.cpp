@@ -52,16 +52,22 @@
 
 cwAddImageTask::cwAddImageTask(QObject* parent) : cwProjectIOTask(parent)
 {
-    MipmapOnly = false;
+
 }
 
 cwAddImageTask::~cwAddImageTask()
 {
 }
 
+void cwAddImageTask::setRegenerateMipmapsOn(cwImage image)
+{
+    RegenerateMipmap = image;
+}
+
 QFuture<cwImage> cwAddImageTask::images() const
 {
     QString filename = databaseFilename();
+    auto context = this->context();
 
     std::function<PrivateImageData (const QString&)> loadImagesFromPath
             = [filename](const QString& imagePath) {
@@ -73,6 +79,7 @@ QFuture<cwImage> cwAddImageTask::images() const
         //Copy the original image to the database
         QImage originalImage;
         originalImage = copyOriginalImage(imagePath, &imageIds, database);
+        database.close();
 
         if(!originalImage.isNull()) {
             return PrivateImageData(imageIds, originalImage, imagePath);
@@ -87,15 +94,32 @@ QFuture<cwImage> cwAddImageTask::images() const
             //Where the database image ideas are stored
             cwImage imageIds;
             copyOriginalImage(image, &imageIds, database);
+            database.close();
+
             return PrivateImageData(imageIds, image);
         }
         return PrivateImageData();
+    };
+
+    auto loadFromDatabaseImage = [filename](const cwImage& image) {
+        cwImageProvider provider;
+        provider.setProjectPath(filename);
+        QImage imageData = provider.image(image.original());
+
+        cwImage newImage = image;
+        newImage.setMipmaps({});
+
+        return PrivateImageData(newImage, imageData);
     };
 
     //For creating icon from private image data
     std::function<int (const PrivateImageData&)> createIcon
             = [filename](const PrivateImageData& imageData) {
         Q_ASSERT(!imageData.OriginalImage.isNull());
+
+        if(imageData.Id.isIconValid()) {
+            return imageData.Id.icon();
+        }
 
         auto database = cwAddImageTask::createDatabase("addIcon", filename);
 
@@ -124,6 +148,7 @@ QFuture<cwImage> cwAddImageTask::images() const
         //Write the data to database
         cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
         int imageId = cwProject::addImage(database, iconImageData);
+        database.close();
         return imageId;
     };
 
@@ -156,13 +181,13 @@ QFuture<cwImage> cwAddImageTask::images() const
 
     //For creating mipmaps
     std::function<QFuture<int> (const QList<QImage>& image)> compressAndUpload
-            = [filename, this](const QList<QImage>& images)->QFuture<int> {
+            = [filename, context](const QList<QImage>& images)->QFuture<int> {
 
         cwDXT1Compresser compresser;
         auto compressFuture = compresser.compress(images);
 
         return AsyncFuture::observe(compressFuture)
-                .context(this,
+                .context(context,
                          [compressFuture, filename]()
         {
 
@@ -171,6 +196,7 @@ QFuture<cwImage> cwAddImageTask::images() const
                 auto database = cwAddImageTask::createDatabase("dxtSave", filename);
                 cwImageData imageData = cwImageProvider::createDxt1(image.size, image.data);
                 int imageId = cwProject::addImage(database, imageData);
+                database.close();
                 return imageId;
             };
 
@@ -180,6 +206,7 @@ QFuture<cwImage> cwAddImageTask::images() const
 
     auto pathImagesFuture = NewImagePaths.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImagePaths, loadImagesFromPath);
     auto imagesFuture = NewImages.isEmpty() ? QFuture<PrivateImageData>() : QtConcurrent::mapped(NewImages, loadFromImages);
+    auto regeneratedFuture = RegenerateMipmap.isOriginalValid() ? QtConcurrent::run(std::bind(loadFromDatabaseImage, RegenerateMipmap)) : QFuture<PrivateImageData>();
     auto imageCombine = AsyncFuture::combine();
 
     auto addToImageCombine = [&imageCombine](QFuture<PrivateImageData> future) {
@@ -190,14 +217,16 @@ QFuture<cwImage> cwAddImageTask::images() const
 
     addToImageCombine(pathImagesFuture);
     addToImageCombine(imagesFuture);
+    addToImageCombine(regeneratedFuture);
 
     return AsyncFuture::observe(imageCombine.future())
-            .context(this,
+            .context(context,
                      [=]()
     {
         QList<PrivateImageData> imageData = 
                 pathImagesFuture.results() 
-                + imagesFuture.results();
+                + imagesFuture.results()
+                + regeneratedFuture.results();
 
         QList<PrivateImageData> filterData;
         filterData.reserve(imageData.size());
@@ -210,7 +239,7 @@ QFuture<cwImage> cwAddImageTask::images() const
         auto scaleFuture = QtConcurrent::mapped(imageData, scaleImage);
 
         auto compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
-                .context(this, [compressAndUpload, scaleFuture]()
+                .context(context, [compressAndUpload, scaleFuture]()
         {
             QList<QList<QImage>> allImages = scaleFuture.results();
             QVector<QFuture<int>> ids;
@@ -228,7 +257,7 @@ QFuture<cwImage> cwAddImageTask::images() const
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
 
         return AsyncFuture::observe(idCombine.future())
-                .context(this, [=]()
+                .context(context, [=]()
         {
             auto icons = iconFuture.results();
             auto allMipmaps = compressAndUploadFuture.result();
@@ -240,7 +269,7 @@ QFuture<cwImage> cwAddImageTask::images() const
             }
 
             return AsyncFuture::observe(mipmapCombine.future())
-                    .context(this, [=]()
+                    .context(context, [=]()
             {
                 Q_ASSERT(icons.size() == allMipmaps.size());
                 Q_ASSERT(icons.size() == imageData.size());
@@ -257,6 +286,7 @@ QFuture<cwImage> cwAddImageTask::images() const
                     cwImage newImage = image.Id;
                     newImage.setIcon(icon);
                     newImage.setMipmaps(mipmapFutures.results());
+
                     images.append(newImage);
                 }
 
@@ -273,161 +303,12 @@ QFuture<cwImage> cwAddImageTask::images() const
   */
 void cwAddImageTask::runTask() {
     Q_ASSERT(false);
-//    //Clear all previous data
-//    Images.clear();
-
-//    //Clear the current progress
-//    Progress = QAtomicInt(0);
-
-//    //Set the number of steps for this task
-//    calculateNumberOfSteps();
-
-//    //Connect to the database
-//    bool connected = connectToDatabase("AddImagesTask");
-
-//    if(connected) {
-//        //Try to add the ImagePaths to the database
-//        tryAddingImagesToDatabase();
-
-//        //Close the database
-//        disconnectToDatabase();
-
-//        if(isRunning()) {
-//            emit addedImages(images());
-//        }
-//    } else {
-//        qDebug() << "Couldn't connect to the database!" << LOCATION;
-//    }
-
-//    //Finished
-//    done();
 }
-
-/**
-  \brief This calculate the number of steps in this task
-
-  The number of steps are equal = sum of all pixels in each mipmap
-  */
-void cwAddImageTask::calculateNumberOfSteps() {
-
-    QList<QSize> sizes;
-    sizes.reserve(NewImagePaths.size() + Images.size());
-
-    foreach(QString imagePath, NewImagePaths) {
-        QImageReader reader(imagePath);
-        QSize imageSize;
-        if(reader.supportsOption(QImageIOHandler::Size)) {
-            //Format support reading the size without reading the whole image
-            imageSize = reader.size();
-        } else {
-            //Read the whole image and get the size
-            QImage image = reader.read();
-            imageSize = image.size();
-        }
-        sizes.append(imageSize);
-    }
-
-    foreach(QImage image, NewImages) {
-        sizes.append(image.size());
-    }
-
-    int numberOfSteps = 0;
-    foreach(QSize imageSize, sizes) {
-        int numberOfMipmapLevel = numberOfMipmapLevels(imageSize);
-        for(int i = 0; i < numberOfMipmapLevel; i++) {
-            int iterWidth = imageSize.width() / 4 + 1;
-            int iterHeight = imageSize.height() / 4 + 1;
-
-            numberOfSteps += iterWidth * iterHeight;
-            imageSize = half(imageSize);
-        }
-    }
-
-    setNumberOfSteps(numberOfSteps);
-}
-
-/**
-  \brief This tries to add the image to the database
-  */
-void cwAddImageTask::tryAddingImagesToDatabase() {
-
-//    //Database image, original image
-//    QList< PrivateImageData > images;
-
-//    //Go through all the images strings
-//    for(int i = 0; i < NewImagePaths.size() && isRunning(); i++) {
-//        QString imagePath = NewImagePaths[i];
-
-//        //Where the database image ideas are stored
-//        cwImage imageIds;
-
-//        //Copy the original image to the database
-//        QImage originalImage;
-//        originalImage = copyOriginalImage(imagePath, &imageIds);
-
-//        if(!originalImage.isNull()) {
-//            images.append(PrivateImageData(imageIds, originalImage, imagePath));
-//        }
-//    }
-
-//    //Go through all the images
-//    for(int i = 0; i < NewImages.size() && isRunning(); i++) {
-//        QImage originalImage = NewImages[i];
-
-//        if(!originalImage.isNull()) {
-//            //Where the database image ideas are stored
-//            cwImage imageIds;
-
-//            if(!MipmapOnly) {
-//                copyOriginalImage(originalImage, &imageIds);
-//            } else {
-//                imageIds = originalMetaData(originalImage);
-//            }
-
-//            images.append(PrivateImageData(imageIds, originalImage));
-//        }
-//    }
-
-//    //Go through all the images
-//    for(int i = 0; i < images.size() && isRunning(); i++) {
-//        cwImage& imageIds = images[i].Id;
-//        const QImage& originalImage = images[i].OriginalImage;
-//        const QString name = images[i].Name;
-
-//        //Create a icon image
-//        if(!MipmapOnly) {
-//            createIcon(originalImage, name, &imageIds);
-//        }
-
-//        //Create mipmaps
-//        createMipmaps(originalImage, name, &imageIds);
-
-//        //Add image ids to the list of images that are returned
-//        Images.append(imageIds);
-
-//        //  emit progressed(i + 1);
-//    }
-
-//    if(RegenerateImage.isValid()) {
-//        //Regenerate the mipmaps based on what's aleardy in the database
-
-//        cwImageProvider imageProvider;
-//        imageProvider.setProjectPath(databaseFilename());
-//        QImage originalImage = imageProvider.image(RegenerateImage.original());
-
-//        if(!originalImage.isNull()) {
-//            createMipmaps(originalImage, "", &RegenerateImage);
-//        }
-//    }
-}
-
 
 /**
   \brief This copies the original image to the new place
   */
 QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdContainer, QSqlDatabase database) {
-
-//    emit statusMessage(QString("Copying %1").arg(QFileInfo(imagePath).fileName()));
 
     //Copy original directly into the database
     QFile originalFile;
@@ -454,10 +335,6 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     QImage image;
     image.loadFromData(originalImageByteData, format.constData());
 
-//    if(MipmapOnly) {
-//        originalImageByteData = QByteArray();
-//    }
-
     *imageIdContainer = addImageToDatabase(image,
                                            format,
                                            originalImageByteData,
@@ -474,21 +351,18 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds, Q
     QByteArray format = "png"; //Alternative is to use "webp", but it seems to be pretty memory leaky
     QByteArray imageData;
 
-//    if(!MipmapOnly) {
+    QBuffer buffer(&imageData);
+    buffer.open(QIODevice::WriteOnly);
+    QImageWriter writer(&buffer, format);
+    writer.setQuality(100);
 
-        QBuffer buffer(&imageData);
-        buffer.open(QIODevice::WriteOnly);
-        QImageWriter writer(&buffer, format);
-        writer.setQuality(100);
+    //FIXME: QImage doesn't support QColorSpaces correctly
+    //https://bugreports.qt.io/browse/QTBUG-82803
+    QImage colorSpaceImage = image;
+    colorSpaceImage.setColorSpace(QColorSpace());
 
-        //FIXME: QImage doesn't support QColorSpaces correctly
-        //https://bugreports.qt.io/browse/QTBUG-82803
-        QImage colorSpaceImage = image;
-        colorSpaceImage.setColorSpace(QColorSpace());
-
-        bool writeSuccessful = writer.write(colorSpaceImage);
-        Q_ASSERT(writeSuccessful);
-//    }
+    bool writeSuccessful = writer.write(colorSpaceImage);
+    Q_ASSERT(writeSuccessful);
 
     *imageIds = addImageToDatabase(image,
                                    format,
@@ -673,24 +547,6 @@ int cwAddImageTask::dotsPerMeter(QImage image) const {
 }
 
 /**
- * @brief cwAddImageTask::regenerateMipmaps
- *
- * This regenerates the mipmaps for RegenerateImage.  This might be used
- * to regenerate the correct mipmap compression for moble devices or
- * if the compression was incorrect generate the first time.
- */
-void cwAddImageTask::regenerateMipmaps()
-{
-    if(RegenerateImage.isValid()) {
-        //Get the original image from the database
-        cwImageProvider imageProvider;
-        imageProvider.setProjectPath(databaseFilename());
-
-        QImage original = imageProvider.image(RegenerateImage.original());
-    }
-}
-
-/**
  * @brief cwAddImageTask::ensureImageDivisibleBy4
  * @param originalImage
  * @param renderTextureSize
@@ -778,25 +634,6 @@ QImage cwAddImageTask::ensureImageDivisibleBy4(QImage originalImage, QSizeF *cli
     *clipArea = QSizeF(validWidth, validHeight);
     return paddedImage;
 }
-
-/**
-  \brief This increases the current progress of the task
-
-  This function is thread safe
-
-  This uses an atomic integer that's thread safe
-  */
-//void cwAddImageTask::IncreaseProgress() {
-//    int originalValue = Progress.fetchAndAddRelaxed(1);
-
-//    //Normalize to progress
-//    double percent = 100.0 * (originalValue / (double)numberOfSteps());
-//    int wholeProgress = (qRound(percent) / 100.0) * numberOfSteps();
-
-//    wholeProgress = qMax(0, qMin(wholeProgress, numberOfSteps()));
-
-//    setProgress(wholeProgress);
-//}
 
 cwImage cwAddImageTask::originalMetaData(const QImage &image)
 {

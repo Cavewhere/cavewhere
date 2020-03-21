@@ -31,9 +31,6 @@
 
 cwCropImageTask::cwCropImageTask(QObject* parent) :
     cwProjectIOTask(parent) {
-//    AddImageTask = new cwAddImageTask(this);
-//    AddImageTask->setParentTask(this);
-//    AddImageTask->setUsingThreadPool(false);
 
 }
 
@@ -52,20 +49,12 @@ void cwCropImageTask::setRectF(QRectF cropTo) {
     CropRect = cropTo;
 }
 
-/**
- * @brief cwCropImageTask::setMipmapOnly
- * @param mipmapOnly - This make the crop image task only create images with mipmaps
- */
-//void cwCropImageTask::setMipmapOnly(bool mipmapOnly)
-//{
-//    AddImageTask->setMipmapsOnly(mipmapOnly);
-//}
-
 QFuture<cwImage> cwCropImageTask::crop()
 {
     auto filename = databaseFilename();
     auto originalImage = Original;
     auto cropRect = CropRect;
+    auto context = this->context();
 
     auto cropImage = [filename, originalImage, cropRect]()->QImage {
             cwImageProvider provider;
@@ -80,15 +69,14 @@ QFuture<cwImage> cwCropImageTask::crop()
 
     auto cropFuture = QtConcurrent::run(cropImage);
 
-    auto addImages = QSharedPointer<cwAddImageTask>::create();
-    addImages->setParent(this);
-    addImages->setDatabaseFilename(filename);
 
-    auto addImageFuture = AsyncFuture::observe(cropFuture).context(this, [addImages, cropFuture, filename]() {
-        addImages->setNewImages({cropFuture.result()});
-        return addImages->images();
+    auto addImageFuture = AsyncFuture::observe(cropFuture).context(context, [context, cropFuture, filename]() {
+        cwAddImageTask addImages;
+        addImages.setContext(context);
+        addImages.setDatabaseFilename(filename);
+        addImages.setNewImages({cropFuture.result()});
+        return addImages.images();
     }).future();
-
 
     auto finishedFuture = AsyncFuture::observe(addImageFuture).context(this,
                                              [addImageFuture](){
@@ -100,38 +88,13 @@ QFuture<cwImage> cwCropImageTask::crop()
     }).future();
 
     return finishedFuture;
-
-//    addFutures({cropImage, addImages, finishedFuture});
 }
-
-/**
-  This gets the finished cropped image.  This should be called when the task has completed
-  */
-//cwImage cwCropImageTask::croppedImage() const {
-//    return CroppedImage;
-//}
 
 /**
   \brief This does the the cropping
   */
 void cwCropImageTask::runTask() {
     Q_ASSERT_X(false, "Use cwCropImageTask::crop() instead", LOCATION_STR);
-
-//    ImageProvider.setProjectPath(databaseFilename());
-//    cwImageData imageData = ImageProvider.data(Original.original());
-//    QImage image = QImage::fromData(imageData.data(), imageData.format());
-//    QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(CropRect, Original.originalSize()));
-//    QImage croppedImage = image.copy(cropArea);
-
-//    AddImageTask->setDatabaseFilename(databaseFilename());
-//    AddImageTask->setNewImages({croppedImage});
-//    AddImageTask->start();
-//    if(isRunning()) {
-//        if(!AddImageTask->images().isEmpty()) {
-//            CroppedImage = AddImageTask->images().first();
-//        }
-//    }
-//    done();
 }
 
 /**

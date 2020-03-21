@@ -94,7 +94,7 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
     CHECK(transform->northUp() == Approx(row.Rotation).epsilon(row.RotationEpsilon));
 }
 
-TEST_CASE("Auto Calculate Note Transform", "[Scrap]") {
+TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotate.cw", 87.8004635984, 176.349));
@@ -118,7 +118,7 @@ TEST_CASE("Auto Calculate Note Transform", "[Scrap]") {
     }
 }
 
-TEST_CASE("Exact Auto Calculate Note Transform", "[Scrap]") {
+TEST_CASE("Exact Auto Calculate Note Transform", "[cwScrap]") {
 
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw", -0.155, 5795.0, 0.05, 0.005));
@@ -151,7 +151,7 @@ TEST_CASE("Exact Auto Calculate Note Transform", "[Scrap]") {
     }
 }
 
-TEST_CASE("Check that auto calculate work outside of trip", "[Scrap]") {
+TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 30.13, 1606.3, 0.05, 0.005));
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw", 30.13, 1606.3, 0.05, 0.005));
@@ -179,7 +179,7 @@ TEST_CASE("Check that auto calculate work outside of trip", "[Scrap]") {
     }
 }
 
-TEST_CASE("Auto calculate if survey station change position", "[Scrap]") {
+TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw", 354.13, 16063.06, 0.05, 0.005));
 
@@ -217,7 +217,7 @@ TEST_CASE("Auto calculate if survey station change position", "[Scrap]") {
 }
 
 
-TEST_CASE("Guess neighbor station name", "[Scrap]") {
+TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     class TestRow {
     public:
         TestRow(QString filename) :
@@ -274,7 +274,7 @@ TEST_CASE("Guess neighbor station name", "[Scrap]") {
 /**
  * This test the profileViewRotation() function in cwScrap
  */
-TEST_CASE("Test profile view rotation", "[Scrap]") {
+TEST_CASE("Test profile view rotation", "[cwScrap]") {
 
     class TestRow {
     public:

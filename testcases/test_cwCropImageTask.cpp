@@ -25,8 +25,6 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         cwAddImageTask addImageTask;
         addImageTask.setNewImages({image});
         addImageTask.setDatabaseFilename(filename);
-//        addImageTask.setUsingThreadPool(false);
-//        addImageTask.start();
 
         auto imageFuture = addImageTask.images();
         CHECK(cwAsyncFuture::waitForFinished(imageFuture, 3000));

@@ -4,6 +4,7 @@
 //Qt includes
 #include <QFuture>
 #include <QEventLoop>
+#include <QFutureWatcher>
 #include <QTimer>
 
 class cwAsyncFuture
