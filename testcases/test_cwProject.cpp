@@ -22,10 +22,10 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
 
     CHECK(project.isModified() == true);
 
-    QString testFile = "test_cwProject.cw";
+    QString testFile = prependTempFolder("test_cwProject.cw");
     QFile::remove(testFile);
 
-    project.saveAs("test_cwProject.cw");
+    project.saveAs(testFile);
     project.waitSaveToFinish();
 
     CHECK(project.isModified() == false);
@@ -33,7 +33,7 @@ TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     project.newProject();
     CHECK(project.isModified() == false);
 
-    project.loadFile("test_cwProject.cw");
+    project.loadFile(testFile);
     project.waitLoadToFinish();
     CHECK(project.isModified() == false);
 
@@ -65,7 +65,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
-    project->saveAs("imageTest-" + QUuid::createUuid().toString().left(5));
+    project->saveAs(prependTempFolder("imageTest-" + QUuid::createUuid().toString().left(5)));
 
     auto region = project->cavingRegion();
     region->addCave();

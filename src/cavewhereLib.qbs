@@ -16,10 +16,10 @@ DynamicLibrary {
     //For mac os x we need to build dylib instead of framework bundle. When running
     //macdepolyqt for release, with a framework, an extra "lib" is added to the
     //path which prevents macdeployqt from finding the correct library's location
-    consoleApplication: true
+//    consoleApplication: true
 
     readonly property string gitVersion: git.productVersion
-    readonly property string rpath: buildDirectory
+//    readonly property string rpath: buildDirectory
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -44,6 +44,7 @@ DynamicLibrary {
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "asyncfuture" }
     Depends { name: "s3tc-dxt-decompression" }
+    Depends { name: "bundle" }
 
     GitProbe {
         id: git
@@ -52,7 +53,7 @@ DynamicLibrary {
 
     Export {
         Depends { name: "cpp" }
-        cpp.rpaths: [product.rpath]
+//        cpp.rpaths: [product.rpath]
         cpp.includePaths: [
             ".",
             "utils",
@@ -82,9 +83,9 @@ DynamicLibrary {
         qbs.install: qbs.targetOS.contains("windows")
     }
 
-    cpp.rpaths: [Qt.core.libPath]
+//    cpp.rpaths: [Qt.core.libPath]
     cpp.cxxLanguageVersion: "c++17"
-//    cpp.treatWarningsAsErrors: true
+    cpp.treatWarningsAsErrors: false
     Qt.quick.compilerAvailable: false
 
     cpp.includePaths: [
@@ -95,23 +96,27 @@ DynamicLibrary {
     ]
 
     Properties {
-        condition: qbs.targetOS.contains("osx")
+        condition: qbs.targetOS.contains("macos")
 
-        cpp.sonamePrefix: "@rpath"
+        cpp.sonamePrefix: qbs.installRoot + "/lib"
 
         cpp.frameworks: [
             "OpenGL"
         ]
     }
 
-    Properties {
-        condition: qbs.targetOS.contains("osx")
-        cpp.cxxFlags: {
-            var flags = [
-                        "-stdlib=libc++", //Needed for protoc
-                        "-Werror", //Treat warnings as errors
+    Group {
+        fileTagsFilter: ["bundle.content"]
+        qbs.install: bundle.isBundle
+        qbs.installSourceBase: product.buildDirectory
+        qbs.installDir: "lib"
+        qbs.installPrefix: ""
+    }
 
-                    ];
+    Properties {
+        condition: qbs.targetOS.contains("macos")
+        cpp.cxxFlags: {
+            var flags = [];
 
             if(qbs.buildVariant == "debug") {
                 flags.push("-fsanitize=address");

@@ -1,6 +1,9 @@
 #include "TestHelper.h"
 #include "catch.hpp"
 
+//Qt includes
+#include <QStandardPaths>
+
 std::shared_ptr<cwProject> fileToProject(QString filename) {
     auto project = std::make_shared<cwProject>();
     fileToProject(project.get(), filename);
@@ -89,4 +92,9 @@ std::ostream &operator <<(std::ostream &os, const cwError &error) {
     QMetaEnum metaEnum = QMetaEnum::fromType<cwError::ErrorType>();
     os << "(typeId:" << error.errorTypeId() << ", " << metaEnum.valueToKey(error.type()) << ", \'" << error.message().toStdString() << "'" << ", suppressed:" << error.suppressed() << ")";
     return os;
+}
+
+QString prependTempFolder(QString filename)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
 }

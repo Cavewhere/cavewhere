@@ -79,7 +79,7 @@ Q_DECLARE_METATYPE(cwScrapStationView*)
  */
 inline QUrl cwScrapStationView::qmlSource() const
 {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/NoteStation.qml");
+    return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + "qml/NoteStation.qml");
 }
 
 

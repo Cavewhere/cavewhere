@@ -21,16 +21,16 @@ public:
     cwGlobalDirectory();
 
     static void setupBaseDirectory();
-    static QString baseDirectory();
+    static QString resourceDirectory();
     static QString qmlMainFilePath() { return "qml/CavewhereMainWindow.qml"; }
     static QUrl mainWindowSourcePath();
 
 private:
-    static QString BaseDirectory;
+    static QString ResourceDirectory;
 };
 
-inline QString cwGlobalDirectory::baseDirectory() {
-    return BaseDirectory + "/";
+inline QString cwGlobalDirectory::resourceDirectory() {
+    return ResourceDirectory + "/";
 }
 
 #endif // CWGLOBALDIRECTORY_H

@@ -29,6 +29,9 @@
 #include "cwError.h"
 #include "cwImageData.h"
 
+//Std includes
+#include <iostream>
+
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
     return os;
@@ -107,6 +110,8 @@ void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup
  * Copyies filename to the temp folder
  */
 QString copyToTempFolder(QString filename);
+
+QString prependTempFolder(QString filename);
 
 /**
  * @brief fileToProject

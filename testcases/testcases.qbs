@@ -4,8 +4,6 @@ import qbs.Process
 import qbs.FileInfo
 import qbs.File
 
-import "../qbsModules/CavewhereApp.qbs" as CavewhereApp
-
 CppApplication {
     name: "cavewhere-test"
     consoleApplication: true
@@ -19,7 +17,9 @@ CppApplication {
 
     cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++17"
-    cpp.treatWarningsAsErrors: true
+//    cpp.treatWarningsAsErrors: true
+
+    qbs.installPrefix: ""
 
     Properties {
         condition: qbs.targetOS.contains("linux") || qbs.targetOS.contains("macos")
@@ -82,8 +82,8 @@ CppApplication {
     }
 
     Group {
-        fileTagsFilter: bundle.isBundle ? ["bundle.content"] : ["application"]
+        fileTagsFilter: ["application"]
         qbs.install: true
-        qbs.installSourceBase: product.buildDirectory
+        qbs.installDir: project.installDir
     }
 }

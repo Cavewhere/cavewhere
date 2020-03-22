@@ -46,32 +46,34 @@ Project {
                             "-concurrent",
                             "-no-angle",
                             project.installDir + "/" + inputs.application[0].fileName]
-                } else if(targetOS.contains("osx")) {
+                } else if(targetOS.contains("macos")) {
                     deploymentApp = "macdeployqt"
 
-                    var bundlePath = ""
+                    var bundleName = "CaveWhere.app"
+                    var bundlePath = project.installDir + "/" + bundleName
 
-                    //Find the bundle
-                    for(var i = 0; i < inputs.installable.length; i++) {
-                        print(JSON.stringify(inputs.installable[i].fileTags))
-                        print(inputs.installable[i].fileTags.indexOf("bundle"))
-                        if(inputs.installable[i].fileTags.indexOf("bundle") != -1) {
-                            //Found the bundle
-                            var inp = inputs.installable[i];
-                            print("Inp:" + JSON.stringify(inp))
-                            bundlePath = project.installDir + "/" + inp.fileName;
-                            break;
-                        }
-                    }
+//                    //Find the bundle
+//                    for(var i = 0; i < inputs.installable.length; i++) {
+//                        console.error(JSON.stringify(inputs.installable[i].fileTags))
+//                        console.error(inputs.installable[i].fileTags.indexOf("bundle.content"))
+//                        if(inputs.installable[i].fileTags.indexOf("bundle.content") != -1) {
+//                            //Found the bundle
+//                            var inp = inputs.installable[i];
+////                            console.error("Inp:" + JSON.stringify(inp))
+//                            bundlePath = project.installDir + "/" + inp.fileName;
+//                            break;
+//                        }
+//                    }
 
-                    print("BundlePath:" + bundlePath)
+                    console.error("BundlePath:" + bundlePath)
 
                     if(bundlePath == "") {
                         throw "Bundle not found";
                     }
 
                     args = [bundlePath,
-                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml"
+                            "-qmldir=" + project.installDir + "/" + bundleName + "/Contents/Resources/qml",
+                            "-appstore-compliant"
                             ]
                 }
 
@@ -79,7 +81,6 @@ Project {
                 cmd.arguments = args
                 cmd.description = "running " + deploymentApp
                 return cmd
-                //return null
             }
         }
     }
@@ -122,7 +123,10 @@ Project {
             prepare: {
                 var cmd = new Command(inputs.shell[0].filePath)
                 cmd.arguments = [product.gitVersion,
-                                 product.sourceDirectory]
+                                 product.sourceDirectory,
+                                 project.codeSign,
+                                 project.installDir
+                        ]
 
                 cmd.workingDirectory = project.installDir
                 cmd.description = "running " + inputs.shell[0].filePath

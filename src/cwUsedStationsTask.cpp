@@ -270,6 +270,6 @@ QList<QString> cwUsedStationsTask::groupStrings(QList<SurveyGroup> groups) const
             groupStrings.append(groupString);
         }
     }
-    return groupStrings;
+    return std::move(groupStrings);
 }
 

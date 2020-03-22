@@ -25,13 +25,13 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
 {
     QQmlEngine* engine = context->engine();
 
-    DataBoxDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/DataBox.qml", this);
-    StationDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/StationBox.qml", this);
-    TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/TitleLabel.qml", this);
-    FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/FrontSightReadingBox.qml", this);
-    BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/BackSightReadingBox.qml", this);
-    ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/ShotDistanceDataBox.qml", this);
-    ErrorDelegate = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/SurveyChunkErrorDelegate.qml", this);
+    DataBoxDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/DataBox.qml", this);
+    StationDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/StationBox.qml", this);
+    TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/TitleLabel.qml", this);
+    FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/FrontSightReadingBox.qml", this);
+    BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/BackSightReadingBox.qml", this);
+    ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/ShotDistanceDataBox.qml", this);
+    ErrorDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/SurveyChunkErrorDelegate.qml", this);
 
     //Print error if there are any
     cwDebug::printErrors(DataBoxDelegate);
