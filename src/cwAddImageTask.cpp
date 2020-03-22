@@ -268,6 +268,11 @@ QFuture<cwImage> cwAddImageTask::images() const
                 mipmapCombine << mipmapFuture;
             }
 
+            auto progressFuture = mipmapCombine.future();
+            AsyncFuture::observe(progressFuture).onProgress([progressFuture](){
+                qDebug() << "Progress:" << progressFuture.progressValue() << progressFuture.progressMaximum();
+            });
+
             return AsyncFuture::observe(mipmapCombine.future())
                     .context(context, [=]()
             {

@@ -44,6 +44,16 @@ void cwFutureManagerModel::addJob(const Job &job)
             this, [this, watcher](){
         auto modelIndex = indexOf(watcher);
         emit dataChanged(modelIndex, modelIndex, {ProgressRole});
+
+    });
+
+    connect(watcher, &QFutureWatcher<void>::progressRangeChanged,
+            this, [this, watcher](int min, int max){
+        Q_UNUSED(min);
+        Q_UNUSED(max);
+        auto modelIndex = indexOf(watcher);
+        qDebug() << "ProgressRangeChanged!" << watcher << max;
+        emit dataChanged(modelIndex, modelIndex, {NumberOfStepRole});
     });
 
     watcher->setFuture(job.future());

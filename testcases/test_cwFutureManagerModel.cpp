@@ -125,3 +125,61 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
     }
 }
 
+TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerModel]") {
+
+    cwFutureManagerModel model;
+
+    int size = 50;
+
+    QVector<int> steps = {
+        size * 2,
+        size * 3
+    };
+    int currentIndex = 0;
+
+    QObject::connect(&model, &cwFutureManagerModel::dataChanged,
+            [&currentIndex, steps](const QModelIndex& topLeft,
+                     const QModelIndex& bottomRight,
+                     QVector<int> roles) {
+
+        REQUIRE(topLeft == bottomRight);
+
+        if(roles.contains(cwFutureManagerModel::NumberOfStepRole)) {
+            bool okay;
+            int numSteps = topLeft.data(cwFutureManagerModel::NumberOfStepRole).toInt(&okay);
+            CHECK(okay);
+            REQUIRE(currentIndex < steps.size());
+            CHECK(steps.at(currentIndex) == numSteps);
+
+            currentIndex++;
+        }
+    });
+
+    QSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+
+    QVector<int> ints(size);
+    std::iota(ints.begin(), ints.end(), ints.size());
+    std::function<int (int)> func = [](int x)->int {
+        QThread::msleep(100);
+        return x * x;
+    };
+    QFuture<int> mappedFuture = QtConcurrent::mapped(ints, func);
+
+    auto nextFuture = AsyncFuture::observe(mappedFuture).subscribe([ints, func](){
+        QFuture<int> mappedFuture2 = QtConcurrent::mapped(ints, func);
+        return mappedFuture2;
+    }).future();
+
+    bool nextExecuted2 = false;
+    auto nextFuture2 = AsyncFuture::observe(nextFuture).subscribe([&nextExecuted2, ints, func](){
+        QFuture<int> mappedFuture2 = QtConcurrent::mapped(ints, func);
+        nextExecuted2 = true;
+        return mappedFuture2;
+    }).future();
+
+
+    model.addJob({nextFuture2, "ChainedFutures"});
+
+    CHECK(cwAsyncFuture::waitForFinished(nextFuture2, size * 100));
+
+}

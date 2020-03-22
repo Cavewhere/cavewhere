@@ -22,10 +22,10 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
     }
 
-    SECTION("With GPU") {
-        REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-    }
+//    SECTION("With GPU") {
+//        REQUIRE(cwOpenGLSettings::instance());
+//        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+//    }
 
     auto addImage = [filename, &addImageTask](const QImage& image) {
         addImageTask->setNewImages({image});
