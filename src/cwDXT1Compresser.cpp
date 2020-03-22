@@ -111,31 +111,35 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(c
                                              squish::kDxt1 | squish::kColourIterativeClusterFit);
     };
 
+    auto futureResults = [context](const QList<QFuture<cwDXT1Compresser::CompressedImage>>& imageFutures) {
+        auto compressFutures = AsyncFuture::combine() << imageFutures;
+
+        return AsyncFuture::observe(compressFutures.future())
+                .context(context, [imageFutures]()
+        {
+            QList<cwDXT1Compresser::CompressedImage> compressedImages;
+            compressedImages.reserve(imageFutures.size());
+            for(auto imageResultFuture : imageFutures) {
+                Q_ASSERT(imageResultFuture.isFinished());
+                compressedImages.append(imageResultFuture.result());
+            }
+            return AsyncFuture::completed(compressedImages);
+        }).future();
+    };
+
     if(threaded) {
         auto compressFuture = QtConcurrent::mapped(images, compress);
 
         return AsyncFuture::observe(compressFuture)
-                .context(context, [compressFuture, context]()
+                .context(context, [compressFuture, futureResults]()
         {
-            auto compressFutures = AsyncFuture::combine() << compressFuture.results();
-
-            return AsyncFuture::observe(compressFutures.future())
-                    .context(context, [compressFuture]()
-            {
-                QList<cwDXT1Compresser::CompressedImage> compressedImages;
-                compressedImages.reserve(compressFuture.resultCount());
-                for(auto imageResultFuture : compressFuture.results()) {
-                    Q_ASSERT(imageResultFuture.isFinished());
-                    compressedImages.append(imageResultFuture.result());
-                }
-                return AsyncFuture::completed(compressedImages);
-            }).future();
+            return futureResults(compressFuture.results());
         }).future();
     }
 
-    QList<cwDXT1Compresser::CompressedImage> compressedImages;
+    QList<QFuture<cwDXT1Compresser::CompressedImage>> compressedImages;
     std::transform(images.begin(), images.end(), std::back_inserter(compressedImages), compress);
-    return AsyncFuture::completed(compressedImages);
+    return futureResults(compressedImages);
 }
 
 QList<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::results(QFuture<cwDXT1Compresser::CompressedImage> future) const
