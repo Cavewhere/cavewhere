@@ -42,6 +42,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     AsyncFuture::observe(addImageFuture).onProgress([addImageFuture, &lastProgress]() {
         CHECK(lastProgress <= addImageFuture.progressValue());
         CHECK(addImageFuture.progressValue() <= addImageFuture.progressMaximum());
+        qDebug() << "Progress!" << addImageFuture.progressValue() << addImageFuture.progressMaximum();
         lastProgress = addImageFuture.progressValue();
     });
 

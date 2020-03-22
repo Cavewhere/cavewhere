@@ -184,6 +184,7 @@ QFuture<cwImage> cwAddImageTask::images() const
             = [filename, context](const QList<QImage>& images)->QFuture<int> {
 
         cwDXT1Compresser compresser;
+        compresser.setContext(context);
         auto compressFuture = compresser.compress(images);
 
         return AsyncFuture::observe(compressFuture)

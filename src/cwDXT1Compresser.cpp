@@ -114,10 +114,21 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(c
     if(threaded) {
         auto compressFuture = QtConcurrent::mapped(images, compress);
 
+        auto future = compressFuture; //.future();
+        AsyncFuture::observe(future).onProgress([future](){
+            qDebug() << "BlockFuture:" << future.progressValue() << future.progressMaximum();
+        });
+
         return AsyncFuture::observe(compressFuture)
                 .context(context, [compressFuture, context]()
         {
             auto compressFutures = AsyncFuture::combine() << compressFuture.results();
+
+//            auto future = compressFutures.future();
+//            AsyncFuture::observe(future).onProgress([future](){
+//                qDebug() << "BlockFuture:" << future.progressValue() << future.progressMaximum();
+//            });
+
 
             return AsyncFuture::observe(compressFutures.future())
                     .context(context, [compressFuture]()
@@ -163,13 +174,16 @@ public:
       \param rgba - The source rgba
       \param blockData - The output blockdata
       */
-    Block(int x, int y, u8 const* rgba, void* blockData) {
+    Block(int x, int y, const QImage& rgbaImage, void* blockData) :
+        image(rgbaImage)
+    {
         Position = QPoint(x, y);
-        RGBA = rgba;
+        RGBA = image.constBits();
         BlockData = blockData;
     }
 
     QPoint Position;
+    const QImage image;
     u8 const* RGBA;
     void* BlockData;
 };
@@ -191,7 +205,7 @@ public:
     float* Metric;
 
 
-    void operator()(Block block) {
+    void operator()(const Block& block) {
         // build the 4x4 block of pixels
         u8 sourceRgba[16*4];
         u8* targetPixel = sourceRgba;
@@ -264,8 +278,8 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImage
     int outputFileSize = squish::GetStorageRequirements(image.width(), image.height(), squish::kDxt1);
 
     //Allocate the compress data
-    auto outputData = QSharedPointer<QByteArray>::create();
-    outputData->resize(outputFileSize);
+    QByteArray outputData;
+    outputData.resize(outputFileSize);
 
     //Convert the image to a real format
     QImage convertedFormat = cwOpenGLUtils::toGLTexture(image);
@@ -274,7 +288,7 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImage
     flags = FixFlags( flags );
 
     // initialise the block output
-    u8* targetBlock = reinterpret_cast< u8* >( outputData->data() );
+    u8* targetBlock = reinterpret_cast< u8* >( outputData.data() );
     int bytesPerBlock = ( ( flags & kDxt1 ) != 0 ) ? 8 : 16;
 
     // loop over pixels and create blocks
@@ -284,7 +298,7 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImage
     {
         for( int x = 0; x < image.width(); x += 4 )
         {
-            computeBlocks.append(Block(x, y, convertedFormat.bits(), targetBlock));
+            computeBlocks.append(Block(x, y, convertedFormat, targetBlock));
 
             // advance
             targetBlock += bytesPerBlock;
@@ -295,8 +309,8 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImage
     auto blockFuture = QtConcurrent::map(computeBlocks, CompressImageKernal(image.size(), flags, metric));
 
     return AsyncFuture::observe(blockFuture)
-            .context(context, [outputData, image]() {
-        return CompressedImage(*outputData.data(), image.size());
+            .context(context, [outputData, image, computeBlocks]() {
+        return CompressedImage(outputData, image.size());
     }).future();
 }
 
