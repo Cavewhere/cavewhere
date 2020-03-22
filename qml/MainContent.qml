@@ -5,26 +5,6 @@ import Cavewhere 1.0
 QQ.Item {
     id: mainContentId
 
-//    property alias dataPage: dataMainPageId
-
-    /**
-      This is for global page selection
-      obj.page = "View" <- This will change the main window to "View" page
-      obj.page = "Data" <- This will change the main window to "Data" page
-      */
-    function setCurrentMainPage(obj) {
-        switch(obj.page) {
-        case "View":
-            mainSideBar.pageShown = 0;
-            break
-        case "Data":
-            mainSideBar.pageShown = 1;
-            break;
-        default:
-            console.log("Can't change the main page!!!, this is a bug");
-        }
-    }
-
     anchors.fill: parent
 
     LinkBar {

@@ -70,7 +70,11 @@ QQ.Rectangle {
                 pageShown = 0;
             } else if(address.search(dataPage) == 0) {
                 pageShown = 1
+            } else {
+                //Deselect both, probably in unknown page or settings page
+                pageShown = -1;
             }
+
             gotoToPage = true
         }
     }
