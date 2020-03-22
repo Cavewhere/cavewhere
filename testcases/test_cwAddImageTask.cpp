@@ -19,11 +19,6 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     auto addImageTask = std::make_unique<cwAddImageTask>();
     addImageTask->setDatabaseFilename(filename);
 
-    auto addImage = [filename, &addImageTask](const QImage& image) {
-        auto imageFuture = addImageTask->images();
-        return imageFuture;
-    };
-
     QFuture<cwImage> addImageFuture;
     QString imageFilename = "://datasets/dx1Cropping/scanCrop.png";
     auto resourceImage = QImage(imageFilename);
