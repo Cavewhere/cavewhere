@@ -7,6 +7,7 @@
 #include "cwProject.h"
 #include "cwOpenGLSettings.h"
 #include "cwImageProvider.h"
+#include "TestHelper.h"
 
 //Async includes
 #include "asyncfuture.h"
@@ -16,37 +17,65 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     cwProject project;
     QString filename = project.filename();
     auto addImageTask = std::make_unique<cwAddImageTask>();
-
-    SECTION("With Squish") {
-        REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-    }
-
-//    SECTION("With GPU") {
-//        REQUIRE(cwOpenGLSettings::instance());
-//        cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-//    }
+    addImageTask->setDatabaseFilename(filename);
 
     auto addImage = [filename, &addImageTask](const QImage& image) {
-        addImageTask->setNewImages({image});
-        addImageTask->setDatabaseFilename(filename);
         auto imageFuture = addImageTask->images();
         return imageFuture;
     };
 
-    auto resourceImage = QImage("://datasets/dx1Cropping/scanCrop.png");
-    auto addImageFuture = addImage(resourceImage);
+    QFuture<cwImage> addImageFuture;
+    QString imageFilename = "://datasets/dx1Cropping/scanCrop.png";
+    auto resourceImage = QImage(imageFilename);
+
+    SECTION("Load from QImage") {
+        SECTION("With Squish") {
+            REQUIRE(cwOpenGLSettings::instance());
+            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+        }
+
+        SECTION("With GPU") {
+            REQUIRE(cwOpenGLSettings::instance());
+            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+        }
+
+        addImageTask->setNewImages({resourceImage});
+        addImageFuture = addImageTask->images();
+    }
+
+    SECTION("Load from file") {
+        SECTION("With Squish") {
+            REQUIRE(cwOpenGLSettings::instance());
+            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+        }
+
+        SECTION("With GPU") {
+            REQUIRE(cwOpenGLSettings::instance());
+            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+        }
+
+        auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
+        addImageTask->setNewImagesPath({resourceImageFilename});
+        addImageFuture = addImageTask->images();
+    }
+
+    if(addImageFuture.isCanceled()) {
+        return;
+    }
 
     //Check that progress works okay
     int lastProgress = 0;
     AsyncFuture::observe(addImageFuture).onProgress([addImageFuture, &lastProgress]() {
         CHECK(lastProgress <= addImageFuture.progressValue());
         CHECK(addImageFuture.progressValue() <= addImageFuture.progressMaximum());
-        qDebug() << "Progress!" << addImageFuture.progressValue() << addImageFuture.progressMaximum();
         lastProgress = addImageFuture.progressValue();
     });
 
     CHECK(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
+    if(cwOpenGLSettings::instance()->dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish) {
+        CHECK(lastProgress > 50000);
+    }
+
     CHECK(addImageFuture.isFinished() == true);
     CHECK(addImageFuture.isCanceled() == false);
     REQUIRE(addImageFuture.results().size() == 1);

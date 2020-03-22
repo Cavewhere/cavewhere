@@ -114,21 +114,10 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(c
     if(threaded) {
         auto compressFuture = QtConcurrent::mapped(images, compress);
 
-        auto future = compressFuture; //.future();
-        AsyncFuture::observe(future).onProgress([future](){
-            qDebug() << "BlockFuture:" << future.progressValue() << future.progressMaximum();
-        });
-
         return AsyncFuture::observe(compressFuture)
                 .context(context, [compressFuture, context]()
         {
             auto compressFutures = AsyncFuture::combine() << compressFuture.results();
-
-//            auto future = compressFutures.future();
-//            AsyncFuture::observe(future).onProgress([future](){
-//                qDebug() << "BlockFuture:" << future.progressValue() << future.progressMaximum();
-//            });
-
 
             return AsyncFuture::observe(compressFutures.future())
                     .context(context, [compressFuture]()
