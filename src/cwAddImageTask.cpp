@@ -77,8 +77,7 @@ QFuture<cwImage> cwAddImageTask::images() const
         cwImage imageIds;
 
         //Copy the original image to the database
-        QImage originalImage;
-        originalImage = copyOriginalImage(imagePath, &imageIds, database);
+        QImage originalImage = copyOriginalImage(imagePath, &imageIds, database);
         database.close();
 
         if(!originalImage.isNull()) {
@@ -134,6 +133,10 @@ QFuture<cwImage> cwAddImageTask::images() const
         }
 
         QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+        //FIXME: QImage doesn't support QColorSpaces correctly
+        //https://bugreports.qt.io/browse/QTBUG-82803
+        scaledImage.setColorSpace(QColorSpace());
 
         //Convert the image into a jpg
         QByteArray format = "jpg";

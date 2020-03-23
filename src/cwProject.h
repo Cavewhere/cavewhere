@@ -71,8 +71,6 @@ public:
     cwFutureManagerModel* futureManagerModel() const;
     void setFutureManagerModel(cwFutureManagerModel* futureManagerModel);
 
-    void addImages(QList<QUrl> noteImagePath, QObject* reciever, const char* slot);
-
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
     static bool updateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
     static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);

@@ -96,3 +96,35 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     CHECK(!sqlImage.isNull());
     CHECK(originalImage == sqlImage);
 }
+
+TEST_CASE("Images should load correctly", "[cwProject]") {
+
+    auto image = [](const QColor& color) {
+        QImage image(1024, 1024, QImage::Format_ARGB32);
+        image.fill(color);
+        QString imageFilename = QDir::tempPath() + "/" + QString("cavewhere-cwProject-image%1%2%3.png").arg(color.red()).arg(color.green()).arg(color.blue());
+        REQUIRE(image.save(imageFilename, "png"));
+        return QUrl::fromLocalFile(imageFilename);
+    };
+
+    QVector<QColor> imageColors = {"red", "green", "blue"};
+    QList<QUrl> filenames;
+    std::transform(imageColors.begin(), imageColors.end(), std::back_inserter(filenames), image);
+
+    filenames += {
+        QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwProject/crashMap.png"))
+    };
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    int checked = 0;
+    project->addImages(filenames, rootData.get(), [&checked](QList<cwImage> images){
+        REQUIRE(images.size() == 1);
+        CHECK(images.first().isValid());
+        checked++;
+    });
+
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(checked == filenames.size());
+    CHECK(filenames.size() > 0);
+}

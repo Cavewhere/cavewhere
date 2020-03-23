@@ -100,7 +100,8 @@ QHash<int, QByteArray> cwFutureManagerModel::roleNames() const
 
 void cwFutureManagerModel::waitForFinished()
 {
-    for(auto watcher : Watchers) {
+    auto watchers = Watchers;
+    for(auto watcher : watchers) {
         cwAsyncFuture::waitForFinished(watcher.job.future());
     }
 }
