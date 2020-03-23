@@ -24,8 +24,6 @@ cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
 
-//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
-
 }
 
 /**
@@ -65,8 +63,14 @@ void cwPlotSauceTask::runTask() {
         return;
     }
 
-    PlotSauceProcess = new QProcess();
-    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+    auto plotSauceProcess = std::make_unique<QProcess>();
+    auto plotSaucePtr = plotSauceProcess.get();
+    connect(plotSaucePtr, &QProcess::errorOccurred,
+            plotSaucePtr,
+            [plotSaucePtr]()
+    {
+         qDebug() << "PlotSauce errors: " << plotSaucePtr->errorString();
+    });
 
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + PlotSauceExtension;
@@ -88,15 +92,9 @@ void cwPlotSauceTask::runTask() {
     arguments.append(inputFile);
     arguments.append(outputFile);
 
-    PlotSauceProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    PlotSauceProcess->start(plotSaucePath, arguments);
-    PlotSauceProcess->waitForFinished();
-
-    delete PlotSauceProcess;
+    plotSauceProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    plotSauceProcess->start(plotSaucePath, arguments);
+    plotSauceProcess->waitForFinished();
 
     done();
-}
-
-void cwPlotSauceTask::printErrors() {
-    qDebug() << "PlotSauce errors: " << PlotSauceProcess->errorString();
 }

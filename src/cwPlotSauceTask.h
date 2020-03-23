@@ -33,12 +33,7 @@ private:
     static const QString PlotSauceExtension;
     QString Survex3DFileName;
 
-    QProcess* PlotSauceProcess;
-
     QString survex3DFilename() const;
-
-private slots:
-    void printErrors();
 
 };
 
