@@ -66,7 +66,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         lastProgress = addImageFuture.progressValue();
     });
 
-    CHECK(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
+    REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
     if(cwOpenGLSettings::instance()->dxt1Algorithm() == cwOpenGLSettings::DXT1_Squish) {
         CHECK(lastProgress > 50000);
     }

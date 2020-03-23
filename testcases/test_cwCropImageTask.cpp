@@ -27,7 +27,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         addImageTask.setDatabaseFilename(filename);
 
         auto imageFuture = addImageTask.images();
-        CHECK(cwAsyncFuture::waitForFinished(imageFuture, 3000));
+        REQUIRE(cwAsyncFuture::waitForFinished(imageFuture, 3000));
 
         REQUIRE(imageFuture.results().size() == 1);
 
@@ -112,7 +112,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 //            cropImageTask.start();
 
             auto cropFuture = cropImageTask.crop();
-            CHECK(cwAsyncFuture::waitForFinished(cropFuture, 3000));
+            REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));
 
             cwImage croppedImageId = cropFuture.result();
 
@@ -150,7 +150,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 //            cropImageTask.start();
 
             auto cropFuture = cropImageTask.crop();
-            CHECK(cwAsyncFuture::waitForFinished(cropFuture, 3000));
+            REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));
 
             cwImage croppedImageId = cropFuture.result();
             return croppedImageId;

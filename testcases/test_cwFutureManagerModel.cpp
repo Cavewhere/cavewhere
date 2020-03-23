@@ -110,7 +110,7 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
             combine << row.future;
         }
 
-        CHECK(cwAsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
+        REQUIRE(cwAsyncFuture::waitForFinished(combine.future(), numberOfTasks * sleepScale * 10));
 
         CHECK(model.rowCount() == 0);
         spyChecker[&rowsRemovedSpy] = numberOfTasks;
@@ -130,6 +130,7 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
     cwFutureManagerModel model;
 
     int size = 50;
+    int sleepTime = 10;
 
     QVector<int> steps = {
         size * 2,
@@ -159,8 +160,8 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
 
     QVector<int> ints(size);
     std::iota(ints.begin(), ints.end(), ints.size());
-    std::function<int (int)> func = [](int x)->int {
-        QThread::msleep(100);
+    std::function<int (int)> func = [sleepTime](int x)->int {
+        QThread::msleep(sleepTime);
         return x * x;
     };
     QFuture<int> mappedFuture = QtConcurrent::mapped(ints, func);
@@ -180,6 +181,6 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
 
     model.addJob({nextFuture2, "ChainedFutures"});
 
-    CHECK(cwAsyncFuture::waitForFinished(nextFuture2, size * 100));
+    REQUIRE(cwAsyncFuture::waitForFinished(nextFuture2, size * sleepTime * 3));
 
 }
