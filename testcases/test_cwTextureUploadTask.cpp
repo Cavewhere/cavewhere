@@ -10,6 +10,12 @@
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwTextureUploadTask.h"
+#include "cwAsyncFuture.h"
+
+//Qt includes
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
 
 TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
 
@@ -39,11 +45,28 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
     };
 
     SECTION("DXT1 extraction should work correctly") {
+
+        SECTION("Regenerate texture should work correctly") {
+            //Remove all mipmap textures from the database
+            QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("test_cwTextureUploadTask"));
+            database.setDatabaseName(project->filename());
+            REQUIRE(database.open());
+
+            auto query = database.exec("delete from Images where type like \"dxt1.gz\"");
+            REQUIRE(query.lastError().type() == QSqlError::NoError);
+            database.close();
+        }
+
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());
         task.setType(cwTextureUploadTask::DXT1Mipmaps);
-        auto results = task();
+        auto resultsFuture = task.mipmaps();
+
+        cwAsyncFuture::waitForFinished(resultsFuture);
+        REQUIRE(resultsFuture.resultCount() == 1);
+        REQUIRE(resultsFuture.isFinished());
+        auto results = resultsFuture.result();
 
         QList< QPair< int, QSize > > mipmaps({
                                                  { 411264 , QSize(1008, 816) },
@@ -61,6 +84,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
         CHECK(results.scaleTexCoords.x() == Approx(0.997024));
         CHECK(results.scaleTexCoords.y() == Approx(1.0));
+
         checkMipmaps(results, mipmaps);
     }
 
@@ -69,7 +93,10 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         task.setImage(note->image());
         task.setProjectFilename(project->filename());
         task.setType(cwTextureUploadTask::OpenGL_RGBA);
-        auto results = task();
+        auto resultsFuture = task.mipmaps();
+
+        cwAsyncFuture::waitForFinished(resultsFuture);
+        auto results = resultsFuture.result();
 
         QList< QPair< int, QSize > > mipmaps({
                                                  { 3280320 , QSize(1005, 816) }

@@ -20,85 +20,115 @@
 //Std includes
 #include <math.h>
 
+//Async Future
+#include "asyncfuture.h"
+
 cwTextureUploadTask::cwTextureUploadTask()
 {
 }
 
-cwTextureUploadTask::UploadResult cwTextureUploadTask::operator()() const
+QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 {
-    if(Image.mipmaps().empty()) { return UploadResult(); }
+    if(Image.mipmaps().empty()) { return AsyncFuture::completed(UploadResult()); }
 
-    //Fetch mimaps from disk
-    cwImageProvider imageProvidor;
-    imageProvidor.setProjectPath(ProjectFilename);
+    auto projectFile = ProjectFilename;
+    auto image = Image;
+    auto currentType = type;
+    auto context = this->context();
 
-    int firstLevel = Image.mipmaps().first();
-    QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+    //loads valid mipmap
+    auto loadValidMipmap = [projectFile, currentType](const cwImage& image) {
+        cwImageProvider imageProvidor;
+        imageProvidor.setProjectPath(projectFile);
 
-    if(!isDivisibleBy4(firstLevelSize)) {
-        //Regenerate the mipmaps
-        cwAddImageTask addImageTask;
-        addImageTask.setUsingThreadPool(false);
-        addImageTask.setDatabaseFilename(ProjectFilename);
-        addImageTask.regenerateMipmapsOn(Image);
-        addImageTask.start();
+        UploadResult results;
 
-        //Double check if it successful
-        int firstLevel = Image.mipmaps().first();
-        firstLevelSize = imageProvidor.data(firstLevel, true).size();
-        if(!isDivisibleBy4(firstLevelSize)) {
-            //No original image, can regenerate image
-            return UploadResult();
-        }
-    }
+        auto loadDXT1Mipmap = [&imageProvidor, image]() {
+            QList< QPair< QByteArray, QSize > > mipmaps;
+            //Load all the mipmaps
+            foreach(int imageId, image.mipmaps()) {
+                imageProvidor.data(imageId, true);
 
-    UploadResult results;
+                QSize imageSize;
+                QByteArray imageData = imageProvidor.requestImageData(imageId, &imageSize);
+                mipmaps.append(QPair< QByteArray, QSize >(imageData, imageSize));
+            }
+            return mipmaps;
+        };
 
-    auto loadDXT1Mipmap = [this, &imageProvidor]() {
-        QList< QPair< QByteArray, QSize > > mipmaps;
-        //Load all the mipmaps
-        foreach(int imageId, Image.mipmaps()) {
-            imageProvidor.data(imageId, true);
+        auto loadRGB = [&imageProvidor, image]()->QList< QPair< QByteArray, QSize > > {
+            QList< QPair< QByteArray, QSize > > mipmaps;
+            auto imageData = imageProvidor.data(image.original());
 
-            QSize imageSize;
-            QByteArray imageData = imageProvidor.requestImageData(imageId, &imageSize);
-            mipmaps.append(QPair< QByteArray, QSize >(imageData, imageSize));
-        }
-        return mipmaps;
-    };
+            if(imageData.data().isEmpty()) {
+                return {};
+            }
 
-    auto loadRGB = [this, &imageProvidor]()->QList< QPair< QByteArray, QSize > > {
-        QList< QPair< QByteArray, QSize > > mipmaps;
-        auto imageData = imageProvidor.data(Image.original());
-
-        if(imageData.data().isEmpty()) {
+            QImage image;
+            bool loadedOkay = image.loadFromData(imageData.data());
+            if(loadedOkay) {
+                image = cwOpenGLUtils::toGLTexture(image);
+                QByteArray data(reinterpret_cast<char*>(image.bits()),
+                                static_cast<int>(image.sizeInBytes()));
+                return {{data, imageData.size()}};
+            }
             return {};
+        };
+
+        switch(currentType) {
+        case OpenGL_RGBA:
+            results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
+            results.mipmaps = loadRGB();
+            break;
+        case DXT1Mipmaps:
+            results.scaleTexCoords = imageProvidor.scaleTexCoords(image);
+            results.mipmaps = loadDXT1Mipmap();
+            break;
         }
 
-        QImage image;
-        bool loadedOkay = image.loadFromData(imageData.data());
-        if(loadedOkay) {
-            image = cwOpenGLUtils::toGLTexture(image);
-            QByteArray data(reinterpret_cast<char*>(image.bits()),
-                            static_cast<int>(image.sizeInBytes()));
-            return {{data, imageData.size()}};
-        }
-        return {};
+        results.type = currentType;
+        return results;
     };
 
-    switch(type) {
-    case OpenGL_RGBA:
-        results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
-        results.mipmaps = loadRGB();
-        break;
-    case DXT1Mipmaps:
-        results.scaleTexCoords = imageProvidor.scaleTexCoords(Image);
-        results.mipmaps = loadDXT1Mipmap();
-        break;
-    }
+    //fetchs the mipmaps
+    auto fetchImages = [loadValidMipmap, projectFile, image, context]() {
+        //Fetch mimaps from disk
+        cwImageProvider imageProvidor;
+        imageProvidor.setProjectPath(projectFile);
 
-    results.type = type;
-    return results;
+        int firstLevel = image.mipmaps().first();
+        QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+
+        if(!isDivisibleBy4(firstLevelSize)) {
+            //Regenerate the mipmaps
+            cwAddImageTask addImageTask;
+            addImageTask.setDatabaseFilename(projectFile);
+            addImageTask.setRegenerateMipmapsOn(image);
+            addImageTask.setContext(context);
+            auto reAddFuture = addImageTask.images();
+
+            return AsyncFuture::observe(reAddFuture)
+                    .context(context, [projectFile, reAddFuture, loadValidMipmap]() {
+                //Double check if it successful
+                cwImageProvider imageProvidor;
+                imageProvidor.setProjectPath(projectFile);
+
+                auto image = reAddFuture.result();
+                int firstLevel = image.mipmaps().first();
+                QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+                if(!isDivisibleBy4(firstLevelSize)) {
+                    //No original image, can regenerate image
+                    return AsyncFuture::completed(UploadResult());
+                }
+
+                return QtConcurrent::run(std::bind(loadValidMipmap, reAddFuture));
+            }).future();
+        }
+
+        return QtConcurrent::run(std::bind(loadValidMipmap, image));
+    };
+
+    return QtConcurrent::run(fetchImages);
 }
 
 /**

@@ -20,6 +20,8 @@
 #include <QTimer>
 #include <QDebug>
 
+//Std includes
+
 QAtomicInt cwProjectIOTask::DatabaseConnectionCounter;
 
 cwProjectIOTask::cwProjectIOTask(QObject* parent) :
@@ -30,6 +32,19 @@ cwProjectIOTask::cwProjectIOTask(QObject* parent) :
 QList<cwError> cwProjectIOTask::errors() const
 {
     return Errors;
+}
+
+QSqlDatabase cwProjectIOTask::createDatabase(const QString &connectionName, const QString& databasePath)
+{
+    int nextConnectonName = DatabaseConnectionCounter.fetchAndAddAcquire(1);
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("%1-%2").arg(connectionName).arg(nextConnectonName));
+    database.setDatabaseName(databasePath);
+    bool connected = database.open();
+    if(!connected) {
+        throw std::runtime_error(QString("Couldn't connect to database for %1 %2 %3").arg(connectionName).arg(databasePath).toStdString());
+    }
+
+    return database;
 }
 
 /**

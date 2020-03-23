@@ -19,6 +19,7 @@ class cwProject;
 #include <QMetaType>
 #include <QSharedData>
 #include <QSharedDataPointer>
+#include <QDebug>
 
 /**
   \brief This class stores id's to all the images in the database
@@ -51,6 +52,7 @@ public:
     bool operator !=(const cwImage& other) const;
 
     bool isValid() const;
+    bool isOriginalValid() const;
     bool isMipmapsValid() const;
     bool isIconValid() const;
 
@@ -168,7 +170,13 @@ inline int cwImage::originalDotsPerMeter() const {
   \brief Returns false if the image isn't valid and true if it is valid.
   */
 inline bool cwImage::isValid() const {
-    return isIdValid(Data->OriginalId) && isMipmapsValid() && isIconValid();
+    return isOriginalValid() && isMipmapsValid() && isIconValid();
+}
+
+
+inline bool cwImage::isOriginalValid() const
+{
+    return isIdValid(original());
 }
 
 /**
@@ -183,6 +191,8 @@ inline bool cwImage::isIdValid(int id)
 {
     return id > -1;
 }
+
+QDebug operator<<(QDebug debug, const cwImage &image);
 
 
 

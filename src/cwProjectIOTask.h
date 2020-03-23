@@ -11,8 +11,8 @@
 //Our includes
 #include "cwTask.h"
 #include "cwError.h"
+#include "cwJob.h"
 class cwCavingRegion;
-
 
 //Qt includes
 #include <QSqlDatabase>
@@ -22,7 +22,7 @@ class cwCavingRegion;
 /**
   cXMLProjectLoadTask
   */
-class cwProjectIOTask : public cwTask
+class cwProjectIOTask : public cwTask, public cwJob
 {
     Q_OBJECT
 
@@ -39,6 +39,7 @@ protected:
 
     QSqlDatabase database() const;
 
+    static QSqlDatabase createDatabase(const QString& connectionName, const QString &databasePath);
     bool connectToDatabase(QString connectionName);
     void disconnectToDatabase();
     bool beginTransation();

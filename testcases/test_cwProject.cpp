@@ -11,6 +11,7 @@
 #include "cwRootData.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTaskManagerModel.h"
+#include "cwFutureManagerModel.h"
 
 TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     cwProject project;
@@ -78,7 +79,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
 
     trip->notes()->addFromFiles({QUrl("file:/" + filename)}, project);
 
-    rootData->taskManagerModel()->waitForTasks();
+    rootData->futureManagerModel()->waitForFinished();
 
     SECTION("Is Modifed shouldn't effect the save and load") {
         //Make sure is modified doesn't modify the underlying file

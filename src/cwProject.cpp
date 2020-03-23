@@ -403,35 +403,48 @@ void cwProject::setFilename(QString newFilename) {
   \param slot - The slot that'll handle the addImages signal
 
   */
-void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const char* slot) {
-    if(receiver == nullptr )  { return; }
+//template <typename CallBack>
+//void cwProject::addImages(QList<QUrl> noteImagePath, QObject* context, CallBack func) {
+//    if(context == nullptr )  { return; }
 
-    //Create a new image task
-    foreach(QUrl url, noteImagePath) {
-        QString path = url.toLocalFile();
+//    //Create a new image task
+//    foreach(QUrl url, noteImagePath) {
+//        QString path = url.toLocalFile();
 
-        cwAddImageTask* addImageTask = new cwAddImageTask();
+//        auto addImageTask = QSharedPointer<cwAddImageTask>::create();
+//        addImageTask->setDatabaseFilename(filename());
 
-        TaskManager->addTask(addImageTask);
+//        //Set all the noteImagePath
+//        addImageTask->setNewImagesPath({path}); //noteImagePath);
 
-        auto deleteImageTask = [addImageTask]() {
-            addImageTask->deleteLater();
-        };
+//        auto imagesFuture = addImageTask->images();
 
-        connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-        connect(addImageTask, &cwTask::finished, addImageTask, deleteImageTask);
-        connect(addImageTask, &cwTask::stopped, addImageTask, deleteImageTask);
+//        FutureManager->addJob({imagesFuture, "Adding Image"});
 
-        //Set the project path
-        addImageTask->setDatabaseFilename(filename());
+//        AsyncFuture::observe(imagesFuture)
+//                .context(context,
+//                         [imagesFuture, addImageTask, func]()
+//        {
+//            func(imagesFuture.results());
+//        });
 
-        //Set all the noteImagePath
-        addImageTask->setNewImagesPath(QStringList() << path); //noteImagePath);
+//        //        TaskManager->addTask(addImageTask);
 
-        //Run the addImageTask, in an asyncus way
-        addImageTask->start();
-    }
-}
+////        auto deleteImageTask = [addImageTask]() {
+////            addImageTask->deleteLater();
+////        };
+
+////        connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
+////        connect(addImageTask, &cwTask::finished, addImageTask, deleteImageTask);
+////        connect(addImageTask, &cwTask::stopped, addImageTask, deleteImageTask);
+
+//        //Set the project path
+
+
+//        //Run the addImageTask, in an asyncus way
+////        addImageTask->start();
+//    }
+//}
 
 /**
   \brief Adds an image to the project file
@@ -633,6 +646,36 @@ bool cwProject::isModified() const
     QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
 
     return saveData != currentData;
+}
+
+void cwProject::addImages(QList<QUrl> noteImagePath,
+                          QObject *context,
+                          std::function<void (QList<cwImage>)> func)
+{
+    if(context == nullptr )  { return; }
+
+    //Create a new image task
+    for(QUrl url : noteImagePath) {
+        QString path = url.toLocalFile();
+
+        cwAddImageTask addImageTask;
+        addImageTask.setDatabaseFilename(filename());
+        addImageTask.setContext(context);
+
+        //Set all the noteImagePath
+        addImageTask.setNewImagesPath({path}); //noteImagePath);
+
+        auto imagesFuture = addImageTask.images();
+
+        FutureManager->addJob({imagesFuture, "Adding Image"});
+
+        AsyncFuture::observe(imagesFuture)
+                .context(context,
+                         [imagesFuture, func]()
+        {
+            func(imagesFuture.results());
+        });
+    }
 }
 
 /**

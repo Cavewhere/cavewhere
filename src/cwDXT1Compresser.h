@@ -8,10 +8,10 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwJob.h"
 
-class CAVEWHERE_LIB_EXPORT cwDXT1Compresser : public QObject
+class CAVEWHERE_LIB_EXPORT cwDXT1Compresser : public cwJob
 {
-    Q_OBJECT
 
 public:
     class CompressedImage {
@@ -25,7 +25,7 @@ public:
         QSize size;
     };
 
-    cwDXT1Compresser(QObject* parent = nullptr);
+    cwDXT1Compresser();
     ~cwDXT1Compresser();
 
     QFuture<CompressedImage> compress(const QList<QImage>& images);
@@ -35,7 +35,12 @@ public:
     QList<CompressedImage> results(QFuture<CompressedImage> future) const;
 
 private:
-    static CompressedImage squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
+
+
+    static QFuture<CompressedImage> squishCompressImageThreaded(QImage image,
+                                                                QObject *context,
+                                                                int flags,
+                                                                float* metric = 0);
 
     class OpenGLCompresser : public QOpenGLFunctions_2_1 {
     public:

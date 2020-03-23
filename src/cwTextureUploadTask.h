@@ -9,19 +9,21 @@
 #define CWTEXTUREUPLOADTASK_H
 
 //Our includes
-#include "cwTask.h"
 #include "cwImage.h"
 #include "cwGlobals.h"
+#include "cwJob.h"
 
 //Qt includes
 #include <QOpenGLFunctions>
 #include <QOpenGLBuffer>
 #include <QVector2D>
+#include <QFuture>
 class QOpenGLContext;
 class QSurface;
 
-class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
+class CAVEWHERE_LIB_EXPORT cwTextureUploadTask : public cwJob
 {
+
 public:
     enum Type {
         DXT1Mipmaps,
@@ -42,7 +44,7 @@ public:
     void setProjectFilename(QString filename);
     void setType(Type type);
 
-    UploadResult operator()() const;
+    QFuture<cwTextureUploadTask::UploadResult> mipmaps() const;
 
     static bool isDivisibleBy4(QSize size);
 

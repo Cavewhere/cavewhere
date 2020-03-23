@@ -167,6 +167,7 @@ QQ.Rectangle {
 
                 y: 5
 
+                anchors.margins: 5
                 anchors.left: parent.left
                 anchors.right: parent.right
 
@@ -178,7 +179,8 @@ QQ.Rectangle {
                 }
 
                 QC.ProgressBar {
-                    value: !indeterminate ? progressRole / numberOfStepsRole : 0
+                    Layout.maximumWidth: columnLayoutId.width
+                    value: !indeterminate ? progressRole / numberOfStepsRole : 0.0
                     indeterminate: numberOfStepsRole <= 0
                 }
             }
