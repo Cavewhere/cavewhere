@@ -154,7 +154,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
 
     QEventLoop loop;
-    QTimer::singleShot(2000, [rootData, filename, &loop]() {
+    QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
 
         auto project = rootData->project();
         fileToProject(project, "://datasets/test_cwProject/Phake Cave 3000.cw");
@@ -192,6 +192,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
             }
         }
 
+        delete firstAppEngine;
         loop.quit();
     });
     loop.exec();
