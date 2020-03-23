@@ -7,6 +7,14 @@
 #include "cwRootData.h"
 #include "cwQMLReload.h"
 #include "TestHelper.h"
+#include "cwImageProvider.h"
+#include "cwSurveyNoteModel.h"
+#include "cwTaskManagerModel.h"
+#include "cwFutureManagerModel.h"
+#include "cwCavingRegion.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QQmlApplicationEngine>
@@ -131,3 +139,62 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
     loop.exec();
     CHECK(true);
 }
+
+TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
+    cwGlobalDirectory::setupBaseDirectory();
+
+    //Register all of the cavewhere types
+    cwQMLRegister::registerQML();
+
+    auto firstAppEngine = MainHelper::createApplicationEnigne();
+    cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());
+    REQUIRE(rootData);
+
+    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+
+
+    QEventLoop loop;
+    QTimer::singleShot(2000, [rootData, filename, &loop]() {
+
+        auto project = rootData->project();
+        fileToProject(project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+
+        rootData->taskManagerModel()->waitForTasks();
+        rootData->futureManagerModel()->waitForFinished();
+
+        REQUIRE(project->cavingRegion()->caveCount() == 1);
+        auto cave = project->cavingRegion()->cave(0);
+
+        REQUIRE(cave->tripCount() == 1);
+        auto trip = cave->trip(0);
+
+        REQUIRE(trip->notes()->notes().size() == 1);
+        auto note = trip->notes()->notes().at(0);
+
+        cwImageProvider imageProvider;
+        imageProvider.setProjectPath(project->filename());
+
+        CHECK(note->scraps().size() == 2);
+
+        for(auto scrap : note->scraps()) {
+            auto triangleData = scrap->triangulationData();
+            CHECK(triangleData.croppedImage().isValid());
+
+            QList<int> ids = {
+                triangleData.croppedImage().original(),
+                triangleData.croppedImage().icon()
+            };
+            ids += triangleData.croppedImage().mipmaps();
+
+            for(auto id : ids) {
+                auto data = imageProvider.data(id, true);
+                CHECK(data.size().isValid());
+            }
+        }
+
+        loop.quit();
+    });
+    loop.exec();
+    CHECK(true);
+}
+

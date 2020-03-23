@@ -108,6 +108,10 @@ QFuture<cwImage> cwAddImageTask::images() const
         cwImage newImage = image;
         newImage.setMipmaps({});
 
+        if(imageData.isNull()) {
+            return PrivateImageData();
+        }
+
         return PrivateImageData(newImage, imageData);
     };
 
@@ -237,10 +241,10 @@ QFuture<cwImage> cwAddImageTask::images() const
         
         //Remove all invalid images
         std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
-                       [](const PrivateImageData& data) { return data.Id.original() > 0; });
+                       [](const PrivateImageData& data) { return data.Id.original() > 0 && !data.OriginalImage.isNull(); });
 
 
-        auto scaleFuture = QtConcurrent::mapped(imageData, scaleImage);
+        auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
         auto compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
                 .context(context, [compressAndUpload, scaleFuture]()
@@ -257,7 +261,7 @@ QFuture<cwImage> cwAddImageTask::images() const
             return ids;
         }).future();
 
-        auto iconFuture = QtConcurrent::mapped(imageData, createIcon);
+        auto iconFuture = QtConcurrent::mapped(filterData, createIcon);
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
 
         return AsyncFuture::observe(idCombine.future())
@@ -276,14 +280,14 @@ QFuture<cwImage> cwAddImageTask::images() const
                     .context(context, [=]()
             {
                 Q_ASSERT(icons.size() == allMipmaps.size());
-                Q_ASSERT(icons.size() == imageData.size());
+                Q_ASSERT(icons.size() == filterData.size());
 
                 QList<cwImage> images;
 
                 for(int i = 0; i < icons.size(); i++) {
                     auto icon = icons.at(i);
                     auto mipmapFutures = allMipmaps.at(i);
-                    auto image = imageData.at(i);
+                    auto image = filterData.at(i);
 
                     Q_ASSERT(mipmapFutures.isFinished());
 

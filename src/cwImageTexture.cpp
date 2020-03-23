@@ -214,6 +214,8 @@ void cwImageTexture::updateData() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
+        Q_ASSERT(mipmaps.at(mipmapLevel - 1 > 0 ? mipmapLevel - 1 : 0).second.width() >= size.width());
+
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
             switch(results.type) {
             case cwTextureUploadTask::DXT1Mipmaps:
