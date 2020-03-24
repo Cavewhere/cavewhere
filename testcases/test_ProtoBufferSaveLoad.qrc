@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_ProtoBufferSaveLoad/badFile.cw</file>
+        <file>datasets/test_ProtoBufferSaveLoad/corrupted.cw</file>
+        <file>datasets/test_ProtoBufferSaveLoad/newerVersion.cw</file>
+    </qresource>
+</RCC>

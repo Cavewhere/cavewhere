@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/dx1Cropping/16x16.png</file>
+        <file>datasets/dx1Cropping/scanCrop.png</file>
+    </qresource>
+</RCC>

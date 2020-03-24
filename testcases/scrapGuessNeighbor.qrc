@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw</file>
+        <file>datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw</file>
+    </qresource>
+</RCC>

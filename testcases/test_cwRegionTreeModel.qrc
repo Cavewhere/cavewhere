@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwRegionTreeModel/testAllFunction.cw</file>
+    </qresource>
+</RCC>

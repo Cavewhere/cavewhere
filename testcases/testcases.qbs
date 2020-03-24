@@ -49,7 +49,7 @@ CppApplication {
         files: [
             "*.cpp",
             "*.h",
-            "cavewhere-test.qrc"
+            "*.qrc"
         ]
     }
 
