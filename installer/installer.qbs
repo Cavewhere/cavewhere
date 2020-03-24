@@ -17,6 +17,7 @@ Project {
         property var qt: Qt.core.binPath
 
         Depends { name: "CaveWhere" }
+        Depends { name: "cavewhere-test" }
         Depends { name: "Qt.core" }
 
         Rule {
