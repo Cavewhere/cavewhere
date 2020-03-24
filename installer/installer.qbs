@@ -45,7 +45,7 @@ Project {
                             "-xml",
                             "-opengl",
                             "-concurrent",
-                            "-no-angle",
+                            "-test",
                             project.installDir + "/" + inputs.application[0].fileName]
                 } else if(targetOS.contains("macos")) {
                     deploymentApp = "macdeployqt"
