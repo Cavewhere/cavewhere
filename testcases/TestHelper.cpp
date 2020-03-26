@@ -23,7 +23,10 @@ QString copyToTempFolder(QString filename) {
     QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
 
     if(QFileInfo::exists(newFileLocation)) {
-        bool couldRemove = QFile::remove(newFileLocation);
+        QFile file(newFileLocation);
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser);
+
+        bool couldRemove = file.remove();
         INFO("Trying to remove " << newFileLocation);
         REQUIRE(couldRemove == true);
     }

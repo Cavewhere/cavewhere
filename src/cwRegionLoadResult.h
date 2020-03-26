@@ -19,6 +19,7 @@ public:
     ~cwRegionLoadResult();
 
     void addError(const cwError& error);
+    void addErrors(const QList<cwError>& errors);
     void setErrors(const QList<cwError>& errors);
     QList<cwError> errors() const;
 
@@ -27,6 +28,12 @@ public:
 
     void setFileVersion(int fileVersion);
     int fileVersion() const;
+
+    void setFileName(const QString& filename);
+    QString filename() const;
+
+    void setIsTempFile(bool isTempFile);
+    bool isTempFile() const;
 
 private:
     QSharedDataPointer<cwRegionLoadResultData> data;

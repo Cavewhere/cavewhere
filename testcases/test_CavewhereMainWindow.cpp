@@ -152,12 +152,33 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
     auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
 
+    SECTION("Make the file read-only") {
+        QFile file(filename);
+        CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser));
+
+        QFileInfo info(filename);
+        CHECK(info.isReadable());
+        CHECK(info.isWritable() == false);
+    }
+
+//    SECTION("Normal / read write mode") {
+//        //This section is important because it allows catch to run the file when it has write
+//        //permissions
+//        QFileInfo info(filename);
+//        CHECK(info.isReadable());
+//        CHECK(info.isWritable());
+//        CHECK(true);
+//    }
 
     QEventLoop loop;
     QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
 
         auto project = rootData->project();
-        fileToProject(project, "://datasets/test_cwProject/Phake Cave 3000.cw");
+        project->loadFile(filename);
+
+        project->waitLoadToFinish();
+
+        INFO("Filename:" << project->filename());
 
         rootData->taskManagerModel()->waitForTasks();
         rootData->futureManagerModel()->waitForFinished();
@@ -178,7 +199,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
         for(auto scrap : note->scraps()) {
             auto triangleData = scrap->triangulationData();
-            CHECK(triangleData.croppedImage().isValid());
+            CHECK((triangleData.croppedImage().isValid()));
 
             QList<int> ids = {
                 triangleData.croppedImage().original(),
@@ -188,14 +209,20 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
             for(auto id : ids) {
                 auto data = imageProvider.data(id, true);
-                CHECK(data.size().isValid());
+                INFO("Id:" << id << " isValid:" << data.size().isValid());
+                CHECK((data.size().isValid()));
             }
         }
 
-        delete firstAppEngine;
-        loop.quit();
+        QTimer::singleShot(1000, [&loop, firstAppEngine]() {
+            delete firstAppEngine;
+            loop.quit();
+        });
     });
     loop.exec();
     CHECK(true);
+
+    QFile file(filename);
+    CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser));
 }
 

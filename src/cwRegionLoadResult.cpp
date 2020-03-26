@@ -10,6 +10,8 @@ public:
     QList<cwError> errors;
     cwCavingRegionPtr region;
     int version = 0;
+    QString filename;
+    bool isTempFile = false;
 };
 
 cwRegionLoadResult::cwRegionLoadResult() : data(new cwRegionLoadResultData)
@@ -37,6 +39,11 @@ cwRegionLoadResult::~cwRegionLoadResult()
 void cwRegionLoadResult::addError(const cwError &error)
 {
     data->errors.append(error);
+}
+
+void cwRegionLoadResult::addErrors(const QList<cwError> &errors)
+{
+    data->errors.append(errors);
 }
 
 void cwRegionLoadResult::setErrors(const QList<cwError> &errors)
@@ -67,4 +74,24 @@ void cwRegionLoadResult::setFileVersion(int version)
 int cwRegionLoadResult::fileVersion() const
 {
     return data->version;
+}
+
+void cwRegionLoadResult::setFileName(const QString &filename)
+{
+    data->filename = filename;
+}
+
+QString cwRegionLoadResult::filename() const
+{
+    return data->filename;
+}
+
+void cwRegionLoadResult::setIsTempFile(bool isTempFile)
+{
+    data->isTempFile = isTempFile;
+}
+
+bool cwRegionLoadResult::isTempFile() const
+{
+    return data->isTempFile;
 }
