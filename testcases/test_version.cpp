@@ -13,8 +13,9 @@ TEST_CASE("Cavewhere Version should be generated correctly", "[version]") {
     CHECK(CavewhereVersion.isEmpty() == false);
     CHECK(CavewhereVersion.toStdString() != "Unknown Version");
 
-    QRegularExpression regex("^\\d+\\.\\d+(-\\d+-g[a-f0-9]{7})?$");
+    QRegularExpression regex("^\\d+\\.\\d+(-\\w+)?$");
     QRegularExpressionMatch results = regex.match(CavewhereVersion);
 
+    INFO("Cavewhere version:" << CavewhereVersion);
     CHECK(results.hasMatch());
 }
