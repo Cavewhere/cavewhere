@@ -161,21 +161,20 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         CHECK(info.isWritable() == false);
     }
 
-//    SECTION("Normal / read write mode") {
-//        //This section is important because it allows catch to run the file when it has write
-//        //permissions
-//        QFileInfo info(filename);
-//        CHECK(info.isReadable());
-//        CHECK(info.isWritable());
-//        CHECK(true);
-//    }
+    SECTION("Normal / read write mode") {
+        //This section is important because it allows catch to run the file when it has write
+        //permissions
+        QFileInfo info(filename);
+        CHECK(info.isReadable());
+        CHECK(info.isWritable());
+        CHECK(true);
+    }
 
     QEventLoop loop;
     QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
 
         auto project = rootData->project();
         project->loadFile(filename);
-
         project->waitLoadToFinish();
 
         INFO("Filename:" << project->filename());
@@ -219,6 +218,8 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
             loop.quit();
         });
     });
+
+
     loop.exec();
     CHECK(true);
 

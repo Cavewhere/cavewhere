@@ -83,8 +83,15 @@ cwRegionLoadResult cwRegionLoadTask::load()
         results.addError(cwError(QString("'%1' is a ReadOnly file. Copying it to a temporary file").arg(databaseFilename()), cwError::Warning));
         auto newFilename = cwProject::createTemporaryFilename();
         QFile::copy(databaseFilename(), newFilename);
+        QFile::setPermissions(newFilename, QFileDevice::WriteOwner | QFileDevice::WriteUser | QFileDevice::ReadOwner | QFileDevice::ReadUser);
         setDatabaseFilename(newFilename);
         results.setIsTempFile(true);
+
+        QFileInfo newInfo(newFilename);
+        if(!newInfo.exists() || !newInfo.isReadable() || !newInfo.isWritable()) {
+            results.addError(cwError(QString("Can't copy to temporary file '%1', giving up.").arg(newFilename), cwError::Fatal));
+            return results;
+        }
     }
 
     runAfterConnected([this, &results](){

@@ -387,7 +387,6 @@ void cwProject::loadFile(QString filename) {
 void cwProject::setFilename(QString newFilename) {
     if(newFilename != filename()) {
         ProjectFile = newFilename;
-        qDebug() << "Setting filename:" << ProjectFile;
         emit filenameChanged(ProjectFile);
     }
 }
