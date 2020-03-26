@@ -71,12 +71,8 @@ void cwProject::createTempProjectFile() {
         }
     }
 
-    QDateTime seedTime = QDateTime::currentDateTime();
-
     //Create the with a hex number
-    QString projectFile = QString("%1/CavewhereTmpProject-%2.cw")
-            .arg(QDir::tempPath())
-            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+    QString projectFile = createTemporaryFilename();
     setFilename(projectFile);
 
     setTemporaryProject(true);
@@ -87,7 +83,7 @@ void cwProject::createTempProjectFile() {
     ProjectDatabase.setDatabaseName(ProjectFile);
     bool couldOpen = ProjectDatabase.open();
     if(!couldOpen) {
-        qDebug() << "Couldn't open temp project file: " << ProjectFile;
+        ErrorModel->append(cwError(QString("Couldn't open temp project file: %1. Temp directory not writable?").arg(ProjectFile), cwError::Fatal));
         return;
     }
 
@@ -360,10 +356,10 @@ void cwProject::loadFile(QString filename) {
     }
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
-        setFilename(filename);
+        setFilename(result.filename());
+        setTemporaryProject(result.isTempFile());
         *Region = *(result.cavingRegion().data());\
         FileVersion = result.fileVersion();
-        setTemporaryProject(false);
         emit canSaveDirectly();
     };
 
@@ -394,57 +390,6 @@ void cwProject::setFilename(QString newFilename) {
         emit filenameChanged(ProjectFile);
     }
 }
-
-/**
-  This will add images to the database
-
-  \param noteImagePath - A list of all the image paths that'll be added to the project
-  \param receiver - The reciever of the addedImages signal
-  \param slot - The slot that'll handle the addImages signal
-
-  */
-//template <typename CallBack>
-//void cwProject::addImages(QList<QUrl> noteImagePath, QObject* context, CallBack func) {
-//    if(context == nullptr )  { return; }
-
-//    //Create a new image task
-//    foreach(QUrl url, noteImagePath) {
-//        QString path = url.toLocalFile();
-
-//        auto addImageTask = QSharedPointer<cwAddImageTask>::create();
-//        addImageTask->setDatabaseFilename(filename());
-
-//        //Set all the noteImagePath
-//        addImageTask->setNewImagesPath({path}); //noteImagePath);
-
-//        auto imagesFuture = addImageTask->images();
-
-//        FutureManager->addJob({imagesFuture, "Adding Image"});
-
-//        AsyncFuture::observe(imagesFuture)
-//                .context(context,
-//                         [imagesFuture, addImageTask, func]()
-//        {
-//            func(imagesFuture.results());
-//        });
-
-//        //        TaskManager->addTask(addImageTask);
-
-////        auto deleteImageTask = [addImageTask]() {
-////            addImageTask->deleteLater();
-////        };
-
-////        connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-////        connect(addImageTask, &cwTask::finished, addImageTask, deleteImageTask);
-////        connect(addImageTask, &cwTask::stopped, addImageTask, deleteImageTask);
-
-//        //Set the project path
-
-
-//        //Run the addImageTask, in an asyncus way
-////        addImageTask->start();
-//    }
-//}
 
 /**
   \brief Adds an image to the project file
@@ -601,6 +546,14 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
             QString("dotsPerMeter INTEGER,") + //The resolution of the image
             QString("imageData BLOB)"); //The blob that stores the image data
     createTable(database, imageTableQuery);
+}
+
+QString cwProject::createTemporaryFilename()
+{
+    QDateTime seedTime = QDateTime::currentDateTime();
+    return QString("%1/CavewhereTmpProject-%2.cw")
+                .arg(QDir::tempPath())
+                .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
 }
 
 /**

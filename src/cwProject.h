@@ -76,6 +76,7 @@ public:
     static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);
 
     static void createDefaultSchema(const QSqlDatabase& database);
+    static QString createTemporaryFilename();
 
     void waitLoadToFinish();
     void waitSaveToFinish();

@@ -158,4 +158,61 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
             CHECK(root->project()->isModified() == false);
         }
     }
+
+#ifndef Q_OS_WIN
+    //This testcase is broken on windows because removing the read permission still al
+    SECTION("File doesn't have read permissions") {
+        CHECK(root->project()->cavingRegion()->caveCount() == 0);
+
+        auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+
+        QFile file(filename);
+        CHECK(file.setPermissions(QFileDevice::WriteOwner | QFileDevice::WriteUser));
+
+        QFileInfo info(filename);
+        REQUIRE(!info.isReadable());
+
+        root->project()->loadFile(filename);
+        root->project()->waitLoadToFinish();
+        auto errorModel = root->project()->errorModel();
+
+        REQUIRE(errorModel->size() == 1);
+
+        QString expectErrorMessage = QString("Couldn't open '%1' because you don't have permission to read it").arg(filename);
+
+        CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Fatal));
+
+        CHECK(root->project()->isTemporaryProject());
+    }
+#endif
+
+    SECTION("File doesn't have write permissions") {
+
+        CHECK(root->project()->cavingRegion()->caveCount() == 0);
+
+        auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+
+        QFile file(filename);
+        CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::ReadUser));
+
+        QFileInfo info(filename);
+        REQUIRE(!info.isWritable());
+        REQUIRE(info.isReadable());
+
+        root->project()->loadFile(filename);
+        root->project()->waitLoadToFinish();
+        auto errorModel = root->project()->errorModel();
+
+        REQUIRE(errorModel->size() == 1);
+
+        QString expectErrorMessage = QString("'%1' is a ReadOnly file. Copying it to a temporary file").arg(filename);
+
+        CHECK(errorModel->at(0) == cwError(expectErrorMessage, cwError::Warning));
+
+        CHECK(root->project()->filename().toStdString() != filename.toStdString());
+        CHECK(root->project()->isTemporaryProject());
+        CHECK(root->project()->cavingRegion()->caveCount() == 1);
+        CHECK(root->project()->canSaveDirectly() == false);
+
+    }
 }

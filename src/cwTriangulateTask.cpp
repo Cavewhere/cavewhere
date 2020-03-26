@@ -92,7 +92,9 @@ void cwTriangulateTask::cropScraps() {
         cwAsyncFuture::waitForFinished(cropFuture);
 
         cwTriangulatedData triangulatedData;
-        triangulatedData.setCroppedImage(cropFuture.result());
+        if(cropFuture.resultCount() > 0) {
+            triangulatedData.setCroppedImage(cropFuture.result());
+        }
         TriangulatedScraps.append(triangulatedData);
 
         setProgress(i + 1);

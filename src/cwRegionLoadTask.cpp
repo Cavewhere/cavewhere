@@ -24,6 +24,7 @@
 #include "cwDebug.h"
 #include "cwSurveyNetwork.h"
 #include "cavewhereVersion.h"
+#include "cwProject.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -66,9 +67,31 @@ cwRegionLoadResult cwRegionLoadTask::load()
 {
     cwRegionLoadResult results;
 
-    if(!QFileInfo::exists(databaseFilename())) {
+    QFileInfo info(databaseFilename());
+
+    if(!info.exists()) {
         results.addError(cwError(QString("Couldn't open '%1' because it doesn't exist").arg(databaseFilename()), cwError::Fatal));
         return results;
+    }
+
+    if(!info.isReadable()) {
+        results.addError(cwError(QString("Couldn't open '%1' because you don't have permission to read it").arg(databaseFilename()), cwError::Fatal));
+        return results;
+    }
+
+    if(!info.isWritable()) {
+        results.addError(cwError(QString("'%1' is a ReadOnly file. Copying it to a temporary file").arg(databaseFilename()), cwError::Warning));
+        auto newFilename = cwProject::createTemporaryFilename();
+        QFile::copy(databaseFilename(), newFilename);
+        QFile::setPermissions(newFilename, QFileDevice::WriteOwner | QFileDevice::WriteUser | QFileDevice::ReadOwner | QFileDevice::ReadUser);
+        setDatabaseFilename(newFilename);
+        results.setIsTempFile(true);
+
+        QFileInfo newInfo(newFilename);
+        if(!newInfo.exists() || !newInfo.isReadable() || !newInfo.isWritable()) {
+            results.addError(cwError(QString("Can't copy to temporary file '%1', giving up.").arg(newFilename), cwError::Fatal));
+            return results;
+        }
     }
 
     runAfterConnected([this, &results](){
@@ -77,7 +100,7 @@ cwRegionLoadResult cwRegionLoadTask::load()
         //Try loading Proto Buffer
         auto data = loadFromProtoBuffer();
 
-        results.setErrors(errors());
+        results.addErrors(errors());
         if(cwError::containsFatal(results.errors())) {
             return results;
         }
@@ -85,6 +108,7 @@ cwRegionLoadResult cwRegionLoadTask::load()
         data.region->moveToThread(nullptr);
         results.setCavingRegion(data.region);
         results.setFileVersion(data.fileVersion);
+        results.setFileName(databaseFilename());
         return results;
     });
 
