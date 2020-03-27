@@ -62,6 +62,8 @@ public:
     static QRect half(QRect size);
     static QPoint half(QPoint point);
 
+    static QStringList supportedImageFormats();
+
 signals:
     void addedImages(QList<cwImage> images);
 

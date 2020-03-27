@@ -24,7 +24,7 @@ IconButton {
 
     FileDialog {
         id: fileDialog;
-        nameFilters: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
+        nameFilters: "Images (" + rootData.supportImageFormats + ")";
         title: "Load Images"
         selectMultiple: true
         folder: rootData.lastDirectory

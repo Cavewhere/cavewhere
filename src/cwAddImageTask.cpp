@@ -89,6 +89,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
                                     originalImage,
                                     imagePath);
         }
+        qDebug() << "Image is null!" << LOCATION;
         return PrivateImageData();
     };
 
@@ -102,6 +103,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
             return PrivateImageData(cwTrackedImage::createShared(imageId, filename),
                                     image);
         }
+        qDebug() << "Image is null!" << LOCATION;
         return PrivateImageData();
     };
 
@@ -111,6 +113,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         QImage imageData = provider.image(image.original());
 
         if(imageData.isNull()) {
+            qDebug() << "Database image is null!" << LOCATION;
             return PrivateImageData();
         }
 
@@ -412,6 +415,11 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath,
     //The the original file's format
     QByteArray format = QImageReader::imageFormat(imagePath);
 
+    if(!supportedImageFormats().contains(format)) {
+        qDebug() << "Not a valid file format:" << imagePath << LOCATION;
+        return QImage();
+    }
+
     if(format.isEmpty()) {
         qDebug() << "This file is not an image:" << imagePath << LOCATION;
         return QImage();
@@ -492,6 +500,11 @@ cwImage cwAddImageTask::addImageToDatabase(const QImage &image,
 int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) {
     double largestDimension = static_cast<double>(std::max(imageSize.width(), imageSize.height()));
     return std::max(1, static_cast<int>(log2(largestDimension)) + 1);
+}
+
+QStringList cwAddImageTask::supportedImageFormats()
+{
+    return QStringList({"bmp", "gif", "jpg", "jpeg", "png", "tif", "tiff", "svg", "webp"});
 }
 
 /**

@@ -13,6 +13,9 @@
 //Async includes
 #include "asyncfuture.h"
 
+//Qt includes
+#include <QImageReader>
+
 TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
     cwProject project;
@@ -141,6 +144,85 @@ TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
     cwAddImageTask task;
     auto future = task.images();
     CHECK(future.resultCount() == 0);
+}
+
+TEST_CASE("cwAddImageTask should return a list of valid image formats", "[cwAddImageTask]") {
+    auto realFormats = QImageReader::supportedImageFormats();
+    QSet<QString> realFormatsSet(realFormats.begin(), realFormats.end());
+
+    for(auto format : cwAddImageTask::supportedImageFormats()) {
+        CHECK(realFormatsSet.contains(format));
+    }
+}
+
+TEST_CASE("cwAddImageTask should load supported images", "[cwAddImageTask]") {
+
+    QList<QString> imageFilenames = {
+        "://datasets/test_cwAddImageTask/supportedImage.png",
+        "://datasets/test_cwAddImageTask/supportedImage.jpeg",
+        "://datasets/test_cwAddImageTask/supportedImage.jpg",
+        "://datasets/test_cwAddImageTask/supportedImage.webp",
+        "://datasets/test_cwAddImageTask/supportedImage.bmp",
+        "://datasets/test_cwAddImageTask/supportedImage.gif",
+        "://datasets/test_cwAddImageTask/supportedImage.tif",
+        "://datasets/test_cwAddImageTask/supportedImage.tiff",
+        "://datasets/test_cwAddImageTask/supportedImage.svg",
+    };
+
+    cwProject project;
+    QString filename = project.filename();
+    auto addImageTask = std::make_unique<cwAddImageTask>();
+    addImageTask->setDatabaseFilename(filename);
+    addImageTask->setFormatType(cwTextureUploadTask::format());
+
+    QImage refImage;
+    REQUIRE(refImage.load("://datasets/test_cwAddImageTask/supportedImage.png"));
+    REQUIRE(refImage.size() == QSize(100,100));
+
+    cwImageProvider provider;
+    provider.setProjectPath(filename);
+
+    auto squaredError = [](const QColor& c1, const QColor& c2) {
+        double red = c1.redF() - c2.redF();
+        double green = c1.greenF() - c2.greenF();
+        double blue = c1.blueF() - c2.blueF();
+        return red * red + green * green + blue * blue;
+    };
+
+    auto checkImage = [refImage, squaredError](const QImage& image) {
+        REQUIRE(refImage.size() == image.size());
+        double sumOfSquares = 0.0;
+        for(int y = 0; y < image.size().height(); y++) {
+            for(int x = 0; x < image.size().width(); x++) {
+                QColor c1 = refImage.pixelColor(x, y);
+                QColor c2 = image.pixelColor(x, y);
+
+                sumOfSquares += squaredError(c1, c2);
+            }
+        }
+        int pixelCount = refImage.size().width() * refImage.size().height();
+        double stdError = sqrt(sumOfSquares) / static_cast<double>(pixelCount);
+
+        CHECK(stdError < 0.0005);
+    };
+
+    //Make sure the referance image works
+    checkImage(refImage);
+
+    for(auto imageFilename : imageFilenames) {
+        auto resourceImageFilename = copyToTempFolder(imageFilename);
+        INFO("Filename: " << imageFilename);
+        INFO("Copy: " << resourceImageFilename);
+        addImageTask->setNewImagesPath({resourceImageFilename});
+        auto future = addImageTask->images();
+        REQUIRE(cwAsyncFuture::waitForFinished(future, 20000));
+
+        REQUIRE(future.isFinished());
+        REQUIRE(future.resultCount() == 1);
+
+        auto loadedImage = provider.image(future.result()->original());
+        checkImage(loadedImage);
+    }
 }
 
 TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", "[cwAddImageTask]") {

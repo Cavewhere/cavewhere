@@ -173,7 +173,7 @@ DynamicLibrary {
         condition: qbs.targetOS.contains("windows")
 
         cpp.cxxFlags: [
-            "/WX", //Treat warnings as errors
+//            "/WX", //Treat warnings as errors
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 

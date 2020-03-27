@@ -19,6 +19,7 @@
 #include <QBuffer>
 #include <QImageWriter>
 #include <QList>
+#include <QColorSpace>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -67,10 +68,17 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             provider.setProjectPath(filename);
             cwImageData imageData = provider.data(originalImage.original());
             QImage image = QImage::fromData(imageData.data(), imageData.format());
+            image.setColorSpace(QColorSpace());
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   originalImage.originalSize()));
-            QImage croppedImage = image.copy(cropArea);
-            return croppedImage;
+            if(!image.isNull()) {
+                return image.copy(cropArea);
+            }
+
+            QImage badImage(cropArea.size(), QImage::Format_ARGB32);
+            badImage.fill(QColor("red"));
+            qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
+            return badImage;
     };
 
     auto cropFuture = QtConcurrent::run(cropImage);

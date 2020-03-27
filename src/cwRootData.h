@@ -66,8 +66,12 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
+
+    //Settings
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
     Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
+    Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
+
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
@@ -108,6 +112,8 @@ public:
 
     QUrl lastDirectory() const;
     void setLastDirectory(QUrl lastDirectory);
+
+    QString supportImageFormats() const;
 
 signals:
     void regionChanged();

@@ -25,6 +25,7 @@
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwImageCompressionUpdater.h"
+#include "cwAddImageTask.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -34,6 +35,8 @@
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
+
+
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
@@ -178,4 +181,15 @@ void cwRootData::setLastDirectory(QUrl lastDirectory) {
 
 cwSettings* cwRootData::settings() const {
     return cwSettings::instance();
+}
+
+QString cwRootData::cwRootData::supportImageFormats() const {
+    QStringList formats = cwAddImageTask::supportedImageFormats();
+    QStringList withWildCards;
+    std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
+                   [](const QString& format)
+    {
+        return "*." + format;
+    });
+    return withWildCards.join(' ');
 }
