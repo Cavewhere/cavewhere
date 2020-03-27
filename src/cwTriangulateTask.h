@@ -128,7 +128,7 @@ private:
     QList<cwTriangulatedData> TriangulatedScraps;
 
     //Sub tasks
-    cwCropImageTask* CropTask;
+//    cwCropImageTask* CropTask;
 
     void cropScraps();
 

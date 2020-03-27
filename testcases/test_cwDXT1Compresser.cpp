@@ -88,3 +88,31 @@ TEST_CASE("cwDXT1Compresser should be able to compress correctly", "[cwDXT1Compr
         cwAsyncFuture::waitForFinished(completeFuture, 1000);
     }
 };
+
+TEST_CASE("cwDXT1Compresser should be able to be canceled correctly", "[cwDXT1Compresser]") {
+
+    QImage image("://datasets/dx1Cropping/scanCrop.png");
+    REQUIRE(!image.isNull());
+
+    QFuture<cwDXT1Compresser::CompressedImage> future;
+
+    {
+        cwDXT1Compresser compressor;
+        future = compressor.squishCompression({image}, true);
+        //Deallocate the compressor
+    }
+
+//    int count = 0;
+//    AsyncFuture::observe(future).onProgress([&future, &count]() {
+////        if(count > 10) {
+//        qDebug() << "Cancel!";
+//            future.cancel();
+////        }
+//        count++;
+//    });
+    future.cancel();
+
+    CHECK(cwAsyncFuture::waitForFinished(future, 2000));
+//    CHECK(count == 1);
+    CHECK(future.isCanceled());
+}

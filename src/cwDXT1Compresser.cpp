@@ -199,6 +199,8 @@ public:
 
 
     void operator()(const Block& block) {
+        qDebug() << "Block";
+
         // build the 4x4 block of pixels
         u8 sourceRgba[16*4];
         u8* targetPixel = sourceRgba;

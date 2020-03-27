@@ -19,12 +19,12 @@
 #include <QDebug>
 
 cwTriangulateTask::cwTriangulateTask(QObject *parent) :
-    cwTask(parent),
-    CropTask(new cwCropImageTask(this))
+    cwTask(parent)
+//    CropTask(new cwCropImageTask(this))
 {
-    CropTask->setParentTask(this);
+//    CropTask->setParentTask(this);
 //    CropTask->setMipmapOnly(true);
-    CropTask->setUsingThreadPool(false);
+//    CropTask->setUsingThreadPool(false);
 
 }
 
@@ -78,27 +78,38 @@ void cwTriangulateTask::runTask() {
 void cwTriangulateTask::cropScraps() {
     auto context = std::make_unique<QObject>();
 
+    cwCropImageTask cropTask;
+    cropTask.setDatabaseFilename(ProjectFilename);
+    cropTask.setContext(context.get());
+
     for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         const cwTriangulateInData& data = Scraps.at(i);
 
         QRectF cropArea = data.outline().boundingRect();
-        CropTask->setOriginal(data.noteImage());
-        CropTask->setRectF(cropArea);
-        CropTask->setDatabaseFilename(ProjectFilename);
-        CropTask->setContext(context.get());
 
-        //FIXME: Don't wait convert to async
-        auto cropFuture = CropTask->crop();
-        cwAsyncFuture::waitForFinished(cropFuture);
+        cropTask.setOriginal(data.noteImage());
+        cropTask.setRectF(cropArea);
+
+        //FIXME: Don't wait, convert to async, cancels if not running after 100ms
+        auto cropFuture = cropTask.crop();
+        while(!cwAsyncFuture::waitForFinished(cropFuture, 100)) {
+            if(!isRunning()) {
+                cropFuture.cancel();
+            }
+        }
+        Q_ASSERT(cropFuture.isFinished());
 
         cwTriangulatedData triangulatedData;
         if(cropFuture.resultCount() > 0) {
             triangulatedData.setCroppedImage(cropFuture.result());
+        } else {
+            qDebug() << "Triangulation failed because cropping Image didn't work" << LOCATION;
         }
         TriangulatedScraps.append(triangulatedData);
 
         setProgress(i + 1);
     }
+    qDebug() << "Finished cropping!" << isRunning();
 }
 
 /**
