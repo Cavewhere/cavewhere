@@ -9,6 +9,7 @@
 
 //Qt includes
 #include <QImage>
+#include <QThreadPool>
 
 //Async future
 #include "asyncfuture.h"
@@ -94,25 +95,37 @@ TEST_CASE("cwDXT1Compresser should be able to be canceled correctly", "[cwDXT1Co
     QImage image("://datasets/dx1Cropping/scanCrop.png");
     REQUIRE(!image.isNull());
 
+    QThreadPool::globalInstance()->setMaxThreadCount(1);
+
     QFuture<cwDXT1Compresser::CompressedImage> future;
+    QElapsedTimer timer;
 
     {
         cwDXT1Compresser compressor;
+        timer.start();
         future = compressor.squishCompression({image}, true);
+        cwAsyncFuture::waitForFinished(future);
         //Deallocate the compressor
     }
 
-//    int count = 0;
-//    AsyncFuture::observe(future).onProgress([&future, &count]() {
-////        if(count > 10) {
-//        qDebug() << "Cancel!";
-//            future.cancel();
-////        }
-//        count++;
-//    });
-    future.cancel();
+    int count = 0;
+    AsyncFuture::observe(future).onProgress([&future, &count]() {
+//        if(count > 10) {
+        qDebug() << "Cancel!";
+            future.cancel();
+//        }
+        count++;
+    });
+//    future.cancel();
 
-    CHECK(cwAsyncFuture::waitForFinished(future, 2000));
+    CHECK(cwAsyncFuture::waitForFinished(future, 100));
+    QThreadPool::globalInstance()->waitForDone();
+
+    QThreadPool::globalInstance()->setMaxThreadCount(QThread::idealThreadCount());
+
+//    QThread::currentThread()->msleep(1000);
+//    QCoreApplication::processEvents();
+
 //    CHECK(count == 1);
     CHECK(future.isCanceled());
 }

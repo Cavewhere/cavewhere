@@ -11,6 +11,8 @@
 //Qt includes
 #include <QApplication>
 #include <QThread>
+#include <QThreadPool>
+#include <QMetaObject>
 
 //Our includes
 #include "cwOpenGLSettings.h"
@@ -28,9 +30,14 @@ int main( int argc, char* argv[] )
 
   app.thread()->setObjectName("Main QThread");
 
-  int result = Catch::Session().run( argc, argv );
+  int result = 0;
+  QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
+      result = Catch::Session().run( argc, argv );
+      QThreadPool::globalInstance()->waitForDone();
+      QApplication::quit();
+  }, Qt::QueuedConnection);
 
-  QCoreApplication::processEvents();
+  app.exec();
 
   return result;
 }
