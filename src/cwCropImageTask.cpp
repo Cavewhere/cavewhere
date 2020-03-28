@@ -70,7 +70,10 @@ QFuture<cwImage> cwCropImageTask::crop()
     auto cropFuture = QtConcurrent::run(cropImage);
 
 
-    auto addImageFuture = AsyncFuture::observe(cropFuture).context(context, [context, cropFuture, filename]() {
+    auto addImageFuture = AsyncFuture::observe(cropFuture)
+            .context(context,
+                     [context, cropFuture, filename]()
+    {
         cwAddImageTask addImages;
         addImages.setContext(context);
         addImages.setDatabaseFilename(filename);
@@ -78,8 +81,10 @@ QFuture<cwImage> cwCropImageTask::crop()
         return addImages.images();
     }).future();
 
-    auto finishedFuture = AsyncFuture::observe(addImageFuture).context(this,
-                                             [addImageFuture](){
+    auto finishedFuture = AsyncFuture::observe(addImageFuture)
+            .context(context,
+                     [addImageFuture]()
+    {
         auto images = addImageFuture.results();
         if(!images.isEmpty()) {
             return images.first();
