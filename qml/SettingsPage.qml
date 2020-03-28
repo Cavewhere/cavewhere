@@ -6,7 +6,45 @@ import Cavewhere 1.0
 ScrollViewPage {
     id: pageId
 
+    property OpenGLSettings renderingSettings: rootData.settings.renderingSettings
+    property JobSettings jobSettings: rootData.settings.jobSettings
+
     ColumnLayout {
+        QC.GroupBox {
+            title: "Job Settings"
+
+            ColumnLayout {
+                RowLayout {
+                    InformationButton {
+                        showItemOnClick: threadHelpAreaId
+                    }
+
+                    Text {
+                        text: "Max Number of Threads"
+                    }
+
+                    QC.SpinBox {
+                        from: 1
+                        to: jobSettings.idleThreadCount
+                        value: jobSettings.threadCount
+                        onValueChanged: {
+                            jobSettings.threadCount = value;
+                        }
+                    }
+                }
+
+                HelpArea {
+                    id: threadHelpAreaId
+                    Layout.fillWidth: true
+                    text: "By default and the recommend setting, CaveWhere uses all the usable threads provide by your system. Decreasing Max Number of Threads will limit the number concurrent jobs that CaveWhere execute and will reduce CaveWhere's performance. If your computer is experiencing over heating issues from CaveWhere, reducing the Max Number of Threads may help."
+                }
+
+                Text {
+                    text: "Usable threads: " + jobSettings.idleThreadCount
+                }
+            }
+        }
+
         QC.GroupBox {
             title: "Texture Settings"
             ColumnLayout {
@@ -15,10 +53,10 @@ ScrollViewPage {
                     Layout.fillWidth: true
                     text: "Compression"
                     helpText: "When enabled, CaveWhere uses DXT1 compression OpenGL texture maps. This slightly reduces image quality of scraps, but reduces GPU memory by 1/4. When disabled, 4 times more GPU memory will be used but textures will look slightly better. It's recommended to leave this option enabled if supported.";
-                    supported: rootData.renderingSettings.dxt1Supported
-                    using: rootData.renderingSettings.useDXT1Compression
+                    supported: renderingSettings.dxt1Supported
+                    using: renderingSettings.useDXT1Compression
                     onUsingChanged: {
-                        rootData.renderingSettings.useDXT1Compression = using
+                        renderingSettings.useDXT1Compression = using
                     }
                 }
 
@@ -26,13 +64,13 @@ ScrollViewPage {
                     Layout.fillWidth: true
                     text: "GPU Accelerated Compression"
                     helpText: "When enabled, CaveWhere will compress images on the GPU, instead of the CPU. When enabled, this can improve image loading preformance by 20 time vs thread CPU compression (when this option is disabled). It's recommended to leave this option enabled if supported."
-                    supported: rootData.renderingSettings.gpuGeneratedDXT1Supported
-                    using: rootData.renderingSettings.dxt1Algorithm === OpenGLSettings.DXT1_GPU
+                    supported: renderingSettings.gpuGeneratedDXT1Supported
+                    using: renderingSettings.dxt1Algorithm === OpenGLSettings.DXT1_GPU
                     onUsingChanged: {
                         if(using) {
-                            rootData.renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_GPU
+                            renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_GPU
                         } else {
-                            rootData.renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_Squish
+                            renderingSettings.dxt1Algorithm = OpenGLSettings.DXT1_Squish
                         }
                     }
                 }
@@ -42,10 +80,10 @@ ScrollViewPage {
                     text: "Anisotropy"
                     helpIcon: "qrc:/icons/Anisotropic_filtering_en.png"
                     helpText: "When enabled, CaveWhere improves texture rendering by reducing texture blurring between mipmaps at the cost of rendering preformance. Rendering preformance maybe improved by disabling this option."
-                    supported: rootData.renderingSettings.anisotropySupported
-                    using: rootData.renderingSettings.useAnisotropy
+                    supported: renderingSettings.anisotropySupported
+                    using: renderingSettings.useAnisotropy
                     onUsingChanged: {
-                        rootData.renderingSettings.useAnisotropy = using
+                        renderingSettings.useAnisotropy = using
                     }
                 }
             }
@@ -54,9 +92,9 @@ ScrollViewPage {
         CheckableGroupBox {
             id: mipmapsId
             text: "Use Mipmaps"
-            checked: rootData.renderingSettings.useMipmaps
+            checked: renderingSettings.useMipmaps
             onCheckedChanged: {
-                rootData.renderingSettings.useMipmaps = checked
+                renderingSettings.useMipmaps = checked
             }
 
             ColumnLayout {
@@ -74,10 +112,10 @@ ScrollViewPage {
                     enabled: mipmapsId.enabled
                     text: "Magification Filter"
                     helpText: "When set to Nearest, zooming in on textures will render individual pixels. Using Linear, will cause the textures pixel to be blended together";
-                    model: rootData.renderingSettings.magFilterModel
-                    currentIndex: rootData.renderingSettings.magFilter
+                    model: renderingSettings.magFilterModel
+                    currentIndex: renderingSettings.magFilter
                     onCurrentIndexChanged: {
-                        rootData.renderingSettings.magFilter = currentIndex
+                        renderingSettings.magFilter = currentIndex
                     }
                 }
 
@@ -85,10 +123,10 @@ ScrollViewPage {
                     enabled: mipmapsId.enabled
                     text: "Minification Filter"
                     helpText: "The renderer will filter between mipmaps when zoomed out. The default is Nearest Mipmap Linear";
-                    model: rootData.renderingSettings.minFilterModel
-                    currentIndex: rootData.renderingSettings.minFilter
+                    model: renderingSettings.minFilterModel
+                    currentIndex: renderingSettings.minFilter
                     onCurrentIndexChanged: {
-                        rootData.renderingSettings.minFilter = currentIndex
+                        renderingSettings.minFilter = currentIndex
                     }
                 }
             }
@@ -100,17 +138,17 @@ ScrollViewPage {
             ColumnLayout {
 
                 Text {
-                    visible: rootData.renderingSettings.needsRestart
+                    visible: renderingSettings.needsRestart
                     text: "Restart Required!"
                 }
 
                 ComboBoxWithInfo {
                     text: "Renderer"
                     helpText: "The underlying OpenGL engine. It's recommended to use Automatic which should choose the correct renderer for you."
-                    model: rootData.renderingSettings.rendererModel
-                    currentIndex: rootData.renderingSettings.currentSupportedRenderer
+                    model: renderingSettings.rendererModel
+                    currentIndex: renderingSettings.currentSupportedRenderer
                     onCurrentIndexChanged: {
-                        rootData.renderingSettings.currentSupportedRenderer = currentIndex
+                        renderingSettings.currentSupportedRenderer = currentIndex
                     }
                 }
 
@@ -118,9 +156,9 @@ ScrollViewPage {
                     Layout.fillWidth: true
                     text: "Native Text Rendering"
                     helpText: "When enabled, CaveWhere uses native texture rendering. When disabled, CaveWhere uses OpenGL texture rendering (better performance). Unless you're seeing text rendering artifacts, it's recommended to keep this option disabled";
-                    using: rootData.renderingSettings.useNativeTextRendering
+                    using: renderingSettings.useNativeTextRendering
                     onUsingChanged: {
-                        rootData.renderingSettings.useNativeTextRendering = using
+                        renderingSettings.useNativeTextRendering = using
                     }
                 }
             }
@@ -136,7 +174,7 @@ ScrollViewPage {
                     QC.TextArea {
                         readOnly: true
                         selectByMouse: true
-                        text: rootData.renderingSettings.allVersionInfo
+                        text: renderingSettings.allVersionInfo
                     }
                 }
             }

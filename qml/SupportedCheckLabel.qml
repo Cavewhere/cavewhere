@@ -43,28 +43,4 @@ ColumnLayout {
         text: rootId.text
         checkboxEnabled: supported
     }
-
-//    RowLayout {
-//        QQ.Item {
-//            width: 16
-//            height: 1
-//        }
-
-//        InformationButton {
-//            showItemOnClick: helpAreaId
-//        }
-
-//        QC.CheckBox {
-//            text: "Use " + rootId.text
-//            checked: using
-//            onCheckedChanged: {
-//                using = checked;
-//            }
-//        }
-//    }
-
-//    HelpArea {
-//        id: helpAreaId
-//        Layout.fillWidth: true
-//    }
 }

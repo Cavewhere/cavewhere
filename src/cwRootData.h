@@ -36,7 +36,7 @@ class cwEventRecorderModel;
 class cwTaskManagerModel;
 class cwFutureManagerModel;
 class cwPageSelectionModel;
-class cwOpenGLSettings;
+class cwSettings;
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -67,7 +67,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
-    Q_PROPERTY(cwOpenGLSettings* renderingSettings READ renderingSettings CONSTANT)
+    Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
@@ -92,7 +92,7 @@ public:
     cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
-    cwOpenGLSettings* renderingSettings() const;
+    cwSettings* settings() const;
 
     void setQuickView(QQuickView* quickView);
 

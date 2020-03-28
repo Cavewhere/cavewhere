@@ -23,7 +23,7 @@
 #include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
-#include "cwOpenGLSettings.h"
+#include "cwSettings.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -90,7 +90,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     PageSelectionModel = new cwPageSelectionModel(this);
 
-    cwOpenGLSettings::initialize(); //Init's a singleton
+    cwSettings::initialize(); //Init's a singleton
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }
@@ -172,6 +172,6 @@ void cwRootData::setLastDirectory(QUrl lastDirectory) {
     }
 }
 
-cwOpenGLSettings *cwRootData::renderingSettings() const {
-    return cwOpenGLSettings::instance();
+cwSettings* cwRootData::settings() const {
+    return cwSettings::instance();
 }

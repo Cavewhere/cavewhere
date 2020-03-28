@@ -110,6 +110,8 @@
 #include "cwFutureFilterModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwOpenGLSettings.h"
+#include "cwSettings.h"
+#include "cwJobSettings.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -245,8 +247,10 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwFutureFilterModel>("Cavewhere", 1, 0, "FutureFilterModel");
     qmlRegisterType<cwFutureManagerModel>("Cavewhere", 1, 0, "FutureManagerModel");
     qmlRegisterType<cwTaskFutureCombineModel>("Cavewhere", 1, 0, "TaskFutureCombineModel");
-    qmlRegisterUncreatableType<cwOpenGLSettings>("Cavewhere", 1, 0, "OpenGLSettings", "Should only be created in cwRootData also is static across the application");
+    qmlRegisterUncreatableType<cwOpenGLSettings>("Cavewhere", 1, 0, "OpenGLSettings", "Should only be created in cwSettings also is static across the application");
     qmlRegisterSingletonType( QUrl("qrc:/qml/UnitDefaults.qml"), "Cavewhere", 1, 0, "UnitDefaults");
+    qmlRegisterUncreatableType<cwSettings>("Cavewhere", 1, 0, "Settings", "Should only be created in cwRootData also is static across the application");
+    qmlRegisterUncreatableType<cwJobSettings>("Cavewhere", 1, 0, "JobSettings", "Should only be created in cwSettings also is static across the application");
 
 
 }
