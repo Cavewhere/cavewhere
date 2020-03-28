@@ -40,8 +40,12 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
         checker.checkSpies();
 
         CHECK(diskSettings.value("threadCount").toInt() == 1);
+
+        settings->setThreadCount(QThread::idealThreadCount());
     }
 
-
     diskSettings.clear();
+
+    CHECK(settings->threadCount() == QThread::idealThreadCount());
+    CHECK(QThreadPool::globalInstance()->maxThreadCount() == QThread::idealThreadCount());
 }

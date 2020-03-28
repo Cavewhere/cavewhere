@@ -19,6 +19,8 @@
 #include <QThreadPool>
 #include <QDebug>
 
+QThreadPool* cwTask::ThreadPool = nullptr;
+
 cwTask::cwTask(QObject *parent) :
     QObject(parent),
     StatusLocker(QReadWriteLock::Recursive)
@@ -155,7 +157,7 @@ void cwTask::start() {
     }
 
     if(isUsingThreadPool()) {
-        QThreadPool::globalInstance()->start(this);
+        threadPool()->start(this);
     } else {
         run();
     }
@@ -382,6 +384,23 @@ void cwTask::waitToFinish(cwTask::WaitToFinishType type)
         }
 
         QCoreApplication::processEvents();
+    }
+}
+
+int cwTask::maxThreadCount()
+{
+    return threadPool()->maxThreadCount();
+}
+
+QThreadPool *cwTask::threadPool()
+{
+    return ThreadPool;
+}
+
+void cwTask::initilizeThreadPool()
+{
+    if(!ThreadPool) {
+        ThreadPool = new QThreadPool(QThreadPool::globalInstance());
     }
 }
 

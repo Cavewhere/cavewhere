@@ -73,9 +73,9 @@ public:
     void addFuture(QFuture<void> future);
     void addFutures(QVector<QFuture<void>> futures);
 
-    //Do not move this to a slot!!! You will break things
-    //TODO: figure out why this is bad...
-    //void stop();
+    static int maxThreadCount();
+    static QThreadPool* threadPool();
+    static void initilizeThreadPool();
 
 public slots:
     void start();
@@ -122,7 +122,7 @@ private:
     QString Name; //!< The name of the task
 
     bool UsingThreadPool;
-
+    static QThreadPool* ThreadPool;
 
     void privateStop();
     bool isParentsRunning();

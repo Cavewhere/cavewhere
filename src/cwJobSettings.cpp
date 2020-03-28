@@ -1,5 +1,6 @@
 //Our inculdes
 #include "cwJobSettings.h"
+#include "cwTask.h"
 
 //Qt includes
 #include <QThreadPool>
@@ -22,6 +23,7 @@ void cwJobSettings::setThreadCountPrivate(int count)
 {
     if(isThreadCountValid(count)) {
         QThreadPool::globalInstance()->setMaxThreadCount(count);
+        cwTask::threadPool()->setMaxThreadCount(count);
     }
 }
 
@@ -47,11 +49,13 @@ cwJobSettings *cwJobSettings::instance()
 
 void cwJobSettings::initialize()
 {
+    cwTask::initilizeThreadPool();
     if(Settings == nullptr) {
         Settings = new cwJobSettings(QCoreApplication::instance());
     }
 }
 
 int cwJobSettings::threadCount() const {
+    Q_ASSERT(QThreadPool::globalInstance()->maxThreadCount() == cwTask::threadPool()->maxThreadCount());
     return QThreadPool::globalInstance()->maxThreadCount();
 }

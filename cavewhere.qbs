@@ -30,7 +30,8 @@ Project {
         "qt-qml-models/QtQmlModels.qbs",
         "asyncfuture/asyncfuture.qbs",
         "autoBuild/autoBuild.qbs",
-        "testcases/s3tc-dxt-decompression/s3tc-dxt-decompression.qbs"
+        "testcases/s3tc-dxt-decompression/s3tc-dxt-decompression.qbs",
+        "testcases/combiner/combiner.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]

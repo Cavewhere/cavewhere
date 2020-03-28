@@ -88,6 +88,7 @@ int main(int argc, char *argv[])
         delete applicationEnigine;
         delete rootData;
         QThreadPool::globalInstance()->waitForDone();
+        cwTask::threadPool()->waitForDone();
         a.quit();
     };
 

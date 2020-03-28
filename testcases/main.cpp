@@ -13,9 +13,11 @@
 #include <QThread>
 #include <QThreadPool>
 #include <QMetaObject>
+#include <QThreadPool>
 
 //Our includes
-#include "cwOpenGLSettings.h"
+#include "cwSettings.h"
+#include "cwTask.h"
 
 int main( int argc, char* argv[] )
 {
@@ -26,7 +28,7 @@ int main( int argc, char* argv[] )
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
 
-  cwOpenGLSettings::initialize();
+  cwSettings::initialize();
 
   app.thread()->setObjectName("Main QThread");
 
@@ -34,6 +36,7 @@ int main( int argc, char* argv[] )
   QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
       result = Catch::Session().run( argc, argv );
       QThreadPool::globalInstance()->waitForDone();
+      cwTask::threadPool()->waitForDone();
       QApplication::quit();
   }, Qt::QueuedConnection);
 

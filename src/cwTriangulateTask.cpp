@@ -76,8 +76,11 @@ void cwTriangulateTask::runTask() {
     This runs the cropping task on all the scraps
   */
 void cwTriangulateTask::cropScraps() {
+    auto context = QSharedPointer<QObject>::create();
+
     cwCropImageTask cropTask;
     cropTask.setDatabaseFilename(ProjectFilename);
+    cropTask.setContext(context.get());
 
     for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         const cwTriangulateInData& data = Scraps.at(i);

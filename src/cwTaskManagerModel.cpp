@@ -313,7 +313,9 @@ void cwTaskManagerModel::updateTask(QObject *taskObject, cwFutureManagerModel::R
         roleChanged.append(role);
 
         QModelIndex modelIndex = this->index(index);
-//        qDebug() << "Data changed:" << index << role;
-        emit dataChanged(modelIndex, modelIndex, roleChanged);
+        //        qDebug() << "Data changed:" << index << role;
+        if(modelIndex.isValid()) {
+            emit dataChanged(modelIndex, modelIndex, roleChanged);
+        }
     }
 }

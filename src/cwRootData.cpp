@@ -39,6 +39,7 @@ cwRootData::cwRootData(QObject *parent) :
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))
 {
+    cwSettings::initialize(); //Init's a singleton
 
     //Task Manager, allows the users to see running tasks
     TaskManagerModel = new cwTaskManagerModel(this);
@@ -89,8 +90,6 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
-
-    cwSettings::initialize(); //Init's a singleton
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }
