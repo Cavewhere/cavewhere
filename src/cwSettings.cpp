@@ -10,8 +10,6 @@ cwSettings* cwSettings::Singleton = nullptr;
 
 cwSettings::cwSettings(QObject *parent) : QObject(parent)
 {
-    cwOpenGLSettings::initialize(); //Init's a singleton
-    cwJobSettings::initialize();
 }
 
 cwOpenGLSettings* cwSettings::renderingSettings() const {
@@ -23,6 +21,10 @@ void cwSettings::initialize()
     if(Singleton == nullptr) {
         Singleton = new cwSettings(QCoreApplication::instance());
     }
+
+    //Keep these here because cwOpenGLSetting can be deallocated in cleanup()
+    cwOpenGLSettings::initialize(); //Init's a singleton
+    cwJobSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
