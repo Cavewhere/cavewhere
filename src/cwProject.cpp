@@ -225,7 +225,7 @@ void cwProject::privateSave() {
         FutureManager->addJob({future, "Saving"});
     }
 
-    SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
+    SaveFuture = AsyncFuture::observe(future).context(this, [future, this](){
         auto errors = future.result();
         ErrorModel->append(errors);
         if(!cwError::containsFatal(errors)) {
@@ -364,7 +364,7 @@ void cwProject::loadFile(QString filename) {
     };
 
     LoadFuture = AsyncFuture::observe(loadFuture)
-            .subscribe([loadFuture, updateRegion, this]()
+            .context(this, [loadFuture, updateRegion, this]()
     {
         auto result = loadFuture.result();
         if(result.errors().isEmpty()) {
