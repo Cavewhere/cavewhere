@@ -134,7 +134,15 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(c
                 .context(context, [compressFuture, futureResults]()
         {
             return futureResults(compressFuture.results());
-        }).future();
+        }
+        ,
+        //Cancel all futures
+        [compressFuture]() {
+            for(auto future : compressFuture.results()) {
+                future.cancel();
+            }
+        }
+        ).future();
     }
 
     QList<QFuture<cwDXT1Compresser::CompressedImage>> compressedImages;
@@ -198,7 +206,7 @@ public:
     float* Metric;
 
 
-    void operator()(const Block& block) {
+    void operator()(Block block) {
         // build the 4x4 block of pixels
         u8 sourceRgba[16*4];
         u8* targetPixel = sourceRgba;

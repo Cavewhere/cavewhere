@@ -76,11 +76,8 @@ void cwTriangulateTask::runTask() {
     This runs the cropping task on all the scraps
   */
 void cwTriangulateTask::cropScraps() {
-    auto context = std::make_unique<QObject>();
-
     cwCropImageTask cropTask;
     cropTask.setDatabaseFilename(ProjectFilename);
-    cropTask.setContext(context.get());
 
     for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         const cwTriangulateInData& data = Scraps.at(i);
@@ -97,19 +94,19 @@ void cwTriangulateTask::cropScraps() {
                 cropFuture.cancel();
             }
         }
-        Q_ASSERT(cropFuture.isFinished());
 
         cwTriangulatedData triangulatedData;
-        if(cropFuture.resultCount() > 0) {
-            triangulatedData.setCroppedImage(cropFuture.result());
-        } else {
-            qDebug() << "Triangulation failed because cropping Image didn't work" << LOCATION;
+        if(!cropFuture.isCanceled()) {
+            if(cropFuture.resultCount() > 0) {
+                triangulatedData.setCroppedImage(cropFuture.result());
+            } else {
+                qDebug() << "Triangulation failed because cropping Image didn't work" << LOCATION;
+            }
         }
         TriangulatedScraps.append(triangulatedData);
 
         setProgress(i + 1);
     }
-    qDebug() << "Finished cropping!" << isRunning();
 }
 
 /**
