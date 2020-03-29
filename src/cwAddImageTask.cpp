@@ -13,6 +13,7 @@
 #include "cwDebug.h"
 #include "cwDXT1Compresser.h"
 #include "cwAsyncFuture.h"
+#include "cwOpenGLSettings.h"
 //#include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
@@ -243,23 +244,26 @@ QFuture<cwImage> cwAddImageTask::images() const
         std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
                        [](const PrivateImageData& data) { return data.Id.original() > 0 && !data.OriginalImage.isNull(); });
 
+        QFuture<QVector<QFuture<int>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<int>>());
 
-        auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
+        if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+            auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
-        auto compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
-                .context(context, [compressAndUpload, scaleFuture]()
-        {
-            QList<QList<QImage>> allImages = scaleFuture.results();
-            QVector<QFuture<int>> ids;
-            ids.reserve(allImages.size());
+            compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
+                    .context(context, [compressAndUpload, scaleFuture]()
+            {
+                QList<QList<QImage>> allImages = scaleFuture.results();
+                QVector<QFuture<int>> ids;
+                ids.reserve(allImages.size());
 
-            std::transform(allImages.begin(),
-                           allImages.end(),
-                           std::back_inserter(ids),
-                           compressAndUpload);
+                std::transform(allImages.begin(),
+                               allImages.end(),
+                               std::back_inserter(ids),
+                               compressAndUpload);
 
-            return ids;
-        }).future();
+                return ids;
+            }).future();
+        }
 
         auto iconFuture = QtConcurrent::mapped(filterData, createIcon);
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
@@ -270,6 +274,38 @@ QFuture<cwImage> cwAddImageTask::images() const
             auto icons = iconFuture.results();
             auto allMipmaps = compressAndUploadFuture.result();
 
+            auto completedImages = [=]() {
+                Q_ASSERT(icons.size() == filterData.size());
+                Q_ASSERT(icons.size() == allMipmaps.size() || allMipmaps.isEmpty());
+
+                QList<cwImage> images;
+
+                for(int i = 0; i < icons.size(); i++) {
+                    auto icon = icons.at(i);
+                    auto image = filterData.at(i);
+
+
+                    cwImage newImage = image.Id;
+                    newImage.setIcon(icon);
+
+                    if(i < allMipmaps.size()) {
+                        auto mipmapFutures = allMipmaps.at(i);
+                        Q_ASSERT(mipmapFutures.isFinished());
+                        newImage.setMipmaps(mipmapFutures.results());
+                    }
+
+                    images.append(newImage);
+                }
+
+                return AsyncFuture::completed(images);
+            };
+
+            if(!cwOpenGLSettings::instance()->useDXT1Compression()) {
+                //Not DXT1 Compression, so don't use mipmaps
+                Q_ASSERT(allMipmaps.isEmpty());
+                return completedImages();
+            }
+
             //Combine all the futures together
             auto mipmapCombine = AsyncFuture::combine();
             for(const auto& mipmapFuture : allMipmaps) {
@@ -277,29 +313,7 @@ QFuture<cwImage> cwAddImageTask::images() const
             }
 
             return AsyncFuture::observe(mipmapCombine.future())
-                    .context(context, [=]()
-            {
-                Q_ASSERT(icons.size() == allMipmaps.size());
-                Q_ASSERT(icons.size() == filterData.size());
-
-                QList<cwImage> images;
-
-                for(int i = 0; i < icons.size(); i++) {
-                    auto icon = icons.at(i);
-                    auto mipmapFutures = allMipmaps.at(i);
-                    auto image = filterData.at(i);
-
-                    Q_ASSERT(mipmapFutures.isFinished());
-
-                    cwImage newImage = image.Id;
-                    newImage.setIcon(icon);
-                    newImage.setMipmaps(mipmapFutures.results());
-
-                    images.append(newImage);
-                }
-
-                return AsyncFuture::completed(images);
-            }).future();
+                    .context(context, completedImages).future();
         }).future();
     }).future();
 }

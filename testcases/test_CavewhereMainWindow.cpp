@@ -15,6 +15,7 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwScrap.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QQmlApplicationEngine>
@@ -170,6 +171,11 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         CHECK(true);
     }
 
+    SECTION("Disable DXT1 Compression") {
+        REQUIRE(cwOpenGLSettings::instance());
+        cwOpenGLSettings::instance()->setDXT1Compression(false);
+    }
+
     QEventLoop loop;
     QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
 
@@ -219,11 +225,12 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
         });
     });
 
-
     loop.exec();
     CHECK(true);
 
     QFile file(filename);
     CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser));
+
+    cwOpenGLSettings::instance()->setDXT1Compression(true);
 }
 

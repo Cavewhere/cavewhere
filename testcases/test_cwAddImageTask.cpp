@@ -34,6 +34,11 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
         }
 
+        SECTION("Without compression") {
+            REQUIRE(cwOpenGLSettings::instance());
+            cwOpenGLSettings::instance()->setDXT1Compression(false);
+        }
+
         addImageTask->setNewImages({resourceImage});
         addImageFuture = addImageTask->images();
     }
@@ -77,7 +82,9 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
     cwImage image = addImageFuture.resultAt(0);
 
-    REQUIRE(image.isValid());
+    CHECK(image.isOriginalValid());
+    CHECK(image.isIconValid());
+    CHECK((image.isMipmapsValid() || !cwOpenGLSettings::instance()->useDXT1Compression()));
 
     cwImageProvider provider;
     provider.setProjectPath(filename);
@@ -102,23 +109,29 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         currentSize = mipmap.size();
     }
 
-    QList<QSize> halfSizes = {
-        {932, 872},
-        {466, 436},
-        {233, 218},
-        {116, 109},
-        {58, 54},
-        {29, 27},
-        {14, 13},
-        {7, 6},
-        {3, 3},
-        {1, 1}};
+    if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+        QList<QSize> halfSizes = {
+            {932, 872},
+            {466, 436},
+            {233, 218},
+            {116, 109},
+            {58, 54},
+            {29, 27},
+            {14, 13},
+            {7, 6},
+            {3, 3},
+            {1, 1}};
 
-    REQUIRE(halfSizes.size() == image.mipmaps().size());
-    for(int i = 0; i < halfSizes.size(); i++) {
-        cwImageData mipmap = provider.data(image.mipmaps().at(i));
-        CHECK(halfSizes.at(i) == mipmap.size());
+        REQUIRE(halfSizes.size() == image.mipmaps().size());
+        for(int i = 0; i < halfSizes.size(); i++) {
+            cwImageData mipmap = provider.data(image.mipmaps().at(i));
+            CHECK(halfSizes.at(i) == mipmap.size());
+        }
+    } else {
+        CHECK(image.mipmaps().isEmpty());
     }
+
+    cwOpenGLSettings::instance()->setDXT1Compression(true);
 }
 
 TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
