@@ -67,13 +67,13 @@ private:
     bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
 
-    cwTextureUploadTask::Type TextureType = cwTextureUploadTask::DXT1Mipmaps;
+    cwTextureUploadTask::Format TextureType = cwTextureUploadTask::Unknown;
 
     QFuture<cwTextureUploadTask::UploadResult> UploadedTextureFuture;
 
     void deleteGLTexture();
 
-    void setTextureType(cwTextureUploadTask::Type type);
+    void setTextureType(cwTextureUploadTask::Format type);
 
     bool isImageValid(const cwImage& image) const;
 

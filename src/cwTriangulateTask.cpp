@@ -20,11 +20,7 @@
 
 cwTriangulateTask::cwTriangulateTask(QObject *parent) :
     cwTask(parent)
-//    CropTask(new cwCropImageTask(this))
 {
-//    CropTask->setParentTask(this);
-//    CropTask->setMipmapOnly(true);
-//    CropTask->setUsingThreadPool(false);
 
 }
 
@@ -42,6 +38,15 @@ void cwTriangulateTask::setProjectFilename(QString filename)
         ProjectFilename = filename;
     } else {
         qDebug() << "Can't set project filename while the task is still running" << LOCATION;
+    }
+}
+
+void cwTriangulateTask::setFormatType(cwTextureUploadTask::Format format)
+{
+    if(isReady()) {
+        Format = format;
+    } else {
+        qDebug() << "Can't set format while task is running";
     }
 }
 
@@ -81,6 +86,7 @@ void cwTriangulateTask::cropScraps() {
     cwCropImageTask cropTask;
     cropTask.setDatabaseFilename(ProjectFilename);
     cropTask.setContext(context.get());
+    cropTask.setFormatType(Format);
 
     for(int i = 0; i < Scraps.size() && isRunning(); i++) {
         const cwTriangulateInData& data = Scraps.at(i);

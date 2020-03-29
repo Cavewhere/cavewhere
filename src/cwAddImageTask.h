@@ -13,6 +13,7 @@
 #include "cwImage.h"
 #include "cwGlobals.h"
 #include "cwDXT1Compresser.h"
+#include "cwTextureUploadTask.h"
 
 //Qt includes
 #include <QStringList>
@@ -46,10 +47,13 @@ public:
     //Option 3 - Regenerate mipmaps
     void setRegenerateMipmapsOn(cwImage image);
 
+    //Settings
+    void setFormatType(cwTextureUploadTask::Format format);
+
     //Process the images
     QFuture<cwImage> images() const;
 
-    //Until functions
+    //Util functions
     static int numberOfMipmapLevels(QSize imageSize);
     static QSize half(QSize size);
     static QRect half(QRect size);
@@ -83,6 +87,7 @@ private:
     QStringList NewImagePaths;
     QList<QImage> NewImages;
     cwImage RegenerateMipmap;
+    cwTextureUploadTask::Format FormatType = cwTextureUploadTask::Unknown;
 
     static QImage copyOriginalImage(QString image,
                                     cwImage* imageIds,

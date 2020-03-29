@@ -32,18 +32,19 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 {
     auto settings = cwOpenGLSettings::instance();
 
-    setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
+    setTextureType(cwTextureUploadTask::format());
 
     auto reloadTexture = [this]() {
         ReloadTexture = true;
         markAsDirty();
     };
 
-    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture, settings]() {
-        setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
+    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture]() {
+        setTextureType(cwTextureUploadTask::format());
         startLoadingImage();
         reloadTexture();
     });
+
     connect(settings, &cwOpenGLSettings::useAnisotropyChanged, this, reloadTexture);
     connect(settings, &cwOpenGLSettings::useMipmapsChanged, this, reloadTexture);
     connect(settings, &cwOpenGLSettings::magFilterChanged, this, reloadTexture);
@@ -264,7 +265,7 @@ void cwImageTexture::updateData() {
  */
 void cwImageTexture::startLoadingImage()
 {
-    if(isImageValid(Image) && !project().isEmpty()) {
+    if(Image.isOriginalValid() && !project().isEmpty()) {
 
         UploadedTextureFuture.cancel();
 
@@ -304,7 +305,7 @@ void cwImageTexture::deleteGLTexture()
     }
 }
 
-void cwImageTexture::setTextureType(cwTextureUploadTask::Type type)
+void cwImageTexture::setTextureType(cwTextureUploadTask::Format type)
 {
     if(type != TextureType) {
         TextureType = type;

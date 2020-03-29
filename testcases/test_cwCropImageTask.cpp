@@ -25,6 +25,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         cwAddImageTask addImageTask;
         addImageTask.setNewImages({image});
         addImageTask.setDatabaseFilename(filename);
+        addImageTask.setFormatType(cwTextureUploadTask::format());
 
         auto imageFuture = addImageTask.images();
         REQUIRE(cwAsyncFuture::waitForFinished(imageFuture, 3000));
@@ -109,7 +110,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(QRectF(origin, pixelBlockSize)); //First pixel
             cropImageTask.setOriginal(image);
-//            cropImageTask.start();
+            cropImageTask.setFormatType(cwTextureUploadTask::format());
 
             auto cropFuture = cropImageTask.crop();
             REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));
@@ -147,7 +148,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(cropArea); //First pixel
             cropImageTask.setOriginal(image);
-//            cropImageTask.start();
+            cropImageTask.setFormatType(cwTextureUploadTask::format());
 
             auto cropFuture = cropImageTask.crop();
             REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));

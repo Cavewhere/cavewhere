@@ -25,16 +25,17 @@ class CAVEWHERE_LIB_EXPORT cwTextureUploadTask : public cwJob
 {
 
 public:
-    enum Type {
+    enum Format {
         DXT1Mipmaps,
-        OpenGL_RGBA
+        OpenGL_RGBA,
+        Unknown,
     };
 
     class UploadResult {
     public:
         QList< QPair< QByteArray, QSize > > mipmaps;
         QVector2D scaleTexCoords;
-        Type type;
+        Format type = Unknown;
     };
 
     explicit cwTextureUploadTask();
@@ -42,14 +43,15 @@ public:
     //Inputs
     void setImage(cwImage image);
     void setProjectFilename(QString filename);
-    void setType(Type type);
+    void setType(Format type);
 
     QFuture<cwTextureUploadTask::UploadResult> mipmaps() const;
 
     static bool isDivisibleBy4(QSize size);
+    static Format format();
 
 private:
-    Type type = OpenGL_RGBA;
+    Format type = Unknown;
     cwImage Image;
     QString ProjectFilename;
 
@@ -78,7 +80,7 @@ inline void cwTextureUploadTask::setProjectFilename(QString filename)
 }
 
 
-inline void cwTextureUploadTask::setType(cwTextureUploadTask::Type type)
+inline void cwTextureUploadTask::setType(cwTextureUploadTask::Format type)
 {
     this->type = type;
 }

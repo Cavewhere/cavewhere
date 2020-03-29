@@ -14,6 +14,7 @@
 #include "cwTriangulatedData.h"
 #include "cwImage.h"
 #include "cwNoteTranformation.h"
+#include "cwTextureUploadTask.h"
 class cwCropImageTask;
 
 //Qt include
@@ -32,6 +33,7 @@ public:
     //Input so the triangle task
     void setScrapData(QList<cwTriangulateInData> scraps);
     void setProjectFilename(QString filename);
+    void setFormatType(cwTextureUploadTask::Format format);
 
     //Outputs of the task
     QList<cwTriangulatedData> triangulatedScrapData() const;
@@ -123,12 +125,10 @@ private:
     //Inputs
     QList<cwTriangulateInData> Scraps;
     QString ProjectFilename;
+    cwTextureUploadTask::Format Format;
 
     //Outputs
     QList<cwTriangulatedData> TriangulatedScraps;
-
-    //Sub tasks
-//    cwCropImageTask* CropTask;
 
     void cropScraps();
 

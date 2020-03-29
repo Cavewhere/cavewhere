@@ -32,11 +32,11 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 {
     auto projectFile = ProjectFilename;
     auto image = Image;
-    auto currentType = type;
+    auto currentFormat = type;
     auto context = this->context();
 
     //loads valid mipmap
-    auto loadValidMipmap = [projectFile, currentType](const cwImage& image) {
+    auto loadValidMipmap = [projectFile, currentFormat](const cwImage& image) {
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
 
@@ -74,7 +74,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             return {};
         };
 
-        switch(currentType) {
+        switch(currentFormat) {
         case OpenGL_RGBA:
             results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
             results.mipmaps = loadRGB();
@@ -85,27 +85,33 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             break;
         }
 
-        results.type = currentType;
+        results.type = currentFormat;
         return results;
     };
 
     //fetchs the mipmaps
-    auto fetchImages = [loadValidMipmap, projectFile, image, context, currentType]() {
+    auto fetchImages = [loadValidMipmap, projectFile, image, context, currentFormat]() {
         //Fetch mimaps from disk
 
-        if(currentType == DXT1Mipmaps) {
-            cwImageProvider imageProvidor;
-            imageProvidor.setProjectPath(projectFile);
+        if(currentFormat == DXT1Mipmaps) {
+            auto size = [image, projectFile]() {
+                if(image.mipmaps().isEmpty()) {
+                    return QSize();
+                }
 
-            int firstLevel = image.mipmaps().first();
-            QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+                int firstLevel = image.mipmaps().first();
+                cwImageProvider imageProvidor;
+                imageProvidor.setProjectPath(projectFile);
+                return imageProvidor.data(firstLevel, true).size();
+            };
 
-            if(!isDivisibleBy4(firstLevelSize)) {
+            if(!isDivisibleBy4(size())) {
                 //Regenerate the mipmaps
                 cwAddImageTask addImageTask;
                 addImageTask.setDatabaseFilename(projectFile);
                 addImageTask.setRegenerateMipmapsOn(image);
                 addImageTask.setContext(context);
+                addImageTask.setFormatType(currentFormat);
                 auto reAddFuture = addImageTask.images();
 
                 return AsyncFuture::observe(reAddFuture)
@@ -145,4 +151,15 @@ bool cwTextureUploadTask::isDivisibleBy4(QSize size)
     int widthRemainder = size.width() % 4;
     int heightRemainder = size.height() % 4;
     return widthRemainder == 0 && heightRemainder == 0;
+}
+
+/**
+ * This function is not Thread safe, make sure use correctly
+ */
+cwTextureUploadTask::Format cwTextureUploadTask::format()
+{
+    if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+        return cwTextureUploadTask::DXT1Mipmaps;
+    }
+    return cwTextureUploadTask::OpenGL_RGBA;
 }

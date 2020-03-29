@@ -269,7 +269,6 @@ bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
             return true;
         }
         cwImageData imageData = ImageProvider.data(image.original(), true);
-        qDebug() << "ImageData:" << imageData.size().isValid() << imageData.size();
         return imageData.size().isValid();
     }
     //No cropped image
@@ -450,6 +449,7 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
         TriangulateTask->setProjectFilename(Project->filename());
         TriangulateTask->setScrapData(scrapData);
+        TriangulateTask->setFormatType(cwTextureUploadTask::format());
         TriangulateTask->start();
     } else {
         //Isn't ready!, restart the task

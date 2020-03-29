@@ -39,6 +39,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             cwOpenGLSettings::instance()->setDXT1Compression(false);
         }
 
+        addImageTask->setFormatType(cwTextureUploadTask::format());
         addImageTask->setNewImages({resourceImage});
         addImageFuture = addImageTask->images();
     }
@@ -55,6 +56,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         }
 
         auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
+        addImageTask->setFormatType(cwTextureUploadTask::format());
         addImageTask->setNewImagesPath({resourceImageFilename});
         addImageFuture = addImageTask->images();
     }

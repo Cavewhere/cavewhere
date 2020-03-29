@@ -49,12 +49,18 @@ void cwCropImageTask::setRectF(QRectF cropTo) {
     CropRect = cropTo;
 }
 
+void cwCropImageTask::setFormatType(cwTextureUploadTask::Format format)
+{
+    Format = format;
+}
+
 QFuture<cwImage> cwCropImageTask::crop()
 {
     auto filename = databaseFilename();
     auto originalImage = Original;
     auto cropRect = CropRect;
     auto context = this->context();
+    auto format = Format;
 
     auto cropImage = [filename, originalImage, cropRect]()->QImage {
             cwImageProvider provider;
@@ -72,12 +78,13 @@ QFuture<cwImage> cwCropImageTask::crop()
 
     auto addImageFuture = AsyncFuture::observe(cropFuture)
             .context(context,
-                     [context, cropFuture, filename]()
+                     [context, cropFuture, filename, format]()
     {
         cwAddImageTask addImages;
         addImages.setContext(context);
         addImages.setDatabaseFilename(filename);
         addImages.setNewImages({cropFuture.result()});
+        addImages.setFormatType(format);
         return addImages.images();
     }).future();
 

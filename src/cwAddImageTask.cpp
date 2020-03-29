@@ -65,10 +65,16 @@ void cwAddImageTask::setRegenerateMipmapsOn(cwImage image)
     RegenerateMipmap = image;
 }
 
+void cwAddImageTask::setFormatType(cwTextureUploadTask::Format format)
+{
+    FormatType = format;
+}
+
 QFuture<cwImage> cwAddImageTask::images() const
 {
     QString filename = databaseFilename();
     auto context = this->context();
+    auto format = FormatType;
 
     std::function<PrivateImageData (const QString&)> loadImagesFromPath
             = [filename](const QString& imagePath) {
@@ -230,7 +236,15 @@ QFuture<cwImage> cwAddImageTask::images() const
 
     return AsyncFuture::observe(imageCombine.future())
             .context(context,
-                     [=]()
+                     [pathImagesFuture,
+                     imagesFuture,
+                     regeneratedFuture,
+                     format,
+                     scaleImage,
+                     context,
+                     compressAndUpload,
+                     createIcon
+                     ]()
     {
         QList<PrivateImageData> imageData = 
                 pathImagesFuture.results() 
@@ -246,7 +260,7 @@ QFuture<cwImage> cwAddImageTask::images() const
 
         QFuture<QVector<QFuture<int>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<int>>());
 
-        if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+        if(format == cwTextureUploadTask::DXT1Mipmaps) {
             auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
             compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
@@ -300,11 +314,13 @@ QFuture<cwImage> cwAddImageTask::images() const
                 return AsyncFuture::completed(images);
             };
 
-            if(!cwOpenGLSettings::instance()->useDXT1Compression()) {
-                //Not DXT1 Compression, so don't use mipmaps
+            if(format == cwTextureUploadTask::OpenGL_RGBA) {
+                //RGBA, so don't use mipmaps
                 Q_ASSERT(allMipmaps.isEmpty());
                 return completedImages();
             }
+
+            Q_ASSERT(format == cwTextureUploadTask::DXT1Mipmaps);
 
             //Combine all the futures together
             auto mipmapCombine = AsyncFuture::combine();

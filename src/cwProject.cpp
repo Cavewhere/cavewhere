@@ -614,6 +614,7 @@ void cwProject::addImages(QList<QUrl> noteImagePath,
         cwAddImageTask addImageTask;
         addImageTask.setDatabaseFilename(filename());
         addImageTask.setContext(context);
+        addImageTask.setFormatType(cwTextureUploadTask::format());
 
         //Set all the noteImagePath
         addImageTask.setNewImagesPath({path}); //noteImagePath);

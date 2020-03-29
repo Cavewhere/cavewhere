@@ -14,6 +14,7 @@
 #include "cwImageProvider.h"
 #include "cwProjectIOTask.h"
 #include "cwGlobals.h"
+#include "cwTextureUploadTask.h"
 class cwAddImageTask;
 
 //Qt includes
@@ -35,6 +36,7 @@ public:
     void setOriginal(cwImage image);
     void setRectF(QRectF cropTo);
     void setMipmapOnly(bool mipmapOnly);
+    void setFormatType(cwTextureUploadTask::Format format);
 
     QFuture<cwImage> crop();
 
@@ -45,6 +47,7 @@ private:
     //Inputs
     cwImage Original;
     QRectF CropRect;
+    cwTextureUploadTask::Format Format = cwTextureUploadTask::Unknown;
 
     //Output
     cwImage CroppedImage;
