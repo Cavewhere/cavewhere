@@ -23,6 +23,7 @@
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
+#include "cwOpenGLSettings.h"
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
@@ -252,15 +253,24 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
  */
 bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
-    if(scrap->triangulationData().croppedImage().isValid()) {
+    auto image = scrap->triangulationData().croppedImage();
+    if(image.isOriginalValid()) {
         //Should be in the database
-        foreach(int mipmap, scrap->triangulationData().croppedImage().mipmaps()) {
-            cwImageData imageData = ImageProvider.data(mipmap, true);
-            if(!imageData.size().isValid()) {
+        if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+            if(!image.isMipmapsValid()) {
                 return false;
             }
+            foreach(int mipmap, image.mipmaps()) {
+                cwImageData imageData = ImageProvider.data(mipmap, true);
+                if(!imageData.size().isValid()) {
+                    return false;
+                }
+            }
+            return true;
         }
-        return true;
+        cwImageData imageData = ImageProvider.data(image.original(), true);
+        qDebug() << "ImageData:" << imageData.size().isValid() << imageData.size();
+        return imageData.size().isValid();
     }
     //No cropped image
     return false;
@@ -754,7 +764,7 @@ void cwScrapManager::taskFinished() {
         //Removed all cropped image data
         foreach(cwScrap* scrap, validScraps) {
             cwImage image = scrap->triangulationData().croppedImage();
-            if(image.isValid()) {
+            if(image.isOriginalValid()) {
                 imagesToRemove.append(image);
             }
         }

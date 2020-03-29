@@ -32,12 +32,15 @@ cwImageTexture::cwImageTexture(QObject *parent) :
 {
     auto settings = cwOpenGLSettings::instance();
 
+    setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
+
     auto reloadTexture = [this]() {
         ReloadTexture = true;
         markAsDirty();
     };
 
-    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture]() {
+    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture, settings]() {
+        setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
         startLoadingImage();
         reloadTexture();
     });
@@ -108,7 +111,6 @@ void cwImageTexture::initialize()
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    setTextureType(settings->useDXT1Compression() ? cwTextureUploadTask::DXT1Mipmaps : cwTextureUploadTask::OpenGL_RGBA);
 }
 
 void cwImageTexture::releaseResources()
@@ -143,7 +145,7 @@ void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
 
-        if(Image.isMipmapsValid()) {
+        if(isImageValid(image)) {
             startLoadingImage();
         } else {
             DeleteTexture = true;
@@ -179,12 +181,16 @@ void cwImageTexture::updateData() {
         return;
     }
 
+    if(UploadedTextureFuture.resultCount() == 0) {
+        return;
+    }
+
     auto results = UploadedTextureFuture.result();
 
     QList<QPair<QByteArray, QSize> > mipmaps = results.mipmaps;
     ScaleTexCoords = results.scaleTexCoords;
 
-    if(mipmaps.empty()) { return; }
+    if(mipmaps.isEmpty()) { return; }
 
     QSize firstLevel = mipmaps.first().second;
     if(!cwTextureUploadTask::isDivisibleBy4(firstLevel) && results.type == cwTextureUploadTask::DXT1Mipmaps) {
@@ -258,7 +264,7 @@ void cwImageTexture::updateData() {
  */
 void cwImageTexture::startLoadingImage()
 {
-    if(Image.isMipmapsValid() && !project().isEmpty()) {
+    if(isImageValid(Image) && !project().isEmpty()) {
 
         UploadedTextureFuture.cancel();
 
@@ -304,6 +310,20 @@ void cwImageTexture::setTextureType(cwTextureUploadTask::Type type)
         TextureType = type;
         startLoadingImage();
     }
+}
+
+bool cwImageTexture::isImageValid(const cwImage &image) const
+{
+    switch(TextureType) {
+    case cwTextureUploadTask::DXT1Mipmaps:
+        Q_ASSERT(cwOpenGLSettings::instance()->useDXT1Compression());
+        return image.isMipmapsValid();
+    case cwTextureUploadTask::OpenGL_RGBA:
+        Q_ASSERT(!cwOpenGLSettings::instance()->useDXT1Compression());
+        return image.isOriginalValid();
+    }
+    Q_ASSERT(false);
+    return false;
 }
 
 void cwImageTexture::markAsDirty()

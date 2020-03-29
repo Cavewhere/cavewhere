@@ -75,6 +75,8 @@ private:
 
     void setTextureType(cwTextureUploadTask::Type type);
 
+    bool isImageValid(const cwImage& image) const;
+
 private slots:
     void startLoadingImage();
     void markAsDirty();

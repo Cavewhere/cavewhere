@@ -11,16 +11,16 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         image.setOriginal(3);
         image.setMipmaps({2});
         image.setIcon(4);
-        CHECK(image.isValid() == true);
+        CHECK(image.isOriginalValid() == true);
 
         image.setOriginal(0);
-        CHECK(image.isValid() == true);
+        CHECK(image.isOriginalValid() == true);
 
         image.setOriginal(-1);
-        CHECK(image.isValid() == false);
+        CHECK(image.isOriginalValid() == false);
 
         image.setOriginal(-10);
-        CHECK(image.isValid() == false);
+        CHECK(image.isOriginalValid() == false);
         CHECK(image.isIconValid() == true);
         CHECK(image.isMipmapsValid() == true);
     }
@@ -37,7 +37,7 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
 
         image.setIcon(-10);
         CHECK(image.isIconValid() == false);
-        CHECK(image.isValid() == false);
+        CHECK(image.isOriginalValid() == false);
         CHECK(image.isMipmapsValid() == false);
     }
 
@@ -60,7 +60,7 @@ TEST_CASE("cwImages isValid methods should return correctly", "[cwImage]") {
         image.setMipmaps({2, 0, 6, -1});
         CHECK(image.isMipmapsValid() == false);
         CHECK(image.isIconValid() == false);
-        CHECK(image.isValid() == false);
+        CHECK(image.isOriginalValid() == false);
     }
 
 }

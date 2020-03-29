@@ -268,7 +268,7 @@ void cwImageItem::resizeGL() {
   \brief Draws the note item
   */
 void cwImageItem::paint(QPainter* painter) {
-    if(!Image.isValid()) { return; }
+    if(!Image.isOriginalValid()) { return; }
     if(GLResources == nullptr) { initializeGL(); }
 
     painter->beginNativePainting();

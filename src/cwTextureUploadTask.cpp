@@ -12,6 +12,7 @@
 #include "cwAddImageTask.h"
 #include "cwMath.h"
 #include "cwOpenGLUtils.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QDebug>
@@ -29,8 +30,6 @@ cwTextureUploadTask::cwTextureUploadTask()
 
 QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 {
-    if(Image.mipmaps().empty()) { return AsyncFuture::completed(UploadResult()); }
-
     auto projectFile = ProjectFilename;
     auto image = Image;
     auto currentType = type;
@@ -57,7 +56,6 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         };
 
         auto loadRGB = [&imageProvidor, image]()->QList< QPair< QByteArray, QSize > > {
-            QList< QPair< QByteArray, QSize > > mipmaps;
             auto imageData = imageProvidor.data(image.original());
 
             if(imageData.data().isEmpty()) {
@@ -72,6 +70,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
                                 static_cast<int>(image.sizeInBytes()));
                 return {{data, imageData.size()}};
             }
+            qDebug() << "Couldn't load from imageData";
             return {};
         };
 
@@ -91,38 +90,41 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
     };
 
     //fetchs the mipmaps
-    auto fetchImages = [loadValidMipmap, projectFile, image, context]() {
+    auto fetchImages = [loadValidMipmap, projectFile, image, context, currentType]() {
         //Fetch mimaps from disk
-        cwImageProvider imageProvidor;
-        imageProvidor.setProjectPath(projectFile);
 
-        int firstLevel = image.mipmaps().first();
-        QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+        if(currentType == DXT1Mipmaps) {
+            cwImageProvider imageProvidor;
+            imageProvidor.setProjectPath(projectFile);
 
-        if(!isDivisibleBy4(firstLevelSize)) {
-            //Regenerate the mipmaps
-            cwAddImageTask addImageTask;
-            addImageTask.setDatabaseFilename(projectFile);
-            addImageTask.setRegenerateMipmapsOn(image);
-            addImageTask.setContext(context);
-            auto reAddFuture = addImageTask.images();
+            int firstLevel = image.mipmaps().first();
+            QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
 
-            return AsyncFuture::observe(reAddFuture)
-                    .context(context, [projectFile, reAddFuture, loadValidMipmap]() {
-                //Double check if it successful
-                cwImageProvider imageProvidor;
-                imageProvidor.setProjectPath(projectFile);
+            if(!isDivisibleBy4(firstLevelSize)) {
+                //Regenerate the mipmaps
+                cwAddImageTask addImageTask;
+                addImageTask.setDatabaseFilename(projectFile);
+                addImageTask.setRegenerateMipmapsOn(image);
+                addImageTask.setContext(context);
+                auto reAddFuture = addImageTask.images();
 
-                auto image = reAddFuture.result();
-                int firstLevel = image.mipmaps().first();
-                QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
-                if(!isDivisibleBy4(firstLevelSize)) {
-                    //No original image, can regenerate image
-                    return AsyncFuture::completed(UploadResult());
-                }
+                return AsyncFuture::observe(reAddFuture)
+                        .context(context, [projectFile, reAddFuture, loadValidMipmap]() {
+                    //Double check if it successful
+                    cwImageProvider imageProvidor;
+                    imageProvidor.setProjectPath(projectFile);
 
-                return QtConcurrent::run(std::bind(loadValidMipmap, reAddFuture));
-            }).future();
+                    auto image = reAddFuture.result();
+                    int firstLevel = image.mipmaps().first();
+                    QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
+                    if(!isDivisibleBy4(firstLevelSize)) {
+                        //No original image, can regenerate image
+                        return AsyncFuture::completed(UploadResult());
+                    }
+
+                    return QtConcurrent::run(std::bind(loadValidMipmap, reAddFuture));
+                }).future();
+            }
         }
 
         return QtConcurrent::run(std::bind(loadValidMipmap, image));

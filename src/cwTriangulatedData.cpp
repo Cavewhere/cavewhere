@@ -18,7 +18,7 @@ cwTriangulatedData::cwTriangulatedData() :
  */
 bool cwTriangulatedData::isNull() const
 {
-    return !Data->croppedImage.isValid() &&
+    return !Data->croppedImage.isOriginalValid() &&
             Data->indices.isEmpty() &&
             Data->points.isEmpty() &&
             Data->texCoords.isEmpty();

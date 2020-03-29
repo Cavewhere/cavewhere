@@ -204,13 +204,21 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
         for(auto scrap : note->scraps()) {
             auto triangleData = scrap->triangulationData();
-            CHECK((triangleData.croppedImage().isValid()));
 
             QList<int> ids = {
                 triangleData.croppedImage().original(),
                 triangleData.croppedImage().icon()
             };
-            ids += triangleData.croppedImage().mipmaps();
+
+            if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+                CHECK((triangleData.croppedImage().isOriginalValid()));
+                CHECK((triangleData.croppedImage().isIconValid()));
+                CHECK((triangleData.croppedImage().isMipmapsValid()));
+                ids += triangleData.croppedImage().mipmaps();
+            } else {
+                CHECK((triangleData.croppedImage().isIconValid()));
+                CHECK((triangleData.croppedImage().isOriginalValid()));
+            }
 
             for(auto id : ids) {
                 auto data = imageProvider.data(id, true);

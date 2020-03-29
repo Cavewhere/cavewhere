@@ -51,7 +51,6 @@ public:
     bool operator ==(const cwImage& other) const;
     bool operator !=(const cwImage& other) const;
 
-    bool isValid() const;
     bool isOriginalValid() const;
     bool isMipmapsValid() const;
     bool isIconValid() const;
@@ -165,14 +164,6 @@ inline void cwImage::setOriginalDotsPerMeter(int dotsPerMeter) {
 inline int cwImage::originalDotsPerMeter() const {
     return Data->OriginalDotsPerMeter;
 }
-
-/**
-  \brief Returns false if the image isn't valid and true if it is valid.
-  */
-inline bool cwImage::isValid() const {
-    return isOriginalValid() && isMipmapsValid() && isIconValid();
-}
-
 
 inline bool cwImage::isOriginalValid() const
 {

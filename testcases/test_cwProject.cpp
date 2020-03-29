@@ -120,7 +120,8 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     int checked = 0;
     project->addImages(filenames, rootData.get(), [&checked](QList<cwImage> images){
         REQUIRE(images.size() == 1);
-        CHECK(images.first().isValid());
+        CHECK(images.first().isOriginalValid());
+        CHECK(images.first().isIconValid());
         checked++;
     });
 
