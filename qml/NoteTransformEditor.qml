@@ -101,15 +101,14 @@ QQ.Item {
 
                     HelpArea {
                         id: northUpHelpArea
-                        width: scaleInputId.width
+                        Layout.fillWidth: true
                         text: {
                             switch(scrapType) {
                             case Scrap.Plan:
                                 return "You can set the direction of <b>north</b> relative to page for a scrap.
                                 Setting this incorrectly may cause warping issues."
                             case Scrap.RunningProfile:
-                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap.
-                                Setting this incorrectly may cause warping issues."
+                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
                                     return "Error..."
                             }
@@ -126,8 +125,20 @@ QQ.Item {
 
                     HelpArea {
                         id: scaleHelpAreaId
-                        width: scaleInputId.width
-                        text: "You can set the <b>scale</b> of the scrap."
+                        Layout.fillWidth: true
+                        text: "You can set the <b>scale</b> of the scrap. Setting this incorrectly may cause warping issues."
+                    }
+
+                    ErrorHelpArea {
+                        Layout.fillWidth: true
+                        visible: {
+                            if(scaleInputId.scaleObject) {
+                                return scaleInputId.scaleObject.scale >= 1.0
+                            }
+                            return false;
+                        }
+
+                        text: {"A scale of 1:1 or smaller is bad! You might need to add more station to create a shot or enter scale manually."}
                     }
                 }
             }
