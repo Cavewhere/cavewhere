@@ -23,6 +23,8 @@ cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
 
 void cwFutureManagerModel::addJob(const Job &job)
 {
+    Q_ASSERT(QThread::currentThread() == thread());
+
     if(job.future().isCanceled() || job.future().isFinished()) {
         return;
     }
