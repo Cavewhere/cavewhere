@@ -145,6 +145,7 @@ void cwImageItem::initializeGL() {
     GLResources->NoteTexture = new cwImageTexture();
     GLResources->NoteTexture->setProject(ProjectFilename);
     GLResources->NoteTexture->setImage(Image);
+    GLResources->NoteTexture->setFutureManagerToken(futureManagerToken());
 
     //Called when the image is finished loading
     connect(GLResources->NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
@@ -359,3 +360,11 @@ void cwImageItem::setProjectFilename(QString filename) {
 QString cwImageItem::projectFilename() const {
     return ProjectFilename;
 }
+
+void cwImageItem::setFutureManagerToken(cwFutureManagerToken futureManagerToken) {
+    if(FutureManagerToken != futureManagerToken) {
+        FutureManagerToken = futureManagerToken;
+        emit futureManagerTokenChanged();
+    }
+}
+

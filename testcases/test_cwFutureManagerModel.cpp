@@ -134,13 +134,13 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
     }
 
     SECTION("Model shouldn't add canceled futures") {
-        model.addJob(cwFutureManagerModel::Job(QFuture<void>(), "Canceled Job"));
+        model.addJob(cwFuture(QFuture<void>(), "Canceled Job"));
         CHECK(model.rowCount() == 0);
         spyChecker.checkSpies();
     }
 
     SECTION("Model shouldn't add finished futures") {
-        model.addJob(cwFutureManagerModel::Job(AsyncFuture::completed(), "Finished Job"));
+        model.addJob(cwFuture(AsyncFuture::completed(), "Finished Job"));
         CHECK(model.rowCount() == 0);
         spyChecker.checkSpies();
     }

@@ -21,7 +21,7 @@ cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
     Timer->start();
 }
 
-void cwFutureManagerModel::addJob(const Job &job)
+void cwFutureManagerModel::addJob(const cwFuture &job)
 {
     Q_ASSERT(QThread::currentThread() == thread());
 

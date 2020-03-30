@@ -33,6 +33,7 @@ class cwRegionTreeModel;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
+#include "cwFutureManagerToken.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -52,6 +53,7 @@ public:
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
     void setTaskManager(cwTaskManagerModel* taskManager);
+    void setFutureManagerToken(cwFutureManagerToken token);
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
 
@@ -80,6 +82,7 @@ private:
     cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
     cwTaskManagerModel* TaskManagerModel;
+    cwFutureManagerToken FutureManagerToken;
 
     //The gl scraps that need updating
     cwGLScraps* GLScraps;

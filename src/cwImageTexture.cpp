@@ -274,6 +274,7 @@ void cwImageTexture::startLoadingImage()
         uploadTask.setProjectFilename(ProjectFilename);
         uploadTask.setType(TextureType);
         UploadedTextureFuture = uploadTask.mipmaps();
+        FutureManagerToken.addJob({UploadedTextureFuture, "Updating Texture"});
 
         auto context = QSharedPointer<QObject>::create();
 
@@ -346,4 +347,14 @@ void cwImageTexture::bind() {
   */
 void cwImageTexture::release() {
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+/**
+*
+*/
+void cwImageTexture::setFutureManagerToken(cwFutureManagerToken futureManagerToken) {
+    if(FutureManagerToken != futureManagerToken) {
+        FutureManagerToken = futureManagerToken;
+        emit futureManagerTokenChanged();
+    }
 }

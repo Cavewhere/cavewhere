@@ -9,31 +9,17 @@
 #include <QElapsedTimer>
 
 //Our includes
-#include <cwGlobals.h>
+#include "cwGlobals.h"
+#include "cwFutureManagerToken.h"
+#include "cwFuture.h"
 
 class CAVEWHERE_LIB_EXPORT cwFutureManagerModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
-
+    Q_PROPERTY(cwFutureManagerToken token READ token CONSTANT)
 
 public:
-    class Job {
-    public:
-        Job() {}
-        Job(const QFuture<void>& future, const QString& jobName) :
-            mFuture(future),
-            mName(jobName)
-        { }
-
-        QFuture<void> future() const { return mFuture; }
-        QString name() const { return mName; }
-
-    private:
-        QFuture<void> mFuture;
-        QString mName;
-    };
-
     enum Roles {
         NameRole,
         ProgressRole,
@@ -47,7 +33,7 @@ public:
     int interval() const;
     void setInterval(int interval);
 
-    void addJob(const Job& job);
+    void addJob(const cwFuture& job);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
@@ -56,13 +42,16 @@ public:
     void waitForFinished();
 
     static QHash<int, QByteArray> defaultRoles();
+
+    cwFutureManagerToken token();
+
 signals:
     void intervalChanged();
 
 private:
     class WatcherContainer {
     public:
-        Job job;
+        cwFuture job;
         bool visible;
         QElapsedTimer startTime;
         QFutureWatcher<void>* watcher = nullptr;
@@ -79,5 +68,15 @@ private:
 inline int cwFutureManagerModel::interval() const {
     return Timer->interval();
 }
+
+/**
+*
+*/
+inline cwFutureManagerToken cwFutureManagerModel::token() {
+    cwFutureManagerModel* model = this;
+    cwFutureManagerToken token(model);
+    return token;
+}
+
 
 #endif // CWFUTUREMANAGERMODEL_H

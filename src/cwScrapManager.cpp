@@ -144,6 +144,14 @@ void cwScrapManager::setTaskManager(cwTaskManagerModel *taskManager)
     }
 }
 
+void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
+{
+    FutureManagerToken = token;
+    if(GLScraps) {
+        GLScraps->setFutureManagerToken(token);
+    }
+}
+
 /**
   This function is for testing
 
@@ -792,6 +800,7 @@ void cwScrapManager::setGLScraps(cwGLScraps *glScraps)
 {
     GLScraps = glScraps;
     GLScraps->setProject(Project);
+    GLScraps->setFutureManagerToken(FutureManagerToken);
 }
 
 /**

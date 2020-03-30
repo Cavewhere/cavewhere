@@ -67,6 +67,7 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setRegionTreeModel(RegionTreeModel);
     ScrapManager->setLinePlotManager(LinePlotManager);
     ScrapManager->setTaskManager(TaskManagerModel);
+    ScrapManager->setFutureManagerToken(FutureManagerModel->token());
 
     //Setup the survey import manager
     SurveyImportManager = new cwSurveyImportManager(Project);

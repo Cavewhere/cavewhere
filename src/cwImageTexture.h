@@ -21,12 +21,14 @@
 //Our includes
 #include "cwImage.h"
 #include "cwTextureUploadTask.h"
+#include "cwFutureManagerToken.h"
 
 class cwImageTexture : public QObject, private QOpenGLFunctions
 {
     Q_OBJECT
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
+    Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged)
 
 public:
     explicit cwImageTexture(QObject *parent = 0);
@@ -44,6 +46,9 @@ public:
     QString project() const;
     void setProject(QString project);
 
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
+
     QVector2D scaleTexCoords() const;
 
     bool isDirty() const;
@@ -53,6 +58,7 @@ signals:
     void imageChanged();
     void textureUploaded();
     void needsUpdate();
+    void futureManagerTokenChanged();
 
 public slots:
     void updateData();
@@ -70,6 +76,7 @@ private:
     cwTextureUploadTask::Format TextureType = cwTextureUploadTask::Unknown;
 
     QFuture<cwTextureUploadTask::UploadResult> UploadedTextureFuture;
+    cwFutureManagerToken FutureManagerToken; //!<
 
     void deleteGLTexture();
 
@@ -106,5 +113,11 @@ inline cwImage cwImageTexture::image() const {
     return Image;
 }
 
+/**
+*
+*/
+inline cwFutureManagerToken cwImageTexture::futureManagerToken() const {
+    return FutureManagerToken;
+}
 
 #endif // CWIMAGETEXTURE_H

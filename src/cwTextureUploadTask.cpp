@@ -83,6 +83,8 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             results.scaleTexCoords = imageProvidor.scaleTexCoords(image);
             results.mipmaps = loadDXT1Mipmap();
             break;
+        default:
+            Q_ASSERT(false);
         }
 
         results.type = currentFormat;

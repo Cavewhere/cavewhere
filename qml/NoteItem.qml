@@ -19,6 +19,8 @@ ImageItem {
     clip: true
     rotation: note !== null ? note.rotate : 0
 
+    futureManagerToken: rootData.futureManagerModel.token
+
     PanZoomInteraction {
         id: panZoomInteraction
         anchors.fill: parent

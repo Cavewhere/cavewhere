@@ -1,5 +1,6 @@
 //Our includes
 #include "cwFutureManagerToken.h"
+#include "cwFutureManagerModel.h"
 
 //Qt includes
 #include <QMetaObject>
@@ -10,7 +11,7 @@ cwFutureManagerToken::cwFutureManagerToken(cwFutureManagerModel *model) :
 
 }
 
-void cwFutureManagerToken::addJob(const cwFutureManagerModel::Job &job)
+void cwFutureManagerToken::addJob(const cwFuture &job)
 {
     auto model = Model;
 
@@ -20,4 +21,9 @@ void cwFutureManagerToken::addJob(const cwFutureManagerModel::Job &job)
             model->addJob(job);
         }
     });
+}
+
+bool cwFutureManagerToken::operator==(const cwFutureManagerToken &token) const
+{
+    return token.Model == Model;
 }

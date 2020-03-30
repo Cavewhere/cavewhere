@@ -34,6 +34,22 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
         CHECK(model->rowCount() == 0);
     }
 
+    SECTION("The token from the model should work") {
+        cwFutureManagerToken token = model->token();
+
+        auto def = AsyncFuture::deferred<int>();
+        token.addJob({def.future(), "Current Thread"});
+
+        REQUIRE(model->rowCount() == 1);
+        CHECK(model->index(0).data(cwFutureManagerModel::NameRole).toString().toStdString() == "Current Thread");
+
+        def.complete(1);
+
+        QCoreApplication::processEvents();
+
+        CHECK(model->rowCount() == 0);
+    }
+
     SECTION("Add job another thread") {
         cwFutureManagerToken token(model.get());
         auto def = AsyncFuture::deferred<int>();

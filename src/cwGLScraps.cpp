@@ -108,7 +108,7 @@ void cwGLScraps::updateData()
                 glScrap.update(command.triangulatedData());
                 scrapId = glScrap.ScrapId;
             } else {
-                GLScrap glScrap(command.triangulatedData(), project());
+                GLScrap glScrap(command.triangulatedData(), project(), FutureManagerToken);
                 glScrap.ScrapId = MaxScrapId++;
                 scrapId = glScrap.ScrapId;
                 connect(glScrap.Texture, &cwImageTexture::needsUpdate,
@@ -246,7 +246,9 @@ cwGLScraps::GLScrap::GLScrap() :
 
 }
 
-cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project) :
+cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data,
+                             cwProject *project,
+                             const cwFutureManagerToken &token) :
     ScrapId(-1),
     Texture(new cwImageTexture())
 {
@@ -262,6 +264,7 @@ cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project)
     //Upload the texture to the graphics card
     Texture->initialize();
     Texture->setProject(project->filename());
+    Texture->setFutureManagerToken(token);
 
     update(data);
 }
@@ -309,6 +312,11 @@ void cwGLScraps::setProject(cwProject* project) {
         Project = project;
         emit projectChanged();
     }
+}
+
+void cwGLScraps::setFutureManagerToken(cwFutureManagerToken token)
+{
+    FutureManagerToken = token;
 }
 
 /**

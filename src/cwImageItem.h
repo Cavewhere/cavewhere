@@ -17,6 +17,7 @@
 #include "cwGLViewer.h"
 #include "cwImage.h"
 #include "cwImageData.h"
+#include "cwFutureManagerToken.h"
 class cwGLImageItemResources;
 class cwImageTexture;
 class cwImageProperties;
@@ -30,6 +31,7 @@ class cwImageItem : public cwGLViewer, protected QOpenGLFunctions
     Q_PROPERTY(float rotation READ rotation WRITE setRotation NOTIFY rotationChanged)
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix NOTIFY modelMatrixChanged)
     Q_PROPERTY(cwImageProperties* imageProperties READ imageProperties NOTIFY imagePropertiesChanged)
+    Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged)
 
 public:
     cwImageItem(QQuickItem *parent = 0);
@@ -47,6 +49,9 @@ public:
     QString projectFilename() const;
     void setProjectFilename(QString projectFilename);
 
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
+
     QMatrix4x4 modelMatrix() const;
 
     Q_INVOKABLE void updateRotationCenter();
@@ -61,6 +66,7 @@ signals:
     void projectFilenameChanged();
     void modelMatrixChanged();
     void imagePropertiesChanged();
+    void futureManagerTokenChanged();
 
 protected:
     virtual void initializeGL();
@@ -76,19 +82,17 @@ private:
     cwImage Image;
     cwImageProperties* ImageProperties; //!< The image properties of the current Image
     float Rotation;
-    //QString ProjectFilename;
     QMatrix4x4 RotationModelMatrix;
     QPointF RotationCenter;
     QString ProjectFilename;
+    cwFutureManagerToken FutureManagerToken; //!<
 
     //For rendering
     cwGLImageItemResources* GLResources;
     int vVertex; //!< The attribute location of the vVertex
     int ModelViewProjectionMatrix; //!< The uniform location for modelViewProjection matrix
     int CropAreaUniform; //!< The uniform location of CropArea this is for trimming padding of the images
-//    cwImageTexture* NoteTexture;
     QOpenGLShaderProgram* ImageProgram; //!< The image shader program that's used to render the image
-//    QOpenGLBuffer GeometryVertexBuffer; //!< The vertex buffer
 
     void initializeShaders();
     void initializeVertexBuffers();
@@ -125,6 +129,13 @@ Gets imageProperties
 */
 inline cwImageProperties* cwImageItem::imageProperties() const {
     return ImageProperties;
+}
+
+/**
+*
+*/
+inline cwFutureManagerToken cwImageItem::futureManagerToken() const {
+    return FutureManagerToken;
 }
 
 #endif // CWIMAGEITEM_H

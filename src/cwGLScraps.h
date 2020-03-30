@@ -13,6 +13,7 @@
 #include "cwTriangulatedData.h"
 #include "cwImageTexture.h"
 #include "cwGeometryItersecter.h"
+#include "cwFutureManagerToken.h"
 class cwCavingRegion;
 class cwProject;
 class cwScrap;
@@ -36,6 +37,7 @@ public:
     void setProject(cwProject* project);
 
     void setCavingRegion(cwCavingRegion* region);
+    void setFutureManagerToken(cwFutureManagerToken token);
 
     void initialize() override;
     void releaseResources() override;
@@ -89,7 +91,9 @@ private:
 
     public:
         GLScrap();
-        GLScrap(const cwTriangulatedData& data, cwProject* project);
+        GLScrap(const cwTriangulatedData& data,
+                cwProject* project,
+                const cwFutureManagerToken& token);
 
         QOpenGLBuffer PointBuffer;
         QOpenGLBuffer IndexBuffer;
@@ -106,6 +110,7 @@ private:
     };
 
     cwProject* Project; //!< The project file for loading textures
+    cwFutureManagerToken FutureManagerToken;
 
     //Pending data to update
     QHash<cwScrap*, PendingScrapCommand> PendingChanges;
