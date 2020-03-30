@@ -117,19 +117,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
                 auto reAddFuture = addImageTask.images();
 
                 return AsyncFuture::observe(reAddFuture)
-                        .context(context, [projectFile, reAddFuture, loadValidMipmap]() {
-                    //Double check if it successful
-                    cwImageProvider imageProvidor;
-                    imageProvidor.setProjectPath(projectFile);
-
-                    auto image = reAddFuture.result();
-                    int firstLevel = image.mipmaps().first();
-                    QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
-                    if(!isDivisibleBy4(firstLevelSize)) {
-                        //No original image, can regenerate image
-                        return AsyncFuture::completed(UploadResult());
-                    }
-
+                        .context(context, [reAddFuture, loadValidMipmap]() {
                     return QtConcurrent::run(std::bind(loadValidMipmap, reAddFuture));
                 }).future();
             }
