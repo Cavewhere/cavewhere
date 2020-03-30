@@ -23,6 +23,10 @@ cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
 
 void cwFutureManagerModel::addJob(const Job &job)
 {
+    if(job.future().isCanceled() || job.future().isFinished()) {
+        return;
+    }
+
     auto watcher = new QFutureWatcher<void>(this);
 
     WatcherContainer container;

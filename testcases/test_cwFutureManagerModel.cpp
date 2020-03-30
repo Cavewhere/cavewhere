@@ -38,6 +38,15 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
                               {&intervalChangedSpy, 0}
                           });
 
+    rowsInsertedSpy.setObjectName("rowsInsertedSpy");
+    rowsRemovedSpy.setObjectName("rowsRemovedSpy");
+    rowsMovedSpy.setObjectName("rowsMovedSpy");
+    columnsMovedSpy.setObjectName("columnsMovedSpy");
+    columnsRemovedSpy.setObjectName("columnsRemovedSpy");
+    columnsInsertedSpy.setObjectName("columnsInsertedSpy");
+    dataChangedSpy.setObjectName("dataChangedSpy");
+    intervalChangedSpy.setObjectName("intervalChangedSpy");
+
     class Row {
     public:
         Row() {}
@@ -122,6 +131,18 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
         int timeOutChanges = numberOfTasks * sleepScale / model.interval();
         int buffer = 1;
         CHECK(dataChangedSpy.size() >= (progressChanges + timeOutChanges) - buffer);
+    }
+
+    SECTION("Model shouldn't add canceled futures") {
+        model.addJob(cwFutureManagerModel::Job(QFuture<void>(), "Canceled Job"));
+        CHECK(model.rowCount() == 0);
+        spyChecker.checkSpies();
+    }
+
+    SECTION("Model shouldn't add finished futures") {
+        model.addJob(cwFutureManagerModel::Job(AsyncFuture::completed(), "Finished Job"));
+        CHECK(model.rowCount() == 0);
+        spyChecker.checkSpies();
     }
 }
 
