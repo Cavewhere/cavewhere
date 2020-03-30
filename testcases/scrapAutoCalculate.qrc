@@ -26,5 +26,6 @@
         <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileUpsideDown.cw</file>
     </qresource>
 </RCC>

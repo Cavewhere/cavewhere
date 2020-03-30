@@ -101,6 +101,7 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileRotateMirror.cw", 87.5044033263, 176.696));
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", -1.8869214928, 175.592));
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);

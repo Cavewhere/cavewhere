@@ -476,6 +476,14 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     //Go through all the valid stations get the
     QList<cwNoteStation> validStationList = stations(); //validStationsSet.toList();
 
+    //This makes the assumption that station are surveyed in assending order
+    //This usually helps prevent station flipping in profile mode
+    std::sort(validStationList.begin(), validStationList.end(),
+              [](const cwNoteStation& s1, const cwNoteStation& s2)
+    {
+        return s1.name().toUpper() < s2.name().toUpper();
+    });
+
     //Generate all the neighbor list for each station
     QList< QStringList > stationNeighbors;
     foreach(cwNoteStation station, validStationList) {
