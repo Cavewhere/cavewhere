@@ -13,6 +13,12 @@
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 
+//Qt includes
+#include <QSqlQuery>
+#include <QSqlDatabase>
+#include <QSqlResult>
+#include <QSqlRecord>
+
 TEST_CASE("cwProject isModified should work correctly", "[cwProject]") {
     cwProject project;
     CHECK(project.isModified() == false);
@@ -128,4 +134,106 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     rootData->futureManagerModel()->waitForFinished();
     CHECK(checked == filenames.size());
     CHECK(filenames.size() > 0);
+}
+
+TEST_CASE("Images should be removed correctly", "[cwProject]") {
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QList<QUrl> filenames {
+        QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG")),
+                QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwProject/crashMap.png"))
+    };
+
+    QList<cwImage> loadedImages;
+    project->addImages(filenames, rootData.get(), [&loadedImages](QList<cwImage> images){
+        loadedImages += images;
+    });
+
+    rootData->futureManagerModel()->waitForFinished();
+
+    REQUIRE(loadedImages.size() == 2);
+    auto firstImage = loadedImages.at(0);
+    auto secondImage = loadedImages.at(1);
+
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("ImageRemoveTest"));
+    database.setDatabaseName(project->filename());
+    REQUIRE(database.open());
+
+    auto idExists = [database](int id) {
+        INFO("idExists:" << id);
+        QString SQL = QString("select count(*) from Images where id = %1").arg(id);
+
+        INFO("sql:" << SQL.toStdString());
+        INFO("database:" << database.databaseName());
+
+        REQUIRE(database.isOpen());
+        REQUIRE(database.isValid());
+
+        QSqlQuery query(database);
+        REQUIRE(query.prepare(SQL));
+
+        REQUIRE(query.exec());
+        REQUIRE(query.first());
+
+        auto record = query.record();
+        return record.value(0).toInt() == 1;
+    };
+
+    auto idNotExists = [idExists](int id) {
+        return !idExists(id);
+    };
+
+    auto imageIds = [](const cwImage& image) {
+        QList<int> ids {
+            image.original(),
+                    image.icon(),
+        };
+
+        ids.append(image.mipmaps());
+        return ids;
+    };
+
+    auto imageTestFunc = [imageIds](const cwImage& image, auto func) {
+        auto ids = imageIds(image);
+
+        return std::accumulate(ids.begin(), ids.end(), true,
+                               [func](bool current, int id)
+        {
+            return current && func(id);
+        });
+    };
+
+    auto imageExists = [idExists, imageTestFunc](const cwImage& image) {
+        return imageTestFunc(image, idExists);
+    };
+
+    auto imageNotExists = [idNotExists, imageTestFunc](const cwImage& image) {
+        return imageTestFunc(image, idNotExists);
+    };
+
+    CHECK(imageExists(firstImage));
+    CHECK(imageExists(secondImage));
+
+    cwProject::removeImage(database, secondImage);
+
+    CHECK(imageNotExists(secondImage));
+    CHECK(imageExists(firstImage));
+
+    cwProject::removeImages(database, {firstImage.original()});
+
+    QList<int> ids = {
+        firstImage.icon()
+    };
+    ids += firstImage.mipmaps();
+
+    for(auto id : ids){
+        INFO("id:" << id);
+        CHECK(idExists(id));
+    }
+
+    CHECK(idNotExists(firstImage.original()));
+
+    database.close();
 }

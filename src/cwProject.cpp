@@ -462,40 +462,51 @@ bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &ima
  */
 bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool withTransaction)
 {
+    QList<int> ids = {
+        image.original(),
+        image.icon(),
+    };
+    ids.append(image.mipmaps());
+
+    return removeImages(database, ids, withTransaction);
+}
+
+bool cwProject::removeImages(const QSqlDatabase &database, QList<int> ids, bool withTransaction)
+{
     if(withTransaction) {
         cwSQLManager::instance()->beginTransaction(database);
     }
 
-    //Create the delete SQL statement
-    QString SQL("DELETE FROM Images WHERE");
-    SQL += QString(" id == %1").arg(image.original());
-    SQL += QString(" OR ");
-    SQL += QString(" id == %1").arg(image.icon());
-    foreach(int mipmapId, image.mipmaps()) {
-        SQL += QString(" OR ");
-        SQL += QString(" id == %1").arg(mipmapId);
-    }
+    auto deleteImage = [&](int id) {
+        //Create the delete SQL statement
+        QString SQL = QString("DELETE FROM Images WHERE id == %1").arg(id);
 
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
+        QSqlQuery query(database);
+        bool successful = query.prepare(SQL);
 
-    if(!successful) {
-        qDebug() << "Couldn't delete images: " << query.lastError();
+        if(!successful) {
+            qDebug() << "Couldn't delete image: " << id << query.lastError();
 
-        if(withTransaction) {
-            cwSQLManager::instance()->endTransaction(database);
+            if(withTransaction) {
+                cwSQLManager::instance()->endTransaction(database);
+            }
+
+            return false;
         }
 
-        return false;
-    }
+        return query.exec();
+    };
 
-    query.exec();
+    bool okay = true;
+    for(int id : ids) {
+        okay = okay && deleteImage(id);
+    }
 
     if(withTransaction) {
         cwSQLManager::instance()->endTransaction(database);
     }
 
-    return true;
+    return okay;
 }
 
 /**
