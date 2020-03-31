@@ -113,11 +113,15 @@ QFuture<cwImage> cwAddImageTask::images() const
         QImage imageData = provider.image(image.original());
 
         cwImage newImage = image;
-        newImage.setMipmaps({});
+//        newImage.setMipmaps({});
 
         if(imageData.isNull()) {
             return PrivateImageData();
         }
+
+//        //Deletes the old mipmaps
+//        auto database = cwAddImageTask::createDatabase("removeMipmaps", filename);
+//        cwProject::removeImages(database, image.mipmaps());
 
         return PrivateImageData(newImage, imageData);
     };
@@ -166,56 +170,93 @@ QFuture<cwImage> cwAddImageTask::images() const
         return imageId;
     };
 
+    struct Mipmap {
+        QImage image;
+        int id;
+    };
+
     //Scaling images for mipmaps
-    std::function<QList<QImage> (const PrivateImageData&)> scaleImage
-            = [](const PrivateImageData& imageData)->QList<QImage> {
+    std::function<QList<Mipmap> (const PrivateImageData&)> scaleImage
+            = [](const PrivateImageData& imageData)->QList<Mipmap> {
         const QImage& originalImage = imageData.OriginalImage;
 
         QSizeF clipArea;
         QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
-        QList<int> mipmapIds;
+        QList<int> mipmapIds = imageData.Id.mipmaps();
+
+        auto mipmapId = [mipmapIds](int index) {
+            if(index < mipmapIds.size()) {
+                return mipmapIds.at(index);
+            }
+            return -1;
+        };
 
         int numberOfLevels = numberOfMipmapLevels(scaledImage.size());
 
         QSize scaledImageSize = scaledImage.size();
 
-        QList<QImage> scaledImages;
+        QList<Mipmap> scaledImages;
 
         for(int i = 0; i < numberOfLevels; i++) {
             //Rescaled the image
             scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-            scaledImages.append(scaledImage);
+            scaledImages.append({scaledImage, mipmapId(i)});
 
             //Create the new width and height, by halfing them
             scaledImageSize = half(scaledImageSize);
         }
 
+        //Delete all unused mipmaps
+
         return scaledImages;
     };
 
     //For creating mipmaps
-    std::function<QFuture<int> (const QList<QImage>& image)> compressAndUpload
-            = [filename, context](const QList<QImage>& images)->QFuture<int> {
+    std::function<QFuture<int> (const QList<Mipmap>& image)> compressAndUpload
+            = [filename, context](const QList<Mipmap>& mipmaps)->QFuture<int> {
+
+        QList<QImage> mipmapImages = transform(mipmaps,
+                                               [](const Mipmap& mipmap)
+        {
+            qDebug() << "Mipmap:" << mipmap.id;
+            return mipmap.image;
+        });
 
         cwDXT1Compresser compresser;
         compresser.setContext(context);
-        auto compressFuture = compresser.compress(images);
+        auto compressFuture = compresser.compress(mipmapImages);
 
         return AsyncFuture::observe(compressFuture)
                 .context(context,
-                         [compressFuture, filename]()
+                         [compressFuture, mipmaps, filename]()
         {
+            struct CompressedMipmap {
+                cwDXT1Compresser::CompressedImage image;
+                int id;
+            };
 
-            std::function<int (const cwDXT1Compresser::CompressedImage&)> updateDatabase
-                    = [filename](const cwDXT1Compresser::CompressedImage& image) {
+            auto compressionResults = compressFuture.results();
+            Q_ASSERT(mipmaps.size() == compressionResults.size());
+
+            auto mipmapIter = mipmaps.begin();
+            QList<CompressedMipmap> mipmaps = transform(compressionResults,
+                                                        [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
+            {
+                CompressedMipmap mipmap = {compressedImage, mipmapIter->id};
+                mipmapIter++;
+                return mipmap;
+            });
+
+            std::function<int (const CompressedMipmap&)> updateDatabase
+                    = [filename](const CompressedMipmap& mipmap) {
                 auto database = cwAddImageTask::createDatabase("dxtSave", filename);
-                cwImageData imageData = cwImageProvider::createDxt1(image.size, image.data);
-                int imageId = cwProject::addImage(database, imageData);
+                cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
+                int imageId = cwProject::addOrUpdateImage(database, imageData, mipmap.id);
                 database.close();
                 return imageId;
             };
 
-            return QtConcurrent::mapped(compressFuture.results(), updateDatabase);
+            return QtConcurrent::mapped(mipmaps, updateDatabase);
         }).future();
     };
 
@@ -266,7 +307,7 @@ QFuture<cwImage> cwAddImageTask::images() const
             compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
                     .context(context, [compressAndUpload, scaleFuture]()
             {
-                QList<QList<QImage>> allImages = scaleFuture.results();
+                QList<QList<Mipmap>> allImages = scaleFuture.results();
                 QVector<QFuture<int>> ids;
                 ids.reserve(allImages.size());
 

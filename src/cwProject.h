@@ -73,6 +73,7 @@ public:
 
     static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
     static bool updateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
+    static int addOrUpdateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
     static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);
     static bool removeImages(const QSqlDatabase& database, QList<int> ids, bool withTransaction = true);
 

@@ -141,3 +141,41 @@ TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
     auto future = task.images();
     CHECK(future.resultCount() == 0);
 }
+
+TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", "[cwAddImageTask]") {
+    cwProject project;
+    QString filename = project.filename();
+    auto addImageTask = std::make_unique<cwAddImageTask>();
+    addImageTask->setDatabaseFilename(filename);
+
+    SECTION("Without compression") {
+        REQUIRE(cwOpenGLSettings::instance());
+        cwOpenGLSettings::instance()->setDXT1Compression(false);
+    }
+
+    SECTION("With compression") {
+        REQUIRE(cwOpenGLSettings::instance());
+        cwOpenGLSettings::instance()->setDXT1Compression(true);
+    }
+
+    auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
+    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setNewImagesPath({resourceImageFilename});
+    auto addImageFuture = addImageTask->images();
+    REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
+
+    QFile file(filename);
+    file.open(QFile::ReadOnly);
+    auto baseFileSize = file.size();
+
+    REQUIRE(addImageFuture.resultCount() == 1);
+
+    addImageTask->setRegenerateMipmapsOn(addImageFuture.result());
+    auto regenerateAddImageFuture = addImageTask->images();
+    REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
+
+    CHECK(addImageFuture != regenerateAddImageFuture);
+    auto regenerateFileSize = file.size();
+
+    CHECK(regenerateFileSize <= baseFileSize);
+}

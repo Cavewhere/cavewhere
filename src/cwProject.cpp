@@ -454,6 +454,19 @@ bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &ima
     return query.exec();
 }
 
+int cwProject::addOrUpdateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
+{
+    if(id > 0) {
+        bool okay = updateImage(database, imageData, id);
+        if(!okay) {
+            return -1;
+        }
+    } else {
+        id = addImage(database, imageData);
+    }
+    return id;
+}
+
 /**
  * @brief cwProject::removeImage
  * @param database - The database connection
@@ -473,6 +486,10 @@ bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool wi
 
 bool cwProject::removeImages(const QSqlDatabase &database, QList<int> ids, bool withTransaction)
 {
+    if(ids.isEmpty()) {
+        return true;
+    }
+
     if(withTransaction) {
         cwSQLManager::instance()->beginTransaction(database);
     }

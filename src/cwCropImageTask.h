@@ -35,7 +35,6 @@ public:
     //Inputs
     void setOriginal(cwImage image);
     void setRectF(QRectF cropTo);
-    void setMipmapOnly(bool mipmapOnly);
     void setFormatType(cwTextureUploadTask::Format format);
 
     QFuture<cwImage> crop();
