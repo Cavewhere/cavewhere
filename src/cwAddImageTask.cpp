@@ -113,15 +113,10 @@ QFuture<cwImage> cwAddImageTask::images() const
         QImage imageData = provider.image(image.original());
 
         cwImage newImage = image;
-//        newImage.setMipmaps({});
 
         if(imageData.isNull()) {
             return PrivateImageData();
         }
-
-//        //Deletes the old mipmaps
-//        auto database = cwAddImageTask::createDatabase("removeMipmaps", filename);
-//        cwProject::removeImages(database, image.mipmaps());
 
         return PrivateImageData(newImage, imageData);
     };
@@ -218,7 +213,6 @@ QFuture<cwImage> cwAddImageTask::images() const
         QList<QImage> mipmapImages = transform(mipmaps,
                                                [](const Mipmap& mipmap)
         {
-            qDebug() << "Mipmap:" << mipmap.id;
             return mipmap.image;
         });
 

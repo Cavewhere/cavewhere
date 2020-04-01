@@ -162,6 +162,7 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     addImageTask->setFormatType(cwTextureUploadTask::format());
     addImageTask->setNewImagesPath({resourceImageFilename});
     auto addImageFuture = addImageTask->images();
+    addImageTask->setNewImagesPath({});
     REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
 
     QFile file(filename);
@@ -169,13 +170,60 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     auto baseFileSize = file.size();
 
     REQUIRE(addImageFuture.resultCount() == 1);
+    addImageTask->setRegenerateMipmapsOn(addImageFuture.result());
+
+    for(int i = 0; i < 2; i++) {
+        auto regenerateAddImageFuture = addImageTask->images();
+        REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
+        CHECK(addImageFuture != regenerateAddImageFuture);
+    }
+
+    auto regenerateFileSize = file.size();
+    double ratio = regenerateFileSize / static_cast<double>(baseFileSize);
+    INFO("Filename:" << filename);
+    CHECK(ratio <= Approx(1.0)); //Make sure this hasn't grown
+}
+
+TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImageTask]") {
+    cwProject project;
+    QString filename = project.filename();
+    auto addImageTask = std::make_unique<cwAddImageTask>();
+    addImageTask->setDatabaseFilename(filename);
+
+    REQUIRE(cwOpenGLSettings::instance());
+    cwOpenGLSettings::instance()->setDXT1Compression(false);
+
+    auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
+    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setNewImagesPath({resourceImageFilename});
+    auto addImageFuture = addImageTask->images();
+    addImageTask->setNewImagesPath({});
+    REQUIRE(cwAsyncFuture::waitForFinished(addImageFuture, 20000));
+
+    QFile file(filename);
+    file.open(QFile::ReadOnly);
+    auto baseFileSize = file.size();
+
+    REQUIRE(addImageFuture.resultCount() == 1);
+    CHECK(addImageFuture.result().isIconValid());
+    CHECK(addImageFuture.result().isOriginalValid());
+    CHECK(addImageFuture.result().mipmaps().isEmpty());
+
+    cwOpenGLSettings::instance()->setDXT1Compression(true);
 
     addImageTask->setRegenerateMipmapsOn(addImageFuture.result());
+    addImageTask->setFormatType(cwTextureUploadTask::format());
     auto regenerateAddImageFuture = addImageTask->images();
     REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
 
-    CHECK(addImageFuture != regenerateAddImageFuture);
-    auto regenerateFileSize = file.size();
+    auto mipmapFileSize = file.size();
 
-    CHECK(regenerateFileSize <= baseFileSize);
+    REQUIRE(regenerateAddImageFuture.resultCount() == 1);
+    CHECK(regenerateAddImageFuture.result().isIconValid());
+    CHECK(regenerateAddImageFuture.result().isOriginalValid());
+    CHECK(regenerateAddImageFuture.result().isMipmapsValid());
+
+    double ratio = mipmapFileSize / static_cast<double>(baseFileSize);
+    INFO("Filename:" << filename);
+    CHECK(ratio <= 1.33);
 }
