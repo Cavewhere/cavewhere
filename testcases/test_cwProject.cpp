@@ -12,6 +12,7 @@
 #include "cwSurveyNoteModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -83,7 +84,7 @@ TEST_CASE("Image data should save and load correctly", "[cwProject]") {
     QString filename = copyToTempFolder("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");
     QImage originalImage(filename);
 
-    trip->notes()->addFromFiles({QUrl("file:/" + filename)}, project);
+    trip->notes()->addFromFiles({QUrl("file:/" + filename)});
 
     rootData->futureManagerModel()->waitForFinished();
 
@@ -216,12 +217,13 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
     CHECK(imageExists(firstImage));
     CHECK(imageExists(secondImage));
 
-    cwProject::removeImage(database, secondImage);
+    cwImageDatabase imageDatabase(project->filename());
+    imageDatabase.removeImage(secondImage);
 
     CHECK(imageNotExists(secondImage));
     CHECK(imageExists(firstImage));
 
-    cwProject::removeImages(database, {firstImage.original()});
+    imageDatabase.removeImages({firstImage.original()});
 
     QList<int> ids = {
         firstImage.icon()

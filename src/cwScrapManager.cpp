@@ -18,19 +18,18 @@
 #include "cwTriangulateInData.h"
 #include "cwDebug.h"
 #include "cwGLScraps.h"
-#include "cwRemoveImageTask.h"
 #include "cwImageResolution.h"
 #include "cwLinePlotManager.h"
 #include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
 #include "cwOpenGLSettings.h"
+#include "cwImageDatabase.h"
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     //    Region(nullptr),
     LinePlotManager(nullptr),
     TriangulateTask(new cwTriangulateTask()),
-    RemoveImageTask(new cwRemoveImageTask(this)), //Runs in the scrapManager's thread
     Project(nullptr),
     TaskManagerModel(nullptr),
     GLScraps(nullptr),
@@ -38,7 +37,6 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 {
     connect(TriangulateTask, SIGNAL(finished()), SLOT(taskFinished()));
     connect(TriangulateTask, &cwTriangulateTask::shouldRerun, this, &cwScrapManager::rerunDirtyScraps);
-
 }
 
 cwScrapManager::~cwScrapManager()
@@ -52,19 +50,7 @@ cwScrapManager::~cwScrapManager()
   \brief Sets the project for the scrap manager
   */
 void cwScrapManager::setProject(cwProject *project) {
-    if(project != Project) {
-        if(Project != nullptr) {
-            disconnect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
-        }
-
-        Project = project;
-
-        if(Project != nullptr) {
-            ImageProvider.setProjectPath(Project->filename());
-
-            connect(Project, &cwProject::filenameChanged, this, &cwScrapManager::updateImageProviderPath);
-        }
-    }
+    Project = project;
 }
 
 /**
@@ -132,14 +118,12 @@ void cwScrapManager::setTaskManager(cwTaskManagerModel *taskManager)
     if(TaskManagerModel != taskManager) {
         if(TaskManagerModel != nullptr) {
             TaskManagerModel->removeTask(TriangulateTask);
-            TaskManagerModel->removeTask(RemoveImageTask);
         }
 
         TaskManagerModel = taskManager;
 
         if(TaskManagerModel != nullptr) {
             TaskManagerModel->addTask(TriangulateTask);
-            TaskManagerModel->removeTask(RemoveImageTask);
         }
     }
 }
@@ -171,16 +155,6 @@ void cwScrapManager::updateAllScraps() {
     }
 
     updateScrapGeometryHelper(scraps);
-}
-
-/**
- * @brief cwScrapManager::updateImageProviderPath
- *
- * This updates the image providers project path
- */
-void cwScrapManager::updateImageProviderPath()
-{
-    ImageProvider.setProjectPath(Project->filename());
 }
 
 /**
@@ -262,25 +236,8 @@ void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
 bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
     auto image = scrap->triangulationData().croppedImage();
-    if(image.isOriginalValid()) {
-        //Should be in the database
-        if(cwOpenGLSettings::instance()->useDXT1Compression()) {
-            if(!image.isMipmapsValid()) {
-                return false;
-            }
-            foreach(int mipmap, image.mipmaps()) {
-                cwImageData imageData = ImageProvider.data(mipmap, true);
-                if(!imageData.size().isValid()) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        cwImageData imageData = ImageProvider.data(image.original(), true);
-        return imageData.size().isValid();
-    }
-    //No cropped image
-    return false;
+    return cwImageDatabase(Project->filename()).mipmapsValid(image,
+                                                      cwOpenGLSettings::instance()->useDXT1Compression());
 }
 
 /**
@@ -727,6 +684,7 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
   \brief Triangulation task has finished
   */
 void cwScrapManager::taskFinished() {
+//    qDebug() << "Task finished:" << TriangulateTask->isReady();
     if(TriangulateTask->isReady()) {
 
         QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
@@ -772,20 +730,26 @@ void cwScrapManager::taskFinished() {
         //Removed all cropped image data
         foreach(cwScrap* scrap, validScraps) {
             cwImage image = scrap->triangulationData().croppedImage();
-            if(image.isOriginalValid()) {
-                imagesToRemove.append(image);
-            }
+            imagesToRemove.append(image);
         }
 
-        RemoveImageTask->setImagesToRemove(imagesToRemove);
-        RemoveImageTask->setDatabaseFilename(Project->filename());
-        RemoveImageTask->start(); //This runs in this thread, should be very quick
+        auto filename = Project->filename();
+        auto removeFuture = QtConcurrent::run([filename, imagesToRemove](){
+            cwImageDatabase imageDatabase(filename);
+            for(auto image : imagesToRemove) {
+                imageDatabase.removeImages(image.ids());
+            }
+        });
+        FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
 
         for(int i = 0; i < validScraps.size(); i++) {
             cwScrap* scrap = validScraps.at(i);
 
             cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
             Q_ASSERT(!triangleData.isStale());
+
+            //Remove the ownership requirements, so it doesn't ge delete from database
+            triangleData.croppedImagePtr()->take();
 
             scrap->setTriangulationData(triangleData);
             GLScraps->addScrapToUpdate(scrap);
@@ -814,4 +778,9 @@ void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
         AutomaticUpdate = automaticUpdate;
         emit automaticUpdateChanged();
     }
+}
+
+void cwScrapManager::waitForFinish()
+{
+    TriangulateTask->waitToFinish();
 }

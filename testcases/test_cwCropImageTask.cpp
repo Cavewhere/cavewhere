@@ -32,7 +32,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 
         REQUIRE(imageFuture.results().size() == 1);
 
-        return imageFuture.results().first();
+        return imageFuture.results().first()->take();
     };
 
     auto image = addImage(image16x16);
@@ -115,7 +115,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             auto cropFuture = cropImageTask.crop();
             REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));
 
-            cwImage croppedImageId = cropFuture.result();
+            cwImage croppedImageId = cropFuture.result()->take();
 
             QVector<QColor> croppedColors = {
                 {blockColors.at((blockSize.height() - 1 - yBlock) * blockSize.width() + xBlock)},
@@ -153,7 +153,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             auto cropFuture = cropImageTask.crop();
             REQUIRE(cwAsyncFuture::waitForFinished(cropFuture, 3000));
 
-            cwImage croppedImageId = cropFuture.result();
+            cwImage croppedImageId = cropFuture.result()->take();
             return croppedImageId;
         };
 

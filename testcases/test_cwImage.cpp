@@ -100,3 +100,40 @@ TEST_CASE("cwImage ==operator should work correctly", "[cwImage]") {
         CHECK(image != image3);
     }
 }
+
+TEST_CASE("cwImage ids should work correctly", "[cwImage]") {
+    cwImage image;
+
+    SECTION("Everything isn't valid") {
+        CHECK(image.ids().isEmpty());
+    }
+
+    SECTION("Everything is valid") {
+        image.setOriginal(1);
+        image.setMipmaps({2, 3, 4});
+        image.setIcon(5);
+
+        CHECK(image.ids() == QList<int>({1, 5, 2, 3, 4}));
+    }
+
+    SECTION("Everything is valid expect original") {
+        image.setMipmaps({2, 3, 4});
+        image.setIcon(5);
+
+        CHECK(image.ids() == QList<int>({5, 2, 3, 4}));
+    }
+
+    SECTION("Everything is valid expect icon") {
+        image.setOriginal(1);
+        image.setMipmaps({2, 3, 4});
+
+        CHECK(image.ids() == QList<int>({1, 2, 3, 4}));
+    }
+
+    SECTION("Everything is valid expect mipmaps") {
+        image.setOriginal(1);
+        image.setIcon(5);
+
+        CHECK(image.ids() == QList<int>({1, 5}));
+    }
+}

@@ -12,8 +12,8 @@
 #include "cwProjectIOTask.h"
 #include "cwImage.h"
 #include "cwGlobals.h"
-#include "cwDXT1Compresser.h"
 #include "cwTextureUploadTask.h"
+#include "cwTrackedImage.h"
 
 //Qt includes
 #include <QStringList>
@@ -54,7 +54,7 @@ public:
     void setFormatType(cwTextureUploadTask::Format format);
 
     //Process the images
-    QFuture<cwImage> images() const;
+    QFuture<cwTrackedImagePtr> images() const;
 
     //Util functions
     static int numberOfMipmapLevels(QSize imageSize);
@@ -72,7 +72,7 @@ private:
     class PrivateImageData {
     public:
         PrivateImageData() { }
-        PrivateImageData(cwImage id, QImage original, QString name = QString("default image")) :
+        PrivateImageData(cwTrackedImagePtr id, QImage original, QString name = QString("default image")) :
             Id(id),
             OriginalImage(original),
             Name(name)
@@ -81,7 +81,7 @@ private:
         }
 
 
-        cwImage Id;
+        cwTrackedImagePtr Id;
         QImage OriginalImage;
         QString Name;
     };
@@ -94,25 +94,18 @@ private:
 
     static QImage copyOriginalImage(QString image,
                                     cwImage* imageIds,
-                                    QSqlDatabase database);
+                                    const QString& databaseFilename);
 
     static void copyOriginalImage(const QImage& image,
                                   cwImage* imageIds,
-                                  QSqlDatabase database);
+                                  const QString& databaseFilename);
 
     static cwImage addImageToDatabase(const QImage& image,
                                       const QByteArray& format,
                                       const QByteArray& imageData,
-                                      QSqlDatabase database);
+                                      const QString& databaseFilename);
 
-    void createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds);
-    void createMipmaps(QImage originalImage, QString imageFilename, cwImage* imageIds);
-    int saveToDXT1Format(const cwDXT1Compresser::CompressedImage& image, int id = -1);
-    QByteArray squishCompressImageThreaded(QImage image, int flags, float* metric = 0);
-    QByteArray openglDxt1Compression(QImage image);
     static QImage ensureImageDivisibleBy4(QImage originalImage, QSizeF* clipArea);
-
-    int dotsPerMeter(QImage image) const;
 
     static int half(int value);
 

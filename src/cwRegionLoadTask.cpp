@@ -540,7 +540,7 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
     cwTriangulatedData data;
 
     cwImage image = loadImage(protoTriangulatedData.croppedimage());
-    data.setCroppedImage(image);
+    data.setCroppedImage(cwTrackedImage::createShared(image, databaseFilename(), cwTrackedImage::NoOwnership));
 
     QVector<QVector3D> points;
     points.resize(protoTriangulatedData.points_size());

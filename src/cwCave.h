@@ -12,6 +12,7 @@
 class cwTrip;
 class cwLength;
 class cwErrorModel;
+class cwCavingRegion;
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
@@ -65,6 +66,8 @@ public:
     void insertTrip(int i, cwTrip* trip);
     Q_INVOKABLE void removeTrip(int i);
     int indexOf(cwTrip* trip) const;
+
+    cwCavingRegion* parentRegion() const;
 
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;

@@ -15,6 +15,7 @@
 #include "cwProjectIOTask.h"
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
+#include "cwTrackedImage.h"
 class cwAddImageTask;
 
 //Qt includes
@@ -37,7 +38,7 @@ public:
     void setRectF(QRectF cropTo);
     void setFormatType(cwTextureUploadTask::Format format);
 
-    QFuture<cwImage> crop();
+    QFuture<cwTrackedImagePtr> crop();
 
 protected:
     virtual void runTask();

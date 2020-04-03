@@ -54,7 +54,7 @@ void cwCropImageTask::setFormatType(cwTextureUploadTask::Format format)
     Format = format;
 }
 
-QFuture<cwImage> cwCropImageTask::crop()
+QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 {
     auto filename = databaseFilename();
     auto originalImage = Original;
@@ -74,7 +74,6 @@ QFuture<cwImage> cwCropImageTask::crop()
     };
 
     auto cropFuture = QtConcurrent::run(cropImage);
-
 
     auto addImageFuture = AsyncFuture::observe(cropFuture)
             .context(context,
@@ -96,7 +95,7 @@ QFuture<cwImage> cwCropImageTask::crop()
         if(!images.isEmpty()) {
             return images.first();
         }
-        return cwImage();
+        return cwTrackedImagePtr();
     }).future();
 
     return finishedFuture;

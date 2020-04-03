@@ -57,6 +57,11 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
             database.close();
         }
 
+        SECTION("Run without regeneration") {
+            //This need to be here to run the DXT1 extraction without regeneration
+            CHECK(true);
+        }
+
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());

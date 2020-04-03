@@ -121,7 +121,7 @@ StandardPage {
         clip: true
 
         onImagesAdded: {
-            currentTrip.notes.addFromFiles(images, rootData.project)
+            currentTrip.notes.addFromFiles(images)
         }
 
         onBackClicked: {

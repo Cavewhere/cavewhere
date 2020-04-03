@@ -14,7 +14,7 @@
 #include "cwDXT1Compresser.h"
 #include "cwAsyncFuture.h"
 #include "cwOpenGLSettings.h"
-//#include "cwImageDatabase.h"
+#include "cwImageDatabase.h"
 
 //For creating compressed DXT texture maps
 #include <squish.h>
@@ -70,7 +70,7 @@ void cwAddImageTask::setFormatType(cwTextureUploadTask::Format format)
     FormatType = format;
 }
 
-QFuture<cwImage> cwAddImageTask::images() const
+QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 {
     QString filename = databaseFilename();
     auto context = this->context();
@@ -78,17 +78,16 @@ QFuture<cwImage> cwAddImageTask::images() const
 
     std::function<PrivateImageData (const QString&)> loadImagesFromPath
             = [filename](const QString& imagePath) {
-        auto database = cwAddImageTask::createDatabase("loadImageFromPath", filename);
-
         //Where the database image ideas are stored
-        cwImage imageIds;
+        cwImage image;
 
         //Copy the original image to the database
-        QImage originalImage = copyOriginalImage(imagePath, &imageIds, database);
-        database.close();
+        QImage originalImage = copyOriginalImage(imagePath, &image, filename);
 
         if(!originalImage.isNull()) {
-            return PrivateImageData(imageIds, originalImage, imagePath);
+            return PrivateImageData(cwTrackedImage::createShared(image, filename),
+                                    originalImage,
+                                    imagePath);
         }
         return PrivateImageData();
     };
@@ -96,13 +95,12 @@ QFuture<cwImage> cwAddImageTask::images() const
     std::function<PrivateImageData (const QImage&)> loadFromImages
             = [filename](const QImage& image) {
         if(!image.isNull()) {
-            auto database = cwAddImageTask::createDatabase("loadFromImages", filename);
             //Where the database image ideas are stored
-            cwImage imageIds;
-            copyOriginalImage(image, &imageIds, database);
-            database.close();
+            cwImage imageId;
+            copyOriginalImage(image, &imageId, filename);
 
-            return PrivateImageData(imageIds, image);
+            return PrivateImageData(cwTrackedImage::createShared(imageId, filename),
+                                    image);
         }
         return PrivateImageData();
     };
@@ -112,34 +110,35 @@ QFuture<cwImage> cwAddImageTask::images() const
         provider.setProjectPath(filename);
         QImage imageData = provider.image(image.original());
 
-        cwImage newImage = image;
-
         if(imageData.isNull()) {
             return PrivateImageData();
         }
 
-        return PrivateImageData(newImage, imageData);
+        return PrivateImageData(cwTrackedImage::createShared(image,
+                                                             filename,
+                                                             cwTrackedImage::Mipmaps),
+                                imageData);
     };
 
     //For creating icon from private image data
-    std::function<int (const PrivateImageData&)> createIcon
+    std::function<cwTrackedImagePtr (const PrivateImageData&)> createIcon
             = [filename](const PrivateImageData& imageData) {
         Q_ASSERT(!imageData.OriginalImage.isNull());
 
-        if(imageData.Id.isIconValid()) {
-            return imageData.Id.icon();
+        if(imageData.Id->isIconValid()) {
+            return cwTrackedImage::createShared(imageData.Id->icon(),
+                                              filename,
+                                              cwTrackedImage::NoOwnership);
         }
-
-        auto database = cwAddImageTask::createDatabase("addIcon", filename);
-
         const QImage& originalImage = imageData.OriginalImage;
-        const cwImage& imageIds = imageData.Id;
         QSize scaledSize = QSize(512, 512);
 
         if(originalImage.size().height() <= scaledSize.height() &&
                 originalImage.size().width() <= scaledSize.width()) {
             //Make the original the icon
-            return imageData.Id.original();
+            return cwTrackedImage::createShared(imageData.Id->original(),
+                                                filename,
+                                                cwTrackedImage::NoOwnership);
         }
 
         QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -156,13 +155,12 @@ QFuture<cwImage> cwAddImageTask::images() const
         writer.setCompression(85);
         writer.write(scaledImage);
 
-        int dotMeter = imageIds.originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
+        int dotMeter = imageData.Id->originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
 
         //Write the data to database
         cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
-        int imageId = cwProject::addImage(database, iconImageData);
-        database.close();
-        return imageId;
+        int imageId = cwImageDatabase(filename).addImage(iconImageData);
+        return cwTrackedImage::createShared(imageId, filename);
     };
 
     struct Mipmap {
@@ -177,7 +175,7 @@ QFuture<cwImage> cwAddImageTask::images() const
 
         QSizeF clipArea;
         QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
-        QList<int> mipmapIds = imageData.Id.mipmaps();
+        QList<int> mipmapIds = imageData.Id->mipmaps();
 
         auto mipmapId = [mipmapIds](int index) {
             if(index < mipmapIds.size()) {
@@ -201,14 +199,12 @@ QFuture<cwImage> cwAddImageTask::images() const
             scaledImageSize = half(scaledImageSize);
         }
 
-        //Delete all unused mipmaps
-
         return scaledImages;
     };
 
     //For creating mipmaps
-    std::function<QFuture<int> (const QList<Mipmap>& image)> compressAndUpload
-            = [filename, context](const QList<Mipmap>& mipmaps)->QFuture<int> {
+    std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
+            = [filename, context](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
 
         QList<QImage> mipmapImages = transform(mipmaps,
                                                [](const Mipmap& mipmap)
@@ -241,13 +237,11 @@ QFuture<cwImage> cwAddImageTask::images() const
                 return mipmap;
             });
 
-            std::function<int (const CompressedMipmap&)> updateDatabase
+            std::function<cwTrackedImagePtr (const CompressedMipmap&)> updateDatabase
                     = [filename](const CompressedMipmap& mipmap) {
-                auto database = cwAddImageTask::createDatabase("dxtSave", filename);
                 cwImageData imageData = cwImageProvider::createDxt1(mipmap.image.size, mipmap.image.data);
-                int imageId = cwProject::addOrUpdateImage(database, imageData, mipmap.id);
-                database.close();
-                return imageId;
+                int imageId = cwImageDatabase(filename).addOrUpdateImage(imageData, mipmap.id);
+                return cwTrackedImage::createShared(imageId, filename);
             };
 
             return QtConcurrent::mapped(mipmaps, updateDatabase);
@@ -281,8 +275,9 @@ QFuture<cwImage> cwAddImageTask::images() const
                      createIcon
                      ]()
     {
-        QList<PrivateImageData> imageData = 
-                pathImagesFuture.results() 
+
+        QList<PrivateImageData> imageData =
+                pathImagesFuture.results()
                 + imagesFuture.results()
                 + regeneratedFuture.results();
 
@@ -291,9 +286,12 @@ QFuture<cwImage> cwAddImageTask::images() const
         
         //Remove all invalid images
         std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
-                       [](const PrivateImageData& data) { return data.Id.original() > 0 && !data.OriginalImage.isNull(); });
+                     [](const PrivateImageData& data)
+        {
+            return !data.Id.isNull() && data.Id->original() > 0 && !data.OriginalImage.isNull();
+        });
 
-        QFuture<QVector<QFuture<int>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<int>>());
+        QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<cwTrackedImagePtr>>());
 
         if(format == cwTextureUploadTask::DXT1Mipmaps) {
             auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
@@ -302,7 +300,7 @@ QFuture<cwImage> cwAddImageTask::images() const
                     .context(context, [compressAndUpload, scaleFuture]()
             {
                 QList<QList<Mipmap>> allImages = scaleFuture.results();
-                QVector<QFuture<int>> ids;
+                QVector<QFuture<cwTrackedImagePtr>> ids;
                 ids.reserve(allImages.size());
 
                 std::transform(allImages.begin(),
@@ -311,7 +309,8 @@ QFuture<cwImage> cwAddImageTask::images() const
                                compressAndUpload);
 
                 return ids;
-            }).future();
+            }
+            ).future();
         }
 
         auto iconFuture = QtConcurrent::mapped(filterData, createIcon);
@@ -327,20 +326,31 @@ QFuture<cwImage> cwAddImageTask::images() const
                 Q_ASSERT(icons.size() == filterData.size());
                 Q_ASSERT(icons.size() == allMipmaps.size() || allMipmaps.isEmpty());
 
-                QList<cwImage> images;
+                QList<cwTrackedImagePtr> images;
+
+                auto toMipmap = [](const QList<cwTrackedImagePtr>& mipmapPtrs)
+                {
+                    QList<int> mipmaps;
+                    mipmaps.reserve(mipmapPtrs.size());
+                    std::transform(mipmapPtrs.begin(), mipmapPtrs.end(), std::back_inserter(mipmaps),
+                                   [](const cwTrackedImagePtr& ptr)
+                    {
+                        return ptr->take().original(); //The original for this image is a mipmapId
+                    });
+                    return mipmaps;
+                };
 
                 for(int i = 0; i < icons.size(); i++) {
                     auto icon = icons.at(i);
                     auto image = filterData.at(i);
 
-
-                    cwImage newImage = image.Id;
-                    newImage.setIcon(icon);
+                    auto newImage = image.Id;
+                    newImage->setIcon(icon->take().original()); //The original for this image is a iconId
 
                     if(i < allMipmaps.size()) {
                         auto mipmapFutures = allMipmaps.at(i);
                         Q_ASSERT(mipmapFutures.isFinished());
-                        newImage.setMipmaps(mipmapFutures.results());
+                        newImage->setMipmaps(toMipmap(mipmapFutures.results()));
                     }
 
                     images.append(newImage);
@@ -364,7 +374,8 @@ QFuture<cwImage> cwAddImageTask::images() const
             }
 
             return AsyncFuture::observe(mipmapCombine.future())
-                    .context(context, completedImages).future();
+                    .context(context, completedImages)
+                    .future();
         }).future();
     }).future();
 }
@@ -381,7 +392,9 @@ void cwAddImageTask::runTask() {
 /**
   \brief This copies the original image to the new place
   */
-QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdContainer, QSqlDatabase database) {
+QImage cwAddImageTask::copyOriginalImage(QString imagePath,
+                                         cwImage* imageIdContainer,
+                                         const QString &databaseFilename) {
 
     //Copy original directly into the database
     QFile originalFile;
@@ -411,7 +424,7 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
     *imageIdContainer = addImageToDatabase(image,
                                            format,
                                            originalImageByteData,
-                                           database);
+                                           databaseFilename);
 
     return image;
 }
@@ -419,7 +432,9 @@ QImage cwAddImageTask::copyOriginalImage(QString imagePath, cwImage* imageIdCont
 /**
     \brief this adds the image to the database
   */
-void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds, QSqlDatabase database)
+void cwAddImageTask::copyOriginalImage(const QImage &image,
+                                       cwImage *imageIds,
+                                       const QString &databaseFilename)
 {
     QByteArray format = "png"; //Alternative is to use "webp", but it seems to be pretty memory leaky
     QByteArray imageData;
@@ -440,7 +455,7 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds, Q
     *imageIds = addImageToDatabase(image,
                                    format,
                                    imageData,
-                                   database);
+                                   databaseFilename);
 }
 
 /**
@@ -449,7 +464,7 @@ void cwAddImageTask::copyOriginalImage(const QImage &image, cwImage *imageIds, Q
 cwImage cwAddImageTask::addImageToDatabase(const QImage &image,
                                            const QByteArray &format,
                                            const QByteArray &imageData,
-                                           QSqlDatabase database)
+                                           const QString &databaseFilename)
 {
     cwImage imageIdContainer = originalMetaData(image);
 
@@ -459,112 +474,11 @@ cwImage cwAddImageTask::addImageToDatabase(const QImage &image,
                                   format,
                                   imageData);
 
-    int imageId = cwProject::addImage(database, originalImageData);
+    int imageId = cwImageDatabase(databaseFilename).addImage(originalImageData);
 
     imageIdContainer.setOriginal(imageId);
 
     return imageIdContainer;
-}
-
-/**
-  \brief Creates an icon of the original image
-
-  If the originalImage is less than 512x512, this just save the full image as a icon
-  */
-void cwAddImageTask::createIcon(QImage originalImage, QString imageFilename, cwImage* imageIds) {
-    emit statusMessage(QString("Generating icon for %1").arg(QFileInfo(imageFilename).fileName()));
-
-    QSize scaledSize = QSize(512, 512);
-
-    if(originalImage.size().height() <= scaledSize.height() &&
-            originalImage.size().width() <= scaledSize.width()) {
-        //Make the original the icon
-        imageIds->setIcon(imageIds->original());
-        return;
-    }
-
-    QImage scaledImage = originalImage.scaled(scaledSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-
-    //Convert the image into a jpg
-    QByteArray format = "jpg";
-    QByteArray jpgData;
-    QBuffer buffer(&jpgData);
-    QImageWriter writer(&buffer, format);
-    writer.setCompression(85);
-    writer.write(scaledImage);
-
-    int dotMeter = imageIds->originalDotsPerMeter() > 0 ? scaledImage.dotsPerMeterX() : 0;
-
-    //Write the data to database
-    cwImageData iconImageData(scaledSize, dotMeter, format, jpgData);
-    int imageId = cwProject::addImage(database(), iconImageData);
-    imageIds->setIcon(imageId);
-}
-
-/**
-  \brief This creates compressed mipmaps for the originalImage
-
-  The return stringList is a list of all the mipmaps, starting with level 0 going to level
-  size-1 of the list.
-  */
-void cwAddImageTask::createMipmaps(QImage originalImage,
-                                   QString imageFilename,
-                                   cwImage* imageIds) {
-
-    QSizeF clipArea;
-    QImage scaledImage = ensureImageDivisibleBy4(originalImage, &clipArea);
-    QList<int> mipmapIds;
-
-    int numberOfLevels = numberOfMipmapLevels(scaledImage.size());
-
-    QSize scaledImageSize = scaledImage.size();
-
-    bool regeneratingMipmaps = numberOfLevels == imageIds->mipmaps().size();
-
-    QList<int> generatedMipmapIds;
-    QList<QImage> scaledImages;
-
-    for(int i = 0; i < numberOfLevels && isRunning(); i++) {
-        emit statusMessage(QString("Compressing %1 of %2 bold flavors of %3").arg(i + 1).arg(numberOfLevels).arg(QFileInfo(imageFilename).fileName()));
-
-        //Rescaled the image
-        scaledImage = scaledImage.scaled(scaledImageSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-
-        int mipmapId = -1;
-        if(regeneratingMipmaps) {
-            mipmapId = imageIds->mipmaps().at(i);
-        }
-
-        generatedMipmapIds.append(mipmapId);
-        scaledImages.append(scaledImage);
-
-        //Create the new width and height, by halfing them
-        scaledImageSize = half(scaledImageSize);
-    }
-
-    if(!isRunning()) {
-        return;
-    }
-
-    cwDXT1Compresser compresser;
-    auto future = compresser.compress(scaledImages);
-    auto images = compresser.results(future);
-
-    Q_ASSERT(images.size() == generatedMipmapIds.size());
-
-    //Export the image to DXT1 format
-    for(int i = 0; i < images.size() && isRunning(); i++) {
-        int mipmapId = generatedMipmapIds.at(i);
-        cwDXT1Compresser::CompressedImage image = images.at(i);
-        mipmapId = saveToDXT1Format(image, mipmapId);
-
-        //Add the path to the mipmapPath
-        if(!regeneratingMipmaps) {
-            mipmapIds.append(mipmapId);
-        }
-    }
-
-    imageIds->setMipmaps(mipmapIds);
 }
 
 /**
@@ -578,45 +492,6 @@ void cwAddImageTask::createMipmaps(QImage originalImage,
 int cwAddImageTask::numberOfMipmapLevels(QSize imageSize) {
     double largestDimension = static_cast<double>(std::max(imageSize.width(), imageSize.height()));
     return std::max(1, static_cast<int>(log2(largestDimension)) + 1);
-}
-
-/**
-  \brief Saves the image to the path using the dxt1 format from squish
-
-  The image will be firsted compress using dxt1 compression 1:4.  Then it'll
-  be compressed with zlib to gunzip.  This will compress the image by another
-  35% by default.
-
-  \param image - The image that'll be converted
-  \param id - The id that'll be overwritten by the task
-  */
-int cwAddImageTask::saveToDXT1Format(const cwDXT1Compresser::CompressedImage &image, int id) {
-    //Add the image to the database
-    cwImageData imageData = cwImageProvider::createDxt1(image.size, image.data);
-
-    int imageId;
-    if(id == -1) {
-        //Add the image
-        imageId = cwProject::addImage(database(), imageData);
-    } else {
-        imageId = id;
-        cwProject::updateImage(database(), imageData, id);
-    }
-
-    return imageId;
-}
-
-/**
-  Gets the number of dots per meter of the image
-
-  If the image doesn't have the same dots per meter in both the x and y direction, then
-  zero is returned.
-  */
-int cwAddImageTask::dotsPerMeter(QImage image) const {
-    if(image.dotsPerMeterX() != image.dotsPerMeterY()) {
-        return 0;
-    }
-    return image.dotsPerMeterX();
 }
 
 /**

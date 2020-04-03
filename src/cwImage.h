@@ -30,6 +30,7 @@ class cwProject;
 class CAVEWHERE_LIB_EXPORT cwImage {
 public:
     cwImage();
+    virtual ~cwImage() = default;
 
     void setMipmaps(QList<int> mipmapFiles);
     QList<int> mipmaps() const;
@@ -54,6 +55,8 @@ public:
     bool isOriginalValid() const;
     bool isMipmapsValid() const;
     bool isIconValid() const;
+
+    QList<int> ids() const;
 
 private:
     class PrivateData : public QSharedData {
@@ -183,7 +186,7 @@ inline bool cwImage::isIdValid(int id)
     return id > -1;
 }
 
-QDebug operator<<(QDebug debug, const cwImage &image);
+CAVEWHERE_LIB_EXPORT QDebug operator<<(QDebug debug, const cwImage &image);
 
 
 

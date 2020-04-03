@@ -47,7 +47,7 @@ public:
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
 
-    Q_INVOKABLE void addFromFiles(QList<QUrl> files, cwProject* project);
+    Q_INVOKABLE void addFromFiles(QList<QUrl> files);
     Q_INVOKABLE void removeNote(int index);
 
     void stationPositionModelUpdated();
@@ -56,8 +56,6 @@ public:
     virtual QHash<int, QByteArray> roleNames() const;
 
 signals:
-
-public slots:
 
 private:
     static QString ImagePathString;
@@ -71,9 +69,10 @@ private:
     void copy(const cwSurveyNoteModel& object);
 
     QList<cwNote*> validateNoteImages(QList<cwNote*> notes) const;
-
-public slots:
     void addNotesWithNewImages(QList<cwImage> images);
+
+    cwProject* project() const;
+    void updateMipmaps();
 
 };
 

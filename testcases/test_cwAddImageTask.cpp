@@ -8,6 +8,7 @@
 #include "cwOpenGLSettings.h"
 #include "cwImageProvider.h"
 #include "TestHelper.h"
+#include "cwTrackedImage.h"
 
 //Async includes
 #include "asyncfuture.h"
@@ -19,7 +20,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     auto addImageTask = std::make_unique<cwAddImageTask>();
     addImageTask->setDatabaseFilename(filename);
 
-    QFuture<cwImage> addImageFuture;
+    QFuture<cwTrackedImagePtr> addImageFuture;
     QString imageFilename = "://datasets/dx1Cropping/scanCrop.png";
     auto resourceImage = QImage(imageFilename);
 
@@ -82,7 +83,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     CHECK(addImageFuture.isCanceled() == false);
     REQUIRE(addImageFuture.results().size() == 1);
 
-    cwImage image = addImageFuture.resultAt(0);
+    cwImage image = addImageFuture.resultAt(0)->take();
 
     CHECK(image.isOriginalValid());
     CHECK(image.isIconValid());
@@ -170,7 +171,7 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     auto baseFileSize = file.size();
 
     REQUIRE(addImageFuture.resultCount() == 1);
-    addImageTask->setRegenerateMipmapsOn(addImageFuture.result());
+    addImageTask->setRegenerateMipmapsOn(addImageFuture.result()->take());
 
     for(int i = 0; i < 2; i++) {
         auto regenerateAddImageFuture = addImageTask->images();
@@ -205,13 +206,13 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     auto baseFileSize = file.size();
 
     REQUIRE(addImageFuture.resultCount() == 1);
-    CHECK(addImageFuture.result().isIconValid());
-    CHECK(addImageFuture.result().isOriginalValid());
-    CHECK(addImageFuture.result().mipmaps().isEmpty());
+    CHECK(addImageFuture.result()->isIconValid());
+    CHECK(addImageFuture.result()->isOriginalValid());
+    CHECK(addImageFuture.result()->mipmaps().isEmpty());
 
     cwOpenGLSettings::instance()->setDXT1Compression(true);
 
-    addImageTask->setRegenerateMipmapsOn(addImageFuture.result());
+    addImageTask->setRegenerateMipmapsOn(addImageFuture.result()->take());
     addImageTask->setFormatType(cwTextureUploadTask::format());
     auto regenerateAddImageFuture = addImageTask->images();
     REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
@@ -219,9 +220,9 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     auto mipmapFileSize = file.size();
 
     REQUIRE(regenerateAddImageFuture.resultCount() == 1);
-    CHECK(regenerateAddImageFuture.result().isIconValid());
-    CHECK(regenerateAddImageFuture.result().isOriginalValid());
-    CHECK(regenerateAddImageFuture.result().isMipmapsValid());
+    CHECK(regenerateAddImageFuture.result()->isIconValid());
+    CHECK(regenerateAddImageFuture.result()->isOriginalValid());
+    CHECK(regenerateAddImageFuture.result()->isMipmapsValid());
 
     double ratio = mipmapFileSize / static_cast<double>(baseFileSize);
     INFO("Filename:" << filename);

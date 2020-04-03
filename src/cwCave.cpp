@@ -11,6 +11,7 @@
 #include "cwStation.h"
 #include "cwLength.h"
 #include "cwErrorModel.h"
+#include "cwCavingRegion.h"
 
 //Qt includes
 #include <QThread>
@@ -169,6 +170,11 @@ void cwCave::insertTrip(int i, cwTrip* trip) {
 void cwCave::removeTrip(int i) {
     if(i < 0 || i >= Trips.size()) { return; }
     pushUndo(new RemoveTripCommand(this, i, i));
+}
+
+cwCavingRegion *cwCave::parentRegion() const
+{
+    return dynamic_cast<cwCavingRegion*>(parent());
 }
 
 /**

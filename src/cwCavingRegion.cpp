@@ -9,6 +9,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwDebug.h"
+#include "cwProject.h"
 
 //Qt includes
 #include <QThread>
@@ -233,6 +234,11 @@ void cwCavingRegion::clearCaves() {
   */
 int cwCavingRegion::indexOf(cwCave* cave) {
     return Caves.indexOf(cave);
+}
+
+cwProject *cwCavingRegion::parentProject() const
+{
+    return dynamic_cast<cwProject*>(parent());
 }
 
 /**

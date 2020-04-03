@@ -11,6 +11,7 @@
 #include "cwImageProvider.h"
 #include "cwTrip.h"
 #include "cwNote.h"
+#include "cwCavingRegion.h"
 
 //Qt includes
 #include <QDebug>
@@ -23,6 +24,8 @@ cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     ParentCave(nullptr)
 {
     ImagePathString = QString("image://") + cwImageProvider::Name + QString("/%1");
+
+
 }
 
 QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
@@ -142,8 +145,8 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   create a icon for each file.  The original file, icon, and mipmaps will be stored in the
   project.
   */
-void cwSurveyNoteModel::addFromFiles(QList<QUrl> files, cwProject* project) {
-    project->addImages(files, this,
+void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
+    project()->addImages(files, this,
                        std::bind(&cwSurveyNoteModel::addNotesWithNewImages,
                                  this, std::placeholders::_1));
 }
@@ -191,6 +194,17 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
     }
 
     addNotes(newNotes);
+}
+
+cwProject *cwSurveyNoteModel::project() const
+{
+    if(parentCave()) {
+        auto region = parentCave()->parentRegion();
+        if(region) {
+            return region->parentProject();
+        }
+    }
+    return nullptr;
 }
 /**
   This adds valid notes to the note model

@@ -15,6 +15,7 @@
 #include "cwGlobals.h"
 #include "cwRegionLoadResult.h"
 #include "cwError.h"
+#include "cwFutureManagerToken.h"
 class cwCave;
 class cwCavingRegion;
 class cwAddImageTask;
@@ -68,17 +69,12 @@ public:
     void setTaskManager(cwTaskManagerModel* manager);
     cwTaskManagerModel* taskManager() const;
 
-    cwFutureManagerModel* futureManagerModel() const;
-    void setFutureManagerModel(cwFutureManagerModel* futureManagerModel);
-
-    static int addImage(const QSqlDatabase& database, const cwImageData& imageData);
-    static bool updateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
-    static int addOrUpdateImage(const QSqlDatabase& database, const cwImageData& imageData, int id);
-    static bool removeImage(const QSqlDatabase& database, cwImage image, bool withTransaction = true);
-    static bool removeImages(const QSqlDatabase& database, QList<int> ids, bool withTransaction = true);
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
 
     static void createDefaultSchema(const QSqlDatabase& database);
     static QString createTemporaryFilename();
+    static QSqlDatabase createDatabaseConnection(const QString& connectionName, const QString& databasePath);
 
     void waitLoadToFinish();
     void waitSaveToFinish();
@@ -122,7 +118,7 @@ private:
 
     //Task manager, for visualizing running tasks
     QPointer<cwTaskManagerModel> TaskManager;
-    QPointer<cwFutureManagerModel> FutureManager; //!<
+    cwFutureManagerToken FutureToken; //!<
 
     cwErrorListModel* ErrorModel; //!<
 

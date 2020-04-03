@@ -34,12 +34,13 @@ class cwRegionTreeModel;
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
+#include "cwGlobals.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
     the geometry need to show a scrap in 3d
   */
-class cwScrapManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject
 {
     Q_OBJECT
 
@@ -60,18 +61,17 @@ public:
     bool automaticUpdate() const;
     void setAutomaticUpdate(bool automaticUpdate);
 
+    void waitForFinish();
+
 signals:
     void automaticUpdateChanged();
 
 public slots:
     void updateAllScraps();
-    void updateImageProviderPath();
 
 private:
     QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
-
-    cwImageProvider ImageProvider;
 
     QList<cwScrap*> WaitingForUpdate; //These are the scraps that are running through task
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
@@ -79,7 +79,6 @@ private:
 
     //The task that'll be run
     cwTriangulateTask* TriangulateTask;
-    cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
     cwTaskManagerModel* TaskManagerModel;
     cwFutureManagerToken FutureManagerToken;

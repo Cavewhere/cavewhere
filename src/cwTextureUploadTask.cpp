@@ -17,6 +17,7 @@
 //Qt includes
 #include <QDebug>
 #include <QWindow>
+#include <QtConcurrent>
 
 //Std includes
 #include <math.h>
@@ -36,7 +37,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
     auto context = this->context();
 
     //loads valid mipmap
-    auto loadValidMipmap = [projectFile, currentFormat](const cwImage& image) {
+    auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
 
@@ -45,7 +46,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         auto loadDXT1Mipmap = [&imageProvidor, image]() {
             QList< QPair< QByteArray, QSize > > mipmaps;
             //Load all the mipmaps
-            foreach(int imageId, image.mipmaps()) {
+            foreach(int imageId, image->mipmaps()) {
                 imageProvidor.data(imageId, true);
 
                 QSize imageSize;
@@ -56,7 +57,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         };
 
         auto loadRGB = [&imageProvidor, image]()->QList< QPair< QByteArray, QSize > > {
-            auto imageData = imageProvidor.data(image.original());
+            auto imageData = imageProvidor.data(image->original());
 
             if(imageData.data().isEmpty()) {
                 return {};
@@ -80,7 +81,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             results.mipmaps = loadRGB();
             break;
         case DXT1Mipmaps:
-            results.scaleTexCoords = imageProvidor.scaleTexCoords(image);
+            results.scaleTexCoords = imageProvidor.scaleTexCoords(*image);
             results.mipmaps = loadDXT1Mipmap();
             break;
         default:
@@ -123,7 +124,10 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             }
         }
 
-        return QtConcurrent::run(std::bind(loadValidMipmap, image));
+        return QtConcurrent::run(std::bind(loadValidMipmap,
+                                           cwTrackedImage::createShared(image,
+                                                                        projectFile,
+                                                                        cwTrackedImage::NoOwnership)));
     };
 
     return QtConcurrent::run(fetchImages);

@@ -35,6 +35,7 @@
 #include <QCoreApplication>
 #include <QtConcurrent>
 #include <QSharedPointer>
+#include <QSqlRecord>
 
 //Async Future
 #include <asyncfuture.h>
@@ -221,9 +222,7 @@ void cwProject::privateSave() {
         return saveTask.save(region.get());
     });
 
-    if(FutureManager) {
-        FutureManager->addJob({future, "Saving"});
-    }
+    FutureToken.addJob({future, "Saving"});
 
     SaveFuture = AsyncFuture::observe(future).context(this, [future, this](){
         auto errors = future.result();
@@ -295,8 +294,6 @@ void cwProject::saveAs(QString newFilename){
 
     //Save the current data
     privateSave();
-
-//    emit canSaveDirectly();
 }
 
 /**
@@ -351,9 +348,7 @@ void cwProject::loadFile(QString filename) {
         return loadTask.load();
     });
 
-    if(FutureManager) {
-        FutureManager->addJob({loadFuture, "Loading"});
-    }
+    FutureToken.addJob({loadFuture, "Loading"});
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(result.filename());
@@ -389,141 +384,6 @@ void cwProject::setFilename(QString newFilename) {
         ProjectFile = newFilename;
         emit filenameChanged(ProjectFile);
     }
-}
-
-/**
-  \brief Adds an image to the project file
-
-  This static function takes a database and adds the imageData to the database
-
-  This returns the id of the image in the database
-  */
-int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
-    cwSQLManager::Transaction transaction(database);
-
-    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "
-            "VALUES (?, ?, ?, ?, ?, ?)";
-
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
-
-    if(!successful) {
-        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
-        return -1;
-    }
-
-    query.bindValue(0, imageData.format());
-    query.bindValue(1, false);
-    query.bindValue(2, imageData.size().width());
-    query.bindValue(3, imageData.size().height());
-    query.bindValue(4, imageData.dotsPerMeter());
-    query.bindValue(5, imageData.data());
-    query.exec();
-
-    //Get the id of the last inserted id
-    return query.lastInsertId().toInt();
-}
-
-/**
- * @brief cwProject::updateImage
- * @param database - The database where the image is going to be inserted into
- * @param imageData - The data that going to update the image
- * @param id - The id of the image that needs to be updated
- * @return True if image was update successfully and false, if unsuccessful
- */
-bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
-{
-    cwSQLManager::Transaction transaction(database);
-
-    QString SQL("UPDATE Images SET type=?, width=?, height=?, dotsPerMeter=?, imageData=? where id=?");
-
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
-
-    if(!successful) {
-        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
-        return false;
-    }
-
-    query.bindValue(0, imageData.format());
-    query.bindValue(1, imageData.size().width());
-    query.bindValue(2, imageData.size().height());
-    query.bindValue(3, imageData.dotsPerMeter());
-    query.bindValue(4, imageData.data());
-    query.bindValue(5, id);
-    return query.exec();
-}
-
-int cwProject::addOrUpdateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
-{
-    if(id > 0) {
-        bool okay = updateImage(database, imageData, id);
-        if(!okay) {
-            return -1;
-        }
-    } else {
-        id = addImage(database, imageData);
-    }
-    return id;
-}
-
-/**
- * @brief cwProject::removeImage
- * @param database - The database connection
- * @param image - The Image that going to be removed
- * @return True if the image could be removed, and false if it couldn't be removed
- */
-bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool withTransaction)
-{
-    QList<int> ids = {
-        image.original(),
-        image.icon(),
-    };
-    ids.append(image.mipmaps());
-
-    return removeImages(database, ids, withTransaction);
-}
-
-bool cwProject::removeImages(const QSqlDatabase &database, QList<int> ids, bool withTransaction)
-{
-    if(ids.isEmpty()) {
-        return true;
-    }
-
-    if(withTransaction) {
-        cwSQLManager::instance()->beginTransaction(database);
-    }
-
-    auto deleteImage = [&](int id) {
-        //Create the delete SQL statement
-        QString SQL = QString("DELETE FROM Images WHERE id == %1").arg(id);
-
-        QSqlQuery query(database);
-        bool successful = query.prepare(SQL);
-
-        if(!successful) {
-            qDebug() << "Couldn't delete image: " << id << query.lastError();
-
-            if(withTransaction) {
-                cwSQLManager::instance()->endTransaction(database);
-            }
-
-            return false;
-        }
-
-        return query.exec();
-    };
-
-    bool okay = true;
-    for(int id : ids) {
-        okay = okay && deleteImage(id);
-    }
-
-    if(withTransaction) {
-        cwSQLManager::instance()->endTransaction(database);
-    }
-
-    return okay;
 }
 
 /**
@@ -581,7 +441,20 @@ QString cwProject::createTemporaryFilename()
     QDateTime seedTime = QDateTime::currentDateTime();
     return QString("%1/CavewhereTmpProject-%2.cw")
                 .arg(QDir::tempPath())
-                .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+}
+
+QSqlDatabase cwProject::createDatabaseConnection(const QString &connectionName, const QString &databasePath)
+{
+    int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("%1-%2").arg(connectionName).arg(nextConnectonName));
+    database.setDatabaseName(databasePath);
+    bool connected = database.open();
+    if(!connected) {
+        throw std::runtime_error(QString("Couldn't connect to database for %1 %2 %3").arg(connectionName).arg(databasePath).toStdString());
+    }
+
+    return database;
 }
 
 /**
@@ -639,24 +512,46 @@ void cwProject::addImages(QList<QUrl> noteImagePath,
     for(QUrl url : noteImagePath) {
         QString path = url.toLocalFile();
 
-        cwAddImageTask addImageTask;
-        addImageTask.setDatabaseFilename(filename());
-        addImageTask.setContext(context);
-        addImageTask.setFormatType(cwTextureUploadTask::format());
+        std::function<void ()> addImage = [this, path, context, func, &addImage]() {
+            auto format = cwTextureUploadTask::format();
 
-        //Set all the noteImagePath
-        addImageTask.setNewImagesPath({path}); //noteImagePath);
+            cwAddImageTask addImageTask;
+            addImageTask.setDatabaseFilename(filename());
+            addImageTask.setContext(context);
+            addImageTask.setFormatType(format);
 
-        auto imagesFuture = addImageTask.images();
+            //Set all the noteImagePath
+            addImageTask.setNewImagesPath({path}); //noteImagePath);
 
-        FutureManager->addJob({imagesFuture, "Adding Image"});
+            auto imagesFuture = addImageTask.images();
 
-        AsyncFuture::observe(imagesFuture)
-                .context(context,
-                         [imagesFuture, func]()
-        {
-            func(imagesFuture.results());
-        });
+            FutureToken.addJob({imagesFuture, "Adding Image"});
+
+            AsyncFuture::observe(imagesFuture)
+                    .context(context,
+                             [imagesFuture, func, format, addImage]()
+            {
+                if(cwTextureUploadTask::format() != format) {
+                    //Format has changed, re-run (this isn't true recursion)
+                    addImage();
+                    return;
+                }
+
+                //Convert the images to cwImage
+                auto results = imagesFuture.results();
+                QList<cwImage> images;
+                images.reserve(results.size());
+                std::transform(results.begin(), results.end(), std::back_inserter(images),
+                               [](const cwTrackedImagePtr& imagePtr)
+                {
+                    return imagePtr->take();
+                });
+
+                func(images);
+            });
+        };
+
+        addImage();
     }
 }
 
@@ -673,14 +568,12 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
     }
 }
 
-void cwProject::setFutureManagerModel(cwFutureManagerModel* futureManager) {
-    if(FutureManager != futureManager) {
-        FutureManager = futureManager;
-    }
+void cwProject::setFutureManagerToken(cwFutureManagerToken token) {
+    FutureToken = token;
 }
 
-cwFutureManagerModel* cwProject::futureManagerModel() const {
-    return FutureManager;
+cwFutureManagerToken cwProject::futureManagerToken() const {
+    return FutureToken;
 }
 
 

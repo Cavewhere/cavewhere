@@ -32,6 +32,24 @@ bool cwImage::isMipmapsValid() const
     return iter == Data->Mipmaps.end();
 }
 
+QList<int> cwImage::ids() const
+{
+    QList<int> ids;
+    ids.reserve(2 + mipmaps().size());
+    if(isOriginalValid()) {
+        ids.append(original());
+    }
+
+    if(isIconValid()) {
+        ids.append(icon());
+    }
+
+    if(isMipmapsValid()) {
+        ids.append(mipmaps());
+    }
+
+    return ids;
+}
 
 
 cwImage::PrivateData::PrivateData() {

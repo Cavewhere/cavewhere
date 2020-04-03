@@ -19,6 +19,7 @@
 
 //Our includes
 class cwCave;
+class cwProject;
 #include "cwUndoer.h"
 #include "cwGlobals.h"
 
@@ -57,6 +58,8 @@ public:
     void clearCaves();
 
     int indexOf(cwCave* cave);
+
+    cwProject* parentProject() const;
 
 
 signals:
