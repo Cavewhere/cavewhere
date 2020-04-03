@@ -24,6 +24,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
+#include "cwImageCompressionUpdater.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -91,6 +92,10 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setGLLinePlot(RegionSceneManager->linePlot());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+    cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
+    imageUpdater->setFutureToken(FutureManagerModel->token());
+    imageUpdater->setRegionTreeModel(RegionTreeModel);
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }

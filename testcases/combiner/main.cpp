@@ -19,7 +19,7 @@ int main( int argc, char* argv[] )
     QCoreApplication app(argc, argv);
 
     QString execName = "cavewhere-test.exe";
-    int timeout = 1000 * 15;
+    int timeout = 1000 * 30;
     QString testArg = "--list-tests";
     QString newline = "\r\n";
 
@@ -78,9 +78,9 @@ int main( int argc, char* argv[] )
         auto timer = new QTimer(process);
 
         QObject::connect(timer, &QTimer::timeout,
-                         timer, [process]()
+                         timer, [process, timer]()
         {
-            qDebug() << "Process timed out!" << process->arguments();
+            qDebug() << "Process timed out!" << process->arguments() << timer->interval();
             process->kill();
         });
 
@@ -202,7 +202,10 @@ int main( int argc, char* argv[] )
 //    auto failingTestCase = "[CavewhereMainWindow],[ProtoSaveLoad],[cwAddImageTask],[cwCropImageTask],[cwDXT1Compresser],[cwFutureFilterModel],[cwFutureManagerModel],[LinePlotManager],[cwOpenGLSettings],[cwProject],[cwScrap],[cwTextureUploadTask]";
 
 //    auto failingTestCase = "[ErrorModelTest],[Error],[FindUnconnectedSurveyChunksTask],[SurveyChunkSignaler],[SurveyNetwork],[cwTripCalibration],[cwWallsImporter],[CavewhereMainWindow],[Compass],[ProtoSaveLoad],[cwAddImageTask],[cwCSVImporterManager],[cwCSVLineModel],[cwCropImageTask],[cwDXT1Compresser],[cwFutureFilterModel],[cwFutureManagerModel],[cwImage],[cwJob],[cwJobSettings],[cwLead],[LinePlotManager],[cwOpenGLSettings],[cwProject],[cwRegionIOTask],[cwRegionTreeModel],[cwScrap],[cwSettings],[SurvexImport],[cwSurveyChunk],[cwSurveyNetwork],[cwTextureUploadTask],[version],[dewalls],[dewalls, azimuth],[dewalls, inclination],[dewalls, length],[WallsProjectParser],[WallsProjectParser, .PATH]";
-   auto failingTestCase = "[cwJobSettings],[cwScrap]";
+
+//    qDebug() << "Testcases:" << testcases;
+
+   auto failingTestCase = "[ErrorModelTest], [Error], [FindUnconnectedSurveyChunksTask], [SurveyChunkSignaler], [SurveyNetwork], [cwTripCalibration], [cwWallsImporter], [CavewhereMainWindow], [Compass], [ProtoSaveLoad], [cwAddImageTask]";
 
     auto future = runTestCases({failingTestCase});
 //    runTestCases({testcases.join(",")});

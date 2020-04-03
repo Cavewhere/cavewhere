@@ -13,6 +13,7 @@
 #include "cwMath.h"
 #include "cwOpenGLUtils.h"
 #include "cwOpenGLSettings.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QDebug>
@@ -34,14 +35,17 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
     auto projectFile = ProjectFilename;
     auto image = Image;
     auto currentFormat = type;
-    auto context = this->context();
 
     //loads valid mipmap
     auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
+        UploadResult results;
+
+        if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
+            return results;
+        }
+
         cwImageProvider imageProvidor;
         imageProvidor.setProjectPath(projectFile);
-
-        UploadResult results;
 
         auto loadDXT1Mipmap = [&imageProvidor, image]() {
             QList< QPair< QByteArray, QSize > > mipmaps;
@@ -92,45 +96,11 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
         return results;
     };
 
-    //fetchs the mipmaps
-    auto fetchImages = [loadValidMipmap, projectFile, image, context, currentFormat]() {
-        //Fetch mimaps from disk
+    return QtConcurrent::run(std::bind(loadValidMipmap,
+                                       cwTrackedImage::createShared(image,
+                                                                    projectFile,
+                                                                    cwTrackedImage::NoOwnership)));
 
-        if(currentFormat == DXT1Mipmaps) {
-            auto size = [image, projectFile]() {
-                if(image.mipmaps().isEmpty()) {
-                    return QSize();
-                }
-
-                int firstLevel = image.mipmaps().first();
-                cwImageProvider imageProvidor;
-                imageProvidor.setProjectPath(projectFile);
-                return imageProvidor.data(firstLevel, true).size();
-            };
-
-            if(!isDivisibleBy4(size())) {
-                //Regenerate the mipmaps
-                cwAddImageTask addImageTask;
-                addImageTask.setDatabaseFilename(projectFile);
-                addImageTask.setRegenerateMipmapsOn(image);
-                addImageTask.setContext(context);
-                addImageTask.setFormatType(currentFormat);
-                auto reAddFuture = addImageTask.images();
-
-                return AsyncFuture::observe(reAddFuture)
-                        .context(context, [reAddFuture, loadValidMipmap]() {
-                    return QtConcurrent::run(std::bind(loadValidMipmap, reAddFuture));
-                }).future();
-            }
-        }
-
-        return QtConcurrent::run(std::bind(loadValidMipmap,
-                                           cwTrackedImage::createShared(image,
-                                                                        projectFile,
-                                                                        cwTrackedImage::NoOwnership)));
-    };
-
-    return QtConcurrent::run(fetchImages);
 }
 
 /**

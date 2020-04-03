@@ -215,4 +215,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
         CHECK(root->project()->canSaveDirectly() == false);
 
     }
+
+    root->taskManagerModel()->waitForTasks();
+    root->futureManagerModel()->waitForFinished();
 }

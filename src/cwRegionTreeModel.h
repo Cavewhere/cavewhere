@@ -78,11 +78,29 @@ public:
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
 
     template <typename ReturnType, typename GetFunc>
+    QList<ReturnType> objects(const QModelIndex& parent,
+                              int begin,
+                              int end,
+                              GetFunc func) const
+    {
+        QList<ReturnType> objects;
+        for(int i = begin; i <= end; i++) {
+            auto rowIndex = index(i, 0, parent);
+            ReturnType obj = get<ReturnType>(rowIndex, func);
+            if(obj) {
+                objects.append(obj);
+            }
+        }
+
+        return objects;
+    }
+
+    template <typename ReturnType, typename GetFunc>
     QList<ReturnType> all(const QModelIndex& parent, GetFunc func) const {
         QList<ReturnType> objects;
         for(int row = 0; row < rowCount(parent); row++) {
             auto rowIndex = index(row, 0, parent);
-            ReturnType obj = INVOKE_MEMBER(this, func)(rowIndex); //std::invoke(func, this, rowIndex);
+            auto obj = get<ReturnType>(rowIndex, func);
             if(obj) {
                 objects.append(obj);
             }
@@ -90,6 +108,8 @@ public:
         }
         return objects;
     }
+
+
 
     virtual QHash<int, QByteArray> roleNames() const;
 
@@ -138,6 +158,11 @@ private:
     void insertedTrips(cwCave* parentCave, int begin, int end);
     void insertedNotes(cwTrip* parentTrip, int begin, int end);
     void insertedScraps(cwNote* parentNote, int begin, int end);
+
+    template <typename ReturnType, typename GetFunc>
+    ReturnType get(const QModelIndex& rowIndex, GetFunc func) const {
+        return INVOKE_MEMBER(this, func)(rowIndex); //std::invoke(func, this, rowIndex);
+    };
 
 };
 

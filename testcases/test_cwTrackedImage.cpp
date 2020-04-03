@@ -10,6 +10,7 @@
 #include "TestHelper.h"
 #include "cwImageProvider.h"
 #include "cwAsyncFuture.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QDebug>
@@ -51,11 +52,8 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
     trackedImage.deleteImagesFromDatabase();
 
     auto checkThatImageWasDeleted = [project](int id) {
-        cwImageProvider provider;
-        provider.setProjectPath(project->filename());
-        auto imageData = provider.data(id);
-        CHECK(imageData.data().isEmpty());
-        CHECK(!imageData.size().isValid());
+        cwImageDatabase database(project->filename());
+        CHECK(!database.imageExists(id));
     };
 
     for(int id : trackedImage.ids()) {
@@ -63,7 +61,7 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
     }
 }
 
-TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function", "[cwTrackImage]") {
+TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function", "[cwTrackedImage]") {
 
     QSharedPointer<cwTrackedImage> trackedImage;
 
@@ -101,19 +99,13 @@ TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function
     REQUIRE(!trackImagePtr.isNull());
 
     auto checkThatImageExist = [project](int id) {
-        cwImageProvider provider;
-        provider.setProjectPath(project->filename());
-        auto imageData = provider.data(id);
-        CHECK(!imageData.data().isEmpty());
-        CHECK(imageData.size().isValid());
+        cwImageDatabase database(project->filename());
+        CHECK(database.imageExists(id));
     };
 
     auto checkThatImageWasDeleted = [project](int id) {
-        cwImageProvider provider;
-        provider.setProjectPath(project->filename());
-        auto imageData = provider.data(id);
-        CHECK(imageData.data().isEmpty());
-        CHECK(!imageData.size().isValid());
+        cwImageDatabase database(project->filename());
+        CHECK(!database.imageExists(id));
     };
 
     for(auto id : trackImagePtr->ids()) {

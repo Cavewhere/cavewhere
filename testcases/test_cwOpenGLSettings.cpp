@@ -125,7 +125,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
             SECTION("DXT1 Compression") {
                 if(initSettings->dxt1Supported()) {
                     repeat([&]() {
-                        initSettings->setDXT1Compression(!initSettings->useDXT1Compression());
+                        initSettings->setUseDXT1Compression(!initSettings->useDXT1Compression());
                         checker[&dxt1ComprossedSpy]++;
 
                         CHECK(initSettings->useDXT1Compression() == settings.value(initSettings->keyWithDevice("useDxt1Compression")).toBool());
@@ -208,7 +208,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
                     initSettings->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
                 }
                 if(initSettings->dxt1Supported()) {
-                    initSettings->setDXT1Compression(false);
+                    initSettings->setUseDXT1Compression(false);
                 }
                 if(initSettings->anisotropySupported()) {
                     initSettings->setUseAnisotropy(false);

@@ -14,6 +14,7 @@
 #include <QThreadPool>
 #include <QMetaObject>
 #include <QThreadPool>
+#include <QSettings>
 
 //Our includes
 #include "cwSettings.h"
@@ -27,6 +28,11 @@ int main( int argc, char* argv[] )
   QApplication::setOrganizationDomain("cavewhere.com");
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
+
+  {
+      QSettings settings;
+      settings.clear();
+  }
 
   cwSettings::initialize();
 

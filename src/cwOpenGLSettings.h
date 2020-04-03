@@ -16,7 +16,7 @@ class CAVEWHERE_LIB_EXPORT cwOpenGLSettings : public QObject
     //For texture maps
     Q_PROPERTY(bool dxt1Supported READ dxt1Supported CONSTANT)
     Q_PROPERTY(bool anisotropySupported READ anisotropySupported CONSTANT)
-    Q_PROPERTY(bool useDXT1Compression READ useDXT1Compression WRITE setDXT1Compression NOTIFY useDXT1CompressionChanged)
+    Q_PROPERTY(bool useDXT1Compression READ useDXT1Compression WRITE setUseDXT1Compression NOTIFY useDXT1CompressionChanged)
     Q_PROPERTY(bool useAnisotropy READ useAnisotropy WRITE setUseAnisotropy NOTIFY useAnisotropyChanged)
     Q_PROPERTY(bool useMipmaps READ useMipmaps WRITE setMipmaps NOTIFY useMipmapsChanged)
     Q_PROPERTY(MagFilter magFilter READ magFilter WRITE setMagFilter NOTIFY magFilterChanged)
@@ -85,7 +85,7 @@ public:
     bool anisotropySupported() const;
 
     bool useDXT1Compression() const;
-    void setDXT1Compression(bool useDXT1Compression);
+    void setUseDXT1Compression(bool useDXT1Compression);
 
     bool useAnisotropy() const;
     void setUseAnisotropy(bool useAnisotropy);

@@ -1223,6 +1223,11 @@ QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStat
     return viewRotationMatrix;
 }
 
+void cwScrap::updateImage()
+{
+    emit pointsReset();
+}
+
 /**
 * Sets the type
 * The scrap type tells the warping algorithm how to warp the scrap. Scrap type can be Plan (default)

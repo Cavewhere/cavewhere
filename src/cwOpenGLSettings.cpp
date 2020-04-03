@@ -39,7 +39,7 @@ cwOpenGLSettings::cwOpenGLSettings(QObject* parent) :
 
 }
 
-void cwOpenGLSettings::setDXT1Compression(bool useDXT1Compression) {
+void cwOpenGLSettings::setUseDXT1Compression(bool useDXT1Compression) {
     if(DXT1Compression != useDXT1Compression) {
         Q_ASSERT(thread() == QThread::currentThread());
         DXT1Compression = useDXT1Compression;
@@ -250,7 +250,7 @@ void cwOpenGLSettings::setToDefault()
     setRendererType(defaultSettings.rendererType());
     setDXT1Algorithm(defaultSettings.dxt1Algorithm());
     setUseAnisotropy(defaultSettings.useAnisotropy());
-    setDXT1Compression(defaultSettings.useDXT1Compression());
+    setUseDXT1Compression(defaultSettings.useDXT1Compression());
     setNativeTextRendering(defaultSettings.useNativeTextRendering());
 }
 

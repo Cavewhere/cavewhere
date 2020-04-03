@@ -173,7 +173,7 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
     SECTION("Disable DXT1 Compression") {
         REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setDXT1Compression(false);
+        cwOpenGLSettings::instance()->setUseDXT1Compression(false);
     }
 
     QEventLoop loop;
@@ -239,6 +239,6 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     QFile file(filename);
     CHECK(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser));
 
-    cwOpenGLSettings::instance()->setDXT1Compression(true);
+    cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 }
 

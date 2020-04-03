@@ -60,8 +60,6 @@ public:
     int indexOf(cwCave* cave);
 
     cwProject* parentProject() const;
-
-
 signals:
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);

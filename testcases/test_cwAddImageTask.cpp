@@ -37,7 +37,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
         SECTION("Without compression") {
             REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setDXT1Compression(false);
+            cwOpenGLSettings::instance()->setUseDXT1Compression(false);
         }
 
         addImageTask->setFormatType(cwTextureUploadTask::format());
@@ -134,7 +134,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         CHECK(image.mipmaps().isEmpty());
     }
 
-    cwOpenGLSettings::instance()->setDXT1Compression(true);
+    cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 }
 
 TEST_CASE("cwAddImageTask should return invalid future", "[cwAddImageTask]") {
@@ -151,12 +151,12 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
 
     SECTION("Without compression") {
         REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setDXT1Compression(false);
+        cwOpenGLSettings::instance()->setUseDXT1Compression(false);
     }
 
     SECTION("With compression") {
         REQUIRE(cwOpenGLSettings::instance());
-        cwOpenGLSettings::instance()->setDXT1Compression(true);
+        cwOpenGLSettings::instance()->setUseDXT1Compression(true);
     }
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
@@ -192,7 +192,7 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     addImageTask->setDatabaseFilename(filename);
 
     REQUIRE(cwOpenGLSettings::instance());
-    cwOpenGLSettings::instance()->setDXT1Compression(false);
+    cwOpenGLSettings::instance()->setUseDXT1Compression(false);
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
     addImageTask->setFormatType(cwTextureUploadTask::format());
@@ -210,7 +210,7 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     CHECK(addImageFuture.result()->isOriginalValid());
     CHECK(addImageFuture.result()->mipmaps().isEmpty());
 
-    cwOpenGLSettings::instance()->setDXT1Compression(true);
+    cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 
     addImageTask->setRegenerateMipmapsOn(addImageFuture.result()->take());
     addImageTask->setFormatType(cwTextureUploadTask::format());

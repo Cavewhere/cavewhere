@@ -45,23 +45,6 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
     };
 
     SECTION("DXT1 extraction should work correctly") {
-
-        SECTION("Regenerate texture should work correctly") {
-            //Remove all mipmap textures from the database
-            QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("test_cwTextureUploadTask"));
-            database.setDatabaseName(project->filename());
-            REQUIRE(database.open());
-
-            auto query = database.exec("delete from Images where type like \"dxt1.gz\"");
-            REQUIRE(query.lastError().type() == QSqlError::NoError);
-            database.close();
-        }
-
-        SECTION("Run without regeneration") {
-            //This need to be here to run the DXT1 extraction without regeneration
-            CHECK(true);
-        }
-
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());

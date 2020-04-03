@@ -47,7 +47,7 @@ Q_OBJECT
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
-    Q_PROPERTY(`cwErrorListModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
 public:
     cwProject(QObject* parent = nullptr);

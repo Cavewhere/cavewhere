@@ -45,11 +45,33 @@ TEST_CASE("cwRegionTreeModel all function should work correctly", "[cwRegionTree
     REQUIRE(secondTrip->notes()->notes().size() == 1);
     auto secondNote = secondTrip->notes()->notes().at(0);
     CHECK(secondNote->scraps() == trip2Scraps);
+}
 
+TEST_CASE("cwRegionTreeModel object function should work correctly", "[cwRegionTreeModel]") {
 
+    auto project = std::make_unique<cwProject>();
+    fileToProject(project.get(), "://datasets/test_cwRegionTreeModel/testAllFunction.cw");
 
+    auto regionModel = std::make_unique<cwRegionTreeModel>();
+    regionModel->setCavingRegion(project->cavingRegion());
 
+    REQUIRE(project->cavingRegion()->caves().size() == 1);
+    cwCave* cave = project->cavingRegion()->caves().at(0);
 
+    REQUIRE(cave->tripCount() == 2);
+    cwTrip* firstTrip = cave->trips().at(0);
 
+    QModelIndex firstTripIndex = regionModel->index(firstTrip);
+    CHECK(firstTripIndex.isValid());
 
+    int count = regionModel->rowCount(firstTripIndex);
+    CHECK(count == 1);
+
+    QList<cwNote*> notes = regionModel->objects<cwNote*>(firstTripIndex,
+                                                         0,
+                                                         count - 1,
+                                                         &cwRegionTreeModel::note);
+
+    CHECK(notes.size() == 1);
+    CHECK(notes == firstTrip->notes()->notes());
 }
