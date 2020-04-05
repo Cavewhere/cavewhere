@@ -13,9 +13,10 @@
 #include <QObject>
 
 //Our includes
+#include "cwGlobals.h"
 class cwLength;
 
-class cwScale : public QObject
+class CAVEWHERE_LIB_EXPORT cwScale : public QObject
 {
     Q_OBJECT
 
