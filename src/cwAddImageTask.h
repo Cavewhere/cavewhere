@@ -110,14 +110,6 @@ private:
     static int half(int value);
 
     static cwImage originalMetaData(const QImage& image);
-
-    template<typename T, typename _Fn, typename R = typename std::result_of<_Fn&(T)>::type>
-    static QList<R> transform(const QList<T>& list, _Fn func) {
-        QList<R> returnList;
-        returnList.reserve(list.size());
-        std::transform(list.begin(), list.end(), std::back_inserter(returnList), func);
-        return returnList;
-    };
 };
 
 /**

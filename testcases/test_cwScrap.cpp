@@ -22,6 +22,8 @@
 #include "cwRootData.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
+#include "cwTaskManagerModel.h"
+#include "cwFutureManagerModel.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -166,6 +168,9 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
 
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
+
         INFO("Finished after plotManager!");
         checkScrapTransform(currentScrap, row);
 
@@ -202,6 +207,9 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
 
         auto plotManager = root->linePlotManager();
         plotManager->waitToFinish();
+
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
         checkScrapTransform(currentScrap, row);

@@ -24,26 +24,24 @@
 #include "cwRegionTreeModel.h"
 #include "cwOpenGLSettings.h"
 #include "cwImageDatabase.h"
+#include "cwAsyncFuture.h"
+
+//Async future
+#include "asyncfuture.h"
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
-    //    Region(nullptr),
     LinePlotManager(nullptr),
-    TriangulateTask(new cwTriangulateTask()),
     Project(nullptr),
-    TaskManagerModel(nullptr),
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
-    connect(TriangulateTask, SIGNAL(finished()), SLOT(taskFinished()));
-    connect(TriangulateTask, &cwTriangulateTask::shouldRerun, this, &cwScrapManager::rerunDirtyScraps);
 }
 
 cwScrapManager::~cwScrapManager()
 {
-    TriangulateTask->stop();
-    TriangulateTask->waitToFinish(cwTask::IgnoreRestart);
-    delete TriangulateTask;
+    TriangulateFuture.cancel();
+    waitForFinish();
 }
 
 /**
@@ -102,28 +100,6 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
         if(LinePlotManager != nullptr) {
             connect(LinePlotManager, &cwLinePlotManager::stationPositionInScrapsChanged,
                     this, &cwScrapManager::updateStationPositionChangedForScraps);
-        }
-    }
-}
-
-/**
- * @brief cwScrapManager::setTaskManager
- * @param taskManager
- *
- * We use this to expose the task's that are running in this manager to the user. This allows
- * the user to see if the task is running or not running.
- */
-void cwScrapManager::setTaskManager(cwTaskManagerModel *taskManager)
-{
-    if(TaskManagerModel != taskManager) {
-        if(TaskManagerModel != nullptr) {
-            TaskManagerModel->removeTask(TriangulateTask);
-        }
-
-        TaskManagerModel = taskManager;
-
-        if(TaskManagerModel != nullptr) {
-            TaskManagerModel->addTask(TriangulateTask);
         }
     }
 }
@@ -223,9 +199,7 @@ void cwScrapManager::regenerateScrapGeometryHelper(cwScrap *scrap)
 
 void cwScrapManager::addToDeletedScraps(cwScrap *scrap)
 {
-    if(TriangulateTask->isRunning()) {
-        DeletedScraps.insert(scrap);
-    }
+    DeletedScraps.insert(scrap);
 }
 
 /**
@@ -237,7 +211,7 @@ bool cwScrapManager::scrapImagesOkay(cwScrap *scrap)
 {
     auto image = scrap->triangulationData().croppedImage();
     return cwImageDatabase(Project->filename()).mipmapsValid(image,
-                                                      cwOpenGLSettings::instance()->useDXT1Compression());
+                                                             cwOpenGLSettings::instance()->useDXT1Compression());
 }
 
 /**
@@ -391,9 +365,15 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
  */
 void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
+    if(scraps.isEmpty()) {
+        return;
+    }
+
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
-    foreach(cwScrap* scrap, scraps) {
-        connect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+    for(cwScrap* scrap : scraps) {
+        connect(scrap, &cwScrap::destroyed,
+                this, &cwScrapManager::scrapDeleted,
+                Qt::UniqueConnection);
 
         cwTriangulatedData oldData = scrap->triangulationData();
         oldData.setStale(true);
@@ -402,30 +382,40 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         DirtyScraps.insert(scrap);
     }
 
-    if(TriangulateTask->isReady()) {
-        //Running
-        QList<cwTriangulateInData> scrapData;
-        WaitingForUpdate.clear();
+    TriangulateFuture.cancel();
 
-        foreach(cwScrap* scrap, scraps) {
-            WaitingForUpdate.append(scrap);
-            scrapData.append(mapScrapToTriangulateInData(scrap));
-        }
+    //Running
+    auto dirtyScraps = cw::toList(DirtyScraps);
+    QList<cwTriangulateInData> scrapData = cw::transform(dirtyScraps, mapScrapToTriangulateInData);
 
-        TriangulateTask->setProjectFilename(Project->filename());
-        TriangulateTask->setScrapData(scrapData);
-        TriangulateTask->setFormatType(cwTextureUploadTask::format());
-        TriangulateTask->start();
-    } else {
-        //Isn't ready!, restart the task
-        TriangulateTask->restart();
-    }
+    cwTriangulateTask task;
+    task.setProjectFilename(Project->filename());
+    task.setScrapData(scrapData);
+    task.setFormatType(cwTextureUploadTask::format());
+    auto allFutures = task.triangulate();
+
+    auto combine = AsyncFuture::combine() << allFutures;
+
+    TriangulateFuture = combine.subscribe([this, dirtyScraps, allFutures]()
+    {
+        auto scrapDatas = cw::transform(allFutures,
+                                        [](const QFuture<cwTriangulatedData>& data)
+        {
+            Q_ASSERT(data.resultCount() == 1);
+            Q_ASSERT(data.isFinished());
+            return data.result();
+        });
+
+        taskFinished(dirtyScraps, scrapDatas);
+    }).future();
+
+    FutureManagerToken.addJob({TriangulateFuture, "Updating Scaps"});
 }
 
 /**
     Extracts data from the cwScrap and puts it into a cwTriangulateInData
   */
-cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
+cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) {
     cwTriangulateInData data;
     cwCave* cave = scrap->parentNote()->parentTrip()->parentCave();
     data.setNoteImage(scrap->parentNote()->image());
@@ -446,7 +436,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
   Extracts the note station's position and note position
   */
 QList<cwTriangulateStation> cwScrapManager::mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
-                                                                                const cwStationPositionLookup& positionLookup) const {
+                                                                                const cwStationPositionLookup& positionLookup) {
     QList<cwTriangulateStation> stations;
     foreach(cwNoteStation noteStation, noteStations) {
         if(positionLookup.hasPosition(noteStation.name())) {
@@ -683,77 +673,73 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
 /**
   \brief Triangulation task has finished
   */
-void cwScrapManager::taskFinished() {
-//    qDebug() << "Task finished:" << TriangulateTask->isReady();
-    if(TriangulateTask->isReady()) {
+void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
+                                  const QList<cwTriangulatedData>& scrapDataset) {
+    if(scrapDataset.isEmpty()) {
+        //No scrap data udpated...
+        return;
+    }
 
-        QList<cwTriangulatedData> scrapDataset = TriangulateTask->triangulatedScrapData();
+    //Clear all the scraps that need to be update, because we are updating now
+    foreach(cwScrap* scrap, DirtyScraps) {
+        disconnect(scrap, &cwScrap::destroyed, this, &cwScrapManager::scrapDeleted);
+    }
+    DirtyScraps.clear();
 
-        if(scrapDataset.isEmpty()) {
-            //No scrap data udpated...
-            return;
+    //Make sure there's the same amount of data
+    if(scrapsToUpdate.size() != scrapDataset.size()) {
+        qDebug() << "Scrap size mismatch" << LOCATION;
+        return;
+    }
+
+    //All the images to remove (replacing the previously calculated or invalid images)
+    QList<cwImage> imagesToRemove;
+
+    //Get all the valid scraps
+    QList<cwScrap*> validScraps;
+    QList<cwTriangulatedData> validScrapTriangleDataset;
+    for(int i = 0; i < scrapsToUpdate.size(); i++) {
+        cwScrap* scrap = scrapsToUpdate.at(i);
+        cwTriangulatedData triangleData = scrapDataset.at(i);
+        if(!DeletedScraps.contains(scrap)) {
+            validScraps.append(scrap);
+            validScrapTriangleDataset.append(triangleData);
+        } else {
+            //Scrap has been delete
+            imagesToRemove.append(triangleData.croppedImage());
+            continue;
         }
+    }
 
-        //Clear all the scraps that need to be update, because we are updating now
-        foreach(cwScrap* scrap, DirtyScraps) {
-            disconnect(scrap, SIGNAL(destroyed(QObject*)), this, SLOT(scrapDeleted(QObject*)));
+    DeletedScraps.clear();
+
+    //Removed all cropped image data
+    foreach(cwScrap* scrap, validScraps) {
+        cwImage image = scrap->triangulationData().croppedImage();
+        imagesToRemove.append(image);
+    }
+
+    auto filename = Project->filename();
+    auto removeFuture = QtConcurrent::run([filename, imagesToRemove](){
+        cwImageDatabase imageDatabase(filename);
+        for(auto image : imagesToRemove) {
+            imageDatabase.removeImages(image.ids());
         }
-        DirtyScraps.clear();
+    });
 
-        //Make sure there's the same amount of data
-        if(WaitingForUpdate.size() != scrapDataset.size()) {
-            qDebug() << "Scrap size mismatch" << LOCATION;
-            return;
-        }
+    FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
 
-        //All the images to remove (replacing the previously calculated or invalid images)
-        QList<cwImage> imagesToRemove;
+    for(int i = 0; i < validScraps.size(); i++) {
+        cwScrap* scrap = validScraps.at(i);
 
-        //Get all the valid scraps
-        QList<cwScrap*> validScraps;
-        QList<cwTriangulatedData> validScrapTriangleDataset;
-        for(int i = 0; i < WaitingForUpdate.size(); i++) {
-            cwScrap* scrap = WaitingForUpdate.at(i);
-            cwTriangulatedData triangleData = scrapDataset.at(i);
-            if(!DeletedScraps.contains(scrap)) {
-                validScraps.append(scrap);
-                validScrapTriangleDataset.append(triangleData);
-            } else {
-                //Scrap has been delete
-                imagesToRemove.append(triangleData.croppedImage());
-                continue;
-            }
-        }
+        cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
+        Q_ASSERT(!triangleData.isStale());
 
-        DeletedScraps.clear();
+        //Remove the ownership requirements, so it doesn't ge delete from database
+        triangleData.croppedImagePtr()->take();
 
-        //Removed all cropped image data
-        foreach(cwScrap* scrap, validScraps) {
-            cwImage image = scrap->triangulationData().croppedImage();
-            imagesToRemove.append(image);
-        }
-
-        auto filename = Project->filename();
-        auto removeFuture = QtConcurrent::run([filename, imagesToRemove](){
-            cwImageDatabase imageDatabase(filename);
-            for(auto image : imagesToRemove) {
-                imageDatabase.removeImages(image.ids());
-            }
-        });
-        FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
-
-        for(int i = 0; i < validScraps.size(); i++) {
-            cwScrap* scrap = validScraps.at(i);
-
-            cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
-            Q_ASSERT(!triangleData.isStale());
-
-            //Remove the ownership requirements, so it doesn't ge delete from database
-            triangleData.croppedImagePtr()->take();
-
-            scrap->setTriangulationData(triangleData);
-            GLScraps->addScrapToUpdate(scrap);
-        }
+        scrap->setTriangulationData(triangleData);
+        GLScraps->addScrapToUpdate(scrap);
     }
 }
 
@@ -782,5 +768,5 @@ void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
 
 void cwScrapManager::waitForFinish()
 {
-    TriangulateTask->waitToFinish();
+    cwAsyncFuture::waitForFinished(TriangulateFuture);
 }

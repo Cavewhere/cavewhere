@@ -106,9 +106,15 @@ QHash<int, QByteArray> cwFutureManagerModel::roleNames() const
 
 void cwFutureManagerModel::waitForFinished()
 {
-    auto watchers = Watchers;
-    for(auto watcher : watchers) {
+    while(!Watchers.isEmpty()) {
+        auto watcher = Watchers.first();
         cwAsyncFuture::waitForFinished(watcher.job.future());
+        Q_ASSERT(!watcher.job.future().isRunning());
+        if(!Watchers.isEmpty()) {
+            if(watcher.watcher == Watchers.first().watcher) {
+                removeWatcher(watcher.watcher);
+            }
+        }
     }
 }
 

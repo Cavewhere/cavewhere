@@ -206,7 +206,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
     std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
             = [filename, context](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
 
-        QList<QImage> mipmapImages = transform(mipmaps,
+        QList<QImage> mipmapImages = cw::transform(mipmaps,
                                                [](const Mipmap& mipmap)
         {
             return mipmap.image;
@@ -229,7 +229,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
             Q_ASSERT(mipmaps.size() == compressionResults.size());
 
             auto mipmapIter = mipmaps.begin();
-            QList<CompressedMipmap> mipmaps = transform(compressionResults,
+            QList<CompressedMipmap> mipmaps = cw::transform(compressionResults,
                                                         [&mipmapIter](const cwDXT1Compresser::CompressedImage& compressedImage)
             {
                 CompressedMipmap mipmap = {compressedImage, mipmapIter->id};

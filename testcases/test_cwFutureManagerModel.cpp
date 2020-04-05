@@ -203,5 +203,34 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
     model.addJob({nextFuture2, "ChainedFutures"});
 
     REQUIRE(cwAsyncFuture::waitForFinished(nextFuture2, size * sleepTime * 3));
+}
 
+TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutureManagerModel]") {
+
+    cwFutureManagerModel model;
+
+    int sleepTime = 10;
+    QAtomicInt count;
+    std::function<int (int)> func = [sleepTime, &count](int x)->int {
+        QThread::msleep(sleepTime);
+        count++;
+        return x * x;
+    };
+
+    int runs = 5;
+    for(int i = 0; i < runs; i++) {
+        auto future = QtConcurrent::run(std::bind(func, i));
+        model.addJob({future, QString("Future %1").arg(i)});
+    }
+
+    QTimer timer;
+    timer.setInterval(sleepTime * 0.5);
+    timer.singleShot(sleepTime * 0.5, [func, &model]() {
+        auto future = QtConcurrent::run(std::bind(func, 10));
+        model.addJob({future, QString("delayed future")});
+    });
+
+    model.waitForFinished();
+
+    CHECK(count == runs + 1);
 }

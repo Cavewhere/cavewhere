@@ -539,10 +539,7 @@ void cwProject::addImages(QList<QUrl> noteImagePath,
 
                 //Convert the images to cwImage
                 auto results = imagesFuture.results();
-                QList<cwImage> images;
-                images.reserve(results.size());
-                std::transform(results.begin(), results.end(), std::back_inserter(images),
-                               [](const cwTrackedImagePtr& imagePtr)
+                QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
                 {
                     return imagePtr->take();
                 });
