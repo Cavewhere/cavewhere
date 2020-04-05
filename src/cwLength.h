@@ -11,6 +11,7 @@
 //Our includes
 #include "cwUnits.h"
 #include "cwUnitValue.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QObject>
@@ -18,7 +19,7 @@
 #include <QSharedData>
 #include <QStringList>
 
-class cwLength : public cwUnitValue
+class CAVEWHERE_LIB_EXPORT cwLength : public cwUnitValue
 {
     Q_OBJECT
 

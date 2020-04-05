@@ -24,6 +24,7 @@ cwNoteTranformation::cwNoteTranformation(QObject* parent) :
     North(0.0),
     Scale(new cwScale(this))
 {
+    connect(Scale, &cwScale::scaleChanged, this, &cwNoteTranformation::scaleChanged);
 }
 
 
