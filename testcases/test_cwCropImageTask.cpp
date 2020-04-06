@@ -9,6 +9,7 @@
 #include "TestHelper.h"
 #include "DXT1BlockCompare.h"
 #include "cwAsyncFuture.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QColor>
@@ -107,7 +108,6 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
 
             cwCropImageTask cropImageTask;
             cropImageTask.setDatabaseFilename(filename);
-            cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(QRectF(origin, pixelBlockSize)); //First pixel
             cropImageTask.setOriginal(image);
             cropImageTask.setFormatType(cwTextureUploadTask::format());
@@ -412,6 +412,62 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             CHECK(croppedImageOriginal.size() == originalSize);
             CHECK(croppedImageOriginal.size() == croppedSizes.first().dim);
 
+        }
+    }
+}
+
+TEST_CASE("Crop should no crash when cropping a bad image", "[cwCropImageTask]") {
+    cwProject project;
+    QString filename = project.filename();
+    auto addImageTask = std::make_unique<cwAddImageTask>();
+    addImageTask->setDatabaseFilename(filename);
+
+    auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
+    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setNewImagesPath({resourceImageFilename});
+    auto addImageFuture = addImageTask->images();
+
+    cwAsyncFuture::waitForFinished(addImageFuture);
+
+    REQUIRE(addImageFuture.resultCount() == 1);
+    REQUIRE(addImageFuture.result()->isOriginalValid());
+
+    auto image = addImageFuture.result();
+
+    //Corrupt the image
+    cwImageProvider provider;
+    provider.setProjectPath(filename);
+    cwImageData imageData = provider.data(image->original());
+
+    cwImageData corrupted(imageData.size(), imageData.dotsPerMeter(), imageData.format(), "Corrupted :(");
+
+    auto database = cwImageDatabase(filename);
+    database.updateImage(corrupted, image->original());
+
+    CHECK(database.imageExists(image->original()));
+
+    cwCropImageTask cropImageTask;
+    cropImageTask.setDatabaseFilename(filename);
+    cropImageTask.setRectF(QRectF(0.25, 0.25, 0.5, 0.5)); //First pixel
+    cropImageTask.setOriginal(*image);
+    cropImageTask.setFormatType(cwTextureUploadTask::format());
+    auto cropFuture = cropImageTask.crop();
+
+    cwAsyncFuture::waitForFinished(cropFuture);
+
+    REQUIRE(cropFuture.resultCount() == 1);
+
+    auto badCropImage = cropFuture.result();
+
+    CHECK(database.imageExists(badCropImage->original()));
+
+    QImage badImage = provider.image(badCropImage->original());
+    CHECK(!badImage.isNull());
+
+    for(int y = 0; y < badImage.size().height(); y++) {
+        for(int x = 0; x < badImage.size().width(); x++) {
+            QColor color = badImage.pixelColor(x, y);
+            CHECK(color == Qt::red);
         }
     }
 }
