@@ -39,7 +39,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_OBJECT
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
-    Q_PROPERTY(QDate date READ date WRITE setDate NOTIFY dateChanged)
+    Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)
     Q_PROPERTY(cwSurveyNoteModel* notes READ notes NOTIFY notesChanged)
     Q_PROPERTY(cwTeam* team READ team WRITE setTeam NOTIFY teamChanged)
     Q_PROPERTY(int chunkCount READ chunkCount NOTIFY numberOfChunksChanged)
@@ -56,8 +56,8 @@ public:
     QString name() const;
     void setName(QString name);
 
-    QDate date() const;
-    void setDate(QDate date);
+    QDateTime date() const;
+    void setDate(QDateTime date);
 
     void setTeam(cwTeam* team);
     cwTeam* team() const;
@@ -94,7 +94,7 @@ public:
     cwErrorModel* errorModel() const;
 signals:
     void nameChanged();
-    void dateChanged(QDate date);
+    void dateChanged(QDateTime date);
     void chunksInserted(int begin, int end);
     void chunksAboutToBeRemoved(int begin, int end);
     void chunksRemoved(int begin, int end);
@@ -111,7 +111,7 @@ public slots:
 protected:
     QList<cwSurveyChunk*> Chunks;
     QString Name;
-    QDate Date;
+    QDateTime DateTime;
     cwTeam* Team;
     cwTripCalibration* Calibration;
     QPointer<cwCave> ParentCave;
@@ -138,13 +138,13 @@ private:
 
     class DateCommand : public QUndoCommand {
     public:
-        DateCommand(cwTrip* trip, QDate date);
+        DateCommand(cwTrip* trip, QDateTime date);
         void redo();
         void undo();
     private:
         cwTrip* Trip;
-        QDate NewDate;
-        QDate OldDate;
+        QDateTime NewDate;
+        QDateTime OldDate;
     };
 
 
@@ -169,8 +169,8 @@ inline QString cwTrip::name() const {
 /**
   Gets the date of the survey trip
   */
-inline QDate cwTrip::date() const {
-    return Date;
+inline QDateTime cwTrip::date() const {
+    return DateTime;
 }
 
 /**

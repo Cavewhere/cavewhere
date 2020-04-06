@@ -145,7 +145,7 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
 void cwRegionSaveTask::saveTrip(CavewhereProto::Trip *protoTrip, cwTrip *trip)
 {
     saveString(protoTrip->mutable_name(), trip->name());
-    saveDate(protoTrip->mutable_date(), trip->date());
+    saveDate(protoTrip->mutable_date(), trip->date().date());
     saveSurveyNoteModel(protoTrip->mutable_notemodel(), trip->notes());
     saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
     saveTeam(protoTrip->mutable_team(), trip->team());

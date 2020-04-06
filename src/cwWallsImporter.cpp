@@ -55,7 +55,7 @@ void WallsImporterVisitor::ensureValidTrip()
     {
         CurrentTrip = cwTripPtr(new cwTrip());
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
-        CurrentTrip->setDate(Parser->date());
+        CurrentTrip->setDate(QDateTime(Parser->date()));
 
         cwWallsImporter::importCalibrations(Parser->units(), *CurrentTrip);
     }
@@ -530,7 +530,7 @@ cwTreeImportDataNode* cwWallsImporter::convertTrip(cwTrip* trip, cwTreeImportDat
     try {
         result->IncludeDistance = true;
         result->setName(trip->name());
-        result->setDate(trip->date());
+        result->setDate(trip->date().date());
         *result->calibration() = *trip->calibrations();
         foreach(cwSurveyChunk* chunk, trip->chunks()) {
             result->addChunk(new cwSurveyChunk(*chunk));

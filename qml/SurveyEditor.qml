@@ -103,11 +103,12 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripDate
-                            text: Qt.formatDateTime(currentTrip.date, "yyyy-MM-dd")
+                            text: Qt.formatDate(currentTrip.date, "yyyy-MM-dd")
+
                             font.bold: true
 
                             onFinishedEditting: {
-                                currentTrip.date = newText
+                                currentTrip.date = Date.fromLocaleDateString(Qt.locale(), newText, "yyyy-MM-dd");
                             }
                         }
                     }

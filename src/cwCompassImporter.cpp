@@ -286,7 +286,7 @@ void cwCompassImporter::parseTripDate(QFile *file)
         }
 
         QDate tripDate(year, month, day);
-        CurrentTrip->setDate(tripDate);
+        CurrentTrip->setDate(QDateTime(tripDate));
     }
 }
 

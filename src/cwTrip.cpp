@@ -24,7 +24,7 @@ cwTrip::cwTrip(QObject *parent) :
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
-    Date = QDate::currentDate();
+    DateTime = QDateTime(QDate::currentDate());
     Notes = new cwSurveyNoteModel(this);
     ErrorModel = new cwErrorModel(this);
 
@@ -39,7 +39,7 @@ void cwTrip::Copy(const cwTrip& object)
 
     //Copy the name of the trip
     setName(object.Name);
-    setDate(object.Date);
+    setDate(object.DateTime);
 
     //Copy the team
     Team = new cwTeam(*(object.Team));
@@ -109,9 +109,9 @@ void cwTrip::setName(QString name) {
 /**
   Sets the date of the trip
   */
-void cwTrip::setDate(QDate date) {
-    if(date != Date && !date.isNull()) {
-        pushUndo(new DateCommand(this, date));
+void cwTrip::setDate(QDateTime date) {
+    if(date != DateTime && !date.isNull()) {
+        pushUndo(new DateCommand(this, QDateTime(date.date()))); //Strips the time away
     }
 }
 
@@ -409,7 +409,7 @@ void cwTrip::NameCommand::undo() {
     emit Trip->nameChanged();
 }
 
-cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
+cwTrip::DateCommand::DateCommand(cwTrip* trip, QDateTime date) {
     Trip = trip;
     NewDate = date;
     OldDate = Trip->date();
@@ -417,13 +417,13 @@ cwTrip::DateCommand::DateCommand(cwTrip* trip, QDate date) {
 }
 
 void cwTrip::DateCommand::redo() {
-    Trip->Date = NewDate;
-    emit Trip->dateChanged(Trip->Date);
+    Trip->DateTime = NewDate;
+    emit Trip->dateChanged(Trip->DateTime);
 }
 
 void cwTrip::DateCommand::undo() {
-    Trip->Date = OldDate;
-    emit Trip->dateChanged(Trip->Date);
+    Trip->DateTime = OldDate;
+    emit Trip->dateChanged(Trip->DateTime);
 }
 
 /**

@@ -97,9 +97,9 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
 
     stream << "SURVEY DATE: ";
     writeData(stream, "Survey Date", -12, QString("%1 %2 %3")
-              .arg(trip->date().month())
-              .arg(trip->date().day())
-              .arg(trip->date().year()));
+              .arg(trip->date().date().month())
+              .arg(trip->date().date().day())
+              .arg(trip->date().date().year()));
     stream << " COMMENT:" << CompassNewLine;
 
     stream << "SURVEY TEAM: " << CompassNewLine;

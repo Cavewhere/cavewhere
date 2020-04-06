@@ -55,7 +55,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
     stream << "*begin ; " << trip->name() << endl;
 
-    writeDate(stream, trip->date());
+    writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
     writeCalibrations(stream, trip->calibrations()); stream << endl;
     writeShotData(stream, trip); stream << endl;
