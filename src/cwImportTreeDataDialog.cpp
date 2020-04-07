@@ -360,7 +360,9 @@ void cwImportTreeDataDialog::updateImportButton(QModelIndex begin, QModelIndex e
 
     if(!enableImportButton) {
         //Make sure all nodes are disabled
-        enableImportButton = !Importer->data()->caves().isEmpty();
+        if(Importer->data()) {
+            enableImportButton = !Importer->data()->caves().isEmpty();
+        }
     }
 
     ImportButton->setEnabled(enableImportButton);
