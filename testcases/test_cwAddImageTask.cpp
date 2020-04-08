@@ -26,41 +26,49 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     QFuture<cwTrackedImagePtr> addImageFuture;
     QString imageFilename = "://datasets/dx1Cropping/scanCrop.png";
     auto resourceImage = QImage(imageFilename);
+    int imageTypes = cwAddImageTask::Original | cwAddImageTask::Icon | cwAddImageTask::Mipmaps;
 
     SECTION("Load from QImage") {
-        SECTION("With Squish") {
-            REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+        SECTION("OpenGL Format setting") {
+            SECTION("With Squish") {
+                REQUIRE(cwOpenGLSettings::instance());
+                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+            }
+
+            SECTION("With GPU") {
+                REQUIRE(cwOpenGLSettings::instance());
+                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+            }
+
+            SECTION("Without compression") {
+                REQUIRE(cwOpenGLSettings::instance());
+                cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+                imageTypes = cwAddImageTask::Original | cwAddImageTask::Icon;
+            }
+
+            addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
 
-        SECTION("With GPU") {
-            REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
-        }
-
-        SECTION("Without compression") {
-            REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setUseDXT1Compression(false);
-        }
-
-        addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         addImageTask->setNewImages({resourceImage});
         addImageFuture = addImageTask->images();
     }
 
     SECTION("Load from file") {
-        SECTION("With Squish") {
-            REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
-        }
+        SECTION("OpenGL Format setting") {
+            SECTION("With Squish") {
+                REQUIRE(cwOpenGLSettings::instance());
+                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_Squish);
+            }
 
-        SECTION("With GPU") {
-            REQUIRE(cwOpenGLSettings::instance());
-            cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+            SECTION("With GPU") {
+                REQUIRE(cwOpenGLSettings::instance());
+                cwOpenGLSettings::instance()->setDXT1Algorithm(cwOpenGLSettings::DXT1_GPU);
+            }
+
+            addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
 
         auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
-        addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         addImageTask->setNewImagesPath({resourceImageFilename});
         addImageFuture = addImageTask->images();
     }
@@ -88,34 +96,43 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
 
     cwImage image = addImageFuture.resultAt(0)->take();
 
-    CHECK(image.isOriginalValid());
-    CHECK(image.isIconValid());
     CHECK((image.isMipmapsValid() || !cwOpenGLSettings::instance()->useDXT1Compression()));
 
     cwImageProvider provider;
     provider.setProjectPath(filename);
-    cwImageData original = provider.data(image.original());
-    CHECK(original.size() == image.originalSize());
-    CHECK(image.originalSize() == resourceImage.size());
-    CHECK(original.dotsPerMeter() == image.originalDotsPerMeter());
-    CHECK(!original.data().isEmpty());
-    CHECK(QImage::fromData(original.data()) == resourceImage);
 
-    cwImageData icon = provider.data(image.icon());
-    CHECK(icon.size().width() <= 512);
-    CHECK(icon.size().height() <= 512);
-    CHECK(QImage::fromData(icon.data()).isNull() == false);
-
-    //Mipmaps need to be ordered correctly
-    QSize currentSize(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-    for(int mipmapId : image.mipmaps()) {
-        cwImageData mipmap = provider.data(mipmapId);
-        CHECK(mipmap.size().width() < currentSize.width());
-        CHECK(mipmap.size().height() < currentSize.width());
-        currentSize = mipmap.size();
+    if(imageTypes & cwAddImageTask::Original) {
+        CHECK(image.isOriginalValid());
+        cwImageData original = provider.data(image.original());
+        CHECK(original.size() == image.originalSize());
+        CHECK(image.originalSize() == resourceImage.size());
+        CHECK(original.dotsPerMeter() == image.originalDotsPerMeter());
+        CHECK(!original.data().isEmpty());
+        CHECK(QImage::fromData(original.data()) == resourceImage);
+    } else {
+        CHECK(!image.isOriginalValid());
     }
 
-    if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+    if(imageTypes & cwAddImageTask::Icon) {
+        CHECK(image.isIconValid());
+        cwImageData icon = provider.data(image.icon());
+        CHECK(icon.size().width() <= 512);
+        CHECK(icon.size().height() <= 512);
+        CHECK(QImage::fromData(icon.data()).isNull() == false);
+    } else {
+        CHECK(!image.isIconValid());
+    }
+
+    if(imageTypes & cwAddImageTask::Mipmaps) {
+        //Mipmaps need to be ordered correctly
+        QSize currentSize(std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
+        for(int mipmapId : image.mipmaps()) {
+            cwImageData mipmap = provider.data(mipmapId);
+            CHECK(mipmap.size().width() < currentSize.width());
+            CHECK(mipmap.size().height() < currentSize.width());
+            currentSize = mipmap.size();
+        }
+
         QList<QSize> halfSizes = {
             {932, 872},
             {466, 436},
@@ -126,7 +143,8 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             {14, 13},
             {7, 6},
             {3, 3},
-            {1, 1}};
+            {1, 1}
+        };
 
         REQUIRE(halfSizes.size() == image.mipmaps().size());
         for(int i = 0; i < halfSizes.size(); i++) {
