@@ -91,7 +91,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         addImages.setContext(context);
         addImages.setDatabaseFilename(filename);
         addImages.setNewImages({cropFuture.result()});
-        addImages.setFormatType(format);
+        addImages.setImageTypesWithFormat(format);
         return addImages.images();
     }).future();
 

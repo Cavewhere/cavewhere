@@ -37,6 +37,14 @@ class CAVEWHERE_LIB_EXPORT cwAddImageTask : public cwProjectIOTask
     Q_OBJECT
 
 public:
+    enum ImageType {
+        None = 0,
+        Original = 1 << 0,
+        Icon = 1 << 1,
+        Mipmaps = 1 << 2
+    };
+    Q_ENUM(ImageType)
+
     cwAddImageTask(QObject* parent = nullptr);
     ~cwAddImageTask();
 
@@ -51,7 +59,9 @@ public:
     void setRegenerateMipmapsOn(cwImage image);
 
     //Settings
-    void setFormatType(cwTextureUploadTask::Format format);
+    void setImageTypes(int types);
+    void setImageTypesWithFormat(cwTextureUploadTask::Format format);
+
 
     //Process the images
     QFuture<cwTrackedImagePtr> images() const;
@@ -92,7 +102,8 @@ private:
     QStringList NewImagePaths;
     QList<QImage> NewImages;
     cwImage RegenerateMipmap;
-    cwTextureUploadTask::Format FormatType = cwTextureUploadTask::Unknown;
+    int ImageTypes = (Original | Icon | Mipmaps);
+//    cwTextureUploadTask::Format FormatType = cwTextureUploadTask::Unknown;
 
     static QImage copyOriginalImage(QString image,
                                     cwImage* imageIds,

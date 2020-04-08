@@ -120,7 +120,7 @@ void cwImageCompressionUpdater::recompressNotes(QList<cwNote *> notes)
             cwAddImageTask addImage;
             addImage.setRegenerateMipmapsOn(note->image());
             addImage.setDatabaseFilename(filename);
-            addImage.setFormatType(cwTextureUploadTask::format());
+            addImage.setImageTypesWithFormat(cwTextureUploadTask::format());
             auto imageFuture = addImage.images();
 
             auto finalFuture = AsyncFuture::observe(imageFuture)

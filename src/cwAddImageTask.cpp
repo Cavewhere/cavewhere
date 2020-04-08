@@ -65,24 +65,46 @@ void cwAddImageTask::setRegenerateMipmapsOn(cwImage image)
     RegenerateMipmap = image;
 }
 
-void cwAddImageTask::setFormatType(cwTextureUploadTask::Format format)
+void cwAddImageTask::setImageTypes(int types)
 {
-    FormatType = format;
+    ImageTypes = types;
+}
+
+void cwAddImageTask::setImageTypesWithFormat(cwTextureUploadTask::Format format)
+{
+    switch(format)
+    {
+    case cwTextureUploadTask::DXT1Mipmaps:
+        setImageTypes(Original | Icon | Mipmaps);
+        break;
+    case cwTextureUploadTask::OpenGL_RGBA:
+        setImageTypes(Original | Icon);
+        break;
+    case cwTextureUploadTask::Unknown:
+        setImageTypes(None);
+        break;
+    }
 }
 
 QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 {
     QString filename = databaseFilename();
     auto context = this->context();
-    auto format = FormatType;
+    auto imageTypes = ImageTypes;
 
     std::function<PrivateImageData (const QString&)> loadImagesFromPath
-            = [filename](const QString& imagePath) {
+            = [filename, imageTypes](const QString& imagePath) {
         //Where the database image ideas are stored
         cwImage image;
 
         //Copy the original image to the database
-        QImage originalImage = copyOriginalImage(imagePath, &image, filename);
+        QImage originalImage;
+
+        if(imageTypes & Original) {
+            originalImage = copyOriginalImage(imagePath, &image, filename);
+        } else {
+            originalImage = QImage(imagePath);
+        }
 
         if(!originalImage.isNull()) {
             return PrivateImageData(cwTrackedImage::createShared(image, filename),
@@ -94,11 +116,14 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
     };
 
     std::function<PrivateImageData (const QImage&)> loadFromImages
-            = [filename](const QImage& image) {
+            = [filename, imageTypes](const QImage& image) {
         if(!image.isNull()) {
             //Where the database image ideas are stored
             cwImage imageId;
-            copyOriginalImage(image, &imageId, filename);
+
+            if(imageTypes & Original) {
+                copyOriginalImage(image, &imageId, filename);
+            }
 
             return PrivateImageData(cwTrackedImage::createShared(imageId, filename),
                                     image);
@@ -125,13 +150,17 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 
     //For creating icon from private image data
     std::function<cwTrackedImagePtr (const PrivateImageData&)> createIcon
-            = [filename](const PrivateImageData& imageData) {
+            = [filename, imageTypes](const PrivateImageData& imageData) {
         Q_ASSERT(!imageData.OriginalImage.isNull());
+
+        if(!(imageTypes & Icon)) {
+            return cwTrackedImage::createShared(-1, filename, cwTrackedImage::NoOwnership);
+        }
 
         if(imageData.Id->isIconValid()) {
             return cwTrackedImage::createShared(imageData.Id->icon(),
-                                              filename,
-                                              cwTrackedImage::NoOwnership);
+                                                filename,
+                                                cwTrackedImage::NoOwnership);
         }
         const QImage& originalImage = imageData.OriginalImage;
         QSize scaledSize = QSize(512, 512);
@@ -271,7 +300,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
                      [pathImagesFuture,
                      imagesFuture,
                      regeneratedFuture,
-                     format,
+                     imageTypes,
                      scaleImage,
                      context,
                      compressAndUpload,
@@ -296,7 +325,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 
         QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<cwTrackedImagePtr>>());
 
-        if(format == cwTextureUploadTask::DXT1Mipmaps) {
+        if(imageTypes & Mipmaps) {
             auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
             compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
@@ -362,13 +391,13 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
                 return AsyncFuture::completed(images);
             };
 
-            if(format == cwTextureUploadTask::OpenGL_RGBA) {
+            if(!(imageTypes & Mipmaps)) {
                 //RGBA, so don't use mipmaps
                 Q_ASSERT(allMipmaps.isEmpty());
                 return completedImages();
             }
 
-            Q_ASSERT(format == cwTextureUploadTask::DXT1Mipmaps);
+            Q_ASSERT(imageTypes & Mipmaps);
 
             //Combine all the futures together
             auto mipmapCombine = AsyncFuture::combine();

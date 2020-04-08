@@ -43,7 +43,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             cwOpenGLSettings::instance()->setUseDXT1Compression(false);
         }
 
-        addImageTask->setFormatType(cwTextureUploadTask::format());
+        addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         addImageTask->setNewImages({resourceImage});
         addImageFuture = addImageTask->images();
     }
@@ -60,7 +60,7 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
         }
 
         auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
-        addImageTask->setFormatType(cwTextureUploadTask::format());
+        addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         addImageTask->setNewImagesPath({resourceImageFilename});
         addImageFuture = addImageTask->images();
     }
@@ -173,7 +173,7 @@ TEST_CASE("cwAddImageTask should load supported images", "[cwAddImageTask]") {
     QString filename = project.filename();
     auto addImageTask = std::make_unique<cwAddImageTask>();
     addImageTask->setDatabaseFilename(filename);
-    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
 
     QImage refImage;
     REQUIRE(refImage.load("://datasets/test_cwAddImageTask/supportedImage.png"));
@@ -242,7 +242,7 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     }
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
-    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
     addImageTask->setNewImagesPath({resourceImageFilename});
     auto addImageFuture = addImageTask->images();
     addImageTask->setNewImagesPath({});
@@ -277,7 +277,7 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     cwOpenGLSettings::instance()->setUseDXT1Compression(false);
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
-    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
     addImageTask->setNewImagesPath({resourceImageFilename});
     auto addImageFuture = addImageTask->images();
     addImageTask->setNewImagesPath({});
@@ -295,7 +295,7 @@ TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImag
     cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 
     addImageTask->setRegenerateMipmapsOn(addImageFuture.result()->take());
-    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
     auto regenerateAddImageFuture = addImageTask->images();
     REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
 

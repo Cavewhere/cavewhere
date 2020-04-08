@@ -26,7 +26,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         cwAddImageTask addImageTask;
         addImageTask.setNewImages({image});
         addImageTask.setDatabaseFilename(filename);
-        addImageTask.setFormatType(cwTextureUploadTask::format());
+        addImageTask.setImageTypesWithFormat(cwTextureUploadTask::format());
 
         auto imageFuture = addImageTask.images();
         REQUIRE(cwAsyncFuture::waitForFinished(imageFuture, 3000));
@@ -423,7 +423,7 @@ TEST_CASE("Crop should no crash when cropping a bad image", "[cwCropImageTask]")
     addImageTask->setDatabaseFilename(filename);
 
     auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
-    addImageTask->setFormatType(cwTextureUploadTask::format());
+    addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
     addImageTask->setNewImagesPath({resourceImageFilename});
     auto addImageFuture = addImageTask->images();
 
