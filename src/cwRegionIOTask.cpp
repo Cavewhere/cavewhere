@@ -54,7 +54,7 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
  */
 int cwRegionIOTask::protoVersion()
 {
-    return 2;
+    return 3;
 }
 
 /**
@@ -67,7 +67,8 @@ QString cwRegionIOTask::toVersion(int protoVersion)
     static const QHash<int, QString> protoToVersionString = {
         {0, "0.07"},
         {1, "0.08"},
-        {2, "0.09"},
+        {2, "0.09-beta1"},
+        {3, "0.09"}
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");

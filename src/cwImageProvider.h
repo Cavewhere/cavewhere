@@ -26,15 +26,22 @@ class CAVEWHERE_LIB_EXPORT cwImageProvider : public QObject, public QQuickImageP
 
 public:
     static const QString Name;
-    static const QByteArray Dxt1_GZ_Extension;
+    static const QByteArray Dxt1GzExtension;
+    static const QByteArray CroppedreferenceExtension;
+
+    static const QByteArray CropXKey;
+    static const QByteArray CropYKey;
+    static const QByteArray CropWidthKey;
+    static const QByteArray CropHeightKey;
+    static const QByteArray CropIdKey;
 
     cwImageProvider();
     virtual QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize);
-    QByteArray requestImageData(int id, QSize* size, QByteArray* type = nullptr);
 
     cwImageData originalMetadata(const cwImage& image) const;
     cwImageData data(int id, bool metaDataOnly = false) const;
     QImage image(int id) const;
+    QImage image(const cwImageData& data) const;
     QVector2D scaleTexCoords(const cwImage &image) const;
 
     static cwImageData createDxt1(QSize size, const QByteArray& uncompressData);

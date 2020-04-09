@@ -145,7 +145,6 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         auto cropSpecificImage = [filename](const cwImage& image, const QRectF& cropArea) {
             cwCropImageTask cropImageTask;
             cropImageTask.setDatabaseFilename(filename);
-            cropImageTask.setUsingThreadPool(false);
             cropImageTask.setRectF(cropArea); //First pixel
             cropImageTask.setOriginal(image);
             cropImageTask.setFormatType(cwTextureUploadTask::format());
@@ -401,17 +400,46 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
             cwImageProvider provider;
             provider.setProjectPath(filename);
 
+            CHECK(croppedImageId.originalDotsPerMeter() == 11811);
+            CHECK(croppedImageId.originalSize() == QSize(464, 436));
+
             QVector2D scaleTex = provider.scaleTexCoords(croppedImageId);
 
             CHECK(scaleTex.x() == 1.0);
             CHECK(scaleTex.y() == 1.0);
-
 
             QSize originalSize;
             QImage croppedImageOriginal = provider.requestImage(QString::number(croppedImageId.original()), &originalSize, QSize());
             CHECK(croppedImageOriginal.size() == originalSize);
             CHECK(croppedImageOriginal.size() == croppedSizes.first().dim);
 
+            SECTION("Crop the cropped image") {
+                QVector<DXT1BlockCompare::TestImage> croppedSizes = {
+                    {{116, 112}, 6496, {}},
+                    {{58, 56}, 1680, {}},
+                    {{29, 28}, 448, {}},
+                    {{14, 14}, 128, {}},
+                    {{7, 7}, 32, {}},
+                    {{3, 3}, 8, {}},
+                    {{1, 1}, 8, {}},
+                };
+
+                cwImage cropOfCrop = cropSpecificImage(croppedImageId, QRectF(0.1, 0.15, 0.25, 0.25));
+                checkMipmaps(cropOfCrop.mipmaps(), croppedSizes);
+
+                CHECK(cropOfCrop.originalDotsPerMeter() == 11811);
+                CHECK(cropOfCrop.originalSize() == QSize(116, 112));
+
+                QVector2D scaleTex = provider.scaleTexCoords(cropOfCrop);
+
+                CHECK(scaleTex.x() == 1.0);
+                CHECK(scaleTex.y() == 1.0);
+
+                QSize originalSize;
+                QImage croppedImageOriginal = provider.requestImage(QString::number(cropOfCrop.original()), &originalSize, QSize());
+                CHECK(croppedImageOriginal.size() == originalSize);
+                CHECK(croppedImageOriginal.size() == croppedSizes.first().dim);
+            }
         }
     }
 }

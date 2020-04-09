@@ -13,6 +13,7 @@
 #include "cwProject.h"
 #include "cwAddImageTask.h"
 #include "cwAsyncFuture.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QByteArray>
@@ -20,6 +21,7 @@
 #include <QImageWriter>
 #include <QList>
 #include <QColorSpace>
+#include <QJsonDocument>
 
 //TODO: REMOVE for testing only
 #include <QFile>
@@ -63,22 +65,49 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto context = this->context();
     auto format = Format;
 
-    auto cropImage = [filename, originalImage, cropRect]()->QImage {
+    struct Image {
+        int id;
+        QImage croppedImage;
+        int dotsPerMeter;
+    };
+
+    auto addCropToDatabase = [filename](QRect cropRect, const cwImage& image) {
+        QVariantMap map({
+                            {cwImageProvider::CropIdKey, image.original()},
+                            {cwImageProvider::CropXKey, cropRect.x()},
+                            {cwImageProvider::CropYKey, cropRect.y()},
+                            {cwImageProvider::CropWidthKey, cropRect.width()},
+                            {cwImageProvider::CropHeightKey, cropRect.height()}
+                        });
+        auto document = QJsonDocument::fromVariant(map);
+        auto json = document.toJson(QJsonDocument::Compact);
+
+        cwImageData imageData(cropRect.size(),
+                              image.originalDotsPerMeter(),
+                              cwImageProvider::CroppedreferenceExtension,
+                              json);
+
+        cwImageDatabase database(filename);
+        return database.addImage(imageData);
+    };
+
+    auto cropImage = [filename, originalImage, cropRect, addCropToDatabase]()->Image {
             cwImageProvider provider;
             provider.setProjectPath(filename);
             cwImageData imageData = provider.data(originalImage.original());
-            QImage image = QImage::fromData(imageData.data(), imageData.format());
+            QImage image = provider.image(imageData);
             image.setColorSpace(QColorSpace());
             QRect cropArea = nearestDXT1Rect(mapNormalizedToIndex(cropRect,
                                                                   originalImage.originalSize()));
             if(!image.isNull()) {
-                return image.copy(cropArea);
+                int id = addCropToDatabase(cropArea, originalImage);
+                return Image({id, image.copy(cropArea), originalImage.originalDotsPerMeter()});
             }
 
             QImage badImage(cropArea.size(), QImage::Format_ARGB32);
             badImage.fill(QColor("red"));
             qDebug() << "Original image is bad id:" << originalImage.original() << imageData.data().size() << imageData.size() << imageData.format() << LOCATION;
-            return badImage;
+            return Image({-1, badImage, 0});
     };
 
     auto cropFuture = QtConcurrent::run(cropImage);
@@ -87,20 +116,40 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
             .context(context,
                      [context, cropFuture, filename, format]()
     {
+        int imageTypes = cwAddImageTask::None;
+        if(format == cwTextureUploadTask::DXT1Mipmaps) {
+            imageTypes |= cwAddImageTask::Mipmaps;
+        }
+
+        Image cropRGBImage = cropFuture.result();
+        if(cropRGBImage.id < 0) {
+            //Bad image, add the red image crop
+            imageTypes |= cwAddImageTask::Original;
+        }
+
         cwAddImageTask addImages;
         addImages.setContext(context);
         addImages.setDatabaseFilename(filename);
-        addImages.setNewImages({cropFuture.result()});
-        addImages.setImageTypesWithFormat(format);
+        addImages.setNewImages({cropRGBImage.croppedImage});
+        addImages.setImageTypes(imageTypes);
+
         return addImages.images();
     }).future();
 
     auto finishedFuture = AsyncFuture::observe(addImageFuture)
             .context(context,
-                     [addImageFuture]()
+                     [addImageFuture, cropFuture]()
     {
+        auto cropRGBImage = cropFuture.result();
         auto images = addImageFuture.results();
         if(!images.isEmpty()) {
+            auto imagePtr = images.first();
+            if(cropRGBImage.id > 0) {
+                //Update with the ref image
+                imagePtr->setOriginalDotsPerMeter(cropRGBImage.dotsPerMeter);
+                imagePtr->setOriginalSize(cropRGBImage.croppedImage.size());
+                imagePtr->setOriginal(cropRGBImage.id);
+            }
             return images.first();
         }
         return cwTrackedImagePtr();

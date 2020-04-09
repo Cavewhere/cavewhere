@@ -75,6 +75,10 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
                 imageTypes = cwAddImageTask::Mipmaps;
             }
 
+            SECTION("None") {
+                imageTypes = cwAddImageTask::None;
+            }
+
             addImageTask->setImageTypes(imageTypes);
         }
 

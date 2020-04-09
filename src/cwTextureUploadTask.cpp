@@ -51,11 +51,9 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             QList< QPair< QByteArray, QSize > > mipmaps;
             //Load all the mipmaps
             foreach(int imageId, image->mipmaps()) {
+                auto imageData = imageProvidor.data(imageId);
                 imageProvidor.data(imageId, true);
-
-                QSize imageSize;
-                QByteArray imageData = imageProvidor.requestImageData(imageId, &imageSize);
-                mipmaps.append(QPair< QByteArray, QSize >(imageData, imageSize));
+                mipmaps.append(QPair< QByteArray, QSize >(imageData.data(), imageData.size()));
             }
             return mipmaps;
         };
@@ -67,9 +65,8 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
                 return {};
             }
 
-            QImage image;
-            bool loadedOkay = image.loadFromData(imageData.data());
-            if(loadedOkay) {
+            QImage image = imageProvidor.image(imageData);
+            if(!image.isNull()) {
                 image = cwOpenGLUtils::toGLTexture(image);
                 QByteArray data(reinterpret_cast<char*>(image.bits()),
                                 static_cast<int>(image.sizeInBytes()));
