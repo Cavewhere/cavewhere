@@ -320,7 +320,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         std::copy_if(imageData.begin(), imageData.end(), std::back_inserter(filterData),
                      [](const PrivateImageData& data)
         {
-            return !data.Id.isNull() && data.Id->original() > 0 && !data.OriginalImage.isNull();
+            return !data.OriginalImage.isNull();
         });
 
         QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<cwTrackedImagePtr>>());

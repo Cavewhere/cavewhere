@@ -49,6 +49,35 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
 
+        SECTION("Set different ImageTypes") {
+
+            SECTION("Original") {
+                imageTypes = cwAddImageTask::Original;
+
+                SECTION("Icon") {
+                    imageTypes |= cwAddImageTask::Icon;
+                }
+
+                SECTION("Mipmap") {
+                    imageTypes |= cwAddImageTask::Mipmaps;
+                }
+            }
+
+            SECTION("Icon") {
+                imageTypes = cwAddImageTask::Icon;
+
+                SECTION("Mipmap") {
+                    imageTypes |= cwAddImageTask::Mipmaps;
+                }
+            }
+
+            SECTION("Mipmap") {
+                imageTypes = cwAddImageTask::Mipmaps;
+            }
+
+            addImageTask->setImageTypes(imageTypes);
+        }
+
         addImageTask->setNewImages({resourceImage});
         addImageFuture = addImageTask->images();
     }
@@ -68,6 +97,35 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
             addImageTask->setImageTypesWithFormat(cwTextureUploadTask::format());
         }
 
+        SECTION("Set different ImageTypes") {
+
+            SECTION("Original") {
+                imageTypes = cwAddImageTask::Original;
+
+                SECTION("Icon") {
+                    imageTypes |= cwAddImageTask::Icon;
+                }
+
+                SECTION("Mipmap") {
+                    imageTypes |= cwAddImageTask::Mipmaps;
+                }
+            }
+
+            SECTION("Icon") {
+                imageTypes = cwAddImageTask::Icon;
+
+                SECTION("Mipmap") {
+                    imageTypes |= cwAddImageTask::Mipmaps;
+                }
+            }
+
+            SECTION("Mipmap") {
+                imageTypes = cwAddImageTask::Mipmaps;
+            }
+
+            addImageTask->setImageTypes(imageTypes);
+        }
+
         auto resourceImageFilename = copyToTempFolder("://datasets/dx1Cropping/scanCrop.png");
         addImageTask->setNewImagesPath({resourceImageFilename});
         addImageFuture = addImageTask->images();
@@ -76,6 +134,12 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     if(addImageFuture.isCanceled()) {
         return;
     }
+
+    INFO("ImageTypes:" << imageTypes
+         << " Original:" << static_cast<bool>(imageTypes & cwAddImageTask::Original)
+         << " Icon:" << static_cast<bool>(imageTypes & cwAddImageTask::Icon)
+         << " Mipmap:" << static_cast<bool>(imageTypes & cwAddImageTask::Mipmaps)
+         );
 
     //Check that progress works okay
     int lastProgress = 0;
@@ -95,8 +159,6 @@ TEST_CASE("cwCropImageTask should add images correctly", "[cwAddImageTask]") {
     REQUIRE(addImageFuture.results().size() == 1);
 
     cwImage image = addImageFuture.resultAt(0)->take();
-
-    CHECK((image.isMipmapsValid() || !cwOpenGLSettings::instance()->useDXT1Compression()));
 
     cwImageProvider provider;
     provider.setProjectPath(filename);
