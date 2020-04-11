@@ -13,6 +13,7 @@ class CAVEWHERE_LIB_EXPORT cwJobSettings : public QObject
 
     Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
     Q_PROPERTY(int idleThreadCount READ idleThreadCount CONSTANT)
+    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
 
 public:
     int threadCount() const;
@@ -20,17 +21,24 @@ public:
 
     int idleThreadCount() const;
 
+    bool automaticUpdate() const;
+    void setAutomaticUpdate(bool automaticUpdate);
+
     static cwJobSettings* instance();
     static void initialize();
 
 signals:
     void threadCountChanged();
+    void automaticUpdateChanged();
 
 private:
-    cwJobSettings(QObject* parent = nullptr);
-
     static cwJobSettings* Settings;
     static const QString ThreadCountKey;
+    static const QString AutomaticUpdateKey;
+
+    bool AutomaticUpdate = true;
+
+    cwJobSettings(QObject* parent = nullptr);
 
     void setThreadCountPrivate(int count);
     bool isThreadCountValid(int count) const;
@@ -41,7 +49,8 @@ inline bool cwJobSettings::isThreadCountValid(int count) const
     return count >= 1 && count <= idleThreadCount();
 }
 
-
-
+inline bool cwJobSettings::automaticUpdate() const {
+    return AutomaticUpdate;
+}
 
 #endif // CWJOBSETTINGS_H

@@ -20,11 +20,14 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
     REQUIRE(settings);
 
     QSignalSpy threadCountSpy(settings, &cwJobSettings::threadCountChanged);
+    QSignalSpy autoUpdateSpy(settings, &cwJobSettings::automaticUpdateChanged);
 
     threadCountSpy.setObjectName("threadCountSpy");
+    autoUpdateSpy.setObjectName("autoUpdateSpy");
 
     SpyChecker checker = {
-        {&threadCountSpy, 0}
+        {&threadCountSpy, 0},
+        {&autoUpdateSpy, 0}
     };
 
     QSettings diskSettings;
@@ -42,6 +45,24 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
         CHECK(diskSettings.value("threadCount").toInt() == 1);
 
         settings->setThreadCount(QThread::idealThreadCount());
+    }
+
+    SECTION("Check auto update") {
+        CHECK(settings->automaticUpdate() == true);
+
+        settings->setAutomaticUpdate(false);
+        checker[&autoUpdateSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->automaticUpdate() == false);
+        CHECK(diskSettings.value("automaticUpdate").toBool() == false);
+
+        settings->setAutomaticUpdate(true);
+        checker[&autoUpdateSpy]++;
+        checker.checkSpies();
+
+        CHECK(settings->automaticUpdate() == true);
+        CHECK(diskSettings.value("automaticUpdate").toBool() == true);
     }
 
     diskSettings.clear();
