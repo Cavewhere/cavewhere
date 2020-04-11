@@ -7,12 +7,17 @@
 #include "cwRootData.h"
 #include "TestHelper.h"
 #include "cwAsyncFuture.h"
+#include "cwTaskManagerModel.h"
+#include "cwCave.h"
+#include "cwTrip.h"
+#include "cwSurveyChunk.h"
 
 //Qt includes
 #include <QFile>
 #include <QElapsedTimer>
 #include <QThread>
 #include <QThreadPool>
+#include <QSignalSpy>
 
 //Std includes
 #include <random>
@@ -77,4 +82,49 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
     auto nextSize = file.size();
     double ratio = nextSize / static_cast<double>(firstSize);
     CHECK(ratio <= Approx(1.01));
+}
+
+TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+
+    rootData->futureManagerModel()->waitForFinished();
+
+    QSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
+
+    auto scrapManager = rootData->scrapManager();
+    CHECK(scrapManager->automaticUpdate() == true);
+
+    scrapManager->setAutomaticUpdate(false);
+    CHECK(scrapManager->automaticUpdate() == false);
+
+    //Change the station position
+    auto cave = rootData->region()->cave(0);
+    auto trip = cave->trip(0);
+    auto chunk = trip->chunk(0);
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
+
+    rootData->taskManagerModel()->waitForTasks();
+
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    CHECK(addRowSpy.count() == 0);
+
+    QEventLoop loop;
+
+    QTimer::singleShot(100, [&](){
+        CHECK(rootData->futureManagerModel()->rowCount() == 0);
+        CHECK(addRowSpy.count() == 0);
+
+        scrapManager->setAutomaticUpdate(true);
+
+        CHECK(rootData->futureManagerModel()->rowCount() > 0);
+        CHECK(addRowSpy.count() > 0);
+
+        rootData->futureManagerModel()->waitForFinished();
+
+        loop.quit();
+    });
+
+    loop.exec();
 }

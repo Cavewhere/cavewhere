@@ -354,6 +354,14 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
   3. Morph the geometry to the station positions
   */
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
+    for(cwScrap* scrap : scraps) {
+        connect(scrap, &cwScrap::destroyed,
+                this, &cwScrapManager::scrapDeleted,
+                Qt::UniqueConnection);
+
+        DirtyScraps.insert(scrap);
+    }
+
     if(AutomaticUpdate) {
         updateScrapGeometryHelper(scraps);
     }
@@ -371,15 +379,9 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
     for(cwScrap* scrap : scraps) {
-        connect(scrap, &cwScrap::destroyed,
-                this, &cwScrapManager::scrapDeleted,
-                Qt::UniqueConnection);
-
         cwTriangulatedData oldData = scrap->triangulationData();
         oldData.setStale(true);
         scrap->setTriangulationData(oldData);
-
-        DirtyScraps.insert(scrap);
     }
 
     TriangulateFuture.cancel();
@@ -763,6 +765,7 @@ void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
     if(AutomaticUpdate != automaticUpdate) {
         AutomaticUpdate = automaticUpdate;
         emit automaticUpdateChanged();
+        updateScrapGeometry(cw::toList(DirtyScraps));
     }
 }
 
