@@ -18,8 +18,6 @@
 //Std includes
 #include "cwMath.h"
 
-const char* cwCompassExportCaveTask::CompassNewLine = "\r\n";
-
 cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
 {
@@ -37,7 +35,7 @@ bool cwCompassExportCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         cwTrip* trip = cave->trip(i);
         writeTrip(stream, trip);
         TotalProgress += trip->numberOfStations();
-        stream << CompassNewLine;
+        stream << compassNewLine();
     }
 
     return true;
@@ -89,31 +87,31 @@ void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
     Q_ASSERT(cave != nullptr);
 
     writeData(stream, "Cave Name", -80, cave->name());
-    stream << CompassNewLine;
+    stream << compassNewLine();
 
     stream << "SURVEY NAME: ";
     writeData(stream, "Survey Name", -12, trip->name().remove(" "));
-    stream << CompassNewLine;
+    stream << compassNewLine();
 
     stream << "SURVEY DATE: ";
     writeData(stream, "Survey Date", -12, QString("%1 %2 %3")
               .arg(trip->date().date().month())
               .arg(trip->date().date().day())
               .arg(trip->date().date().year()));
-    stream << " COMMENT:" << CompassNewLine;
+    stream << " COMMENT:" << compassNewLine();
 
-    stream << "SURVEY TEAM: " << CompassNewLine;
+    stream << "SURVEY TEAM: " << compassNewLine();
     writeData(stream, "Survey Team", -100, surveyTeam(trip));
-    stream << CompassNewLine;
+    stream << compassNewLine();
 
     writeDeclination(stream, trip->calibrations());
     writeDataFormat(stream, trip->calibrations());
     writeCorrections(stream, trip->calibrations());
 
 
-    stream << CompassNewLine;
-    stream << "FROM TO   LEN  BEAR   INC LEFT UP DOWN RIGHT AZM2 INC2 FLAGS COMMENTS" << CompassNewLine;
-    stream << CompassNewLine;
+    stream << compassNewLine();
+    stream << "FROM TO   LEN  BEAR   INC LEFT UP DOWN RIGHT AZM2 INC2 FLAGS COMMENTS" << compassNewLine();
+    stream << compassNewLine();
 }
 
 void cwCompassExportCaveTask::writeDataFormat(QTextStream &stream, cwTripCalibration *calibrations) {
@@ -463,7 +461,7 @@ void cwCompassExportCaveTask::writeShot(QTextStream &stream,
         stream << "#|L# ";
     }
 
-    stream << CompassNewLine;
+    stream << compassNewLine();
 }
 
 /**
@@ -488,5 +486,5 @@ void cwCompassExportCaveTask::writeCorrections(QTextStream &stream, cwTripCalibr
               .arg(compassCorrections, 0, 'f', 2)
               .arg(clinoCorrections, 0, 'f', 2)
               .arg(tapeCorrections, 0, 'f', 2);
-    stream << CompassNewLine;
+    stream << compassNewLine();
 }

@@ -17,8 +17,6 @@
 #include <QDebug>
 #include <QApplication>
 
-const QString cwCavernTask::Survex3dExtension = ".3d";
-
 cwCavernTask::cwCavernTask(QObject *parent) :
     cwTask(parent),
     CavernProcess(nullptr)
@@ -40,7 +38,7 @@ void cwCavernTask::setSurvexFile(QString inputFile) {
   \brief Gets the 3d file's output file
   */
 QString cwCavernTask::output3dFileName() const {
-    QFileInfo info(survexFileName().append(Survex3dExtension));
+    QFileInfo info(survexFileName().append(survex3dExtension()));
     if(info.exists()) {
         return info.absoluteFilePath();
     } else {
@@ -68,7 +66,7 @@ QString cwCavernTask::output3dFileName() const {
      connect(CavernProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
 
      QString inputFile = survexFileName();
-     QString outputFile = inputFile + Survex3dExtension;
+     QString outputFile = inputFile + survex3dExtension();
 
      QStringList cavernAppNames;
      cavernAppNames.append("cavern");

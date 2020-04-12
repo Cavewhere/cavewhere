@@ -18,8 +18,6 @@
 //Std includes
 #include "cwMath.h"
 
-const QString cwChipdataExportCaveTask::ChipdataNewLine("\n");
-
 cwChipdataExportCaveTask::cwChipdataExportCaveTask(QObject *parent) :
     cwCaveExporterTask(parent)
 {
@@ -69,11 +67,11 @@ void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, QS
     Q_ASSERT(cave != nullptr);
 
     if (!caveName.isNull()) {
-        stream << caveName << ChipdataNewLine;
+        stream << caveName << chipdataNewLine();
     } else {
-        stream << " *" << ChipdataNewLine;
+        stream << " *" << chipdataNewLine();
     }
-    stream << trip->name() << ChipdataNewLine;
+    stream << trip->name() << chipdataNewLine();
     QList<cwTeamMember> teamMembers = trip->team()->teamMembers();
     for (int i = 0; i < teamMembers.size(); i++) {
         if (i > 0) {
@@ -82,10 +80,10 @@ void cwChipdataExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, QS
         stream << teamMembers[i].name();
     }
     if (trip->date().isValid()) {
-        stream << " - " << trip->date().toString("M/d/yy") << ChipdataNewLine;
+        stream << " - " << trip->date().toString("M/d/yy") << chipdataNewLine();
     }
 
-    stream << " *" << ChipdataNewLine;
+    stream << " *" << chipdataNewLine();
 
     writeDataFormat(stream, trip);
 }
@@ -105,7 +103,7 @@ void cwChipdataExportCaveTask::writeDataFormat(QTextStream &stream, cwTrip *trip
 
     stream << (calibrations->hasCorrectedCompassBacksight() ? "C" : "B");
     stream << (calibrations->hasCorrectedClinoBacksight() ? "C" : "B");
-    stream << " DD" << ChipdataNewLine;
+    stream << " DD" << chipdataNewLine();
 }
 
 /**
@@ -211,7 +209,7 @@ void cwChipdataExportCaveTask::writeShot(QTextStream &stream,
     writeLrudMeasurement(stream, toStation.upInputState(),    toStation.up(),    calibrations->distanceUnit(), lrudUnit);
     writeLrudMeasurement(stream, toStation.downInputState(),  toStation.down(),  calibrations->distanceUnit(), lrudUnit);
 
-    stream << ChipdataNewLine;
+    stream << chipdataNewLine();
 }
 
 void cwChipdataExportCaveTask::writeLrudMeasurement(QTextStream &stream, cwDistanceStates::State state, double measurement, cwUnits::LengthUnit fromUnit, cwUnits::LengthUnit toUnit)

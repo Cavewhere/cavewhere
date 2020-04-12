@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     cwImageProvider* imageProvider = new cwImageProvider();
     imageProvider->setProjectPath(rootData->project()->filename());
     QObject::connect(rootData->project(), SIGNAL(filenameChanged(QString)), imageProvider, SLOT(setProjectPath(QString)));
-    context->engine()->addImageProvider(cwImageProvider::Name, imageProvider);
+    context->engine()->addImageProvider(cwImageProvider::name(), imageProvider);
 
     auto quit = [&a, rootData, applicationEnigine]() {
         delete applicationEnigine;

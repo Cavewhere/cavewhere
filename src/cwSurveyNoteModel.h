@@ -58,8 +58,6 @@ public:
 signals:
 
 private:
-    static QString ImagePathString;
-
     QList<cwNote*> Notes;
 
     cwTrip* ParentTrip;
@@ -73,6 +71,8 @@ private:
 
     cwProject* project() const;
     void updateMipmaps();
+
+    static QString imagePathString();
 
 };
 
