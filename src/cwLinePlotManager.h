@@ -29,6 +29,9 @@ class cwErrorListModel;
 class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
 {
     Q_OBJECT
+
+    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
+
 public:
     explicit cwLinePlotManager(QObject *parent = 0);
     ~cwLinePlotManager();
@@ -36,12 +39,16 @@ public:
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setGLLinePlot(cwGLLinePlot* linePlot);
 
+    bool automaticUpdate() const;
+    void setAutomaticUpdate(bool automaticUpdate);
+
     void waitToFinish();
 
 signals:
     void stationPositionInCavesChanged(QList<cwCave*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
+    void automaticUpdateChanged();
 
 public slots:
 
@@ -54,6 +61,8 @@ private:
     cwGLLinePlot* GLLinePlot;
 
     cwSurveyChunkSignaler* SurveySignaler;
+
+    bool AutomaticUpdate = true;
 
     void connectCaves(cwCavingRegion* region);
 
@@ -69,5 +78,9 @@ private slots:
 
     void updateLinePlot();
 };
+
+inline bool cwLinePlotManager::automaticUpdate() const {
+    return AutomaticUpdate;
+}
 
 #endif // CWLINEPLOTMANAGER_H

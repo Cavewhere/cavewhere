@@ -221,6 +221,10 @@ void cwLinePlotManager::rerunSurvex()
   \brief Run the line plot task
   */
 void cwLinePlotManager::runSurvex() {
+    if(!AutomaticUpdate) {
+        return;
+    }
+
     if(Region != nullptr) {
         if(LinePlotTask->isReady()) {
             setCaveStationLookupAsStale(true);
@@ -290,5 +294,14 @@ void cwLinePlotManager::updateLinePlot() {
     emit stationPositionInCavesChanged(resultData.caveData().keys());
     emit stationPositionInTripsChanged(cw::toList(resultData.trips()));
     emit stationPositionInScrapsChanged(cw::toList(resultData.scraps()));
+}
+
+
+void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
+    if(AutomaticUpdate != automaticUpdate) {
+        AutomaticUpdate = automaticUpdate;
+        emit automaticUpdateChanged();
+        runSurvex();
+    }
 }
 
