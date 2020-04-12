@@ -192,21 +192,30 @@ QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        implicitHeight: autoCheckboxId.height
+        implicitHeight: autoSwitchLayoutId.height
 
         color: "white"
 
-        QC.CheckBox {
-            id: autoCheckboxId
-            text: "Update"
-            checked: rootData.settings.jobSettings.automaticUpdate
-            onCheckedChanged: {
-                rootData.settings.jobSettings.automaticUpdate = checked
+        ColumnLayout {
+            id: autoSwitchLayoutId
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            Text {
+                text: "Automatic\nUpdate"
+                id: labelTextId
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            QC.CheckBox {
+                id: autoCheckboxId
+                checked: rootData.settings.jobSettings.automaticUpdate
+                onCheckedChanged: {
+                    rootData.settings.jobSettings.automaticUpdate = checked
+                }
+                Layout.alignment: Qt.AlignHCenter
             }
         }
-
     }
-
-
-
 }
