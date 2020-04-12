@@ -26,6 +26,7 @@
 #include "cwSettings.h"
 #include "cwImageCompressionUpdater.h"
 #include "cwAddImageTask.h"
+#include "cwJobSettings.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -35,8 +36,6 @@
 
 //Generated files from qbs
 #include "cavewhereVersion.h"
-
-
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
@@ -98,6 +97,18 @@ cwRootData::cwRootData(QObject *parent) :
     cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
     imageUpdater->setFutureToken(FutureManagerModel->token());
     imageUpdater->setRegionTreeModel(RegionTreeModel);
+
+    auto updateAutomaticUpdate = [this]()
+    {
+        bool autoUpdate = cwJobSettings::instance()->automaticUpdate();
+        LinePlotManager->setAutomaticUpdate(autoUpdate);
+        ScrapManager->setAutomaticUpdate(autoUpdate);
+    };
+
+    updateAutomaticUpdate();
+
+    connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
+            this, updateAutomaticUpdate);
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }

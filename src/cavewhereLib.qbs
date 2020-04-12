@@ -75,6 +75,7 @@ DynamicLibrary {
 
         Depends { name: "libqtqmltricks-qtqmlmodels" }
         Depends { name: "protobuf" }
+        Depends { name: "QMath3d" }
     }
 
     Group {
