@@ -19,9 +19,6 @@
 #include <QStyleHints>
 #include <QGuiApplication>
 
-const float cwBaseTurnTableInteraction::DefaultPitch = 90.0f;
-const float cwBaseTurnTableInteraction::DefaultAzimuth = 0.0f;
-
 cwBaseTurnTableInteraction::cwBaseTurnTableInteraction(QQuickItem *parent) :
     cwInteraction(parent),
     ViewMatrixAnimation(new cwMatrix4x4Animation(this))
@@ -205,8 +202,8 @@ void cwBaseTurnTableInteraction::zoom(QPoint position, int delta) {
   \brief Resets the view
   */
 void cwBaseTurnTableInteraction::resetView() {
-    Pitch = DefaultPitch;
-    Azimuth = DefaultAzimuth;
+    Pitch = defaultPitch();
+    Azimuth = defaultAzimuth();
 
     setCurrentRotation(defaultRotation());
 
@@ -356,8 +353,8 @@ void cwBaseTurnTableInteraction::setCurrentRotation(QQuaternion rotation)
 
 QQuaternion cwBaseTurnTableInteraction::defaultRotation() const
 {
-    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, DefaultPitch);
-    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, DefaultAzimuth);
+    QQuaternion pitchQuat = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, defaultPitch());
+    QQuaternion azimuthQuat = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, defaultAzimuth());
     return pitchQuat * azimuthQuat;
 }
 

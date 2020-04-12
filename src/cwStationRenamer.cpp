@@ -12,8 +12,6 @@ cwStationRenamer::cwStationRenamer()
 {
 }
 
-const QRegExp cwStationRenamer::InvalidCharRegExp("[^-_a-zA-Z0-9]");
-
 /**
  * @brief cwStationRenamer::createStation creates a new station based upon the
  * given originalName.
@@ -47,7 +45,7 @@ cwStation cwStationRenamer::createStation(QString originalName)
 
         // replace invalid chars with "_"
         // e.g. FR:WB$ -> FR_WB_
-        newName.replace(InvalidCharRegExp, "_");
+        newName.replace(invalidCharRegExp(), "_");
 
         // if uppercase of new name already exists, add something in to disambiguate
         if (UpperCaseRenamedStations.contains(newName.toUpper())) {

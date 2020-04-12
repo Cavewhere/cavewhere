@@ -30,7 +30,8 @@ private:
     cwJobSettings(QObject* parent = nullptr);
 
     static cwJobSettings* Settings;
-    static const QString ThreadCountKey;
+
+    static QString threadCountKey() { return QLatin1String("threadCount"); }
 
     void setThreadCountPrivate(int count);
     bool isThreadCountValid(int count) const;

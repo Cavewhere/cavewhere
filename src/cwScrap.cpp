@@ -588,7 +588,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
       */
     auto planCalcTransformation = [&]()->ScrapShotTransform {
             QVector3D zeroVector(0.0, 1.0, 0.0);
-            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
+            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::radiansToDegrees();
             QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
             QMatrix4x4 rotationToNorth;
@@ -608,7 +608,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
-            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::RadiansToDegrees;
+            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::radiansToDegrees();
 
             QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
 

@@ -48,7 +48,7 @@ void cwProjection::setFrustum(double left, double right, double bottom, double t
  */
 void cwProjection::setPerspective(double angle, double aspect, double near, double far)
 {
-    double top = near * tan(angle * cwGlobals::PI / 360.0);
+    double top = near * tan(angle * cwGlobals::pi() / 360.0);
     double bottom = -top;
     double left = bottom * aspect;
     double right = top * aspect;

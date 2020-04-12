@@ -168,13 +168,13 @@ private:
 
         static bool crashedOnTest() {
             QSettings settings;
-            return settings.value(cwOpenGLSettings::key(cwOpenGLSettings::TestingKey), false).toBool();
+            return settings.value(cwOpenGLSettings::key(cwOpenGLSettings::testingKey()), false).toBool();
         }
 
     private:
         void setSettings(bool value) {
             QSettings settings;
-            settings.setValue(cwOpenGLSettings::key(cwOpenGLSettings::TestingKey), value);
+            settings.setValue(cwOpenGLSettings::key(cwOpenGLSettings::testingKey()), value);
         }
     };
 
@@ -204,16 +204,16 @@ private:
 
     bool NeedsRestart = false; //!<
 
-    static const QString BaseKey;
-    static const QString TestingKey;
-    static const QString RendererKey;
-    static const QString DXT1CompressionKey;
-    static const QString MipmapsKey;
-    static const QString NativeTextRenderingKey;
-    static const QString UseAnisotropyKey;
-    static const QString MagFilterKey;
-    static const QString MinFilterKey;
-    static const QString DXT1GenerateAlgroKey;
+    static QString baseKey() { return QLatin1String("renderingSettings-%1"); }
+    static QString testingKey() { return QLatin1String("testing"); }
+    static QString rendererKey() { return QLatin1String("renderer"); }
+    static QString dXT1CompressionKey() { return QLatin1String("useDxt1Compression"); }
+    static QString mipmapsKey() { return QLatin1String("useMipmaps"); }
+    static QString nativeTextRenderingKey() { return QLatin1String("useNativeTextRendering"); }
+    static QString useAnisotropyKey() { return QLatin1String("useAnisotropy"); }
+    static QString magFilterKey() { return QLatin1String("scrapMagFilter"); }
+    static QString minFilterKey() { return QLatin1String("scrapMinFilter"); }
+    static QString dXT1GenerateAlgroKey() { return QLatin1String("dxt1GenerateAlgroKey"); }
 
     static cwOpenGLSettings* Singleton; //This singlton isn't threadsafe
 

@@ -91,8 +91,8 @@ private:
 
     QPlane3D LastDitchRotationPlane;
 
-    const static float DefaultPitch;
-    const static float DefaultAzimuth;
+    static float defaultPitch() { return 90.0f; }
+    static float defaultAzimuth() { return 0.0f; }
 
     QTimer* RotationInteractionTimer;
     QPoint TimeoutRotationPosition;

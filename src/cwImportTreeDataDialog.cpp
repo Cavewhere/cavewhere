@@ -130,19 +130,19 @@ void cwImportTreeDataDialog::resizeEvent(QResizeEvent* event) {
 void cwImportTreeDataDialog::setupTypeComboBox() {
     QPixmap dontImportIcon;
     if(!QPixmapCache::find(cwGlobalIcons::NoImport, &dontImportIcon)) {
-        dontImportIcon = QPixmap(cwGlobalIcons::NoImportFilename);
+        dontImportIcon = QPixmap(cwGlobalIcons::noImportFilename());
         cwGlobalIcons::NoImport = QPixmapCache::insert(dontImportIcon);
     }
 
     QPixmap caveIcon;
     if(!QPixmapCache::find(cwGlobalIcons::Cave, &caveIcon)) {
-        caveIcon = QPixmap(cwGlobalIcons::CaveFilename);
+        caveIcon = QPixmap(cwGlobalIcons::caveFilename());
         cwGlobalIcons::Cave = QPixmapCache::insert(caveIcon);
     }
 
     QPixmap tripIcon;
     if(!QPixmapCache::find(cwGlobalIcons::Trip, &tripIcon)) {
-        tripIcon = QPixmap(cwGlobalIcons::TripFilename);
+        tripIcon = QPixmap(cwGlobalIcons::tripFilename());
         cwGlobalIcons::Trip = QPixmapCache::insert(tripIcon);
     }
 

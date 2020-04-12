@@ -9,13 +9,12 @@
 #include <QCoreApplication>
 
 cwJobSettings* cwJobSettings::Settings = nullptr;
-const QString cwJobSettings::ThreadCountKey = "threadCount";
 
 cwJobSettings::cwJobSettings(QObject* parent) :
     QObject(parent)
 {
     QSettings settings;
-    int threadCount = settings.value(ThreadCountKey, QThread::idealThreadCount()).toInt();
+    int threadCount = settings.value(threadCountKey(), QThread::idealThreadCount()).toInt();
     setThreadCountPrivate(threadCount);
 }
 
@@ -31,7 +30,7 @@ void cwJobSettings::setThreadCount(int threadCount) {
     if(threadCount >= 1 && threadCount <= idleThreadCount()) {
         if(this->threadCount() != threadCount) {
             QSettings settings;
-            settings.setValue(ThreadCountKey, threadCount);
+            settings.setValue(threadCountKey(), threadCount);
             setThreadCountPrivate(threadCount);
             emit threadCountChanged();
         }
