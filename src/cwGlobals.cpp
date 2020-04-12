@@ -79,3 +79,9 @@ QString cwGlobals::findExecutable(QStringList executables)
     return execPath;
 }
 
+
+double cwGlobals::pi()
+{
+    static const double pi = acos(-1.0);
+    return pi;
+}

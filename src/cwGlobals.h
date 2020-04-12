@@ -28,10 +28,7 @@ class CAVEWHERE_LIB_EXPORT cwGlobals
 public:
     cwGlobals();
 
-    static double pi() {
-        static const double pi = acos(-1.0);
-        return pi;
-    }
+    static double pi();
     static double radiansToDegrees() { return 180.0 / cwGlobals::pi(); }
     static double degreesToRadians() { return cwGlobals::pi() / 180.0; }
 
