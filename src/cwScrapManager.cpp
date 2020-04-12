@@ -125,12 +125,14 @@ void cwScrapManager::updateAllScraps() {
     foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
         foreach(cwTrip* trip, cave->trips()) {
             foreach(cwNote* note, trip->notes()->notes()) {
-                scraps.append(note->scraps());
+                for(cwScrap* scrap : note->scraps()) {
+                    DirtyScraps.insert(scrap);
+                }
             }
         }
     }
 
-    updateScrapGeometryHelper(scraps);
+    updateScrapGeometryHelper(cw::toList(DirtyScraps));
 }
 
 /**
