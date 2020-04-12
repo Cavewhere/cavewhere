@@ -86,7 +86,7 @@ public:
     bool canSaveDirectly() const;
     bool isTemporaryProject() const;
 
-    void addImages(QList<QUrl> noteImagePath, QObject *context, std::function<void (QList<cwImage> images)> func);
+    void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
 
 signals:
     void filenameChanged(QString newFilename);

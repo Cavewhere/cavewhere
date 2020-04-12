@@ -11,7 +11,6 @@
 //Our includes
 #include "cwTask.h"
 #include "cwError.h"
-#include "cwJob.h"
 class cwCavingRegion;
 
 //Qt includes
@@ -22,7 +21,7 @@ class cwCavingRegion;
 /**
   cXMLProjectLoadTask
   */
-class cwProjectIOTask : public cwTask, public cwJob
+class cwProjectIOTask : public cwTask
 {
     Q_OBJECT
 

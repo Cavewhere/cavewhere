@@ -124,7 +124,7 @@ void cwImageCompressionUpdater::recompressNotes(QList<cwNote *> notes)
             auto imageFuture = addImage.images();
 
             auto finalFuture = AsyncFuture::observe(imageFuture)
-                    .context(note, [note, imageFuture]()
+                    .subscribe([note, imageFuture]()
             {
                 if(imageFuture.resultCount() == 1) {
                     auto trackedImage = imageFuture.result();

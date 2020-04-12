@@ -89,7 +89,6 @@ void cwAddImageTask::setImageTypesWithFormat(cwTextureUploadTask::Format format)
 QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 {
     QString filename = databaseFilename();
-    auto context = this->context();
     auto imageTypes = ImageTypes;
 
     std::function<PrivateImageData (const QString&)> loadImagesFromPath
@@ -236,7 +235,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
 
     //For creating mipmaps
     std::function<QFuture<cwTrackedImagePtr> (const QList<Mipmap>& image)> compressAndUpload
-            = [filename, context](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
+            = [filename](const QList<Mipmap>& mipmaps)->QFuture<cwTrackedImagePtr> {
 
         QList<QImage> mipmapImages = cw::transform(mipmaps,
                                                [](const Mipmap& mipmap)
@@ -245,12 +244,10 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         });
 
         cwDXT1Compresser compresser;
-        compresser.setContext(context);
         auto compressFuture = compresser.compress(mipmapImages);
 
         return AsyncFuture::observe(compressFuture)
-                .context(context,
-                         [compressFuture, mipmaps, filename]()
+                .subscribe([compressFuture, mipmaps, filename]()
         {
             struct CompressedMipmap {
                 cwDXT1Compresser::CompressedImage image;
@@ -296,16 +293,14 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
     addToImageCombine(regeneratedFuture);
 
     return AsyncFuture::observe(imageCombine.future())
-            .context(context,
-                     [pathImagesFuture,
-                     imagesFuture,
-                     regeneratedFuture,
-                     imageTypes,
-                     scaleImage,
-                     context,
-                     compressAndUpload,
-                     createIcon
-                     ]()
+            .subscribe([pathImagesFuture,
+                       imagesFuture,
+                       regeneratedFuture,
+                       imageTypes,
+                       scaleImage,
+                       compressAndUpload,
+                       createIcon
+                       ]()
     {
 
         QList<PrivateImageData> imageData =
@@ -329,7 +324,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
             auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);
 
             compressAndUploadFuture = AsyncFuture::observe(scaleFuture)
-                    .context(context, [compressAndUpload, scaleFuture]()
+                    .subscribe([compressAndUpload, scaleFuture]()
             {
                 QList<QList<Mipmap>> allImages = scaleFuture.results();
                 QVector<QFuture<cwTrackedImagePtr>> ids;
@@ -349,7 +344,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
         auto idCombine = AsyncFuture::combine() << iconFuture << compressAndUploadFuture;
 
         return AsyncFuture::observe(idCombine.future())
-                .context(context, [=]()
+                .subscribe([=]()
         {
             auto icons = iconFuture.results();
             auto allMipmaps = compressAndUploadFuture.result();
@@ -406,7 +401,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
             }
 
             return AsyncFuture::observe(mipmapCombine.future())
-                    .context(context, completedImages)
+                    .subscribe(completedImages)
                     .future();
         }).future();
     }).future();
