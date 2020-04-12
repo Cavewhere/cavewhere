@@ -141,7 +141,7 @@ QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: buttonBar.bottom
-        anchors.bottom: parent.bottom
+        anchors.bottom: autoSwitchId.bottom
 
         TaskFutureCombineModel {
             id: taskModelCombinerId
@@ -186,4 +186,27 @@ QQ.Rectangle {
             }
         }
     }
+
+    QQ.Rectangle {
+        id: autoSwitchId
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        implicitHeight: autoCheckboxId.height
+
+        color: "white"
+
+        QC.CheckBox {
+            id: autoCheckboxId
+            text: "Update"
+            checked: rootData.settings.jobSettings.automaticUpdate
+            onCheckedChanged: {
+                rootData.settings.jobSettings.automaticUpdate = checked
+            }
+        }
+
+    }
+
+
+
 }

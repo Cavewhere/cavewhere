@@ -77,8 +77,6 @@ QQ.Rectangle {
         rotation: -90
         visible: false
         opacity: 1
-
-
     }
 
     QQ.MouseArea {
