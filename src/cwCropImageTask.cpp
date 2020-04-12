@@ -62,7 +62,6 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto filename = databaseFilename();
     auto originalImage = Original;
     auto cropRect = CropRect;
-    auto context = this->context();
     auto format = Format;
 
     struct Image {
@@ -113,8 +112,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     auto cropFuture = QtConcurrent::run(cropImage);
 
     auto addImageFuture = AsyncFuture::observe(cropFuture)
-            .context(context,
-                     [context, cropFuture, filename, format]()
+            .subscribe([cropFuture, filename, format]()
     {
         int imageTypes = cwAddImageTask::None;
         if(format == cwTextureUploadTask::DXT1Mipmaps) {
@@ -128,7 +126,6 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
         }
 
         cwAddImageTask addImages;
-        addImages.setContext(context);
         addImages.setDatabaseFilename(filename);
         addImages.setNewImages({cropRGBImage.croppedImage});
         addImages.setImageTypes(imageTypes);
@@ -137,8 +134,7 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
     }).future();
 
     auto finishedFuture = AsyncFuture::observe(addImageFuture)
-            .context(context,
-                     [addImageFuture, cropFuture]()
+            .subscribe([addImageFuture, cropFuture]()
     {
         auto cropRGBImage = cropFuture.result();
         auto images = addImageFuture.results();

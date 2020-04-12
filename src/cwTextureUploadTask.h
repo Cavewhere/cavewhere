@@ -11,7 +11,6 @@
 //Our includes
 #include "cwImage.h"
 #include "cwGlobals.h"
-#include "cwJob.h"
 
 //Qt includes
 #include <QOpenGLFunctions>
@@ -21,7 +20,7 @@
 class QOpenGLContext;
 class QSurface;
 
-class CAVEWHERE_LIB_EXPORT cwTextureUploadTask : public cwJob
+class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
 {
 
 public:

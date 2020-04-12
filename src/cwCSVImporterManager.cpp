@@ -157,7 +157,7 @@ void cwCSVImporterManager::startParsing()
     auto future = QtConcurrent::run(task);
     CSVRunFuture = future;
 
-    CSVFinishedFuture = AsyncFuture::observe(future).context(this, [this, future](){
+    CSVFinishedFuture = AsyncFuture::observe(future).subscribe([this, future](){
         auto output = future.result();
         ErrorModel->errors()->clear();
         ErrorModel->errors()->append(output->errors);

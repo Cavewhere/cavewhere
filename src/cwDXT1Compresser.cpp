@@ -43,8 +43,6 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::compress(const QLis
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::openglCompression(const QList<QImage> &images, bool threaded)
 {
-    Q_ASSERT(context()->thread() == QThread::currentThread());
-
     auto compressImages = [images]() {
         QOffscreenSurface* surface = nullptr;
         auto createSurface = [&surface]() {
@@ -83,7 +81,7 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::openglCompression(c
         auto concurrentFuture = QtConcurrent::run(compressImages);
 
         //This converts QList<CompressImage> to a future with the results in it, that can be iterated
-        future = AsyncFuture::observe(concurrentFuture).context(context(), [concurrentFuture](){
+        future = AsyncFuture::observe(concurrentFuture).subscribe([concurrentFuture](){
             return AsyncFuture::completed(concurrentFuture.result());
         }).future();
     } else if(QOpenGLContext::supportsThreadedOpenGL() || QThread::currentThread() == QCoreApplication::instance()->thread()){
@@ -99,23 +97,18 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::openglCompression(c
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(const QList<QImage> &images, bool threaded)
 {
-    Q_ASSERT(context()->thread() == QThread::currentThread());
-
-    auto context = this->context();
-
     std::function<QFuture<cwDXT1Compresser::CompressedImage> (const QImage&)> compress =
-            [context](const QImage& image)
+            [](const QImage& image)
     {
           return squishCompressImageThreaded(image,
-                                             context,
                                              squish::kDxt1 | squish::kColourIterativeClusterFit);
     };
 
-    auto futureResults = [context](const QList<QFuture<cwDXT1Compresser::CompressedImage>>& imageFutures) {
+    auto futureResults = [](const QList<QFuture<cwDXT1Compresser::CompressedImage>>& imageFutures) {
         auto compressFutures = AsyncFuture::combine() << imageFutures;
 
         return AsyncFuture::observe(compressFutures.future())
-                .context(context, [imageFutures]()
+                .subscribe([imageFutures]()
         {
             QList<cwDXT1Compresser::CompressedImage> compressedImages;
             compressedImages.reserve(imageFutures.size());
@@ -131,7 +124,7 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(c
         auto compressFuture = QtConcurrent::mapped(images, compress);
 
         return AsyncFuture::observe(compressFuture)
-                .context(context, [compressFuture, futureResults]()
+                .subscribe([compressFuture, futureResults]()
         {
             return futureResults(compressFuture.results());
         }
@@ -273,7 +266,6 @@ static int FixFlags( int flags )
   The only differance is this is threaded.
   */
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImageThreaded( QImage image,
-                                                                                 QObject* context,
                                                                                  int flags,
                                                                                  float* metric) {
     int outputFileSize = squish::GetStorageRequirements(image.width(), image.height(), squish::kDxt1);
@@ -310,7 +302,7 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompressImage
     auto blockFuture = QtConcurrent::map(computeBlocks, CompressImageKernal(image.size(), flags, metric));
 
     return AsyncFuture::observe(blockFuture)
-            .context(context, [outputData, image, computeBlocks]() {
+            .subscribe([outputData, image, computeBlocks]() {
         return CompressedImage(outputData, image.size());
     }).future();
 }

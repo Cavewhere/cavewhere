@@ -8,9 +8,8 @@
 
 //Our includes
 #include "cwGlobals.h"
-#include "cwJob.h"
 
-class CAVEWHERE_LIB_EXPORT cwDXT1Compresser : public cwJob
+class CAVEWHERE_LIB_EXPORT cwDXT1Compresser
 {
 
 public:
@@ -38,7 +37,6 @@ private:
 
 
     static QFuture<CompressedImage> squishCompressImageThreaded(QImage image,
-                                                                QObject *context,
                                                                 int flags,
                                                                 float* metric = 0);
 
