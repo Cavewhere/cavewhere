@@ -125,7 +125,7 @@ TEST_CASE("Images should load correctly", "[cwProject]") {
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
     int checked = 0;
-    project->addImages(filenames, rootData.get(), [&checked](QList<cwImage> images){
+    project->addImages(filenames, [&checked](QList<cwImage> images){
         REQUIRE(images.size() == 1);
         CHECK(images.first().isOriginalValid());
         CHECK(images.first().isIconValid());
@@ -148,7 +148,7 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
     };
 
     QList<cwImage> loadedImages;
-    project->addImages(filenames, rootData.get(), [&loadedImages](QList<cwImage> images){
+    project->addImages(filenames, [&loadedImages](QList<cwImage> images){
         loadedImages += images;
     });
 

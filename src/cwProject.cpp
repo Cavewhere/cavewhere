@@ -503,21 +503,17 @@ bool cwProject::isModified() const
 }
 
 void cwProject::addImages(QList<QUrl> noteImagePath,
-                          QObject *context,
                           std::function<void (QList<cwImage>)> func)
 {
-    if(context == nullptr )  { return; }
-
     //Create a new image task
     for(QUrl url : noteImagePath) {
         QString path = url.toLocalFile();
 
-        std::function<void ()> addImage = [this, path, context, func, &addImage]() {
+        std::function<void ()> addImage = [this, path, func, &addImage]() {
             auto format = cwTextureUploadTask::format();
 
             cwAddImageTask addImageTask;
             addImageTask.setDatabaseFilename(filename());
-            addImageTask.setContext(context);
             addImageTask.setImageTypesWithFormat(format);
 
             //Set all the noteImagePath
@@ -528,8 +524,7 @@ void cwProject::addImages(QList<QUrl> noteImagePath,
             FutureToken.addJob({imagesFuture, "Adding Image"});
 
             AsyncFuture::observe(imagesFuture)
-                    .context(context,
-                             [imagesFuture, func, format, addImage]()
+                    .subscribe([imagesFuture, func, format, addImage]()
             {
                 if(cwTextureUploadTask::format() != format) {
                     //Format has changed, re-run (this isn't true recursion)
