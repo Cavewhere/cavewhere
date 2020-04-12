@@ -35,13 +35,14 @@ protected:
 
 private:
     //The filename of the survex file that'll be used by cavern
-    static const QString Survex3dExtension;
     QString SurvexFileName;
     QReadWriteLock SurvexFileNameLocker;
 
     QProcess* CavernProcess;
 
     QString survexFileName() const;
+
+    static QString survex3dExtension() { return QLatin1String(".3d"); };
 
 private slots:
     void privateSetSurvexFile(QString suvexFile);

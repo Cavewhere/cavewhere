@@ -28,9 +28,12 @@ class CAVEWHERE_LIB_EXPORT cwGlobals
 public:
     cwGlobals();
 
-    static const double PI;
-    static const double RadiansToDegrees;
-    static const double DegreesToRadians;
+    static double pi() {
+        static const double pi = acos(-1.0);
+        return pi;
+    }
+    static double radiansToDegrees() { return 180.0 / cwGlobals::pi(); }
+    static double degreesToRadians() { return cwGlobals::pi() / 180.0; }
 
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);

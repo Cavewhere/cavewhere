@@ -16,15 +16,11 @@
 //Qt includes
 #include <QDebug>
 
-QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
-
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent),
     ParentTrip(nullptr),
     ParentCave(nullptr)
 {
-    ImagePathString = QString("image://") + cwImageProvider::Name + QString("/%1");
-
 
 }
 
@@ -116,12 +112,12 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     case ImageOriginalPathRole: {
         //Get's the full blown note
         cwImage imagePath = Notes[row]->image();
-        return ImagePathString.arg(imagePath.original());
+        return imagePathString().arg(imagePath.original());
     }
     case ImageIconPathRole: {
         //Get's the icon for the note
         cwImage imagePath = Notes[row]->image();
-        return ImagePathString.arg(imagePath.icon());
+        return imagePathString().arg(imagePath.icon());
     }
     case ImageRole: {
         return QVariant::fromValue(Notes[row]->image());
@@ -206,6 +202,11 @@ cwProject *cwSurveyNoteModel::project() const
     }
     return nullptr;
 }
+
+QString cwSurveyNoteModel::imagePathString() {
+    return QLatin1String("image://") + cwImageProvider::name() + QLatin1String("/%1");
+}
+
 /**
   This adds valid notes to the note model
 

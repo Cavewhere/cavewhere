@@ -193,7 +193,8 @@ private:
     QQuickItem* DownTitle;
     QQuickItem* ErrorItem;
 
-    static const double ErrorOffset;
+    //Making this number small will prevent SurveyErrorBox from appearing
+    inline static const double ErrorOffset = 25;
 
 //    QMenu* RightClickMenu;
 

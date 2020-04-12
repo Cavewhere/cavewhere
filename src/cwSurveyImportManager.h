@@ -67,8 +67,8 @@ private slots:
 //    void csvImportedFinished();
 
 private:
-    static const QString ImportSurvexKey;
-    static const QString ImportWallsKey;
+    inline static const QString ImportSurvexKey = QLatin1String("LastImportSurvexFile");
+    inline static const QString ImportWallsKey = QLatin1String("LastImportWallsFile");
 
     QPointer<cwCavingRegion> CavingRegion;
     QPointer<QUndoStack> UndoStack;

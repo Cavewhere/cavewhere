@@ -62,8 +62,6 @@ private:
     QRegExp CalibrationRegExp;
     cwStationRenamer StationRenamer;
 
-    static const QString CompassImportKey;
-
     void verifyCompassDataFileExists();
     void parseFile();
     void parseSurvey(QFile* file);

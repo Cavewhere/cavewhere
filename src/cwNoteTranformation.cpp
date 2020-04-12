@@ -71,9 +71,9 @@ double cwNoteTranformation::calculateNorth(QPointF noteP1, QPointF noteP2) const
     double dot = QVector2D::dotProduct(vectorBetweenPoints, QVector2D(0.0, 1.0));
     double northUp;
     if(vectorBetweenPoints.x() < 0) {
-        northUp = 360.0 - acos(dot) * cwGlobals::RadiansToDegrees;
+        northUp = 360.0 - acos(dot) * cwGlobals::radiansToDegrees();
     } else {
-        northUp = acos(dot) * cwGlobals::RadiansToDegrees;
+        northUp = acos(dot) * cwGlobals::radiansToDegrees();
     }
 
     return northUp;

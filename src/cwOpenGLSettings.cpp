@@ -22,17 +22,6 @@
 
 cwOpenGLSettings* cwOpenGLSettings::Singleton = nullptr;
 
-const QString cwOpenGLSettings::BaseKey = "renderingSettings-%1";
-const QString cwOpenGLSettings::TestingKey = "testing";
-const QString cwOpenGLSettings::RendererKey = "renderer";
-const QString cwOpenGLSettings::DXT1CompressionKey = "useDxt1Compression";
-const QString cwOpenGLSettings::MipmapsKey = "useMipmaps";
-const QString cwOpenGLSettings::NativeTextRenderingKey = "useNativeTextRendering";
-const QString cwOpenGLSettings::UseAnisotropyKey = "useAnisotropy";
-const QString cwOpenGLSettings::MagFilterKey = "scrapMagFilter";
-const QString cwOpenGLSettings::MinFilterKey = "scrapMinFilter";
-const QString cwOpenGLSettings::DXT1GenerateAlgroKey = "dxt1GenerateAlgroKey";
-
 cwOpenGLSettings::cwOpenGLSettings(QObject* parent) :
     QObject(parent)
 {
@@ -43,7 +32,7 @@ void cwOpenGLSettings::setUseDXT1Compression(bool useDXT1Compression) {
     if(DXT1Compression != useDXT1Compression) {
         Q_ASSERT(thread() == QThread::currentThread());
         DXT1Compression = useDXT1Compression;
-        updateSettingsWithDevice(DXT1CompressionKey, DXT1Compression);
+        updateSettingsWithDevice(dXT1CompressionKey(), DXT1Compression);
         emit useDXT1CompressionChanged();
     }
 }
@@ -52,7 +41,7 @@ void cwOpenGLSettings::setMipmaps(bool useMipmaps) {
     if(Mipmaps != useMipmaps) {
         Q_ASSERT(thread() == QThread::currentThread());
         Mipmaps = useMipmaps;
-        updateSettingsWithDevice(MipmapsKey, Mipmaps);
+        updateSettingsWithDevice(mipmapsKey(), Mipmaps);
         emit useMipmapsChanged();
     }
 }
@@ -61,7 +50,7 @@ void cwOpenGLSettings::setNativeTextRendering(bool useNativeTextRendering) {
     if(NativeTextRendering != useNativeTextRendering) {
         Q_ASSERT(thread() == QThread::currentThread());
         NativeTextRendering = useNativeTextRendering;
-        updateSettingsWithDevice(NativeTextRenderingKey, NativeTextRendering);
+        updateSettingsWithDevice(nativeTextRenderingKey(), NativeTextRendering);
         setNeedsRestart();
         emit useNativeTextRenderingChanged();
     }
@@ -71,7 +60,7 @@ void cwOpenGLSettings::setRendererType(cwOpenGLSettings::Renderer rendererType) 
     if(RendererType != rendererType && supportedRenders().contains(rendererType)) {
         Q_ASSERT(thread() == QThread::currentThread());
         RendererType = rendererType;
-        updateSettings(RendererKey, RendererType);
+        updateSettings(rendererKey(), RendererType);
         setNeedsRestart();
         emit rendererTypeChanged();
     }
@@ -81,7 +70,7 @@ void cwOpenGLSettings::setUseAnisotropy(bool useAnisotropy) {
     if(UseAnisotropy != useAnisotropy) {
         Q_ASSERT(thread() == QThread::currentThread());
         UseAnisotropy = useAnisotropy;
-        updateSettingsWithDevice(UseAnisotropyKey, UseAnisotropy);
+        updateSettingsWithDevice(useAnisotropyKey(), UseAnisotropy);
         emit useAnisotropyChanged();
     }
 }
@@ -90,7 +79,7 @@ void cwOpenGLSettings::setMagFilter(MagFilter magFilter) {
     if(mMagFilter != magFilter) {
         Q_ASSERT(thread() == QThread::currentThread());
         mMagFilter = magFilter;
-        updateSettingsWithDevice(MagFilterKey, mMagFilter);
+        updateSettingsWithDevice(magFilterKey(), mMagFilter);
         emit magFilterChanged();
     }
 }
@@ -99,7 +88,7 @@ void cwOpenGLSettings::setMinFilter(MinFilter minFilter) {
     if(mMinFilter != minFilter) {
         Q_ASSERT(thread() == QThread::currentThread());
         mMinFilter = minFilter;
-        updateSettingsWithDevice(MinFilterKey, mMinFilter);
+        updateSettingsWithDevice(minFilterKey(), mMinFilter);
         emit minFilterChanged();
     }
 }
@@ -161,49 +150,49 @@ void cwOpenGLSettings::initialize()
 
             Singleton->load(Singleton->RendererType,
                             defaultSettings.RendererType,
-                            RendererKey,
+                            rendererKey(),
                             &cwOpenGLSettings::rootKey,
                             toInt);
 
             Singleton->load(Singleton->DXT1Compression,
                             defaultSettings.DXT1Compression,
-                            DXT1CompressionKey,
+                            dXT1CompressionKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             &QVariant::toBool);
 
             Singleton->load(Singleton->Mipmaps,
                             defaultSettings.Mipmaps,
-                            MipmapsKey,
+                            mipmapsKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             &QVariant::toBool);
 
             Singleton->load(Singleton->NativeTextRendering,
                             defaultSettings.NativeTextRendering,
-                            NativeTextRenderingKey,
+                            nativeTextRenderingKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             &QVariant::toBool);
 
             Singleton->load(Singleton->UseAnisotropy,
                             defaultSettings.UseAnisotropy,
-                            UseAnisotropyKey,
+                            useAnisotropyKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             &QVariant::toBool);
 
             Singleton->load(Singleton->mMagFilter,
                             defaultSettings.mMagFilter,
-                            MagFilterKey,
+                            magFilterKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             toInt);
 
             Singleton->load(Singleton->mMinFilter,
                             defaultSettings.mMinFilter,
-                            MinFilterKey,
+                            minFilterKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             toInt);
 
             Singleton->load(Singleton->mDXT1Algorithm,
                             Singleton->GPUGeneratedDXT1Supported ? DXT1_GPU : DXT1_Squish,
-                            DXT1GenerateAlgroKey,
+                            dXT1GenerateAlgroKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             toInt);
 
@@ -228,13 +217,13 @@ cwOpenGLSettings::Renderer cwOpenGLSettings::perviousRenderer()
 {
     QSettings settings;
     if(TesterSettings::crashedOnTest()) {
-        updateSettings(RendererKey, Software);
+        updateSettings(rendererKey(), Software);
     }
 
     cwOpenGLSettings glSettings;
     glSettings.load(glSettings.RendererType,
                     glSettings.RendererType,
-                    cwOpenGLSettings::RendererKey,
+                    cwOpenGLSettings::rendererKey(),
                     &cwOpenGLSettings::rootKey,
                     std::bind(&QVariant::toInt, std::placeholders::_1, nullptr));
 
@@ -341,13 +330,13 @@ void cwOpenGLSettings::updateSettings(const QString &key, const QVariant &value)
 
 QString cwOpenGLSettings::key(const QString& subKey)
 {
-    return BaseKey.arg(subKey);
+    return baseKey().arg(subKey);
 }
 
 QString cwOpenGLSettings::keyWithDevice(const QString &subKey) const
 {
     auto deviceKey = renderer().remove(QRegularExpression("\\s+|/|-|\\."));
-    return QString(BaseKey + "-%2").arg(deviceKey).arg(subKey);
+    return QString(baseKey() + "-%2").arg(deviceKey).arg(subKey);
 }
 
 void cwOpenGLSettings::setApplicationRenderer()
@@ -372,7 +361,7 @@ void cwOpenGLSettings::setDXT1Algorithm(DXT1Algorithm dxt1Algorithm) {
     if(mDXT1Algorithm != dxt1Algorithm) {
         Q_ASSERT(thread() == QThread::currentThread());
         mDXT1Algorithm = dxt1Algorithm;
-        updateSettingsWithDevice(DXT1GenerateAlgroKey, mDXT1Algorithm);
+        updateSettingsWithDevice(dXT1GenerateAlgroKey(), mDXT1Algorithm);
         emit dxt1AlgorithmChanged();
     }
 }

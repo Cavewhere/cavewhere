@@ -157,7 +157,7 @@ void cwGLGridPlane::updateModelMatrix() {
 //    QVector3D planeNormal = Plane.normal().normalized();
 
 //    //Find the rotation from up vector
-//    double rotation = acos(QVector3D::dotProduct(upVector, planeNormal)) * cwGlobals::RadiansToDegrees;
+//    double rotation = acos(QVector3D::dotProduct(upVector, planeNormal)) * cwGlobals::radiansToDegrees();
 
 //    //Find the cross product between the vectors
 //    QVector3D cross = QVector3D::crossProduct(upVector, planeNormal);

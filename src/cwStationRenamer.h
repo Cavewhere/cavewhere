@@ -37,7 +37,7 @@ private:
     QHash<QString, QString> RenamedToOriginalStations;
     QSet<QString> UpperCaseRenamedStations;
 
-    static const QRegExp InvalidCharRegExp;
+    const QRegExp invalidCharRegExp() { return QRegExp("[^-_a-zA-Z0-9]"); }
 };
 
 #endif // CWSTATIONRENAMER_H

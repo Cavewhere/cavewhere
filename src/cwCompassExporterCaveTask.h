@@ -48,7 +48,7 @@ private:
     };
 
 
-    static const char* CompassNewLine;
+    static QByteArray compassNewLine() { return QByteArrayLiteral("\r\n");};
 
     void writeTrip(QTextStream& stream, cwTrip* trip);
     void writeHeader(QTextStream& stream, cwTrip* trip);

@@ -9,17 +9,14 @@
 #include <QCoreApplication>
 
 cwJobSettings* cwJobSettings::Settings = nullptr;
-const QString cwJobSettings::ThreadCountKey = "threadCount";
-const QString cwJobSettings::AutomaticUpdateKey = "automaticUpdate";
-
 
 cwJobSettings::cwJobSettings(QObject* parent) :
     QObject(parent)
 {
     QSettings settings;
-    int threadCount = settings.value(ThreadCountKey, QThread::idealThreadCount()).toInt();
+    int threadCount = settings.value(threadCountKey(), QThread::idealThreadCount()).toInt();
     setThreadCountPrivate(threadCount);
-    AutomaticUpdate = settings.value(AutomaticUpdateKey, AutomaticUpdate).toBool();
+    AutomaticUpdate = settings.value(automaticUpdateKey(), AutomaticUpdate).toBool();
 }
 
 void cwJobSettings::setThreadCountPrivate(int count)
@@ -34,7 +31,7 @@ void cwJobSettings::setThreadCount(int threadCount) {
     if(threadCount >= 1 && threadCount <= idleThreadCount()) {
         if(this->threadCount() != threadCount) {
             QSettings settings;
-            settings.setValue(ThreadCountKey, threadCount);
+            settings.setValue(threadCountKey(), threadCount);
             setThreadCountPrivate(threadCount);
             emit threadCountChanged();
         }
@@ -66,7 +63,7 @@ int cwJobSettings::threadCount() const {
 void cwJobSettings::setAutomaticUpdate(bool automaticUpdate) {
     if(this->automaticUpdate() != automaticUpdate) {
         QSettings settings;
-        settings.setValue(AutomaticUpdateKey, automaticUpdate);
+        settings.setValue(automaticUpdateKey(), automaticUpdate);
         AutomaticUpdate = automaticUpdate;
         emit automaticUpdateChanged();
     }

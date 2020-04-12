@@ -18,8 +18,6 @@
 #include <QApplication>
 #include <QDebug>
 
-const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
-
 cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
@@ -39,7 +37,7 @@ void cwPlotSauceTask::setSurvex3DFile(QString inputFile) {
   \brief Gets the path to the output file
   */
 QString cwPlotSauceTask::outputXMLFile() const {
-    QFileInfo info(survex3DFilename().append(PlotSauceExtension));
+    QFileInfo info(survex3DFilename().append(plotSauceExtension()));
     if(info.exists()) {
         return info.absoluteFilePath();
     } else {
@@ -73,7 +71,7 @@ void cwPlotSauceTask::runTask() {
     });
 
     QString inputFile = survex3DFilename();
-    QString outputFile = inputFile + PlotSauceExtension;
+    QString outputFile = inputFile + plotSauceExtension();
 
     QStringList plotSauceAppNames;
     plotSauceAppNames.append("plotsauce");

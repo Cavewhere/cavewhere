@@ -47,9 +47,6 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
     }
 }
 
-const QString cwSurveyImportManager::ImportSurvexKey = "LastImportSurvexFile";
-const QString cwSurveyImportManager::ImportWallsKey = "LastImportWallsFile";
-
 /**
   \brief Opens the survex importer dialog
   */

@@ -32,7 +32,7 @@ signals:
 public slots:
 
 private:
-    static const QString ChipdataNewLine;
+    static QString chipdataNewLine() { return QLatin1String("\n"); };
 
     void writeTrip(QTextStream& stream, cwTrip* trip, QString caveName = QString());
     void writeHeader(QTextStream& stream, cwTrip* trip, QString caveName = QString());

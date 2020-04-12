@@ -72,18 +72,18 @@ QFuture<cwTrackedImagePtr> cwCropImageTask::crop()
 
     auto addCropToDatabase = [filename](QRect cropRect, const cwImage& image) {
         QVariantMap map({
-                            {cwImageProvider::CropIdKey, image.original()},
-                            {cwImageProvider::CropXKey, cropRect.x()},
-                            {cwImageProvider::CropYKey, cropRect.y()},
-                            {cwImageProvider::CropWidthKey, cropRect.width()},
-                            {cwImageProvider::CropHeightKey, cropRect.height()}
+                            {cwImageProvider::cropIdKey(), image.original()},
+                            {cwImageProvider::cropXKey(), cropRect.x()},
+                            {cwImageProvider::cropYKey(), cropRect.y()},
+                            {cwImageProvider::cropWidthKey(), cropRect.width()},
+                            {cwImageProvider::cropHeightKey(), cropRect.height()}
                         });
         auto document = QJsonDocument::fromVariant(map);
         auto json = document.toJson(QJsonDocument::Compact);
 
         cwImageData imageData(cropRect.size(),
                               image.originalDotsPerMeter(),
-                              cwImageProvider::CroppedreferenceExtension,
+                              cwImageProvider::croppedReferenceExtension(),
                               json);
 
         cwImageDatabase database(filename);

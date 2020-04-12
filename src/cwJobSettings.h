@@ -33,8 +33,9 @@ signals:
 
 private:
     static cwJobSettings* Settings;
-    static const QString ThreadCountKey;
-    static const QString AutomaticUpdateKey;
+
+    static QString automaticUpdateKey() { return QLatin1String("automaticUpdate"); }
+    static QString threadCountKey() { return QLatin1String("threadCount"); }
 
     bool AutomaticUpdate = true;
 

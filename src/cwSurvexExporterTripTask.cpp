@@ -14,8 +14,6 @@
 #include "cwTeamMember.h"
 #include "cwTeam.h"
 
-const int cwSurvexExporterTripTask::TextPadding = -11; //Left align with 10 spaces
-
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
 {
