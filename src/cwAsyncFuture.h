@@ -7,6 +7,9 @@
 #include <QFutureWatcher>
 #include <QTimer>
 
+//AsyncFuture
+#include "asyncfuture.h"
+
 class cwAsyncFuture
 {
 public:
@@ -32,6 +35,25 @@ public:
         loop.exec();
 
         return watcher.isFinished();
+    }
+
+    template<class T, typename RunFunc>
+    static void restart(QFuture<T>* future, RunFunc run) {
+        future->cancel();
+
+        if(!future->isRunning()) {
+            *future = run();
+
+            AsyncFuture::observe(*future).subscribe(
+                        [](){},
+            [future, run]()
+            {
+                //Recursive call
+                *future = QFuture<T>();
+                Q_ASSERT(!future->isRunning());
+                restart(future, run);
+            });
+        }
     }
 };
 

@@ -353,7 +353,7 @@ void cwProject::loadFile(QString filename) {
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(result.filename());
         setTemporaryProject(result.isTempFile());
-        *Region = *(result.cavingRegion().data());\
+        *Region = *(result.cavingRegion().data());
         FileVersion = result.fileVersion();
         emit canSaveDirectly();
     };

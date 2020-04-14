@@ -386,34 +386,42 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
         scrap->setTriangulationData(oldData);
     }
 
-    TriangulateFuture.cancel();
+    auto run = [this]() {
+        //Running
+        auto dirtyScraps = cw::toList(DirtyScraps);
 
-    //Running
-    auto dirtyScraps = cw::toList(DirtyScraps);
-    QList<cwTriangulateInData> scrapData = cw::transform(dirtyScraps, mapScrapToTriangulateInData);
+        if(dirtyScraps.isEmpty()) {
+            return AsyncFuture::completed();
+        }
 
-    cwTriangulateTask task;
-    task.setProjectFilename(Project->filename());
-    task.setScrapData(scrapData);
-    task.setFormatType(cwTextureUploadTask::format());
-    auto allFutures = task.triangulate();
+        QList<cwTriangulateInData> scrapData = cw::transform(dirtyScraps, mapScrapToTriangulateInData);
 
-    auto combine = AsyncFuture::combine() << allFutures;
+        cwTriangulateTask task;
+        task.setProjectFilename(Project->filename());
+        task.setScrapData(scrapData);
+        task.setFormatType(cwTextureUploadTask::format());
+        auto allFutures = task.triangulate();
 
-    TriangulateFuture = combine.subscribe([this, dirtyScraps, allFutures]()
-    {
-        auto scrapDatas = cw::transform(allFutures,
-                                        [](const QFuture<cwTriangulatedData>& data)
+        auto combine = AsyncFuture::combine() << allFutures;
+
+        auto finalFuture = combine.subscribe([this, dirtyScraps, allFutures]()
         {
-            Q_ASSERT(data.resultCount() == 1);
-            Q_ASSERT(data.isFinished());
-            return data.result();
-        });
+            auto scrapDatas = cw::transform(allFutures,
+                                            [](const QFuture<cwTriangulatedData>& data)
+            {
+                Q_ASSERT(data.resultCount() == 1);
+                Q_ASSERT(data.isFinished());
+                return data.result();
+            });
 
-        taskFinished(dirtyScraps, scrapDatas);
-    }).future();
+            taskFinished(dirtyScraps, scrapDatas);
+        }).future();
 
-    FutureManagerToken.addJob({TriangulateFuture, "Updating Scaps"});
+        FutureManagerToken.addJob({finalFuture, "Updating Scaps"});
+        return finalFuture;
+    };
+
+    cwAsyncFuture::restart(&TriangulateFuture, run);
 }
 
 /**

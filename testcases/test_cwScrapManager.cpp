@@ -11,6 +11,8 @@
 #include "cwCave.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
+#include "cwNote.h"
+#include "cwSurveyNoteModel.h"
 
 //Qt includes
 #include <QFile>
@@ -117,11 +119,11 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
         CHECK(addRowSpy.count() == 0);
 
         scrapManager->setAutomaticUpdate(true);
-
-        CHECK(rootData->futureManagerModel()->rowCount() > 0);
-        CHECK(addRowSpy.count() > 0);
+        CHECK(trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         rootData->futureManagerModel()->waitForFinished();
+
+        CHECK(!trip->notes()->notes().first()->scraps().first()->triangulationData().isStale());
 
         loop.quit();
     });
