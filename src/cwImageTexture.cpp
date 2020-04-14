@@ -276,10 +276,7 @@ void cwImageTexture::startLoadingImage()
         UploadedTextureFuture = uploadTask.mipmaps();
         FutureManagerToken.addJob({UploadedTextureFuture, "Updating Texture"});
 
-        auto context = QSharedPointer<QObject>::create();
-
-        AsyncFuture::observe(UploadedTextureFuture).context(context.get(), [context, this](){
-            Q_ASSERT(context->thread() == QThread::currentThread());
+        AsyncFuture::observe(UploadedTextureFuture).subscribe([this](){
             markAsDirty();
             emit textureUploaded();
             emit needsUpdate();
