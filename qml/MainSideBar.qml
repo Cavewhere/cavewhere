@@ -141,7 +141,7 @@ QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: buttonBar.bottom
-        anchors.bottom: autoSwitchId.bottom
+        anchors.bottom: autoSwitchId.top
 
         TaskFutureCombineModel {
             id: taskModelCombinerId
