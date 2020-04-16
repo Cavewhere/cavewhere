@@ -266,7 +266,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
             renderers = QStringList({
                 "Automatic",
                 "OpenGL",
-                "OpenGL via DirectX",
+                "OpenGL ES via DirectX",
                 "Software"
             });
 #else
