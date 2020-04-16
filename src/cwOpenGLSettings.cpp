@@ -136,7 +136,8 @@ void cwOpenGLSettings::initialize()
                 return QString::fromLocal8Bit(extention);
             });
 
-            Singleton->DXT1Supported = context->extensions().contains("GL_EXT_texture_compression_dxt1");
+            Singleton->DXT1Supported = context->extensions().contains("GL_EXT_texture_compression_s3tc_srgb")
+                    || context->extensions().contains("GL_EXT_texture_compression_s3tc");
             Singleton->AnisotropySupported = context->extensions().contains("GL_EXT_texture_filter_anisotropic");
 
             if(Singleton->DXT1Supported) {
@@ -144,6 +145,13 @@ void cwOpenGLSettings::initialize()
             }
 
             cwOpenGLSettings defaultSettings;
+
+            auto minFilterDefault = [&defaultSettings]() {
+                if(Singleton->Vendor.contains("ANGLE")) {
+                    return MinLinear;
+                }
+                return defaultSettings.MinNearest_Mipmap_Linear;
+            };
 
             //Bind the bool* away, and just have nullptr
             auto toInt = std::bind(&QVariant::toInt, std::placeholders::_1, nullptr);
@@ -185,7 +193,7 @@ void cwOpenGLSettings::initialize()
                             toInt);
 
             Singleton->load(Singleton->mMinFilter,
-                            defaultSettings.mMinFilter,
+                            minFilterDefault(),
                             minFilterKey(),
                             &cwOpenGLSettings::keyWithDevice,
                             toInt);
@@ -194,7 +202,7 @@ void cwOpenGLSettings::initialize()
                             Singleton->GPUGeneratedDXT1Supported ? DXT1_GPU : DXT1_Squish,
                             dXT1GenerateAlgroKey(),
                             &cwOpenGLSettings::keyWithDevice,
-                            toInt);
+                            toInt);      
 
         } else {
             Singleton->Version = "Unknown, couldn't create context";
@@ -393,7 +401,7 @@ QStringList cwOpenGLSettings::rendererModel() const {
         case GPU:
             return "OpenGL";
         case Angles:
-            return "OpenGL via DirectX";
+            return "OpenGL ES via DirectX";
         case Software:
             return "Software";
         }
