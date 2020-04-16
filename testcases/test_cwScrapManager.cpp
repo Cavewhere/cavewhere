@@ -13,6 +13,7 @@
 #include "cwSurveyChunk.h"
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
+#include "cwLinePlotManager.h"
 
 //Qt includes
 #include <QFile>
@@ -107,14 +108,13 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     auto chunk = trip->chunk(0);
     chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10.0");
 
-    rootData->taskManagerModel()->waitForTasks();
-
     CHECK(rootData->futureManagerModel()->rowCount() == 0);
     CHECK(addRowSpy.count() == 0);
 
     QEventLoop loop;
 
-    QTimer::singleShot(100, [&](){
+    QTimer::singleShot(1, [&](){
+        rootData->linePlotManager()->waitToFinish();
         CHECK(rootData->futureManagerModel()->rowCount() == 0);
         CHECK(addRowSpy.count() == 0);
 
