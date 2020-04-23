@@ -37,7 +37,7 @@ void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cw
 
                 INFO("BlockIndex:" << blockIndex << " ImageIndex:" << imageIndex << " Image block index:" << imageIndex / 16);
                 INFO("Color:" << color.name().toStdString() << " DecompressedColor:" << QColor(decompressedColor).name().toStdString());
-                CHECK(cwOpenGLUtils::fuzzyCompareColors(color, decompressedColor) <= 10);
+                CHECK(cwOpenGLUtils::fuzzyCompareColors(color, decompressedColor) <= 16);
             }
         }
     }
