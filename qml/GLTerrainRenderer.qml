@@ -17,12 +17,7 @@ RegionViewer {
     property alias leadView: leadViewId
 
     clip: true
-
-    QQ.Binding {
-        target: camera
-        property: "devicePixelRatio"
-        value: Screen.devicePixelRatio
-    }
+    camera.devicePixelRatio: Screen.devicePixelRatio
 
     TurnTableInteraction {
         id: turnTableInteractionId
