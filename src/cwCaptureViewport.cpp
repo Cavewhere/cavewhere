@@ -7,6 +7,7 @@
 
 //Qt includes
 #include <QPen>
+#include <QUuid>
 
 //Our includes
 #include "cwCaptureViewport.h"

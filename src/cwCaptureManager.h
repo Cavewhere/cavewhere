@@ -44,6 +44,9 @@ class cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
     Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
 
+    Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
+    Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
+
     Q_ENUMS(FileType Roles)
 public:   
     enum FileType {
@@ -113,6 +116,9 @@ public:
     QStringList fileTypes() const;
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
 
+    double memoryRequired() const;
+    double memoryLimit() const;
+
 signals:
     void viewChanged();
     void paperSizeChanged();
@@ -128,6 +134,7 @@ signals:
     void finishedCapture();
     void numberOfCapturesChanged();
     void aboutToDestoryManager();
+    void memoryRequiredChanged();
 
 public slots:
 
@@ -188,6 +195,8 @@ private:
     void addFullResultionCaptureItemHelper(cwCaptureViewport* capture);
 
     void updateBorderRectangle();
+
+    qint64 requiredSizeInBytes() const;
 
 };
 
@@ -305,6 +314,7 @@ inline cwCaptureManager::FileType cwCaptureManager::typeNameToFileType(QString f
 inline cwCaptureGroupModel* cwCaptureManager::groupModel() const {
     return GroupModel;
 }
+
 
 
 

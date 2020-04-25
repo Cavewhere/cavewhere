@@ -9,11 +9,14 @@
 #include "cwScreenCaptureCommand.h"
 #include "cwScene.h"
 #include "cwCamera.h"
+#include "cwMappedQImage.h"
 
 //Qt includes
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFramebufferObjectFormat>
-
+#include <QFile>
+#include <QUuid>
+#include <QDir>
 
 cwScreenCaptureCommand::cwScreenCaptureCommand() :
     Id(0)
@@ -81,7 +84,7 @@ void cwScreenCaptureCommand::excute()
     Scene->paint();
 
     framebuffer.release();
-    QImage image = framebuffer.toImage();
+    QImage image = cwMappedQImage::createDiskImageWithTempFile(QString("cw-capture-%1").arg(Id), framebuffer.toImage());
 
     Scene->setCamera(oldCamera);
     glBindFramebuffer(GL_FRAMEBUFFER, previousFramebuffer);

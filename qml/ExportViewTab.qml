@@ -122,13 +122,54 @@ QQ.Item {
 
                 Button {
                     text: "Export"
-
+                    enabled: screenCaptureManagerId.memoryLimit > screenCaptureManagerId.memoryRequired || screenCaptureManagerId.memoryLimit < 0.0
                     onClicked: {
                         exportDialogId.open();
                         //                    screenCaptureManagerId.filename = "file://Users/vpicaver/Documents/Projects/cavewhere/testcase/test.png"
                         //                    screenCaptureManagerId.capture()
                     }
                 }
+            }
+
+            ColumnLayout {
+                RowLayout {
+                    Text {
+                        id: memoryRequiredId
+
+                        function formatMemory(memoryMB) {
+                            var useGB = function() {
+                                return memoryMB / 1024.0 > 1.0;
+                            }
+
+                            var requireMemory = function() {
+                                var toUnit = useGB() ? 1024.0 : 1.0;
+                                return memoryMB / toUnit;
+                            }
+
+                            var unit = useGB() ? "GB" : "MB";
+
+                            return requireMemory().toFixed(2) + unit;
+                        }
+
+                        text: "Memory Required: " + formatMemory(screenCaptureManagerId.memoryRequired)
+                    }
+
+                    InformationButton {
+                        showItemOnClick: memoryHelpAreaId
+                    }
+                }
+
+                HelpArea {
+                    id: memoryHelpAreaId
+                    Layout.fillWidth: true;
+                    text: "The amout of RAM that CaveWhere requires to save image. Using more memory than what's on computer my cause your computer to hang! CaveWhere may temporarily use equal or double the amount of disk space required by the memory required";
+                }
+
+                Text {
+                    visible: screenCaptureManagerId.memoryLimit > 0.0
+                    text: "Memory Limit: " + memoryRequiredId.formatMemory(screenCaptureManagerId.memoryLimit);
+                }
+
             }
 
             BreakLine {  }

@@ -34,6 +34,12 @@ private:
 
         auto fileMapPtr = file->map(0, file->size());
 
+        if(fileMapPtr == nullptr) {
+            qDebug() << "File size:" << file->fileName() << file->size();
+            qDebug() << "Couldn't map:" << file->size() / 1024.0 / 1024.0;
+            throw std::runtime_error("Couldn't map image, disk maybe full?");
+        }
+
         //Create a QImage that uses memory off of disk rather than in memory
         QImage image(fileMapPtr, size.width(), size.height(), QImage::Format_ARGB32,
                      [](void* cleanup)
