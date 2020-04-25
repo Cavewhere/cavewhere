@@ -32,7 +32,7 @@ DataBox {
             anchors.verticalCenterOffset: 1
 
             font.family: "monospace"
-            font.pointSize: 10
+            font.pixelSize: 14
             font.bold: true
             color: "#EEEEEE"
             text: "Excluded"

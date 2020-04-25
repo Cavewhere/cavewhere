@@ -62,6 +62,6 @@ QQ.Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 4
-        font.pointSize: 14
+        font.pixelSize: 14
     }
 }

@@ -43,7 +43,7 @@ QQ.Rectangle {
             style: Text.Sunken
             font.bold: true
             Layout.alignment: Qt.AlignHCenter
-            font.pointSize: 14
+            font.pixelSize: 18
         }
     }
 

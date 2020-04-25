@@ -65,7 +65,7 @@ StandardPage {
                 id: caveNameText
                 text: currentCave.name
                 font.bold: true
-                font.pointSize: 20
+                font.pixelSize: 20
 
                 onFinishedEditting: {
                     currentCave.name = newText

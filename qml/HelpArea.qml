@@ -73,7 +73,7 @@ QQ.Rectangle {
 
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
-                font.pointSize: 10
+                font.pixelSize: 14
 
                 text: "No documentation"
             }

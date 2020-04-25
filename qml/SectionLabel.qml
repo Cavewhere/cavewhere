@@ -10,7 +10,7 @@ import QtQuick 2.0 as QQ
 
 Text {
     font.underline: true
-    font.pointSize: 14
+    font.pixelSize: 20
     font.bold: true
     anchors.horizontalCenter: parent.horizontalCenter
 }

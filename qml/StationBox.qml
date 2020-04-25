@@ -67,7 +67,7 @@ DataBox {
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#444444"
             text: "Press Tab"
-            font.pointSize: 10
+            font.pixelSize: 14
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
         }

@@ -20,7 +20,7 @@ QQ.Row {
         QQ.FontLoader { id: fontBold; source: "qrc:/fonts/YanoneKaffeesatz-Bold.ttf"        }
 
         text: "CAVE"
-        font.pointSize: 40
+        font.pixelSize: 40
         anchors.verticalCenter: imageId.verticalCenter
         font.family: fontBold.name
         font.letterSpacing: 3

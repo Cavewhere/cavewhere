@@ -53,7 +53,7 @@ QQ.Item {
                 Text {
                     id: noteTextId
                     text: "No notes found..."
-                    font.pointSize: 14
+                    font.pixelSize: 18
                     font.bold: true
                     anchors.horizontalCenter: parent.horizontalCenter
                 }

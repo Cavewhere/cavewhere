@@ -60,7 +60,6 @@ QQ.Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: 1
 
-            font.pointSize: 9
             font.bold: true
         }
     }

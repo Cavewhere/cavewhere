@@ -29,7 +29,7 @@ StandardPage {
 
             Text {
                 font.bold: true
-                font.pointSize: 20
+                font.pixelSize: 20
                 text: "All Caves"
             }
 

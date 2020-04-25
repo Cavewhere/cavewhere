@@ -12,5 +12,5 @@ Text {
     color: "white"
     style: Text.Outline;
     styleColor: "black"
-    font.pointSize: 14
+    font.pixelSize: 16
 }

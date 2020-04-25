@@ -15,7 +15,7 @@ ScrollViewPage {
 
             Text {
                 text: "Unknown page!"
-                font.pointSize: 30
+                font.pixelSize: 30
                 Layout.alignment: Qt.AlignHCenter
             }
 

@@ -30,7 +30,7 @@ ShadowRectangle {
         id: textId
         anchors.centerIn: parent
 
-        font.pointSize: 14
+        font.pixelSize: 16
         horizontalAlignment: Text.AlignHCenter
     }
 

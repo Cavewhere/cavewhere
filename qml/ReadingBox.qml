@@ -18,6 +18,6 @@ DataBox {
         anchors.left: parent.left
         anchors.leftMargin: 2
         anchors.topMargin: 1
-        font.pointSize: 10
+        font.pixelSize: 12
     }
 }

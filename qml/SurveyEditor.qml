@@ -90,7 +90,7 @@ QQ.Item {
                             id: tripNameText
                             text: currentTrip.name
                             font.bold: true
-                            font.pointSize: 20
+                            font.pixelSize: 20
 
                             onFinishedEditting: {
                                 currentTrip.name = newText
