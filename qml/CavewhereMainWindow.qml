@@ -92,7 +92,7 @@ ApplicationWindow {
         id: saveAsFileDialogId
     }
 
-    ProjectErrorDialog {
+    ErrorDialog {
         id: projectErrorDialog
         model: rootData.project.errorModel
     }

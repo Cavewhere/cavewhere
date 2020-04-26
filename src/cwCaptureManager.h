@@ -19,10 +19,11 @@
 
 //Our includes
 #include "cw3dRegionViewer.h"
+#include "cwProjection.h"
 class cwCaptureViewport;
 class cwCaptureItem;
-#include "cwProjection.h"
 class cwCaptureGroupModel;
+class cwErrorListModel;
 
 class cwCaptureManager : public QAbstractListModel
 {
@@ -39,10 +40,14 @@ class cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(QUrl filename READ filename WRITE setFilename NOTIFY filenameChanged)
     Q_PROPERTY(FileType fileType READ fileType WRITE setFileType NOTIFY fileTypeChanged)
     Q_PROPERTY(QStringList fileTypes READ fileTypes CONSTANT)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
     Q_PROPERTY(QGraphicsScene* scene READ scene CONSTANT)
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
     Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
+
+    Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
+    Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
 
     Q_ENUMS(FileType Roles)
 public:   
@@ -113,6 +118,11 @@ public:
     QStringList fileTypes() const;
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
 
+    double memoryRequired() const;
+    double memoryLimit() const;
+
+    cwErrorListModel* errorModel() const;
+
 signals:
     void viewChanged();
     void paperSizeChanged();
@@ -128,6 +138,7 @@ signals:
     void finishedCapture();
     void numberOfCapturesChanged();
     void aboutToDestoryManager();
+    void memoryRequiredChanged();
 
 public slots:
 
@@ -152,6 +163,7 @@ private:
     QUrl Filename; //!<
     FileType Filetype; //!<
     cwCaptureGroupModel* GroupModel; //!<
+    cwErrorListModel* ErrorModel; //!<
     const QMap<QString, FileType> FileTypes = {
         {"PNG", PNG},
         {"TIF", TIF},
@@ -188,6 +200,8 @@ private:
     void addFullResultionCaptureItemHelper(cwCaptureViewport* capture);
 
     void updateBorderRectangle();
+
+    qint64 requiredSizeInBytes() const;
 
 };
 
@@ -304,6 +318,13 @@ inline cwCaptureManager::FileType cwCaptureManager::typeNameToFileType(QString f
 */
 inline cwCaptureGroupModel* cwCaptureManager::groupModel() const {
     return GroupModel;
+}
+
+/**
+* Returns the errors in the model
+*/
+inline cwErrorListModel* cwCaptureManager::errorModel() const {
+    return ErrorModel;
 }
 
 

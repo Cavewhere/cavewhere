@@ -18,6 +18,8 @@
 #include "cwCaptureViewport.h"
 #include "cwCaptureGroupModel.h"
 #include "cwDebug.h"
+#include "cwMappedQImage.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QLabel>
@@ -29,6 +31,8 @@
 #include <QQmlEngine>
 #include <QSvgGenerator>
 #include <QPdfWriter>
+#include <QTemporaryFile>
+#include <QImageWriter>
 
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
@@ -39,6 +43,7 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     LeftMargin(0.0),
     Filetype(PNG),
     GroupModel(new cwCaptureGroupModel(this)),
+    ErrorModel(new cwErrorListModel(this)),
     NumberOfImagesProcessed(0),
     Scene(new QGraphicsScene(this)),
     PaperRectangle(new QGraphicsRectItem()),
@@ -64,6 +69,10 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     borderPen.setJoinStyle(Qt::MiterJoin);
     BorderRectangle->setPen(borderPen);
 
+    connect(this, &cwCaptureManager::paperSizeChanged,
+            this, &cwCaptureManager::memoryRequiredChanged);
+    connect(this, &cwCaptureManager::resolutionChanged,
+            this, &cwCaptureManager::resolutionChanged);
 }
 
 /**
@@ -440,8 +449,13 @@ void cwCaptureManager::saveScene()
     };
 
     auto saveToImage = [&](const QString& type) {
-        QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
-        outputImage.fill(Qt::white); //transparent);
+        auto size = imageSize.toSize();
+
+        auto outputImage = cwMappedQImage::createDiskImageWithTempFile(QLatin1String("capture-manager"), size);
+
+        qint64 imageSizeBytes = requiredSizeInBytes();
+        Q_ASSERT(outputImage.sizeInBytes() == imageSizeBytes);
+        outputImage.fill(Qt::white);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
         cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -454,7 +468,14 @@ void cwCaptureManager::saveScene()
 
         QString fileName = appendExtention(filename().toLocalFile(), type);
 
-        outputImage.save(fileName, type.toLocal8Bit());
+        //This preforms a deep copy in memory!
+        QImageWriter imageWriter;
+        imageWriter.setFileName(fileName);
+        imageWriter.setFormat(type.toLocal8Bit());
+        bool success = imageWriter.write(outputImage);
+        if(!success) {
+            throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
+        }
     };
 
     auto saveToSVG = [&]() {
@@ -484,28 +505,35 @@ void cwCaptureManager::saveScene()
         painter.end();
     };
 
-    switch (fileType()) {
-    case PNG:
-        saveToImage("png");
-        break;
-    case TIF:
-        saveToImage("tif");
-        break;
-    case JPG:
-        saveToImage("jpg");
-        break;
-    case SVG:
-        saveToSVG();
-        break;
-    case PDF:
-        saveToPDF();
-        break;
-    default:
-        qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
-        break;
-    }
+    try {
+        switch (fileType()) {
+        case PNG:
+            saveToImage("png");
+            break;
+        case TIF:
+            saveToImage("tif");
+            break;
+        case JPG:
+            saveToImage("jpg");
+            break;
+        case SVG:
+            saveToSVG();
+            break;
+        case PDF:
+            saveToPDF();
+            break;
+        default:
+            qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
+            break;
+        }
 
-    emit finishedCapture();
+        emit finishedCapture();
+
+    } catch(std::runtime_error e) {
+        errorModel()->append(cwError(QString::fromStdString(e.what()), cwError::Fatal));
+    } catch(...) {
+        errorModel()->append(cwError("There was an unknown error, this is a bug!", cwError::Fatal));
+    }
 }
 
 /**
@@ -693,4 +721,39 @@ void cwCaptureManager::updateBorderRectangle()
 */
 QStringList cwCaptureManager::fileTypes() const {
     return FileTypes.keys();
+}
+
+/**
+* Returns the memory required by the capture manager
+*/
+double cwCaptureManager::memoryRequired() const {
+    return requiredSizeInBytes() / (1024.0 * 1024.0);
+}
+
+/**
+ * Returns the require image size in bytes
+ */
+qint64 cwCaptureManager::requiredSizeInBytes() const
+{
+    QSizeF imageSize = paperSize() * resolution();
+    return cwMappedQImage::requiredSizeInBytes(imageSize.toSize(), QImage::Format_ARGB32);
+}
+
+/**
+* Return the memory limit in MB
+*
+* For 32Bit systems this is 2.0GB
+* For 64bit systems this returns -1, no limit
+*/
+double cwCaptureManager::memoryLimit() const {
+
+    auto isBuild32Bit = []() {
+        static bool b = !QSysInfo::buildCpuArchitecture().contains(QLatin1String("64"));
+        return b;
+    };
+
+    if(isBuild32Bit()) {
+        return 1.0 * 1024.0;
+    }
+    return -1.0;
 }
