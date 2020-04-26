@@ -19,6 +19,7 @@
 #include "cwCaptureGroupModel.h"
 #include "cwDebug.h"
 #include "cwMappedQImage.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QLabel>
@@ -42,6 +43,7 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     LeftMargin(0.0),
     Filetype(PNG),
     GroupModel(new cwCaptureGroupModel(this)),
+    ErrorModel(new cwErrorListModel(this)),
     NumberOfImagesProcessed(0),
     Scene(new QGraphicsScene(this)),
     PaperRectangle(new QGraphicsRectItem()),
@@ -452,19 +454,8 @@ void cwCaptureManager::saveScene()
         auto outputImage = cwMappedQImage::createDiskImageWithTempFile(QLatin1String("capture-manager"), size);
 
         qint64 imageSizeBytes = requiredSizeInBytes();
-        qDebug() << "Resizing image to:" << imageSizeBytes;
-
-//        QTemporaryFile mapFile;
-//        mapFile.open();
-//        mapFile.resize(imageSizeBytes);
-
-//        auto fileMapPtr = mapFile.map(0, imageSizeBytes);
-//        Q_ASSERT(fileMapPtr);
-//        QImage outputImage(fileMapPtr, size.width(), size.height(), QImage::Format_ARGB32);
-        qDebug() << "Image size:" << size;
-        qDebug() << "Size in bytes:" << outputImage.sizeInBytes() << imageSizeBytes;
         Q_ASSERT(outputImage.sizeInBytes() == imageSizeBytes);
-        outputImage.fill(Qt::white); //transparent);
+        outputImage.fill(Qt::white);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
         cwImageResolution resolutionDPM = resolutionDPI.convertTo(cwUnits::DotsPerMeter);
@@ -477,15 +468,13 @@ void cwCaptureManager::saveScene()
 
         QString fileName = appendExtention(filename().toLocalFile(), type);
 
-        qDebug() << "Output image:" << outputImage << "type";
-
         //This preforms a deep copy in memory!
         QImageWriter imageWriter;
         imageWriter.setFileName(fileName);
         imageWriter.setFormat(type.toLocal8Bit());
         bool success = imageWriter.write(outputImage);
         if(!success) {
-            qDebug() << "Error:" << imageWriter.errorString();
+            throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
         }
     };
 
@@ -537,12 +526,14 @@ void cwCaptureManager::saveScene()
             qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
             break;
         }
+
+        emit finishedCapture();
+
+    } catch(std::runtime_error e) {
+        errorModel()->append(cwError(QString::fromStdString(e.what()), cwError::Fatal));
     } catch(...) {
-        qDebug() << "There was an error";
+        errorModel()->append(cwError("There was an unknown error, this is a bug!", cwError::Fatal));
     }
-
-    emit finishedCapture();
-
 }
 
 /**
@@ -745,12 +736,7 @@ double cwCaptureManager::memoryRequired() const {
 qint64 cwCaptureManager::requiredSizeInBytes() const
 {
     QSizeF imageSize = paperSize() * resolution();
-    auto size = imageSize.toSize();
-    qint64 bytesPerPixel = 4;
-    qint64 imageSizeBytes = static_cast<qint64>(size.width())
-            * static_cast<qint64>(size.height())
-            * bytesPerPixel;
-    return imageSizeBytes;
+    return cwMappedQImage::requiredSizeInBytes(imageSize.toSize(), QImage::Format_ARGB32);
 }
 
 /**
@@ -767,7 +753,7 @@ double cwCaptureManager::memoryLimit() const {
     };
 
     if(isBuild32Bit()) {
-        return 2.0 * 1024.0;
+        return 1.0 * 1024.0;
     }
     return -1.0;
 }

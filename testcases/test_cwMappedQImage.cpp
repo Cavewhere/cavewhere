@@ -167,3 +167,11 @@ TEST_CASE("CreateDiskImageWithTempFile should work correctly with QSize", "[cwMa
     CHECK(!tempFilePath.isEmpty());
     CHECK(QFile::exists(tempFilePath) == false);
 }
+
+TEST_CASE("Required bytes should calculate correctly", "[cwMappedQImage]") {
+    CHECK(cwMappedQImage::requiredSizeInBytes(QSize(), QImage::Format_ARGB32) == 0);
+    CHECK(cwMappedQImage::requiredSizeInBytes(QSize(7, 3), QImage::Format_ARGB32) == 7 * 3 * 4);
+    CHECK(cwMappedQImage::requiredSizeInBytes(QSize(1, 1), QImage::Format_ARGB32) == 4);
+    CHECK(cwMappedQImage::requiredSizeInBytes(QSize(), QImage::Format_Mono) == -1);
+    CHECK(cwMappedQImage::requiredSizeInBytes(QSize(10, 11), QImage::Format_Mono) == -1);
+}

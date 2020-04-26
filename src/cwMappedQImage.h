@@ -21,23 +21,23 @@ public:
     static QImage createDiskImageWithTempFile(const QString& templateStr, const QImage& imageToCopy);
     static QImage createDiskImageWithTempFile(const QString& templateStr, const QSize& size);
 
+    static qint64 requiredSizeInBytes(QSize size, QImage::Format);
+
 private:
     template <typename FilePopulateFunc>
     static QImage createDiskImage(const QString& path, const QSize& size, FilePopulateFunc populate) {
         Q_ASSERT(!QFile::exists(path));
 
         auto file = new QFile(path);
-        bool success = file->open(QIODevice::ReadWrite);
-        Q_ASSERT(success);
+        file->open(QIODevice::ReadWrite);
+        checkForFileErrors(file);
 
         populate(file);
 
         auto fileMapPtr = file->map(0, file->size());
 
         if(fileMapPtr == nullptr) {
-            qDebug() << "File size:" << file->fileName() << file->size();
-            qDebug() << "Couldn't map:" << file->size() / 1024.0 / 1024.0;
-            throw std::runtime_error("Couldn't map image, disk maybe full?");
+            throw std::runtime_error(QString("Couldn't memory map image, disk maybe full, or out of address space? Error:\"%1\"").arg(file->errorString()).toStdString());
         }
 
         //Create a QImage that uses memory off of disk rather than in memory
@@ -56,6 +56,7 @@ private:
     }
 
     static QString tempFilename(const QString& templateStr);
+    static void checkForFileErrors(QFile* file);
 };
 
 #endif // CWMAPPEDQIMAGE_H

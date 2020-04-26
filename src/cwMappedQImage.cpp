@@ -13,8 +13,8 @@ QImage cwMappedQImage::createDiskImage(const QString &path, const QImage &imageT
 
     return createDiskImage(path, imageToCopy.size(), [imageToCopy](QFile* file)
     {
-        bool success = file->write(reinterpret_cast<const char*>(imageToCopy.bits()), imageToCopy.sizeInBytes());
-        Q_ASSERT(success);
+        file->write(reinterpret_cast<const char*>(imageToCopy.bits()), imageToCopy.sizeInBytes());
+        checkForFileErrors(file);
         Q_ASSERT(file->size() == imageToCopy.sizeInBytes());
     });
 }
@@ -27,13 +27,9 @@ QImage cwMappedQImage::createDiskImage(const QString &path, const QSize &size)
 
     return createDiskImage(path, size, [size](QFile* file)
     {
-        const qint64 bytesPerPixel = 4;
-        qint64 imageSizeBytes = static_cast<qint64>(size.width())
-                * static_cast<qint64>(size.height())
-                * bytesPerPixel;
-
-        bool success = file->resize(imageSizeBytes);
-        Q_ASSERT(success);
+        qint64 imageSizeBytes = requiredSizeInBytes(size, QImage::Format_ARGB32);
+        file->resize(imageSizeBytes);
+        checkForFileErrors(file);
     });
 
 }
@@ -46,6 +42,29 @@ QImage cwMappedQImage::createDiskImageWithTempFile(const QString &templateStr, c
 QImage cwMappedQImage::createDiskImageWithTempFile(const QString &templateStr, const QSize &size)
 {
     return createDiskImage(tempFilename(templateStr), size);
+}
+
+qint64 cwMappedQImage::requiredSizeInBytes(QSize size, QImage::Format format)
+{
+    qint64 bytesPerPixel;
+
+    switch(format) {
+    case QImage::Format_ARGB32:
+        bytesPerPixel = 4;
+        break;
+    default:
+        return -1;
+        break;
+    }
+
+    if(!size.isValid()) {
+        return 0;
+    }
+
+    qint64 imageSizeBytes = static_cast<qint64>(size.width())
+            * static_cast<qint64>(size.height())
+            * bytesPerPixel;
+    return imageSizeBytes;
 }
 
 QString cwMappedQImage::tempFilename(const QString &templateStr)
@@ -61,5 +80,12 @@ QString cwMappedQImage::tempFilename(const QString &templateStr)
         filename = QString("%1/%2-%3.qimage").arg(QDir::tempPath()).arg(templateStr).arg(randomString());
     } while(QFile::exists(filename));
     return filename;
+}
+
+void cwMappedQImage::checkForFileErrors(QFile *file)
+{
+    if(file->error() != QFileDevice::NoError) {
+        throw(std::runtime_error(QString("Image mapping had the following error: \"%1\"").arg(file->errorString()).toStdString()));
+    }
 }
 

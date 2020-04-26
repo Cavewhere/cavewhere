@@ -39,6 +39,11 @@ QQ.Item {
         }
     }
 
+    ErrorDialog {
+        id: errorDialog
+        model: screenCaptureManagerId.errorModel
+    }
+
     SelectExportAreaTool {
         id: selectionTool
         parent: exportViewTabId.view
