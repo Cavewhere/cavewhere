@@ -203,8 +203,9 @@ void cwCaptureManager::setViewport(QRect viewport) {
 * The filename of the output file
 */
 void cwCaptureManager::setFilename(QUrl filename) {
-    if(Filename != filename) {
-        Filename = filename;
+    auto filenameWithExtention = appendExtention(filename, fileType());
+    if(Filename != filenameWithExtention) {
+        Filename = filenameWithExtention;
         emit filenameChanged();
     }
 }
@@ -217,6 +218,8 @@ void cwCaptureManager::setFileType(FileType fileType) {
     if(Filetype != fileType) {
         Filetype = fileType;
         emit fileTypeChanged();
+
+        setFilename(Filename);
     }
 }
 
@@ -440,15 +443,7 @@ void cwCaptureManager::saveScene()
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
 
-    auto appendExtention = [](const QString& filename, const QString& extention) {
-        QFileInfo info(filename);
-        if(info.suffix().compare(extention, Qt::CaseInsensitive) != 0) {
-            return filename + QString(".") + extention;
-        }
-        return filename;
-    };
-
-    auto saveToImage = [&](const QString& type) {
+    auto saveToImage = [&](FileType type) {
         auto size = imageSize.toSize();
 
         auto outputImage = cwMappedQImage::createDiskImageWithTempFile(QLatin1String("capture-manager"), size);
@@ -466,12 +461,11 @@ void cwCaptureManager::saveScene()
         QPainter painter(&outputImage);
         Scene->render(&painter, imageRect, sceneRect);
 
-        QString fileName = appendExtention(filename().toLocalFile(), type);
-
         //This preforms a deep copy in memory!
+        qDebug() << "Writing to:" << filename().toLocalFile();
         QImageWriter imageWriter;
-        imageWriter.setFileName(fileName);
-        imageWriter.setFormat(type.toLocal8Bit());
+        imageWriter.setFileName(filename().toLocalFile());
+        imageWriter.setFormat(fileTypeToExtention(type).toLocal8Bit());
         bool success = imageWriter.write(outputImage);
         if(!success) {
             throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
@@ -479,10 +473,8 @@ void cwCaptureManager::saveScene()
     };
 
     auto saveToSVG = [&]() {
-        QString fileName = appendExtention(filename().toLocalFile(), "svg");
-
         QSvgGenerator generator;
-        generator.setFileName(fileName);
+        generator.setFileName(filename().toLocalFile());
         generator.setSize(imageSize.toSize());
         generator.setViewBox(imageRect);
 
@@ -493,9 +485,7 @@ void cwCaptureManager::saveScene()
     };
 
     auto saveToPDF = [&]() {
-        QString fileName = appendExtention(filename().toLocalFile(), "pdf");
-
-        QPdfWriter pdfWriter(fileName);
+        QPdfWriter pdfWriter(filename().toLocalFile());
         pdfWriter.setPageSize(QPageSize(paperSize(), QPageSize::Inch));
         pdfWriter.setResolution(resolution());
 
@@ -508,13 +498,9 @@ void cwCaptureManager::saveScene()
     try {
         switch (fileType()) {
         case PNG:
-            saveToImage("png");
-            break;
         case TIF:
-            saveToImage("tif");
-            break;
         case JPG:
-            saveToImage("jpg");
+            saveToImage(fileType());
             break;
         case SVG:
             saveToSVG();
@@ -737,6 +723,43 @@ qint64 cwCaptureManager::requiredSizeInBytes() const
 {
     QSizeF imageSize = paperSize() * resolution();
     return cwMappedQImage::requiredSizeInBytes(imageSize.toSize(), QImage::Format_ARGB32);
+}
+
+QUrl cwCaptureManager::appendExtention(const QUrl &fileUrl, FileType fileType) const
+{
+    QString extention = fileTypeToExtention(fileType);
+    QString filename = fileUrl.toLocalFile();
+    QFileInfo info(filename);
+    if(typeNameToFileType(info.suffix().toUpper()) != UnknownType) {
+        if(!info.suffix().isEmpty()) {
+            filename.chop(info.suffix().size() + 1); //also chop off the .jpg
+        }
+    }
+    if(!filename.endsWith(QLatin1String("."))) {
+        filename += QString(".");
+    }
+
+    filename += extention;
+    return QUrl::fromLocalFile(filename);
+}
+
+QString cwCaptureManager::fileTypeToExtention(cwCaptureManager::FileType type) const
+{
+    switch(type) {
+    case UnknownType:
+        return QString();
+    case PNG:
+        return QLatin1String("png");
+    case TIF:
+        return QLatin1String("tif");
+    case JPG:
+        return QLatin1String("jpg");
+    case SVG:
+        return QLatin1String("svg");
+    case PDF:
+        return QLatin1String("pdf");
+    }
+    return QString("");
 }
 
 /**

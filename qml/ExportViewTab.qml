@@ -589,6 +589,7 @@ QQ.Item {
         title: "Export to " + fileTypeExportComboBox.currentText
         selectExisting: false
         folder: rootData.lastDirectory
+        defaultSuffix: screenCaptureManagerId.fileTypeToExtention(screenCaptureManagerId.fileType)
         onAccepted: {
             var type = screenCaptureManagerId.typeNameToFileType(fileTypeExportComboBox.currentText);
 
