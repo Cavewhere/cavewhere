@@ -20,12 +20,13 @@
 //Our includes
 #include "cw3dRegionViewer.h"
 #include "cwProjection.h"
+#include "cwGlobals.h"
 class cwCaptureViewport;
 class cwCaptureItem;
 class cwCaptureGroupModel;
 class cwErrorListModel;
 
-class cwCaptureManager : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
 {
     Q_OBJECT
 
@@ -117,6 +118,7 @@ public:
 
     QStringList fileTypes() const;
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
+    Q_INVOKABLE QString fileTypeToExtention(FileType type) const;
 
     double memoryRequired() const;
     double memoryLimit() const;
@@ -202,6 +204,8 @@ private:
     void updateBorderRectangle();
 
     qint64 requiredSizeInBytes() const;
+
+    QUrl appendExtention(const QUrl& filename, FileType fileType) const;
 
 };
 
