@@ -38,6 +38,10 @@ cwStationRenamer::cwStationRenamer()
  */
 cwStation cwStationRenamer::createStation(QString originalName)
 {
+    if(originalName.isEmpty()) {
+        return cwStation();
+    }
+
     QString newName = OriginalToRenamedStations.value(originalName);
 
     if(newName.isEmpty()) {

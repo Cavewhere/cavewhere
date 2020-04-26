@@ -241,7 +241,11 @@ void WallsImporterVisitor::parsedVector(Vector v)
         Importer->StationMap[lrudStation->name()] = *lrudStation;
     }
 
-    if (v.distance().isValid())
+    if(fromStation.name().isEmpty() || toStation.name().isEmpty()) {
+        Importer->addImportError(WallsMessage("warning", QString("Station \"%1\" to \"%2\" Walls importer currently doesn't support splay shots").arg(fromStation.name()).arg(toStation.name())));
+    }
+
+    if (v.distance().isValid() && !fromStation.name().isEmpty() && !toStation.name().isEmpty())
     {
         CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
     }
@@ -318,7 +322,7 @@ bool cwWallsImporter::shouldWarn(WarningType type, bool condition)
 }
 
 cwStation cwWallsImporter::createStation(QString name)
-{
+{   
     cwStation station = StationRenamer.createStation(name);
     if (shouldWarn(STATION_RENAMED, name != station.name())) {
         addImportError(WallsMessage("warning",
