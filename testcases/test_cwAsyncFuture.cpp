@@ -28,6 +28,12 @@ TEST_CASE("cwAsyncFuture should restart correctly", "[cwAsyncFuture]") {
         cwAsyncFuture::restart(&runFuture, run);
     }
 
+    if(runFuture.isCanceled()) {
+        QCoreApplication::processEvents();
+    }
+
+    CHECK(runFuture.isCanceled() == false);
+
     cwAsyncFuture::waitForFinished(runFuture);
 
     int finalCount = count;
