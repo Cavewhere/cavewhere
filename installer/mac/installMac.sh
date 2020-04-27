@@ -20,6 +20,7 @@ install_name_tool -add_rpath @executable_path/../Frameworks Cavewhere.app/Conten
 install_name_tool -change $4/lib/cavewhere-lib.framework/Versions/A/cavewhere-lib @executable_path/../Frameworks/cavewhere-lib.framework/Versions/A/cavewhere-lib Cavewhere.app/Contents/MacOS/cavewhere-test
 install_name_tool -change $4/lib/s3tc-dxt-decompression.framework/Versions/A/s3tc-dxt-decompression @executable_path/../Frameworks/s3tc-dxt-decompression.framework/Versions/A/s3tc-dxt-decompression Cavewhere.app/Contents/MacOS/cavewhere-test
 install_name_tool -change $4/lib/dewalls.framework/Versions/A/dewalls @executable_path/../Frameworks/dewalls.framework/Versions/A/dewalls Cavewhere.app/Contents/MacOS/cavewhere-test
+install_name_tool -change $4/lib/QMath3d.framework/Versions/A/QMath3d @executable_path/../Frameworks/QMath3d.framework/Versions/A/QMath3d Cavewhere.app/Contents/MacOS/cavewhere-test
 
 echo "Deleting old DMG"
 rm -rvf "CaveWhere $1.dmg"
