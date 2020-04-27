@@ -68,7 +68,7 @@ QString cwRegionIOTask::toVersion(int protoVersion)
         {0, "0.07"},
         {1, "0.08"},
         {2, "0.09-beta1"},
-        {3, "0.09"}
+        {3, "0.09-beta2"}
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");
