@@ -9,8 +9,9 @@
 #define CWDISTANCEVALIDATOR_H
 
 #include "cwValidator.h"
+#include "cwGlobals.h"
 
-class cwDistanceValidator : public cwValidator
+class CAVEWHERE_LIB_EXPORT cwDistanceValidator : public cwValidator
 {
     Q_OBJECT
 public:

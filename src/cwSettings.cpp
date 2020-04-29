@@ -1,10 +1,11 @@
-//
+//Our includes
 #include "cwSettings.h"
 #include "cwOpenGLSettings.h"
 #include "cwJobSettings.h"
 
 //Our inculdes
 #include <QCoreApplication>
+#include <QLocale>
 
 cwSettings* cwSettings::Singleton = nullptr;
 
@@ -21,6 +22,8 @@ void cwSettings::initialize()
     if(Singleton == nullptr) {
         Singleton = new cwSettings(QCoreApplication::instance());
     }
+
+    QLocale::setDefault(QLocale::c());
 
     //Keep these here because cwOpenGLSetting can be deallocated in cleanup()
     cwOpenGLSettings::initialize(); //Init's a singleton
