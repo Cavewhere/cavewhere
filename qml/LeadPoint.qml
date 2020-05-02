@@ -45,14 +45,22 @@ PointItem {
                 width: columnLayout.width
                 height: columnLayout.height
 
-                CWButton {
-                    anchors.right: parent.right
-                    iconSource: "qrc:/icons/x.png"
-                    onClicked: selected = false
-                }
 
                 ColumnLayout {
                     id: columnLayout
+
+                    CWButton {
+                        anchors.right: parent.right
+                        iconSource: "qrc:/icons/x.png"
+                        onClicked: selected = false
+                    }
+
+                    SizeEditor {
+                        readOnly: true
+                        backgroundColor: "#C6C6C6"
+                        widthText: lead.width
+                        heightText: lead.height
+                    }
 
                     CheckBox {
                         id: checkBox
@@ -64,13 +72,6 @@ PointItem {
                             target: lead
                             onCompletedChanged: checkBox.checked = lead.completed
                         }
-                    }
-
-                    SizeEditor {
-                        readOnly: true
-                        backgroundColor: "#C6C6C6"
-                        widthText: lead.width
-                        heightText: lead.height
                     }
 
                     Text {
