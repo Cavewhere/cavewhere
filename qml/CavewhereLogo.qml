@@ -31,7 +31,7 @@ QQ.Row {
         QQ.FontLoader { id: fontThin; source: "qrc:/fonts/YanoneKaffeesatz-Thin.ttf" }
 
         text: "WHERE"
-        font.pointSize: caveTextId.font.pointSize
+        font.pixelSize: caveTextId.font.pixelSize
         anchors.verticalCenter: imageId.verticalCenter
         font.family: fontThin.name
     }
