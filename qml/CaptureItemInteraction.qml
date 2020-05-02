@@ -13,7 +13,7 @@ QQ.Rectangle {
     property bool selected: false
 
     //Private properties
-    property double _scale: captureScale * Screen.devicePixelRatio
+    property double _scale: captureScale
 
     /**
       This find the maxium delta from the x and y.
