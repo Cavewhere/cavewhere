@@ -72,7 +72,7 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     connect(this, &cwCaptureManager::paperSizeChanged,
             this, &cwCaptureManager::memoryRequiredChanged);
     connect(this, &cwCaptureManager::resolutionChanged,
-            this, &cwCaptureManager::resolutionChanged);
+            this, &cwCaptureManager::memoryRequiredChanged);
 }
 
 /**
@@ -125,7 +125,7 @@ void cwCaptureManager::setPaperSize(QSizeF paperSize) {
 
 /**
 * @brief cwCaptureManager::setResolution
-* @param resolution
+* @param resolution in pixel per-inch
 */
 void cwCaptureManager::setResolution(double resolution) {
     if(Resolution != resolution) {
