@@ -22,6 +22,14 @@ cwCaptureItemManiputalor::cwCaptureItemManiputalor(QQuickItem *parent) :
     QQuickItem(parent),
     InteractionComponent(nullptr)
 {
+    connect(this, &QQuickItem::xChanged,
+            this, &cwCaptureItemManiputalor::updateTransform);
+    connect(this, &QQuickItem::yChanged,
+            this, &cwCaptureItemManiputalor::updateTransform);
+    connect(this, &QQuickItem::widthChanged,
+            this, &cwCaptureItemManiputalor::updateTransform);
+    connect(this, &QQuickItem::heightChanged,
+            this, &cwCaptureItemManiputalor::updateTransform);
 }
 
 /**
