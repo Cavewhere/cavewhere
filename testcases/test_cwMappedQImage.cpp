@@ -137,7 +137,7 @@ TEST_CASE("CreateDiskImageWithTempFile should work correctly with QSize", "[cwMa
         QSize size(512, 512);
         QImage refImage(size,  QImage::Format_ARGB32);
         refImage.fill(Qt::red);
-        QImage diskImage = cwMappedQImage::createDiskImageWithTempFile(templateName, size);\
+        QImage diskImage = cwMappedQImage::createDiskImageWithTempFile(templateName, size);
         diskImage.fill(Qt::red);
 
         auto dirListAll = tempDir.entryList(filter, QDir::Files);
@@ -174,4 +174,28 @@ TEST_CASE("Required bytes should calculate correctly", "[cwMappedQImage]") {
     CHECK(cwMappedQImage::requiredSizeInBytes(QSize(1, 1), QImage::Format_ARGB32) == 4);
     CHECK(cwMappedQImage::requiredSizeInBytes(QSize(), QImage::Format_Mono) == -1);
     CHECK(cwMappedQImage::requiredSizeInBytes(QSize(10, 11), QImage::Format_Mono) == -1);
+}
+
+TEST_CASE("cwMappedQImage should keep original color space", "[cwMappedQImage]") {
+    QImage image(QSize(100, 100), QImage::Format_ARGB32);
+    image.setColorSpace(QColorSpace(QColorSpace::AdobeRgb));
+    image.fill(Qt::red);
+
+    CHECK(image.colorSpace() == QColorSpace(QColorSpace::AdobeRgb));
+    CHECK(image.colorSpace() != QColorSpace());
+
+    QImage diskImage = cwMappedQImage::createDiskImageWithTempFile("colorSpace", image);
+    CHECK(diskImage == image);
+    CHECK(diskImage.colorSpace() == image.colorSpace());
+}
+
+TEST_CASE("cwMappedQImage should keep the correct format", "[cwMappedQImage]") {
+    QImage image(QSize(100, 100), QImage::Format_A2RGB30_Premultiplied);
+    image.setColorSpace(QColorSpace(QColorSpace::AdobeRgb));
+    image.fill(Qt::red);
+
+
+    QImage diskImage = cwMappedQImage::createDiskImageWithTempFile("format", image);
+    CHECK(diskImage == image);
+    CHECK(diskImage.format() == image.format());
 }

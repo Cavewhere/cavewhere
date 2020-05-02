@@ -11,7 +11,11 @@ QImage cwMappedQImage::createDiskImage(const QString &path, const QImage &imageT
         return imageToCopy;
     }
 
-    return createDiskImage(path, imageToCopy.size(), [imageToCopy](QFile* file)
+    return createDiskImage(path,
+                           imageToCopy.size(),
+                           imageToCopy.colorSpace(),
+                           imageToCopy.format(),
+                           [imageToCopy](QFile* file)
     {
         file->write(reinterpret_cast<const char*>(imageToCopy.bits()), imageToCopy.sizeInBytes());
         checkForFileErrors(file);
@@ -25,7 +29,11 @@ QImage cwMappedQImage::createDiskImage(const QString &path, const QSize &size)
         return QImage();
     }
 
-    return createDiskImage(path, size, [size](QFile* file)
+    return createDiskImage(path,
+                           size,
+                           QColorSpace(),
+                           QImage::Format_ARGB32,
+                           [size](QFile* file)
     {
         qint64 imageSizeBytes = requiredSizeInBytes(size, QImage::Format_ARGB32);
         file->resize(imageSizeBytes);

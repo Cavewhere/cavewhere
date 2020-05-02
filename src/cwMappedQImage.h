@@ -7,6 +7,7 @@
 #include <QSize>
 #include <QFile>
 #include <QDebug>
+#include <QColorSpace>
 
 //Our includes
 #include "cwGlobals.h"
@@ -25,7 +26,11 @@ public:
 
 private:
     template <typename FilePopulateFunc>
-    static QImage createDiskImage(const QString& path, const QSize& size, FilePopulateFunc populate) {
+    static QImage createDiskImage(const QString& path,
+                                  const QSize& size,
+                                  QColorSpace colorSpace,
+                                  QImage::Format format,
+                                  FilePopulateFunc populate) {
         Q_ASSERT(!QFile::exists(path));
 
         auto file = new QFile(path);
@@ -41,7 +46,7 @@ private:
         }
 
         //Create a QImage that uses memory off of disk rather than in memory
-        QImage image(fileMapPtr, size.width(), size.height(), QImage::Format_ARGB32,
+        QImage image(fileMapPtr, size.width(), size.height(), format,
                      [](void* cleanup)
         {
             auto file = reinterpret_cast<QFile*>(cleanup);
@@ -51,6 +56,8 @@ private:
             Q_ASSERT(success);
         },
         file);
+
+        image.setColorSpace(colorSpace);
 
         return image;
     }
