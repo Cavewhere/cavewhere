@@ -52,5 +52,5 @@ QGraphicsScene* cwQuickSceneView::scene() const {
 void cwQuickSceneView::paint(QPainter *painter)
 {
     if(Scene.isNull()) { return; }
-    Scene->render(painter);
+    Scene->render(painter, boundingRect());
 }
