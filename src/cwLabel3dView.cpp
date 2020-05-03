@@ -217,3 +217,10 @@ void cwLabel3dView::TransformPoint::operator()(cwLabel3dItem& label) {
     viewportCoord.setY(y);
     label.setPosition(viewportCoord);
 }
+
+/**
+Gets camera
+*/
+cwCamera *cwLabel3dView::camera() const {
+    return Camera;
+}

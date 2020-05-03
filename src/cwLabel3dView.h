@@ -72,7 +72,7 @@ private:
 
     //For rendering labels
     QQmlComponent* Component;
-    cwCamera* Camera; //!<
+    QPointer<cwCamera> Camera; //!<
     cwCollisionRectKdTree LabelKdTree;
 
     void updateGroup(cwLabel3dGroup* group);
@@ -83,10 +83,5 @@ private slots:
 };
 
 
-/**
-Gets camera
-*/
-inline cwCamera* cwLabel3dView::camera() const {
-    return Camera;
-}
+
 #endif // CWLABEL3DVIEW_H

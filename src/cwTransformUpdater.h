@@ -71,7 +71,7 @@ private slots:
 
 private:
     QSet<QQuickItem*> PointItems;
-    cwCamera* Camera;
+    QPointer<cwCamera> Camera;
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
