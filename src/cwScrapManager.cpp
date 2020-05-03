@@ -50,9 +50,22 @@ cwScrapManager::~cwScrapManager()
   \brief Sets the project for the scrap manager
   */
 void cwScrapManager::setProject(cwProject *project) {
-    Project = project;
-            ScrapsEntity->setProject(Project->filename());
+    if(Project != project) {
+        if(Project) {
+           disconnect(Project, nullptr, this, nullptr);
+        }
 
+        Project = project;
+
+        if(Project) {
+            auto updateProfileFilename = [this]() {
+                ScrapsEntity->setProject(Project->filename());
+            };
+
+            connect(Project, &cwProject::filenameChanged,
+                    this, updateProfileFilename);
+        }
+    }
 }
 
 /**

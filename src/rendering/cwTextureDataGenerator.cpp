@@ -51,7 +51,7 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     if(mipmaps.isEmpty()) {
         return textureData;
     }
-    Q_ASSERT(mipmaps.size() == 1);
+    Q_ASSERT(mipmaps.size() >= 1);
 
     auto firstMipmap = mipmaps.first();
 

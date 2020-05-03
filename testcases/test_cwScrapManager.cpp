@@ -14,6 +14,7 @@
 #include "cwNote.h"
 #include "cwSurveyNoteModel.h"
 #include "cwLinePlotManager.h"
+#include "cwScrapsEntity.h"
 
 //Qt includes
 #include <QFile>
@@ -129,4 +130,19 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
     });
 
     loop.exec();
+}
+
+TEST_CASE("cwScrapManager should update the cwScrapEntity project correctly", "[cwScrapManager]") {
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    fileToProject(project, "://datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw");
+
+    CHECK(rootData->scrapManager()->scrapsEntity()->project() == project->filename());
+
+    auto oldName = project->filename();
+    project->newProject();
+
+    CHECK(oldName != project->filename());
+    CHECK(rootData->scrapManager()->scrapsEntity()->project() == project->filename());
 }
