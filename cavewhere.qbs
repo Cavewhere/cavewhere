@@ -40,9 +40,6 @@ Project {
         id: applicationId
         name: "CaveWhere"
 
-        files: [
-            "shaders/shaderresources.qrc",
-        ]
         readonly property string appPrefix: {
             if(qbs.targetOS.contains("macos")) {
                 return name + ".app/Contents/MacOS/"
