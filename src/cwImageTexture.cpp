@@ -242,6 +242,9 @@ void cwImageTexture::updateData() {
                     glGenerateMipmap(GL_TEXTURE_2D);
                 }
                 break;
+            case cwTextureUploadTask::Unknown:
+                Q_ASSERT(false);
+                break;
             }
 
             trueMipmapLevel++;
@@ -320,6 +323,9 @@ bool cwImageTexture::isImageValid(const cwImage &image) const
     case cwTextureUploadTask::OpenGL_RGBA:
         Q_ASSERT(!cwOpenGLSettings::instance()->useDXT1Compression());
         return image.isOriginalValid();
+    case cwTextureUploadTask::Unknown:
+        Q_ASSERT(false);
+        return false;
     }
     Q_ASSERT(false);
     return false;

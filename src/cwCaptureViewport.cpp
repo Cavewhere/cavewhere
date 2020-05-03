@@ -20,6 +20,9 @@
 #include "cwLength.h"
 #include "cwGlobals.h"
 
+//Std includes
+#include <math.h>
+
 //undef these because microsoft is fucking retarded...
 #ifdef Q_OS_WIN
 #undef far

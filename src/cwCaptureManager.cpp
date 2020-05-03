@@ -35,6 +35,9 @@
 #include <QTemporaryFile>
 #include <QImageWriter>
 
+//Std includes
+#include <math.h>
+
 #ifdef Q_OS_WIN
 #undef far
 #undef near

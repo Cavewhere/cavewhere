@@ -69,7 +69,6 @@ inline std::ostream& operator << ( std::ostream& os, QModelIndex const& value) {
     if(value.parent() != QModelIndex()) {
         os << value.parent() << "->"; //Recursive printing
         printIndex();
-        os;
     } else {
         os << "Model:" << value.model() << " ";
         printIndex();
