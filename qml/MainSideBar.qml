@@ -5,10 +5,12 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
+import QtQuick.Controls 2.12 as QC
 import QtQuick.Layouts 1.1
+import Cavewhere 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: sidebarArea
     width: 80
     color: "#ffffff"
@@ -28,9 +30,11 @@ Rectangle {
         var history = rootData.pageSelectionModel.history;
         for(var i = history.length - 1; i >= 0; i--) {
             var page = history[i];
-            var fullAddress = page.fullname();
-            if(fullAddress.search(pageType) === 0) {
-                return fullAddress;
+            if(page) {
+                var fullAddress = page.fullname();
+                if(fullAddress.search(pageType) === 0) {
+                    return fullAddress;
+                }
             }
         }
         return pageType;
@@ -55,7 +59,7 @@ Rectangle {
         rootData.pageSelectionModel.currentPageAddress = page;
     }
 
-    Connections {
+    QQ.Connections {
         target: rootData.pageSelectionModel
 
         onCurrentPageAddressChanged: {
@@ -66,23 +70,27 @@ Rectangle {
                 pageShown = 0;
             } else if(address.search(dataPage) == 0) {
                 pageShown = 1
+            } else {
+                //Deselect both, probably in unknown page or settings page
+                pageShown = -1;
             }
+
             gotoToPage = true
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: sideBarBackground
         border.width: 0
        // border.color: "#000000"
         height: parent.width
-        gradient: Gradient {
-            GradientStop {
+        gradient: QQ.Gradient {
+            QQ.GradientStop {
                 position: 1
                 color: "#616469"
             }
 
-            GradientStop {
+            QQ.GradientStop {
                 position: 0
                 color: "#1b2331"
             }
@@ -91,13 +99,13 @@ Rectangle {
         x: -parent.height / 2
         y: parent.height / 2
         rotation: -90
-        transformOrigin: Item.Top
+        transformOrigin: QQ.Item.Top
 
     }
 
 
 
-    Column {
+    QQ.Column {
         id: buttonBar
         anchors.left: parent.left
         anchors.right: parent.right
@@ -128,17 +136,27 @@ Rectangle {
 //        }
     }
 
-    ListView {
+    QQ.ListView {
         id: taskListView
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: buttonBar.bottom
-        anchors.bottom: parent.bottom
+        anchors.bottom: autoSwitchId.top
 
-        model: rootData.taskManagerModel
-        verticalLayoutDirection: ListView.BottomToTop
+        TaskFutureCombineModel {
+            id: taskModelCombinerId
+            models: [rootData.taskManagerModel, rootData.futureManagerModel]
+        }
 
-        delegate: Rectangle {
+        FutureFilterModel {
+            id: futureFilterId
+            sourceModel: taskModelCombinerId
+        }
+
+        model: taskModelCombinerId
+        verticalLayoutDirection: QQ.ListView.BottomToTop
+
+        delegate: QQ.Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
 
@@ -149,29 +167,53 @@ Rectangle {
 
                 y: 5
 
+                anchors.margins: 5
                 anchors.left: parent.left
                 anchors.right: parent.right
 
                 Text {
                     id: nameText
                     text: nameRole
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
                 }
 
-                Rectangle {
-                    border.width: 1
-                    border.color: "black"
-
-                    implicitHeight: 12
-
-                    Rectangle {
-                        property double precentComplete: progressRole / numberOfStepsRole
-                        x: 1
-                        y: 1
-                        width: (parent.width - 2) * precentComplete
-                        height: parent.height - 2
-                        color: "red"
-                    }
+                QC.ProgressBar {
+                    Layout.maximumWidth: columnLayoutId.width
+                    value: !indeterminate ? progressRole / numberOfStepsRole : 0.0
+                    indeterminate: numberOfStepsRole <= 0
                 }
+            }
+        }
+    }
+
+    QQ.Rectangle {
+        id: autoSwitchId
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        implicitHeight: autoSwitchLayoutId.height
+        color: "white"
+
+        ColumnLayout {
+            id: autoSwitchLayoutId
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            Text {
+                text: "Automatic\nUpdate"
+                id: labelTextId
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            QC.CheckBox {
+                id: autoCheckboxId
+                checked: rootData.settings.jobSettings.automaticUpdate
+                onCheckedChanged: {
+                    rootData.settings.jobSettings.automaticUpdate = checked
+                }
+                Layout.alignment: Qt.AlignHCenter
             }
         }
     }

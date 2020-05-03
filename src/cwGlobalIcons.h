@@ -23,10 +23,10 @@ public:
     static QPixmapCache::Key Trip;
     static QPixmapCache::Key Plus;
 
-    static const QString CaveFilename;
-    static const QString NoImportFilename;
-    static const QString TripFilename;
-    static const QString PlusFilename;
+    static QString caveFilename() { return QLatin1String(":/icons/cave.png");}
+    static QString noImportFilename() { return QLatin1String(":/icons/dontImport.png");}
+    static QString tripFilename() { return QLatin1String(":/icons/trip.png");}
+    static QString plusFilename() { return QLatin1String(":/icons/plus.png");}
 
 };
 

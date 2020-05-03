@@ -15,6 +15,7 @@
 #include <QSet>
 
 //Our includes
+#include <cwGlobals.h>
 class cwCaptureItem;
 
 class cwCaptureSelectionModel : public QObject
@@ -56,7 +57,7 @@ private slots:
 * @return
 */
 inline QList<cwCaptureItem*> cwCaptureSelectionModel::selectedItems() const {
-    return SelectedItems.toList();
+    return cw::toList(SelectedItems);
 }
 
 #endif // CWCAPTURESELECTIONMODEL_H

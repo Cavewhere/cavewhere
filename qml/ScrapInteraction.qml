@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 BaseScrapInteraction {
@@ -17,7 +17,7 @@ BaseScrapInteraction {
         anchors.fill: parent
         basePanZoom: basePanZoomInteraction
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
@@ -90,7 +90,7 @@ BaseScrapInteraction {
         text: "Trace a cave section by <b>clicking</b> points around it."
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: snapPoint
         visible: false
         color: "red"
@@ -105,7 +105,7 @@ BaseScrapInteraction {
         }
     }
 
-    Keys.onSpacePressed: {
+    QQ.Keys.onSpacePressed: {
         interaction.startNewScrap()
     }
 }

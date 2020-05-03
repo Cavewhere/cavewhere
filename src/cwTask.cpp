@@ -19,6 +19,8 @@
 #include <QThreadPool>
 #include <QDebug>
 
+QThreadPool* cwTask::ThreadPool = nullptr;
+
 cwTask::cwTask(QObject *parent) :
     QObject(parent),
     StatusLocker(QReadWriteLock::Recursive)
@@ -155,7 +157,7 @@ void cwTask::start() {
     }
 
     if(isUsingThreadPool()) {
-        QThreadPool::globalInstance()->start(this);
+        threadPool()->start(this);
     } else {
         run();
     }
@@ -243,56 +245,6 @@ void cwTask::done() {
         locker.unlock();
         emit finished();
     }
-}
-
-/**
-  \brief Starts running the task on the task's thread
-
-  THIS should only be called from start()
-  */
-void cwTask::startOnCurrentThread() {
-
-    if(!isParentsRunning()) {
-        //Parent task aren't running
-        stop(); //Stop
-        done(); //We are finished
-        return;
-    }
-
-    {
-        QWriteLocker locker(&StatusLocker);
-
-        Q_ASSERT(!isReadyPrivate()); //The thread should definitally not me running here
-
-        if(CurrentStatus != PreparingToStart) {
-            done();
-            return;
-        }
-
-        //Make sure we are preparing to start
-        CurrentStatus = Running;
-
-        NeedsRestart = false;
-    }
-
-    //Set the progress to zero
-    setProgress(0);
-
-    if(isUsingThreadPool()) {
-        QThreadPool::globalInstance()->start(this);
-    } else {
-        run();
-    }
-}
-
-/**
-  \brief Moves the task to the thread
-
-  This moves this task and all it children to the thread
-  */
-void cwTask::changeThreads(QThread* thread) {
-    moveToThread(thread);
-    emit threadChanged();
 }
 
 /**
@@ -400,7 +352,7 @@ void cwTask::run()
  *
  * This blocks the current thread until the cwTask finishes, ei. emit finished signal
  */
-void cwTask::waitToFinish()
+void cwTask::waitToFinish(cwTask::WaitToFinishType type)
 {
     if(isUsingThreadPool()) {
         //We need to process the events because there could be events that cause the status to change
@@ -408,7 +360,13 @@ void cwTask::waitToFinish()
 
         {
             QReadLocker locker(&StatusLocker);
-            switch (CurrentStatus) {
+
+            int currentStatus = CurrentStatus;
+            if(type == IgnoreRestart && (CurrentStatus == Restarting || CurrentStatus == Restart)) {
+                currentStatus = Ready;
+            }
+
+            switch (currentStatus) {
             case Ready:
                 break;
             case PreparingToStart:
@@ -426,6 +384,23 @@ void cwTask::waitToFinish()
         }
 
         QCoreApplication::processEvents();
+    }
+}
+
+int cwTask::maxThreadCount()
+{
+    return threadPool()->maxThreadCount();
+}
+
+QThreadPool *cwTask::threadPool()
+{
+    return ThreadPool;
+}
+
+void cwTask::initilizeThreadPool()
+{
+    if(!ThreadPool) {
+        ThreadPool = new QThreadPool(QThreadPool::globalInstance());
     }
 }
 

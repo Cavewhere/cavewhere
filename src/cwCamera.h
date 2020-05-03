@@ -34,6 +34,7 @@ class cwCamera : public Qt3DCore::QEntity
     //Camera settings
     Q_PROPERTY(QMatrix4x4 viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)
+    Q_PROPERTY(double devicePixelRatio READ devicePixelRatio WRITE setDevicePixelRatio NOTIFY devicePixelRatioChanged)
     Q_PROPERTY(ProjectionType projectionType READ projectionType WRITE setProjectionType NOTIFY projectionTypeChanged)
     Q_PROPERTY(bool updateProjectionOnViewportChange READ updateProjectionOnViewportChange WRITE setUpdateProjectionOnViewportChange NOTIFY updateProjectionOnViewportChangeChanged)
 
@@ -57,6 +58,9 @@ public:
 
     double fieldOfView() const;
     void setFieldOfView(double fieldOfView);
+    
+    double devicePixelRatio() const;
+    void setDevicePixelRatio(double devicePixelRatio);
 
     void setViewport(QRect viewport);
     QRect viewport() const;
@@ -104,6 +108,7 @@ signals:
     void pixelsPerMeterChanged();
     void zoomScaleChanged();
     void projectionTypeChanged();
+    void devicePixelRatioChanged();
     void orthProjectionMatrixChanged();
     void perspectiveProjectionMartixChanged();
     void fieldOfViewChanged();
@@ -116,6 +121,7 @@ private:
     QMatrix4x4 ViewMatrix;
     mutable QMatrix4x4 ViewProjectionMatrix;
     cwProjection Projection;
+    double DevicePixelRatio = 1.0; //!<
 
     //For ortho projections
     double ZoomScale; //!<
@@ -203,6 +209,13 @@ inline QVector3D cwCamera::unProject(QPoint point, float viewDepth, QMatrix4x4 m
 */
 inline double cwCamera::zoomScale() const {
     return ZoomScale;
+}
+
+/**
+*
+*/
+inline double cwCamera::devicePixelRatio() const {
+    return DevicePixelRatio;
 }
 
 

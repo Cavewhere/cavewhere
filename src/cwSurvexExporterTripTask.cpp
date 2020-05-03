@@ -14,8 +14,6 @@
 #include "cwTeamMember.h"
 #include "cwTeam.h"
 
-const int cwSurvexExporterTripTask::TextPadding = -11; //Left align with 10 spaces
-
 cwSurvexExporterTripTask::cwSurvexExporterTripTask(QObject *parent) :
     cwExporterTask(parent)
 {
@@ -55,7 +53,7 @@ void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
     stream << "*begin ; " << trip->name() << endl;
 
-    writeDate(stream, trip->date());
+    writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
     writeCalibrations(stream, trip->calibrations()); stream << endl;
     writeShotData(stream, trip); stream << endl;

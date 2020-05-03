@@ -18,6 +18,7 @@ cwGLImageItemResources::~cwGLImageItemResources()
     if(context() != nullptr) {
         context()->makeCurrent(context()->surface());
         GeometryVertexBuffer.destroy();
+        NoteTexture->release();
         delete NoteTexture;
     }
 }

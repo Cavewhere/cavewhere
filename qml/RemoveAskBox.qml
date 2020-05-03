@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
@@ -32,7 +32,7 @@ ShadowRectangle {
 
     color: Theme.errorBackground
 
-    MouseArea {
+    QQ.MouseArea {
         parent: rootPopupItem
         anchors.fill: parent
 
@@ -54,7 +54,7 @@ ShadowRectangle {
         }
     }
 
-    Row {
+    QQ.Row {
         id: askRow
         x: 3
         y: 3
@@ -85,9 +85,9 @@ ShadowRectangle {
 
 
     states: [
-        State {
+        QQ.State {
             name: "visible"
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: removeChallenge
                 visible: true
             }
@@ -95,11 +95,11 @@ ShadowRectangle {
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             from: ""
             to: "visible"
 
-                PropertyAnimation {
+                QQ.PropertyAnimation {
                     target: removeChallenge
                     property: "opacity"
                     from: 0.0

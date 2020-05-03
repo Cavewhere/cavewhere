@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw</file>
+    </qresource>
+</RCC>

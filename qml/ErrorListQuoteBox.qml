@@ -1,16 +1,16 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.0 as Controls
+import QtQuick.Controls 2.12 as QC
 
-Loader {
+QQ.Loader {
 
     property ErrorListModel errors
 
     sourceComponent: visible ? quoteBoxCompent : null
 
 
-    Component {
+    QQ.Component {
         id: quoteBoxCompent
 
         QuoteBox {
@@ -35,17 +35,17 @@ Loader {
             triangleEdge: Qt.TopEdge
 
             ColumnLayout {
-                Repeater {
+                QQ.Repeater {
                     id: repeaterId
                     model: errors === null ? 0 : errors
                     delegate:
                         RowLayout {
 
-                        Image {
+                        QQ.Image {
                             source: errorQuoteBox.errorImageSource(type)
                         }
 
-                        Controls.CheckBox {
+                        CheckBox {
                             checked: suppressed
                             onCheckedChanged: {
                                 //SuppressWarning

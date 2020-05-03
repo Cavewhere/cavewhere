@@ -23,6 +23,8 @@
 #include "cwSQLManager.h"
 #include "cwDebug.h"
 #include "cwSurveyNetwork.h"
+#include "cavewhereVersion.h"
+#include "cwProject.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -56,25 +58,67 @@ QByteArray cwRegionLoadTask::readSeralizedData()
     return data;
 }
 
+void cwRegionLoadTask::setDeleteOldImages(bool deleteImages)
+{
+    DeleteOldImages = deleteImages;
+}
+
+cwRegionLoadResult cwRegionLoadTask::load()
+{
+    cwRegionLoadResult results;
+
+    QFileInfo info(databaseFilename());
+
+    if(!info.exists()) {
+        results.addError(cwError(QString("Couldn't open '%1' because it doesn't exist").arg(databaseFilename()), cwError::Fatal));
+        return results;
+    }
+
+    if(!info.isReadable()) {
+        results.addError(cwError(QString("Couldn't open '%1' because you don't have permission to read it").arg(databaseFilename()), cwError::Fatal));
+        return results;
+    }
+
+    if(!info.isWritable()) {
+        results.addError(cwError(QString("'%1' is a ReadOnly file. Copying it to a temporary file").arg(databaseFilename()), cwError::Warning));
+        auto newFilename = cwProject::createTemporaryFilename();
+        QFile::copy(databaseFilename(), newFilename);
+        QFile::setPermissions(newFilename, QFileDevice::WriteOwner | QFileDevice::WriteUser | QFileDevice::ReadOwner | QFileDevice::ReadUser);
+        setDatabaseFilename(newFilename);
+        results.setIsTempFile(true);
+
+        QFileInfo newInfo(newFilename);
+        if(!newInfo.exists() || !newInfo.isReadable() || !newInfo.isWritable()) {
+            results.addError(cwError(QString("Can't copy to temporary file '%1', giving up.").arg(newFilename), cwError::Fatal));
+            return results;
+        }
+    }
+
+    runAfterConnected([this, &results](){
+        auto region = cwCavingRegionPtr(new cwCavingRegion);
+
+        //Try loading Proto Buffer
+        auto data = loadFromProtoBuffer();
+
+        results.addErrors(errors());
+        if(cwError::containsFatal(results.errors())) {
+            return results;
+        }
+
+        data.region->moveToThread(nullptr);
+        results.setCavingRegion(data.region);
+        results.setFileVersion(data.fileVersion);
+        results.setFileName(databaseFilename());
+        return results;
+    });
+
+    return results;
+}
+
 /**
   Loads the region data
   */
 void cwRegionLoadTask::runTask() {
-    //Clear region
-    runAfterConnected([this](){
-        //Try loading Proto Buffer
-        bool success = loadFromProtoBuffer();
-
-        if(!success) {
-            qDebug() << "Couldn't load from any format!";
-            stop();
-        }
-    });
-
-    if(isRunning()) {
-        emit finishedLoading();
-    }
-
     done();
 }
 
@@ -82,35 +126,36 @@ void cwRegionLoadTask::runTask() {
  * @brief cwRegionLoadTask::loadFromProtoBuffer
  * @return
  */
-bool cwRegionLoadTask::loadFromProtoBuffer()
+cwRegionLoadTask::LoadData cwRegionLoadTask::loadFromProtoBuffer()
 {
     bool okay;
     QByteArray protoBufferData = readProtoBufferFromDatabase(&okay);
 
     if(!okay) {
-        return false;
+        return {};
     }
 
-    CavewhereProto::CavingRegion region;
-    bool couldParse = region.ParseFromArray(protoBufferData.data(), protoBufferData.size());
+    CavewhereProto::CavingRegion regionProto;
+    bool couldParse = regionProto.ParseFromArray(protoBufferData.data(), protoBufferData.size());
 
     if(!couldParse) {
-        qDebug() << "Couldn't read proto buffer. Corrupted?!";
-        //Don't close the Database here because, the xml loader needs it
-        return false;
+        addError(cwError("Couldn't read proto buffer. Corrupted?!", cwError::Fatal));
+        return {};
     }
 
-    loadCavingRegion(region);
+    auto data = loadCavingRegion(regionProto);
 
     //Clean up old images
-    cwImageCleanupTask imageCleanupTask;
-    imageCleanupTask.setUsingThreadPool(false);
-    imageCleanupTask.setDatabaseFilename(databaseFilename());
-    imageCleanupTask.setRegion(Region);
-    imageCleanupTask.start();
+    if(DeleteOldImages) {
+        cwImageCleanupTask imageCleanupTask;
+        imageCleanupTask.setUsingThreadPool(false);
+        imageCleanupTask.setDatabaseFilename(databaseFilename());
+        imageCleanupTask.setRegion(data.region.data());
+        imageCleanupTask.start();
+    }
 
-    Database.close();
-    return true;
+    disconnectToDatabase();
+    return data;
 }
 
 /**
@@ -119,15 +164,16 @@ bool cwRegionLoadTask::loadFromProtoBuffer()
  */
 QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
 {
-    cwSQLManager::Transaction transaction(&Database, cwSQLManager::ReadOnly);
+    cwSQLManager::Transaction transaction(database(), cwSQLManager::ReadOnly);
 
-    QSqlQuery selectObjectData(Database);
+    QSqlQuery selectObjectData(database());
     QString queryStr =
             QString("SELECT protoBuffer FROM ObjectData where id = 1");
 
     bool couldPrepare = selectObjectData.prepare(queryStr);
     if(!couldPrepare) {
-        qDebug() << "Couldn't prepare select Caving Region:" << selectObjectData.lastError().databaseText() << queryStr;
+        addError({QString("Couldn't prepare select Caving Region:'%1' sql:'%2'").arg(selectObjectData.lastError().databaseText()).arg(queryStr), cwError::Fatal});
+        return QByteArray();
     }
 
     //Extract the data
@@ -135,7 +181,7 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
     QSqlRecord record = selectObjectData.record();
 
     if(record.isEmpty()) {
-        qDebug() << "Hmmmm, no caving regions to load from protoBuffer";
+        addError({QString("Hmmmm, no caving regions to load from protoBuffer"), cwError::Fatal});
         *okay = false;
         return QByteArray();
     }
@@ -152,24 +198,38 @@ QByteArray cwRegionLoadTask::readProtoBufferFromDatabase(bool* okay)
  * @brief cwRegionLoadTask::loadCavingRegion
  * @param region
  */
-void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &region)
+cwRegionLoadTask::LoadData cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &protoRegion)
 {
-    Region->moveToThread(QThread::currentThread());
-    Region->clearCaves();
+    LoadData data(new cwCavingRegion(), loadFileVersion(protoRegion));
+
+    data.fileVersion = loadFileVersion(protoRegion);
+    auto fileCavewhereVersion = protoRegion.has_cavewhereversion() ? loadString(protoRegion.cavewhereversion()) : "";
+
+    if(data.fileVersion > protoVersion()) {
+        //Add a warning
+        QString upgradeStr = fileCavewhereVersion.isEmpty() ? QString() : QString(" to %1").arg(fileCavewhereVersion);
+
+        addError(cwError(QString("Upgrade CaveWhere to %1 to load this file! Current file version is %2. CaveWhere %3 supports up to file version %4. You are loading a newer CaveWhere file than this version supports. You will loss data if you save")
+                         .arg(fileCavewhereVersion)
+                         .arg(data.fileVersion)
+                         .arg(CavewhereVersion)
+                         .arg(protoVersion())));
+    }
 
     QList<cwCave*> caves;
-    caves.reserve(region.caves_size());
+    caves.reserve(protoRegion.caves_size());
 
-    for(int i = 0; i < region.caves_size(); i++) {
-        const CavewhereProto::Cave& protoCave = region.caves(i);
+    for(int i = 0; i < protoRegion.caves_size(); i++) {
+        const CavewhereProto::Cave& protoCave = protoRegion.caves(i);
         cwCave* cave = new cwCave();
         loadCave(protoCave, cave);
 
         caves.append(cave);
     }
 
-    Region->addCaves(caves);
-    Region->moveToThread(nullptr);
+    data.region->addCaves(caves);
+
+    return data;
 }
 
 /**
@@ -180,8 +240,8 @@ void cwRegionLoadTask::loadCavingRegion(const CavewhereProto::CavingRegion &regi
 void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *cave)
 {
     QString name = loadString(protoCave.name());
-    cwUnits::LengthUnit lengthUnit = (cwUnits::LengthUnit)protoCave.lengthunit();
-    cwUnits::LengthUnit depthUnit = (cwUnits::LengthUnit)protoCave.depthunit();
+    cwUnits::LengthUnit lengthUnit = static_cast<cwUnits::LengthUnit>(protoCave.lengthunit());
+    cwUnits::LengthUnit depthUnit = static_cast<cwUnits::LengthUnit>(protoCave.depthunit());
 
     QList<cwTrip*> trips;
     trips.reserve(protoCave.trips_size());
@@ -233,7 +293,7 @@ void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *t
     QDate tripDate = loadDate(protoTrip.date());
 
     trip->setName(tripName);
-    trip->setDate(tripDate);
+    trip->setDate(QDateTime(tripDate));
 
     loadSurveyNoteModel(protoTrip.notemodel(), trip->notes());
     loadTripCalibration(protoTrip.tripcalibration(), trip->calibrations());
@@ -312,7 +372,7 @@ void cwRegionLoadTask::loadSurveyChunk(const CavewhereProto::SurveyChunk& protoC
     }
 
     if(stations.count() - 1 != shots.count()) {
-        qDebug() << "Shot, station count mismatch, survey chunk invalid:" << stations.count() << shots.count();
+        addError(cwError("Shot, station count mismatch, survey chunk invalid: %1 %2", cwError::Warning));
         return;
     }
 
@@ -480,7 +540,7 @@ cwTriangulatedData cwRegionLoadTask::loadTriangulatedData(const CavewhereProto::
     cwTriangulatedData data;
 
     cwImage image = loadImage(protoTriangulatedData.croppedimage());
-    data.setCroppedImage(image);
+    data.setCroppedImage(cwTrackedImage::createShared(image, databaseFilename(), cwTrackedImage::NoOwnership));
 
     QVector<QVector3D> points;
     points.resize(protoTriangulatedData.points_size());
@@ -617,6 +677,11 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
     return lead;
 }
 
+int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)
+{
+    return protoRegion.has_version() ? protoRegion.version() : 0;
+}
+
 /**
  * @brief cwRegionLoadTask::loadString
  * @param protoString
@@ -709,73 +774,6 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
     return list;
 }
 
-
-/**
-  Reads the region data from the database
-
-  This return a QString filed with XML data
-  */
-//QString cwRegionLoadTask::readXMLFromDatabase() {
-//    QSqlQuery selectCavingRegion(Database);
-//    QString queryStr =
-//            QString("SELECT qCompress_XML FROM CavingRegion where id = 1");
-
-//    bool couldPrepare = selectCavingRegion.prepare(queryStr);
-//    if(!couldPrepare) {
-//        qDebug() << "Couldn't prepare select Caving Region:" << selectCavingRegion.lastError().databaseText() << queryStr;
-//    }
-
-//    //Extract the data
-//    selectCavingRegion.exec();
-//    QSqlRecord record = selectCavingRegion.record();
-
-//    if(record.isEmpty()) {
-//        qDebug() << "Hmmmm, no caving regions to load";
-//        return QString();
-//    }
-
-//    //Get the first row
-//    selectCavingRegion.next();
-
-//    QString xmlData = selectCavingRegion.value(0).toString();
-//    return xmlData;
-//}
-
-/**
- * @brief cwRegionLoadTask::loadFromBoostSerialization
- * @return
- */
-//bool cwRegionLoadTask::loadFromBoostSerialization()
-//{        //Get the xmlData from the database
-//    QString xmlData = readXMLFromDatabase();
-//    Database.close();
-
-//    //Add the string data to the stream
-//    std::stringstream stream(xmlData.toStdString());
-
-//    //Parse xml the string data
-//    try {
-//        boost::archive::xml_iarchive xmlLoadArchive(stream);
-
-//        cwCavingRegion region;
-//        xmlLoadArchive >> BOOST_SERIALIZATION_NVP(region);
-//        *Region = region;
-
-//        //Clean up old images
-//        cwImageCleanupTask imageCleanupTask;
-//        imageCleanupTask.setDatabaseFilename(databaseFilename());
-//        imageCleanupTask.setRegion(Region);
-//        imageCleanupTask.start();
-//        return true;
-
-//    } catch(boost::archive::archive_exception exception) {
-//        qDebug() << "Couldn't load data from XML!" << exception.what();
-//        return false;
-//    }
-//}
-
-
-
 /**
  * @brief cwRegionLoadTask::insureVacuuming
  *
@@ -785,13 +783,11 @@ QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoSt
  */
 void cwRegionLoadTask::insureVacuuming()
 {
-//    cwSQLManager::Transaction transaction(&Database);
-
     int vacuum = -1;
 
     {
         QString SQL = "PRAGMA auto_vacuum";
-        QSqlQuery isVaccumingQuery(SQL, Database);
+        QSqlQuery isVaccumingQuery(SQL, database());
 
         if(isVaccumingQuery.next()) {
             vacuum = isVaccumingQuery.value(0).toInt();
@@ -802,7 +798,7 @@ void cwRegionLoadTask::insureVacuuming()
     case 0: {
         //Vacuum is off
         //Turn on full Vacuum
-        QSqlQuery turnOnFullVacuum(Database);
+        QSqlQuery turnOnFullVacuum(database());
 
         bool success = turnOnFullVacuum.exec("PRAGMA auto_vacuum = 1");
         if(!success) {
@@ -813,6 +809,8 @@ void cwRegionLoadTask::insureVacuuming()
         if(!success) {
             qDebug() << "Vacuum error:" << turnOnFullVacuum.lastError().text();
         }
+
+        break;
     }
     case 1:
         //Full Vacuum
@@ -820,7 +818,7 @@ void cwRegionLoadTask::insureVacuuming()
     case 2: {
         //Incremental Vacuum
         QString SQL = "PRAGMA auto_vacuum 1";
-        QSqlQuery turnOnFullVacuum(Database);
+        QSqlQuery turnOnFullVacuum(database());
         turnOnFullVacuum.exec(SQL);
     }
     }

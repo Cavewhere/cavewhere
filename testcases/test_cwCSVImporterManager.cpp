@@ -134,7 +134,7 @@ TEST_CASE("cwCSVImportManager should parse using default values", "[cwCSVImporte
     CHECK(manager.lineModel()->rowCount() == 2); //1 row plus the header row
     CHECK(manager.lineModel()->columnCount() == 5);
 
-    CHECK(manager.previewText().toStdString() == "From,To,Length,Compass,Clino\r\n1,2,30.4,20,-82\r\n");
+    CHECK(manager.previewText().toStdString() == "From,To,Length,Compass,Clino\n1,2,30.4,20,-82\n");
 }
 
 TEST_CASE("cwCSVImportManager previewText should works correctly", "[cwCSVImporterManager]") {

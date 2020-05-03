@@ -40,7 +40,7 @@ Qt3DRender::QTextureImageDataGeneratorPtr cwTextureImage::dataGenerator() const
  */
 void cwTextureImage::updateGenartor()
 {
-    if(!ProjectFilename.isEmpty() && Image.isValid()) {
+    if(!ProjectFilename.isEmpty() && Image.isMipmapsValid()) {
         GenerationCount++;
         Generator.reset(new cwTextureDataGenerator(projectFilename(),
                                                    image(),

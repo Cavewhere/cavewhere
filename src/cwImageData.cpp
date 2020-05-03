@@ -12,17 +12,29 @@
 //}
 
 cwImageData::cwImageData() :
-    Data(new PrivateData())
+    d(new PrivateData())
 {
-    Data->DotsPerMeter = 0;
+    d->DotsPerMeter = 0;
 }
 
 cwImageData::cwImageData(QSize size, int dotsPerMeter, const QByteArray& format, const QByteArray& image) :
-    Data(new PrivateData())
+    d(new PrivateData())
 {
-    Data->Size = size;
-    Data->DotsPerMeter = dotsPerMeter;
-    Data->Format = format;
-    Data->Data = image;
+    d->Size = size;
+    d->DotsPerMeter = dotsPerMeter;
+    d->Format = format;
+    d->Data = image;
+}
+
+cwImageData::cwImageData(const cwImageData &other) : d(other.d)
+{
+
+}
+
+cwImageData& cwImageData::operator=(const cwImageData &other)
+{
+    if (this != &other)
+        d.operator=(other.d);
+    return *this;
 }
 

@@ -11,6 +11,14 @@
 //Qt includes
 #include <QApplication>
 #include <QThread>
+#include <QThreadPool>
+#include <QMetaObject>
+#include <QThreadPool>
+#include <QSettings>
+
+//Our includes
+#include "cwSettings.h"
+#include "cwTask.h"
 
 int main( int argc, char* argv[] )
 {
@@ -21,9 +29,24 @@ int main( int argc, char* argv[] )
   QApplication::setApplicationName("cavewhere-test");
   QApplication::setApplicationVersion("1.0");
 
+  {
+      QSettings settings;
+      settings.clear();
+  }
+
+  cwSettings::initialize();
+
   app.thread()->setObjectName("Main QThread");
 
-  int result = Catch::Session().run( argc, argv );
+  int result = 0;
+  QMetaObject::invokeMethod(&app, [&result, argc, argv]() {
+      result = Catch::Session().run( argc, argv );
+      QThreadPool::globalInstance()->waitForDone();
+      cwTask::threadPool()->waitForDone();
+      QApplication::quit();
+  }, Qt::QueuedConnection);
+
+  app.exec();
 
   return result;
 }

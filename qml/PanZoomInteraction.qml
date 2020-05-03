@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 BasePanZoomInteraction {
@@ -15,7 +15,7 @@ BasePanZoomInteraction {
         anchors.fill: parent
         basePanZoom: interaction
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onPressed: interaction.panFirstPoint(Qt.point(mouse.x, mouse.y))

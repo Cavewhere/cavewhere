@@ -30,6 +30,7 @@
 #include "cwImageResolution.h"
 #include "cwDebug.h"
 #include "cwSQLManager.h"
+#include "cavewhereVersion.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -49,12 +50,12 @@ cwRegionSaveTask::cwRegionSaveTask(QObject *parent) :
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 }
 
-QByteArray cwRegionSaveTask::serializedData()
+QByteArray cwRegionSaveTask::serializedData(cwCavingRegion* region)
 {
-    CavewhereProto::CavingRegion region;
-    saveCavingRegion(region);
+    CavewhereProto::CavingRegion protoRegion;
+    saveCavingRegion(protoRegion, region);
 
-    std::string regionString = region.SerializeAsString();
+    std::string regionString = protoRegion.SerializeAsString();
 
     QByteArray regionByteArray;
     if(!regionString.empty()) {
@@ -63,27 +64,25 @@ QByteArray cwRegionSaveTask::serializedData()
     return regionByteArray;
 }
 
-void cwRegionSaveTask::runTask() {
-
+QList<cwError> cwRegionSaveTask::save(cwCavingRegion* region)
+{
     //Open a datebase connection
     bool connected = connectToDatabase("saveRegionTask");
-    if(connected) {      
+    if(connected) {
 
-        cwProject::createDefaultSchema(Database);
+        cwProject::createDefaultSchema(database());
 
-        saveToProtoBuffer();
+        saveToProtoBuffer(region);
 
-        Database.close();
+        disconnectToDatabase();
     }
 
-    //Clear the region of data
-    *Region = cwCavingRegion();
+    return errors();
+}
 
-    qDebug() << "Finished saving!!!";
-
+void cwRegionSaveTask::runTask() {
     //Finished
     done();
-
 }
 
 /**
@@ -91,13 +90,13 @@ void cwRegionSaveTask::runTask() {
  *
  * Save cavewhere object data usingo google protobuffer
  */
-void cwRegionSaveTask::saveToProtoBuffer()
+void cwRegionSaveTask::saveToProtoBuffer(cwCavingRegion* region)
 {
-    cwSQLManager::Transaction transaction(&Database);
+    cwSQLManager::Transaction transaction(database());
 
-    QByteArray regionByteArray = serializedData();
+    QByteArray regionByteArray = serializedData(region);
 
-    QSqlQuery insertCavingRegion(Database);
+    QSqlQuery insertCavingRegion(database());
     QString queryStr =
             QString("INSERT OR REPLACE INTO ObjectData ") +
             QString("(id, protoBuffer) ") +
@@ -105,7 +104,7 @@ void cwRegionSaveTask::saveToProtoBuffer()
 
     bool successful = insertCavingRegion.prepare(queryStr);
     if(!successful) {
-        qDebug() << "Couldn't create query to insert region proto buffer data:" << insertCavingRegion.lastError();
+        addError(cwError(QString("Couldn't create query to insert region proto buffer data:") + insertCavingRegion.lastError().text(), cwError::Fatal));
         stop();
     }
 
@@ -113,9 +112,8 @@ void cwRegionSaveTask::saveToProtoBuffer()
     bool success = insertCavingRegion.exec();
 
     if(!success) {
-        qDebug()  << "Couldn't execute query:" << insertCavingRegion.lastError().databaseText() << queryStr << LOCATION;
+        addError(cwError(QString("Couldn't execute query:") + insertCavingRegion.lastError().databaseText() + " " + queryStr + " " + LOCATION_STR, cwError::Fatal));
     }
-
 }
 
 /**
@@ -147,7 +145,7 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
 void cwRegionSaveTask::saveTrip(CavewhereProto::Trip *protoTrip, cwTrip *trip)
 {
     saveString(protoTrip->mutable_name(), trip->name());
-    saveDate(protoTrip->mutable_date(), trip->date());
+    saveDate(protoTrip->mutable_date(), trip->date().date());
     saveSurveyNoteModel(protoTrip->mutable_notemodel(), trip->notes());
     saveTripCalibration(protoTrip->mutable_tripcalibration(), trip->calibrations());
     saveTeam(protoTrip->mutable_team(), trip->team());
@@ -259,7 +257,7 @@ void cwRegionSaveTask::saveImage(CavewhereProto::Image *protoImage, const cwImag
     protoImage->set_originalid(image.original());
     protoImage->set_iconid(image.icon());
     protoImage->set_dotpermeter(image.originalDotsPerMeter());
-    saveSize(protoImage->mutable_size(), image.origianlSize());
+    saveSize(protoImage->mutable_size(), image.originalSize());
     foreach(int mipmapId, image.mipmaps()) {
         protoImage->add_mipmapids(mipmapId);
     }
@@ -510,14 +508,15 @@ void cwRegionSaveTask::saveShot(CavewhereProto::Shot *protoShot, const cwShot &s
  * @brief cwRegionSaveTask::saveCavingRegion
  * @param region
  */
-void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &region)
+void cwRegionSaveTask::saveCavingRegion(CavewhereProto::CavingRegion &protoRegion, cwCavingRegion* region)
 {
-    foreach(cwCave* cave, Region->caves()) {
-        CavewhereProto::Cave* protoCave = region.add_caves();
+    foreach(cwCave* cave, region->caves()) {
+        CavewhereProto::Cave* protoCave = protoRegion.add_caves();
         saveCave(protoCave, cave);
     }
 
-    region.set_version(version());
+    protoRegion.set_version(protoVersion());
+    saveString(protoRegion.mutable_cavewhereversion(), CavewhereVersion);
 }
 
 /**

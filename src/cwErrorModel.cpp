@@ -32,13 +32,13 @@ cwErrorModel::~cwErrorModel()
 void cwErrorModel::setParentModel(cwErrorModel *parent)
 {
     if(Parent != parent) {
-        if(Parent != nullptr) {
+        if(!Parent.isNull()) {
             Parent->removeChildModel(this);
         }
 
         Parent = parent;
 
-        if(Parent != nullptr) {
+        if(!Parent.isNull()) {
             Parent->addChildModel(this);
         }
 

@@ -1,6 +1,7 @@
 //Our includes
 #include "cwTextureDataGenerator.h"
 #include "cwTextureUploadTask.h"
+#include "cwDebug.h"
 
 //Qt includes
 #include <QTextureImageData>
@@ -36,29 +37,42 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
     textureData->setDepth(1);
     textureData->setFaces(1);
     textureData->setLayers(1);
-    textureData->setFormat(QOpenGLTexture::RGB_DXT1);
     textureData->setTarget(QOpenGLTexture::Target2D);
 
     cwTextureUploadTask task;
-    task.setUsingThreadPool(false); //This is already runnig on the thread pool for qt3d
+    task.setThreading(cwTextureUploadTask::NoThreading);
     task.setImage(image());
     task.setProjectFilename(project());
     task.setMipmapLevel(MipmapLevel);
-    task.start();
+    task.setType(cwTextureUploadTask::DXT1Mipmaps);
 
-    if(task.mipmaps().isEmpty()) {
+    auto result = task.mipmaps().result();
+    auto mipmaps = result.mipmaps;
+    if(mipmaps.isEmpty()) {
         return textureData;
     }
-
-    auto mipmaps = task.mipmaps();
     Q_ASSERT(mipmaps.size() == 1);
 
     auto firstMipmap = mipmaps.first();
 
+    int blockSize = 0;
+    switch(result.type) {
+        case cwTextureUploadTask::DXT1Mipmaps:
+        textureData->setFormat(QOpenGLTexture::RGB_DXT1);
+        blockSize = 8;
+        break;
+    case cwTextureUploadTask::OpenGL_RGBA:
+        textureData->setFormat(QOpenGLTexture::RGBA8_UNorm);
+        blockSize = 4;
+        break;
+    default:
+        Q_ASSERT_X(false, LOCATION_STR, "Unhandled texture format");
+    }
+
     textureData->setWidth(firstMipmap.second.width());
     textureData->setHeight(firstMipmap.second.height());
     textureData->setMipLevels(1);
-    textureData->setData(firstMipmap.first, 8, true);
+    textureData->setData(firstMipmap.first, blockSize, true);
 
     return textureData;
 }

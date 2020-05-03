@@ -5,7 +5,8 @@
 **
 **************************************************************************/
 
-import QtQuick 2.2
+import QtQml 2.2
+import QtQuick 2.2 as QQ
 import QtQuick.Controls 2.0 as Controls
 
 UnitBaseItem {
@@ -27,7 +28,7 @@ UnitBaseItem {
         color: readOnly ? "black" : pallete.inputTextColor
         text: unitModel !== null && typeof(unitModel) !== 'undefined' ? " " + unitModel[menuId.selectedIndex] : "";
 
-        MouseArea {
+        QQ.MouseArea {
             anchors.fill: parent
             enabled: !readOnly
 

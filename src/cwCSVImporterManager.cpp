@@ -5,14 +5,17 @@
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
 #include "cwCSVLineModel.h"
+#include "cwAsyncFuture.h"
+
+//AsyncFuture
+#include <asyncfuture.h>
 
 cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
     QObject(parent),
     AvailableColumns(new cwColumnNameModel(this)),
     ColumnsModel(new cwColumnNameModel(this)),
     ErrorModel(new cwErrorModel(this)),
-    LineModel(new cwCSVLineModel(this)),
-    Task(new cwCSVImporterTask)
+    LineModel(new cwCSVLineModel(this))
 {
     QList<cwColumnName> availableColumns {
         {"Compass Backsight", cwCSVImporterTask::CompassBackSight},
@@ -37,12 +40,7 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
 
     LineModel->setColumnModel(ColumnsModel);
 
-    //This allows caves to be moved
-    Settings.setOutputThread(thread());
-
     //For restarts
-    connect(Task, &cwTask::shouldRerun, this, &cwCSVImporterManager::startParsing);
-    connect(Task, &cwTask::finished, this, &cwCSVImporterManager::updateModel);
     connect(ColumnsModel, &QAbstractItemModel::modelReset, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsRemoved, this, &cwCSVImporterManager::startParsing);
     connect(ColumnsModel, &QAbstractItemModel::rowsInserted, this, &cwCSVImporterManager::startParsing);
@@ -51,9 +49,7 @@ cwCSVImporterManager::cwCSVImporterManager(QObject* parent) :
 
 cwCSVImporterManager::~cwCSVImporterManager()
 {
-    Task->stop();
-    Task->waitToFinish();
-    Task->deleteLater();
+
 }
 
 /**
@@ -123,19 +119,16 @@ void cwCSVImporterManager::setDistanceUnit(cwUnits::LengthUnit distanceUnit) {
  */
 void cwCSVImporterManager::waitToFinish()
 {
-    Task->waitToFinish();
+    cwAsyncFuture::waitForFinished(CSVFinishedFuture);
 }
 
 /**
  * Returns all the caves that were parsed. Caves will be avaliable when the underlying task
  * finishes
  */
-QList<cwCave*> cwCSVImporterManager::caves() const
+QList<cwCave *> cwCSVImporterManager::caves() const
 {
-    if(Task->isReady()) {
-        return Task->output().caves;
-    }
-    return QList<cwCave*>();
+    return LastCaves;
 }
 
 /**
@@ -155,38 +148,37 @@ void cwCSVImporterManager::deleteOldCaves()
  */
 void cwCSVImporterManager::startParsing()
 {
-    if(Task->isReady()) {
-        Settings.setColumns(ColumnsModel->toList());
-        Task->setSettings(Settings);
-        Task->start();
-    } else {
-        Task->restart();
-    }
-}
+    CSVRunFuture.cancel();
+    CSVFinishedFuture.cancel();
 
-/**
- * Updates the line model with new data
- */
-void cwCSVImporterManager::updateModel()
-{
-    if(Task->isReady()) {
+    cwCSVImporterTask task;
+    Settings.setColumns(ColumnsModel->toList());
+    task.setSettings(Settings);
+    auto future = QtConcurrent::run(task);
+    CSVRunFuture = future;
+
+    CSVFinishedFuture = AsyncFuture::observe(future).subscribe([this, future](){
+        auto output = future.result();
         ErrorModel->errors()->clear();
-        ErrorModel->errors()->append(Task->output().errors);
+        ErrorModel->errors()->append(output->errors);
 
-        LineModel->setLines(Task->output().lines);
+        LineModel->setLines(output->lines);
 
-        Text = Task->output().text;
+        Text = output->text;
         emit previewTextChanged();
 
-        LineCount = Task->output().lineCount;
+        LineCount = output->lineCount;
         emit lineCountChanged();
 
         deleteOldCaves();
-        LastCaves = Task->output().caves;
+
+        LastCaves = output->takeCaves();
         for(auto cave : LastCaves) {
+            cave->moveToThread(thread());
             cave->setParent(this);
         }
     }
+    ).future();
 }
 
 /**

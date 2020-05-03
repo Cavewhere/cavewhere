@@ -350,8 +350,10 @@ QVariant cwScrap::leadData(cwScrap::LeadDataRole role, int leadIndex) const
         return lead.desciption();
     case LeadSize:
         return lead.size();
-    case LeadUnits:
-        return parentNote()->parentTrip()->calibrations()->distanceUnit();
+    case LeadUnits: {
+        auto calibration = parentNote()->parentTrip()->calibrations();
+        return calibration->mapToSupportUnit(calibration->distanceUnit());
+    }
     case LeadSupportedUnits:
         return parentNote()->parentTrip()->calibrations()->supportedUnits();
     case LeadCompleted:
@@ -483,6 +485,14 @@ QList< QPair <cwNoteStation, cwNoteStation> > cwScrap::noteShots() const {
     //Go through all the valid stations get the
     QList<cwNoteStation> validStationList = stations(); //validStationsSet.toList();
 
+    //This makes the assumption that station are surveyed in assending order
+    //This usually helps prevent station flipping in profile mode
+    std::sort(validStationList.begin(), validStationList.end(),
+              [](const cwNoteStation& s1, const cwNoteStation& s2)
+    {
+        return s1.name().toUpper() < s2.name().toUpper();
+    });
+
     //Generate all the neighbor list for each station
     QList< QStringList > stationNeighbors;
     foreach(cwNoteStation station, validStationList) {
@@ -587,7 +597,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
       */
     auto planCalcTransformation = [&]()->ScrapShotTransform {
             QVector3D zeroVector(0.0, 1.0, 0.0);
-            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::RadiansToDegrees;
+            double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::radiansToDegrees();
             QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
 
             QMatrix4x4 rotationToNorth;
@@ -607,7 +617,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
-            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::RadiansToDegrees;
+            double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::radiansToDegrees();
 
             QVector3D xAxis = profileTransform.Rotation * QVector3D(1.0, 0.0, 0.0);
 
@@ -1094,11 +1104,11 @@ QPointF cwScrap::clampToScrap(QPointF point) {
 
     //Left intersection
     QPointF leftIntersectionPoint;
-    QLineF::IntersectType leftType = leftNormal.intersect(leftLine, &leftIntersectionPoint);
+    QLineF::IntersectType leftType = leftNormal.intersects(leftLine, &leftIntersectionPoint);
 
     //Right intersection
     QPointF rightIntersectionPoint;
-    QLineF::IntersectType rightType = rightNormal.intersect(rightLine, &rightIntersectionPoint);
+    QLineF::IntersectType rightType = rightNormal.intersects(rightLine, &rightIntersectionPoint);
 
     if(leftType != QLineF::NoIntersection && pointOnLine(leftLine, leftIntersectionPoint)) {
         //Point is on the left line
@@ -1224,6 +1234,11 @@ QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStat
     viewRotationMatrix.rotate(profileQuat);
 
     return viewRotationMatrix;
+}
+
+void cwScrap::updateImage()
+{
+    emit pointsReset();
 }
 
 /**

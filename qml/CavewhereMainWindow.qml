@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import QtQuick.Window 2.0
 import QtQuick.Dialogs 1.2
@@ -20,7 +20,11 @@ ApplicationWindow {
     width: 1024
     height: 576
 
-    title: "Cavewhere - " + version
+    title: {
+        var baseName = "CaveWhere - " + version
+        var filename = rootData.project.isTemporaryProject ? "New File" : rootData.project.filename;
+        return baseName + "   " + filename
+    }
 
     menuBar: FileButtonAndMenu {
         id: fileMenuButton
@@ -31,6 +35,7 @@ ApplicationWindow {
         saveAsFileDialog: saveAsFileDialogId
         loadFileDialog: loadFileDialogId
         applicationWindow: applicationWindowId
+        askToSaveDialog: askToSaveDialogId
 
         onOpenAboutWindow:  {
             loadAboutWindowId.setSource("AboutWindow.qml")
@@ -43,32 +48,32 @@ ApplicationWindow {
         windowName: "mainWindow"
     }
 
-    Loader {
+    QQ.Loader {
         id: loadAboutWindowId
     }
 
-    Loader {
+    QQ.Loader {
         id: loadMainContentsId
         source: "MainContent.qml"
         anchors.fill: parent
         asynchronous: false
-        visible: status == Loader.Ready
+        visible: status == QQ.Loader.Ready
 
 //        onLoaded: {
 //            fileMenuButton.dataPage = item.dataPage
 //        }
     }
 
-    Column {
+    QQ.Column {
         anchors.centerIn: parent
-        visible: loadAboutWindowId.status != Loader.Ready
+        visible: loadAboutWindowId.status != QQ.Loader.Ready
 
         Text {
             text: {
                 switch(loadMainContentsId.status) {
-                case Loader.Error:
+                case QQ.Loader.Error:
                     return "QML error in " + loadMainContentsId.source + "<br> check commandline for details";
-                case Loader.Loading:
+                case QQ.Loader.Loading:
                     return "Loading"
                 }
                 return "";
@@ -79,7 +84,7 @@ ApplicationWindow {
             minimumValue: 0
             maximumValue: 100
             value: loadMainContentsId.progress * 100.
-            visible: loadMainContentsId.status == Loader.Loading
+            visible: loadMainContentsId.status == QQ.Loader.Loading
         }
     }
 
@@ -87,9 +92,14 @@ ApplicationWindow {
         id: saveAsFileDialogId
     }
 
+    ErrorDialog {
+        id: projectErrorDialog
+        model: rootData.project.errorModel
+    }
+
     FileDialog {
         id: loadFileDialogId
-        nameFilters: ["Cavewhere File (*.cw)"]
+        nameFilters: ["CaveWhere File (*.cw)"]
         folder: rootData.lastDirectory
         onAccepted: {
             rootData.lastDirectory = fileUrl
@@ -112,26 +122,31 @@ ApplicationWindow {
         id: globalDialogHandler
     }
 
-    Item {
+    QQ.Item {
         id: rootPopupItem
         anchors.fill: parent
     }
 
     AskToSaveDialog {
-        id: askToSaveDialog
+        id: askToSaveDialogId
         saveAsDialog: saveAsFileDialogId
     }
 
-    onClosing: {
-        if(rootData.project.isModified()) {
-            askToSaveDialog.askToSave();
-            close.accepted = false;
-        } else {
-            close.accepted = true;
-        }
+    SaveFeedbackHelpBox {
+        anchors.centerIn: parent
     }
 
-    Component.onCompleted: {
+    onClosing: {
+        askToSaveDialogId.taskName = "quiting"
+        askToSaveDialogId.afterSaveFunc = function() {
+            Qt.quit();
+        }
+
+        askToSaveDialogId.askToSave();
+        close.accepted = false;
+    }
+
+    QQ.Component.onCompleted: {
         eventRecorderModel.rootEventObject = applicationWindowId
         screenSizeSaverId.resize();
     }

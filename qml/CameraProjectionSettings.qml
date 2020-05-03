@@ -1,4 +1,4 @@
-import QtQuick 2.1
+import QtQuick 2.1 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 
@@ -36,17 +36,18 @@ ColumnLayout {
             text: "°"
         }
 
-        NumberAnimation {
+        QQ.NumberAnimation {
             id: fieldOfViewAnimationId
             target: camera;
             property: "fieldOfView";
             duration: 200;
-            easing.type: Easing.InOutQuad }
+            easing.type: QQ.Easing.InOutQuad }
 
     }
 
     HelpArea {
         id: fieldOfViewId
+        Layout.fillWidth: true
         text: "The FOV (field of view) is the visible angle of the view.
 The FOV is valid between 0.0° to 180.0°. A low FOV will make the view zoom in, while a
 high FOV (near 180) will give a fish eye effect.  A good number for FOV is 55°"

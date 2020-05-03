@@ -1,8 +1,8 @@
-import QtQuick 2.12
+import QtQuick 2.12 as QQ
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: root
 
     property ColumnNameModel model
@@ -16,19 +16,19 @@ Item {
     implicitWidth: Math.max(layoutId.width, root.Layout.minimumWidth)
     implicitHeight: layoutId.height
 
-    Row {
+    QQ.Row {
         id: layoutId
 
-        move: Transition {
+        move:  QQ.Transition {
             id: rowTransitionId
             enabled: false
-            NumberAnimation { properties: "x"; }
+            QQ.NumberAnimation { properties: "x"; }
         }
 
-        Repeater {
+        QQ.Repeater {
             id: repeaterId
             model: root.model
-            delegate: Item {
+            delegate: QQ.Item {
                 id: delegateId
                 property point beginDrag
                 property double spacing: 5
@@ -43,28 +43,28 @@ Item {
                 implicitHeight: rectId.implicitHeight
 
                 states: [
-                    State {
+                    QQ.State {
                         when: dragAreaId.drag.active
 
-                        PropertyChanges {
+                        QQ.PropertyChanges {
                             target: delegateId
                             implicitWidth: 0
                         }
                     }
                 ]
 
-                MouseArea {
+                QQ.MouseArea {
                     id: dragAreaId
                     anchors.fill: rectLayoutId
                     drag.target: rectLayoutId
 
                     onPressed: {
                         delegateId.beginDrag = Qt.point(rectLayoutId.x, rectLayoutId.y);
-                        rectLayoutId.Drag.hotSpot = Qt.point(mouse.x, mouse.y)
+                        rectLayoutId.QQ.Drag.hotSpot = Qt.point(mouse.x, mouse.y)
                     }
 
                     onReleased: {
-                        rectLayoutId.Drag.drop()
+                        rectLayoutId.QQ.Drag.drop()
                         if(!delegateId.caught) {
                             backAnim.stop()
                             backAnimX.from = rectLayoutId.x;
@@ -81,27 +81,27 @@ Item {
                     }
                 }
 
-                ParallelAnimation {
+                QQ.ParallelAnimation {
                     id: backAnim
-                    SpringAnimation { id: backAnimX; target: rectLayoutId; property: "x"; duration: 100; spring: 2; damping: 0.2 }
-                    SpringAnimation { id: backAnimY; target: rectLayoutId; property: "y"; duration: 100; spring: 2; damping: 0.2 }
+                    QQ.SpringAnimation { id: backAnimX; target: rectLayoutId; property: "x"; duration: 100; spring: 2; damping: 0.2 }
+                    QQ.SpringAnimation { id: backAnimY; target: rectLayoutId; property: "y"; duration: 100; spring: 2; damping: 0.2 }
                 }
 
-                Row {
+                QQ.Row {
                     id: rectLayoutId
 
                     spacing: 0
-                    Drag.active: dragAreaId.drag.active
-                    Drag.source: delegateId
-                    Drag.supportedActions: Qt.MoveAction
+                    QQ.Drag.active: dragAreaId.drag.active
+                    QQ.Drag.source: delegateId
+                    QQ.Drag.supportedActions: Qt.MoveAction
 
-                    Item {
+                    QQ.Item {
                         id: leftDropSpaceId
                         height: 1
                         width: insertLeftDropArea.containsDrag ? dropWidth : 0
                     }
 
-                    Rectangle {
+                    QQ.Rectangle {
                         id: rectId
                         property bool selected: false
 
@@ -121,7 +121,7 @@ Item {
                         }
                     }
 
-                    Item {
+                    QQ.Item {
                         id: rightDropSpaceId
                         height: 1
                         width: insertRightDropArea.containsDrag ? dropWidth : 0

@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: teamTable
 
     property Team model
@@ -30,7 +30,7 @@ Item {
         text: "Team"
     }
 
-    Item {
+    QQ.Item {
         id: personTable
 
         anchors.top: title.bottom
@@ -72,7 +72,7 @@ Item {
             visible: teamList.visible
         }
 
-        Rectangle {
+        QQ.Rectangle {
             id: verticalLine2
             anchors.left: parent.horizontalCenter
             anchors.top: parent.top
@@ -83,7 +83,7 @@ Item {
             visible: teamList.visible
         }
 
-        ListView {
+        QQ.ListView {
             id: teamList
 
             anchors.top: addPerson.bottom
@@ -104,7 +104,7 @@ Item {
                 updateState();
             }
 
-            delegate: Rectangle {
+            delegate: QQ.Rectangle {
                 id: rowDelegate
 
                 width: teamList.width
@@ -114,7 +114,7 @@ Item {
 
                 property bool selected: teamList.currentIndex === index
 
-                MouseArea {
+                QQ.MouseArea {
                     id: rowMouseArea
                     anchors.fill: parent
                     hoverEnabled: true
@@ -125,7 +125,7 @@ Item {
                     onDoubleClicked: nameText.openEditor()
                 }
 
-                Rectangle {
+                QQ.Rectangle {
                     height: 1
                     border.width: 1
                     border.color: "lightgray"
@@ -133,7 +133,7 @@ Item {
                     anchors.right: parent.right
                 }
 
-                Rectangle {
+                QQ.Rectangle {
                     id: selectedBackground
                     border.width: 1
                     anchors.fill: parent
@@ -143,7 +143,7 @@ Item {
                     visible: rowDelegate.selected
                 }
 
-                Item {
+                QQ.Item {
                     id: personNameRow
 
                     anchors.left: parent.left
@@ -179,7 +179,7 @@ Item {
                     }
                 }
 
-                Rectangle {
+                QQ.Rectangle {
                     id: verticalLine
                     anchors.left: parent.horizontalCenter
                     anchors.top: parent.top
@@ -189,7 +189,7 @@ Item {
                     border.width: 1
                 }
 
-                Flow {
+                QQ.Flow {
                     id: jobsListView
 
                     property int rowIndex: index
@@ -202,9 +202,9 @@ Item {
                     spacing: 5
 
 
-                    Repeater {
+                    QQ.Repeater {
                         model: jobs
-                        delegate: Rectangle {
+                        delegate: QQ.Rectangle {
                             id: job
                             property alias selected: job.focus
 
@@ -241,7 +241,7 @@ Item {
                                 }
                             }
 
-                            MouseArea {
+                            QQ.MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
                                     teamList.currentIndex = jobsListView.rowIndex
@@ -253,13 +253,13 @@ Item {
                                 }
                             }
 
-                            Keys.onDeletePressed: {
+                            QQ.Keys.onDeletePressed: {
                                 removeJob()
                             }
                         }
                     }
 
-                    Rectangle {
+                    QQ.Rectangle {
                         radius: 5
                         color: "#B2D3AF"
 
@@ -271,12 +271,12 @@ Item {
 
                         visible: rowDelegate.selected
 
-                        Row {
+                        QQ.Row {
                             id: addJobRow
                             anchors.centerIn: parent
                             spacing: 5
 
-                            Image {
+                            QQ.Image {
                                 source: "qrc:icons/plus.png"
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -288,7 +288,7 @@ Item {
                             }
                         }
 
-                        MouseArea {
+                        QQ.MouseArea {
                             anchors.fill: parent
 
                             onClicked: {
@@ -311,37 +311,37 @@ Item {
 
 
     states: [
-        State {
+        QQ.State {
             name: "NoTeam"
             //            when: teamList.count === 0
-            AnchorChanges {
+            QQ.AnchorChanges {
                 target: addPerson
                 anchors.left: undefined
                 anchors.horizontalCenter: personTable.horizontalCenter
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: addPerson
                 anchors.leftMargin: 0
                 text: "Add a team member"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: teamList
                 height: 0
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: nameHeader
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: jobHeader
                 visible: false
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: verticalLine2
                 visible: false
             }

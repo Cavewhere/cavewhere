@@ -23,6 +23,9 @@ cwLeadView::cwLeadView(QQuickItem *parent) :
     SelectionMananger(new cwSelectionManager(this))
 {
     connect(TransformUpdater, &cwTransformUpdater::cameraChanged, this, &cwLeadView::cameraChanged);
+    connect(this, &cwLeadView::visibleChanged, this, [this](){
+        TransformUpdater->setEnabled(isVisible());
+    });
 
 }
 
@@ -57,6 +60,11 @@ void cwLeadView::setRegionModel(cwRegionTreeModel* regionModel) {
         if(!RegionModel.isNull()) {
             connect(RegionModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadView::scrapsAdded);
             connect(RegionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadView::scrapsRemoved);
+
+            QList<cwScrap*> scraps = RegionModel->all<cwScrap*>(QModelIndex(), &cwRegionTreeModel::scrap);
+            for(auto scrap : scraps) {
+                addScrap(scrap);
+            }
         }
 
         emit regionModelChanged();

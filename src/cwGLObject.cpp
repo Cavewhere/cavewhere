@@ -11,18 +11,24 @@
 #include "cwInitCommand.h"
 #include "cwUpdateDataCommand.h"
 
+//Qt includes
+#include <QOpenGLShaderProgram>
+
 cwGLObject::cwGLObject(QObject* parent) :
     QObject(parent),
     Scene(nullptr),
     QueuedDataCommand(nullptr)
 {
-//    Dirty = false;
-    //    Scene = nullptr;
 }
 
 cwGLObject::~cwGLObject()
 {
 
+}
+
+void cwGLObject::initilizeGLFunctions()
+{
+    initializeOpenGLFunctions();
 }
 
 /**
@@ -86,6 +92,16 @@ void cwGLObject::setScene(cwScene *scene)
      Scene->addSceneCommand(QueuedDataCommand);
  }
 
+ void cwGLObject::deleteShaders(QOpenGLShaderProgram *program)
+ {
+     if(program) {
+         for(auto shader : program->shaders()) {
+             delete shader;
+         }
+         delete program;
+     }
+ }
+
 /**
  * @brief cwGLObject::geometryItersecter
  * @return The current geometry intersector
@@ -94,16 +110,3 @@ void cwGLObject::setScene(cwScene *scene)
 {
     return Scene == nullptr ? nullptr : Scene->geometryItersecter();
 }
-
-// /**
-//  * @brief cwGLObject::setDirty
-//  * @param isDirty - Set the cwGLObject to dirty.
-//  */
-// void cwGLObject::setDirty(bool isDirty)
-// {
-//     Dirty = isDirty;
-//     if(Scene != nullptr) {
-//         Scene->update();
-//     }
-// }
-

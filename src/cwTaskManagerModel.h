@@ -19,6 +19,8 @@
 
 //Our includes
 class cwTask;
+#include "cwFutureManagerModel.h"
+#include "cwGlobals.h"
 
 /**
  * @brief The cwTaskManagerModel class
@@ -26,17 +28,11 @@ class cwTask;
  * This class show active task. Tasks that take longer than 2 seconds are shown as
  * active tasks. This class allows the gui to visualize running task, stop, and stop them
  */
-class cwTaskManagerModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwTaskManagerModel : public QAbstractListModel
 {
     Q_OBJECT
 public:
-    enum Roles {
-        NameRole,
-        ProgressRole,
-        NumberOfStepRole
-    };
-
-    explicit cwTaskManagerModel(QObject *parent = 0);
+    explicit cwTaskManagerModel(QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
@@ -44,6 +40,8 @@ public:
 
     void addTask(cwTask* task);
     void removeTask(cwTask* task);
+
+    void waitForTasks();
 
 signals:
 
@@ -68,7 +66,7 @@ private:
     void removeActiveTask(cwTask* task);
     void addActiveTask(cwTask* task);
 
-    void updateTask(QObject* taskObject, Roles role);
+    void updateTask(QObject* taskObject, cwFutureManagerModel::Roles role);
 private slots:
     void taskDeleted(QObject* taskObject);
     void taskHasStarted(QObject* taskObject);

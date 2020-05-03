@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.1
 import QtQuick.Layouts 1.1
 
-Item {
+QQ.Item {
     id: cameraSettingsId
 
     implicitWidth: columnLayoutId.width
@@ -54,7 +54,8 @@ Item {
 
         HelpArea {
             id: projectionSliderHelpAreaId
-            text: "Cavewhere supports two types of projections:<ul>
+            Layout.fillWidth: true
+            text: "CaveWhere supports two types of projections:<ul>
 <li>Orthogonal - 3D objects always appear the same size no matter how close
 or far away they are to the view. When printing or drawing a cave map, this is the
 projection you want to use.

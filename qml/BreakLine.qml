@@ -5,15 +5,15 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.0
 
-Item {
+QQ.Item {
     Layout.fillWidth: true
 
     height: 20
 
-    Rectangle {
+    QQ.Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: 10

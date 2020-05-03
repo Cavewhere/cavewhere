@@ -14,6 +14,7 @@
 #include "cwTriangulatedData.h"
 #include "cwImage.h"
 #include "cwNoteTranformation.h"
+#include "cwTextureUploadTask.h"
 class cwCropImageTask;
 
 //Qt include
@@ -23,26 +24,23 @@ class cwCropImageTask;
 #include <QSet>
 #include <QPoint>
 
-class cwTriangulateTask : public cwTask
+class cwTriangulateTask //: public cwTask
 {
-    Q_OBJECT
+//    Q_OBJECT
 public:
-    explicit cwTriangulateTask(QObject *parent = 0);
+    explicit cwTriangulateTask() = default;
     
     //Input so the triangle task
     void setScrapData(QList<cwTriangulateInData> scraps);
     void setProjectFilename(QString filename);
+    void setFormatType(cwTextureUploadTask::Format format);
 
     //Outputs of the task
-    QList<cwTriangulatedData> triangulatedScrapData() const;
+    QList<QFuture<cwTriangulatedData> > triangulate() const;
 
 signals:
     
 public slots:
-
-protected:
-    virtual void runTask();
-
 
 private:
 
@@ -123,42 +121,52 @@ private:
     //Inputs
     QList<cwTriangulateInData> Scraps;
     QString ProjectFilename;
+    cwTextureUploadTask::Format Format;
 
     //Outputs
     QList<cwTriangulatedData> TriangulatedScraps;
 
-    //Sub tasks
-    cwCropImageTask* CropTask;
 
-    void cropScraps();
+    static QFuture<cwTrackedImagePtr> cropScrap(const cwTriangulateInData& scrap,
+                                                const QString& projectFilename,
+                                                cwTextureUploadTask::Format format);
 
-    void triangulateScraps();
-    void triangulateScrap(int index);
-    PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const;
-    QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon) const;
-    QuadDatabase createQuads(const PointGrid& grid, const QPolygonF& polygon);
+    static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
+                                                            cwTrackedImagePtr croppedImage);
+
+    static PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData);
+    static QSet<int> pointsInPolygon(const PointGrid& grid, const QPolygonF& polygon);
+    static QuadDatabase createQuads(const PointGrid& grid, const QPolygonF& polygon);
 
     //For triangulation
-    cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
-    QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
-    QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
-    QPolygonF addPointsOnOverlapingEdges(QPolygonF polygon) const;
-    QList<QPolygonF> createSimplePolygons(QPolygonF polygon) const;
-    void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
+    static cwTriangulatedData createTriangles(const PointGrid& grid, const QSet<int> pointsInOutline, const QuadDatabase& database, const cwTriangulateInData& inScrapData);
+    static QVector<uint> createTrianglesFull(const QuadDatabase& database, const QHash<int, int>& mapGridToOut);
+    static QVector<QPointF> createTrianglesPartial(const PointGrid& grid, const QuadDatabase &database, const QPolygonF& scrapOutline);
+    static QPolygonF addPointsOnOverlapingEdges(QPolygonF polygon);
+    static QList<QPolygonF> createSimplePolygons(QPolygonF polygon);
+    static void mergeFullAndPartialTriangles(QVector<QVector3D>& pointSet, QVector<uint>& indices, const QVector<QPointF>& unAddedTriangles);
 
     //For transformation from note coords to local note coords
-    QMatrix4x4 mapToScrapCoordinates(const QRectF& bounds) const;
-    QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords) const;
-    QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords) const;
-    QVector<QVector2D> scaleTexCoordinates(const cwImage& image, QVector<QVector2D> texCoords) const;
+    static QMatrix4x4 mapToScrapCoordinates(const QRectF& bounds);
+    static QVector<QVector3D> mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D>& normalizeNoteCoords);
+    static QVector<QVector2D> mapTexCoordinates(const QVector<QVector3D>& normalizeNoteCoords);
+    static QVector<QVector2D> scaleTexCoordinates(const cwImage& image, QVector<QVector2D> texCoords);
 
     //For morphing
-    QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints, const cwTriangulateInData &scrapData, const QMatrix4x4& toLocal, const cwImage& croppedImage);
-    QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point, const QList<cwTriangulateStation>& stations, const QPolygonF& scrapOutline) const;
-    QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations, const QMatrix4x4 &toWorldCoords, const QMatrix4x4 &viewMatrix, const QVector3D &point);
+    static QVector<QVector3D> morphPoints(const QVector<QVector3D> &notePoints,
+                                          const cwTriangulateInData &scrapData,
+                                          const QMatrix4x4& toLocal,
+                                          const cwImage& croppedImage);
+    static QList<cwTriangulateStation> stationsVisibleToPoint(const QVector3D& point,
+                                                              const QList<cwTriangulateStation>& stations,
+                                                              const QPolygonF& scrapOutline);
+    static QVector3D morphPoint(const QList<cwTriangulateStation>& visibleStations,
+                                const QMatrix4x4 &toWorldCoords,
+                                const QMatrix4x4 &viewMatrix,
+                                const QVector3D &point);
 
     //For lead handling
-    QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads) const;
+    static QVector<QVector3D> leadPositionToVector3D(const QList<cwLead>& leads);
 };
 
 /**

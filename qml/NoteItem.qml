@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 ImageItem {
@@ -18,6 +18,8 @@ ImageItem {
 
     clip: true
     rotation: note !== null ? note.rotate : 0
+
+    futureManagerToken: rootData.futureManagerModel.token
 
     PanZoomInteraction {
         id: panZoomInteraction
@@ -140,7 +142,7 @@ ImageItem {
         modelMatrix: noteArea.modelMatrix
     }
 
-    Column {
+    QQ.Column {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.leftMargin: 5
@@ -182,27 +184,27 @@ ImageItem {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "ADD-STATION"
         },
 
-        State {
+        QQ.State {
             name: "ADD-SCRAP"
         },
 
-        State {
+        QQ.State {
             name: "ADD-LEAD"
         },
 
-        State {
+        QQ.State {
             name: "SELECT"
         }
     ]
 
     transitions: [
-        Transition {
+         QQ.Transition {
             to: "ADD-SCRAP"
-            ScriptAction {
+            QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(addScrapInteraction)
                     addScrapInteraction.startNewScrap()
@@ -210,23 +212,23 @@ ImageItem {
             }
         },
 
-        Transition {
+         QQ.Transition {
             to: "ADD-STATION"
-            ScriptAction {
+            QQ.ScriptAction {
                 script: interactionManagerId.active(addStationInteraction)
             }
         },
 
-        Transition {
+         QQ.Transition {
             to: "ADD-LEAD"
-            ScriptAction {
+            QQ.ScriptAction {
                 script: interactionManagerId.active(addLeadInteraction)
             }
         },
 
-        Transition {
+         QQ.Transition {
             to: ""
-            ScriptAction {
+            QQ.ScriptAction {
                 script: {
                     scrapViewId.clearSelection();
                     interactionManagerId.active(panZoomInteraction)
@@ -234,9 +236,9 @@ ImageItem {
             }
         },
 
-        Transition {
+         QQ.Transition {
             to: "SELECT"
-            ScriptAction {
+            QQ.ScriptAction {
                 script: {
                     interactionManagerId.active(noteSelectionInteraction)
                 }

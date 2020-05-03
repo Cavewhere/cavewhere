@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0 as Cavewhere
 import QtQuick.Controls 2.0
@@ -54,7 +54,7 @@ ColumnLayout {
             }
         }
 
-        Item {
+        QQ.Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -71,16 +71,17 @@ ColumnLayout {
 
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: pitchAnimation
         target: turnTableInteraction;
         property: "pitch";
         duration: 200;
-        easing.type: Easing.InOutQuad
+        easing.type: QQ.Easing.InOutQuad
     }
 
     HelpArea {
         id: helpAreaId
+        Layout.fillWidth: true
         text: "The vertical angle is the (in degrees between -90.0 and 90.0) clinometer direction that the view is facing.
 <br><br>Clicking on plan, will cause the view to look down at a 90.0°.
 <br>Clicking on profile, will cause the view to look at 0.0°."

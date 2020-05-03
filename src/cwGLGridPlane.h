@@ -26,8 +26,9 @@ class cwGLGridPlane : public cwGLObject {
 public:
     cwGLGridPlane(QObject *parent = nullptr);
 
-    virtual void initialize();
-    virtual void draw();
+    virtual void initialize() override;
+    virtual void releaseResources() override;
+    virtual void draw() override;
 
     QPlane3D plane() const;
     void setPlane(QPlane3D plane);
@@ -48,6 +49,7 @@ private:
     int vVertex;
     int UniformModelViewProjectionMatrix;
     int UniformModelMatrix;
+    int UniformDevicePixelRatio;
 
     void initializeGeometry();
     void initializeShaders();

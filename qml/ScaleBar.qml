@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: itemId
 
     property Camera camera;
@@ -19,7 +19,7 @@ Item {
     property real maxTotalWidth: itemId.parent.width * 0.75
     property real minTotalWidth: itemId.parent.width * 0.2
 
-    QtObject {
+    QQ.QtObject {
         id: privateData
         property real meterPerCell: {
             if(itemId.visible) {
@@ -63,9 +63,9 @@ Item {
     }
 
 
-    Repeater {
+    QQ.Repeater {
         model: 2
-        Rectangle {
+        QQ.Rectangle {
             id: rect2Id
             y: -height
             x: -width / 2 + index * privateData.smallCellWidth * 2
@@ -79,7 +79,7 @@ Item {
                     rect2Id.height = height;
                 }
 
-                Component.onCompleted: {
+                QQ.Component.onCompleted: {
                     rect2Id.width = width;
                     rect2Id.height = height;
                 }
@@ -87,10 +87,10 @@ Item {
         }
     }
 
-    Repeater {
+    QQ.Repeater {
         model: 5
 
-        Rectangle {
+        QQ.Rectangle {
             id: rect1Id
             y: -height
             x: -width / 2 + (index + 1) * privateData.cellWidth
@@ -113,7 +113,7 @@ Item {
         }
     }
 
-    Grid {
+   QQ.Grid {
         id: smallGrid
         x: 1
         y: 1
@@ -121,9 +121,9 @@ Item {
         rows: 2
         columns: 4
 
-        Repeater {
+        QQ.Repeater {
             model: smallGrid.rows * smallGrid.columns
-            Rectangle {
+            QQ.Rectangle {
                 id: smallRectangle
                 width: privateData.smallCellWidth
                 height: privateData.cellHeight
@@ -137,7 +137,7 @@ Item {
         }
     }
 
-    Grid {
+   QQ.Grid {
         id: largeGrid
 
         anchors.left: smallGrid.right
@@ -146,9 +146,9 @@ Item {
         rows: 2
         columns: smallGrid.columns
 
-        Repeater {
+        QQ.Repeater {
             model: largeGrid.rows * largeGrid.columns
-            Rectangle {
+            QQ.Rectangle {
                 width: privateData.cellWidth
                 height: privateData.cellHeight
                 color: {
@@ -161,7 +161,7 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
 
         width: smallGrid.width + largeGrid.width + 2
         height: privateData.cellHeight * 2.0 + 2

@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
     id: toggleSliderId
 
     property int sliderRange: greenBackgroundId.width - sliderButtonId.width
@@ -35,7 +35,7 @@ Item {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: parent
 
         onPressed: {
@@ -47,7 +47,7 @@ Item {
         }
     }
 
-    Image {
+    QQ.Image {
         id: greenBackgroundId
 //        source: "qrc:icons/toggleSlider/greenSliderBackground.png"
         source: "qrc:icons/toggleSlider/graySliderBackGround.png"
@@ -58,7 +58,7 @@ Item {
 
     }
 
-//    Image {
+//    QQ.Image {
 //        id: blueBackgroundId
 ////        source: "qrc:icons/toggleSlider/blueSliderBackground.png"
 //        source: "qrc:icons/toggleSlider/graySliderBackGround.png"
@@ -67,7 +67,7 @@ Item {
 //        opacity: sliderButtonId.x / sliderRange
 //    }
 
-    Item {
+    QQ.Item {
         id: leftClipBox
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -85,7 +85,7 @@ Item {
         }
     }
 
-    Item {
+    QQ.Item {
         id: rightClipBox
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -103,18 +103,18 @@ Item {
         }
     }
 
-    Image {
+    QQ.Image {
         id: sliderButtonId
         source: "qrc:icons/toggleSlider/buttonSlider.png"
         height: greenBackgroundId.height
         width: 20
 
-        Behavior on x {
+        QQ.Behavior on x {
             id: behaviorId
-            NumberAnimation {}
+            QQ.NumberAnimation {}
         }
 
-        MouseArea {
+        QQ.MouseArea {
             property int firstPointX: 0
 
             anchors.fill: parent

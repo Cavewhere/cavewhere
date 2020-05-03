@@ -30,15 +30,11 @@ protected:
 
 private:
     //The filename of the survex 3d file
-    static const QString PlotSauceExtension;
+    static QString plotSauceExtension() { return QLatin1String(".xml.gz"); }
+
     QString Survex3DFileName;
 
-    QProcess* PlotSauceProcess;
-
     QString survex3DFilename() const;
-
-private slots:
-    void printErrors();
 
 };
 

@@ -282,6 +282,16 @@ QVector3D cwCamera::mapNormalizeScreenToGLViewport(const QVector3D& point) const
  }
 
  /**
+* Sets the device pixel ratio for the screen that the camera is rendering too
+*/
+ void cwCamera::setDevicePixelRatio(double devicePixelRatio) {
+     if(DevicePixelRatio != devicePixelRatio) {
+         DevicePixelRatio = devicePixelRatio;
+         emit devicePixelRatioChanged();
+     }
+ }
+ 
+ /**
   * @brief cwCamera::updateProjection
   *
   * This is a helper to update the projection automatically. If updateProjectionOnViewportChange is

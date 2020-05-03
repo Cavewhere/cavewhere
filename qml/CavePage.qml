@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
@@ -22,19 +22,20 @@ StandardPage {
     }
 
     function registerSubPages() {
-        console.log("Page changed:" + exportButton.page + " " + PageView.page)
+        if(currentCave) {
 
-        var oldCarpetPage = PageView.page.childPage("Leads")
-        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
-            if(oldCarpetPage !== null) {
-                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
-            }
+            var oldCarpetPage = PageView.page.childPage("Leads")
+            if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+                if(oldCarpetPage !== null) {
+                    rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+                }
 
-            if(PageView.page.name !== "Leads") {
-                var page = rootData.pageSelectionModel.registerPage(PageView.page,
-                                                                    "Leads",
-                                                                    caveLeadsPage,
-                                                                    {"cave":currentCave});
+                if(PageView.page.name !== "Leads") {
+                    var page = rootData.pageSelectionModel.registerPage(PageView.page,
+                                                                        "Leads",
+                                                                        caveLeadsPage,
+                                                                        {"cave":currentCave});
+                }
             }
         }
     }
@@ -46,7 +47,7 @@ StandardPage {
         registerSubPages()
     }
 
-    Component {
+    QQ.Component {
         id: caveLeadsPage
         CaveLeadPage {
             anchors.fill: parent
@@ -65,14 +66,14 @@ StandardPage {
                 id: caveNameText
                 text: currentCave.name
                 font.bold: true
-                font.pointSize: 20
+                font.pixelSize: 20
 
                 onFinishedEditting: {
                     currentCave.name = newText
                 }
             }
 
-            Rectangle {
+            QQ.Rectangle {
                 id: lengthDepthContainerId
 
                 color: "lightgray"
@@ -112,7 +113,7 @@ StandardPage {
             }
 
 
-//            Rectangle {
+//            QQ.Rectangle {
 //                color: "gray"
 
 //                width: 100
@@ -123,7 +124,7 @@ StandardPage {
 //                    text: "Leads"
 //                }
 
-//                MouseArea {
+//                QQ.MouseArea {
 //                    anchors.fill: parent
 //                    onClicked:  {
 //            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
@@ -160,16 +161,16 @@ StandardPage {
                 //            anchors.top: parent.top
                 //            anchors.bottom: parent.bottom
 
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Trip"; }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Date"; }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Survey"; width: 100 }
-                Controls.TableViewColumn{ role: "tripObjectRole"; title: "Length"; width: 100 }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Trip"; }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Date"; }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Survey"; width: 100 }
+                Controls.TableViewColumn { role: "tripObjectRole"; title: "Length"; width: 100 }
 
                 itemDelegate:
-                    Item {
+                    QQ.Item {
                     clip: true
 
-                    Connections {
+                    QQ.Connections {
                         target: tableViewId
                         onCurrentRowChanged: {
                             if(tableViewId.currentRow === styleData.row) {
@@ -191,7 +192,7 @@ StandardPage {
                         onlyLargestRange: true
                     }
 
-                    Item {
+                    QQ.Item {
                         visible: styleData.column === 0
 
                         anchors.fill: parent
@@ -282,7 +283,7 @@ StandardPage {
     Instantiator {
         id: instantiatorId
 
-        delegate: QtObject {
+        delegate: QQ.QtObject {
             id: delegateObjectId
             property Trip trip: tripObjectRole
             property Page page
@@ -308,7 +309,7 @@ StandardPage {
         }
     }
 
-    Component {
+    QQ.Component {
         id: tripPageComponent
         TripPage {
             anchors.fill: parent

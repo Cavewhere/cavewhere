@@ -59,5 +59,6 @@ void cwGunZipReader::runTask() {
         stop();
     }
 
+    gzclose(file);
     done();
 }

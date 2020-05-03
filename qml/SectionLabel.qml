@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 
 Text {
     font.underline: true
-    font.pointSize: 14
+    font.pixelSize: 20
     font.bold: true
     anchors.horizontalCenter: parent.horizontalCenter
 }

@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 import "Utils.js" as Utils
@@ -23,7 +23,7 @@ RowLayout {
 
     property double scaleValue
 
-    Row {
+    QQ.Row {
         id: rowId
         spacing: 3
         anchors.verticalCenter: parent.verticalCenter
@@ -34,7 +34,7 @@ RowLayout {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        Rectangle {
+        QQ.Rectangle {
 
             anchors.verticalCenter: parent.verticalCenter
             radius: 5
@@ -42,7 +42,7 @@ RowLayout {
             width: childrenRect.width + columnOnPaper.x * 2.0
             height: childrenRect.height
 
-            Column {
+            QQ.Column {
                 id: columnOnPaper
                 x: 3
 
@@ -68,7 +68,7 @@ RowLayout {
             text: "="
         }
 
-        Rectangle {
+        QQ.Rectangle {
 
             anchors.verticalCenter: parent.verticalCenter
             radius: 5
@@ -76,7 +76,7 @@ RowLayout {
             width: childrenRect.width + columnInCave.x * 2.0
             height: childrenRect.height
 
-            Column {
+            QQ.Column {
                 id: columnInCave
                 x: 3
 

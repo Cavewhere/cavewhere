@@ -33,7 +33,7 @@ QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) co
         bool okay;
         double value = input.toDouble(&okay);
         if(!okay || !check(value)) {
-            //The validator is dump ... this handle use case input="5,5"
+            //The validator is dumb ... this handle use case input="5,5"
             return QValidator::Invalid;
         }
     }
@@ -43,6 +43,6 @@ QValidator::State cwDistanceValidator::validate( QString & input, int & pos ) co
 
 int cwDistanceValidator::validate( QString input ) const {
     int pos = 0;
-    return (int)validate(input, pos);
+    return static_cast<int>(validate(input, pos));
 }
 

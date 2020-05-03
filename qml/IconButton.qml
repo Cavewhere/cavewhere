@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: container
     property alias iconSource: iconNormal.source
     property alias hoverIconSource: iconHover.source
@@ -25,7 +25,7 @@ Rectangle {
     color: selected ? "#999999" : "#00000000"
 
 
-    Image {
+    QQ.Image {
         id: iconNormal
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -33,7 +33,7 @@ Rectangle {
         visible: true;
     }
 
-    Image {
+    QQ.Image {
         id: iconHover
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
@@ -49,7 +49,7 @@ Rectangle {
         anchors.topMargin: 2
     }
 
-    MouseArea {
+    QQ.MouseArea {
         id: mouseArea
         anchors.fill: parent
 
@@ -60,16 +60,16 @@ Rectangle {
         }
     }
 
-    Behavior on color {
-        PropertyAnimation { }
+    QQ.Behavior on color {
+        QQ.PropertyAnimation { }
     }
 
     states: [
-        State {
-            name: "hover"; when: mouseArea.containsMouse && iconHover.status == Image.Ready
-            PropertyChanges { target: iconHover; visible: true }
-            PropertyChanges { target: iconNormal; visible: false }
-            //            PropertyChanges { target: buttonText; font.bold: true }
+        QQ.State {
+            name: "hover"; when: mouseArea.containsMouse && iconHover.status == QQ.Image.Ready
+            QQ.PropertyChanges { target: iconHover; visible: true }
+            QQ.PropertyChanges { target: iconNormal; visible: false }
+            //            QQ.PropertyChanges { target: buttonText; font.bold: true }
         }
 
     ]

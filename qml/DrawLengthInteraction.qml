@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
@@ -32,13 +32,13 @@ Interaction {
     }
 
     focus: visible
-    Keys.onEscapePressed: done()
+    QQ.Keys.onEscapePressed: done()
 
     PanZoomPitchArea {
         anchors.fill: parent
         basePanZoom: basePanZoomInteraction
 
-        MouseArea {
+        QQ.MouseArea {
             id: mouseAreaId
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -87,7 +87,7 @@ Interaction {
         width: row.width + row.x * 2
         height: row.height + row.y * 2
 
-        MouseArea {
+        QQ.MouseArea {
             //This mouse area prevents the interaction from using the mouse,
             //when the user clicks in the area of the input
             anchors.fill: parent
@@ -105,7 +105,7 @@ Interaction {
             unit: Units.Meters
         }
 
-        Row {
+        QQ.Row {
             id: row
 
             x: 3
@@ -142,10 +142,10 @@ Interaction {
 
 
     states: [
-        State {
+        QQ.State {
             name: "WaitForSecondClick"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: mouseAreaId
 
                 hoverEnabled: true
@@ -169,21 +169,21 @@ Interaction {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: helpBoxId
                 text: "<b> Click </b> the length's second point"
             }
         },
 
-        State {
+        QQ.State {
             name: "WaitForDone"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: lengthRect
                 visible: true
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: helpBoxId
                 visible: false
             }

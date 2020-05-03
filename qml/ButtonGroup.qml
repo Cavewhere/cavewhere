@@ -5,16 +5,16 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
     property alias text: groupText.text
     default property alias buttons: buttonArea.children
 
     width: childrenRect.width
     height: childrenRect.height
 
-    Rectangle {
+    QQ.Rectangle {
         id: buttonAreaRect
 
         width: buttonArea.width + 5
@@ -27,7 +27,7 @@ Item {
 
         radius: 3
 
-        Row {
+        QQ.Row {
             id: buttonArea
             anchors.horizontalCenter: buttonAreaRect.horizontalCenter
 
@@ -40,7 +40,7 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: textRect
 
         anchors.verticalCenter: buttonAreaRect.bottom
@@ -60,7 +60,6 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: 1
 
-            font.pointSize: 9
             font.bold: true
         }
     }

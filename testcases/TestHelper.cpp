@@ -1,8 +1,12 @@
 #include "TestHelper.h"
+#include "catch.hpp"
 
-cwProject *fileToProject(QString filename) {
-    cwProject* project = new cwProject();
-    fileToProject(project, filename);
+//Qt includes
+#include <QStandardPaths>
+
+std::shared_ptr<cwProject> fileToProject(QString filename) {
+    auto project = std::make_shared<cwProject>();
+    fileToProject(project.get(), filename);
     return project;
 }
 
@@ -19,7 +23,10 @@ QString copyToTempFolder(QString filename) {
     QString newFileLocation = QDir::tempPath() + "/" + info.fileName();
 
     if(QFileInfo::exists(newFileLocation)) {
-        bool couldRemove = QFile::remove(newFileLocation);
+        QFile file(newFileLocation);
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadUser);
+
+        bool couldRemove = file.remove();
         INFO("Trying to remove " << newFileLocation);
         REQUIRE(couldRemove == true);
     }
@@ -82,4 +89,15 @@ std::ostream &operator <<(std::ostream &os, const QStringList &value) {
         os << "[]";
     }
     return os;
+}
+
+std::ostream &operator <<(std::ostream &os, const cwError &error) {
+    QMetaEnum metaEnum = QMetaEnum::fromType<cwError::ErrorType>();
+    os << "(typeId:" << error.errorTypeId() << ", " << metaEnum.valueToKey(error.type()) << ", \'" << error.message().toStdString() << "'" << ", suppressed:" << error.suppressed() << ")";
+    return os;
+}
+
+QString prependTempFolder(QString filename)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
 }

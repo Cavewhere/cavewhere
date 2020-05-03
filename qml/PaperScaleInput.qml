@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
-Item {
+QQ.Item {
     id: scaleInput
 
 //    property NoteTransform noteTransform
@@ -23,7 +23,7 @@ Item {
     implicitHeight: childrenRect.height
     implicitWidth: inputRow.width
 
-    Row {
+    QQ.Row {
         id: inputRow
         spacing: 5
 
@@ -35,7 +35,7 @@ Item {
             onClicked: scaleInteractionActivated()
         }
 
-        Row {
+        QQ.Row {
             spacing: 3
             anchors.verticalCenter: parent.verticalCenter
 
@@ -100,27 +100,27 @@ Item {
     }
 
     states: [
-        State {
+        QQ.State {
             when: scaleObject !== null
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: onPaperLengthInput
                 unitValue: scaleObject.scaleNumerator
                 valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: inCaveLengthInput
                 unitValue: scaleObject.scaleDenominator
                 valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: scaleText
                 text: "1:" + Utils.fixed(1 / scaleObject.scale, 1)
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: errorText
                 visible: (scaleObject.scaleDenominator.unit === Units.Unitless ||
                           scaleObject.scaleNumerator.unit === Units.Unitless) &&

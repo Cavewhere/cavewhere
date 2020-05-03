@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/compass/compassExportMissingLRUD.cw</file>
+        <file>datasets/compass/compassImportExport.cw</file>
+        <file>datasets/compass/missingDataValidated.dat</file>
+    </qresource>
+</RCC>

@@ -1,8 +1,8 @@
-import QtQuick 2.10
+import QtQuick 2.10 as QQ
 import QtQuick.Window 2.0
 import Qt.labs.settings 1.0
 
-Item {
+QQ.Item {
     id: itemId
 
     property Window window;
@@ -56,7 +56,7 @@ Item {
                   window.screen.desktopAvailableHeight
     }
 
-    Connections {
+    QQ.Connections {
         id: settingsConnectionId
         target: window
         enabled: false

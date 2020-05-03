@@ -127,5 +127,6 @@ TEST_CASE("Import chunk calibration", "[SurvexImport]") {
     CHECK(calibration->tapeCalibration() == -1.0);
 
     CHECK(trip->calibrations()->tapeCalibration() == -2.0);
+    delete importer;
 }
 

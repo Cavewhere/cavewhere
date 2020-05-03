@@ -1,8 +1,8 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: delegateId
     property SurveyChunk chunk;
 
@@ -15,7 +15,7 @@ Rectangle {
     visible: chunk !== null ? chunk.errorModel.errors.count > 0 : false
 
 
-    Rectangle {
+    QQ.Rectangle {
         color: "#F6A8AA"
         parent: delegateId.parent
         width: delegateId.width
@@ -30,7 +30,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.topMargin: 3
 
-        Image {
+        QQ.Image {
             source: "qrc:icons/stopSignError.png"
         }
 

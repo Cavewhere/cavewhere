@@ -47,7 +47,8 @@ public:
         LeadNearestStation,
         LeadScrap,
         LeadIndexInScrap,
-        LeadDistanceToReferanceStation
+        LeadDistanceToReferanceStation,
+        LeadTrip
     };
 
     explicit cwLeadModel(QObject *parent = 0);

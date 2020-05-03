@@ -30,6 +30,7 @@ class cwLength;
 #include "cwImage.h"
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
+#include "cwRegionLoadResult.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -69,10 +70,14 @@ namespace QtProto {
 class cwRegionLoadTask : public cwRegionIOTask
 {
     Q_OBJECT
-public:
+public:   
     explicit cwRegionLoadTask(QObject *parent = 0);
 
     QByteArray readSeralizedData();
+
+    void setDeleteOldImages(bool deleteImages);
+
+    cwRegionLoadResult load();
 
 signals:
     void finishedLoading();
@@ -83,10 +88,23 @@ protected:
     void runTask();
 
 private:
-    bool loadFromProtoBuffer();
+    class LoadData {
+    public:
+        LoadData() {}
+        LoadData(cwCavingRegion* region, int fileVersion) :
+            region(region), fileVersion(fileVersion)
+        {}
+
+        cwCavingRegionPtr region;
+        int fileVersion = 0;
+    };
+
+    bool DeleteOldImages = true;
+
+    LoadData loadFromProtoBuffer();
     QByteArray readProtoBufferFromDatabase(bool* okay);
 
-    void loadCavingRegion(const CavewhereProto::CavingRegion& region);
+    LoadData loadCavingRegion(const CavewhereProto::CavingRegion& protoRegion);
     void loadCave(const CavewhereProto::Cave& protoCave, cwCave* cave);
     void loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip* trip);
     void loadSurveyNoteModel(const CavewhereProto::SurveyNoteModel& protoNoteModel,
@@ -115,6 +133,7 @@ private:
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
+    int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
 
     //Utils
     QString loadString(const QtProto::QString& protoString);
@@ -132,16 +151,15 @@ private:
         if(connected) {
             //This makes sure that sqlite is clean up after it self
             insureVacuuming();
-
             func();
         }
+        disconnectToDatabase();
     }
 
 //    QString readXMLFromDatabase();
 //    bool loadFromBoostSerialization();
 
     void insureVacuuming();
-
 
 };
 

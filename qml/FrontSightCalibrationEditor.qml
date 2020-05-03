@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
-import QtQuick.Controls 1.0 as Controls
+import QtQuick.Controls 2.12 as QC
 import "Utils.js" as Utils
 
 CheckableGroupBox {
@@ -28,12 +28,12 @@ CheckableGroupBox {
         calibration.frontSights = checked
     }
 
-    Column {
+    QQ.Column {
         id: frontSightContent
         anchors.left: parent.left
         anchors.right: parent.right
 
-        Row {
+        QQ.Row {
             spacing: 3
 
             LabelWithHelp {
@@ -66,7 +66,7 @@ for the calibration to correct it. UncorrectedValue = 180°,
 Calibration = 2°, so 180° + (2°) = 182° </p>"
         }
 
-        Row {
+        QQ.Row {
             spacing: 3
 
             LabelWithHelp {
@@ -103,7 +103,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
 
         BreakLine {}
 
-        Row {
+        QQ.Row {
             InformationButton {
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: {
@@ -111,7 +111,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-            Controls.CheckBox {
+            CheckBox {
                 id: compassCorrected
                 text: "Backwards <i>Compass</i>"
 
@@ -133,7 +133,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
             the true value."
         }
 
-        Row {
+        QQ.Row {
             InformationButton {
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: {
@@ -141,7 +141,7 @@ Calibration = -1°, so +4° + (-1°) = +3° </p>"
                 }
             }
 
-            Controls.CheckBox {
+            CheckBox {
                 id: clinoCorrected
                 text: "Backwards <i>Clino</i>"
 

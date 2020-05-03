@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QRunnable>
 #include <QWaitCondition>
+#include <QFuture>
 
 //Our includes
 #include "cwGlobals.h"
@@ -40,6 +41,12 @@ public:
         Restart,
         Restarting, //Same as ready
     };
+
+    enum WaitToFinishType {
+        IgnoreRestart,
+        WaitForRestart
+    };
+
     Q_ENUM(Status)
 
     explicit cwTask(QObject *parent = 0);
@@ -61,11 +68,14 @@ public:
 
     void run();
 
-    void waitToFinish();
+    void waitToFinish(WaitToFinishType type = WaitForRestart);
 
-    //Do not move this to a slot!!! You will break things
-    //TODO: figure out why this is bad...
-    //void stop();
+    void addFuture(QFuture<void> future);
+    void addFutures(QVector<QFuture<void>> futures);
+
+    static int maxThreadCount();
+    static QThreadPool* threadPool();
+    static void initilizeThreadPool();
 
 public slots:
     void start();
@@ -101,7 +111,7 @@ private:
     QMutex WaitToFinishLocker;
 
     int NumberOfSteps;
-    int Progress; //!<
+    int Progress = 0; //!<
 
     Status CurrentStatus;
     bool NeedsRestart;
@@ -112,7 +122,7 @@ private:
     QString Name; //!< The name of the task
 
     bool UsingThreadPool;
-
+    static QThreadPool* ThreadPool;
 
     void privateStop();
     bool isParentsRunning();
@@ -121,8 +131,6 @@ private:
     bool isReadyPrivate() const;
 
 private:
-    Q_INVOKABLE void startOnCurrentThread();
-    Q_INVOKABLE void changeThreads(QThread* thread);
 
 };
 

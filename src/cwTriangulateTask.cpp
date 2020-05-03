@@ -10,118 +10,87 @@
 #include "cwCropImageTask.h"
 #include "cwDebug.h"
 #include "utils/cwTriangulate.h"
+#include "cwAsyncFuture.h"
 
 //Utils includes
 #include "utils/Forsyth.h"
 
+//Async future
+#include "asyncfuture.h"
+
 //Qt includes
 #include <QDebug>
 
-cwTriangulateTask::cwTriangulateTask(QObject *parent) :
-    cwTask(parent),
-    CropTask(new cwCropImageTask(this))
-{
-    CropTask->setParentTask(this);
-    CropTask->setMipmapOnly(true);
-    CropTask->setUsingThreadPool(false);
-
-}
-
 void cwTriangulateTask::setScrapData(QList<cwTriangulateInData> scraps) {
-    if(isReady()) {
-        Scraps = scraps;
-    } else {
-        qDebug() << "Can't set scraps while the task is still running" << LOCATION;
-    }
+    Scraps = scraps;
 }
 
 void cwTriangulateTask::setProjectFilename(QString filename)
 {
-    if(isReady()) {
-        ProjectFilename = filename;
-    } else {
-        qDebug() << "Can't set project filename while the task is still running" << LOCATION;
-    }
+    ProjectFilename = filename;
 }
 
-QList<cwTriangulatedData> cwTriangulateTask::triangulatedScrapData() const {
-    if(isReady()) {
-        return TriangulatedScraps;
-    } else {
-        qDebug() << "Can't get scrap data because the task is still running" << LOCATION;
-    }
-    return QList<cwTriangulatedData>();
+void cwTriangulateTask::setFormatType(cwTextureUploadTask::Format format)
+{
+    Format = format;
 }
 
-/**
-  \brief Does the triangulation
-  */
-void cwTriangulateTask::runTask() {
-    TriangulatedScraps.clear();
-    TriangulatedScraps.reserve(Scraps.size());
+QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
+{
+    Q_ASSERT(!Scraps.isEmpty());
 
-    setNumberOfSteps(Scraps.size() * 2);
+    QString projectFilename = ProjectFilename;
+    cwTextureUploadTask::Format format = Format;
 
-    //Crop all the scrap data
-    cropScraps();
+    std::function<QFuture<cwTriangulatedData> (const cwTriangulateInData&)> triangulateScrap
+            = [projectFilename, format](const cwTriangulateInData& scrap)->QFuture<cwTriangulatedData>
+    {
+        auto cropFuture = cropScrap(scrap, projectFilename, format);
 
-    //Triangulate scraps
-    triangulateScraps();
+        return AsyncFuture::observe(cropFuture)
+                .subscribe([cropFuture, scrap]()
+        {
+            return QtConcurrent::run([scrap, cropFuture]()
+            {
+                return triangulateGeometry(scrap, cropFuture.result());
+            });
+        }).future();
+    };
 
-    done();
+    return cw::transform(Scraps, triangulateScrap);
 }
 
-/**
-    This runs the cropping task on all the scraps
-  */
-void cwTriangulateTask::cropScraps() {
-    for(int i = 0; i < Scraps.size() && isRunning(); i++) {
-        const cwTriangulateInData& data = Scraps.at(i);
+QFuture<cwTrackedImagePtr> cwTriangulateTask::cropScrap(const cwTriangulateInData &scrap,
+                                                        const QString &projectFilename,
+                                                        cwTextureUploadTask::Format format)
+{
+    cwCropImageTask cropTask;
+    cropTask.setDatabaseFilename(projectFilename);
+    cropTask.setFormatType(format);
+    cropTask.setOriginal(scrap.noteImage());
 
-        QRectF cropArea = data.outline().boundingRect();
-        CropTask->setOriginal(data.noteImage());
-        CropTask->setRectF(cropArea);
-        CropTask->setDatabaseFilename(ProjectFilename);
-        CropTask->start();
+    QRectF cropArea = scrap.outline().boundingRect();
+    cropTask.setRectF(cropArea);
 
-        cwTriangulatedData triangulatedData;
-        triangulatedData.setCroppedImage(CropTask->croppedImage());
-        TriangulatedScraps.append(triangulatedData);
-
-        setProgress(i + 1);
-    }
+    return cropTask.crop();
 }
 
-/**
-  \brief triangulate the scrap data
-  */
-void cwTriangulateTask::triangulateScraps() {
-    //For each scrap
-    for(int i = 0; i < Scraps.size() && isRunning(); i++) {
-        triangulateScrap(i);
-        setProgress((i + 1) * 2);
-    }
-}
-
-/**
-    \brief triangulate the scrap data
-  */
-void cwTriangulateTask::triangulateScrap(int index) {
-    cwTriangulateInData& scrapData = Scraps[index];
-    QRectF bounds = scrapData.outline().boundingRect();
-    cwImage croppedImage = TriangulatedScraps[index].croppedImage();
+cwTriangulatedData cwTriangulateTask::triangulateGeometry(const cwTriangulateInData &scrap,
+                                                                   cwTrackedImagePtr croppedImage)
+{
+    QRectF bounds = scrap.outline().boundingRect();
 
     //Create the regualar mesh that covers the croppedImage
-    PointGrid pointGrid = createPointGrid(bounds, scrapData);
+    PointGrid pointGrid = createPointGrid(bounds, scrap);
 
     //Find all the points in the regualar mesh that are in the scrap's polygon
-    QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrapData.outline());
+    QSet<int> gridPointsInScrap = pointsInPolygon(pointGrid, scrap.outline());
 
     //Creates list of quads that are on the edges or in the scrap
-    QuadDatabase quads = createQuads(pointGrid, scrapData.outline());
+    QuadDatabase quads = createQuads(pointGrid, scrap.outline());
 
     //Triangulate the quads (this will update the outputs data)
-    cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrapData);
+    cwTriangulatedData triangleData = createTriangles(pointGrid, gridPointsInScrap, quads, scrap);
 
     //Create the matrix that converts the normalized note coords to normalized scrap coords
     QMatrix4x4 toLocal = mapToScrapCoordinates(bounds);
@@ -133,20 +102,23 @@ void cwTriangulateTask::triangulateScrap(int index) {
     QVector<QVector2D> texCoords = mapTexCoordinates(localNotePoints);
 
     //Morph the points for the scrap
-    QVector<QVector3D> points = morphPoints(triangleData.points(), scrapData, toLocal, croppedImage);
+    QVector<QVector3D> points = morphPoints(triangleData.points(), scrap, toLocal, *croppedImage);
 
     //Morph the lead points for the scrap
-    QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrapData.leads()),
-                                                scrapData,
+    QVector<QVector3D> leadPoints = morphPoints(leadPositionToVector3D(scrap.leads()),
+                                                scrap,
                                                 toLocal,
-                                                croppedImage);
+                                                *croppedImage);
 
-    //For testing
-    cwTriangulatedData& outScrapData = TriangulatedScraps[index];
-    outScrapData.setIndices(triangleData.indices());
-    outScrapData.setPoints(points);
-    outScrapData.setTexCoords(texCoords);
-    outScrapData.setLeadPoints(leadPoints);
+
+    cwTriangulatedData outputData;
+    outputData.setCroppedImage(croppedImage);
+    outputData.setIndices(triangleData.indices());
+    outputData.setPoints(points);
+    outputData.setTexCoords(texCoords);
+    outputData.setLeadPoints(leadPoints);
+
+    return outputData;
 }
 
 /**
@@ -159,12 +131,12 @@ void cwTriangulateTask::triangulateScrap(int index) {
 
     This returns a regualar grid.
 */
-cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData) const {
+cwTriangulateTask::PointGrid cwTriangulateTask::createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData)  {
     PointGrid grid;
 
     cwNoteTranformation noteTransform = scrapData.noteTransform();
 
-    QSize scrapImageSize = scrapData.noteImage().origianlSize();
+    QSize scrapImageSize = scrapData.noteImage().originalSize();
     double sizeOnPaperX = scrapImageSize.width() / scrapData.noteImageResolution(); //in meters
     double sizeOnPaperY = scrapImageSize.height() / scrapData.noteImageResolution(); //in meters
 
@@ -232,7 +204,7 @@ int cwTriangulateTask::PointGrid::index(QPointF point) const
 
     This returns a set of indices that are within the polygon.
 */
-QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid &grid, const QPolygonF &polygon) const {
+QSet<int> cwTriangulateTask::pointsInPolygon(const cwTriangulateTask::PointGrid &grid, const QPolygonF &polygon) {
     QSet<int> inPolygon;
 
     //Go through all the grid points
@@ -453,7 +425,7 @@ QVector<QPointF> cwTriangulateTask::createTrianglesPartial(const cwTriangulateTa
  * This will add points at the begin of the overlapping edges.  This will allow
  * create simplePolygons() to run correctly.
  */
-QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon) const
+QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon)
 {        //Generate the real polygon
     QPolygonF realIntersectionPolygon;
 
@@ -505,7 +477,7 @@ QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon) const
 
         if(!newPoints.isEmpty()) {
             //Sort new points by distance to line.p1()
-            qStableSort(newPoints.begin(), newPoints.end(), distanceLessThan);
+            std::stable_sort(newPoints.begin(), newPoints.end(), distanceLessThan);
 
             //Add the sorted points into realIntersectionPolygon
             for(int ii = 0; ii < newPoints.size(); ii++) {
@@ -527,7 +499,7 @@ QPolygonF cwTriangulateTask::addPointsOnOverlapingEdges(QPolygonF polygon) const
  * @param polygon - A complex polygon, that may contain overlapping axis aligned edges
  * @return A list of simple polygons
  */
-QList<QPolygonF> cwTriangulateTask::createSimplePolygons(QPolygonF polygon) const {
+QList<QPolygonF> cwTriangulateTask::createSimplePolygons(QPolygonF polygon) {
     //Find polygons from the polygon
     QList<QPolygonF> simplePolygons;
     QPolygonF currentSimplePolygon;
@@ -608,7 +580,7 @@ void cwTriangulateTask::mergeFullAndPartialTriangles(QVector<QVector3D> &pointSe
 /**
   Maps the bounds into local normalized coordinates
   */
-QMatrix4x4 cwTriangulateTask::mapToScrapCoordinates(const QRectF &bounds) const
+QMatrix4x4 cwTriangulateTask::mapToScrapCoordinates(const QRectF &bounds)
 {
     float xScale = 1 / bounds.width();
     float yScale = 1 / bounds.height();
@@ -622,7 +594,7 @@ QMatrix4x4 cwTriangulateTask::mapToScrapCoordinates(const QRectF &bounds) const
     return matrix;
 }
 
-QVector<QVector3D> cwTriangulateTask::mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D> &normalizeNoteCoords) const {
+QVector<QVector3D> cwTriangulateTask::mapToLocalNoteCoordinates(QMatrix4x4 toLocal, const QVector<QVector3D> &normalizeNoteCoords) {
     QVector<QVector3D> mappedCoords;
     mappedCoords.reserve(normalizeNoteCoords.size());
     mappedCoords.resize(normalizeNoteCoords.size());
@@ -642,7 +614,7 @@ QVector<QVector3D> cwTriangulateTask::mapToLocalNoteCoordinates(QMatrix4x4 toLoc
 
     This function will produces texcoordinates
   */
-QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D> &localNoteCoords) const {
+QVector<QVector2D> cwTriangulateTask::mapTexCoordinates(const QVector<QVector3D> &localNoteCoords) {
 
     QVector<QVector2D> texCoords;
     texCoords.reserve(localNoteCoords.size());
@@ -775,7 +747,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
     };
 
 
-    QSize imageSize = croppedImage.origianlSize();
+    QSize imageSize = croppedImage.originalSize();
     double metersPerDot = 1.0 / (double)scrapData.noteImageResolution();
 
     //For right now try to map
@@ -819,7 +791,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
   */
 QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVector3D &point,
                                                                       const QList<cwTriangulateStation> &stations,
-                                                                      const QPolygonF &scrapOutline) const{
+                                                                      const QPolygonF &scrapOutline){
 
     QList<QLineF> polygonLines;
     //For all the lines it the polygon
@@ -850,7 +822,7 @@ QList<cwTriangulateStation> cwTriangulateTask::stationsVisibleToPoint(const QVec
         //Do all the intersections
         QPointF intersectionPoint;
         foreach(QLineF line, polygonLines) {
-            if(ray.intersect(line, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(ray.intersects(line, &intersectionPoint) == QLineF::BoundedIntersection) {
                 double percentX = fabs(intersectionPoint.x() - point2D.x()) / point2D.x();
                 double percentY = fabs(intersectionPoint.y() - point2D.y()) / point2D.y();
 
@@ -1021,7 +993,7 @@ QVector3D cwTriangulateTask::morphPoint(const QList<cwTriangulateStation> &visib
  * This will go through all the leads and append the positions of the leads in order to QVector.
  * The vector is then returned.
  */
-QVector<QVector3D> cwTriangulateTask::leadPositionToVector3D(const QList<cwLead> &leads) const
+QVector<QVector3D> cwTriangulateTask::leadPositionToVector3D(const QList<cwLead> &leads)
 {
     QVector<QVector3D> leadPositions;
     leadPositions.reserve(leads.size());
@@ -1076,7 +1048,7 @@ bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& qua
     for(int i = 0; i < polygon.size() - 1; i++) {
         QLineF polygonEdge(polygon.at(i), polygon.at(i + 1));
         foreach(QLineF edge, edges) {
-            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(polygonEdge.intersects(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
                 return true;
             }
         }
@@ -1085,7 +1057,7 @@ bool cwTriangulateTask::PointGrid::intersects(const cwTriangulateTask::Quad& qua
     if(!polygon.isClosed()) {
         QLineF polygonEdge(polygon.first(), polygon.last());
         foreach(QLineF edge, edges) {
-            if(polygonEdge.intersect(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
+            if(polygonEdge.intersects(edge, &intersectionPoint) == QLineF::BoundedIntersection) {
                 return true;
             }
         }

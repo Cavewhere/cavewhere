@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import QtQuick.Dialogs 1.2
 
@@ -14,10 +14,11 @@ MenuBar {
     id: menuBarId
     property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
-    property Loader mainContentLoader;
+    property QQ.Loader mainContentLoader;
     property FileDialog loadFileDialog;
     property FileDialog saveAsFileDialog;
     property ApplicationWindow applicationWindow;
+    property AskToSaveDialog askToSaveDialog;
 
     signal openAboutWindow;
 
@@ -27,11 +28,14 @@ MenuBar {
         MenuItem {
             text: "New"
             shortcut: "Ctrl+N"
-            onTriggered:{
-//                dataPage.resetSideBar(); //Fixes a crash when a new project is loaded
-                rootData.pageSelectionModel.clearHistory()
-                rootData.pageSelectionModel.gotoPageByName(null, "View")
-                project.newProject();
+            onTriggered: {
+                askToSaveDialog.taskName = "creating a new file"
+                askToSaveDialog.afterSaveFunc = function() {
+                    rootData.pageSelectionModel.clearHistory()
+                    rootData.pageSelectionModel.gotoPageByName(null, "View")
+                    project.newProject();
+                }
+                askToSaveDialog.askToSave();
             }
         }
 
@@ -40,7 +44,11 @@ MenuBar {
             shortcut: "Ctrl+O"
             onTriggered: {
 //                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
-                loadFileDialog.open()
+                askToSaveDialog.taskName = "opening";
+                askToSaveDialog.afterSaveFunc = function() {
+                    loadFileDialog.open()
+                }
+                askToSaveDialog.askToSave();
             }
         }
 
@@ -50,7 +58,7 @@ MenuBar {
             text: "Save"
             shortcut: "Ctrl+S"
             onTriggered: {
-                if(!project.temporaryProject) {
+                if(project.canSaveDirectly) {
                     project.save();
                 } else {
                     saveAsFileDialog.open()
@@ -69,8 +77,17 @@ MenuBar {
         MenuSeparator {}
 
         MenuItem {
-            text: "About Cavewhere"
-            onTriggered: openAboutWindow();
+            text: "Settings"
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "Settings");
+            }
+        }
+
+        MenuItem {
+            text: "About"
+            onTriggered: {
+                rootData.pageSelectionModel.gotoPageByName(null, "About");
+            }
         }
 
         MenuItem {
@@ -102,7 +119,7 @@ MenuBar {
                 qmlReloader.reload();
                 mainContentLoader.source = currentSource;
 
-                console.log("Loader status:" + mainContentLoader.status + "Loader:" + Loader.Ready + " " + currentAddress)
+                console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
 
                 rootData.pageSelectionModel.currentPageAddress = currentAddress;
             }
@@ -123,6 +140,16 @@ MenuBar {
             checkable: true
             onTriggered: {
                 rootData.leadsVisible = !rootData.leadsVisible
+            }
+        }
+
+
+        MenuItem {
+            text: "Station Labels Visible"
+            checked: rootData.stationsVisible
+            checkable: true
+            onTriggered: {
+                rootData.stationsVisible = !rootData.stationsVisible
             }
         }
 

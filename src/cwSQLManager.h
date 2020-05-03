@@ -46,13 +46,13 @@ public:
 
     class Transaction {
     public:
-        Transaction(const QSqlDatabase *database, QueryType type = WriteRead);
+        Transaction(const QSqlDatabase& database, QueryType type = WriteRead);
         ~Transaction();
 
         void rollBack();
 
     private:
-        const QSqlDatabase* Database;
+        QSqlDatabase Database;
         bool RolledBack;
 
         //Disabled from copying

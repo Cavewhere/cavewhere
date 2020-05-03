@@ -124,6 +124,8 @@ public:
 
     static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
 
+    void updateImage();
+
 public slots:
     void updateNoteTransformation();
 
@@ -318,8 +320,6 @@ inline cwNoteTranformation* cwScrap::noteTransformation() const {
 inline cwNote* cwScrap::parentNote() const {
     return ParentNote;
 }
-
-
 
 /**
 Gets calculateNoteTransform

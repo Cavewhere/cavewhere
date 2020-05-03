@@ -14,6 +14,7 @@ class cwTrip;
 class cwCave;
 class cwNote;
 class cwScrap;
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -21,13 +22,15 @@ class cwScrap;
 #include <QDebug>
 #include <QPointer>
 
+#define INVOKE_MEMBER(object,ptrToMember)  ((*object).*(ptrToMember))
+
 /**
  * @brief The cwRegionTreeModel class
  *
  * The regionTreeModel allows for global access to cwRegion via a QAbstractItemModel tree. Currently
  * the tree model supports signaling support for add and removing cwCave, cwTrip, cwNote, cwScrap.
  */
-class cwRegionTreeModel : public QAbstractItemModel
+class CAVEWHERE_LIB_EXPORT cwRegionTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
     Q_ENUMS(ItemType)
@@ -73,6 +76,40 @@ public:
     Q_INVOKABLE bool isTrip(const QModelIndex& index) const;
     Q_INVOKABLE bool isCave(const QModelIndex& index) const;
     Q_INVOKABLE bool isRegion(const QModelIndex& index) const;
+
+    template <typename ReturnType, typename GetFunc>
+    QList<ReturnType> objects(const QModelIndex& parent,
+                              int begin,
+                              int end,
+                              GetFunc func) const
+    {
+        QList<ReturnType> objects;
+        for(int i = begin; i <= end; i++) {
+            auto rowIndex = index(i, 0, parent);
+            ReturnType obj = get<ReturnType>(rowIndex, func);
+            if(obj) {
+                objects.append(obj);
+            }
+        }
+
+        return objects;
+    }
+
+    template <typename ReturnType, typename GetFunc>
+    QList<ReturnType> all(const QModelIndex& parent, GetFunc func) const {
+        QList<ReturnType> objects;
+        for(int row = 0; row < rowCount(parent); row++) {
+            auto rowIndex = index(row, 0, parent);
+            auto obj = get<ReturnType>(rowIndex, func);
+            if(obj) {
+                objects.append(obj);
+            }
+            objects += all<ReturnType>(rowIndex, func);
+        }
+        return objects;
+    }
+
+
 
     virtual QHash<int, QByteArray> roleNames() const;
 
@@ -121,6 +158,11 @@ private:
     void insertedTrips(cwCave* parentCave, int begin, int end);
     void insertedNotes(cwTrip* parentTrip, int begin, int end);
     void insertedScraps(cwNote* parentNote, int begin, int end);
+
+    template <typename ReturnType, typename GetFunc>
+    ReturnType get(const QModelIndex& rowIndex, GetFunc func) const {
+        return INVOKE_MEMBER(this, func)(rowIndex); //std::invoke(func, this, rowIndex);
+    };
 
 };
 

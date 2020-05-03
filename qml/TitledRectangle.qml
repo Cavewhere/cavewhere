@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 
-Rectangle {
+QQ.Rectangle {
 
     property alias title: onPaperId.text
     default property alias whereTheChildrenGo: columnOnPaper.children

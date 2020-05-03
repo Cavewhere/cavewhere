@@ -19,6 +19,8 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cwTaskManagerModel.h"
+#include "cwAsyncFuture.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QDir>
@@ -31,6 +33,12 @@
 #include <QFileDialog>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QtConcurrent>
+#include <QSharedPointer>
+#include <QSqlRecord>
+
+//Async Future
+#include <asyncfuture.h>
 
 QAtomicInt cwProject::ConnectionCounter;
 
@@ -40,10 +48,10 @@ QAtomicInt cwProject::ConnectionCounter;
 cwProject::cwProject(QObject* parent) :
     QObject(parent),
     TempProject(true),
+    FileVersion(cwRegionIOTask::protoVersion()),
     Region(new cwCavingRegion(this)),
-    LoadTask(nullptr),
-    SaveTask(nullptr),
-    UndoStack(new QUndoStack(this))
+    UndoStack(new QUndoStack(this)),
+    ErrorModel(new cwErrorListModel(this))
 {
     newProject();
 }
@@ -64,14 +72,11 @@ void cwProject::createTempProjectFile() {
         }
     }
 
-    QDateTime seedTime = QDateTime::currentDateTime();
-
     //Create the with a hex number
-    QString projectFile = QString("%1/CavewhereTmpProject-%2.cw")
-            .arg(QDir::tempPath())
-            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+    QString projectFile = createTemporaryFilename();
     setFilename(projectFile);
-    TempProject = true;
+
+    setTemporaryProject(true);
 
     //Create and open a new database connection
     int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
@@ -79,14 +84,14 @@ void cwProject::createTempProjectFile() {
     ProjectDatabase.setDatabaseName(ProjectFile);
     bool couldOpen = ProjectDatabase.open();
     if(!couldOpen) {
-        qDebug() << "Couldn't open temp project file: " << ProjectFile;
+        ErrorModel->append(cwError(QString("Couldn't open temp project file: %1. Temp directory not writable?").arg(ProjectFile), cwError::Fatal));
         return;
     }
 
     //Create default schema
     createDefaultSchema();
 
-    emit temporaryProjectChanged();
+    emit canSaveDirectlyChanged();
 }
 
 /**
@@ -197,7 +202,7 @@ void cwProject::insertDocumentation(const QSqlDatabase& database, QList<QPair<QS
  call saveAs(filename) instead
   */
 void cwProject::save() {
-    Q_ASSERT(!isTemporaryProject());
+    Q_ASSERT(canSaveDirectly());
     privateSave();
 }
 
@@ -206,17 +211,39 @@ void cwProject::save() {
   Save the project, writes all files to the project
   */
 void cwProject::privateSave() {
-    if(SaveTask == nullptr) {
-        SaveTask = new cwRegionSaveTask();
+
+    auto region = QSharedPointer<cwCavingRegion>::create(*Region);
+    QString filename = this->filename();
+    region->moveToThread(nullptr);
+
+    auto future = QtConcurrent::run([region, filename]() {
+        cwRegionSaveTask saveTask;
+        saveTask.setDatabaseFilename(filename);
+        return saveTask.save(region.get());
+    });
+
+    FutureToken.addJob({future, "Saving"});
+
+    SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
+        auto errors = future.result();
+        ErrorModel->append(errors);
+        if(!cwError::containsFatal(errors)) {
+            emit fileSaved();
+        }
+    }).future();
+}
+
+bool cwProject::saveWillCauseDataLoss() const
+{
+    return FileVersion > cwRegionIOTask::protoVersion();
+}
+
+void cwProject::setTemporaryProject(bool isTemp)
+{
+    if(TempProject != isTemp) {
+        TempProject = isTemp;
+        emit isTemporaryProjectChanged();
     }
-
-    //Set the data for the project
-    qDebug() << "Saving project to:" << ProjectFile;
-    SaveTask->setCavingRegion(*Region);
-    SaveTask->setDatabaseFilename(ProjectFile);
-
-    //Start the save thread
-    SaveTask->start();
 }
 
 /**
@@ -230,8 +257,13 @@ void cwProject::saveAs(QString newFilename){
     newFilename = cwGlobals::addExtension(newFilename, "cw");
     newFilename = cwGlobals::convertFromURL(newFilename);
 
+    if(QFileInfo(newFilename) == QFileInfo(filename()) && saveWillCauseDataLoss()) {
+        errorModel()->append(cwError(QString("Can't overwrite %1 because file is newer that the current version of CaveWhere. To solve this, save it somewhere else").arg(filename()), cwError::Fatal));
+        return;
+    }
+
     //Just save it the user is overwritting it
-    if(newFilename == filename()) {
+    if(QFileInfo(newFilename) == QFileInfo(filename())) {
         privateSave();
         return;
     }
@@ -240,7 +272,7 @@ void cwProject::saveAs(QString newFilename){
     if(QFileInfo(newFilename).exists()) {
         bool couldRemove = QFile::remove(newFilename);
         if(!couldRemove) {
-            qDebug() << "Couldn't remove " << newFilename;
+            errorModel()->append(cwError(QString("Couldn't remove %1").arg(newFilename), cwError::Fatal));
             return;
         }
     }
@@ -248,7 +280,7 @@ void cwProject::saveAs(QString newFilename){
     //Copy the old file to the new location
     bool couldCopy = QFile::copy(filename(), newFilename);
     if(!couldCopy) {
-        qDebug() << "Couldn't copy " << filename() << "to" << newFilename;
+        errorModel()->append(cwError(QString("Couldn't copy %1 to %2").arg(filename()).arg(newFilename), cwError::Fatal));
         return;
     }
 
@@ -258,12 +290,10 @@ void cwProject::saveAs(QString newFilename){
 
     //Update the project filename
     setFilename(newFilename);
-    TempProject = false;
+    setTemporaryProject(false);
 
     //Save the current data
     privateSave();
-
-    emit temporaryProjectChanged();
 }
 
 /**
@@ -306,66 +336,42 @@ cwTaskManagerModel *cwProject::taskManager() const
 void cwProject::loadFile(QString filename) {
     if(filename.isEmpty()) { return; }
 
-    if(LoadTask == nullptr) {
-        LoadTask = new cwRegionLoadTask();
+    //Only load one file at a time
+    LoadFuture.cancel();
 
-        //Load the region task
-        connect(LoadTask, &cwRegionLoadTask::finishedLoading,
-                this, &cwProject::updateRegionData);
+    filename = cwGlobals::convertFromURL(filename);
 
-        filename = cwGlobals::convertFromURL(filename);
+    //Run the load task async
+    auto loadFuture = QtConcurrent::run([filename](){
+        cwRegionLoadTask loadTask;
+        loadTask.setDatabaseFilename(filename);
+        return loadTask.load();
+    });
 
-        //Set the data for the project
-        LoadTask->setDatabaseFilename(filename);
+    FutureToken.addJob({loadFuture, "Loading"});
 
-        //Start the save thread
-        LoadTask->start();
-    }
-}
+    auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
+        setFilename(result.filename());
+        setTemporaryProject(result.isTempFile());
+        *Region = *(result.cavingRegion().data());
+        FileVersion = result.fileVersion();
+        emit canSaveDirectly();
+    };
 
-/**
-  Update the project with new region data
-
-  This should only be called by cwRegionLoadTask
-  */
-void cwProject::updateRegionData() {
-    TempProject = false;
-
-    //Update the project filename
-    setFilename(LoadTask->databaseFilename());
-
-    //Copy the data from the loaded region
-    LoadTask->copyRegionTo(*Region);
-
-    emit temporaryProjectChanged();
-}
-
-/**
- * @brief cwProject::deleteImageTask
- *
- * This will start the process of deleting the image task. This will first move the image task
- * from the other thread to the main thread. Once it's moved, it will delete it using deletImageTask
- */
-void cwProject::startDeleteImageTask()
-{
-    Q_ASSERT(sender() != nullptr);
-    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
-
-    cwAddImageTask* task = static_cast<cwAddImageTask*>(sender());
-    connect(task, &cwTask::threadChanged, this, &cwProject::deleteImageTask);
-}
-
-/**
- * @brief cwProject::deleteImageTask
- *
- * This deletes the image task
- */
-void cwProject::deleteImageTask()
-{
-    Q_ASSERT(sender() != nullptr);
-    Q_ASSERT(dynamic_cast<cwAddImageTask*>(sender()));
-    Q_ASSERT(sender()->thread() == thread());
-    sender()->deleteLater();
+    LoadFuture = AsyncFuture::observe(loadFuture)
+            .subscribe([loadFuture, updateRegion, this]()
+    {
+        auto result = loadFuture.result();
+        if(result.errors().isEmpty()) {
+            updateRegion(result);
+        } else {
+            if(!cwError::containsFatal(result.errors())) {
+                //Just warnings, we should be able to load
+                updateRegion(result);
+            }
+            ErrorModel->append(result.errors());
+        }
+    }).future();
 }
 
 /**
@@ -381,148 +387,6 @@ void cwProject::setFilename(QString newFilename) {
 }
 
 /**
-  This will add images to the database
-
-  \param noteImagePath - A list of all the image paths that'll be added to the project
-  \param receiver - The reciever of the addedImages signal
-  \param slot - The slot that'll handle the addImages signal
-
-  */
-void cwProject::addImages(QList<QUrl> noteImagePath, QObject* receiver, const char* slot) {
-    if(receiver == nullptr )  { return; }
-
-    //Create a new image task
-    foreach(QUrl url, noteImagePath) {
-        QString path = url.toLocalFile();
-        qDebug() << "Adding image:" << path;
-
-        cwAddImageTask* addImageTask = new cwAddImageTask();
-
-        TaskManager->addTask(addImageTask);
-
-        connect(addImageTask, SIGNAL(addedImages(QList<cwImage>)), receiver, slot);
-        connect(addImageTask, &cwTask::finished, this, &cwProject::startDeleteImageTask);
-        connect(addImageTask, &cwTask::stopped, this, &cwProject::startDeleteImageTask);
-
-        //Set the project path
-        addImageTask->setDatabaseFilename(filename());
-
-        //Set all the noteImagePath
-        addImageTask->setNewImagesPath(QStringList() << path); //noteImagePath);
-
-        //Run the addImageTask, in an asyncus way
-        addImageTask->start();
-    }
-}
-
-/**
-  \brief Adds an image to the project file
-
-  This static function takes a database and adds the imageData to the database
-
-  This returns the id of the image in the database
-  */
-int cwProject::addImage(const QSqlDatabase& database, const cwImageData& imageData) {
-    cwSQLManager::Transaction transaction(&database);
-
-    QString SQL = "INSERT INTO Images (type, shouldDelete, width, height, dotsPerMeter, imageData) "
-            "VALUES (?, ?, ?, ?, ?, ?)";
-
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
-
-    if(!successful) {
-        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
-        return -1;
-    }
-
-    query.bindValue(0, imageData.format());
-    query.bindValue(1, false);
-    query.bindValue(2, imageData.size().width());
-    query.bindValue(3, imageData.size().height());
-    query.bindValue(4, imageData.dotsPerMeter());
-    query.bindValue(5, imageData.data());
-    query.exec();
-
-    //Get the id of the last inserted id
-    return query.lastInsertId().toInt();
-}
-
-/**
- * @brief cwProject::updateImage
- * @param database - The database where the image is going to be inserted into
- * @param imageData - The data that going to update the image
- * @param id - The id of the image that needs to be updated
- * @return True if image was update successfully and false, if unsuccessful
- */
-bool cwProject::updateImage(const QSqlDatabase &database, const cwImageData &imageData, int id)
-{
-    cwSQLManager::Transaction transaction(&database);
-
-    QString SQL("UPDATE Images SET type=?, width=?, height=?, dotsPerMeter=?, imageData=? where id=?");
-
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
-
-    if(!successful) {
-        qDebug() << "Couldn't create Insert Images query: " << query.lastError() << LOCATION;
-        return false;
-    }
-
-    query.bindValue(0, imageData.format());
-    query.bindValue(1, imageData.size().width());
-    query.bindValue(2, imageData.size().height());
-    query.bindValue(3, imageData.dotsPerMeter());
-    query.bindValue(4, imageData.data());
-    query.bindValue(5, id);
-    return query.exec();
-}
-
-/**
- * @brief cwProject::removeImage
- * @param database - The database connection
- * @param image - The Image that going to be removed
- * @return True if the image could be removed, and false if it couldn't be removed
- */
-bool cwProject::removeImage(const QSqlDatabase &database, cwImage image, bool withTransaction)
-{
-    if(withTransaction) {
-        cwSQLManager::instance()->beginTransaction(database);
-    }
-
-    //Create the delete SQL statement
-    QString SQL("DELETE FROM Images WHERE");
-    SQL += QString(" id == %1").arg(image.original());
-    SQL += QString(" OR ");
-    SQL += QString(" id == %1").arg(image.icon());
-    foreach(int mipmapId, image.mipmaps()) {
-        SQL += QString(" OR ");
-        SQL += QString(" id == %1").arg(mipmapId);
-    }
-
-    QSqlQuery query(database);
-    bool successful = query.prepare(SQL);
-
-    if(!successful) {
-        qDebug() << "Couldn't delete images: " << query.lastError();
-
-        if(withTransaction) {
-            cwSQLManager::instance()->endTransaction(database);
-        }
-
-        return false;
-    }
-
-    query.exec();
-
-    if(withTransaction) {
-        cwSQLManager::instance()->endTransaction(database);
-    }
-
-    return true;
-}
-
-/**
  * @brief cwProject::createDefaultSchema
  * @param database
  */
@@ -534,7 +398,7 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
     QString query = QString("PRAGMA auto_vacuum = 1");
     vacuumQuery.exec(query);
 
-    cwSQLManager::Transaction transaction(&database);
+    cwSQLManager::Transaction transaction(database);
 
     //Create the caving region
     QString objectDataQuery =
@@ -572,6 +436,27 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
     createTable(database, imageTableQuery);
 }
 
+QString cwProject::createTemporaryFilename()
+{
+    QDateTime seedTime = QDateTime::currentDateTime();
+    return QString("%1/CavewhereTmpProject-%2.cw")
+                .arg(QDir::tempPath())
+            .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
+}
+
+QSqlDatabase cwProject::createDatabaseConnection(const QString &connectionName, const QString &databasePath)
+{
+    int nextConnectonName = ConnectionCounter.fetchAndAddAcquire(1);
+    QSqlDatabase database = QSqlDatabase::addDatabase("QSQLITE", QString("%1-%2").arg(connectionName).arg(nextConnectonName));
+    database.setDatabaseName(databasePath);
+    bool connected = database.open();
+    if(!connected) {
+        throw std::runtime_error(QString("Couldn't connect to database for %1 %2 %3").arg(connectionName).arg(databasePath).toStdString());
+    }
+
+    return database;
+}
+
 /**
  * @brief cwProject::waitToFinish
  *
@@ -580,9 +465,7 @@ void cwProject::createDefaultSchema(const QSqlDatabase &database)
  */
 void cwProject::waitLoadToFinish()
 {
-    if(LoadTask != nullptr) {
-        LoadTask->waitToFinish();
-    }
+    cwAsyncFuture::waitForFinished(LoadFuture);
 }
 
 /**
@@ -593,9 +476,7 @@ void cwProject::waitLoadToFinish()
  */
 void cwProject::waitSaveToFinish()
 {
-    if(SaveTask != nullptr) {
-        SaveTask->waitToFinish();
-    }
+    cwAsyncFuture::waitForFinished(SaveFuture);
 }
 
 /**
@@ -604,8 +485,7 @@ void cwProject::waitSaveToFinish()
 bool cwProject::isModified() const
 {
     cwRegionSaveTask saveTask;
-    saveTask.setCavingRegion(*Region);
-    QByteArray saveData = saveTask.serializedData();
+    QByteArray saveData = saveTask.serializedData(Region);
 
     if(isTemporaryProject()) {
         return Region->caveCount() > 0;
@@ -613,9 +493,58 @@ bool cwProject::isModified() const
 
     cwRegionLoadTask loadTask;
     loadTask.setDatabaseFilename(filename());
-    QByteArray currentData = loadTask.readSeralizedData();
+    loadTask.setDeleteOldImages(false);
+    auto result = loadTask.load();
+    loadTask.waitToFinish();
+
+    QByteArray currentData = saveTask.serializedData(result.cavingRegion().data());
 
     return saveData != currentData;
+}
+
+void cwProject::addImages(QList<QUrl> noteImagePath,
+                          std::function<void (QList<cwImage>)> func)
+{
+    //Create a new image task
+    for(QUrl url : noteImagePath) {
+        QString path = url.toLocalFile();
+
+        std::function<void ()> addImage = [this, path, func, &addImage]() {
+            auto format = cwTextureUploadTask::format();
+
+            cwAddImageTask addImageTask;
+            addImageTask.setDatabaseFilename(filename());
+            addImageTask.setImageTypesWithFormat(format);
+
+            //Set all the noteImagePath
+            addImageTask.setNewImagesPath({path}); //noteImagePath);
+
+            auto imagesFuture = addImageTask.images();
+
+            FutureToken.addJob({imagesFuture, "Adding Image"});
+
+            AsyncFuture::observe(imagesFuture)
+                    .subscribe([imagesFuture, func, format, addImage]()
+            {
+                if(cwTextureUploadTask::format() != format) {
+                    //Format has changed, re-run (this isn't true recursion)
+                    addImage();
+                    return;
+                }
+
+                //Convert the images to cwImage
+                auto results = imagesFuture.results();
+                QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
+                {
+                    return imagePtr->take();
+                });
+
+                func(images);
+            });
+        };
+
+        addImage();
+    }
 }
 
 /**
@@ -630,3 +559,13 @@ void cwProject::setUndoStack(QUndoStack *undoStack) {
         emit undoStackChanged();
     }
 }
+
+void cwProject::setFutureManagerToken(cwFutureManagerToken token) {
+    FutureToken = token;
+}
+
+cwFutureManagerToken cwProject::futureManagerToken() const {
+    return FutureToken;
+}
+
+

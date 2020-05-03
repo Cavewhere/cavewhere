@@ -20,19 +20,22 @@
 
 //Our includes
 #include "cwImage.h"
-class cwTextureUploadTask;
+#include "cwTextureUploadTask.h"
+#include "cwFutureManagerToken.h"
 
 class cwImageTexture : public QObject, private QOpenGLFunctions
 {
     Q_OBJECT
+    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
+    Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
+    Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged)
+
 public:
     explicit cwImageTexture(QObject *parent = 0);
     ~cwImageTexture();
 
-    Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged)
-    Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
-
     void initialize();
+    void releaseResources();
 
     void bind();
     void release();
@@ -43,6 +46,9 @@ public:
     QString project() const;
     void setProject(QString project);
 
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken futureManagerToken);
+
     QVector2D scaleTexCoords() const;
 
     bool isDirty() const;
@@ -51,6 +57,8 @@ signals:
     void projectChanged();
     void imageChanged();
     void textureUploaded();
+    void needsUpdate();
+    void futureManagerTokenChanged();
 
 public slots:
     void updateData();
@@ -60,14 +68,21 @@ private:
     cwImage Image; //!< The image that this texture represent
     QVector2D ScaleTexCoords; //!< How the texture should be scalede
 
+    bool ReloadTexture; //If true reload the texture, delete and re-initilize
     bool TextureDirty; //!< true when the image needs to be updated
     bool DeleteTexture; //!< true when the image needs to be deleted
     GLuint TextureId; //!< Texture object
 
-    cwTextureUploadTask* TextureUploadTask;
+    cwTextureUploadTask::Format TextureType = cwTextureUploadTask::Unknown;
 
-    void deleteLoadNoteTask();
+    QFuture<cwTextureUploadTask::UploadResult> UploadedTextureFuture;
+    cwFutureManagerToken FutureManagerToken; //!<
+
     void deleteGLTexture();
+
+    void setTextureType(cwTextureUploadTask::Format type);
+
+    bool isImageValid(const cwImage& image) const;
 
 private slots:
     void startLoadingImage();
@@ -98,19 +113,11 @@ inline cwImage cwImageTexture::image() const {
     return Image;
 }
 
-///**
-//  This binds the texture to current texture unit
-//  */
-//inline void cwImageTexture::bind() {
-//    glActiveTexture(GL_TEXTURE0);
-//    glBindTexture(GL_TEXTURE_2D, TextureId);
-//}
-
-///**
-//    Releases the texture
-//  */
-//inline void cwImageTexture::release() {
-//    glBindTexture(GL_TEXTURE_2D, 0);
-//}
+/**
+*
+*/
+inline cwFutureManagerToken cwImageTexture::futureManagerToken() const {
+    return FutureManagerToken;
+}
 
 #endif // CWIMAGETEXTURE_H

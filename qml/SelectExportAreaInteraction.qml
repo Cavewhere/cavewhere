@@ -1,17 +1,17 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 Interaction {
     id: interactionId
 
-    property Rectangle selectionRectangle
+    property QQ.Rectangle selectionRectangle
     property bool hasDragged
 
     onDeactivated: {
         hasDragged = false
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: parent
 
         property point initialPoint

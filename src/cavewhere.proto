@@ -6,6 +6,7 @@ package CavewhereProto;
 message CavingRegion {
     repeated Cave caves = 1;
     optional int32 version = 2;
+    optional QtProto.QString cavewhereVersion = 3;
 }
 
 message Cave {

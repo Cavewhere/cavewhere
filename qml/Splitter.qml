@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Item {
+QQ.Item {
     id: splitter
 //    anchors.bottom: parent.bottom
 //    anchors.top: parent.top
@@ -20,7 +20,7 @@ Item {
 
     z:1
 
-    MouseArea {
+    QQ.MouseArea {
         id: splitterMouseArea
         anchors.fill: parent
 
@@ -31,9 +31,9 @@ Item {
         }
 
         states: [
-            State {
+            QQ.State {
                 when: splitterMouseArea.pressed
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: splitterMouseArea
 
                     onPositionChanged: {

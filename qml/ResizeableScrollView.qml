@@ -1,7 +1,7 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 2.5
 
-Item {
+QQ.Item {
     id: rootItem
     default property alias scrollBarData: scrollViewId.contentData
     property size minimumSize: Qt.size(200, 100)
@@ -13,13 +13,13 @@ Item {
         clip: true
     }
 
-    Image {
+    QQ.Image {
         anchors.right: scrollViewId.right
         anchors.bottom: scrollViewId.bottom
         sourceSize: resizeHandleSize
         source: "qrc:///icons/svg/resizeCorner.svg"
 
-        MouseArea {
+        QQ.MouseArea {
             property point firstPoint
 
             anchors.fill: parent

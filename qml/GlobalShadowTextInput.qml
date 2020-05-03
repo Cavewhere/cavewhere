@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-MouseArea {
+QQ.MouseArea {
     id: globalMouseArea
 
     property alias textInput: input
@@ -48,7 +48,7 @@ MouseArea {
         width:  minWidth > input.width + 6 ? minWidth : input.width  + 6
         height: minHeight > input.height + 6 ? minHeight : input.height + 6
 
-        MouseArea {
+        QQ.MouseArea {
             id: borderArea
 
             anchors.fill: parent
@@ -59,7 +59,7 @@ MouseArea {
             }
         }
 
-        TextInput {
+        QQ.TextInput {
             id: input
             visible: shadowEditor.visible
             anchors.centerIn: parent;
@@ -72,18 +72,18 @@ MouseArea {
             property var pressKeyEvent
             signal pressKeyPressed; //This is emitted every time key is pressed
 
-            KeyNavigation.tab: {
+            QQ.KeyNavigation.tab: {
                 if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
                     return null
                 }
-                return coreClickInput.KeyNavigation.tab
+                return coreClickInput.QQ.KeyNavigation.tab
             }
 
-            KeyNavigation.backtab: {
+            QQ.KeyNavigation.backtab: {
                 if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
                     return null
                 }
-                return coreClickInput.KeyNavigation.backtab
+                return coreClickInput.QQ.KeyNavigation.backtab
             }
 
             onFocusChanged: {
@@ -116,7 +116,7 @@ MouseArea {
                 }
             }
 
-            Keys.onPressed: {
+            QQ.Keys.onPressed: {
                 pressKeyEvent = event;
                 pressKeyPressed();
             }

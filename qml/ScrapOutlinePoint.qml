@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 1.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 ScrapPointItem {
@@ -22,17 +22,17 @@ ScrapPointItem {
         return length <= pointGeometry.radius;
     }
 
-    Keys.onDeletePressed: {
+    QQ.Keys.onDeletePressed: {
         scrap.removePoint(pointIndex);
     }
 
-    Keys.onPressed: {
+    QQ.Keys.onPressed: {
         if(event.key === Qt.Key_Backspace) {
             scrap.removePoint(pointIndex);
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: pointGeometry
         width: 9
         height: 9

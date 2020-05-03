@@ -14,6 +14,7 @@
 #include "cwGLShader.h"
 #include "cwCamera.h"
 #include "cwGlobalDirectory.h"
+#include "cwScene.h"
 
 
 cwGLLinePlot::cwGLLinePlot(QObject *parent) :
@@ -30,15 +31,22 @@ void cwGLLinePlot::initialize() {
     initializeBuffers();
 }
 
+void cwGLLinePlot::releaseResources()
+{
+    deleteShaders(ShaderProgram);
+    LinePlotIndexBuffer.destroy();
+    LinePlotVertexBuffer.destroy();
+}
+
 /**
   This initializes all the shaders for the line plot
   */
 void cwGLLinePlot::initializeShaders() {
     cwGLShader* linePlotVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    linePlotVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.vert");
+    linePlotVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/LinePlot.vert");
 
     cwGLShader* linePlotFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    linePlotFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/LinePlot.frag");
+    linePlotFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/LinePlot.frag");
 
     ShaderProgram = new QOpenGLShaderProgram();
     ShaderProgram->addShader(linePlotVertexShader);
@@ -81,7 +89,7 @@ void cwGLLinePlot::initializeBuffers() {
 void cwGLLinePlot::draw() {
     if(Points.size() <= 0) { return; }
 
-    glLineWidth(1.0);
+    glLineWidth(1.0 * camera()->devicePixelRatio());
 
     ShaderProgram->bind();
 
@@ -168,4 +176,6 @@ void cwGLLinePlot::updateData() {
         //FIXME: This could potentially slow down the rendering.
         geometryItersecter()->addObject(geometryObject);
     }
+
+    scene()->update();
 }

@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/survex/dakeng.svx</file>
+        <file>datasets/survex/issue118.svx</file>
+    </qresource>
+</RCC>

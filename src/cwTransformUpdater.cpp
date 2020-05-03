@@ -75,8 +75,11 @@ void cwTransformUpdater::removePointItem(QQuickItem *object) {
     if(object == nullptr) { return; }
 
     if(!PointItems.contains(object)) {
-        qDebug() << (void*)object << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
+        qDebug() << object << " isn't in the cwTransformUpdater, can't remove it" << LOCATION;
+        return;
     }
+
+    disconnect(object, nullptr, this, nullptr);
     PointItems.remove(object);
 }
 
@@ -88,15 +91,17 @@ void cwTransformUpdater::removePointItem(QQuickItem *object) {
   This should be called when the camera has changed in anyway
   */
 void cwTransformUpdater::update() {
-    //Update transformation object
-    updateTransformMatrix();
+    if(enabled()) {
+        //Update transformation object
+        updateTransformMatrix();
 
-    //Update all the point objects
-    foreach(QQuickItem* object, PointItems) {
-        updatePoint(object);
+        //Update all the point objects
+        foreach(QQuickItem* object, PointItems) {
+            updatePoint(object);
+        }
+
+        emit updated();
     }
-
-    emit updated();
 }
 
 /**
@@ -165,4 +170,13 @@ QPointF cwTransformUpdater::mapModelToViewport(QVector3D modelPoint) const {
     return viewportPoint.toPointF();
 }
 
-
+/**
+*
+*/
+void cwTransformUpdater::setEnabled(bool enabled) {
+    if(Enabled != enabled) {
+        Enabled  = enabled;
+        update();
+        emit enabledChanged();
+    }
+}

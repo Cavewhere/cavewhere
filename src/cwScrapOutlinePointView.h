@@ -40,7 +40,7 @@ private slots:
  */
 inline QUrl cwScrapOutlinePointView::qmlSource() const
 {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/ScrapOutlinePoint.qml");
+    return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + "qml/ScrapOutlinePoint.qml");
 }
 
 

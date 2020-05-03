@@ -1,10 +1,10 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-DropArea {
+QQ.DropArea {
     id: dropAreaId
 
-    property MouseArea dragArea
-    property Item delegate
+    property QQ.MouseArea dragArea
+    property QQ.Item delegate
     property var model
     property int indexOffset: 0
     property int insertIndex: index

@@ -21,11 +21,13 @@
 //Our includes
 #include "cwScreenCaptureCommand.h"
 #include "cwProjection.h"
+#include "cwGlobals.h"
 class cwCaptureViewport;
 class cwCaptureItem;
 class cwCaptureGroupModel;
+class cwErrorListModel;
 
-class cwCaptureManager : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
 {
     Q_OBJECT
 
@@ -39,12 +41,16 @@ class cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(QUrl filename READ filename WRITE setFilename NOTIFY filenameChanged)
     Q_PROPERTY(FileType fileType READ fileType WRITE setFileType NOTIFY fileTypeChanged)
     Q_PROPERTY(QStringList fileTypes READ fileTypes CONSTANT)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel CONSTANT)
 
     Q_PROPERTY(QGraphicsScene* scene READ scene CONSTANT)
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
     Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
 
     Q_PROPERTY(bool isScreenCaptureCommandQueueEmpty READ isScreenCaptureCommandQueueEmpty NOTIFY isScreenCaptureCommandQueueEmptyChanged)
+
+    Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
+    Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
 
 public:   
     enum FileType {
@@ -113,6 +119,12 @@ public:
 
     QStringList fileTypes() const;
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
+    Q_INVOKABLE QString fileTypeToExtention(FileType type) const;
+
+    double memoryRequired() const;
+    double memoryLimit() const;
+
+    cwErrorListModel* errorModel() const;
 
     bool isScreenCaptureCommandQueueEmpty() const;
 
@@ -131,6 +143,7 @@ signals:
     void numberOfCapturesChanged();
     void aboutToDestoryManager();
     void screenCaptureCommandAdded();
+    void memoryRequiredChanged();
     void isScreenCaptureCommandQueueEmptyChanged();
 
 public slots:
@@ -157,6 +170,7 @@ private:
     QUrl Filename; //!<
     FileType Filetype; //!<
     cwCaptureGroupModel* GroupModel; //!<
+    cwErrorListModel* ErrorModel; //!<
     const QMap<QString, FileType> FileTypes = {
         {"PNG", PNG},
         {"TIF", TIF},
@@ -197,6 +211,10 @@ private:
     void addFullResultionCaptureItemHelper(cwCaptureViewport* capture);
 
     void updateBorderRectangle();
+
+    qint64 requiredSizeInBytes() const;
+
+    QUrl appendExtention(const QUrl& filename, FileType fileType) const;
 
 };
 
@@ -314,6 +332,13 @@ inline bool cwCaptureManager::isScreenCaptureCommandQueueEmpty() const
 */
 inline cwCaptureGroupModel* cwCaptureManager::groupModel() const {
     return GroupModel;
+}
+
+/**
+* Returns the errors in the model
+*/
+inline cwErrorListModel* cwCaptureManager::errorModel() const {
+    return ErrorModel;
 }
 
 

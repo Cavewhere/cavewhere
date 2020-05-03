@@ -11,7 +11,6 @@
 //Qt includes
 #include <QObject>
 #include <QGuiApplication>
-class QGLWidget;
 class QUndoStack;
 class QOpenGLContext;
 class QQuickView;
@@ -35,8 +34,10 @@ class cwRegionSceneManager;
 class cwScreen;
 class cwEventRecorderModel;
 class cwTaskManagerModel;
+class cwFutureManagerModel;
 class cwPageSelectionModel;
 class cwMainEntity;
+class cwSettings;
 class cwKeywordItemModel;
 
 #ifndef CAVEWHERE_VERSION
@@ -64,13 +65,21 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
     Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
+    Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
+
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel CONSTANT)
     Q_PROPERTY(cwRegionTreeModel* regionTreeModel READ regionTreeModel CONSTANT)
+
+    //Settings
     Q_PROPERTY(QUrl lastDirectory READ lastDirectory WRITE setLastDirectory NOTIFY lastDirectoryChanged)
     Q_PROPERTY(cwKeywordItemModel* keywordItemModel READ keywordItemModel CONSTANT)
+    Q_PROPERTY(cwSettings* settings READ settings CONSTANT)
+    Q_PROPERTY(QString supportImageFormats READ supportImageFormats CONSTANT)
+
 
     //Temporary properties that should be move to a view layer model
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+    Q_PROPERTY(bool stationsVisible READ stationsVisible WRITE setStationVisible NOTIFY stationsVisibleChanged)
 
 public:
     explicit cwRootData(QObject *parent = 0);
@@ -88,9 +97,11 @@ public:
     QScreen* primaryScreen() const;
     cwEventRecorderModel* eventRecorderModel() const;
     cwTaskManagerModel* taskManagerModel() const;
+    cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
     cwRegionTreeModel* regionTreeModel() const;
     cwMainEntity* renderEntity() const;
+    cwSettings* settings() const;
     cwKeywordItemModel* keywordItemModel() const;
 
     void setQuickView(QQuickView* quickView);
@@ -102,10 +113,14 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool leadsVisible);
 
+    bool stationsVisible() const;
+    void setStationVisible(bool stationsVisible);
+
     QUrl lastDirectory() const;
     void setLastDirectory(QUrl lastDirectory);
 
     Q_INVOKABLE void printImage(const QImage& image) const;
+    QString supportImageFormats() const;
 
 signals:
     void regionChanged();
@@ -123,6 +138,7 @@ signals:
     void regionSceneManagerChanged();
     void leadsVisibleChanged();
     void lastDirectoryChanged();
+    void stationsVisibleChanged();
 
 public slots:
 
@@ -138,6 +154,7 @@ private:
     cwRegionSceneManager* RegionSceneManager; //!<
     cwEventRecorderModel* EventRecorderModel; //!<
     cwTaskManagerModel* TaskManagerModel; //!<
+    cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
     cwRegionTreeModel* RegionTreeModel; //!<
     cwMainEntity* RenderEntity; //!<
@@ -148,7 +165,8 @@ private:
     cwTripCalibration* DefaultTripCalibration;
 
     //Temperary property should be move layer
-    bool LeadsVisible; //!<
+    bool LeadsVisible = true; //!<
+    bool StationVisible = true; //!<
 
 };
 
@@ -278,6 +296,24 @@ inline cwRegionTreeModel* cwRootData::regionTreeModel() const {
 inline bool cwRootData::leadsVisible() const {
     return LeadsVisible;
 }
+
+/**
+* Returns true if station labels are visible, otherwise false and invisilbe
+*/
+inline bool cwRootData::stationsVisible() const {
+    return StationVisible;
+}
+
+/**
+* Returns the current future manager
+*/
+inline cwFutureManagerModel* cwRootData::futureManagerModel() const {
+    return FutureManagerModel;
+}
+
+/**
+*
+*/
 
 /**
 * @brief class::renderEntry

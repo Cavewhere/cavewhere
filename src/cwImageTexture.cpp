@@ -10,12 +10,16 @@
 #include "cwImageProvider.h"
 #include "cwTextureUploadTask.h"
 #include "cwDebug.h"
+#include "cwOpenGLSettings.h"
 
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 #include <QVector2D>
 #include <QWindow>
+
+//Async future
+#include <asyncfuture.h>
 
 /**
 
@@ -24,9 +28,27 @@ cwImageTexture::cwImageTexture(QObject *parent) :
     QObject(parent),
     TextureDirty(false),
     DeleteTexture(false),
-    TextureId(0),
-    TextureUploadTask(nullptr)
+    TextureId(0)
 {
+    auto settings = cwOpenGLSettings::instance();
+
+    setTextureType(cwTextureUploadTask::format());
+
+    auto reloadTexture = [this]() {
+        ReloadTexture = true;
+        markAsDirty();
+    };
+
+    connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, [this, reloadTexture]() {
+        setTextureType(cwTextureUploadTask::format());
+        startLoadingImage();
+        reloadTexture();
+    });
+
+    connect(settings, &cwOpenGLSettings::useAnisotropyChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::useMipmapsChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::magFilterChanged, this, reloadTexture);
+    connect(settings, &cwOpenGLSettings::minFilterChanged, this, reloadTexture);
 }
 
 /**
@@ -37,7 +59,6 @@ cwImageTexture::cwImageTexture(QObject *parent) :
  */
 cwImageTexture::~cwImageTexture()
 {
-    deleteGLTexture();
 }
 
 /**
@@ -50,23 +71,52 @@ void cwImageTexture::initialize()
     glGenTextures(1, &TextureId);
     glBindTexture(GL_TEXTURE_2D, TextureId);
 
-//#ifdef Q_OS_WIN
-//    //Only upload one texture, GL_LINEAR, because some intel cards,
-//    //don't support npot dxt1 copression, so we just used GL_LINEAR
-//    //FIXME: ADD to rendering settings! Use mipmaps.
-//    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//#else
-    //All other platforms
-    GLfloat fLargest;
-    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
+    auto toMinFilter = [](cwOpenGLSettings::MinFilter filter) {
+        switch (filter) {
+        case cwOpenGLSettings::MinLinear:
+            return GL_LINEAR;
+        case cwOpenGLSettings::MinNearest_Mipmap_Linear:
+            return GL_NEAREST_MIPMAP_LINEAR;
+        case cwOpenGLSettings::MinLinear_Mipmap_Linear:
+            return GL_NEAREST_MIPMAP_LINEAR;
+        }
+        return GL_LINEAR;
+    };
 
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
-//#endif
-    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    auto toMagFilter = [](cwOpenGLSettings::MagFilter filter) {
+        switch (filter) {
+        case cwOpenGLSettings::MagNearest:
+            return GL_NEAREST;
+        case cwOpenGLSettings::MagLinear:
+            return GL_LINEAR;
+        }
+        return GL_NEAREST;
+    };
+
+    auto settings = cwOpenGLSettings::instance();
+
+    if(settings->useMipmaps()) {
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, toMinFilter(settings->minFilter()));
+    } else {
+        glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
+
+    if(settings->useAnisotropy()) {
+        GLfloat fLargest;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
+    }
+
+    glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, toMagFilter(settings->magFilter()));
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
     glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
     glBindTexture(GL_TEXTURE_2D, 0);
+
+}
+
+void cwImageTexture::releaseResources()
+{
+    deleteGLTexture();
 }
 
 /**
@@ -96,7 +146,7 @@ void cwImageTexture::setImage(cwImage image) {
     if(Image != image) {
         Image = image;
 
-        if(Image.isValid()) {
+        if(isImageValid(image)) {
             startLoadingImage();
         } else {
             DeleteTexture = true;
@@ -116,26 +166,42 @@ void cwImageTexture::updateData() {
     if(DeleteTexture) {
         deleteGLTexture();
         TextureDirty = false;
+        emit needsUpdate();
         return;
     }
 
-    if(TextureUploadTask == nullptr) {
-        TextureDirty = false;
+    if(ReloadTexture) {
+        deleteGLTexture();
+        initialize();
+        ReloadTexture = false;
+        emit needsUpdate();
         return;
     }
 
-    if(TextureUploadTask->isRunning()) { return; }
+    if(UploadedTextureFuture.isRunning()) {
+        return;
+    }
 
-    QList<QPair<QByteArray, QSize> > mipmaps = TextureUploadTask->mipmaps();
-    ScaleTexCoords = TextureUploadTask->scaleTexCoords();
+    if(UploadedTextureFuture.resultCount() == 0) {
+        return;
+    }
 
-    if(mipmaps.empty()) { return; }
+    auto results = UploadedTextureFuture.result();
+
+    QList<QPair<QByteArray, QSize> > mipmaps = results.mipmaps;
+    ScaleTexCoords = results.scaleTexCoords;
+
+    if(mipmaps.isEmpty()) { return; }
 
     QSize firstLevel = mipmaps.first().second;
-    if(!cwTextureUploadTask::isDivisibleBy4(firstLevel)) {
+    if(!cwTextureUploadTask::isDivisibleBy4(firstLevel) && results.type == cwTextureUploadTask::DXT1Mipmaps) {
         qDebug() << "Trying to upload an image that isn't divisible by 4. This will crash ANGLE on windows." << LOCATION;
         TextureDirty = false;
         return;
+    }
+
+    if(TextureId == 0) {
+        initialize();
     }
 
     //Load the data into opengl
@@ -145,6 +211,8 @@ void cwImageTexture::updateData() {
     GLint maxTextureSize;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
 
+    bool useMipmaps = cwOpenGLSettings::instance()->useMipmaps();
+
     int trueMipmapLevel = 0;
     for(int mipmapLevel = 0; mipmapLevel < mipmaps.size(); mipmapLevel++) {
 
@@ -153,25 +221,40 @@ void cwImageTexture::updateData() {
         QByteArray imageData = image.first;
         QSize size = image.second;
 
+        Q_ASSERT(mipmaps.at(mipmapLevel - 1 > 0 ? mipmapLevel - 1 : 0).second.width() >= size.width());
+
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
-            glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
-                                   size.width(), size.height(), 0,
-                                   imageData.size(), imageData.data());
+            switch(results.type) {
+            case cwTextureUploadTask::DXT1Mipmaps:
+                glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                                       size.width(), size.height(), 0,
+                                       imageData.size(), imageData.data());
+                break;
+            case cwTextureUploadTask::OpenGL_RGBA:
+                Q_ASSERT_X(!imageData.isEmpty(), LOCATION_STR, "Image can't be empty, this will cause crashing");
+                glTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_RGBA,
+                             size.width(), size.height(),
+                             0, GL_RGBA, GL_UNSIGNED_BYTE,
+                             imageData.data());
+                Q_ASSERT_X(mipmaps.size() == 1, LOCATION_STR, "There should only be one mipmap for GL_RGBA types");
+
+                if(useMipmaps) {
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                }
+                break;
+            }
 
             trueMipmapLevel++;
 
-//#ifdef Q_OS_WIN
-            //Only upload one texture, because some intel cards, don't support npot dxt1 copression, so we just used nearest
-            //FIXME: ADD to rendering settings!
-//            break;
-//#endif //Q_OS_WIN
+            if(!useMipmaps) {
+                break;
+            }
         }
     }
 
     release();
 
-    deleteLoadNoteTask();
-
+    emit needsUpdate();
     TextureDirty = false;
 }
 
@@ -182,37 +265,24 @@ void cwImageTexture::updateData() {
  */
 void cwImageTexture::startLoadingImage()
 {
-    if(Image.isValid() && !project().isEmpty()) {
+    if(Image.isOriginalValid() && !project().isEmpty()) {
 
-        if(TextureUploadTask == nullptr) {
-            TextureUploadTask = new cwTextureUploadTask();
+        UploadedTextureFuture.cancel();
 
-            connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::markAsDirty);
-            connect(TextureUploadTask, &cwTextureUploadTask::finished, this, &cwImageTexture::textureUploaded);
-            connect(TextureUploadTask, &cwTextureUploadTask::shouldRerun, this, &cwImageTexture::startLoadingImage);
-        }
+        cwTextureUploadTask uploadTask;
+        uploadTask.setImage(image());
+        uploadTask.setProjectFilename(ProjectFilename);
+        uploadTask.setType(TextureType);
+        UploadedTextureFuture = uploadTask.mipmaps();
+        FutureManagerToken.addJob({UploadedTextureFuture, "Updating Texture"});
 
-        if(TextureUploadTask->isRunning()) {
-            TextureUploadTask->restart();
-            return;
-        }
+        AsyncFuture::observe(UploadedTextureFuture).subscribe([this](){
+            markAsDirty();
+            emit textureUploaded();
+            emit needsUpdate();
+        });
 
         DeleteTexture = false;
-        TextureUploadTask->setImage(image());
-        TextureUploadTask->setProjectFilename(ProjectFilename);
-        TextureUploadTask->start();
-    }
-}
-
-/**
- * @brief cwImageTexture::reinitilizeLoadNoteWatcher
- */
-void cwImageTexture::deleteLoadNoteTask()
-{
-    if(TextureUploadTask != nullptr) {
-        TextureUploadTask->stop();
-        TextureUploadTask->deleteLater();
-        TextureUploadTask = nullptr;
     }
 }
 
@@ -224,15 +294,41 @@ void cwImageTexture::deleteLoadNoteTask()
 void cwImageTexture::deleteGLTexture()
 {
     if(TextureId > 0) {
-        glDeleteTextures(0, &TextureId);
+        if(QOpenGLContext::currentContext()) {
+            glDeleteTextures(0, &TextureId);
+        }
         TextureId = 0;
         DeleteTexture = false;
+        markAsDirty();
     }
+}
+
+void cwImageTexture::setTextureType(cwTextureUploadTask::Format type)
+{
+    if(type != TextureType) {
+        TextureType = type;
+        startLoadingImage();
+    }
+}
+
+bool cwImageTexture::isImageValid(const cwImage &image) const
+{
+    switch(TextureType) {
+    case cwTextureUploadTask::DXT1Mipmaps:
+        Q_ASSERT(cwOpenGLSettings::instance()->useDXT1Compression());
+        return image.isMipmapsValid();
+    case cwTextureUploadTask::OpenGL_RGBA:
+        Q_ASSERT(!cwOpenGLSettings::instance()->useDXT1Compression());
+        return image.isOriginalValid();
+    }
+    Q_ASSERT(false);
+    return false;
 }
 
 void cwImageTexture::markAsDirty()
 {
     TextureDirty = true;
+    emit needsUpdate();
 }
 
 /**
@@ -248,4 +344,14 @@ void cwImageTexture::bind() {
   */
 void cwImageTexture::release() {
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+/**
+*
+*/
+void cwImageTexture::setFutureManagerToken(cwFutureManagerToken futureManagerToken) {
+    if(FutureManagerToken != futureManagerToken) {
+        FutureManagerToken = futureManagerToken;
+        emit futureManagerTokenChanged();
+    }
 }

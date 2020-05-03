@@ -74,7 +74,7 @@ bool cwSQLManager::beginTransaction(const QSqlDatabase& database, QueryType type
     QString beginTransationQuery = "BEGIN TRANSACTION";
     QSqlQuery query = database.exec(beginTransationQuery);
     QSqlError error = query.lastError();
-    while (error.isValid() && error.number() == SQLITE_BUSY) {
+    while (error.isValid() && error.nativeErrorCode() == SQLITE_BUSY) {
         //Try to wait until the database becomes less busy
         QThread::currentThread()->sleep(250);
         query = database.exec(beginTransationQuery);
@@ -82,7 +82,7 @@ bool cwSQLManager::beginTransaction(const QSqlDatabase& database, QueryType type
     }
 
     if(error.isValid()) {
-        if(error.number() != SQLITE_BUSY) {
+        if(error.nativeErrorCode() != SQLITE_BUSY) {
             //Some other error
             qDebug() << "Database error when trying to begin transaction:" << error << error.text() << LOCATION;
             return false;
@@ -143,12 +143,11 @@ QReadWriteLock* cwSQLManager::fetchDatabaseMutex(QString databaseName)
  * transaction on the database.
  *
  */
-cwSQLManager::Transaction::Transaction(const QSqlDatabase* database, QueryType type) :
+cwSQLManager::Transaction::Transaction(const QSqlDatabase& database, QueryType type) :
     Database(database),
     RolledBack(false)
 {
-    Q_ASSERT(Database != nullptr);
-    cwSQLManager::instance()->beginTransaction(*Database, type);
+    cwSQLManager::instance()->beginTransaction(Database, type);
 }
 
 /**
@@ -160,7 +159,7 @@ cwSQLManager::Transaction::Transaction(const QSqlDatabase* database, QueryType t
 cwSQLManager::Transaction::~Transaction()
 {
     if(!RolledBack) {
-        cwSQLManager::instance()->endTransaction(*Database, cwSQLManager::Commit);
+        cwSQLManager::instance()->endTransaction(Database, cwSQLManager::Commit);
     }
 }
 
@@ -171,7 +170,7 @@ cwSQLManager::Transaction::~Transaction()
  */
 void cwSQLManager::Transaction::rollBack()
 {
-    cwSQLManager::instance()->endTransaction(*Database, cwSQLManager::Commit);
+    cwSQLManager::instance()->endTransaction(Database, cwSQLManager::Commit);
     RolledBack = true;
 }
 

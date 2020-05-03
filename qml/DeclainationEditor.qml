@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
@@ -17,12 +17,12 @@ GroupBox {
     contentHeight: column.height
     text: "Declination"
 
-    Column {
+    QQ.Column {
         id: column
         anchors.left: parent.left
         anchors.right: parent.right
 
-        Row {
+        QQ.Row {
             spacing: 3
 
             LabelWithHelp {
@@ -44,7 +44,7 @@ GroupBox {
         HelpArea {
             id: declinationHelp
             text: "<p>Magnetic declination is the <b>angle between magnetic north and true north</b></p>
-            Cavewhere calculates the true bearing (<b>TB</b>) by adding declination (<b>D</b>) to magnetic bearing (<b>MB</b>).
+            CaveWhere calculates the true bearing (<b>TB</b>) by adding declination (<b>D</b>) to magnetic bearing (<b>MB</b>).
             <center><b>MB + D = TB</b></center>"
             anchors.left: parent.left
             anchors.right: parent.right

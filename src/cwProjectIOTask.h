@@ -10,11 +10,13 @@
 
 //Our includes
 #include "cwTask.h"
+#include "cwError.h"
 class cwCavingRegion;
 
 //Qt includes
 #include <QSqlDatabase>
 #include <QAtomicInt>
+#include <QList>
 
 /**
   cXMLProjectLoadTask
@@ -22,22 +24,35 @@ class cwCavingRegion;
 class cwProjectIOTask : public cwTask
 {
     Q_OBJECT
+
 public:
     cwProjectIOTask(QObject* parent = nullptr);
 
     void setDatabaseFilename(QString filename);
     QString databaseFilename() const;
 
+    QList<cwError> errors() const;
+
 protected:
+    static QAtomicInt DatabaseConnectionCounter;
+
+    QSqlDatabase database() const;
+
+    static QSqlDatabase createDatabase(const QString& connectionName, const QString &databasePath);
+    bool connectToDatabase(QString connectionName);
+    void disconnectToDatabase();
+    bool beginTransation();
+    void endTransation();
+
+    void addError(const cwError& error);
+    void clearErrors();
+
+private:
+    QList<cwError> Errors;
+
     //For database access
     QString DatabasePath;
     QSqlDatabase Database; //sqlite database
-
-    static QAtomicInt DatabaseConnectionCounter;
-
-    bool connectToDatabase(QString connectionName);
-    bool beginTransation();
-    void endTransation();
 
 };
 
@@ -53,6 +68,16 @@ inline void cwProjectIOTask::setDatabaseFilename(QString filename) {
   */
 inline QString cwProjectIOTask::databaseFilename() const {
     return DatabasePath;
+}
+
+inline QSqlDatabase cwProjectIOTask::database() const
+{
+    return Database;
+}
+
+inline void cwProjectIOTask::disconnectToDatabase()
+{
+    Database.close();
 }
 
 #endif // CXMLPROJECTLOADTASK_H

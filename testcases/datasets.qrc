@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/network.cw</file>
+        <file>datasets/runningProfile.cw</file>
+    </qresource>
+</RCC>

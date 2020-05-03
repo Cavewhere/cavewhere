@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.12
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: containerId
     property Renderer3D viewer
     property alias turnTableInteraction: cameraOptionsTabId.turnTableInteraction

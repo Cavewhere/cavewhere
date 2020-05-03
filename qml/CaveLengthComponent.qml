@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Row {
+QQ.Row {
     id: caveLengthId
 
     property alias text: textId.text

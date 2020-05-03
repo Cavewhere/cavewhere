@@ -5,13 +5,14 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
+import QtQml 2.2
 import QtQuick.Controls 1.0 as Controls
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
     id: editor
 
     property Scrap scrap
@@ -19,12 +20,19 @@ Item {
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
-    property int scrapType: scrap ? scrap.type : -1
+    property int scrapType: currentScrapType()
+
+    //This function is useful for Binding in the combobox. The combobox
+    //doesn't update correctly if bound to just scrapType
+    function currentScrapType() {
+        return scrap ? scrap.type : -1
+    }
 
     visible: noteTransform !== null
 
     height: childrenRect.height
     width: childrenRect.width
+
 
     Binding {
         target: northInteraction
@@ -60,14 +68,14 @@ Item {
                     Binding {
                         target: typeComboBox
                         property: "currentIndex"
-                        value: scrapType
+                        value: currentScrapType()
                     }
                 }
             }
 
             HelpArea {
                 id: scrapTypeHelpId
-                text: "The scrap type designates how Cavewhere will interperate the scrap. A running
+                text: "The scrap type designates how CaveWhere will interperate the scrap. A running
                         profile will warp the scrap vertically along the centerline. Plan will warp
                         the scrap in plan view"
                 width: columnLayoutId.width
@@ -93,15 +101,14 @@ Item {
 
                     HelpArea {
                         id: northUpHelpArea
-                        width: scaleInputId.width
+                        Layout.fillWidth: true
                         text: {
                             switch(scrapType) {
                             case Scrap.Plan:
                                 return "You can set the direction of <b>north</b> relative to page for a scrap.
                                 Setting this incorrectly may cause warping issues."
                             case Scrap.RunningProfile:
-                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap.
-                                Setting this incorrectly may cause warping issues."
+                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
                                     return "Error..."
                             }
@@ -118,8 +125,20 @@ Item {
 
                     HelpArea {
                         id: scaleHelpAreaId
-                        width: scaleInputId.width
-                        text: "You can set the <b>scale</b> of the scrap."
+                        Layout.fillWidth: true
+                        text: "You can set the <b>scale</b> of the scrap. Setting this incorrectly may cause warping issues."
+                    }
+
+                    ErrorHelpArea {
+                        Layout.fillWidth: true
+                        visible: {
+                            if(scaleInputId.scaleObject) {
+                                return scaleInputId.scaleObject.scale >= 1.0
+                            }
+                            return false;
+                        }
+
+                        text: {"A scale of 1:1 or smaller is bad! You might need to add more station to create a shot or enter scale manually."}
                     }
                 }
             }
@@ -127,15 +146,15 @@ Item {
     }
 
     states: [
-        State {
+        QQ.State {
             when: scrap !== null
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: editor
                 noteTransform: scrap.noteTransformation
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: checkableBoxId
                 checked: scrap.calculateNoteTransform
                 onCheckedChanged: scrap.calculateNoteTransform = checked

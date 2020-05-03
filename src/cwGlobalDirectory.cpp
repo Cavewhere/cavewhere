@@ -15,7 +15,7 @@
 #include <QMessageBox>
 #include <QDebug>
 
-QString cwGlobalDirectory::BaseDirectory;
+QString cwGlobalDirectory::ResourceDirectory;
 
 cwGlobalDirectory::cwGlobalDirectory()
 {
@@ -32,24 +32,36 @@ cwGlobalDirectory::cwGlobalDirectory()
 void cwGlobalDirectory::setupBaseDirectory() {
     QString findFile = qmlMainFilePath();
 
+    auto resourceDirectory = []() {
+#if defined(Q_OS_WIN)
+    return QApplication::applicationDirPath() + "/";
+#elif defined(Q_OS_OSX)
+    return QApplication::applicationDirPath() + "/../Resources/";
+#elif defined(Q_OS_LINUX)
+    return QApplication::applicationDirPath() + "/../share/yourapplication/";
+#else
+    return QApplication::applicationDirPath() + "/";
+#endif
+    };
+
     QString currentDirectory = QString(CAVEWHERE_SOURCE_DIR);
-    QString execDirectory = QApplication::applicationDirPath();
+    QString resourcesDir = resourceDirectory();
 
     bool currentExists = QFileInfo(currentDirectory + "/" + findFile).exists();
-    bool execExists = QFileInfo(execDirectory + "/" + findFile).exists();
+    bool resourcesExists = QFileInfo(resourcesDir + "/" + findFile).exists();
 
     if(currentExists) {
-        BaseDirectory = currentDirectory;
-    } else if(execExists) {
-        BaseDirectory = execDirectory;
+        ResourceDirectory = currentDirectory;
+    } else if(resourcesExists) {
+        ResourceDirectory = resourcesDir;
     } else {
         qDebug() << "CurrentDirectory:" << (currentDirectory + "/" + findFile) << "exists:" << currentExists;
-        qDebug() << "ExecDirectory:" << (execDirectory + "/" + findFile) << "exists:" << execExists;
+        qDebug() << "ExecDirectory:" << (resourcesDir + "/" + findFile) << "exists:" << resourcesExists;
         qDebug() << "Couldn't find qml/CavewhereMainWindow.qml, installed wrong!?";
 
         QMessageBox::critical(nullptr,
                               "Installation is Broke Sauce",
-                              QString("<b>Installation is broken!!!</b><br><br>Cavewhere couldn't find <i>%1</i>").arg(findFile),
+                              QString("<b>Installation is broken!!!</b><br><br>CaveWhere couldn't find <i>%1</i>").arg(findFile),
                               QMessageBox::Close
                               );
 
@@ -57,5 +69,5 @@ void cwGlobalDirectory::setupBaseDirectory() {
 }
 
 QUrl cwGlobalDirectory::mainWindowSourcePath() {
-    return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + cwGlobalDirectory::qmlMainFilePath());
+    return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + cwGlobalDirectory::qmlMainFilePath());
 }

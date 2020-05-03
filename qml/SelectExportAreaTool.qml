@@ -1,8 +1,8 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.2
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: toolId
 
     property Renderer3D view
@@ -43,7 +43,7 @@ Item {
         state = ""
     }
 
-    Component {
+    QQ.Component {
         id: captureViewComponentId
         CaptureViewport { }
     }
@@ -67,14 +67,14 @@ Item {
         }
 
         states: [
-            State {
+            QQ.State {
                 name: "ACTIVE_STATE"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: toolButtonId
                     enabled: false
                 }
 
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: interactionId
                     onHasDraggedChanged: {
                         if(hasDragged) {
@@ -84,9 +84,9 @@ Item {
                 }
             },
 
-            State {
+            QQ.State {
                 name: "CAN_DONE_STATE"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: toolButtonId
                     text: "Done"
                     enabled: true
@@ -102,7 +102,7 @@ Item {
                     }
                 }
 
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: interactionId
                     onHasDraggedChanged: {
                         if(!hasDragged) {

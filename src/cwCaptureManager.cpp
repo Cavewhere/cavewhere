@@ -18,6 +18,8 @@
 #include "cwCaptureGroupModel.h"
 #include "cwProjection.h"
 #include "cwDebug.h"
+#include "cwMappedQImage.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QLabel>
@@ -30,6 +32,8 @@
 #include <QSvgGenerator>
 #include <QPdfWriter>
 #include <QFileInfo>
+#include <QTemporaryFile>
+#include <QImageWriter>
 
 #ifdef Q_OS_WIN
 #undef far
@@ -45,6 +49,7 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     LeftMargin(0.0),
     Filetype(PNG),
     GroupModel(new cwCaptureGroupModel(this)),
+    ErrorModel(new cwErrorListModel(this)),
     NumberOfImagesProcessed(0),
     Scene(new QGraphicsScene(this)),
     PaperRectangle(new QGraphicsRectItem()),
@@ -70,6 +75,10 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     borderPen.setJoinStyle(Qt::MiterJoin);
     BorderRectangle->setPen(borderPen);
 
+    connect(this, &cwCaptureManager::paperSizeChanged,
+            this, &cwCaptureManager::memoryRequiredChanged);
+    connect(this, &cwCaptureManager::resolutionChanged,
+            this, &cwCaptureManager::memoryRequiredChanged);
 }
 
 /**
@@ -111,7 +120,7 @@ void cwCaptureManager::setPaperSize(QSizeF paperSize) {
 
 /**
 * @brief cwCaptureManager::setResolution
-* @param resolution
+* @param resolution in pixel per-inch
 */
 void cwCaptureManager::setResolution(double resolution) {
     if(Resolution != resolution) {
@@ -189,8 +198,9 @@ void cwCaptureManager::setViewport(QRect viewport) {
 * The filename of the output file
 */
 void cwCaptureManager::setFilename(QUrl filename) {
-    if(Filename != filename) {
-        Filename = filename;
+    auto filenameWithExtention = appendExtention(filename, fileType());
+    if(Filename != filenameWithExtention) {
+        Filename = filenameWithExtention;
         emit filenameChanged();
     }
 }
@@ -203,6 +213,8 @@ void cwCaptureManager::setFileType(FileType fileType) {
     if(Filetype != fileType) {
         Filetype = fileType;
         emit fileTypeChanged();
+
+        setFilename(Filename);
     }
 }
 
@@ -426,16 +438,13 @@ void cwCaptureManager::saveScene()
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize());
 
-    auto appendExtention = [](const QString& filename, const QString& extention) {
-        QFileInfo info(filename);
-        if(info.suffix().compare(extention, Qt::CaseInsensitive) != 0) {
-            return filename + QString(".") + extention;
-        }
-        return filename;
-    };
+    auto saveToImage = [&](FileType type) {
+        auto size = imageSize.toSize();
 
-    auto saveToImage = [&](const QString& type) {
-        QImage outputImage(imageSize.toSize(), QImage::Format_ARGB32);
+        auto outputImage = cwMappedQImage::createDiskImageWithTempFile(QLatin1String("capture-manager"), size);
+
+        qint64 imageSizeBytes = requiredSizeInBytes();
+        Q_ASSERT(outputImage.sizeInBytes() == imageSizeBytes);
         outputImage.fill(Qt::white);
 
         cwImageResolution resolutionDPI(resolution(), cwUnits::DotsPerInch);
@@ -447,16 +456,20 @@ void cwCaptureManager::saveScene()
         QPainter painter(&outputImage);
         Scene->render(&painter, imageRect, sceneRect);
 
-        QString fileName = appendExtention(filename().toLocalFile(), type);
-
-        outputImage.save(fileName, type.toLocal8Bit());
+        //This preforms a deep copy in memory!
+        qDebug() << "Writing to:" << filename().toLocalFile();
+        QImageWriter imageWriter;
+        imageWriter.setFileName(filename().toLocalFile());
+        imageWriter.setFormat(fileTypeToExtention(type).toLocal8Bit());
+        bool success = imageWriter.write(outputImage);
+        if(!success) {
+            throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
+        }
     };
 
     auto saveToSVG = [&]() {
-        QString fileName = appendExtention(filename().toLocalFile(), "svg");
-
         QSvgGenerator generator;
-        generator.setFileName(fileName);
+        generator.setFileName(filename().toLocalFile());
         generator.setSize(imageSize.toSize());
         generator.setViewBox(imageRect);
 
@@ -467,9 +480,7 @@ void cwCaptureManager::saveScene()
     };
 
     auto saveToPDF = [&]() {
-        QString fileName = appendExtention(filename().toLocalFile(), "pdf");
-
-        QPdfWriter pdfWriter(fileName);
+        QPdfWriter pdfWriter(filename().toLocalFile());
         pdfWriter.setPageSize(QPageSize(paperSize(), QPageSize::Inch));
         pdfWriter.setResolution(resolution());
 
@@ -479,28 +490,31 @@ void cwCaptureManager::saveScene()
         painter.end();
     };
 
-    switch (fileType()) {
-    case PNG:
-        saveToImage("png");
-        break;
-    case TIF:
-        saveToImage("tif");
-        break;
-    case JPG:
-        saveToImage("jpg");
-        break;
-    case SVG:
-        saveToSVG();
-        break;
-    case PDF:
-        saveToPDF();
-        break;
-    default:
-        qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
-        break;
-    }
+    try {
+        switch (fileType()) {
+        case PNG:
+        case TIF:
+        case JPG:
+            saveToImage(fileType());
+            break;
+        case SVG:
+            saveToSVG();
+            break;
+        case PDF:
+            saveToPDF();
+            break;
+        default:
+            qDebug() << "Can't export to an unsupported type, this is a bug" << LOCATION;
+            break;
+        }
 
-    emit finishedCapture();
+        emit finishedCapture();
+
+    } catch(std::runtime_error e) {
+        errorModel()->append(cwError(QString::fromStdString(e.what()), cwError::Fatal));
+    } catch(...) {
+        errorModel()->append(cwError("There was an unknown error, this is a bug!", cwError::Fatal));
+    }
 }
 
 /**
@@ -688,6 +702,78 @@ void cwCaptureManager::updateBorderRectangle()
 */
 QStringList cwCaptureManager::fileTypes() const {
     return FileTypes.keys();
+}
+
+/**
+* Returns the memory required by the capture manager
+*/
+double cwCaptureManager::memoryRequired() const {
+    return requiredSizeInBytes() / (1024.0 * 1024.0);
+}
+
+/**
+ * Returns the require image size in bytes
+ */
+qint64 cwCaptureManager::requiredSizeInBytes() const
+{
+    QSizeF imageSize = paperSize() * resolution();
+    return cwMappedQImage::requiredSizeInBytes(imageSize.toSize(), QImage::Format_ARGB32);
+}
+
+QUrl cwCaptureManager::appendExtention(const QUrl &fileUrl, FileType fileType) const
+{
+    QString extention = fileTypeToExtention(fileType);
+    QString filename = fileUrl.toLocalFile();
+    QFileInfo info(filename);
+    if(typeNameToFileType(info.suffix().toUpper()) != UnknownType) {
+        if(!info.suffix().isEmpty()) {
+            filename.chop(info.suffix().size() + 1); //also chop off the .jpg
+        }
+    }
+    if(!filename.endsWith(QLatin1String("."))) {
+        filename += QString(".");
+    }
+
+    filename += extention;
+    return QUrl::fromLocalFile(filename);
+}
+
+QString cwCaptureManager::fileTypeToExtention(cwCaptureManager::FileType type) const
+{
+    switch(type) {
+    case UnknownType:
+        return QString();
+    case PNG:
+        return QLatin1String("png");
+    case TIF:
+        return QLatin1String("tif");
+    case JPG:
+        return QLatin1String("jpg");
+    case SVG:
+        return QLatin1String("svg");
+    case PDF:
+        return QLatin1String("pdf");
+    }
+    return QString("");
+}
+
+/**
+* Return the memory limit in MB
+*
+* For 32Bit systems this is 2.0GB
+* For 64bit systems this returns -1, no limit
+*/
+double cwCaptureManager::memoryLimit() const {
+
+    auto isBuild32Bit = []() {
+        static bool b = !QSysInfo::buildCpuArchitecture().contains(QLatin1String("64"));
+        return b;
+    };
+
+    if(isBuild32Bit()) {
+        return 1.0 * 1024.0;
+    }
+    return -1.0;
 }
 
 cwScreenCaptureCommand *cwCaptureManager::dequeueScreenCaptureCommand()

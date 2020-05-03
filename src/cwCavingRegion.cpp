@@ -9,6 +9,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwDebug.h"
+#include "cwProject.h"
 
 //Qt includes
 #include <QThread>
@@ -235,6 +236,11 @@ int cwCavingRegion::indexOf(cwCave* cave) {
     return Caves.indexOf(cave);
 }
 
+cwProject *cwCavingRegion::parentProject() const
+{
+    return dynamic_cast<cwProject*>(parent());
+}
+
 /**
   \brief Sets the undo stack for this region
 
@@ -271,8 +277,7 @@ cwCavingRegion::InsertRemoveCave::InsertRemoveCave(cwCavingRegion* region,
 cwCavingRegion::InsertRemoveCave::~InsertRemoveCave() {
     if(OwnsCaves) {
         foreach(cwCave* cave, Caves) {
-            // FIXME: double delete for the cave (cause crash)
-            cave->deleteLater();
+            delete cave;
         }
     }
 }

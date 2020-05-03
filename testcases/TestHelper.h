@@ -9,9 +9,6 @@
 #ifndef STREAMOPERATOR
 #define STREAMOPERATOR
 
-//Catch includes
-#include "catch.hpp"
-
 //Qt includes
 #include <QVector3D>
 #include <QString>
@@ -23,11 +20,19 @@
 #include <QDir>
 #include <QSet>
 #include <QModelIndex>
+#include <QMetaEnum>
+#include <QTextStream>
+#include <QVector2D>
 
 //Our includes
 #include "cwStationPositionLookup.h"
 #include "cwProject.h"
 #include "cwKeyword.h"
+#include "cwError.h"
+#include "cwImageData.h"
+
+//Std includes
+#include <iostream>
 
 inline std::ostream& operator << ( std::ostream& os, QVector3D const& value ) {
     os << "(" << value.x() << ", " << value.y() << ", " << value.z() << ")";
@@ -42,7 +47,7 @@ inline std::ostream& operator << ( std::ostream& os, QString const& value ) {
  std::ostream& operator << ( std::ostream& os, QStringList const& value );
 
 inline std::ostream& operator << ( std::ostream& os, QSet<QString> const& value ) {
-    return operator <<(os, value.toList());
+    return operator <<(os, value.values());
 }
 
 inline std::ostream& operator << ( std::ostream& os, QVariant const& value ) {
@@ -78,6 +83,34 @@ inline std::ostream& operator << ( std::ostream& os, cwKeyword const& value) {
     return os;
 }
 
+inline std::ostream& operator << ( std::ostream& os, QSize const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, QSizeF const& value ) {
+    os << "(" << value.width() << "x" << value.height() << ")";
+    return os;
+}
+
+inline std::ostream& operator << ( std::ostream& os, cwImageData const& value ) {
+    return os << "[size=" << value.size() << "]";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QVector2D const& value ) {
+    return os << "(" << value.x() << ", " << value.y() << ")";
+}
+
+inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& value ) {
+    for(auto image : value) {
+        os << image << ",";
+    }
+    return os;
+}
+
+
+std::ostream &operator << ( std::ostream& os, cwError const& error);
+
 void propertyCompare(QObject* tc1, QObject* tc2);
 
 double roundToDecimal(double value, int decimals);
@@ -103,12 +136,14 @@ void checkStationLookup(cwStationPositionLookup lookup1, cwStationPositionLookup
  */
 QString copyToTempFolder(QString filename);
 
+QString prependTempFolder(QString filename);
+
 /**
  * @brief fileToProject
  * @param filename
  * @return A new project generate from filename
  */
-cwProject* fileToProject(QString filename);
+std::shared_ptr<cwProject> fileToProject(QString filename);
 void fileToProject(cwProject* project, const QString& filename);
 
 #endif // STREAMOPERATOR

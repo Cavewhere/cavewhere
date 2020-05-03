@@ -5,8 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
+import QtQuick.Window 2.14
 
 RegionViewer {
     id: renderer
@@ -16,7 +17,7 @@ RegionViewer {
     property alias leadView: leadViewId
 
     clip: true
-
+    camera.devicePixelRatio: Screen.devicePixelRatio
     TurnTableInteraction {
         id: turnTableInteractionId
         anchors.fill: parent
@@ -47,7 +48,7 @@ RegionViewer {
         visible: rootData.leadsVisible
     }
 
-    Row {
+    QQ.Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20
         anchors.right: parent.right

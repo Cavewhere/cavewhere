@@ -22,28 +22,31 @@
 
 //Our includes
 #include "TestHelper.h"
+#include "SpyChecker.h"
 
 //Qt includes
 #include <QThread>
 #include <QApplication>
+#include <QSignalSpy>
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
-    cwProject* project = fileToProject(":/datasets/network.cw");
+    auto project = fileToProject(":/datasets/network.cw");
 
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 
     cwCave* cave = project->cavingRegion()->cave(0);
     cave->setStationPositionLookup(cwStationPositionLookup());
 
-    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(project->cavingRegion());
     plotManager->waitToFinish();
 
     cwSurveyNetwork network = cave->network();
 
     auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
-        auto foundNeighbors = network.neighbors(stationName).toSet();
-        auto checkNeigbbors = neighbors.toSet();
+        auto neighborsAtStation = network.neighbors(stationName);
+        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
         CHECK(foundNeighbors == checkNeigbbors);
     };
 
@@ -79,7 +82,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
     chunk->appendShot(s1, s2, shot1);
 
-    cwLinePlotManager* plotManager = new cwLinePlotManager();
+    auto plotManager = std::make_unique<cwLinePlotManager>();
 
     SECTION("Setting the region should run line plot generation") {
         plotManager->setRegion(&region);
@@ -766,6 +769,74 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
             }
         }
     }
+}
+
+TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]") {
+
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName("Cave 1");
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName("Trip 1");
+    cave->addTrip(trip);
+
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+
+    cwStation s1("a1");
+    cwStation s2("a2");
+    cwShot shot1;
+    shot1.setDistance("10.0");
+    shot1.setCompass("0.0");
+    shot1.setClino("0.0");
+
+    chunk->appendShot(s1, s2, shot1);
+
+    auto plotManager = std::make_unique<cwLinePlotManager>();
+    QSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
+    autoUpdateSpy.setObjectName("autoUpdateSpy");
+
+    QSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    stationPositionSpy.setObjectName("stationPositionSpy");
+
+    SpyChecker spyChecker {
+        {&autoUpdateSpy, 0},
+        {&stationPositionSpy, 0}
+    };
+
+    CHECK(plotManager->automaticUpdate() == true);
+
+    plotManager->setAutomaticUpdate(false);
+
+    spyChecker[&autoUpdateSpy]++;
+
+    CHECK(plotManager->automaticUpdate() == false);
+    spyChecker.checkSpies();
+
+    plotManager->setRegion(&region);
+    plotManager->waitToFinish();
+
+    spyChecker.checkSpies(); //StationPositionSpy should be zero
+
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "11.0");
+    plotManager->waitToFinish();
+
+    spyChecker.checkSpies(); //StationPositionSpy should be zero
+
+    plotManager->setAutomaticUpdate(true);
+    plotManager->waitToFinish();
+    spyChecker[&autoUpdateSpy]++;
+    spyChecker[&stationPositionSpy]++;
+    spyChecker.checkSpies();
+    CHECK(plotManager->automaticUpdate() == true);
+
+    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "12.0");
+    plotManager->waitToFinish();
+    spyChecker[&stationPositionSpy]++;
+    spyChecker.checkSpies();
 }
 
 

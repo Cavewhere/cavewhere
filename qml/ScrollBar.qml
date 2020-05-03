@@ -48,7 +48,7 @@
 
 import Qt 4.7
 
-Item {
+QQ.Item {
     id: container
 
     property variant scrollArea
@@ -91,7 +91,7 @@ Item {
         } else return nh + ny;
     }
 
-    Rectangle { anchors.fill: parent; color: "Black"; opacity: 0.3 }
+    QQ.Rectangle { anchors.fill: parent; color: "Black"; opacity: 0.3 }
 
     BorderImage {
         source: "images/scrollbar.png"
@@ -102,14 +102,14 @@ Item {
         height: container.orientation == Qt.Vertical ? size() : container.height - 4
     }
 
-    states: State {
+    states: QQ.State {
         name: "visible"
         when: container.orientation == Qt.Vertical ? scrollArea.movingVertically : scrollArea.movingHorizontally
-        PropertyChanges { target: container; opacity: 1.0 }
+        QQ.PropertyChanges { target: container; opacity: 1.0 }
     }
 
-    transitions: Transition {
+    transitions:  QQ.Transition {
         from: "visible"; to: ""
-        NumberAnimation { properties: "opacity"; duration: 600 }
+        QQ.NumberAnimation { properties: "opacity"; duration: 600 }
     }
 }

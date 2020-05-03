@@ -5,13 +5,13 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 import "Navigation.js" as NavigationHandler
 
-Item {
+QQ.Item {
     id: dataBox
 
     property alias dataValue: editor.text
@@ -36,8 +36,8 @@ Item {
     //color : Qt.rgba(201, 230, 245, 255);
 
     //This causes memory leaks in qt 4.7.1!!!
-    //    Behavior on y { PropertyAnimation { duration: 250 } }
-    //    Behavior on opacity  { PropertyAnimation { duration: 250 } }
+    //    QQ.Behavior on y { QQ.PropertyAnimation { duration: 250 } }
+    //    QQ.Behavior on opacity  { QQ.PropertyAnimation { duration: 250 } }
 
     //    onDataValidatorChanged: {
     //        dataTextInput.validator = dataValidator;
@@ -167,7 +167,7 @@ Item {
         z: 1
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: parent
 
         enabled: !editor.isEditting
@@ -183,16 +183,16 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: backgroundStation
         anchors.fill: parent
 
-        gradient: Gradient {
-            GradientStop {
+        gradient: QQ.Gradient {
+            QQ.GradientStop {
                 position: rowIndex % 2 === 0 ? 1.0 : 0.0
                 color:  "#DDF2FF"
             }
-            GradientStop {
+            QQ.GradientStop {
                 position: rowIndex % 2 === 0 ? 0.4 : 0.6
                 color:  "white"
             }
@@ -201,14 +201,14 @@ Item {
         visible: surveyChunk !== null && surveyChunk.isStationRole(dataRole)
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: backgroundShot
         property bool offsetColor: rowIndex % 2 === 0 && surveyChunk !== null && surveyChunk.isShotRole(dataRole)
         anchors.fill: parent
         color: offsetColor ? "#DDF2FF" : "white"
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: border
         anchors.fill: parent
         border.color:  "lightgray"
@@ -216,7 +216,7 @@ Item {
         border.width: 1
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: errorBorder
         property bool shouldBeVisible: errorModel !== null && (errorModel.fatalCount > 0 || errorModel.warningCount > 0)
 
@@ -245,7 +245,7 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: interalHighlight
         border.color: "black"
         anchors.fill: parent
@@ -273,7 +273,7 @@ Item {
         }
     }
 
-    Keys.onPressed: {
+    QQ.Keys.onPressed: {
         handleTab(event);
         surveyChunkView.navigationArrow(rowIndex, dataRole, event.key);
 
@@ -290,7 +290,7 @@ Item {
         }
     }
 
-    Keys.onSpacePressed: {
+    QQ.Keys.onSpacePressed: {
         var trip = surveyChunk.parentTrip;
         if(trip.chunkCount > 0) {
             var lastChunkIndex = trip.chunkCount - 1
@@ -304,15 +304,15 @@ Item {
         surveyChunk.parentTrip.addNewChunk();
     }
 
-    Keys.onEnterPressed: {
+    QQ.Keys.onEnterPressed: {
         enteredPressed()
     }
 
-    Keys.onReturnPressed: {
+    QQ.Keys.onReturnPressed: {
         enteredPressed();
     }
 
-    Keys.onDeletePressed: {
+    QQ.Keys.onDeletePressed: {
         deletePressed();
     }
 
@@ -326,10 +326,10 @@ Item {
 
     states: [
 
-        State {
+        QQ.State {
             name: "MiddleTyping"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: globalShadowTextInput.textInput
 
                 onPressKeyPressed: {
@@ -372,7 +372,7 @@ Item {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: globalShadowTextInput
 
                 onEscapePressed: {
@@ -388,7 +388,7 @@ Item {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: dataBox
                 z: 1
             }

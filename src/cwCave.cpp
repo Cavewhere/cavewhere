@@ -11,6 +11,10 @@
 #include "cwStation.h"
 #include "cwLength.h"
 #include "cwErrorModel.h"
+#include "cwCavingRegion.h"
+
+//Qt includes
+#include <QThread>
 
 cwCave::cwCave(QObject* parent) :
     QAbstractListModel(parent),
@@ -50,6 +54,7 @@ cwCave& cwCave::operator=(const cwCave& object) {
 }
 
 cwCave::~cwCave() {
+    Q_ASSERT(thread() == QThread::currentThread() || thread() == nullptr);
 }
 
 /**
@@ -167,6 +172,11 @@ void cwCave::removeTrip(int i) {
     pushUndo(new RemoveTripCommand(this, i, i));
 }
 
+cwCavingRegion *cwCave::parentRegion() const
+{
+    return dynamic_cast<cwCavingRegion*>(parent());
+}
+
 /**
  * @brief cwCave::rowCount
  * @param parent
@@ -261,8 +271,8 @@ cwCave::InsertRemoveTrip::InsertRemoveTrip(cwCave* cave,
 
 cwCave::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
-        foreach(cwTrip* trip, Trips) {
-            trip->deleteLater();
+        for(auto trip : Trips) {
+            delete trip;
         }
     }
 }
@@ -306,11 +316,11 @@ void cwCave::InsertRemoveTrip::removeTrips() {
 
 
 cwCave::InsertTripCommand::InsertTripCommand(cwCave* cave,
-                                             QList<cwTrip*> Trips,
+                                             QList<cwTrip*> trips,
                                              int index) :
-    cwCave::InsertRemoveTrip(cave, index, index + Trips.size() -1)
+    cwCave::InsertRemoveTrip(cave, index, index + trips.size() -1)
 {
-    Trips = Trips;
+    Trips = trips;
 
     if(Trips.size() == 1) {
         setText(QString("Add %1").arg(Trips.first()->name()));

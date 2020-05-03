@@ -16,7 +16,7 @@
 #include <QPainter>
 #include <QRect>
 #include <QDebug>
-#include <QGLWidget>
+#include <QTimer>
 
 //Std includes
 #include "cwMath.h"
@@ -44,9 +44,6 @@ cwGLViewer::cwGLViewer(QQuickItem *parent) :
 }
 
 cwGLViewer::~cwGLViewer() {
-//    delete GeometryItersecter;
-    Camera->deleteLater();
-//    ShaderDebugger->deleteLater();
 }
 
 void cwGLViewer::privateResizeGL() {
@@ -78,14 +75,12 @@ void cwGLViewer::paint(QPainter * painter) {
     painter->endNativePainting();
 }
 
+void cwGLViewer::releaseResources()
+{
+    Scene->releaseResources();
+    QQuickPaintedItem::releaseResources();
+}
 
-//QSGNode * cwGLRenderer::updatePaintNode(QSGNode * oldNode, UpdatePaintNodeData *data) {
-//    if(!Initialized) {
-//        initializeGL();
-//        Initialized = true;
-//    }
-//    return QQuickPaintedItem::updatePaintNode(oldNode, data);
-//}
 
 /**
  * @brief cwGLViewer::setScene

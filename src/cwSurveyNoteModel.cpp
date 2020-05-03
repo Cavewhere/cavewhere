@@ -11,18 +11,17 @@
 #include "cwImageProvider.h"
 #include "cwTrip.h"
 #include "cwNote.h"
+#include "cwCavingRegion.h"
 
 //Qt includes
 #include <QDebug>
-
-QString cwSurveyNoteModel::ImagePathString; // = QString("image://") + cwProjectImageProvider::Name + QString("/%1");
 
 cwSurveyNoteModel::cwSurveyNoteModel(QObject *parent) :
     QAbstractListModel(parent),
     ParentTrip(nullptr),
     ParentCave(nullptr)
 {
-    ImagePathString = QString("image://") + cwImageProvider::Name + QString("/%1");
+
 }
 
 QHash<int, QByteArray> cwSurveyNoteModel::roleNames() const
@@ -84,7 +83,7 @@ QList<cwNote *> cwSurveyNoteModel::validateNoteImages(QList<cwNote *> notes) con
     QList<cwNote*> validNotes;
     foreach(cwNote* note, notes) {
         if(note != nullptr) {
-            if(note->image().isValid() && note->image().iconIsValid()) {
+            if(note->image().isOriginalValid() && note->image().isIconValid()) {
                 validNotes.append(note);
             } else {
                 note->deleteLater();
@@ -113,12 +112,12 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
     case ImageOriginalPathRole: {
         //Get's the full blown note
         cwImage imagePath = Notes[row]->image();
-        return ImagePathString.arg(imagePath.original());
+        return imagePathString().arg(imagePath.original());
     }
     case ImageIconPathRole: {
         //Get's the icon for the note
         cwImage imagePath = Notes[row]->image();
-        return ImagePathString.arg(imagePath.icon());
+        return imagePathString().arg(imagePath.icon());
     }
     case ImageRole: {
         return QVariant::fromValue(Notes[row]->image());
@@ -142,8 +141,10 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   create a icon for each file.  The original file, icon, and mipmaps will be stored in the
   project.
   */
-void cwSurveyNoteModel::addFromFiles(QList<QUrl> files, cwProject* project) {
-    project->addImages(files, this, SLOT(addNotesWithNewImages(QList<cwImage>)));
+void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
+    project()->addImages(files,
+                       std::bind(&cwSurveyNoteModel::addNotesWithNewImages,
+                                 this, std::placeholders::_1));
 }
 
 /**
@@ -190,6 +191,22 @@ void cwSurveyNoteModel::addNotesWithNewImages(QList<cwImage> images) {
 
     addNotes(newNotes);
 }
+
+cwProject *cwSurveyNoteModel::project() const
+{
+    if(parentCave()) {
+        auto region = parentCave()->parentRegion();
+        if(region) {
+            return region->parentProject();
+        }
+    }
+    return nullptr;
+}
+
+QString cwSurveyNoteModel::imagePathString() {
+    return QLatin1String("image://") + cwImageProvider::name() + QLatin1String("/%1");
+}
+
 /**
   This adds valid notes to the note model
 

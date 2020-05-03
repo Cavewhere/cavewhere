@@ -4,7 +4,11 @@
 //Qt includes
 #include <QFuture>
 #include <QEventLoop>
+#include <QFutureWatcher>
 #include <QTimer>
+
+//AsyncFuture
+#include "asyncfuture.h"
 
 class cwAsyncFuture
 {
@@ -12,9 +16,9 @@ public:
     cwAsyncFuture() = delete;
 
     template<class T>
-    static void waitForFinished(QFuture<T> future, int timeout = -1) {
+    static bool waitForFinished(QFuture<T> future, int timeout = -1) {
         if (future.isFinished()) {
-            return;
+            return true;
         }
 
         QFutureWatcher<T> watcher;
@@ -29,6 +33,27 @@ public:
         watcher.setFuture(future);
 
         loop.exec();
+
+        return watcher.isFinished();
+    }
+
+    template<class T, typename RunFunc>
+    static void restart(QFuture<T>* future, RunFunc run) {
+        future->cancel();
+
+        if(!future->isRunning()) {
+            *future = run();
+
+            AsyncFuture::observe(*future).subscribe(
+                        [](){},
+            [future, run]()
+            {
+                //Recursive call
+                *future = QFuture<T>();
+                Q_ASSERT(!future->isRunning());
+                restart(future, run);
+            });
+        }
     }
 };
 

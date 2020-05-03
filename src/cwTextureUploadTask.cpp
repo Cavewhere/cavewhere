@@ -11,87 +11,101 @@
 #include "cwDebug.h"
 #include "cwAddImageTask.h"
 #include "cwMath.h"
+#include "cwOpenGLUtils.h"
+#include "cwOpenGLSettings.h"
+#include "cwImageDatabase.h"
 
 //Qt includes
 #include <QDebug>
 #include <QWindow>
+#include <QtConcurrent>
 
 //Std includes
 #include <math.h>
 
-cwTextureUploadTask::cwTextureUploadTask(QObject *parent) :
-    cwTask(parent)
+//Async Future
+#include "asyncfuture.h"
+
+cwTextureUploadTask::cwTextureUploadTask()
 {
 }
 
-/**
- * @brief cwTextureUploadTask::runTask
- *
- * This will fetch the texture's from disk, as well as, upload them
- * to the shared OpenGL context. This can be used in a theaded manner
- * to prevent the rendering thread from blocking
- */
-void cwTextureUploadTask::runTask()
+QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
 {
-    //Fetch mimaps from disk
-    loadMipmapsFromDisk();
+    auto projectFile = ProjectFilename;
+    auto image = Image;
+    auto currentFormat = type;
 
-    done();
-}
+    //loads valid mipmap
+    auto loadValidMipmap = [projectFile, currentFormat](const cwTrackedImagePtr& image) {
+        UploadResult results;
 
-/**
- * @brief cwTextureUploadTask::loadMipmapsFromDisk
- * @return
- */
-void cwTextureUploadTask::loadMipmapsFromDisk()
-{
-    Mipmaps.clear();
-    if(Image.mipmaps().empty()) { return; }
-
-    //Fetch mimaps from disk
-    cwImageProvider imageProvidor;
-    imageProvidor.setProjectPath(ProjectFilename);
-
-    QList< QPair< QByteArray, QSize > > mipmaps;
-
-    int firstLevel = Image.mipmaps().first();
-    QSize firstLevelSize = imageProvidor.data(firstLevel, true).size();
-
-    if(!isDivisibleBy4(firstLevelSize)) {
-        //Regenerate the mipmaps
-        cwAddImageTask addImageTask;
-        addImageTask.setUsingThreadPool(false);
-        addImageTask.setDatabaseFilename(ProjectFilename);
-        addImageTask.regenerateMipmapsOn(Image);
-        addImageTask.start();
-
-        //Double check if it successful
-        int firstLevel = Image.mipmaps().first();
-        firstLevelSize = imageProvidor.data(firstLevel, true).size();
-        if(!isDivisibleBy4(firstLevelSize)) {
-            //No original image, can regenerate image
-            return;
+        if(!cwImageDatabase(projectFile).mipmapsValid(*image, currentFormat == DXT1Mipmaps)) {
+            return results;
         }
+
+        cwImageProvider imageProvidor;
+        imageProvidor.setProjectPath(projectFile);
+
+        auto loadDXT1Mipmap = [&imageProvidor, image]() {
+            QList< QPair< QByteArray, QSize > > mipmaps;
+            //Load all the mipmaps
+            foreach(int imageId, image->mipmaps()) {
+                auto imageData = imageProvidor.data(imageId);
+                imageProvidor.data(imageId, true);
+                mipmaps.append(QPair< QByteArray, QSize >(imageData.data(), imageData.size()));
+            }
+            return mipmaps;
+        };
+
+        auto loadRGB = [&imageProvidor, image]()->QList< QPair< QByteArray, QSize > > {
+            auto imageData = imageProvidor.data(image->original());
+
+            if(imageData.data().isEmpty()) {
+                return {};
+            }
+
+            QImage image = imageProvidor.image(imageData);
+            if(!image.isNull()) {
+                image = cwOpenGLUtils::toGLTexture(image);
+                QByteArray data(reinterpret_cast<char*>(image.bits()),
+                                static_cast<int>(image.sizeInBytes()));
+                return {{data, imageData.size()}};
+            }
+            qDebug() << "Couldn't load from imageData";
+            return {};
+        };
+
+        switch(currentFormat) {
+        case OpenGL_RGBA:
+            results.scaleTexCoords = QVector2D(1.0, 1.0); //No extra padding
+            results.mipmaps = loadRGB();
+            break;
+        case DXT1Mipmaps:
+            results.scaleTexCoords = imageProvidor.scaleTexCoords(*image);
+            results.mipmaps = loadDXT1Mipmap();
+            break;
+        default:
+            Q_ASSERT(false);
+        }
+
+        results.type = currentFormat;
+        return results;
+    };
+
+    auto loadFunction = std::bind(loadValidMipmap,
+                                  cwTrackedImage::createShared(image,
+                                                               projectFile,
+                                                               cwTrackedImage::NoOwnership));
+
+    switch(CurrentThreading) {
+    case NoThreading:
+        return AsyncFuture::completed(loadFunction());
+    case Threaded:
+        return QtConcurrent::run(loadFunction);
     }
 
-    ScaleTexCoords = imageProvidor.scaleTexCoords(Image);
-
-    QSize imageSize;
-
-    //Request only one mipmap or all of them depending if MipmapLevel is set
-    auto mipmapIds = MipmapLevel >= 0 ? QList<int>({Image.mipmaps().at(MipmapLevel)}) : Image.mipmaps();
-
-    //Load all the mipmaps
-    foreach(int imageId, mipmapIds) {
-        if(!isRunning()) { return; }
-        imageProvidor.data(imageId, true);
-
-        QByteArray imageData = imageProvidor.requestImageData(imageId, &imageSize);
-        mipmaps.append(QPair< QByteArray, QSize >(imageData, imageSize));
-    }
-
-    Mipmaps = mipmaps;
-
+    return QFuture<UploadResult>();
 }
 
 /**
@@ -109,25 +123,12 @@ bool cwTextureUploadTask::isDivisibleBy4(QSize size)
 }
 
 /**
- * @brief cwTextureUploadTask::mipmaps
- * @return
+ * This function is not Thread safe, make sure use correctly
  */
-QList<QPair<QByteArray, QSize> > cwTextureUploadTask::mipmaps() const
+cwTextureUploadTask::Format cwTextureUploadTask::format()
 {
-    if(isReady()) {
-        return Mipmaps;
+    if(cwOpenGLSettings::instance()->useDXT1Compression()) {
+        return cwTextureUploadTask::DXT1Mipmaps;
     }
-
-    qDebug() << "Mipmaps aren't ready" << status() << LOCATION;
-    return QList<QPair<QByteArray, QSize> >();
-}
-
-QVector2D cwTextureUploadTask::scaleTexCoords() const
-{
-    if(isReady()) {
-        return ScaleTexCoords;
-    }
-
-    qDebug() << "ScaleTexCoords aren't ready" << status() << LOCATION;
-    return QVector2D(1.0, 1.0);
+    return cwTextureUploadTask::OpenGL_RGBA;
 }

@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     id: dataSideBar
 
     property alias caveSidebar: caveDataSidebar
@@ -17,9 +17,9 @@ Rectangle {
         anchors.fill: parent;
 
         children: [
-            Image {
+            QQ.Image {
                 id: splitter
-                fillMode: Image.TileVertically
+                fillMode: QQ.Image.TileVertically
                 source: "qrc:icons/verticalLine.png"
                // anchors.bottom: parent.bottom
                 height: tabWidget.areaY + 4

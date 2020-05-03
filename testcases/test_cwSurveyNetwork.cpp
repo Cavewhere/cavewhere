@@ -36,6 +36,20 @@ TEST_CASE("cwSurveyNetwork should compare changedStation correctly", "[cwSurveyN
 
     n2.addShot("a2", "a3");
 
-    CHECK(cwSurveyNetwork::changedStations(n1, n2).toSet() == QStringList({"A5", "A1", "A2", "A3"}).toSet());
-    CHECK(cwSurveyNetwork::changedStations(n2, n1).toSet() == QStringList({"A5", "A1", "A2", "A3"}).toSet());
+    QStringList testList({"A5", "A1", "A2", "A3"});
+    QSet<QString> testSet(testList.begin(), testList.end());
+
+    {
+        auto changedStations = cwSurveyNetwork::changedStations(n1, n2);
+        QSet<QString> networkSet(changedStations.begin(), changedStations.end());
+
+        CHECK(networkSet == testSet);
+    }
+
+    {
+        auto changedStations = cwSurveyNetwork::changedStations(n2, n1);
+        QSet<QString> networkSet(changedStations.begin(), changedStations.end());
+
+        CHECK(networkSet == testSet);
+    }
 }

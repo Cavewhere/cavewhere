@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.2 as Controls
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
@@ -26,7 +26,7 @@ RowLayout {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
 
         Layout.fillWidth: true
         implicitHeight: sizeItemId.height + 10
@@ -38,18 +38,29 @@ RowLayout {
             visible: false
         }
 
-        ListView {
+        QQ.ListView {
             id: linkBarListView
-            anchors.fill: parent
+//            anchors.fill: parent
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+
             anchors.margins: 3
+            anchors.verticalCenter: parent.verticalCenter
             model: linkBarModel
-            orientation: ListView.Horizontal
+            orientation: QQ.ListView.Horizontal
             spacing: 5
             visible: !textFieldId.visible
+
 
             delegate: LinkBarItem {
                 nextArrowVisible: linkBarListView.count - 1 !== index
                 text: nameRole
+            }
+
+            QQ.Rectangle {
+                anchors.fill: parent
+                color: "red"
             }
         }
 

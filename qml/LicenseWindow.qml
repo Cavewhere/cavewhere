@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Window 2.0
 import QtQuick.Controls 1.0
 import QtQuick.Layouts 1.0
@@ -37,7 +37,7 @@ Window {
             anchors.right: parent.right
 
             Button {
-                text: "Close Cavewhere"
+                text: "Close CaveWhere"
                 onClicked: {
                     license.hasReadLicenseAgreement = false
                     Qt.quit()

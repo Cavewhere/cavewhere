@@ -10,6 +10,7 @@
 
 //Our includes
 class cwProject;
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QString>
@@ -18,6 +19,7 @@ class cwProject;
 #include <QMetaType>
 #include <QSharedData>
 #include <QSharedDataPointer>
+#include <QDebug>
 
 /**
   \brief This class stores id's to all the images in the database
@@ -25,9 +27,10 @@ class cwProject;
   It stores the image path to original in the database,
   all the mipmap levels, and a icon version that's less than 512 by 512 pixels
   */
-class cwImage {
+class CAVEWHERE_LIB_EXPORT cwImage {
 public:
     cwImage();
+    virtual ~cwImage() = default;
 
     void setMipmaps(QList<int> mipmapFiles);
     QList<int> mipmaps() const;
@@ -41,7 +44,7 @@ public:
     int original() const;
 
     void setOriginalSize(QSize size);
-    QSize origianlSize() const;
+    QSize originalSize() const;
 
     void setOriginalDotsPerMeter(int dotsPerMeter);
     int originalDotsPerMeter() const;
@@ -49,8 +52,11 @@ public:
     bool operator ==(const cwImage& other) const;
     bool operator !=(const cwImage& other) const;
 
-    bool isValid() const;
-    bool iconIsValid() const;
+    bool isOriginalValid() const;
+    bool isMipmapsValid() const;
+    bool isIconValid() const;
+
+    QList<int> ids() const;
 
 private:
     class PrivateData : public QSharedData {
@@ -64,6 +70,8 @@ private:
 
         QList<int> Mipmaps;
     };
+
+    static bool isIdValid(int id);
 
     QSharedDataPointer<PrivateData> Data;
 };
@@ -123,9 +131,7 @@ inline int cwImage::original() const {
 /**
   Returns true if the original ids are equal
   */
-inline bool cwImage::operator ==(const cwImage& other) const {
-    return Data->OriginalId == other.Data->OriginalId;
-}
+
 
 /**
   Returns true if the original ids aren't equal
@@ -144,7 +150,7 @@ inline void cwImage::setOriginalSize(QSize size) {
 /**
   \brief Gets the original size of the image
   */
-inline QSize cwImage::origianlSize() const {
+inline QSize cwImage::originalSize() const {
     return Data->OriginalSize;
 }
 
@@ -162,21 +168,25 @@ inline int cwImage::originalDotsPerMeter() const {
     return Data->OriginalDotsPerMeter;
 }
 
-/**
-  \brief Returns false if the image isn't valid and true if it is valid.
-  */
-inline bool cwImage::isValid() const {
-    return Data->OriginalId > -1;
+inline bool cwImage::isOriginalValid() const
+{
+    return isIdValid(original());
 }
 
 /**
- * @brief cwImage::iconIsValid
  * @return returns true if the icon id is valid
  */
-inline bool cwImage::iconIsValid() const
+inline bool cwImage::isIconValid() const
 {
-    return Data->IconId > -1;
+    return isIdValid(Data->IconId);
 }
+
+inline bool cwImage::isIdValid(int id)
+{
+    return id > -1;
+}
+
+CAVEWHERE_LIB_EXPORT QDebug operator<<(QDebug debug, const cwImage &image);
 
 
 

@@ -24,8 +24,9 @@ TEST_CASE("Build a survey network", "[SurveyNetwork]") {
     network.addShot("a2", "a5");
 
     auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
-        auto foundNeighbors = network.neighbors(stationName).toSet();
-        auto checkNeigbbors = neighbors.toSet();
+        auto neighborsAtStation = network.neighbors(stationName);
+        auto foundNeighbors = QSet<QString>(neighborsAtStation.begin(), neighborsAtStation.end());
+        auto checkNeigbbors = QSet<QString>(neighbors.begin(), neighbors.end());
         CHECK(foundNeighbors == checkNeigbbors);
     };
 

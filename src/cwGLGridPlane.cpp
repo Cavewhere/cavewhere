@@ -37,11 +37,18 @@ void cwGLGridPlane::initialize()
 
 }
 
+void cwGLGridPlane::releaseResources()
+{
+    deleteShaders(Program);
+    TriangleVertexBuffer.destroy();
+}
+
 void cwGLGridPlane::draw() {
     Program->bind();
 
     Program->setUniformValue(UniformModelViewProjectionMatrix, camera()->viewProjectionMatrix() * ModelMatrix);
     Program->setUniformValue(UniformModelMatrix, ModelMatrix);
+    Program->setUniformValue(UniformDevicePixelRatio, static_cast<GLfloat>(camera()->devicePixelRatio()));
 
     TriangleVertexBuffer.bind();
 
@@ -106,10 +113,10 @@ void cwGLGridPlane::initializeGeometry() {
   */
 void cwGLGridPlane::initializeShaders() {
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/grid.vert");
+    vertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/grid.vert");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/grid.frag");
+    fragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/grid.frag");
 
     Program = new QOpenGLShaderProgram();
     Program->addShader(vertexShader);
@@ -125,6 +132,7 @@ void cwGLGridPlane::initializeShaders() {
     vVertex = Program->attributeLocation("vVertex");
     UniformModelViewProjectionMatrix = Program->uniformLocation("ModelViewProjectionMatrix");
     UniformModelMatrix = Program->uniformLocation("ModelMatrix");
+    UniformDevicePixelRatio = Program->uniformLocation("devicePixelRatio");
 
 //    Program->setUniformValue("colorBG", Qt::gray);
 }
@@ -149,7 +157,7 @@ void cwGLGridPlane::updateModelMatrix() {
 //    QVector3D planeNormal = Plane.normal().normalized();
 
 //    //Find the rotation from up vector
-//    double rotation = acos(QVector3D::dotProduct(upVector, planeNormal)) * cwGlobals::RadiansToDegrees;
+//    double rotation = acos(QVector3D::dotProduct(upVector, planeNormal)) * cwGlobals::radiansToDegrees();
 
 //    //Find the cross product between the vectors
 //    QVector3D cross = QVector3D::crossProduct(upVector, planeNormal);

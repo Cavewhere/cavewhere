@@ -16,7 +16,8 @@ Project {
 
         property var qt: Qt.core.binPath
 
-        Depends { name: "Cavewhere" }
+        Depends { name: "CaveWhere" }
+        Depends { name: "cavewhere-test" }
         Depends { name: "Qt.core" }
 
         Rule {
@@ -44,34 +45,36 @@ Project {
                             "-xml",
                             "-opengl",
                             "-concurrent",
-                            "-no-angle",
+                            "-test",
                             project.installDir + "/" + inputs.application[0].fileName]
-                } else if(targetOS.contains("osx")) {
+                } else if(targetOS.contains("macos")) {
                     deploymentApp = "macdeployqt"
 
-                    var bundlePath = ""
+                    var bundleName = "CaveWhere.app"
+                    var bundlePath = project.installDir + "/" + bundleName
 
-                    //Find the bundle
-                    for(var i = 0; i < inputs.installable.length; i++) {
-                        print(JSON.stringify(inputs.installable[i].fileTags))
-                        print(inputs.installable[i].fileTags.indexOf("bundle"))
-                        if(inputs.installable[i].fileTags.indexOf("bundle") != -1) {
-                            //Found the bundle
-                            var inp = inputs.installable[i];
-                            print("Inp:" + JSON.stringify(inp))
-                            bundlePath = project.installDir + "/" + inp.fileName;
-                            break;
-                        }
-                    }
+//                    //Find the bundle
+//                    for(var i = 0; i < inputs.installable.length; i++) {
+//                        console.error(JSON.stringify(inputs.installable[i].fileTags))
+//                        console.error(inputs.installable[i].fileTags.indexOf("bundle.content"))
+//                        if(inputs.installable[i].fileTags.indexOf("bundle.content") != -1) {
+//                            //Found the bundle
+//                            var inp = inputs.installable[i];
+////                            console.error("Inp:" + JSON.stringify(inp))
+//                            bundlePath = project.installDir + "/" + inp.fileName;
+//                            break;
+//                        }
+//                    }
 
-                    print("BundlePath:" + bundlePath)
+                    console.error("BundlePath:" + bundlePath)
 
                     if(bundlePath == "") {
                         throw "Bundle not found";
                     }
 
                     args = [bundlePath,
-                            "-qmldir=" + project.installDir + "/Cavewhere.app/Contents/MacOS/qml"
+                            "-qmldir=" + project.installDir + "/" + bundleName + "/Contents/Resources/qml",
+                            "-appstore-compliant"
                             ]
                 }
 
@@ -79,7 +82,6 @@ Project {
                 cmd.arguments = args
                 cmd.description = "running " + deploymentApp
                 return cmd
-                //return null
             }
         }
     }
@@ -88,13 +90,18 @@ Project {
         name: "Mac Installer"
         type: "shellInstaller"
         builtByDefault: false
-        condition: qbs.targetOS.contains("osx")
+        condition: qbs.targetOS.contains("macos")
 
-        property var qtLibPath: qtApp.Qt.core.libPath
-        readonly property string version: Git.productVersion
+        property var qtLibPath: Qt.core.libPath
+        readonly property string gitVersion: gitMac.productVersion
 
         Depends { name: "cavewhere-install" }
-        Depends { name: "Git" }
+        Depends { name: "Qt.core" }
+
+        GitProbe {
+            id: gitMac
+            sourceDirectory: product.sourceDirectory
+        }
 
         Group {
             name: "shellFiles"
@@ -110,14 +117,17 @@ Project {
             multiplex: true
 
             Artifact {
-                filePath: "Cavewhere " + product.version + ".dmg"
+                filePath: "CaveWhere " + product.gitVersion + ".dmg"
                 fileTags: "shellInstaller"
             }
 
             prepare: {
                 var cmd = new Command(inputs.shell[0].filePath)
-                cmd.arguments = [product.version,
-                                 product.sourceDirectory]
+                cmd.arguments = [product.gitVersion,
+                                 product.sourceDirectory,
+                                 project.codeSign,
+                                 project.installDir
+                        ]
 
                 cmd.workingDirectory = project.installDir
                 cmd.description = "running " + inputs.shell[0].filePath
@@ -137,7 +147,7 @@ Project {
             sourceDirectory: product.sourceDirectory
         }
 
-        readonly property string version: git.productVersion
+        readonly property string gitVersion: git.productVersion
         readonly property string arch: {
             var arch
             switch(qbs.architecture) {
@@ -265,7 +275,7 @@ Project {
 
                     innoInputFile = '; NOTE: This file was automatically generated by the build process, don\'t edit it\n\n\
 #define MyAppName "Cavewhere"\n\
-#define MyAppVersion "' + product.version + '"\n\
+#define MyAppVersion "' + product.gitVersion + '"\n\
 #define MyAppPublisher "Cavewhere"\n\
 #define MyAppURL "http://www.cavewhere.com"\n\
 #define MyAppExeName "Cavewhere.exe"\n\
@@ -289,7 +299,7 @@ innoInputFile
             inputs: ["inno"]
 
             Artifact {
-                filePath:  "Cavewhere " + product.version + " " + product.arch + ".exe"
+                filePath:  "Cavewhere " + product.gitVersion + " " + product.arch + ".exe"
                 fileTags: "innoInstaller"
             }
 

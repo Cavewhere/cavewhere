@@ -42,7 +42,7 @@ public slots:
 
 private:
     cwTrip* Trip;
-    static const int TextPadding;
+    inline static const int TextPadding = -11;
 
     void writeChunk(QTextStream& stream, bool hasFrontSight, bool hasBackSight, cwSurveyChunk* chunk);
     void writeCalibrations(QTextStream& stream, cwTripCalibration* calibrations);

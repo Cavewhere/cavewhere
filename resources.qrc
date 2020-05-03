@@ -91,5 +91,10 @@
         <file>icons/unlock.png</file>
         <file>icons/svg/dragAndDrop.svg</file>
         <file>icons/svg/resizeCorner.svg</file>
+        <file>icons/cavewhere_about.png</file>
+        <file>icons/cave512x512.png</file>
+        <file>icons/dxt1TestImage.png</file>
+        <file>icons/Anisotropic_filtering_en.png</file>
+        <file>qml/UnitDefaults.qml</file>
     </qresource>
 </RCC>

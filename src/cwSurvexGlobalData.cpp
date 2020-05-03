@@ -71,7 +71,7 @@ void cwSurvexGlobalData::cavesHelper(QList<cwCave*>* caves,
 
         //Copy the name and date
         currentTrip->setName(currentBlock->name());
-        currentTrip->setDate(currentBlock->date());
+        currentTrip->setDate(QDateTime(currentBlock->date()));
 
         //Copy all the team members
         currentTrip->setTeam(new cwTeam(*(currentBlock->team()))); //Copy the team

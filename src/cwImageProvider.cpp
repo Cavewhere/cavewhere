@@ -20,11 +20,10 @@
 #include <QMutexLocker>
 #include <QDebug>
 #include <QSqlError>
+#include <QJsonDocument>
 
-const QString cwImageProvider::Name = "sqlimagequery";
-const QString cwImageProvider::RequestImageSQL = "SELECT type,width,height,dotsPerMeter,imageData from Images where id=?";
-const QString cwImageProvider::RequestMetadataSQL = "SELECT type,width,height,dotsPerMeter from Images where id=?";
-const QByteArray cwImageProvider::Dxt1_GZ_Extension = "dxt1.gz";
+//Std includes
+#include <stdexcept>
 
 QAtomicInt cwImageProvider::ConnectionCounter;
 
@@ -51,15 +50,14 @@ QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize
     }
 
     //Extract the image data from the database
-    QByteArray type;
-    QByteArray imageData = requestImageData(sqlId, size, &type);
+    auto imageData = data(sqlId);
 
     //Read the image in
-    QImage image = QImage::fromData(imageData, type);
+    QImage image = this->image(imageData);
 
     //Make sure the image is good
     if(image.isNull()) {
-        qDebug() << "cwProjectImageProvider:: Image isn't of format " << type;
+        qDebug() << "cwProjectImageProvider:: Image isn't of format " << imageData.format();
         return QImage();
     }
 
@@ -76,37 +74,6 @@ QImage cwImageProvider::requestImage(const QString &id, QSize *size, const QSize
         *size = image.size();
         return image;
     }
-}
-
-/**
-  \brief Get's the image data at id.
-
-  This will also return the size and the data.  If the image couldn't be loaded then
-  this returns a empty QByteArray.
-
-  If the format is dxt1.gz then this will unzip the data
-  */
-QByteArray cwImageProvider::requestImageData(int id, QSize* size, QByteArray* type) {
-    //Set the default size
-    *size = QSize(0, 0);
-
-    QByteArray tempTypeArray;
-    if(type == nullptr) {
-        type = &tempTypeArray;
-    }
-
-    if(!QFileInfo(ProjectPath).isFile()) {
-        qDebug() << "cwProjectImageProvider:: ProjectPath isn't set or isn't a file:" << ProjectPath << LOCATION;
-        return QByteArray();
-    }
-
-    //Extra all the image data
-    cwImageData imageData = data(id);
-
-    //Set up all the data to be returned
-    *size = imageData.size();
-    if(type != nullptr) { *type = imageData.format(); }
-    return imageData.data();
 }
 
 /**
@@ -158,13 +125,13 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
     QSqlQuery query(database);
     bool successful;
     if(metaDataOnly) {
-        successful = query.prepare(RequestMetadataSQL);
+        successful = query.prepare(requestMetadataSQL());
     } else {
-        successful = query.prepare(RequestImageSQL);
+        successful = query.prepare(requestImageSQL());
     }
 
     if(!successful) {
-        qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << RequestImageSQL;
+        qDebug() << "cwProjectImageProvider:: Couldn't prepare query " << requestImageSQL();
         cwSQLManager::instance()->endTransaction(database);
         database.close();
         return cwImageData();
@@ -192,7 +159,7 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
         if(!metaDataOnly) {
             imageData = query.value(4).toByteArray();
             //Remove the zlib compression from the image
-            if(QString(type) == QString(cwImageProvider::Dxt1_GZ_Extension)) {
+            if(QString(type) == QString(cwImageProvider::dxt1GzExtension())) {
                 //Decompress the QByteArray
                 imageData = qUncompress(imageData);
             }
@@ -216,10 +183,48 @@ cwImageData cwImageProvider::data(int id, bool metaDataOnly) const {
 QImage cwImageProvider::image(int id) const
 {
     cwImageData imageData = data(id);
-    if(imageData.format() != cwImageProvider::Dxt1_GZ_Extension) {
-        return QImage::fromData(imageData.data(), imageData.format());
+    return image(imageData);
+
+}
+
+QImage cwImageProvider::image(const cwImageData &imageData) const
+{
+    if(imageData.format() == cwImageProvider::dxt1GzExtension()) {
+        return QImage();
     }
-    return QImage();
+
+    if(imageData.format() == cwImageProvider::croppedReferenceExtension()) {
+        QJsonParseError error;
+        auto document = QJsonDocument::fromJson(imageData.data(), &error);
+        auto map = document.toVariant().toMap();
+
+        auto getValue = [map](const QString& name) {
+            bool okay;
+            int value = map[name].toInt(&okay);
+            if(!okay) {
+                throw std::runtime_error(QString("Couldn't convert %1 to an int").arg(name).toStdString());
+            }
+            return value;
+        };
+
+        try {
+            int id = getValue(cropIdKey());
+            int x = getValue(cropXKey());
+            int y = getValue(cropYKey());
+            int width = getValue(cropWidthKey());
+            int height = getValue(cropHeightKey());
+
+            QRect cropRect(x, y, width, height);
+            QImage originalImage = image(id);
+            return originalImage.copy(cropRect);
+        } catch(std::runtime_error error) {
+            qDebug() << "Error:" << error.what();
+            return QImage();
+        }
+    }
+
+
+    return QImage::fromData(imageData.data(), imageData.format());
 }
 
 /**
@@ -233,8 +238,17 @@ QVector2D cwImageProvider::scaleTexCoords(const cwImage& image) const
         return QVector2D(1.0, 1.0);
     }
 
-    QSize originalSize = data(image.original(), true).size();
+    QSize originalSize = image.originalSize();
     QSize firstMipmapSize = data(image.mipmaps().first(), true).size();
     return QVector2D(originalSize.width() / (double)firstMipmapSize.width(),
                      originalSize.height() / (double)firstMipmapSize.height());
+}
+
+cwImageData cwImageProvider::createDxt1(QSize size, const QByteArray &uncompressData)
+{
+    //Compress the dxt1FileData using zlib
+    auto outputData = qCompress(uncompressData, 9);
+
+    //Add the image to the database
+    return cwImageData(size, 0, cwImageProvider::dxt1GzExtension(), outputData);
 }

@@ -26,7 +26,7 @@ bool cwApplication::notify(QObject *receiver, QEvent *event)
 {
 //    QEvent* newEvent = cloneEvent(event);
 
-//    if(newEvent != nullptr) {
+//    if(event != nullptr) {
 //        qDebug() << "Receiver:" << receiver << event;
 //    }
 

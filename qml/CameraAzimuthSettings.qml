@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0 as Cavewhere
 import QtQuick.Controls 2.0
@@ -79,7 +79,7 @@ ColumnLayout {
             enabled: turnTableInteraction.azimuth !== 90.0
         }
 
-        Item { width:1; height:1 }
+        QQ.Item { width:1; height:1 }
         Button {
             id: southButton
             text: "South"
@@ -89,7 +89,7 @@ ColumnLayout {
             }
             enabled: turnTableInteraction.azimuth !== 180.0
         }
-        Item { width:1; height:1 }
+        QQ.Item { width:1; height:1 }
     }
 
     GroupBox {
@@ -110,7 +110,7 @@ ColumnLayout {
                 }
             }
 
-            Item {
+            QQ.Item {
                 Layout.fillWidth: true
             }
 
@@ -132,7 +132,7 @@ ColumnLayout {
                     }
                 }
 
-                validator: IntValidator {
+                validator: QQ.IntValidator {
                     bottom: 0
                 }
             }
@@ -143,7 +143,7 @@ ColumnLayout {
         }
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: fullRotationAnimation
         target: turnTableInteraction
         property: "azimuth"
@@ -157,12 +157,12 @@ ColumnLayout {
         }
     }
 
-    NumberAnimation {
+    QQ.NumberAnimation {
         id: azimuthAnimationId
         target: turnTableInteraction;
         property: "azimuth";
         duration: 200;
-        easing.type: Easing.InOutQuad
+        easing.type: QQ.Easing.InOutQuad
 
         function restartRotation(toRotation) {
             var from = turnTableInteraction.azimuth;
@@ -182,6 +182,7 @@ ColumnLayout {
 
     HelpArea {
         id: directionHelpAreaId
+        Layout.fillWidth: true
         text: "The views azimuth (in degrees between 0.0 and 360.0) is
              the compass direction that the view is facing.
             <ul><li>0.0° for North<li>90.0° for East<li>180.0° for South<li>270.0° for West</ul>";

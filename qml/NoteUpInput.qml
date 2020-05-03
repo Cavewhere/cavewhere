@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
 
     property int scrapType
     property NoteTransform noteTransform
@@ -70,10 +70,10 @@ Item {
     }
 
     states: [
-        State {
+        QQ.State {
             when: noteTransform !== null
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: clickInput
                 text: noteTransform.northUp.toFixed(2)
                 onFinishedEditting: noteTransform.northUp = newText

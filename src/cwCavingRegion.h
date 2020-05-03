@@ -15,9 +15,11 @@
 #include <QWeakPointer>
 #include <QAbstractListModel>
 #include <QDebug>
+#include <QSharedPointer>
 
 //Our includes
 class cwCave;
+class cwProject;
 #include "cwUndoer.h"
 #include "cwGlobals.h"
 
@@ -57,7 +59,7 @@ public:
 
     int indexOf(cwCave* cave);
 
-
+    cwProject* parentProject() const;
 signals:
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
@@ -113,10 +115,9 @@ private:
         virtual void redo();
         virtual void undo();
     };
-
-
-
 };
+
+typedef QSharedPointer<cwCavingRegion> cwCavingRegionPtr;
 
 /**
   \brief Get's the number of caves in the region

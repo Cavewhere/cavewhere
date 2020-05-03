@@ -14,20 +14,27 @@
 #include <QByteArray>
 #include <QSharedData>
 
+//Our includes
+#include "cwGlobals.h"
+
 /**
   This class stores
 
   */
-class cwImageData
+class CAVEWHERE_LIB_EXPORT cwImageData
 {
 public:
+
     cwImageData();
     cwImageData(QSize size, int dotsPerMeter, const QByteArray& format, const QByteArray& image);
+    cwImageData(const cwImageData& other);
 
     QSize size() const;
     int dotsPerMeter() const;
     QByteArray format() const;
     QByteArray data() const;
+
+    cwImageData& operator=(const cwImageData& other);
 
 private:
     class PrivateData : public QSharedData {
@@ -38,21 +45,21 @@ private:
         QByteArray Data;
     };
 
-    QSharedDataPointer<PrivateData> Data;
+    QSharedDataPointer<PrivateData> d;
 };
 
 /**
   \brief This gets the image data size
   */
 inline QSize cwImageData::size() const {
-    return Data->Size;
+    return d->Size;
 }
 
 /**
   \brief Gets the resolution of the image
   */
 inline int cwImageData::dotsPerMeter() const {
-    return Data->DotsPerMeter;
+    return d->DotsPerMeter;
 }
 
 /**
@@ -61,14 +68,14 @@ inline int cwImageData::dotsPerMeter() const {
   This is usually a jpg, or a compress opengl format
   */
 inline QByteArray cwImageData::format() const {
-    return Data->Format;
+    return d->Format;
 }
 
 /**
   \brief This gets the image data
   */
 inline QByteArray cwImageData::data() const {
-    return Data->Data;
+    return d->Data;
 }
 
 #endif // CWIMAGEDATA_H

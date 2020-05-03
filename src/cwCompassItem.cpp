@@ -126,10 +126,11 @@ void cwCompassItem::paint(QPainter *painter)
 
 void cwCompassItem::releaseResources()
 {
-    delete Program;
-    delete XShadowProgram;
-    delete YShadowProgram;
-    delete ShadowOutputProgram;
+    cwGLObject::deleteShaders(Program);
+    cwGLObject::deleteShaders(XShadowProgram);
+    cwGLObject::deleteShaders(YShadowProgram);
+    cwGLObject::deleteShaders(ShadowOutputProgram);
+
     CompassVertexBuffer.destroy();
     TextureGeometryBuffer.destroy();
 
@@ -188,11 +189,11 @@ void cwCompassItem::initializeShadowShader()
 {
     //Setup the shadow X direction shader
     cwGLShader* vertexXShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexXShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowX.vsh");
+    vertexXShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadowX.vsh");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
     fragmentShader->addDefine("HORIZONTAL_BLUR_9");
-    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadow.fsh");
+    fragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadow.fsh");
 
     XShadowProgram = new QOpenGLShaderProgram();
     XShadowProgram->addShader(vertexXShader);
@@ -211,11 +212,11 @@ void cwCompassItem::initializeShadowShader()
 
     //Setup the shadow Y direction shader
     cwGLShader* vertexYShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowX.vsh");
+    vertexYShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadowX.vsh");
 
     cwGLShader* fragmentYShader = new cwGLShader(QOpenGLShader::Fragment);
     fragmentYShader->addDefine("VERTICAL_BLUR_9");
-    fragmentYShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadow.fsh");
+    fragmentYShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadow.fsh");
 
     YShadowProgram = new QOpenGLShaderProgram();
     YShadowProgram->addShader(vertexYShader);
@@ -243,10 +244,10 @@ void cwCompassItem::initializeShadowOutputShader()
 {
     //Setup the normal shader
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowOutput.vsh");
+    vertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadowOutput.vsh");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compassShadowOutput.fsh");
+    fragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compassShadowOutput.fsh");
 
     ShadowOutputProgram = new QOpenGLShaderProgram();
     ShadowOutputProgram->addShader(vertexShader);
@@ -270,10 +271,10 @@ void cwCompassItem::initializeCompassShader()
 {
     //Setup the normal shader
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compass.vsh");
+    vertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compass.vsh");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    fragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/compass/compass.fsh");
+    fragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/compass/compass.fsh");
 
     Program = new QOpenGLShaderProgram();
     Program->addShader(vertexShader);
@@ -488,7 +489,7 @@ void cwCompassItem::drawFramebuffer(QOpenGLFramebufferObject *framebuffer, QMatr
     QMatrix4x4 orthoMatrix;
     orthoMatrix.ortho(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
 
-    glViewport(0, 0, width(), height()); //camera()->viewport().width(), camera()->viewport().height());
+    glViewport(0, 0, width() * camera()->devicePixelRatio(), height() * camera()->devicePixelRatio()); //camera()->viewport().width(), camera()->viewport().height());
 
     ShadowOutputProgram->bind();
     ShadowOutputProgram->enableAttributeArray(vVertexShadowOutput);

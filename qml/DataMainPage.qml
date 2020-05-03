@@ -7,7 +7,7 @@
 
 import Cavewhere 1.0
 import QtQml 2.2
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Layouts 1.1
 
@@ -29,7 +29,7 @@ StandardPage {
 
             Text {
                 font.bold: true
-                font.pointSize: 20
+                font.pixelSize: 20
                 text: "All Caves"
             }
 
@@ -66,21 +66,21 @@ StandardPage {
                 Layout.fillHeight: true
                 implicitWidth: 450
 
-                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Cave" ; width: 200 }
-                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Length" ; width: 100 }
-                Controls.TableViewColumn{ role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Cave" ; width: 200 }
+                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Length" ; width: 100 }
+                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Depth" ; width: 100 }
 
                 itemDelegate:
-                    Item {
+                    QQ.Item {
 
-                    Connections {
+                    QQ.Connections {
                         target: tableViewId
                         onCurrentRowChanged: {
                             exportButton.currentCave = styleData.value
                         }
                     }
 
-                    Item {
+                    QQ.Item {
                         visible: styleData.column === 0
 
                         anchors.fill: parent
@@ -116,6 +116,17 @@ StandardPage {
                                 return null
                             }
                         }
+                        unitModel: {
+                            switch(styleData.column) {
+                            case 1:
+                                return UnitDefaults.lengthModel
+                            case 2:
+                                return UnitDefaults.depthModel
+                            default:
+                                return null
+                            }
+                        }
+
                         valueReadOnly: true
                     }
 
@@ -137,7 +148,7 @@ StandardPage {
 
     Instantiator {
         model: rootData.region
-        delegate: QtObject {
+        delegate: QQ.QtObject {
             id: delegateObjectId
             property Cave cave: caveObjectRole
             property Page page
@@ -165,7 +176,7 @@ StandardPage {
     }
 
     //Child page
-    Component {
+    QQ.Component {
         id: caveOverviewPageComponent
         CavePage {
             anchors.fill: parent

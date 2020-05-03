@@ -15,6 +15,7 @@ precision highp float;
 
 varying vec4 vPosition;
 varying vec4 projectedPosition;
+uniform float devicePixelRatio;
 
 float contour(float spacing, float widthPx) {
 

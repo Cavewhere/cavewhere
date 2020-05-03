@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.1
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
 //    property var viewer;
 
     //    parent: viewer
@@ -13,7 +13,7 @@ Item {
     property alias paperRectangle: paperRectangleId
     property alias captureRectangle: captureRectangleId
 
-    Rectangle {
+    QQ.Rectangle {
         id: leftMargin
         width: paperMarginGroupBoxId.leftMargin / paperRectangleId.paperWidth * paperRectangleId.width
         anchors.top: paperRectangleId.top
@@ -21,7 +21,7 @@ Item {
         color: paperRectangleId.marginColor
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: rightMargin
         width: paperMarginGroupBoxId.rightMargin / paperRectangleId.paperWidth * paperRectangleId.width
         anchors.top: paperRectangleId.top
@@ -30,7 +30,7 @@ Item {
         color: paperRectangleId.marginColor
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: topMargin
         anchors.left: leftMargin.right
         anchors.right: rightMargin.left
@@ -38,7 +38,7 @@ Item {
         color: paperRectangleId.marginColor
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: bottomMargin
         anchors.left: leftMargin.right
         anchors.right: rightMargin.left
@@ -47,7 +47,7 @@ Item {
         color: paperRectangleId.marginColor
     }
 
-    Item {
+    QQ.Item {
         id: captureRectangleId
         anchors.left: leftMargin.right
         anchors.right: rightMargin.left
@@ -55,7 +55,7 @@ Item {
         anchors.bottom: bottomMargin.top
     }
 
-    Rectangle {
+    QQ.Rectangle {
         id: paperRectangleId
 
         property real paperWidth: 0

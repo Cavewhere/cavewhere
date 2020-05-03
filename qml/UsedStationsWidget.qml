@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import Cavewhere 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: usedStationsArea
 
     border.width: 1
@@ -24,7 +24,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.topMargin: 0
-        ListView {
+        QQ.ListView {
             id: usedStationsView
 
 
@@ -62,6 +62,6 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: 4
-        font.pixelSize:14
+        font.pixelSize: 14
     }
 }

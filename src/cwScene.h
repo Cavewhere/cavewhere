@@ -55,6 +55,10 @@ public:
 
     void update();
 
+    void checkForGLError(const QByteArray &location);
+
+    void releaseResources();
+
 signals:
     void shaderDebuggerChanged();
     void needsRendering();

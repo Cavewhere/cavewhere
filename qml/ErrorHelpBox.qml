@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import "Theme.js" as Theme
 
 HelpBox {
-    font.pointSize: 10
+    font.pointSize: 14
     color: Theme.errorBackground
 }

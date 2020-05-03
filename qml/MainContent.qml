@@ -1,30 +1,9 @@
-import QtQuick 2.0
-import QtGraphicalEffects 1.0
+import QtQuick 2.0 as QQ
 import QtQuick.Controls 1.0
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: mainContentId
-
-//    property alias dataPage: dataMainPageId
-
-    /**
-      This is for global page selection
-      obj.page = "View" <- This will change the main window to "View" page
-      obj.page = "Data" <- This will change the main window to "Data" page
-      */
-    function setCurrentMainPage(obj) {
-        switch(obj.page) {
-        case "View":
-            mainSideBar.pageShown = 0;
-            break
-        case "Data":
-            mainSideBar.pageShown = 1;
-            break;
-        default:
-            console.log("Can't change the main page!!!, this is a bug");
-        }
-    }
 
     anchors.fill: parent
 
@@ -50,8 +29,8 @@ Item {
         //For animating which page is shown
         property real pageShownReal: pageShown;
 
-        Behavior on pageShownReal {
-            NumberAnimation {
+        QQ.Behavior on pageShownReal {
+            QQ.NumberAnimation {
                 duration: 150
             }
         }
@@ -59,7 +38,7 @@ Item {
 
     }
 
-    Item {
+    QQ.Item {
         id: container;
         anchors.top: linkBar.bottom
         anchors.bottom: parent.bottom
@@ -76,7 +55,7 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: renderingComponent
         RenderingView {
             width:  parent.width
@@ -85,7 +64,7 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: dataMainPageComponent
         DataMainPage {
             width:  parent.width
@@ -95,25 +74,41 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: unknownPageComponent
         UnknownPage {
             anchors.fill: parent
         }
     }
 
-    Component {
+    QQ.Component {
         id: testcasesPageComponent
         TestcasePage {
             anchors.fill: parent
         }
     }
 
-    Component.onCompleted: {
+    QQ.Component {
+        id: aboutPageComponent
+        AboutPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
+        id: settingsPageComponent
+        SettingsPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
         rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
         rootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
+        rootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
+        rootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         rootData.pageSelectionModel.gotoPage(viewPage);
     }
 }

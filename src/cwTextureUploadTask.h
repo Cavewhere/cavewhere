@@ -9,49 +9,64 @@
 #define CWTEXTUREUPLOADTASK_H
 
 //Our includes
-#include "cwTask.h"
 #include "cwImage.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QOpenGLFunctions>
 #include <QOpenGLBuffer>
 #include <QVector2D>
+#include <QFuture>
 class QOpenGLContext;
 class QSurface;
 
-class cwTextureUploadTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwTextureUploadTask
 {
-    Q_OBJECT
+
 public:
-    explicit cwTextureUploadTask(QObject *parent = 0);
+    enum Format {
+        DXT1Mipmaps,
+        OpenGL_RGBA,
+        Unknown,
+    };
+
+    enum Threading {
+        NoThreading,
+        Threaded
+    };
+
+    class UploadResult {
+    public:
+        QList< QPair< QByteArray, QSize > > mipmaps;
+        QVector2D scaleTexCoords;
+        Format type = Unknown;
+    };
+
+    explicit cwTextureUploadTask();
 
     //Inputs
     void setImage(cwImage image);
     void setProjectFilename(QString filename);
     void setMipmapLevel(int level);
+    void setType(Format type);
+    void setThreading(Threading threading);
 
-    //Outputs
-    QList< QPair< QByteArray, QSize > > mipmaps() const;
-    QVector2D scaleTexCoords() const;
+    QFuture<cwTextureUploadTask::UploadResult> mipmaps() const;
 
     static bool isDivisibleBy4(QSize size);
-
-protected:
-    void runTask();
+    static Format format();
 
 private:
+    Format type = Unknown;
     cwImage Image;
     QString ProjectFilename;
     int MipmapLevel = -1;
+    Threading CurrentThreading = Threaded;
 
-    QList< QPair< QByteArray, QSize > > Mipmaps;
-    QVector2D ScaleTexCoords;
 
     void loadMipmapsFromDisk();
 
     void updateScaleTexCoords();
-
-signals:
     
 };
 
@@ -82,6 +97,18 @@ inline void cwTextureUploadTask::setMipmapLevel(int level)
 }
 
 
+inline void cwTextureUploadTask::setType(cwTextureUploadTask::Format type)
+{
+    this->type = type;
+}
+
+/**
+ * Texture upload uses Qt concurrent to fetch the upload data or not
+ */
+inline void cwTextureUploadTask::setThreading(cwTextureUploadTask::Threading threading)
+{
+    CurrentThreading = threading;
+}
 
 
 

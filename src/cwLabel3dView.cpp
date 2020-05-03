@@ -23,7 +23,11 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     Component(nullptr),
     Camera(nullptr)
 {
-
+    connect(this, &cwLabel3dView::visibleChanged, this, [this]() {
+        if(isVisible()) {
+            updatePositions();
+        }
+    });
 }
 
 /**
@@ -33,14 +37,17 @@ cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
  */
 cwLabel3dView::~cwLabel3dView()
 {
-    //Delete all the child groups
-    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-    while(iter.hasNext()) {
-        cwLabel3dGroup* group = iter.next();
-        group->Labels.clear();
-        group->setParentView(nullptr);
-        group->deleteLater();
-    }
+//    for(auto groups : LabelGroups) {
+//        groups->setParentView(nullptr);
+//    }
+//    //Delete all the child groups
+//    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
+//    while(iter.hasNext()) {
+//        cwLabel3dGroup* group = iter.next();
+//        group->Labels.clear();
+//        group->setParentView(nullptr);
+//        group->deleteLater();
+//    }
 }
 
 void cwLabel3dView::addGroup(cwLabel3dGroup *group) {
@@ -69,7 +76,7 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
     if(Component == nullptr) {
         //Create the component that will generate all the labels
         QQmlEngine* engine = QQmlEngine::contextForObject(this)->engine();
-        Component = new QQmlComponent(engine, cwGlobalDirectory::baseDirectory() + "qml/Label3d.qml", this);
+        Component = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/Label3d.qml", this);
 
         if(Component == nullptr) {
             qDebug() << "Component is nullptr" << LOCATION;
@@ -105,7 +112,6 @@ void cwLabel3dView::updateGroup(cwLabel3dGroup* group) {
         QQuickItem* item = group->LabelItems.at(i);
 
         item->setProperty("text", label.text());
-        item->setProperty("font", label.font());
     }
 
     //Update all the positions
@@ -187,13 +193,15 @@ void cwLabel3dView::updatePositions()
 {
     if(Camera == nullptr) { return; }
 
-    QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
-    while(iter.hasNext()) {
-        cwLabel3dGroup* group = iter.next();
-        updateGroupPositions(group);
-    }
+    if(isVisible()) {
+        QSetIterator<cwLabel3dGroup*> iter(LabelGroups);
+        while(iter.hasNext()) {
+            cwLabel3dGroup* group = iter.next();
+            updateGroupPositions(group);
+        }
 
-    LabelKdTree.clear();
+        LabelKdTree.clear();
+    }
 }
 
 /**

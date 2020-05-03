@@ -1,0 +1,31 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/plan-seperate-trip-badSave.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-0rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-90rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-180rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-0mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/exact/profile-270rot-1mirror.cw</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/guessNeighorPlan.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/guessNeighorPlan2.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/guessNeighorPlan3.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/planGuessContinuous.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-90Rot.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-180rot.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-270rot.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-mir.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-mir-90rot.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-mir-180rot.png</file>
+        <file>datasets/scrapAutoCalculate/sourceImages/profileContinous-mir-270rot.png</file>
+        <file>datasets/scrapAutoCalculate/runningProfile.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
+        <file>datasets/scrapAutoCalculate/runningProfileUpsideDown.cw</file>
+    </qresource>
+</RCC>

@@ -32,7 +32,6 @@ class cwErrorData;
 class CAVEWHERE_LIB_EXPORT cwError
 {
     Q_GADGET
-    Q_ENUMS(ErrorType)
 
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
@@ -45,6 +44,7 @@ public:
         Fatal, //Survex will not run
         NoError
     };
+    Q_ENUM(ErrorType)
 
     cwError();
     cwError(const QString& message, ErrorType type = Warning);
@@ -67,10 +67,19 @@ public:
     bool operator==(const cwError& error) const;
     bool operator!=(const cwError& error) const;
 
+    static bool isFatal(const cwError& error) {
+        return error.type() == Fatal;
+    }
+
+    static bool containsFatal(const QList<cwError>& errors) {
+        return std::find_if(errors.begin(), errors.end(), &cwError::isFatal) != errors.end();
+    }
+
 private:
     QSharedDataPointer<cwErrorData> data;
 };
 
 Q_DECLARE_METATYPE(cwError)
+
 
 #endif // CWSURVEYCHUNKERROR_H

@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Dialogs 1.2
 
@@ -24,7 +24,7 @@ IconButton {
 
     FileDialog {
         id: fileDialog;
-        nameFilters: "Images (*.png *.jpg *.jpeg *.jp2 *.tiff)"
+        nameFilters: "Images (" + rootData.supportImageFormats + ")";
         title: "Load Images"
         selectMultiple: true
         folder: rootData.lastDirectory

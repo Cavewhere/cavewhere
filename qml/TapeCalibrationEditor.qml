@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0
+// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import "Utils.js" as Utils
 
@@ -18,7 +18,7 @@ GroupBox {
     contentHeight: tapeContent.height
     text: "Distance"
 
-    Column {
+    QQ.Column {
         id: tapeContent
         anchors.left: parent.left
         anchors.right: parent.right
@@ -26,11 +26,11 @@ GroupBox {
         spacing: 3
 
         //Tape calibration
-        Row {
+        QQ.Row {
 
             spacing: 15
 
-            Row {
+            QQ.Row {
                 spacing: 3
 
                 LabelWithHelp {
@@ -49,7 +49,7 @@ GroupBox {
                 }
             }
 
-            Row {
+            QQ.Row {
                 LabelWithHelp {
                     id: tapeUnits
                     text: "Units"

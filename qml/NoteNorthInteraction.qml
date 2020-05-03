@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 /**
@@ -39,9 +39,9 @@ Interaction {
     }
 
 
-    Keys.onEscapePressed: done()
+    QQ.Keys.onEscapePressed: done()
 
-    QtObject {
+    QQ.QtObject {
         id: privateData
         property variant firstLocation;
     }
@@ -50,7 +50,7 @@ Interaction {
         anchors.fill: parent
         basePanZoom: basePanZoomInteraction
 
-        MouseArea {
+        QQ.MouseArea {
             id: mouseAreaId
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -100,12 +100,12 @@ Interaction {
         style: Text.Outline
         styleColor: "#EEEEEE"
 
-        Connections {
+        QQ.Connections {
             target: northArrow.transformUpdater
             onUpdated: northAngleTextId.updatePosition()
         }
 
-        Connections {
+        QQ.Connections {
             target: northArrow
             onP1Changed: northAngleTextId.updatePosition()
         }
@@ -123,10 +123,10 @@ Interaction {
     }
 
     states: [
-        State {
+        QQ.State {
             name: "WaitForSecondClick"
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: mouseAreaId
 
                 hoverEnabled: true
@@ -149,12 +149,12 @@ Interaction {
                 }
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: helpBoxId
                 text: "<b>Click</b> the north arrow's second point"
             }
 
-            PropertyChanges {
+            QQ.PropertyChanges {
                 target: northAngleTextId
                 visible: true;
             }

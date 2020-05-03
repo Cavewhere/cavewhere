@@ -28,13 +28,35 @@ class CAVEWHERE_LIB_EXPORT cwGlobals
 public:
     cwGlobals() = delete;
 
-    static const double PI;
-    static const double RadiansToDegrees;
-    static const double DegreesToRadians;
+    static double pi();
+    static double radiansToDegrees() { return 180.0 / cwGlobals::pi(); }
+    static double degreesToRadians() { return cwGlobals::pi() / 180.0; }
 
     static QString addExtension(QString filename, QString extensionHint);
     static QString convertFromURL(QString filenameUrl);
     static QString findExecutable(QStringList executables);
+
 };
 
+namespace cw {
+
+template<typename T, typename _Fn, typename R = typename std::result_of<_Fn&(T)>::type>
+static QList<R> transform(const QList<T>& list, _Fn func) {
+    QList<R> returnList;
+    returnList.reserve(list.size());
+    std::transform(list.begin(), list.end(), std::back_inserter(returnList), func);
+    return returnList;
+};
+
+template<typename T>
+static QSet<T> toSet(const QList<T>& list) {
+    return QSet<T>(list.begin(), list.end());
+}
+
+template<typename T>
+static QList<T> toList(const QSet<T>& set) {
+    return QList<T>(set.begin(), set.end());
+}
+
+}
 #endif // CWGLOBALS_H

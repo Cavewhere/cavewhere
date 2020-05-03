@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtGraphicalEffects 1.0
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
     id: widgetId
 
     signal filesSelected(var images)
@@ -25,7 +25,7 @@ Item {
         }
     }
 
-    Item {
+    QQ.Item {
         id: shadowContainerId
         width: shadowBoxId.width + 20
         height: shadowBoxId.height + 20
@@ -43,7 +43,7 @@ Item {
             radius: Theme.floatingWidgetRadius
             color: Theme.floatingWidgetColor
 
-            Column {
+            QQ.Column {
                 id: columnId
 
                 spacing: 10
@@ -53,12 +53,12 @@ Item {
                 Text {
                     id: noteTextId
                     text: "No notes found..."
-                    font.pointSize: 14
+                    font.pixelSize: 18
                     font.bold: true
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
-                Row {
+                QQ.Row {
                     anchors.horizontalCenter: noteTextId.horizontalCenter
                     spacing: 5
 
@@ -67,7 +67,7 @@ Item {
                         anchors.verticalCenter: loadNoteButtonId.verticalCenter
                     }
 
-                    Image {
+                    QQ.Image {
                         anchors.verticalCenter: loadNoteButtonId.verticalCenter
                         rotation: 180
                         source: "qrc:/icons/back.png"
@@ -97,18 +97,18 @@ Item {
         anchors.centerIn: widgetId
     }
 
-    ParallelAnimation {
+    QQ.ParallelAnimation {
         id: visibleAnimation
 
 
-        PropertyAnimation {
+        QQ.PropertyAnimation {
             target: fastBlurId
             property: "radius"
             from: 100
             to: 0
         }
 
-        PropertyAnimation {
+        QQ.PropertyAnimation {
 
             target: fastBlurId
             property: "opacity"

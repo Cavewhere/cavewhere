@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 import QtQuick.Controls 2.4
 import Cavewhere 1.0
 
-Item {
+QQ.Item {
     id: itemId
 
     implicitWidth: columnLayoutId.implicitWidth
@@ -42,24 +42,28 @@ Item {
                 title: "Vertical Angle"
                 Layout.fillWidth: true
 
-                CameraVerticalAngleSettings {
-                    id: verticalAngleSettingsId
-                    turnTableInteraction: itemId.turnTableInteraction
-                    anchors.left: parent.left
-                    anchors.right: parent.right
+                QQ.Item {
+                    CameraVerticalAngleSettings {
+                        id: verticalAngleSettingsId
+                        turnTableInteraction: itemId.turnTableInteraction
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                    }
                 }
-            }
 
-            GroupBox {
-                title: "Projection"
-                Layout.fillWidth: true
-
-
-
-                CameraProjectionSettings {
-                    id: projectionSettingsId
-                    camera: itemId.turnTableInteraction.camera
+                GroupBox {
+                    title: "Projection"
                     Layout.fillWidth: true
+
+
+
+                    QQ.Item {
+                        CameraProjectionSettings {
+                            id: projectionSettingsId
+                            camera: itemId.turnTableInteraction.camera
+                            Layout.fillWidth: true
+                        }
+                    }
                 }
             }
         }

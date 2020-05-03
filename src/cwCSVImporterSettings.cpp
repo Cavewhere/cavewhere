@@ -12,7 +12,6 @@ public:
     bool UseFromStationForLRUD = true;
     bool NewTripOnEmptyLines = false;
     int PreviewLines = 20;
-    QThread* OutputThread = nullptr;
 };
 
 cwCSVImporterSettings::cwCSVImporterSettings() : data(new cwCSVImporterSettingsData)
@@ -115,14 +114,4 @@ int cwCSVImporterSettings::previewLines() const
 void cwCSVImporterSettings::setPreviewLines(int previewLines)
 {
     data->PreviewLines = previewLines;
-}
-
-QThread *cwCSVImporterSettings::outputThread() const
-{
-    return data->OutputThread;
-}
-
-void cwCSVImporterSettings::setOutputThread(QThread *thread)
-{
-     data->OutputThread = thread;
 }

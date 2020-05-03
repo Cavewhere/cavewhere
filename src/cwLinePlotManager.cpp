@@ -52,13 +52,13 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunkCalibrations(SIGNAL(calibrationsChanged()), this, SLOT(runSurvex()));
 
     LinePlotTask = new cwLinePlotTask();
-    connect(LinePlotTask, SIGNAL(shouldRerun()), SLOT(rerunSurvex())); //So the task is rerun
+    connect(LinePlotTask, SIGNAL(shouldRerun()), this, SLOT(rerunSurvex())); //So the task is rerun
     connect(LinePlotTask, &cwLinePlotTask::finished, this, &cwLinePlotManager::updateLinePlot);
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
     LinePlotTask->stop();
-    LinePlotTask->waitToFinish();
+    LinePlotTask->waitToFinish(cwTask::IgnoreRestart);
 
     delete LinePlotTask;
 }
@@ -229,6 +229,10 @@ void cwLinePlotManager::rerunSurvex()
   \brief Run the line plot task
   */
 void cwLinePlotManager::runSurvex() {
+    if(!AutomaticUpdate) {
+        return;
+    }
+
     if(Region != nullptr) {
         if(LinePlotTask->isReady()) {
             setCaveStationLookupAsStale(true);
@@ -301,7 +305,16 @@ void cwLinePlotManager::updateLinePlot() {
     setCaveStationLookupAsStale(false);
 
     emit stationPositionInCavesChanged(resultData.caveData().keys());
-    emit stationPositionInTripsChanged(resultData.trips().toList());
-    emit stationPositionInScrapsChanged(resultData.scraps().toList());
+    emit stationPositionInTripsChanged(cw::toList(resultData.trips()));
+    emit stationPositionInScrapsChanged(cw::toList(resultData.scraps()));
+}
+
+
+void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
+    if(AutomaticUpdate != automaticUpdate) {
+        AutomaticUpdate = automaticUpdate;
+        emit automaticUpdateChanged();
+        runSurvex();
+    }
 }
 

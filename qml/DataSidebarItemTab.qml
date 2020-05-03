@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-Rectangle {
+QQ.Rectangle {
     property bool selected: false;
 
     width:  parent.width
@@ -21,10 +21,10 @@ Rectangle {
         anchors.rightMargin: -7
     }
 
-    Behavior on x {
-        NumberAnimation {
+    QQ.Behavior on x {
+        QQ.NumberAnimation {
             duration: 200;
-            easing.type: Easing.OutQuad
+            easing.type: QQ.Easing.OutQuad
         }
     }
 }

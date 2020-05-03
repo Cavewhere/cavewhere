@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
 DataTabWidget {
@@ -35,7 +35,7 @@ DataTabWidget {
         notesModel: tripTabWidget.currentTrip !== null ? tripTabWidget.currentTrip.notes : null
 
         onImagesAdded: {
-            currentTrip.notes.addFromFiles(images, project);
+            currentTrip.notes.addFromFiles(images);
         }
 
     }

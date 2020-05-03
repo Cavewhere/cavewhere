@@ -9,7 +9,7 @@
 #define CWTRIANGULATEDATA_H
 
 //Our includes
-#include "cwImage.h"
+#include "cwTrackedImage.h"
 
 //Qt includes
 #include <QSharedData>
@@ -23,7 +23,8 @@ public:
     cwTriangulatedData();
 
     cwImage croppedImage() const;
-    void setCroppedImage(cwImage croppedImage);
+    cwTrackedImagePtr croppedImagePtr() const;
+    void setCroppedImage(cwTrackedImagePtr croppedImage);
 
     QVector<QVector3D> points() const;
     void setPoints(QVector<QVector3D> points);
@@ -49,7 +50,7 @@ private:
             Stale(false)
         {}
 
-        cwImage croppedImage;
+        cwTrackedImagePtr croppedImage = cwTrackedImagePtr::create();
         QVector<QVector3D> points;
         QVector<QVector2D> texCoords;
         QVector<uint> indices;
@@ -64,13 +65,18 @@ private:
 Get variableName
 */
 inline cwImage cwTriangulatedData::croppedImage() const {
+    return *Data->croppedImage;
+}
+
+inline cwTrackedImagePtr cwTriangulatedData::croppedImagePtr() const
+{
     return Data->croppedImage;
 }
 
 /**
 Sets variableName
 */
-inline void cwTriangulatedData::setCroppedImage(cwImage croppedImage) {
+inline void cwTriangulatedData::setCroppedImage(cwTrackedImagePtr croppedImage) {
     Data->croppedImage = croppedImage;
 }
 

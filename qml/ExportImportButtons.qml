@@ -5,12 +5,12 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 import QtQuick.Controls 1.2 as Controls;
 import QtQuick.Dialogs 1.2
 
-Item {
+QQ.Item {
     id: iconBar
 
     property alias currentTrip: exportManager.trip
@@ -55,7 +55,7 @@ Item {
         font: importManager.messageListFont
     }
 
-    Item {
+    QQ.Item {
         id: fileDialogItem
         FileDialog {
             id: fileDialog
@@ -63,9 +63,9 @@ Item {
         }
 
         states: [
-            State {
+            QQ.State {
                 name: "EXPORT_TRIP_SURVEX"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Export " + exportManager.currentTripName + " to survex"
                     nameFilters: ["Survex (*.svx)"]
@@ -77,9 +77,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "EXPORT_CAVE_SURVEX"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Export " + exportManager.currentCaveName + " to survex"
                     nameFilters: ["Survex (*.svx)"]
@@ -91,9 +91,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "EXPORT_REGION_SURVEX"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Export All Caves to survex"
                     nameFilters: ["Survex (*.svx)"]
@@ -105,9 +105,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "EXPORT_CAVE_COMPASS"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Export " + exportManager.currentCaveName + " to compass"
                     nameFilters: ["Compass (*.dat)"]
@@ -119,9 +119,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "EXPORT_CAVE_CHIPDATA"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Export " + exportManager.currentCaveName + " to chipdata"
                     nameFilters: ["Chipdata (*.*)"]
@@ -132,9 +132,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "IMPORT_COMPASS"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Import from Compass"
                     nameFilters: ["Compass (*.dat)"]
@@ -147,9 +147,9 @@ Item {
                     }
                 }
             },
-            State {
+            QQ.State {
                 name: "IMPORT_CSV"
-                PropertyChanges {
+                QQ.PropertyChanges {
                     target: fileDialog
                     title: "Import from CSV"
                     nameFilters: ["All (*)", "Comma Seperated Value (*.csv)", "Text (*.txt)"]
@@ -165,7 +165,7 @@ Item {
         ]
     }
 
-    Row {
+    QQ.Row {
         id: rowId
 
         spacing: 3
@@ -296,7 +296,7 @@ Item {
         }
     }
 
-    Component {
+    QQ.Component {
         id: csvImporterComponent
         CSVImporterPage {
 

@@ -18,13 +18,9 @@
 #include <QApplication>
 #include <QDebug>
 
-const QString cwPlotSauceTask::PlotSauceExtension = ".xml.gz";
-
 cwPlotSauceTask::cwPlotSauceTask(QObject* parent) :
     cwTask(parent)
 {
-
-//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
 
 }
 
@@ -41,7 +37,7 @@ void cwPlotSauceTask::setSurvex3DFile(QString inputFile) {
   \brief Gets the path to the output file
   */
 QString cwPlotSauceTask::outputXMLFile() const {
-    QFileInfo info(survex3DFilename().append(PlotSauceExtension));
+    QFileInfo info(survex3DFilename().append(plotSauceExtension()));
     if(info.exists()) {
         return info.absoluteFilePath();
     } else {
@@ -65,11 +61,17 @@ void cwPlotSauceTask::runTask() {
         return;
     }
 
-    PlotSauceProcess = new QProcess();
-    connect(PlotSauceProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+    auto plotSauceProcess = std::make_unique<QProcess>();
+    auto plotSaucePtr = plotSauceProcess.get();
+    connect(plotSaucePtr, &QProcess::errorOccurred,
+            plotSaucePtr,
+            [plotSaucePtr]()
+    {
+         qDebug() << "PlotSauce errors: " << plotSaucePtr->errorString();
+    });
 
     QString inputFile = survex3DFilename();
-    QString outputFile = inputFile + PlotSauceExtension;
+    QString outputFile = inputFile + plotSauceExtension();
 
     QStringList plotSauceAppNames;
     plotSauceAppNames.append("plotsauce");
@@ -88,15 +90,9 @@ void cwPlotSauceTask::runTask() {
     arguments.append(inputFile);
     arguments.append(outputFile);
 
-    PlotSauceProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    PlotSauceProcess->start(plotSaucePath, arguments);
-    PlotSauceProcess->waitForFinished();
-
-    delete PlotSauceProcess;
+    plotSauceProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    plotSauceProcess->start(plotSaucePath, arguments);
+    plotSauceProcess->waitForFinished();
 
     done();
-}
-
-void cwPlotSauceTask::printErrors() {
-    qDebug() << "PlotSauce errors: " << PlotSauceProcess->errorString();
 }

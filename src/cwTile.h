@@ -25,8 +25,9 @@ class cwTile : public cwGLObject
 public:
     cwTile();
 
-    virtual void initialize();
-    virtual void draw();
+    virtual void initialize() override;
+    virtual void releaseResources() override;
+    virtual void draw() override;
 
     void setTileSize(int powerOfTwoSize);
     int tileSize() const;

@@ -19,7 +19,7 @@
 #include "cwShaderDebugger.h"
 #include "cwGlobalDirectory.h"
 #include "cwProject.h"
-
+#include "cwScene.h"
 
 cwGLScraps::cwGLScraps(QObject *parent) :
     cwGLObject(parent),
@@ -31,6 +31,16 @@ cwGLScraps::cwGLScraps(QObject *parent) :
 
 void cwGLScraps::initialize() {
     initializeShaders();
+}
+
+void cwGLScraps::releaseResources()
+{
+    deleteShaders(Program);
+
+    for(auto scrap : Scraps) {
+        scrap.releaseResources();
+    }
+
 }
 
 void cwGLScraps::draw() {
@@ -98,9 +108,11 @@ void cwGLScraps::updateData()
                 glScrap.update(command.triangulatedData());
                 scrapId = glScrap.ScrapId;
             } else {
-                GLScrap glScrap(command.triangulatedData(), project());
+                GLScrap glScrap(command.triangulatedData(), project(), FutureManagerToken);
                 glScrap.ScrapId = MaxScrapId++;
                 scrapId = glScrap.ScrapId;
+                connect(glScrap.Texture, &cwImageTexture::needsUpdate,
+                        scene(), &cwScene::update);
                 Scraps.insert(command.scrap(), glScrap);
             }
 
@@ -130,6 +142,7 @@ void cwGLScraps::updateData()
         }
     }
 
+    scene()->update();
     PendingChanges.clear();
 }
 
@@ -187,10 +200,10 @@ void cwGLScraps::removeScrap(cwScrap *scrap)
   */
 void cwGLScraps::initializeShaders() {
     cwGLShader* scrapVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    scrapVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.vert");
+    scrapVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/scrap.vert");
 
     cwGLShader* scrapFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    scrapFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.frag");
+    scrapFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/scrap.frag");
 
 //    cwGLShader* scrapGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
 //    scrapGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/scrap.geom");
@@ -233,7 +246,9 @@ cwGLScraps::GLScrap::GLScrap() :
 
 }
 
-cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project) :
+cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data,
+                             cwProject *project,
+                             const cwFutureManagerToken &token) :
     ScrapId(-1),
     Texture(new cwImageTexture())
 {
@@ -249,6 +264,7 @@ cwGLScraps::GLScrap::GLScrap(const cwTriangulatedData& data, cwProject *project)
     //Upload the texture to the graphics card
     Texture->initialize();
     Texture->setProject(project->filename());
+    Texture->setFutureManagerToken(token);
 
     update(data);
 }
@@ -280,9 +296,10 @@ void cwGLScraps::GLScrap::update(const cwTriangulatedData &data)
 
 void cwGLScraps::GLScrap::releaseResources()
 {
-    PointBuffer.release();
-    IndexBuffer.release();
-    TexCoords.release();
+    PointBuffer.destroy();
+    IndexBuffer.destroy();
+    TexCoords.destroy();
+    Texture->releaseResources();
     delete Texture;
 }
 
@@ -295,6 +312,11 @@ void cwGLScraps::setProject(cwProject* project) {
         Project = project;
         emit projectChanged();
     }
+}
+
+void cwGLScraps::setFutureManagerToken(cwFutureManagerToken token)
+{
+    FutureManagerToken = token;
 }
 
 /**

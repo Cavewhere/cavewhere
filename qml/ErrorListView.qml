@@ -1,19 +1,29 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.0
 import QtQuick.Controls 2.5
 import Cavewhere 1.0
 
-ScrollView {
-    property alias model: listViewId.model
+QQ.ListView {
+    id: listViewId
 
-    ListView {
-        id: listViewId
+    anchors.fill: parent
 
-        implicitHeight: 300
-        implicitWidth: 600
+    delegate: QQ.Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        implicitHeight: rowLayoutId.height
 
-        delegate: RowLayout {
-            Image {
+        color: index % 2 ? "lightgray" : "white"
+
+        RowLayout {
+            id: rowLayoutId
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+
+            QQ.Image {
                 source: {
                     switch(type) {
                     case CwError.Warning:
@@ -26,9 +36,14 @@ ScrollView {
                 }
             }
 
-            Text {
+            TextArea {
+                Layout.fillWidth: true
                 text: message
+                readOnly: true
+                selectByMouse: true
+                wrapMode: QQ.TextEdit.WordWrap
             }
         }
     }
 }
+

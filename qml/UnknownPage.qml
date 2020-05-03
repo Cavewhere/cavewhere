@@ -1,11 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
 
 ScrollViewPage {
-    Rectangle {
+    QQ.Rectangle {
         radius: 5
-
-        anchors.centerIn: parent
 
         width: columnLayoutId.width + 30
         height: columnLayoutId.height + 30
@@ -17,7 +15,7 @@ ScrollViewPage {
 
             Text {
                 text: "Unknown page!"
-                font.pointSize: 30
+                font.pixelSize: 30
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -28,8 +26,9 @@ ScrollViewPage {
                 visible: text.length > 0
             }
 
-            Image {
+            QQ.Image {
                 source: "qrc:/icons/unknownPage.png"
+                sourceSize: Qt.size(400, 0);
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -43,4 +42,5 @@ ScrollViewPage {
         }
     }
 }
+
 

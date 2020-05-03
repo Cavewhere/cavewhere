@@ -9,6 +9,10 @@
 #include "cwTripCalibration.h"
 #include "cwColumnNameModel.h"
 
+//Qt includes
+#include <QThread>
+#include <QMetaObject>
+
 cwCSVImporterTask::cwCSVImporterTask()
 {
 
@@ -16,29 +20,20 @@ cwCSVImporterTask::cwCSVImporterTask()
 
 void cwCSVImporterTask::setSettings(const cwCSVImporterSettings &settings)
 {
-    if(isReady()) {
-        Settings = settings;
-    }
+    Settings = settings;
+
 }
 
-cwCSVImporterTask::Output cwCSVImporterTask::output() const
-{
-    if(isReady()) {
-        return CSVOutput;
-    }
-    return Output();
-}
 
-void cwCSVImporterTask::runTask()
+cwCSVImporterTask::OutputPtr cwCSVImporterTask::operator()() const
 {
-    CSVOutput = Output(); //Clear the output from last time
+    auto output = OutputPtr::create();
 
     if(!QFileInfo::exists(Settings.filename())) {
         cwError error(QStringLiteral("Can't open \"%1\". %2").arg(Settings.filename()).arg("The system cannot find the file specified."),
                       cwError::Fatal);
-        CSVOutput.errors.append(error);
-        done();
-        return;
+        output->errors.append(error);
+        return output;
     }
 
     QFile file(Settings.filename());
@@ -46,9 +41,8 @@ void cwCSVImporterTask::runTask()
     if(!okay) {
         cwError error(QStringLiteral("Can't open \"%1\". %2").arg(Settings.filename()).arg(file.errorString()),
                       cwError::Fatal);
-        CSVOutput.errors.append(error);
-        done();
-        return;
+        output->errors.append(error);
+        return output;
     }
 
     int tripCount = 1;
@@ -75,12 +69,13 @@ void cwCSVImporterTask::runTask()
         return lineCount <= Settings.previewLines() || Settings.previewLines() < 0;
     };
 
-    auto readLine = [&file, &lineCount, this, isPreviewLine]() {
+    auto readLine = [&file, &lineCount, &output, isPreviewLine]() {
         lineCount++;
         QString line = file.readLine();
+        line.remove('\r');
 
         if(isPreviewLine()) {
-            CSVOutput.text.append(line);
+            output->text.append(line);
         }
 
         return line.trimmed();
@@ -108,7 +103,7 @@ void cwCSVImporterTask::runTask()
 
         if(readColumns.size() != columns.size()) {
             cwError error(QStringLiteral("Looking for %1 columns but found %2 on line %3").arg(columns.size()).arg(readColumns.size()).arg(lineCount));
-            CSVOutput.errors.append(error);
+            output->errors.append(error);
         }
 
         QStringList line;
@@ -162,7 +157,7 @@ void cwCSVImporterTask::runTask()
         }
 
         if(isPreviewLine()) {
-            CSVOutput.lines.append(line);
+            output->lines.append(line);
         }
     };
 
@@ -183,7 +178,7 @@ void cwCSVImporterTask::runTask()
             //Error can't find shot in trip
             QString stationName = (Settings.useFromStationForLRUD() ? to : from).name();
             cwError error(QStringLiteral("Can't set LRUD data for shot \"%1\" because shot \"%2\" to \"%3\" on line %4.").arg(stationName).arg(from.name()).arg(to.name()).arg(lineCount));
-            CSVOutput.errors.append(error);
+            output->errors.append(error);
         }
     };
 
@@ -236,7 +231,7 @@ void cwCSVImporterTask::runTask()
 
     if(lineCount == 0) {
         cwError error("No lines read, file empty?", cwError::Warning);
-        CSVOutput.errors.append(error);
+        output->errors.append(error);
     }
 
     //Remove last empty trip that exists
@@ -244,12 +239,12 @@ void cwCSVImporterTask::runTask()
         cave->removeTrip(cave->tripCount() - 1);
     }
 
-    CSVOutput.caves.append(cave);
-    CSVOutput.lineCount = lineCount;
+    output->caves.append(cave);
+    output->lineCount = lineCount;
 
-    cave->moveToThread(settings().outputThread());
+    cave->moveToThread(nullptr);
 
-    done();
+    return output;
 }
 
 /**
@@ -272,4 +267,10 @@ int cwCSVImporterTask::lrudStationIndex(const cwSurveyChunk *chunk, const cwStat
     }
 
     return -1;
+}
+
+cwCSVImporterTask::Output::~Output() {
+    for(auto cave : caves) {
+        delete cave;
+    }
 }

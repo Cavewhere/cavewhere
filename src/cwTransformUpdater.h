@@ -33,6 +33,7 @@ class cwTransformUpdater : public QObject
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY matrixChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged)
+    Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
 
 public:
     explicit cwTransformUpdater(QObject *parent = 0);
@@ -48,6 +49,9 @@ public:
 
     QMatrix4x4 matrix() const;
 
+    bool enabled() const;
+    void setEnabled(bool enabled);
+
     Q_INVOKABLE QVector3D mapFromViewportToModel(QPointF viewport) const;
     Q_INVOKABLE QPointF mapModelToViewport(QVector3D modelPoint) const;
     Q_INVOKABLE QPointF mapModelToViewport(QPointF modelPoint) const;
@@ -56,6 +60,7 @@ signals:
     void matrixChanged();
     void cameraChanged();
     void updated();
+    void enabledChanged();
 
 public slots:
     void update();
@@ -70,6 +75,7 @@ private:
     QMatrix4x4 ModelMatrix;
 
     QMatrix4x4 TransformMatrix; //!< The total matrix that converts a object's position into qt coordinates
+    bool Enabled = true; //!<
 
     void updatePoint(QQuickItem* object);
 
@@ -111,4 +117,10 @@ inline QMatrix4x4 cwTransformUpdater::modelMatrix() const {
     return ModelMatrix;
 }
 
+/**
+*
+*/
+inline bool cwTransformUpdater::enabled() const {
+    return Enabled;
+}
 #endif // CWTRANSFORMUPDATER_H

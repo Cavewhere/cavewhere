@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
-QtObject {
+QQ.QtObject {
     property color inputTextColor: "blue"
     property color normalTextColor: "black"
 }

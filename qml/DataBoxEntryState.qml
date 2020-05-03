@@ -7,23 +7,23 @@
 
 import Qt 4.7
 
-State {
+QQ.State {
 
-    PropertyChanges {
+    QQ.PropertyChanges {
         target: edittor
         visible: true
     }
 
-    PropertyChanges {
+    QQ.PropertyChanges {
         target: dataText
         visible: false
     }
 
-    PropertyChanges {
+    QQ.PropertyChanges {
         id: dataTextPropertyChanges
         target: dataTextInput
 
-        Keys.onPressed: {
+        QQ.Keys.onPressed: {
             NavigationHandler.HandleTabEvent(event, dataBox);
             NavigationHandler.HandleArrowEvent(event, dataBox);
             if(event.accepted) {
@@ -31,11 +31,11 @@ State {
             }
         }
 
-        Keys.onEnterPressed: {
+        QQ.Keys.onEnterPressed: {
             dataBox.state = '';
         }
 
-        Keys.onReturnPressed: {
+        QQ.Keys.onReturnPressed: {
             dataBox.state = '';
         }
 
@@ -47,7 +47,7 @@ State {
 
     }
 
-    PropertyChanges {
+    QQ.PropertyChanges {
         target: dataBox
         z: 1
     }

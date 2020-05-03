@@ -35,8 +35,8 @@ cwSurveyImportManager::cwSurveyImportManager(QObject *parent) :
 cwSurveyImportManager::~cwSurveyImportManager()
 {
     CompassImporter->stop();
-    CompassImporter->waitToFinish();
-    CompassImporter->deleteLater();
+    CompassImporter->waitToFinish(cwTask::IgnoreRestart);
+    delete CompassImporter;
 }
 
 void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
@@ -46,9 +46,6 @@ void cwSurveyImportManager::setCavingRegion(cwCavingRegion *region)
         emit cavingRegionChanged();
     }
 }
-
-const QString cwSurveyImportManager::ImportSurvexKey = "LastImportSurvexFile";
-const QString cwSurveyImportManager::ImportWallsKey = "LastImportWallsFile";
 
 /**
   \brief Opens the survex importer dialog

@@ -25,6 +25,10 @@
 #include "cwPageSelectionModel.h"
 #include "cwMainEntity.h"
 #include "cwKeywordItemModel.h"
+#include "cwSettings.h"
+#include "cwImageCompressionUpdater.h"
+#include "cwAddImageTask.h"
+#include "cwJobSettings.h"
 
 //Qt includes
 #include <QItemSelectionModel>
@@ -40,16 +44,18 @@ cwRootData::cwRootData(QObject *parent) :
     RenderEntity(new cwMainEntity),
     KeywordItemModel(new cwKeywordItemModel(this)),
     DefaultTrip(new cwTrip(this)),
-    DefaultTripCalibration(new cwTripCalibration(this)),
-    LeadsVisible(true)
+    DefaultTripCalibration(new cwTripCalibration(this))
 {
+    cwSettings::initialize(); //Init's a singleton
 
     //Task Manager, allows the users to see running tasks
     TaskManagerModel = new cwTaskManagerModel(this);
+    FutureManagerModel = new cwFutureManagerModel(this);
 
     //Create the project, this saves and load data
     Project = new cwProject(this);
     Project->setTaskManager(TaskManagerModel);
+    Project->setFutureManagerToken(FutureManagerModel);
 
     Region = Project->cavingRegion();
     Region->setUndoStack(undoStack());
@@ -67,7 +73,7 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setProject(Project);
     ScrapManager->setRegionTreeModel(RegionTreeModel);
     ScrapManager->setLinePlotManager(LinePlotManager);
-    ScrapManager->setTaskManager(TaskManagerModel);
+    ScrapManager->setFutureManagerToken(FutureManagerModel->token());
     ScrapManager->setKeywordItemModel(KeywordItemModel);
 
     //Setup the survey import manager
@@ -93,6 +99,22 @@ cwRootData::cwRootData(QObject *parent) :
     LinePlotManager->setLinePlotMesh(RenderEntity->linePlotMesh());
 
     PageSelectionModel = new cwPageSelectionModel(this);
+
+    cwImageCompressionUpdater* imageUpdater = new cwImageCompressionUpdater(this);
+    imageUpdater->setFutureToken(FutureManagerModel->token());
+    imageUpdater->setRegionTreeModel(RegionTreeModel);
+
+    auto updateAutomaticUpdate = [this]()
+    {
+        bool autoUpdate = cwJobSettings::instance()->automaticUpdate();
+        LinePlotManager->setAutomaticUpdate(autoUpdate);
+        ScrapManager->setAutomaticUpdate(autoUpdate);
+    };
+
+    updateAutomaticUpdate();
+
+    connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
+            this, updateAutomaticUpdate);
 
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [&]() { Project->waitSaveToFinish(); });
 }
@@ -139,6 +161,16 @@ void cwRootData::setLeadsVisible(bool leadsVisible) {
 }
 
 /**
+*
+*/
+void cwRootData::setStationVisible(bool stationsVisible) {
+    if(StationVisible != stationsVisible) {
+        StationVisible = stationsVisible;
+        emit stationsVisibleChanged();
+    }
+}
+
+/**
 * @brief cwRootData::lastDirectory
 * @return Returns the last directory open by the file dialog. If the directory doesn't exist, this opens the desktopLocation
 */
@@ -168,4 +200,19 @@ void cwRootData::printImage(const QImage& image) const
 {
     qDebug() << "Image:" << image.size() << image;
 //    image.save("")
+}
+
+cwSettings* cwRootData::settings() const {
+    return cwSettings::instance();
+}
+
+QString cwRootData::cwRootData::supportImageFormats() const {
+    QStringList formats = cwAddImageTask::supportedImageFormats();
+    QStringList withWildCards;
+    std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
+                   [](const QString& format)
+    {
+        return "*." + format;
+    });
+    return withWildCards.join(' ');
 }

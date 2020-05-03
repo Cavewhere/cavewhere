@@ -5,11 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
-import QtQuick.Controls 1.0 as Controls
+import QtQuick 2.0 as QQ
+import QtQuick.Controls 2.12 as QC
 import "Theme.js" as Theme
 
-Item {
+QQ.Item {
 
     property color backgroundColor: "white"
     property alias checked: checkbox.checked
@@ -23,7 +23,7 @@ Item {
     implicitHeight: height
     implicitWidth: width
 
-    Rectangle {
+    QQ.Rectangle {
         id: checkBoxGroup
         border.width: 1
         border.color: "gray"
@@ -36,7 +36,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        Item {
+        QQ.Item {
             id: contentArea
             anchors.top: checkBoxGroup.top
             anchors.left: parent.left
@@ -50,13 +50,13 @@ Item {
         }
     }
 
-    Rectangle {
+    QQ.Rectangle {
         color: backgroundColor
         anchors.fill: checkbox
         visible: contentsVisible
     }
 
-    Controls.CheckBox {
+    CheckBox {
         id: checkbox
         anchors.left: checkBoxGroup.left
         anchors.leftMargin: 6

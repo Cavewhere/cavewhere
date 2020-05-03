@@ -1,9 +1,9 @@
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 
 /**
   This shows a dialog in cavewhere
   */
-Rectangle {
+QQ.Rectangle {
 
     property bool fillParent: true //If true, this will try to file the root view
 

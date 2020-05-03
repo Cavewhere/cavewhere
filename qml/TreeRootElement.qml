@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.0 as QQ
 import Cavewhere 1.0
 
-Rectangle {
+QQ.Rectangle {
     id: rootElement
 
     property variant index //QModelindex
@@ -50,7 +50,7 @@ Rectangle {
         selected: rootElement.selected
     }
 
-    Image {
+    QQ.Image {
         id: icon
         sourceSize.width: 16
         sourceSize.height: 16
@@ -72,7 +72,7 @@ Rectangle {
         }
     }
 
-    MouseArea {
+    QQ.MouseArea {
         anchors.fill: parent;
 
         onClicked: {

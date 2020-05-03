@@ -96,9 +96,9 @@ QUrl cwScrapLeadView::qmlSource() const
 {
     switch(positionRole()) {
     case cwScrap::LeadPosition:
-        return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/LeadPoint.qml");
+        return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + "qml/LeadPoint.qml");
     case cwScrap::LeadPositionOnNote:
-        return QUrl::fromLocalFile(cwGlobalDirectory::baseDirectory() + "qml/NoteLead.qml");
+        return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + "qml/NoteLead.qml");
     default:
         break;
     }

@@ -35,12 +35,14 @@ class cwKeywordItemModel;
 #include "cwNoteStation.h"
 #include "cwTriangulateInData.h"
 #include "cwImageProvider.h"
+#include "cwFutureManagerToken.h"
+#include "cwGlobals.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
     the geometry need to show a scrap in 3d
   */
-class cwScrapManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwScrapManager : public QObject
 {
     Q_OBJECT
 
@@ -54,7 +56,7 @@ public:
     void setProject(cwProject* project);
     void setRegionTreeModel(cwRegionTreeModel* regionTreeModel);
     void setLinePlotManager(cwLinePlotManager* linePlotManager);
-    void setTaskManager(cwTaskManagerModel* taskManager);
+    void setFutureManagerToken(cwFutureManagerToken token);
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
     Q_INVOKABLE void setGLScraps(cwGLScraps* glScraps);
@@ -63,30 +65,26 @@ public:
     void setAutomaticUpdate(bool automaticUpdate);
 
     cwScrapsEntity* scrapsEntity() const;
+    void waitForFinish();
 
 signals:
     void automaticUpdateChanged();
 
 public slots:
     void updateAllScraps();
-    void updateImageProviderPath();
 
 private:
     QPointer<cwRegionTreeModel> RegionModel;
     cwLinePlotManager* LinePlotManager;
 
-    cwImageProvider ImageProvider;
-
-    QList<cwScrap*> WaitingForUpdate; //These are the scraps that are running through task
     QSet<cwScrap*> DirtyScraps; //These are the scraps that need to be updated
     QSet<cwScrap*> DeletedScraps; //All the deleted scraps
 
     //The task that'll be run
-    cwTriangulateTask* TriangulateTask;
-    cwRemoveImageTask* RemoveImageTask;
     cwProject* Project;
-    cwTaskManagerModel* TaskManagerModel;
+    QFuture<void> TriangulateFuture;
     cwKeywordItemModel* KeywordItemModel;
+    cwFutureManagerToken FutureManagerToken;
 
     //The gl scraps that need updating
     cwScrapsEntity* ScrapsEntity; //!<
@@ -102,8 +100,9 @@ private:
 
     void updateScrapGeometry(QList<cwScrap *> scraps = QList<cwScrap*>());
     void updateScrapGeometryHelper(QList<cwScrap *> scraps);
-    cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap) const;
-    QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations, const cwStationPositionLookup& positionLookup) const;
+    static cwTriangulateInData mapScrapToTriangulateInData(cwScrap *scrap);
+    static QList<cwTriangulateStation> mapNoteStationsToTriangulateStation(QList<cwNoteStation> noteStations,
+                                                                           const cwStationPositionLookup& positionLookup);
 
     void scrapInsertedHelper(cwNote* parentNote, int begin, int end);
     void scrapRemovedHelper(cwNote* parentNote, int begin, int end);
@@ -143,7 +142,8 @@ private slots:
 
     void scrapDeleted(QObject* scrap);
 
-    void taskFinished();
+    void taskFinished(const QList<cwScrap *> &scrapsToUpdate,
+                      const QList<cwTriangulatedData>& scrapDataset);
 
 };
 
@@ -154,7 +154,7 @@ private slots:
  */
 inline uint qHash(const QWeakPointer<cwScrap> &scrapPointer)
 {
-    return qHash(scrapPointer.data());
+    return qHash(scrapPointer.toStrongRef().data());
 }
 
 /**

@@ -43,7 +43,7 @@ private:
 Gets size
 */
 inline QSize cwImageProperties::size() const {
-    return Image.origianlSize();
+    return Image.originalSize();
 }
 
 /**

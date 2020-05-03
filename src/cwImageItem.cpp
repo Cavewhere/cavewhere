@@ -15,15 +15,11 @@
 #include "cwImageTexture.h"
 #include "cwProjection.h"
 #include "cwGLImageItemResources.h"
+#include "cwDebug.h"
 
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
-
-QOpenGLShaderProgram* cwImageItem::ImageProgram = nullptr;
-int cwImageItem::vVertex = -1;
-int cwImageItem::ModelViewProjectionMatrix = -1;
-int cwImageItem::CropAreaUniform = -1;
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLViewer(parent),
@@ -32,6 +28,10 @@ cwImageItem::cwImageItem(QQuickItem *parent) :
     RotationCenter(0.5, 0.5),
     GLResources(nullptr)
 {
+    ImageProgram = nullptr;
+    vVertex = -1;
+    ModelViewProjectionMatrix = -1;
+    CropAreaUniform = -1;
 
     ImageProperties->setImage(Image);
 
@@ -114,7 +114,7 @@ void cwImageItem::setRotation(float degrees) {
   The image has complete loading it self
   */
 void cwImageItem::imageFinishedLoading() {
-    QSize imageSize = Image.origianlSize();
+    QSize imageSize = Image.originalSize();
     resizeGL();
 
     QMatrix4x4 newViewMatrix;
@@ -137,16 +137,20 @@ void cwImageItem::imageFinishedLoading() {
   \brief Sets up the shaders for this item
   */
 void cwImageItem::initializeGL() {
+    initializeOpenGLFunctions();
+
     GLResources = new cwGLImageItemResources();
     GLResources->setContext(QOpenGLContext::currentContext());
 
     GLResources->NoteTexture = new cwImageTexture();
     GLResources->NoteTexture->setProject(ProjectFilename);
     GLResources->NoteTexture->setImage(Image);
+    GLResources->NoteTexture->setFutureManagerToken(futureManagerToken());
 
     //Called when the image is finished loading
     connect(GLResources->NoteTexture, SIGNAL(textureUploaded()), SLOT(imageFinishedLoading()));
     connect(GLResources->NoteTexture, SIGNAL(projectChanged()), SIGNAL(projectFilenameChanged()));
+    connect(GLResources->NoteTexture, &cwImageTexture::needsUpdate, this, [this](){update();});
 
     initializeShaders();
     initializeVertexBuffers();
@@ -159,10 +163,10 @@ void cwImageItem::initializeGL() {
 void cwImageItem::initializeShaders() {
     if(ImageProgram == nullptr) {
         cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-        imageVertexShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.vert");
+        imageVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/NoteItem.vert");
 
         cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-        imageFragmentShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/NoteItem.frag");
+        imageFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/NoteItem.frag");
 
         ImageProgram = new QOpenGLShaderProgram();
         ImageProgram->addShader(imageVertexShader);
@@ -222,7 +226,7 @@ void cwImageItem::initializeTexture() {
 void cwImageItem::resizeGL() {
 
 
-    QSize imageSize = Image.origianlSize();
+    QSize imageSize = Image.originalSize();
     if(!imageSize.isValid()) { return; }
 
     QSize windowSize(width(), height());
@@ -265,7 +269,7 @@ void cwImageItem::resizeGL() {
   \brief Draws the note item
   */
 void cwImageItem::paint(QPainter* painter) {
-    if(!Image.isValid()) { return; }
+    if(!Image.isOriginalValid()) { return; }
     if(GLResources == nullptr) { initializeGL(); }
 
     painter->beginNativePainting();
@@ -294,7 +298,7 @@ void cwImageItem::paint(QPainter* painter) {
  */
 void cwImageItem::releaseResources()
 {
-    GLResources->deleteLater();
+    delete GLResources;
 }
 
 /**
@@ -356,3 +360,11 @@ void cwImageItem::setProjectFilename(QString filename) {
 QString cwImageItem::projectFilename() const {
     return ProjectFilename;
 }
+
+void cwImageItem::setFutureManagerToken(cwFutureManagerToken futureManagerToken) {
+    if(FutureManagerToken != futureManagerToken) {
+        FutureManagerToken = futureManagerToken;
+        emit futureManagerTokenChanged();
+    }
+}
+
