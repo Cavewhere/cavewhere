@@ -42,28 +42,21 @@ QQ.Item {
                 title: "Vertical Angle"
                 Layout.fillWidth: true
 
-                QQ.Item {
-                    CameraVerticalAngleSettings {
-                        id: verticalAngleSettingsId
-                        turnTableInteraction: itemId.turnTableInteraction
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                    }
-                }
-
-                GroupBox {
-                    title: "Projection"
+                CameraVerticalAngleSettings {
+                    id: verticalAngleSettingsId
+                    turnTableInteraction: itemId.turnTableInteraction
                     Layout.fillWidth: true
+                }
+            }
 
+            GroupBox {
+                title: "Projection"
+                Layout.fillWidth: true
 
-
-                    QQ.Item {
-                        CameraProjectionSettings {
-                            id: projectionSettingsId
-                            camera: itemId.turnTableInteraction.camera
-                            Layout.fillWidth: true
-                        }
-                    }
+                CameraProjectionSettings {
+                    id: projectionSettingsId
+                    camera: itemId.turnTableInteraction.camera
+                    Layout.fillWidth: true
                 }
             }
         }

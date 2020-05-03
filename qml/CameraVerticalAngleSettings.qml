@@ -27,6 +27,13 @@ ColumnLayout {
             text: "°"
         }
 
+        LockButton {
+            down: turnTableInteraction.pitchLocked
+            onClicked: {
+                turnTableInteraction.pitchLocked = !turnTableInteraction.pitchLocked
+            }
+        }
+
         Cavewhere.ClinoValidator {
             id: doubleValidatorId
         }
@@ -53,22 +60,6 @@ ColumnLayout {
                 enabled: turnTableInteraction.pitch !== 0.0
             }
         }
-
-        QQ.Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            LockButton {
-                anchors.top: parent.top
-                anchors.right: parent.right
-
-                down: turnTableInteraction.pitchLocked
-                onClicked: {
-                    turnTableInteraction.pitchLocked = !turnTableInteraction.pitchLocked
-                }
-            }
-        }
-
     }
 
     QQ.NumberAnimation {
