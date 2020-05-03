@@ -9,7 +9,6 @@
         <file>scrap.frag</file>
         <file>scrap.geom</file>
         <file>scrap.vert</file>
-        <file>shaderResources.qrc</file>
         <file>simple.frag</file>
         <file>simple.vert</file>
         <file>tileVertex.frag</file>
