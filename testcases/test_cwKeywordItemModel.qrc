@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwKeywordItemModel/keywordScrap.cw</file>
+    </qresource>
+</RCC>

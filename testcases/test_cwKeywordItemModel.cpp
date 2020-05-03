@@ -319,7 +319,7 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
 
 TEST_CASE("cwKeywordItemModel should populate correctly from loaded file", "[cwKeywordItemModel]") {
     cwRootData root;
-    fileToProject(root.project(), "://datasets/keywordScrap.cw");
+    fileToProject(root.project(), "://datasets/test_cwKeywordItemModel/keywordScrap.cw");
 
     class Row {
     public:
