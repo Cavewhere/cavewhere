@@ -393,7 +393,10 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
             }
         }
 
-        if(fileFormatString.size() == 11 || fileFormatString.size() == 12 || fileFormatString.size() == 13) {
+        if(fileFormatString.size() == 11 ||
+                fileFormatString.size() == 12 ||
+                fileFormatString.size() == 13 ||
+                fileFormatString.size() == 15) {
             if(fileFormatString.at(0) != 'D') {
                 emit statusMessage(QString("I can only understand Degrees for the Bearing Units. Converting all Bearing units to Degrees. In %1 on line %2")
                                    .arg(CurrentFilename)
@@ -430,7 +433,7 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
             CurrentTrip->calibrations()->setDistanceUnit(cwUnits::Feet);
             CurrentTrip->calibrations()->setBackSights(false);
         } else {
-            emit statusMessage(QString("I found that the file format to be %1. It must be 11 or 12 characters long. In file %2, on line %3")
+            emit statusMessage(QString("I found that the file format to be %1. It must be 11, 12, 13, 15 characters long. In file %2, on line %3")
                                .arg(fileFormatString.size())
                                .arg(CurrentFilename)
                                .arg(LineCount)
@@ -471,7 +474,11 @@ void cwCompassImporter::parseSurveyData(QFile *file)
         if(!isFileGood(file, "data line")) { return; }
 
         //Make sure not at the end of the survey section
-        if(!dataLine.isEmpty() && dataLine.toLocal8Bit().at(0) == 0x0C) { break; }
+        if(!dataLine.isEmpty() && (dataLine.toLocal8Bit().at(0) == 0x0C
+                                   || dataLine.toLocal8Bit().at(0) == 0x1A)
+                ) {
+            break;
+        }
 
         QStringList dataStrings = dataLine.split(QRegExp("\\s+"), QString::SkipEmptyParts);
 

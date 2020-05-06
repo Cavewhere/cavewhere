@@ -3,5 +3,6 @@
         <file>datasets/compass/compassExportMissingLRUD.cw</file>
         <file>datasets/compass/compassImportExport.cw</file>
         <file>datasets/compass/missingDataValidated.dat</file>
+        <file>datasets/compass/calibrationToLong.dat</file>
     </qresource>
 </RCC>
