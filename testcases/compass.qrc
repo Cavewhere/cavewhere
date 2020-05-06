@@ -4,5 +4,6 @@
         <file>datasets/compass/compassImportExport.cw</file>
         <file>datasets/compass/missingDataValidated.dat</file>
         <file>datasets/compass/calibrationToLong.dat</file>
+        <file>datasets/compass/badFile.dat</file>
     </qresource>
 </RCC>

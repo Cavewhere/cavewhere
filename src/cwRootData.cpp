@@ -75,6 +75,7 @@ cwRootData::cwRootData(QObject *parent) :
     SurveyImportManager = new cwSurveyImportManager(Project);
     SurveyImportManager->setCavingRegion(Region);
     SurveyImportManager->setUndoStack(undoStack());
+    SurveyImportManager->setErrorModel(Project->errorModel());
 
     QuickView = nullptr;
 

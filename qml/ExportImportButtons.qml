@@ -27,34 +27,6 @@ QQ.Item {
         id: exportManager
     }
 
-    SurveyImportManager {
-        id: importManager
-        cavingRegion: iconBar.currentRegion
-        undoStack: rootData.undoStack
-        onMessageAdded: {
-            messageListDialog.visible = true;
-            messageListDialog.messages.append({
-                                                  severity: severity,
-                                                  message: message,
-                                                  lineCount: message.split('\n').length,
-                                                  source: source,
-                                                  startLine: startLine + 1,
-                                                  startColumn: startColumn + 1
-                                              });
-            messageListDialog.scrollToBottom();
-        }
-        onMessagesCleared: messageListDialog.messages.clear()
-    }
-
-    MessageListDialog {
-        visible: false
-        modality: Qt.NonModal
-        id: messageListDialog
-        width: 730
-        height: 400
-        font: importManager.messageListFont
-    }
-
     QQ.Item {
         id: fileDialogItem
         FileDialog {
@@ -142,23 +114,7 @@ QQ.Item {
                     selectMultiple: true
                     onAccepted: {
                         rootData.lastDirectory = fileUrl
-                        messageListDialog.title = "Compass Import"
-                        importManager.importCompassDataFile(fileUrls);
-                    }
-                }
-            },
-            QQ.State {
-                name: "IMPORT_CSV"
-                QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Import from CSV"
-                    nameFilters: ["All (*)", "Comma Seperated Value (*.csv)", "Text (*.txt)"]
-                    selectExisting: true
-                    selectMultiple: false
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        messageListDialog.title = "CSV Import"
-                        importManager.importCSV(fileUrl);
+                        rootData.surveyImportManager.importCompassDataFile(fileUrls);
                     }
                 }
             }
