@@ -60,4 +60,5 @@ script:
     - qbs resolve profile:qt5 config:release
     - qbs build --products CaveWhere profile:qt5 config:debug
     - export LSAN_OPTIONS=suppressions=suppressedLeaks.txt
-    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then qbs run --products cavewhere-test profile:qt5 config:debug; fi
+#    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then qbs run --products cavewhere-test profile:qt5 config:debug; fi
+    - qbs run --products cavewhere-test profile:qt5 config:debug
