@@ -182,3 +182,26 @@ TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {
         CHECK(loadShot.backClinoState() == importShot.backClinoState());
     }
 }
+
+TEST_CASE("Test 15 char format is okay", "[Compass]") {
+    QString datasetFile = copyToTempFolder("://datasets/compass/calibrationToLong.dat");
+
+    auto importFromCompass = std::make_unique<cwCompassImporter>();
+
+    QSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+
+    importFromCompass->setCompassDataFiles({datasetFile});
+    importFromCompass->start();
+    importFromCompass->waitToFinish();
+
+    CHECK(messageSpy.size() == 0);
+
+    for(auto signal : messageSpy) {
+        for(auto arg : signal) {
+            qDebug() << "Arg:" << arg;
+        }
+    }
+
+    QList<cwCave> caves = importFromCompass->caves();
+    REQUIRE(caves.size() == 1);
+}

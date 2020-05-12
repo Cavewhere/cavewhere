@@ -23,17 +23,20 @@ class cwCavingRegion;
 class cwCompassImporter;
 class cwWallsImporter;
 class cwCSVImporterTask;
+class cwErrorListModel;
+#include "cwGlobals.h"
 
 /**
     This class allows qml to import data
   */
-class cwSurveyImportManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwSurveyImportManager : public QObject
 {
     Q_OBJECT
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)
     Q_PROPERTY(QFont messageListFont MEMBER MessageListFont CONSTANT)
+    Q_PROPERTY(cwErrorListModel* errorModel READ errorModel WRITE setErrorModel NOTIFY errorModelChanged)
 
 public:
     explicit cwSurveyImportManager(QObject *parent = 0);
@@ -45,17 +48,22 @@ public:
     QUndoStack* undoStack() const;
     void setUndoStack(QUndoStack* undoStack);
 
+    cwErrorListModel* errorModel() const;
+    void setErrorModel(cwErrorListModel* errorModel);
+
     Q_INVOKABLE void importSurvex();
     Q_INVOKABLE void importWalls();
     Q_INVOKABLE void importWallsSrv();
     Q_INVOKABLE void importCompassDataFile(QList<QUrl> filenames);
-//    Q_INVOKABLE void importCSV(QUrl filename);
+
+    void waitForCompassToFinish();
 
 signals:
     void cavingRegionChanged();
     void undoStackChanged();
     void messageAdded(QString severity, QString message, QString source, int startLine, int startColumn, int endLine, int endColumn);
     void messagesCleared();
+    void errorModelChanged();
     
 public slots:
 
@@ -72,10 +80,10 @@ private:
 
     QPointer<cwCavingRegion> CavingRegion;
     QPointer<QUndoStack> UndoStack;
+    QPointer<cwErrorListModel> ErrorModel; //!<
 
     QStringList QueuedCompassFile;
     cwCompassImporter* CompassImporter;
-//    cwCSVImporterTask* CSVImporter;
 
     QStringList urlsToStringList(QList<QUrl> urls);
 

@@ -17,6 +17,7 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwSurveyImportManager.h"
+#include "cwErrorListModel.h"
 
 //Qt includes
 #include <QFileDialog>
@@ -87,16 +88,10 @@ void cwSurveyImportManager::importCompassDataFile(QList<QUrl> filenames)
     }
 }
 
-/**
- * Starts the import task for CSV on filename
- */
-//void cwSurveyImportManager::importCSV(QUrl filename)
-//{
-//    if(CSVImporter->isReady()) {
-//        CSVImporter->setFilename(filename.toLocalFile());
-//        CSVImporter->start();
-//    }
-//}
+void cwSurveyImportManager::waitForCompassToFinish()
+{
+    CompassImporter->waitToFinish();
+}
 
 /**
  * @brief cwSurveyImportManager::compassImporterFinished
@@ -133,8 +128,9 @@ void cwSurveyImportManager::compassImporterFinished()
  */
 void cwSurveyImportManager::compassMessages(QString message)
 {
-    qDebug() << "Compass Importer:" << message;
-//    emit messageAdded(message);
+    if(ErrorModel) {
+        ErrorModel->append(cwError(message, cwError::Warning));
+    }
 }
 
 /**
@@ -190,19 +186,6 @@ void cwSurveyImportManager::wallsMessages(QString severity, QString message, QSt
 }
 
 /**
- * @brief cwSurveyImportManager::csvImportedFinished
- *
- * Adds the imported cave to cavewhere
- */
-//void cwSurveyImportManager::csvImportedFinished()
-//{
-//    foreach(cwCave cave, CSVImporter->caves()) {
-//        cwCave* newCave = new cwCave(cave); //Copy the caves
-//        CavingRegion->addCave(newCave);
-//    }
-//}
-
-/**
  * @brief cwSurveyImportManager::urlsToStringList
  * @param urls
  * @return The converted urls as a stringlist
@@ -242,4 +225,21 @@ void cwSurveyImportManager::setUndoStack(QUndoStack* undoStack) {
         UndoStack = undoStack;
         emit undoStackChanged();
     }
+}
+
+/**
+*
+*/
+void cwSurveyImportManager::setErrorModel(cwErrorListModel* errorModel) {
+    if(ErrorModel != errorModel) {
+        ErrorModel = errorModel;
+        emit errorModelChanged();
+    }
+}
+
+/**
+*
+*/
+cwErrorListModel* cwSurveyImportManager::errorModel() const {
+    return ErrorModel;
 }

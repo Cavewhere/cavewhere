@@ -209,7 +209,9 @@ void cwLinePlotManager::updateUnconnectedChunkErrors(cwCave* cave,
 void cwLinePlotManager::clearUnconnectedChunkErrors()
 {
     foreach(auto errorList, UnconnectedChunks) {
-        errorList->clear();
+        if(errorList) {
+            errorList->clear();
+        }
     }
     UnconnectedChunks.clear();
 }
