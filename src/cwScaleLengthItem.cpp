@@ -12,6 +12,7 @@
 
 //Qt includes
 #include <QDebug>
+#include <QPainterPath>
 
 cwScaleLengthItem::cwScaleLengthItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent),
