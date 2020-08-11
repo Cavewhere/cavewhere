@@ -60,7 +60,7 @@ qbs setup-qt /opt/qt514/bin/qmake qt5
 qbs config profiles.qt5.baseProfile x86_64-linux-gnu-gcc-7
 qbs config defaultProfile qt5
 qbs resolve profile:qt5 config:release
-qbs build --products profile:qt5 config:release
+qbs build --products CaveWhere profile:qt5 config:release
 ```
 
 ### Running CaveWhere
