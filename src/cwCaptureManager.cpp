@@ -34,6 +34,9 @@
 #include <QTemporaryFile>
 #include <QImageWriter>
 
+//Std includes
+#include <stdexcept>
+
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
     Resolution(300.0),
