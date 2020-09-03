@@ -48,6 +48,11 @@ DynamicLibrary {
     Depends { name: "s3tc-dxt-decompression" }
     Depends { name: "bundle" }
 
+    Depends {
+        name: "Qt.pdf"
+        required: false
+    }
+
     GitProbe {
         id: git
         sourceDirectory: product.sourceDirectory
@@ -180,43 +185,27 @@ DynamicLibrary {
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 
-        cpp.dynamicLibraries: [
-            "OpenGL32",
-            "Qt5Pdfd"
-        ]
+        cpp.dynamicLibraries: {
+            var base = [
+                        "OpenGL32",
+                    ]
+//            if(qbs.buildvariant == "debug") {
+//                base.push("Qt5Pdfd")
+//            }
+            return base
+        }
 
-//        Properties {
-//            condition: qbs.buildVariant == "debug"
-//            cpp.dynamicLibraries: outer.concat(
-//                "Qt5Pdfd"
-//            )
+//        //Manually add QPdf on windows for debugging to work
+//        cpp.includePaths: {
+//            if(qbs.buildVariant == "debug") {
+//                return outer.concat(
+//                            Qt.core.incPath + "/QtPdf"
+//                            )
+//            }
+//            return outer;
 //        }
-
-//        Properties {
-//            condition: qbs.buildVariant == "release"
-//            cpp.dynamicLibraries: outer.concat(
-//                                      "Qt5Pdf"
-//                                      )
-//        }
-
-        //Manually add on windows for debugging to work
-        cpp.includePaths: outer.concat(
-            Qt.core.incPath + "/QtPdf"
-        )
 
     }
-
-//    Properties {
-//        condition: qbs.buildVariant == "debug" && qbs.targetOS.contains("windows")
-//        cpp.dynamicLibraries: outer.concat(
-//            "Qt5Pdfd"
-//        )
-//    }
-
-//    Properties {
-////        condition: qbs.buildVariant == "Release" //&& qbs.targetOS.contains("windows")
-//        cpp.dynamicLibraries: ["Qt5Pdf"]
-//    }
 
     cpp.defines: {
         var base = ["TRILIBRARY",
@@ -231,6 +220,10 @@ DynamicLibrary {
 
         if(qbs.targetOS.contains("windows")) {
             base = base.concat('CAVEWHERE_LIB')
+        }
+
+        if(Qt.pdf.present) {
+            base = base.concat('WITH_PDF_SUPPORT')
         }
 
         return base;

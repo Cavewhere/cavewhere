@@ -88,6 +88,8 @@ public:
 
     void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
 
+    static QString supportedImageFormats();
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();

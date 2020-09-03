@@ -544,7 +544,8 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
 {
     auto isPDF = [](const QString& path) {
         QFileInfo info(path);
-        return info.completeSuffix().compare("pdf", Qt::CaseInsensitive) == 0;
+        bool pdfExtention = info.completeSuffix().compare("pdf", Qt::CaseInsensitive) == 0;
+        return pdfExtention && cwPDFConverter::isSupported();
     };
 
     //Create a new image task
@@ -575,6 +576,27 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
             });
         }
     }
+}
+
+/**
+ * Returns all the image formats
+ */
+QString cwProject::supportedImageFormats()
+{
+    QStringList formats = cwAddImageTask::supportedImageFormats();
+
+    if(cwPDFConverter::isSupported()) {
+        formats.append("pdf");
+    }
+
+    QStringList withWildCards;
+    std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
+                   [](const QString& format)
+    {
+        return "*." + format;
+    });
+
+    return withWildCards.join(' ');
 }
 
 /**
