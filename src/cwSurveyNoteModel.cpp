@@ -143,8 +143,10 @@ QVariant cwSurveyNoteModel::data(const QModelIndex &index, int role) const {
   */
 void cwSurveyNoteModel::addFromFiles(QList<QUrl> files) {
     project()->addImages(files,
-                       std::bind(&cwSurveyNoteModel::addNotesWithNewImages,
-                                 this, std::placeholders::_1));
+                         [this](QList<cwImage> notes)
+    {
+        addNotesWithNewImages(notes);
+    });
 }
 
 /**

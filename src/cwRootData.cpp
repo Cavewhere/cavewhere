@@ -203,5 +203,6 @@ QString cwRootData::cwRootData::supportImageFormats() const {
     {
         return "*." + format;
     });
+    withWildCards.append("*.pdf"); //Adds pdf support
     return withWildCards.join(' ');
 }

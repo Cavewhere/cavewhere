@@ -31,9 +31,11 @@ DynamicLibrary {
             "opengl",
             "xml",
             "concurrent",
-            "svg"
+            "svg",
+            //"pdf" //This doesn't work under debug
         ]
     }
+
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
     Depends { name: "plotsauce" }
@@ -179,10 +181,42 @@ DynamicLibrary {
         ]
 
         cpp.dynamicLibraries: [
-            "OpenGL32"
+            "OpenGL32",
+            "Qt5Pdfd"
         ]
 
+//        Properties {
+//            condition: qbs.buildVariant == "debug"
+//            cpp.dynamicLibraries: outer.concat(
+//                "Qt5Pdfd"
+//            )
+//        }
+
+//        Properties {
+//            condition: qbs.buildVariant == "release"
+//            cpp.dynamicLibraries: outer.concat(
+//                                      "Qt5Pdf"
+//                                      )
+//        }
+
+        //Manually add on windows for debugging to work
+        cpp.includePaths: outer.concat(
+            Qt.core.incPath + "/QtPdf"
+        )
+
     }
+
+//    Properties {
+//        condition: qbs.buildVariant == "debug" && qbs.targetOS.contains("windows")
+//        cpp.dynamicLibraries: outer.concat(
+//            "Qt5Pdfd"
+//        )
+//    }
+
+//    Properties {
+////        condition: qbs.buildVariant == "Release" //&& qbs.targetOS.contains("windows")
+//        cpp.dynamicLibraries: ["Qt5Pdf"]
+//    }
 
     cpp.defines: {
         var base = ["TRILIBRARY",

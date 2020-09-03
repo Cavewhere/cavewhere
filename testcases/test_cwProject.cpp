@@ -239,3 +239,25 @@ TEST_CASE("Images should be removed correctly", "[cwProject]") {
 
     database.close();
 }
+
+TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    int checked = 0;
+
+    QList<QUrl> filenames {
+        QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf"))
+    };
+
+    project->addImages(filenames, [&checked](QList<cwImage> images){
+        REQUIRE(images.size() == 2);
+        for(int i = 0; i < images.size(); i++) {
+            CHECK(images.at(i).isOriginalValid());
+            CHECK(images.at(i).isIconValid());
+        }
+        checked++;
+    });
+
+    rootData->futureManagerModel()->waitForFinished();
+    CHECK(checked == filenames.size());
+}

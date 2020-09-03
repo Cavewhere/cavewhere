@@ -21,6 +21,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwAsyncFuture.h"
 #include "cwErrorListModel.h"
+#include "cwPDFConverter.h"
 
 //Qt includes
 #include <QDir>
@@ -246,6 +247,42 @@ void cwProject::setTemporaryProject(bool isTemp)
     }
 }
 
+void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+                               std::function<void (cwAddImageTask *)> setImagesFunc)
+{
+    auto format = cwTextureUploadTask::format();
+
+    cwAddImageTask addImageTask;
+    addImageTask.setDatabaseFilename(filename());
+    addImageTask.setImageTypesWithFormat(format);
+
+    //Set all the noteImagePath
+    setImagesFunc(&addImageTask);
+
+    auto imagesFuture = addImageTask.images();
+
+    FutureToken.addJob({imagesFuture, "Adding Image"});
+
+    AsyncFuture::observe(imagesFuture)
+            .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
+    {
+        if(cwTextureUploadTask::format() != format) {
+            //Format has changed, re-run (this isn't true recursion)
+            addImageHelper(outputCallBackFunc, setImagesFunc);
+            return;
+        }
+
+        //Convert the images to cwImage
+        auto results = imagesFuture.results();
+        QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
+        {
+            return imagePtr->take();
+        });
+
+        outputCallBackFunc(images);
+    });
+}
+
 /**
   Saves the project as a new file
 
@@ -440,7 +477,7 @@ QString cwProject::createTemporaryFilename()
 {
     QDateTime seedTime = QDateTime::currentDateTime();
     return QString("%1/CavewhereTmpProject-%2.cw")
-                .arg(QDir::tempPath())
+            .arg(QDir::tempPath())
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
 }
 
@@ -502,48 +539,41 @@ bool cwProject::isModified() const
     return saveData != currentData;
 }
 
-void cwProject::addImages(QList<QUrl> noteImagePath,
-                          std::function<void (QList<cwImage>)> func)
+void cwProject::addImages(QList<QUrl> noteImagePaths,
+                          std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
+    auto isPDF = [](const QString& path) {
+        QFileInfo info(path);
+        return info.completeSuffix().compare("pdf", Qt::CaseInsensitive) == 0;
+    };
+
     //Create a new image task
-    for(QUrl url : noteImagePath) {
+    for(QUrl url : noteImagePaths) {
         QString path = url.toLocalFile();
 
-        std::function<void ()> addImage = [this, path, func, &addImage]() {
-            auto format = cwTextureUploadTask::format();
+        if(isPDF(path)) {
+            //Convert pdf to images
+            cwPDFConverter converter;
+            converter.setSource(path);
+            auto future = converter.convert();
 
-            cwAddImageTask addImageTask;
-            addImageTask.setDatabaseFilename(filename());
-            addImageTask.setImageTypesWithFormat(format);
+            FutureToken.addJob({future, "Converting PDF"});
 
-            //Set all the noteImagePath
-            addImageTask.setNewImagesPath({path}); //noteImagePath);
-
-            auto imagesFuture = addImageTask.images();
-
-            FutureToken.addJob({imagesFuture, "Adding Image"});
-
-            AsyncFuture::observe(imagesFuture)
-                    .subscribe([imagesFuture, func, format, addImage]()
-            {
-                if(cwTextureUploadTask::format() != format) {
-                    //Format has changed, re-run (this isn't true recursion)
-                    addImage();
-                    return;
-                }
-
-                //Convert the images to cwImage
-                auto results = imagesFuture.results();
-                QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
-                {
-                    return imagePtr->take();
+            AsyncFuture::observe(future).context(this, [this, future, outputCallBackFunc](){
+                addImageHelper(outputCallBackFunc,
+                            [future](cwAddImageTask* task) {
+                    task->setNewImages(future.results());
                 });
-
-                func(images);
             });
-        };
 
-        addImage();
+        } else {
+            //Normal image
+            addImageHelper(outputCallBackFunc,
+                           [path](cwAddImageTask* task)
+            {
+                task->setNewImagesPath({path});
+            });
+        }
     }
 }
 

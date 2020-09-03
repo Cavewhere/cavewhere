@@ -137,6 +137,9 @@ private:
 
     bool saveWillCauseDataLoss() const;
     void setTemporaryProject(bool isTemp);
+
+    void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+                        std::function<void (cwAddImageTask*)> setImagesFunc);
 };
 
 /**
