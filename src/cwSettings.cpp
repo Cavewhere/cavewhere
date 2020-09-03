@@ -2,6 +2,7 @@
 #include "cwSettings.h"
 #include "cwOpenGLSettings.h"
 #include "cwJobSettings.h"
+#include "cwPDFSettings.h"
 
 //Our inculdes
 #include <QCoreApplication>
@@ -28,6 +29,7 @@ void cwSettings::initialize()
     //Keep these here because cwOpenGLSetting can be deallocated in cleanup()
     cwOpenGLSettings::initialize(); //Init's a singleton
     cwJobSettings::initialize();
+    cwPDFSettings::initialize();
 }
 
 cwSettings *cwSettings::instance()
@@ -37,4 +39,8 @@ cwSettings *cwSettings::instance()
 
 cwJobSettings* cwSettings::jobSettings() const {
     return cwJobSettings::instance();
+}
+
+cwPDFSettings* cwSettings::pdfSettings() const {
+    return cwPDFSettings::instance();
 }

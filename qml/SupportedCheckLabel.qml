@@ -10,31 +10,9 @@ ColumnLayout {
     property alias helpText: checkboxId.helpText
     property alias helpIcon: checkboxId.helpIcon
 
-    RowLayout {
-        QQ.Image {
-            id: stopId
-            source: "qrc:/icons/stopSignError.png"
-            width: 16
-            height: 16
-            visible: !supported
-        }
-
-        QQ.Image {
-            id: goodId
-            source: "qrc:/icons/good.png"
-            width: stopId.width
-            height: stopId.height
-            visible: supported
-        }
-
-        Text {
-            id: textId
-
-            text: {
-                var supportText = supported ? "supported" : "unsupported"
-                return rootId.text + " is " + supportText;
-            }
-        }
+    SupportedLabel {
+        supported: rootId.supported
+        text: rootId.text
     }
 
     CheckBoxWithInfo {

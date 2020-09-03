@@ -22,6 +22,7 @@
 #include "cwAsyncFuture.h"
 #include "cwErrorListModel.h"
 #include "cwPDFConverter.h"
+#include "cwPDFSettings.h"
 
 //Qt includes
 #include <QDir>
@@ -556,6 +557,8 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
             //Convert pdf to images
             cwPDFConverter converter;
             converter.setSource(path);
+            converter.setResolution(cwPDFSettings::instance()->resolutionImport());
+
             auto future = converter.convert();
 
             FutureToken.addJob({future, "Converting PDF"});

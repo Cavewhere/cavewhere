@@ -13,6 +13,7 @@
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwImageDatabase.h"
+#include "cwPDFSettings.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -244,22 +245,51 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
     if(cwProject::supportedImageFormats().contains("pdf")) {
         auto rootData = std::make_unique<cwRootData>();
         auto project = rootData->project();
-        int checked = 0;
 
         QList<QUrl> filenames {
             QUrl::fromLocalFile(copyToTempFolder("://datasets/test_cwPDFConverter/2page-test.pdf"))
         };
 
-        project->addImages(filenames, [&checked](QList<cwImage> images){
-            REQUIRE(images.size() == 2);
-            for(int i = 0; i < images.size(); i++) {
-                CHECK(images.at(i).isOriginalValid());
-                CHECK(images.at(i).isIconValid());
-            }
-            checked++;
-        });
+        struct Row {
+            QList<QSize> pageSizes;
+            int resolutionPPI;
+        };
 
-        rootData->futureManagerModel()->waitForFinished();
-        CHECK(checked == filenames.size());
+        QList<Row> rows = {
+            {
+                {
+                    QSize(139, 139),
+                    QSize(208, 139)
+                },
+                100
+            },
+
+            {
+                {
+                    QSize(417, 417),
+                    QSize(625, 417)
+                },
+                300
+            }
+        };
+
+        for(auto row : rows) {
+            cwPDFSettings::instance()->setResolutionImport(row.resolutionPPI);
+
+            int checked = 0;
+
+            project->addImages(filenames, [&checked, row](QList<cwImage> images){
+                REQUIRE(images.size() == row.pageSizes.size());
+                for(int i = 0; i < images.size(); i++) {
+                    CHECK(images.at(i).isOriginalValid());
+                    CHECK(images.at(i).isIconValid());
+                    CHECK(images.at(i).originalSize() == row.pageSizes.at(i));
+                }
+                checked++;
+            });
+
+            rootData->futureManagerModel()->waitForFinished();
+            CHECK(checked == filenames.size());
+        }
     }
 }
