@@ -207,6 +207,17 @@ DynamicLibrary {
 
     }
 
+    Group {
+        name: "Windows QPDF Install"
+        condition: qbs.targetOS.contains("windows") && Qt.pdf.present
+
+        qbs.install: qbs.buildVariant == "release"
+
+        files: [
+            Qt.core.binPath + "/Qt5Pdf.dll"
+        ]
+    }
+
     cpp.defines: {
         var base = ["TRILIBRARY",
                     "ANSI_DECLARATORS"];
