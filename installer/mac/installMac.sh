@@ -37,5 +37,6 @@ $2/mac/create-dmg/create-dmg \
     --app-drop-link 440 175 \
     --background $2/mac/dmgBackground.png \
     --icon "Cavewhere.app" 170 175 \
+    --no-internet-enable \
     "CaveWhere $1.dmg" \
     "CaveWhere.app"
