@@ -2,7 +2,7 @@ version: ~> 1.0
 jobs:
   include:
     - os: linux
-      dist: bionic
+      dist: focal
       compiler: gcc
       services: xvfb
     - os: osx
