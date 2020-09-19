@@ -11,6 +11,8 @@ import "../qbsModules/GitProbe.qbs" as GitProbe
   files for the application and for the testcases.
   */
 DynamicLibrary {
+    id: cavewhereLibId
+
     name: "cavewhere-lib"
 
     //For mac os x we need to build dylib instead of framework bundle. When running
@@ -19,7 +21,14 @@ DynamicLibrary {
 //    consoleApplication: true
 
     readonly property string gitVersion: git.productVersion
-//    readonly property string rpath: buildDirectory
+
+    //This is a work around for debug QtPdf on windows to work
+    readonly property bool win32QPDFExists: {
+        return File.exists(Qt.core.binPath + "/Qt5Pdfd.dll")
+
+    }
+    //    readonly property string rpath: buildDirectory
+
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -189,21 +198,21 @@ DynamicLibrary {
             var base = [
                         "OpenGL32",
                     ]
-//            if(qbs.buildvariant == "debug") {
-//                base.push("Qt5Pdfd")
-//            }
+            if(qbs.buildVariant == "debug" && cavewhereLibId.win32QPDFExists) {
+                base.push("Qt5Pdfd")
+            }
             return base
         }
 
-//        //Manually add QPdf on windows for debugging to work
-//        cpp.includePaths: {
-//            if(qbs.buildVariant == "debug") {
-//                return outer.concat(
-//                            Qt.core.incPath + "/QtPdf"
-//                            )
-//            }
-//            return outer;
-//        }
+        //Manually add QPdf on windows for debugging to work
+        cpp.includePaths: {
+            if(qbs.buildVariant == "debug" && cavewhereLibId.win32QPDFExists) {
+                return outer.concat(
+                            Qt.core.incPath + "/QtPdf"
+                            )
+            }
+            return outer;
+        }
 
     }
 
@@ -233,7 +242,9 @@ DynamicLibrary {
             base = base.concat('CAVEWHERE_LIB')
         }
 
-        if(Qt.pdf.present) {
+        console.error("cavewhereLibId:" + cavewhereLibId.win32QPDFExists)
+
+        if(Qt.pdf.present || cavewhereLibId.win32QPDFExists) {
             base = base.concat('WITH_PDF_SUPPORT')
         }
 
