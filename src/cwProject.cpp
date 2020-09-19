@@ -265,7 +265,7 @@ void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBa
     FutureToken.addJob({imagesFuture, "Adding Image"});
 
     AsyncFuture::observe(imagesFuture)
-            .context(this, [this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
+            .subscribe([this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
     {
         if(cwTextureUploadTask::format() != format) {
             //Format has changed, re-run (this isn't true recursion)
@@ -563,11 +563,14 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
 
             FutureToken.addJob({future, "Converting PDF"});
 
-            AsyncFuture::observe(future).context(this, [this, future, outputCallBackFunc](){
-                addImageHelper(outputCallBackFunc,
-                            [future](cwAddImageTask* task) {
-                    task->setNewImages(future.results());
-                });
+            AsyncFuture::observe(future).subscribe([this, future, outputCallBackFunc](){
+                for(auto image : future.results()) {
+                    addImageHelper(outputCallBackFunc,
+                                   [image](cwAddImageTask* task)
+                    {
+                        task->setNewImages({image});
+                    });
+                }
             });
 
         } else {

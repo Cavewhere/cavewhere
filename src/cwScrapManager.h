@@ -107,6 +107,8 @@ private:
 
     bool scrapImagesOkay(cwScrap* scrap);
 
+    bool isScrapGeometryValid(const cwScrap* scrap) const;
+
 private slots:
     void handleRegionReset();
 
@@ -118,6 +120,7 @@ private slots:
 
     void regenerateScrapGeometry(); //This is called by cwScrap
     void updateScrapPoints(int begin, int end);  //This is called by cwScrap
+    void removeScrapPoints(int begin, int end);
 
     void updateExistingScrapGeometry(); //This is called by cwScrap only
     void updateScrapStations(int begin, int end); //This is called by cwScrap

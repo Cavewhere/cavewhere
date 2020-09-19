@@ -15,7 +15,10 @@
 #include <QString>
 #include <QHash>
 
-class cwNoteStation
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwNoteStation
 {
 public:
     cwNoteStation();

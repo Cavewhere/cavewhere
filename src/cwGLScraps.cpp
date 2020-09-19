@@ -155,20 +155,22 @@ void cwGLScraps::updateData()
  */
 void cwGLScraps::addScrapToUpdate(cwScrap *scrap)
 {
-    PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
-                                                      scrap,
-                                                      scrap->triangulationData());
+    if(!scrap->triangulationData().isNull()) {
+        PendingScrapCommand command = PendingScrapCommand(PendingScrapCommand::AddScrap,
+                                                          scrap,
+                                                          scrap->triangulationData());
 
-    if(PendingChanges.contains(scrap)) {
-        PendingScrapCommand command = PendingChanges.value(scrap);
-        if(command.type() == PendingScrapCommand::RemoveScrap) {
-            //Replace with a add command
+        if(PendingChanges.contains(scrap)) {
+            PendingScrapCommand command = PendingChanges.value(scrap);
+            if(command.type() == PendingScrapCommand::RemoveScrap) {
+                //Replace with a add command
+                PendingChanges.insert(scrap, command);
+                markDataAsDirty();
+            }
+        } else {
             PendingChanges.insert(scrap, command);
             markDataAsDirty();
         }
-    } else {
-        PendingChanges.insert(scrap, command);
-        markDataAsDirty();
     }
 }
 
