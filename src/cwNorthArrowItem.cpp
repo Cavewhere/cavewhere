@@ -14,6 +14,7 @@
 
 //Qt includes
 #include <QPen>
+#include <QPainterPath>
 
 cwNorthArrowItem::cwNorthArrowItem(QQuickItem *parent) :
     cwAbstract2PointItem(parent),

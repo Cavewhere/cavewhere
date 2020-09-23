@@ -37,6 +37,7 @@
 
 //Std includes
 #include <math.h>
+#include <stdexcept>
 
 #ifdef Q_OS_WIN
 #undef far

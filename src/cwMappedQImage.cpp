@@ -5,6 +5,9 @@
 #include <QDir>
 #include <QUuid>
 
+//Std includes
+#include <stdexcept>
+
 QImage cwMappedQImage::createDiskImage(const QString &path, const QImage &imageToCopy)
 {
     if(imageToCopy.isNull()) {
