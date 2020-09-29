@@ -323,7 +323,7 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
-    connect(scrap, &cwScrap::typeChanged, this, &cwScrapManager::regenerateScrapGeometry);
+    connect(scrap, &cwScrap::viewMatrixChanged, this, &cwScrapManager::regenerateScrapGeometry);
 }
 
 /**
@@ -354,7 +354,7 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     disconnect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     disconnect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
-    disconnect(scrap, &cwScrap::typeChanged, this, &cwScrapManager::regenerateScrapGeometry);
+    disconnect(scrap, &cwScrap::viewMatrixChanged, this, &cwScrapManager::regenerateScrapGeometry);
 }
 
 /**
@@ -444,7 +444,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
     data.setNoteTransform(*(scrap->noteTransformation()));
-    data.setType(scrap->type());
+    data.setViewMatrix(scrap->viewMatrix());
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
     data.setNoteImageResolution(dotsPerMeter);

@@ -7,15 +7,18 @@
 #include <QVector3D>
 #include <QMatrix4x4>
 
+//Our includes
+#include <cwGlobals.h>
+
 class cwScrapViewMatrixData;
 
-class cwScrapViewMatrix
+class CAVEWHERE_LIB_EXPORT cwScrapViewMatrix
 {
     Q_GADGET
 
     Q_PROPERTY(ScrapType type READ type WRITE setType)
-    Q_PROPERTY(QVector3D eyeDirection READ eyeDirection WRITE setEyeDirection)
-    Q_PROPERTY(QVector3D upDirection READ upDirection WRITE setUpDirection)
+    Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
+
     Q_PROPERTY(QMatrix4x4 matrix READ matrix)
 
 public:
@@ -27,7 +30,7 @@ public:
     enum ScrapType {
         Plan,
         RunningProfile,
-        Custom
+        ProjectedProfile
     };
     Q_ENUM(ScrapType);
 
@@ -36,29 +39,22 @@ public:
 
     Q_INVOKABLE static QStringList types();
 
-    QVector3D eyeDirection() const;
-    void setEyeDirection(QVector3D eyeDirection);
-
-    QVector3D upDirection() const;
-    void setUpDirection(QVector3D upDirection);
+    double azimuth() const;
+    void setAzimuth(double azimuth);
 
     QMatrix4x4 matrix() const;
+
+    bool operator==(const cwScrapViewMatrix& other) const;
+    bool operator!=(const cwScrapViewMatrix& other) const;
 
 private:
     QSharedDataPointer<cwScrapViewMatrixData> data;
 };
 
-/**
- * Returns the matrix that represents the scrap view matrix
- * This matrix is usually used to help warp the scraps
- */
-inline QMatrix4x4 cwScrapViewMatrix::matrix() const {
-    QMatrix4x4 matrix;
-    matrix.lookAt(eyeDirection(), //Eye
-                  QVector3D(0.0, 0.0, 0.0), //Center or origin
-                  upDirection()); //Up
-
-    return matrix;
+inline bool cwScrapViewMatrix::operator!=(const cwScrapViewMatrix &other) const
+{
+    return !operator==(other);
 }
+
 
 #endif // CWSCRAPVIEWMATRIX_H

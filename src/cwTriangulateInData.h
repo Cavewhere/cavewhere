@@ -18,11 +18,17 @@
 #include "cwNoteTranformation.h"
 #include "cwLead.h"
 #include "cwScrap.h"
+#include "cwScrapViewMatrix.h"
+
+class cwTriangulatePrivateData;
 
 class cwTriangulateInData
 {
 public:
     cwTriangulateInData();
+    cwTriangulateInData(const cwTriangulateInData& data);
+    cwTriangulateInData &operator=(const cwTriangulateInData& other);
+    ~cwTriangulateInData();
 
     cwImage noteImage() const;
     void setNoteImage(cwImage noteImage);
@@ -39,8 +45,8 @@ public:
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
 
-    cwScrap::ScrapType type() const;
-    void setType(cwScrap::ScrapType type);
+    cwScrapViewMatrix viewMatrix() const;
+    void setViewMatrix(const cwScrapViewMatrix& view);
 
     void setLookDirection(QVector3D eyeVector);
     QVector3D lookDirection() const;
@@ -49,7 +55,7 @@ public:
     void setLeads(QList<cwLead> leads);
 
 private:
-    QSharedDataPointer<class PrivateData> Data;
+    QSharedDataPointer<cwTriangulatePrivateData> data;
 };
 
 #endif // CWTRIANGULATEINDATA_H

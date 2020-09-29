@@ -642,7 +642,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
       */
     auto sortScrapStations = [&scrapData]() {
         QList<cwTriangulateStation> stations = scrapData.stations();
-        if(scrapData.type() == cwScrap::RunningProfile) {
+        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
             //This assumes that up on the page is up for the scrap
             auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
                 QMatrix4x4 rotation = scrapData.noteTransform().matrix();
@@ -669,7 +669,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
      */
     auto findStationsToUseForMorphing = [&scrapData](QList<cwTriangulateStation> stations, QVector3D notePoint)->QList<cwTriangulateStation>
     {
-        if(scrapData.type() == cwScrap::RunningProfile) {
+        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
 
             //Need to have a least two stations
             if(stations.size() < 2) {
@@ -719,9 +719,12 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
       When in running profile mode, this returns a view matrix of the shot between the first
       and last station in stations. This view matrix is in a profile view, where the shot
       is aligned with the x-axis.
+
+      When in projected profile mode, this returns the view matrix from cwScrapViewMatrix.
      */
     auto calculateViewMatrix = [&scrapData](const QList<cwTriangulateStation>& stations) {
-        if(scrapData.type() == cwScrap::RunningProfile) {
+
+        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
             //Calculate the rotation matrix for the profile for this point (could be looked up)
             if(stations.size() < 2) {
                 return QMatrix4x4();
@@ -743,7 +746,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
             return viewMatrix;
         }
-        return QMatrix4x4();
+        return scrapData.viewMatrix().matrix();
     };
 
 

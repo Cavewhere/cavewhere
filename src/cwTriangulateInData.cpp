@@ -7,89 +7,107 @@
 
 #include "cwTriangulateInData.h"
 
-class PrivateData : public QSharedData {
+class cwTriangulatePrivateData : public QSharedData {
 public:
-    PrivateData() : Type(cwScrap::Plan) {}
+    cwTriangulatePrivateData() {}
 
     cwImage NoteImage;
-    double DotPerMeter;
+    double DotPerMeter = 0;
     QPolygonF Outline;
     cwNoteTranformation NoteTransform;
     QList<cwTriangulateStation> Stations;
     QList<cwLead> Leads;
-    cwScrap::ScrapType Type;
+    cwScrapViewMatrix ViewMatrix;
     QVector3D LookDirection;
 };
 
 cwTriangulateInData::cwTriangulateInData() :
-    Data(new PrivateData())
+    data(new cwTriangulatePrivateData())
 {
+}
+
+cwTriangulateInData::cwTriangulateInData(const cwTriangulateInData &data) :
+    data(data.data)
+{
+
+}
+
+cwTriangulateInData &cwTriangulateInData::operator=(const cwTriangulateInData &other)
+{
+    if (this != &other)
+        data.operator=(other.data);
+    return *this;
+}
+
+cwTriangulateInData::~cwTriangulateInData()
+{
+
 }
 
 void cwTriangulateInData::setLookDirection(QVector3D eyeVector)
 {
-    Data->LookDirection = eyeVector;
+    data->LookDirection = eyeVector;
 }
 
 QVector3D cwTriangulateInData::lookDirection() const
 {
-    return Data->LookDirection;
+    return data->LookDirection;
 }
 
 /**
 Get NoteImage
 */
 cwImage cwTriangulateInData::noteImage() const {
-    return Data->NoteImage;
+    return data->NoteImage;
 }
 
 /**
 Sets NoteImage
 */
 void cwTriangulateInData::setNoteImage(cwImage noteImage) {
-    Data->NoteImage = noteImage;
+    data->NoteImage = noteImage;
 }
 
 /**
 Get variableName
 */
 QPolygonF cwTriangulateInData::outline() const {
-    return Data->Outline;
+    return data->Outline;
 }
 
 /**
 Sets variableName
 */
 void cwTriangulateInData::setOutline(QPolygonF outline) {
-    Data->Outline = outline;
+    data->Outline = outline;
 }
 
 /**
   Get variableName
   */
 QList<cwTriangulateStation> cwTriangulateInData::stations() const {
-    return Data->Stations;
+    return data->Stations;
 }
 
 /**
   Sets variableName
   */
 void cwTriangulateInData::setStations(QList<cwTriangulateStation> stations) {
-    Data->Stations = stations;
+    data->Stations = stations;
 }
 
 /**
   Get variableName
   */
 cwNoteTranformation cwTriangulateInData::noteTransform() const {
-    return Data->NoteTransform;
+    return data->NoteTransform;
 }
 
 /**
   Sets variableName
   */
 void cwTriangulateInData::setNoteTransform(cwNoteTranformation noteTransform) {
-    Data->NoteTransform = noteTransform;
+    data->NoteTransform = noteTransform;
 }
 
 /**
@@ -98,7 +116,7 @@ void cwTriangulateInData::setNoteTransform(cwNoteTranformation noteTransform) {
  */
 double cwTriangulateInData::noteImageResolution() const
 {
-    return Data->DotPerMeter;
+    return data->DotPerMeter;
 }
 
 /**
@@ -107,25 +125,21 @@ double cwTriangulateInData::noteImageResolution() const
  */
 void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
 {
-    Data->DotPerMeter = dotsPerMeter;
+    data->DotPerMeter = dotsPerMeter;
 }
 
-/**
- * @brief cwTriangulateInData::type
- * @return The type of the scrap
- */
-cwScrap::ScrapType cwTriangulateInData::type() const
+cwScrapViewMatrix cwTriangulateInData::viewMatrix() const
 {
-    return Data->Type;
+    return data->ViewMatrix;
 }
 
 /**
  * @brief cwTriangulateInData::setType
- * @param type - The type of the scrap, Plan or RunningProfile
+ * @param type - The type of the scrap, Plan, RunningProfile, ProjectedProfile
  */
-void cwTriangulateInData::setType(cwScrap::ScrapType type)
+void cwTriangulateInData::setViewMatrix(const cwScrapViewMatrix &view)
 {
-    Data->Type = type;
+    data->ViewMatrix = view;
 }
 
 /**
@@ -134,7 +148,7 @@ void cwTriangulateInData::setType(cwScrap::ScrapType type)
  */
 QList<cwLead> cwTriangulateInData::leads() const
 {
-    return Data->Leads;
+    return data->Leads;
 }
 
 /**
@@ -143,7 +157,7 @@ QList<cwLead> cwTriangulateInData::leads() const
  */
 void cwTriangulateInData::setLeads(QList<cwLead> leads)
 {
-    Data->Leads = leads;
+    data->Leads = leads;
 }
 
 

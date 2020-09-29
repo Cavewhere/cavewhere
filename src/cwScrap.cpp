@@ -29,7 +29,7 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    Type(Plan),
+    ViewMatrix(),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false)
@@ -41,6 +41,7 @@ cwScrap::cwScrap(const cwScrap& other)
     : QObject(nullptr),
       NoteTransformation(new cwNoteTranformation(this)),
       CalculateNoteTransform(false),
+      ViewMatrix(),
       ParentNote(nullptr),
       ParentCave(nullptr),
       TriangulationDataDirty(false)
@@ -444,18 +445,30 @@ void cwScrap::updateNoteTransformation() {
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
 
     //Choose the averaging function
-    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
-    switch(type()) {
-    case cwScrap::RunningProfile:
-        averageFunc = std::mem_fn(&cwScrap::runningProfileAverageTransform);
+    std::function<cwNoteTranformation (QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
+    switch(viewMatrix().type()) {
+    case cwScrapViewMatrix::RunningProfile:
+        averageFunc = [this](auto list)
+        {
+            return runningProfileAverageTransform(list);
+        };
         break;
-    case cwScrap::Plan:
-        averageFunc = std::mem_fn(&cwScrap::planAverageTransform);
+    case cwScrapViewMatrix::Plan:
+        averageFunc = [this](auto list)
+        {
+            return planAverageTransform(list);
+        };
+        break;
+    case cwScrapViewMatrix::ProjectedProfile:
+        qDebug() << "Profile note transform hasn't been implement yet" << LOCATION;
+        averageFunc = [this](auto list) {
+            return cwNoteTranformation();
+        };
         break;
     };
 
     //Do the calculations
-    cwNoteTranformation averageTransformation = averageFunc(this, shotStations);
+    cwNoteTranformation averageTransformation = averageFunc(shotStations);
     NoteTransformation->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
@@ -549,13 +562,16 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     QVector3D station2RealPos = positionLookup.position(station2.name());
 
     //Remove the z for plan view
-    switch(type()) {
-    case Plan:
+    switch(viewMatrix().type()) {
+    case cwScrapViewMatrix::Plan:
         station1RealPos.setZ(0.0);
         station2RealPos.setZ(0.0);
         break;
-    case RunningProfile:
+    case cwScrapViewMatrix::RunningProfile:
         //Keep the full point, because running profile keeps the full length
+        break;
+    case cwScrapViewMatrix::ProjectedProfile:
+        qDebug() << "Implement me!" << LOCATION;
         break;
     }
 
@@ -620,11 +636,14 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             return ScrapShotTransform(scale, errorVector, clinoDiff);
 };
 
-    switch(type()) {
-    case Plan:
+    switch(viewMatrix().type()) {
+    case cwScrapViewMatrix::Plan:
         return planCalcTransformation();
-    case RunningProfile:
+    case cwScrapViewMatrix::RunningProfile:
         return profileCalcTrasnformation();
+    case cwScrapViewMatrix::ProjectedProfile:
+        qDebug() << "Implement me scrapshottransform" << LOCATION;
+        return ScrapShotTransform();
     }
     return ScrapShotTransform();
 }
@@ -909,14 +928,20 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
 
     //Figure out how we are going to calculate the error, choose the function pointer
     std::function<void (const QString&, QVector3D)> calcError;
-    switch(type()) {
-    case cwScrap::Plan:
+    switch(viewMatrix().type()) {
+    case cwScrapViewMatrix::Plan:
         calcError = calcErrorForPlan;
         break;
-    case cwScrap::RunningProfile:
+    case cwScrapViewMatrix::RunningProfile:
         calcError = calcErrorForProfile;
         break;
+    case cwScrapViewMatrix::ProjectedProfile:
+        qDebug() << "Scrap Error not implement" << LOCATION;
+        calcError = [](const QString&, QVector3D) {
+
+        };
     }
+
 
     //Calculate the error each station
     foreach(cwStation station, neigborStations) {
@@ -1146,7 +1171,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    Type = other.Type;
+    ViewMatrix = other.ViewMatrix;
 
     emit stationsReset();
 
@@ -1228,15 +1253,16 @@ void cwScrap::updateImage()
     emit pointsReset();
 }
 
+QStringList cwScrap::types() const {
+    return cwScrapViewMatrix::types();
+}
+
 /**
-* Sets the type
-* The scrap type tells the warping algorithm how to warp the scrap. Scrap type can be Plan (default)
-* and RunningProfile.
+*
 */
-void cwScrap::setType(ScrapType type) {
-    if(Type != type) {
-        Type = type;
-        updateNoteTransformation();
-        emit typeChanged();
+void cwScrap::setViewMatrix(const cwScrapViewMatrix& viewMatrix) {
+    if(ViewMatrix != viewMatrix) {
+        ViewMatrix = viewMatrix;
+        emit viewMatrixChanged();
     }
 }

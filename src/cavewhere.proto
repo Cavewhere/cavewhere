@@ -136,7 +136,8 @@ message Scrap {
     optional bool calculateNoteTransform = 4;
     optional TriangulatedData triangleData = 5;
     repeated Lead leads = 6;
-    optional ScrapType type = 7;
+    optional ScrapType OBSOLETE_type = 7; //Not needed anymore
+    optional ScrapViewMatrix scrapViewMatrix = 8;
 }
 
 message TriangulatedData {
@@ -221,4 +222,15 @@ message SurveyNetwork {
         required QtProto.QString stationName = 1;
         required QtProto.QStringList neighbors = 2;
     }
+}
+
+message ScrapViewMatrix {
+    enum ScrapType {
+        Plan = 0;
+        RunningProfile = 1;
+        ProjectedProfile = 2;
+    }
+
+    optional ScrapType type = 1;
+    optional double Azimuth = 2;
 }

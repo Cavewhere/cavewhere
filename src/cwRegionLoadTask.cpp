@@ -491,7 +491,14 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
     scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
-    scrap->setType((cwScrap::ScrapType)protoScrap.type());
+
+    if(protoScrap.has_obsolete_type()) {
+        cwScrapViewMatrix viewMatrix;
+        viewMatrix.setType(static_cast<cwScrapViewMatrix::ScrapType>(protoScrap.obsolete_type()));
+        scrap->setViewMatrix(viewMatrix);
+    } else if(protoScrap.has_scrapviewmatrix()) {
+        scrap->setViewMatrix(loadScrapViewMatrix(protoScrap.scrapviewmatrix()));
+    }
 }
 
 /**
@@ -680,6 +687,20 @@ cwLead cwRegionLoadTask::loadLead(const CavewhereProto::Lead &protoLead)
 int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoRegion)
 {
     return protoRegion.has_version() ? protoRegion.version() : 0;
+}
+
+cwScrapViewMatrix cwRegionLoadTask::loadScrapViewMatrix(const CavewhereProto::ScrapViewMatrix &protoViewMatrix)
+{
+    cwScrapViewMatrix viewMatrix;
+    if(protoViewMatrix.has_type()) {
+        viewMatrix.setType(static_cast<cwScrapViewMatrix::ScrapType>(protoViewMatrix.type()));
+    }
+
+    if(protoViewMatrix.has_azimuth()) {
+        viewMatrix.setAzimuth(protoViewMatrix.azimuth());
+    }
+
+    return viewMatrix;
 }
 
 /**

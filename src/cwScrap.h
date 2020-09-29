@@ -21,6 +21,7 @@
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
 #include "cwStation.h"
+#include "cwScrapViewMatrix.h"
 class cwNote;
 class cwCave;
 
@@ -36,16 +37,17 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
-    Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(cwScrapViewMatrix viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
+
     Q_PROPERTY(QStringList types READ types CONSTANT)
 
-    Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
 
     enum StationDataRole {
         StationName,
         StationPosition
     };
+    Q_ENUM(StationDataRole);
 
     enum LeadDataRole {
         LeadPositionOnNote,
@@ -57,11 +59,7 @@ public:
         LeadCompleted,
         LeadNumberOfRoles
     };
-
-    enum ScrapType {
-        Plan = 0,
-        RunningProfile = 1
-    };
+    Q_ENUM(LeadDataRole)
 
     explicit cwScrap(QObject *parent = 0);
     cwScrap(const cwScrap& other);
@@ -73,8 +71,8 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
-    ScrapType type() const;
-    void setType(ScrapType type);
+    cwScrapViewMatrix viewMatrix() const;
+    void setViewMatrix(const cwScrapViewMatrix &viewMatrix);
     QStringList types() const;
 
     void addPoint(QPointF point);
@@ -150,7 +148,7 @@ signals:
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
-    void typeChanged();
+    void viewMatrixChanged();
 
 private:
 
@@ -201,7 +199,7 @@ private:
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
     //The type of scrap
-    ScrapType Type; //!<
+    cwScrapViewMatrix ViewMatrix;
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -332,20 +330,12 @@ inline cwTriangulatedData cwScrap::triangulationData() const {
 }
 
 /**
-* Returns The scrap type.
-* The scrap type tells the warping algorithm how to warp the scrap.
+* This returns the type of scrap this is and the view matrix
 */
-inline cwScrap::ScrapType cwScrap::type() const {
-    return Type;
+inline cwScrapViewMatrix cwScrap::viewMatrix() const {
+    return ViewMatrix;
 }
 
-/**
-* @brief cwScrap::types
-* @return
-*/
-inline QStringList cwScrap::types() const {
-    return QStringList() << "Plan" << "Running Profile";
-}
 
 
 #endif // CWSCRAP_H

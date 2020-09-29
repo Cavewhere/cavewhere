@@ -30,6 +30,7 @@ class cwShot;
 class cwStationPositionLookup;
 class cwLead;
 class cwSurveyNetwork;
+class cwScrapViewMatrix;
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -54,6 +55,7 @@ namespace CavewhereProto {
     class StationPositionLookup;
     class Lead;
     class SurveyNetwork;
+    class ScrapViewMatrix;
 };
 
 namespace QtProto {
@@ -124,6 +126,8 @@ private:
     void saveLead(CavewhereProto::Lead* protoLead, const cwLead& lead);
     void saveSurveyNetwork(CavewhereProto::SurveyNetwork* protoSurveyNetwork,
                            const cwSurveyNetwork& network);
+    void saveScrapViewMatrix(CavewhereProto::ScrapViewMatrix* protoScrapViewMatrix,
+                             const cwScrapViewMatrix& viewMatrix);
 
     //Utils
     void saveString(QtProto::QString* protoString, QString string);

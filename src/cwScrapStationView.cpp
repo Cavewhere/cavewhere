@@ -16,6 +16,7 @@
 #include "cwGlobalDirectory.h"
 #include "cwCave.h"
 #include "cwSGLinesNode.h"
+#include "cwScrapViewMatrix.h"
 
 //Qt includes
 #include <QQmlComponent>
@@ -137,6 +138,7 @@ void cwScrapStationView::updateShotLines() {
                 dotPerMeter *
                 notePageAspect *
                 noteTransformMatrix *
+                scrap()->viewMatrix().matrix() *
                 offsetMatrix;
 
         //Only used if the scrap is in running profile
@@ -147,7 +149,7 @@ void cwScrapStationView::updateShotLines() {
 
             QVector3D currentPos = stationPositionLookup.position(station.name());
 
-            if(scrap()->type() == cwScrap::RunningProfile) {
+            if(scrap()->viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
                 bool foundStation = false;
                 foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
                     if(currentNoteStation.name().toLower() == station.name().toLower()) {
@@ -273,7 +275,7 @@ QMatrix4x4 cwScrapStationView::runningProfileDirection() const
 {
     QMatrix4x4 profileDirection;
 
-    if(scrap()->type() == cwScrap::RunningProfile) {
+    if(scrap()->viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
         QMatrix4x4 noteMatrix = scrap()->noteTransformation()->matrix();
 
         QMatrix4x4 pageOffset;

@@ -31,6 +31,7 @@ class cwLength;
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
 #include "cwRegionLoadResult.h"
+#include "cwScrapViewMatrix.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -54,6 +55,7 @@ namespace CavewhereProto {
     class Shot;
     class StationPositionLookup;
     class Lead;
+    class ScrapViewMatrix;
 };
 
 namespace QtProto {
@@ -134,6 +136,7 @@ private:
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
+    cwScrapViewMatrix loadScrapViewMatrix(const CavewhereProto::ScrapViewMatrix& protoViewMatrix);
 
     //Utils
     QString loadString(const QtProto::QString& protoString);

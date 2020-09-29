@@ -31,6 +31,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cavewhereVersion.h"
+#include "cwScrapViewMatrix.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -289,7 +290,7 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
     saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
-    protoScrap->set_type((CavewhereProto::Scrap_ScrapType)scrap->type());
+    saveScrapViewMatrix(protoScrap->mutable_scrapviewmatrix(), scrap->viewMatrix());
 }
 
 /**
@@ -567,4 +568,10 @@ void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSur
         saveString(newStationItem->mutable_stationname(), station);
         saveStringList(newStationItem->mutable_neighbors(), neighbors);
     }
+}
+
+void cwRegionSaveTask::saveScrapViewMatrix(CavewhereProto::ScrapViewMatrix *protoScrapViewMatrix, const cwScrapViewMatrix &viewMatrix)
+{
+    protoScrapViewMatrix->set_type(static_cast<CavewhereProto::ScrapViewMatrix::ScrapType>(viewMatrix.type()));
+    protoScrapViewMatrix->set_azimuth(viewMatrix.azimuth());
 }
