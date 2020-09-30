@@ -112,6 +112,8 @@ void cwTransformUpdater::update() {
 void cwTransformUpdater::updatePoint(QQuickItem *object) {
     QVector3D position = object->property("position3D").value<QVector3D>();
     QVector3D position2D = TransformMatrix * position;
+    auto visiblity = position2D.z() >= 0.0 && position2D.z() <= 1.0;
+    object->setVisible(visiblity);
     object->setPosition(QPointF(position2D.x(), position2D.y()));
 }
 
