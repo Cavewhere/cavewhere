@@ -21,7 +21,6 @@ before_install:
     #This PPA has all the QT versions, just update it to change versions
     #Full list here: https://launchpad.net/~beineri
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo add-apt-repository -y ppa:beineri/opt-qt-5.15.0-focal; fi
-    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo add-apt-repository -y ppa:mardy/qbs-on-lts; fi
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y update; fi
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install qt515-meta-minimal; fi
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install qt515svg; fi
@@ -32,7 +31,13 @@ before_install:
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install qt515imageformats; fi
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install libgl1-mesa-glx; fi
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install libgl1-mesa-dev; fi
-    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install qbs; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then git clone https://github.com/qbs/qbs.git; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd qbs; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then git checkout v1.17.0; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then /opt/qt515/bin/qmake -r qbs.pro && make -j `nproc`; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo make install; fi
+    - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ..; fi
+
     - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ls -l /usr/lib/x86_64-linux-gnu/libGL.*; fi
 
     - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update; fi
