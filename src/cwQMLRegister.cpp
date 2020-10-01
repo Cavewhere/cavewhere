@@ -113,6 +113,7 @@
 #include "cwSettings.h"
 #include "cwJobSettings.h"
 #include "cwPDFSettings.h"
+#include "cwScrapViewMatrix.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -140,6 +141,7 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
     qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+    qRegisterMetaType<cwScrapViewMatrix>("cwScrapViewMatrix");
 
 
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
@@ -241,6 +243,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwErrorModel>("Cavewhere", 1, 0, "ErrorModel");
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
     qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
+    qmlRegisterUncreatableType<cwScrapViewMatrix>("Cavewhere", 1, 0, "ScrapViewMatrix", "Shouldn't be created in qml");
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
     qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");
     qmlRegisterType<cwColumnNameModel>("Cavewhere", 1, 0, "ColumnNameModel");
@@ -253,6 +256,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterUncreatableType<cwSettings>("Cavewhere", 1, 0, "Settings", "Should only be created in cwRootData also is static across the application");
     qmlRegisterUncreatableType<cwJobSettings>("Cavewhere", 1, 0, "JobSettings", "Should only be created in cwSettings also is static across the application");
     qmlRegisterUncreatableType<cwPDFSettings>("Cavewhere", 1, 0, "PDFSettings", "Should only be created in cwSettings also is static across the application");
+
 
 
 }

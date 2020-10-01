@@ -25,7 +25,7 @@ QQ.Item {
     //This function is useful for Binding in the combobox. The combobox
     //doesn't update correctly if bound to just scrapType
     function currentScrapType() {
-        return scrap ? scrap.type : -1
+        return scrap ? scrap.viewMatrix.type : -1
     }
 
     visible: noteTransform !== null
@@ -63,7 +63,9 @@ QQ.Item {
                     id: typeComboBox
                     implicitWidth: 175
                     model: scrap ? scrap.types : null
-                    onCurrentIndexChanged: if(scrap) { scrap.type = currentIndex; }
+                    onCurrentIndexChanged: if(scrap) {
+                                               scrap.viewMatrix.type = currentIndex;
+                                           }
 
                     Binding {
                         target: typeComboBox
@@ -104,10 +106,12 @@ QQ.Item {
                         Layout.fillWidth: true
                         text: {
                             switch(scrapType) {
-                            case Scrap.Plan:
+                            case ScrapViewMatrix.Plan:
                                 return "You can set the direction of <b>north</b> relative to page for a scrap.
                                 Setting this incorrectly may cause warping issues."
-                            case Scrap.RunningProfile:
+                            case ScrapViewMatrix.RunningProfile:
+                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
+                            case ScrapViewMatrix.ProjectProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
                                     return "Error..."
@@ -127,6 +131,30 @@ QQ.Item {
                         id: scaleHelpAreaId
                         Layout.fillWidth: true
                         text: "You can set the <b>scale</b> of the scrap. Setting this incorrectly may cause warping issues."
+                    }
+
+                    RowLayout {
+                        id: azimuthInput
+                        visible: upInputId.scrapType == ScrapViewMatrix.ProjectedProfile
+                        LabelWithHelp {
+                            id: azimuthLabelId
+                            text: "Azimuth"
+                            helpArea: azimuthHelpAreaId
+                        }
+
+                        ClickTextInput {
+                            id: azimuthTextInputId
+                            text: scrap.viewMatrix.azimuth
+                            onFinishedEditting: {
+                                scrap.viewMatrix.azimuth = newText
+                            }
+                        }
+                    }
+
+                    HelpArea {
+                        id: azimuthHelpAreaId
+                        Layout.fillWidth: true
+                        text: "Azimuth help"
                     }
 
                     ErrorHelpArea {

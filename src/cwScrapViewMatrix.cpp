@@ -53,9 +53,9 @@ double cwScrapViewMatrix::cwScrapViewMatrix::azimuth() const {
 }
 
 void cwScrapViewMatrix::cwScrapViewMatrix::setAzimuth(double azimuth) {
-    if(data->Azimuth != azimuth) {
+//    if(data->Azimuth != azimuth) {
         data->Azimuth = azimuth;
-    }
+//    }
 }
 
 /**
@@ -71,9 +71,10 @@ QMatrix4x4 cwScrapViewMatrix::matrix() const {
     case RunningProfile:
         return QMatrix4x4(); //Not used for running profile
     case ProjectedProfile: {
+        //This rotation isn't correct
         QQuaternion rotation = QQuaternion::fromAxisAndAngle(QVector3D(0.0, 0.0, 1.0),
                                                              -azimuth())
-                * QQuaternion::fromAxisAndAngle(QVector3D(1.0, 0.0, 0.0), 90.0);
+                * QQuaternion::fromAxisAndAngle(QVector3D(1.0, 0.0, 0.0), 90.0); //Not sure if this 90 is correct
         QMatrix4x4 matrix;
         matrix.rotate(rotation);
         return matrix;

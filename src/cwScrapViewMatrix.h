@@ -17,7 +17,7 @@ class CAVEWHERE_LIB_EXPORT cwScrapViewMatrix
     Q_GADGET
 
     Q_PROPERTY(ScrapType type READ type WRITE setType)
-    Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
+    Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth)
 
     Q_PROPERTY(QMatrix4x4 matrix READ matrix)
 
@@ -50,6 +50,8 @@ public:
 private:
     QSharedDataPointer<cwScrapViewMatrixData> data;
 };
+
+Q_DECLARE_METATYPE(cwScrapViewMatrix)
 
 inline bool cwScrapViewMatrix::operator!=(const cwScrapViewMatrix &other) const
 {
