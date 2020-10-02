@@ -136,7 +136,6 @@ private:
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
-    cwScrapViewMatrix loadScrapViewMatrix(const CavewhereProto::ScrapViewMatrix& protoViewMatrix);
 
     //Utils
     QString loadString(const QtProto::QString& protoString);

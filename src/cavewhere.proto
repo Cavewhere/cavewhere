@@ -128,6 +128,7 @@ message Scrap {
     enum ScrapType {
         Plan = 0;
         RunningProfile = 1;
+        ProjectedProfile = 2;
     }
 
     repeated QtProto.QPointF outlinePoints = 1;
@@ -136,8 +137,8 @@ message Scrap {
     optional bool calculateNoteTransform = 4;
     optional TriangulatedData triangleData = 5;
     repeated Lead leads = 6;
-    optional ScrapType OBSOLETE_type = 7; //Not needed anymore
-    optional ScrapViewMatrix scrapViewMatrix = 8;
+    optional ScrapType type = 7;
+    optional ProjectedProfileViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
 }
 
 message TriangulatedData {
@@ -224,13 +225,6 @@ message SurveyNetwork {
     }
 }
 
-message ScrapViewMatrix {
-    enum ScrapType {
-        Plan = 0;
-        RunningProfile = 1;
-        ProjectedProfile = 2;
-    }
-
-    optional ScrapType type = 1;
-    optional double Azimuth = 2;
+message ProjectedProfileViewMatrix {
+    optional double Azimuth = 1;
 }

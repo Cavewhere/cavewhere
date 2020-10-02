@@ -25,6 +25,7 @@
 #include "cwOpenGLSettings.h"
 #include "cwImageDatabase.h"
 #include "cwAsyncFuture.h"
+#include "cwAbstractScrapViewMatrix.h"
 
 //Async future
 #include "asyncfuture.h"
@@ -444,7 +445,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setOutline(scrap->points());
     data.setStations(mapNoteStationsToTriangulateStation(scrap->stations(), cave->stationPositionLookup()));
     data.setNoteTransform(*(scrap->noteTransformation()));
-    data.setViewMatrix(scrap->viewMatrix());
+    data.setViewMatrix(scrap->viewMatrix()->data()->clone());
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value();
     data.setNoteImageResolution(dotsPerMeter);

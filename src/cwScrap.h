@@ -22,6 +22,7 @@
 #include "cwLead.h"
 #include "cwStation.h"
 #include "cwScrapViewMatrix.h"
+#include "cwAbstractScrapViewMatrix.h"
 class cwNote;
 class cwCave;
 
@@ -37,11 +38,18 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
-    Q_PROPERTY(cwScrapViewMatrix viewMatrix READ viewMatrix WRITE setViewMatrix NOTIFY viewMatrixChanged)
 
+    Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(cwAbstractScrapViewMatrix* viewMatrix READ viewMatrix NOTIFY viewMatrixChanged)
     Q_PROPERTY(QStringList types READ types CONSTANT)
 
 public:
+    enum ScrapType {
+        Plan,
+        RunningProfile,
+        ProjectedProfile
+    };
+    Q_ENUM(ScrapType);
 
     enum StationDataRole {
         StationName,
@@ -71,8 +79,9 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
-    cwScrapViewMatrix viewMatrix() const;
-    void setViewMatrix(const cwScrapViewMatrix &viewMatrix);
+    cwAbstractScrapViewMatrix* viewMatrix() const;
+    ScrapType type() const;
+    void setType(ScrapType type);
     QStringList types() const;
 
     void addPoint(QPointF point);
@@ -149,6 +158,7 @@ signals:
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
     void viewMatrixChanged();
+    void typeChanged();
 
 private:
 
@@ -199,7 +209,8 @@ private:
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
     //The type of scrap
-    cwScrapViewMatrix ViewMatrix;
+    ScrapType Type = Plan;
+    std::unique_ptr<cwAbstractScrapViewMatrix> ViewMatrix;
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -322,6 +333,11 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
+cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
+{
+    return ViewMatrix.get();
+}
+
 /**
   \brief Gets the triangulation data
   */
@@ -330,12 +346,10 @@ inline cwTriangulatedData cwScrap::triangulationData() const {
 }
 
 /**
-* This returns the type of scrap this is and the view matrix
+*
 */
-inline cwScrapViewMatrix cwScrap::viewMatrix() const {
-    return ViewMatrix;
+inline cwScrap::ScrapType cwScrap::type() const {
+    return Type;
 }
-
-
 
 #endif // CWSCRAP_H

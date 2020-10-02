@@ -15,6 +15,9 @@
 #include "cwGlobals.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
+#include "cwPlanScrapViewMatrix.h"
+#include "cwRunningProfileScrapViewMatrix.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Qt includes
 #include <QDebug>
@@ -446,20 +449,20 @@ void cwScrap::updateNoteTransformation() {
 
     //Choose the averaging function
     std::function<cwNoteTranformation (QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
-    switch(viewMatrix().type()) {
-    case cwScrapViewMatrix::RunningProfile:
+    switch(type()) {
+    case RunningProfile:
         averageFunc = [this](auto list)
         {
             return runningProfileAverageTransform(list);
         };
         break;
-    case cwScrapViewMatrix::Plan:
+    case Plan:
         averageFunc = [this](auto list)
         {
             return planAverageTransform(list);
         };
         break;
-    case cwScrapViewMatrix::ProjectedProfile:
+    case ProjectedProfile:
         qDebug() << "Profile note transform hasn't been implement yet" << LOCATION;
         averageFunc = [this](auto list) {
             return cwNoteTranformation();
@@ -562,15 +565,15 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     QVector3D station2RealPos = positionLookup.position(station2.name());
 
     //Remove the z for plan view
-    switch(viewMatrix().type()) {
-    case cwScrapViewMatrix::Plan:
+    switch(type()) {
+    case Plan:
         station1RealPos.setZ(0.0);
         station2RealPos.setZ(0.0);
         break;
-    case cwScrapViewMatrix::RunningProfile:
+    case RunningProfile:
         //Keep the full point, because running profile keeps the full length
         break;
-    case cwScrapViewMatrix::ProjectedProfile:
+    case ProjectedProfile:
         qDebug() << "Implement me!" << LOCATION;
         break;
     }
@@ -636,12 +639,12 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             return ScrapShotTransform(scale, errorVector, clinoDiff);
 };
 
-    switch(viewMatrix().type()) {
-    case cwScrapViewMatrix::Plan:
+    switch(type()) {
+    case Plan:
         return planCalcTransformation();
-    case cwScrapViewMatrix::RunningProfile:
+    case RunningProfile:
         return profileCalcTrasnformation();
-    case cwScrapViewMatrix::ProjectedProfile:
+    case ProjectedProfile:
         qDebug() << "Implement me scrapshottransform" << LOCATION;
         return ScrapShotTransform();
     }
@@ -928,14 +931,14 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
 
     //Figure out how we are going to calculate the error, choose the function pointer
     std::function<void (const QString&, QVector3D)> calcError;
-    switch(viewMatrix().type()) {
-    case cwScrapViewMatrix::Plan:
+    switch(type()) {
+    case Plan:
         calcError = calcErrorForPlan;
         break;
-    case cwScrapViewMatrix::RunningProfile:
+    case RunningProfile:
         calcError = calcErrorForProfile;
         break;
-    case cwScrapViewMatrix::ProjectedProfile:
+    case ProjectedProfile:
         qDebug() << "Scrap Error not implement" << LOCATION;
         calcError = [](const QString&, QVector3D) {
 
@@ -1171,7 +1174,7 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    ViewMatrix = other.ViewMatrix;
+    ViewMatrix = std::unique_ptr<cwAbstractScrapViewMatrix>(other.ViewMatrix->clone());
 
     emit stationsReset();
 
@@ -1253,16 +1256,30 @@ void cwScrap::updateImage()
     emit pointsReset();
 }
 
-QStringList cwScrap::types() const {
-    return cwScrapViewMatrix::types();
-}
-
 /**
-*
+* Sets the scrap type on how it's going to be projected
 */
-void cwScrap::setViewMatrix(const cwScrapViewMatrix& viewMatrix) {
-    if(ViewMatrix != viewMatrix) {
-        ViewMatrix = viewMatrix;
+void cwScrap::setType(ScrapType type) {
+    if(Type != type) {
+        Type = type;
+        emit typeChanged();
+
+        switch(Type) {
+        case Plan:
+            ViewMatrix = std::make_unique<cwPlanScrapViewMatrix>();
+            break;
+        case RunningProfile:
+            ViewMatrix = std::make_unique<cwRunningProfileScrapViewMatrix>();
+            break;
+        case ProjectedProfile:
+            ViewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix>();
+            break;
+        }
+
         emit viewMatrixChanged();
     }
+}
+
+QStringList cwScrap::types() const {
+    return {"Plan", "Running Profile", "Project Profile"};
 }

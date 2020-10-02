@@ -10,6 +10,20 @@
 class cwTriangulatePrivateData : public QSharedData {
 public:
     cwTriangulatePrivateData() {}
+    cwTriangulatePrivateData(cwTriangulatePrivateData& other) :
+        QSharedData(other),
+        NoteImage(other.NoteImage),
+        DotPerMeter(other.DotPerMeter),
+        Outline(other.Outline),
+        NoteTransform(other.NoteTransform),
+        Stations(other.Stations),
+        Leads(other.Leads),
+        Type(other.Type),
+        LookDirection(other.LookDirection),
+        ViewMatrix(other.ViewMatrix->clone())
+    {
+
+    }
 
     cwImage NoteImage;
     double DotPerMeter = 0;
@@ -17,8 +31,9 @@ public:
     cwNoteTranformation NoteTransform;
     QList<cwTriangulateStation> Stations;
     QList<cwLead> Leads;
-    cwScrapViewMatrix ViewMatrix;
+    cwScrap::ScrapType Type;
     QVector3D LookDirection;
+    std::unique_ptr<cwAbstractScrapViewMatrix::Data> ViewMatrix;
 };
 
 cwTriangulateInData::cwTriangulateInData() :
@@ -128,18 +143,18 @@ void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
     data->DotPerMeter = dotsPerMeter;
 }
 
-cwScrapViewMatrix cwTriangulateInData::viewMatrix() const
+cwAbstractScrapViewMatrix::Data* cwTriangulateInData::viewMatrix() const
 {
-    return data->ViewMatrix;
+    return data->ViewMatrix.get();
 }
 
 /**
  * @brief cwTriangulateInData::setType
  * @param type - The type of the scrap, Plan, RunningProfile, ProjectedProfile
  */
-void cwTriangulateInData::setViewMatrix(const cwScrapViewMatrix &view)
+void cwTriangulateInData::setViewMatrix(cwAbstractScrapViewMatrix::Data *view)
 {
-    data->ViewMatrix = view;
+    data->ViewMatrix = std::unique_ptr<cwAbstractScrapViewMatrix::Data>(view);
 }
 
 /**

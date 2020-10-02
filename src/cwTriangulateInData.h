@@ -19,6 +19,7 @@
 #include "cwLead.h"
 #include "cwScrap.h"
 #include "cwScrapViewMatrix.h"
+#include "cwAbstractScrapViewMatrix.h"
 
 class cwTriangulatePrivateData;
 
@@ -45,8 +46,8 @@ public:
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
 
-    cwScrapViewMatrix viewMatrix() const;
-    void setViewMatrix(const cwScrapViewMatrix& view);
+    cwAbstractScrapViewMatrix::Data* viewMatrix() const;
+    void setViewMatrix(cwAbstractScrapViewMatrix::Data* view);
 
     void setLookDirection(QVector3D eyeVector);
     QVector3D lookDirection() const;

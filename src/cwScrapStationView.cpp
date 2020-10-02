@@ -138,7 +138,7 @@ void cwScrapStationView::updateShotLines() {
                 dotPerMeter *
                 notePageAspect *
                 noteTransformMatrix *
-                scrap()->viewMatrix().matrix() *
+                scrap()->viewMatrix()->matrix() *
                 offsetMatrix;
 
         //Only used if the scrap is in running profile
@@ -149,7 +149,7 @@ void cwScrapStationView::updateShotLines() {
 
             QVector3D currentPos = stationPositionLookup.position(station.name());
 
-            if(scrap()->viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
+            if(scrap()->type() == cwScrap::RunningProfile) {
                 bool foundStation = false;
                 foreach(cwNoteStation currentNoteStation, scrap()->stations()) {
                     if(currentNoteStation.name().toLower() == station.name().toLower()) {
@@ -275,7 +275,7 @@ QMatrix4x4 cwScrapStationView::runningProfileDirection() const
 {
     QMatrix4x4 profileDirection;
 
-    if(scrap()->viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
+    if(scrap()->type() == cwScrap::RunningProfile) {
         QMatrix4x4 noteMatrix = scrap()->noteTransformation()->matrix();
 
         QMatrix4x4 pageOffset;

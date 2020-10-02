@@ -25,6 +25,7 @@
 #include "cwSurveyNetwork.h"
 #include "cavewhereVersion.h"
 #include "cwProject.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -491,13 +492,14 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
     scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
+    scrap->setType(static_cast<cwScrap::ScrapType>(protoScrap.type()));
 
-    if(protoScrap.has_obsolete_type()) {
-        cwScrapViewMatrix viewMatrix;
-        viewMatrix.setType(static_cast<cwScrapViewMatrix::ScrapType>(protoScrap.obsolete_type()));
-        scrap->setViewMatrix(viewMatrix);
-    } else if(protoScrap.has_scrapviewmatrix()) {
-        scrap->setViewMatrix(loadScrapViewMatrix(protoScrap.scrapviewmatrix()));
+    if(protoScrap.type() == CavewhereProto::Scrap_ScrapType::Scrap_ScrapType_ProjectedProfile) {
+        Q_ASSERT(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
+        auto view = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+        if(protoScrap.has_profileviewmatrix() && protoScrap.profileviewmatrix().has_azimuth()) {
+            view->setAzimuth(protoScrap.profileviewmatrix().azimuth());
+        }
     }
 }
 
@@ -689,19 +691,6 @@ int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoR
     return protoRegion.has_version() ? protoRegion.version() : 0;
 }
 
-cwScrapViewMatrix cwRegionLoadTask::loadScrapViewMatrix(const CavewhereProto::ScrapViewMatrix &protoViewMatrix)
-{
-    cwScrapViewMatrix viewMatrix;
-    if(protoViewMatrix.has_type()) {
-        viewMatrix.setType(static_cast<cwScrapViewMatrix::ScrapType>(protoViewMatrix.type()));
-    }
-
-    if(protoViewMatrix.has_azimuth()) {
-        viewMatrix.setAzimuth(protoViewMatrix.azimuth());
-    }
-
-    return viewMatrix;
-}
 
 /**
  * @brief cwRegionLoadTask::loadString
