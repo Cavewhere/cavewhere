@@ -316,7 +316,7 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);
     connect(scrap, &cwScrap::removedPoints, this, &cwScrapManager::removeScrapPoints);
     connect(scrap, &cwScrap::pointChanged, this, &cwScrapManager::updateScrapPoints);
-    connect(scrap, &cwScrap::pointsReset, this, &cwScrapManager::regenerateScrapGeometry);
+    connect(scrap, &cwScrap::pointsReset, this, [this, scrap](){ cwScrapManager::regenerateScrapGeometry(scrap); });
     connect(scrap, &cwScrap::stationAdded, this, &cwScrapManager::updateExistingScrapGeometry);
     connect(scrap, &cwScrap::stationPositionChanged, this, &cwScrapManager::updateScrapStations);
     connect(scrap, &cwScrap::stationRemoved, this, &cwScrapManager::updateScrapStation);
@@ -324,7 +324,11 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
-    connect(scrap, &cwScrap::viewMatrixChanged, this, &cwScrapManager::regenerateScrapGeometry);
+    connect(scrap, &cwScrap::viewMatrixChanged, this, [this, scrap]()
+    {
+        connect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged, this, [this, scrap](){cwScrapManager::regenerateScrapGeometry(scrap);});
+        cwScrapManager::regenerateScrapGeometry(scrap);
+    });
 }
 
 /**
@@ -347,7 +351,7 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);
     disconnect(scrap, &cwScrap::removedPoints, this, &cwScrapManager::removeScrapPoints);
     disconnect(scrap, &cwScrap::pointChanged, this, &cwScrapManager::updateScrapPoints);
-    disconnect(scrap, &cwScrap::pointsReset, this, &cwScrapManager::regenerateScrapGeometry);
+    disconnect(scrap, &cwScrap::pointsReset, this, nullptr);
     disconnect(scrap, &cwScrap::stationAdded, this, &cwScrapManager::updateExistingScrapGeometry);
     disconnect(scrap, &cwScrap::stationPositionChanged, this, &cwScrapManager::updateScrapStations);
     disconnect(scrap, &cwScrap::stationRemoved, this, &cwScrapManager::updateScrapStation);
@@ -355,7 +359,8 @@ void cwScrapManager::disconnectScrap(cwScrap* scrap)
     disconnect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     disconnect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     disconnect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
-    disconnect(scrap, &cwScrap::viewMatrixChanged, this, &cwScrapManager::regenerateScrapGeometry);
+    disconnect(scrap, &cwScrap::viewMatrixChanged, this, nullptr);
+    disconnect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged, this, nullptr);
 }
 
 /**
@@ -556,9 +561,8 @@ void cwScrapManager::scrapRemoved(int begin, int end) {
  * This will cause the sender (a cwScrap*) to regenerate the texture and geometry for the
  * scrap.
  */
-void cwScrapManager::regenerateScrapGeometry()
+void cwScrapManager::regenerateScrapGeometry(cwScrap* scrap)
 {
-    cwScrap* scrap = static_cast<cwScrap*>(sender());
     regenerateScrapGeometryHelper(scrap);
 }
 

@@ -138,7 +138,7 @@ message Scrap {
     optional TriangulatedData triangleData = 5;
     repeated Lead leads = 6;
     optional ScrapType type = 7;
-    optional ProjectedProfileViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
+    optional ProjectedProfileScrapViewMatrix profileViewMatrix = 8; //Only used if type == ProjectedProfile
 }
 
 message TriangulatedData {
@@ -225,6 +225,6 @@ message SurveyNetwork {
     }
 }
 
-message ProjectedProfileViewMatrix {
-    optional double Azimuth = 1;
+message ProjectedProfileScrapViewMatrix {
+    optional double azimuth = 1;
 }

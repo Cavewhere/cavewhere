@@ -25,7 +25,7 @@ QQ.Item {
     //This function is useful for Binding in the combobox. The combobox
     //doesn't update correctly if bound to just scrapType
     function currentScrapType() {
-        return scrap ? scrap.viewMatrix.type : -1
+        return scrap ? scrap.type : -1
     }
 
     visible: noteTransform !== null
@@ -64,7 +64,7 @@ QQ.Item {
                     implicitWidth: 175
                     model: scrap ? scrap.types : null
                     onCurrentIndexChanged: if(scrap) {
-                                               scrap.viewMatrix.type = currentIndex;
+                                               scrap.type = currentIndex;
                                            }
 
                     Binding {
@@ -106,12 +106,12 @@ QQ.Item {
                         Layout.fillWidth: true
                         text: {
                             switch(scrapType) {
-                            case ScrapViewMatrix.Plan:
+                            case Scrap.Plan:
                                 return "You can set the direction of <b>north</b> relative to page for a scrap.
                                 Setting this incorrectly may cause warping issues."
-                            case ScrapViewMatrix.RunningProfile:
+                            case Scrap.RunningProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
-                            case ScrapViewMatrix.ProjectProfile:
+                            case Scrap.ProjectProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
                                     return "Error..."
@@ -135,7 +135,7 @@ QQ.Item {
 
                     RowLayout {
                         id: azimuthInput
-                        visible: upInputId.scrapType == ScrapViewMatrix.ProjectedProfile
+                        visible: upInputId.scrapType == Scrap.ProjectedProfile
                         LabelWithHelp {
                             id: azimuthLabelId
                             text: "Azimuth"

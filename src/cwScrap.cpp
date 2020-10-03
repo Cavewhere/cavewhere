@@ -32,7 +32,8 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    ViewMatrix(),
+    Type(Plan),
+    ViewMatrix(new cwPlanScrapViewMatrix(this)),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false)
@@ -44,7 +45,6 @@ cwScrap::cwScrap(const cwScrap& other)
     : QObject(nullptr),
       NoteTransformation(new cwNoteTranformation(this)),
       CalculateNoteTransform(false),
-      ViewMatrix(),
       ParentNote(nullptr),
       ParentCave(nullptr),
       TriangulationDataDirty(false)
@@ -1174,7 +1174,9 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    ViewMatrix = std::unique_ptr<cwAbstractScrapViewMatrix>(other.ViewMatrix->clone());
+    Type = other.Type;
+    ViewMatrix = other.ViewMatrix->clone();
+    ViewMatrix->setParent(this);
 
     emit stationsReset();
 
@@ -1264,15 +1266,17 @@ void cwScrap::setType(ScrapType type) {
         Type = type;
         emit typeChanged();
 
+        ViewMatrix->deleteLater();
+
         switch(Type) {
         case Plan:
-            ViewMatrix = std::make_unique<cwPlanScrapViewMatrix>();
+            ViewMatrix = new cwPlanScrapViewMatrix(this);
             break;
         case RunningProfile:
-            ViewMatrix = std::make_unique<cwRunningProfileScrapViewMatrix>();
+            ViewMatrix = new cwRunningProfileScrapViewMatrix(this);
             break;
         case ProjectedProfile:
-            ViewMatrix = std::make_unique<cwProjectedProfileScrapViewMatrix>();
+            ViewMatrix = new cwProjectedProfileScrapViewMatrix(this);
             break;
         }
 

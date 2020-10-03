@@ -46,6 +46,9 @@ public:
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
 
+    void setType(cwScrap::ScrapType type);
+    cwScrap::ScrapType type() const;
+
     cwAbstractScrapViewMatrix::Data* viewMatrix() const;
     void setViewMatrix(cwAbstractScrapViewMatrix::Data* view);
 

@@ -210,7 +210,7 @@ private:
 
     //The type of scrap
     ScrapType Type = Plan;
-    std::unique_ptr<cwAbstractScrapViewMatrix> ViewMatrix;
+    cwAbstractScrapViewMatrix* ViewMatrix;
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -333,9 +333,9 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
-cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
+inline cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
 {
-    return ViewMatrix.get();
+    return ViewMatrix;
 }
 
 /**

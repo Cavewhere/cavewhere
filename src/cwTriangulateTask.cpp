@@ -642,7 +642,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
       */
     auto sortScrapStations = [&scrapData]() {
         QList<cwTriangulateStation> stations = scrapData.stations();
-        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
+        if(scrapData.type() == cwScrap::RunningProfile) {
             //This assumes that up on the page is up for the scrap
             auto profileCompare = [&scrapData](const cwTriangulateStation& left, const cwTriangulateStation& right)->bool {
                 QMatrix4x4 rotation = scrapData.noteTransform().matrix();
@@ -669,7 +669,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
      */
     auto findStationsToUseForMorphing = [&scrapData](QList<cwTriangulateStation> stations, QVector3D notePoint)->QList<cwTriangulateStation>
     {
-        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
+        if(scrapData.type() == cwScrap::RunningProfile) {
 
             //Need to have a least two stations
             if(stations.size() < 2) {
@@ -724,7 +724,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
      */
     auto calculateViewMatrix = [&scrapData](const QList<cwTriangulateStation>& stations) {
 
-        if(scrapData.viewMatrix().type() == cwScrapViewMatrix::RunningProfile) {
+        if(scrapData.type() == cwScrap::RunningProfile) {
             //Calculate the rotation matrix for the profile for this point (could be looked up)
             if(stations.size() < 2) {
                 return QMatrix4x4();
@@ -746,7 +746,7 @@ QVector<QVector3D> cwTriangulateTask::morphPoints(const QVector<QVector3D>& note
 
             return viewMatrix;
         }
-        return scrapData.viewMatrix().matrix();
+        return scrapData.viewMatrix()->matrix();
     };
 
 

@@ -143,6 +143,16 @@ void cwTriangulateInData::setNoteImageResolution(double dotsPerMeter)
     data->DotPerMeter = dotsPerMeter;
 }
 
+void cwTriangulateInData::setType(cwScrap::ScrapType type)
+{
+    data->Type = type;
+}
+
+cwScrap::ScrapType cwTriangulateInData::type() const
+{
+    return data->Type;
+}
+
 cwAbstractScrapViewMatrix::Data* cwTriangulateInData::viewMatrix() const
 {
     return data->ViewMatrix.get();

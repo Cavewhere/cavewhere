@@ -31,7 +31,7 @@
 #include "cwDebug.h"
 #include "cwSQLManager.h"
 #include "cavewhereVersion.h"
-#include "cwScrapViewMatrix.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -290,7 +290,9 @@ void cwRegionSaveTask::saveScrap(CavewhereProto::Scrap *protoScrap, cwScrap *scr
     saveNoteTranformation(protoScrap->mutable_notetransformation(), scrap->noteTransformation());
     protoScrap->set_calculatenotetransform(scrap->calculateNoteTransform());
     saveTriangulatedData(protoScrap->mutable_triangledata(), scrap->triangulationData());
-    saveScrapViewMatrix(protoScrap->mutable_scrapviewmatrix(), scrap->viewMatrix());
+    if(scrap->type() == cwScrap::ProjectedProfile) {
+        saveProjectedScrapViewMatrix(protoScrap->mutable_profileviewmatrix(), static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
+    }
 }
 
 /**
@@ -570,8 +572,8 @@ void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSur
     }
 }
 
-void cwRegionSaveTask::saveScrapViewMatrix(CavewhereProto::ScrapViewMatrix *protoScrapViewMatrix, const cwScrapViewMatrix &viewMatrix)
+void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix *protoViewMatrix, cwProjectedProfileScrapViewMatrix *viewMatrix)
 {
-    protoScrapViewMatrix->set_type(static_cast<CavewhereProto::ScrapViewMatrix::ScrapType>(viewMatrix.type()));
-    protoScrapViewMatrix->set_azimuth(viewMatrix.azimuth());
+    protoViewMatrix->set_azimuth(viewMatrix->azimuth());
 }
+

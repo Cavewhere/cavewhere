@@ -118,7 +118,7 @@ private slots:
     void scrapInserted(int begin, int end);
     void scrapRemoved(int begin, int end);
 
-    void regenerateScrapGeometry(); //This is called by cwScrap
+    void regenerateScrapGeometry(cwScrap* scrap);
     void updateScrapPoints(int begin, int end);  //This is called by cwScrap
     void removeScrapPoints(int begin, int end);
 
