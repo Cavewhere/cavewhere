@@ -17,10 +17,19 @@
 #include "cwSurveyNoteModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwImageProvider.h"
+#include "cwTripCalibration.h"
+#include "cwReadingStates.h"
+#include "cwTeam.h"
+#include "cwSurveyNoteModel.h"
+#include "cwNote.h"
+#include "cwScrap.h"
+#include "cwRunningProfileScrapViewMatrix.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //std includes
 #include <memory>
 #include <iostream>
+#include <optional>
 
 //Qt includes
 #include <QUuid>
@@ -219,3 +228,240 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     root->taskManagerModel()->waitForTasks();
     root->futureManagerModel()->waitForFinished();
 }
+
+TEST_CASE("Save and load should work correctly for Projected Profile v3->v4", "[ProtoSaveLoad]") {
+
+    auto fileCheck = [](QString filename, auto scrapCheckFunc) {
+        auto root = std::make_unique<cwRootData>();
+
+        auto isResourceFile = [](QString filename){
+            return filename.indexOf("://") == 0;
+        };
+
+        if(isResourceFile(filename)) {
+            fileToProject(root->project(), filename);
+        } else {
+            root->project()->loadFile(filename);
+            root->project()->waitLoadToFinish();
+        }
+
+        auto errorModel = root->project()->errorModel();
+        REQUIRE(errorModel->size() == 0);
+
+        //Test that it loades correctly, 6 stations, has noteStations, has polygon
+        //and in running profile mode with running profile, with auto
+        REQUIRE(root->project()->cavingRegion()->caveCount() == 1);
+        auto cave = root->project()->cavingRegion()->cave(0);
+        CHECK(cave->name().toStdString() == "My Cave");
+
+        REQUIRE(cave->tripCount() == 1);
+        auto trip = cave->trip(0);
+        CHECK(trip->name().toStdString() == "Best Trip");
+
+        auto calibration = trip->calibrations();
+        CHECK(calibration->declination() == 1.0);
+        CHECK(calibration->distanceUnit() == cwUnits::Meters);
+        CHECK(calibration->tapeCalibration() == 0.03);
+
+        CHECK(calibration->hasFrontSights() == true);
+        CHECK(calibration->frontCompassCalibration() == 0.01);
+        CHECK(calibration->frontClinoCalibration() == 0.02);
+        CHECK(calibration->hasCorrectedCompassFrontsight() == false);
+        CHECK(calibration->hasCorrectedClinoFrontsight() == false);
+
+        CHECK(calibration->hasBackSights() == true);
+        CHECK(calibration->backCompassCalibration() == -0.01);
+        CHECK(calibration->backClinoCalibration() == -0.02);
+        CHECK(calibration->hasCorrectedCompassBacksight() == true);
+        CHECK(calibration->hasCorrectedClinoBacksight() == true);
+
+        REQUIRE(trip->chunkCount() == 1);
+        auto chunk = trip->chunk(0);
+
+        struct Station {
+            QString stationName;
+            std::optional<double> left;
+            std::optional<double> right;
+            std::optional<double> up;
+            std::optional<double> down;
+        };
+
+        QList<Station> stations {
+            {"a1", 1, 2, 3, 4},
+            {"a2", {},{},{},{}},
+            {"a3", {},{},{},{}},
+            {"a4", {},{},{},{}},
+            {"a5", {},{},{},{}},
+            {"a6", {},{},{},{}}
+        };
+
+        REQUIRE(chunk->stationCount() == stations.size());
+
+        auto checkStation = [=](int stationIndex) {
+            auto chunkStation = chunk->station(stationIndex);
+            auto station = stations.at(stationIndex);
+            CHECK(chunkStation.name().toStdString() == station.stationName.toStdString());
+
+            auto checkLRUD = [](auto stateFunc, auto valueFunc, std::optional<double> checkValue) {
+                if(checkValue.has_value()) {
+                    CHECK(stateFunc() == cwDistanceStates::Valid);
+                    CHECK(valueFunc() == checkValue.value());
+                } else {
+                    CHECK(stateFunc() == cwDistanceStates::Empty);
+                }
+            };
+
+            checkLRUD([chunkStation]() { return chunkStation.leftInputState();},
+            [chunkStation]() { return chunkStation.left(); },
+            station.left
+            );
+            checkLRUD([chunkStation]() { return chunkStation.rightInputState();},
+            [chunkStation]() { return chunkStation.right(); },
+            station.right
+            );
+            checkLRUD([chunkStation]() { return chunkStation.upInputState();},
+            [chunkStation]() { return chunkStation.up(); },
+            station.up
+            );
+            checkLRUD([chunkStation]() { return chunkStation.downInputState();},
+            [chunkStation]() { return chunkStation.down(); },
+            station.down
+            );
+        };
+
+        struct Clino {
+
+            enum Type {
+                Up,
+                Down,
+                Value
+            };
+
+            Type type;
+            std::optional<double> value;
+        };
+
+        struct Shot {
+            double distance;
+            std::optional<double> compass;
+            std::optional<double> backCompass;
+            Clino clino;
+            Clino backClino;
+        };
+
+        QList<Shot> shots {
+            { 10, {}, {}, {Clino::Down, {}}, {Clino::Up, {}}},
+            { 7.3, 50, 50.1, {Clino::Value, {-75}}, {Clino::Value, {-74}}},
+            { 4, 220, 219, {Clino::Value, {10}}, {Clino::Value, {11}}},
+            { 6, 46, 46.2, {Clino::Value, {-85}}, {Clino::Value, {-84.5}}},
+            { 21.5, 35, 34, {Clino::Value, {-78}}, {Clino::Value, {-77}}}
+        };
+
+        REQUIRE(chunk->shotCount() == shots.size());
+
+        auto checkShot = [=](int shotIndex) {
+            auto chunkShot = chunk->shot(shotIndex);
+            auto shot = shots .at(shotIndex);
+            CHECK(chunkShot.distance() == shot.distance);
+            if(shot.compass.has_value()) {
+                CHECK(chunkShot.compassState() == cwCompassStates::Valid);
+                CHECK(shot.compass == chunkShot.compass());
+            } else {
+                CHECK(chunkShot.compassState() == cwCompassStates::Empty);
+            }
+
+            if(shot.backCompass.has_value()) {
+                CHECK(chunkShot.backCompassState() == cwCompassStates::Valid);
+                CHECK(shot.backCompass == chunkShot.backCompass());
+            } else {
+                CHECK(chunkShot.backCompassState() == cwCompassStates::Empty);
+            }
+
+            auto checkClino = [](Clino clino, auto clinoStateFunc, auto clinoValueFunc) {
+                switch(clino.type) {
+                case Clino::Up:
+                    CHECK(clinoStateFunc() == cwClinoStates::Up);
+                    break;
+                case Clino::Down:
+                    CHECK(clinoStateFunc() == cwClinoStates::Down);
+                    break;
+                case Clino::Value:
+                    CHECK(clinoStateFunc() == cwClinoStates::Valid);
+                    CHECK(clinoValueFunc() == clino.value.value());
+                    break;
+                }
+            };
+
+            INFO("Front Clino");
+            checkClino(shot.clino,
+                       [chunkShot]() { return chunkShot.clinoState(); },
+            [chunkShot]() { return chunkShot.clino(); }
+            );
+
+            INFO("Back clino");
+            checkClino(shot.backClino,
+                       [chunkShot]() { return chunkShot.backClinoState(); },
+            [chunkShot]() { return chunkShot.backClino(); }
+            );
+
+        };
+
+        for(int i = 0; i < chunk->shotCount(); i++) {
+            INFO("Shot i:" << i);
+            checkShot(i);
+        }
+
+        REQUIRE(trip->team()->teamMembers().size() == 1);
+        CHECK(trip->team()->teamMembers().at(0).name().toStdString() == "Sauce Man");
+        CHECK(trip->team()->teamMembers().at(0).jobs() == QStringList({"Super", "Duper"}));
+
+        REQUIRE(trip->notes()->notes().size() == 1);
+        auto note = trip->notes()->notes().at(0);
+
+        REQUIRE(note->scraps().size() == 1);
+        auto scrap = note->scraps().at(0);
+        scrapCheckFunc(scrap);
+
+        root->taskManagerModel()->waitForTasks();
+        root->futureManagerModel()->waitForFinished();
+
+        root->project()->save();
+        root->futureManagerModel()->waitForFinished();
+
+        CHECK(root->project()->canSaveDirectly() == true);
+
+        return root->project()->filename();
+    };
+
+    auto originalScrapCheck = [](cwScrap* scrap) {
+        CHECK(scrap->type() == cwScrap::RunningProfile);
+        CHECK(dynamic_cast<cwRunningProfileScrapViewMatrix*>(scrap->viewMatrix()) != nullptr);
+        CHECK(scrap->stations().size() == 6);
+        CHECK(scrap->polygon().size() > 0);
+
+        scrap->setType(cwScrap::ProjectedProfile);
+        CHECK(scrap->type() == cwScrap::ProjectedProfile);
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()) != nullptr);
+
+        cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+        profileView->setAzimuth(135);
+
+        CHECK(profileView->azimuth() == 135);
+    };
+
+    auto profileCheck = [](cwScrap* scrap) {
+        CHECK(scrap->type() == cwScrap::ProjectedProfile);
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()) != nullptr);
+        CHECK(scrap->stations().size() == 6);
+        CHECK(scrap->polygon().size() > 0);
+
+        cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+        CHECK(profileView->azimuth() == 135);
+    };
+
+    auto newFilename = fileCheck("://datasets/test_ProtoBufferSaveLoad/ProjectProfile-test-v3.cw", originalScrapCheck);
+
+    fileCheck(newFilename, profileCheck);
+}
+
+
