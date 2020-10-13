@@ -2,7 +2,8 @@
 #define CWABSTRACTSCRAPVIEWMATRIX_H
 
 //Our includes
-#include <cwGlobals.h>
+#include "cwGlobals.h"
+#include "cwScrap.h"
 
 //Qt includes
 #include <QObject>
@@ -13,6 +14,7 @@ class CAVEWHERE_LIB_EXPORT cwAbstractScrapViewMatrix : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged)
+    Q_PROPERTY(cwScrap::ScrapType type READ type CONSTANT)
 
 public:
     class Data {
@@ -20,6 +22,7 @@ public:
         Data() = default;
         virtual QMatrix4x4 matrix() const = 0;
         virtual Data* clone() const = 0;
+        virtual cwScrap::ScrapType type() const = 0;
     };
 
     cwAbstractScrapViewMatrix(QObject* parent = nullptr) :
@@ -37,6 +40,10 @@ public:
     }
 
     virtual cwAbstractScrapViewMatrix* clone() const = 0;
+
+    cwScrap::ScrapType type() const {
+        return m_data->type();
+    }
 
 signals:
     void matrixChanged();

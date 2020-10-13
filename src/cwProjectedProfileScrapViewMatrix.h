@@ -14,12 +14,7 @@ class CAVEWHERE_LIB_EXPORT cwProjectedProfileScrapViewMatrix : public cwAbstract
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
 
 public:
-    cwProjectedProfileScrapViewMatrix(QObject* parent = nullptr);
-
-    double azimuth() const;
-    void setAzimuth(double azimuth);
-
-    class Data : public cwAbstractScrapViewMatrix::Data {
+    class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
     public:
         Data(double azimuth) :
             Azimuth(azimuth)
@@ -33,14 +28,19 @@ public:
         // Data interface
         QMatrix4x4 matrix() const;
         Data *clone() const;
+        cwScrap::ScrapType type() const;
 
     protected:
         Data(const Data& other) = default;
 
     private:
         double Azimuth = 0.0; //!<
-
     };
+
+    cwProjectedProfileScrapViewMatrix(QObject* parent = nullptr);
+
+    double azimuth() const;
+    void setAzimuth(double azimuth);
 
     const cwProjectedProfileScrapViewMatrix::Data *data() const
     {

@@ -32,7 +32,6 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    Type(Plan),
     ViewMatrix(new cwPlanScrapViewMatrix(this)),
     ParentNote(nullptr),
     ParentCave(nullptr),
@@ -624,7 +623,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
             QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
             QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
 
-            QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
+            QMatrix4x4 toProfile = cwRunningProfileScrapViewMatrix::Data(station1RealPos, station2RealPos).matrix();
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
             double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::radiansToDegrees();
@@ -914,7 +913,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
         QMatrix4x4 worldToProfileNoteMatrix;
 
         //Rotate into a profile
-        QMatrix4x4 profileRotation = toProfileRotation(prevStationPos, stationPosition);
+        QMatrix4x4 profileRotation = cwRunningProfileScrapViewMatrix::Data(prevStationPos, stationPosition).matrix();
 
         //Mirror right to left, left to right, running profile can be drawn either way
         for(int i = 0; i < 2; i++) {
@@ -967,20 +966,11 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     if(parentNote()->parentTrip() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QMatrix4x4(); }
 
-//    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
-//    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
-
-    //The position of the selected station
-//    QVector3D stationPos = stationLookup.position(referenceStation.name());
-
     //Create the matrix to covert global position into note position
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
     noteTransformMatrix = noteTransformMatrix.inverted(); //From cave coordinates to page coordinates
 
     QMatrix4x4 dotsOnPageMatrix = parentNote()->metersOnPageMatrix().inverted();
-
-//    QMatrix4x4 offsetMatrix;
-//    offsetMatrix.translate(-stationPos);
 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
@@ -988,7 +978,6 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     QMatrix4x4 toNormalizedNote = noteStationOffset *
             dotsOnPageMatrix *
             noteTransformMatrix;
-//            offsetMatrix;
 
     return toNormalizedNote;
 }
@@ -1006,18 +995,11 @@ void cwScrap::setParentNote(cwNote* note) {
 
         if(ParentNote != nullptr) {
             ParentCave = parentNote()->parentCave();
-            //            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
-
-        //        updateStationsWithNewCave();
     }
 }
 
-//void cwScrap::updateStationsWithNewCave() {
-//    for(int i = 0; i < Stations.size(); i++) {
-//        Stations[i].setCave(parentCave());
-//    }
-//}
+
 
 /**
   Clamps the point within the scrap
@@ -1174,7 +1156,6 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    Type = other.Type;
     ViewMatrix = other.ViewMatrix->clone();
     ViewMatrix->setParent(this);
 
@@ -1223,36 +1204,6 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
     leadsDataChanged(0, leads().size() - 1, roles);
 }
 
-/**
- * @brief cwTriangulateTask::profileViewRotation
- * @param fromStationPos
- * @param toStationPos
- * @return This returns the rotation matrix that will rotate the view from fromStationPos to toStationPos
- * in a profile view. This will remove the azimuth from the shot between fromStationPos and toStationPos.
- * It will also show the pitch of the shot.
- */
-QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos)
-{
-    //Calculate the compass and clino from the shot
-    QVector3D shotDirection = toStationPos - fromStationPos; //stations.last().position() - stations.first().position();
-    QVector3D yAxis(0.0, 1.0, 0.0);
-    QVector3D eulerAngles = QQuaternion::rotationTo(yAxis, shotDirection.normalized()).toEulerAngles();
-
-    //Rotate the profile view
-    QQuaternion profilePitch = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0);
-
-    //Profile aligned with the compass direction
-    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, -eulerAngles.z() - 90.0);
-
-    //Combine the rotation to create the shot's profile view rotation
-    QQuaternion profileQuat = profilePitch * profileYaw;
-
-    QMatrix4x4 viewRotationMatrix;
-    viewRotationMatrix.rotate(profileQuat);
-
-    return viewRotationMatrix;
-}
-
 void cwScrap::updateImage()
 {
     emit pointsReset();
@@ -1262,13 +1213,11 @@ void cwScrap::updateImage()
 * Sets the scrap type on how it's going to be projected
 */
 void cwScrap::setType(ScrapType type) {
-    if(Type != type) {
-        Type = type;
-        emit typeChanged();
+    if(this->type() != type) {
 
         ViewMatrix->deleteLater();
 
-        switch(Type) {
+        switch(type) {
         case Plan:
             ViewMatrix = new cwPlanScrapViewMatrix(this);
             break;
@@ -1280,10 +1229,17 @@ void cwScrap::setType(ScrapType type) {
             break;
         }
 
+        Q_ASSERT(this->type() == type);
+
+        emit typeChanged();
         emit viewMatrixChanged();
     }
 }
 
 QStringList cwScrap::types() const {
     return {"Plan", "Running Profile", "Project Profile"};
+}
+
+cwScrap::ScrapType cwScrap::type() const {
+    return viewMatrix()->type();
 }

@@ -10,7 +10,7 @@ class CAVEWHERE_LIB_EXPORT cwRunningProfileScrapViewMatrix : public cwAbstractSc
 public:
     cwRunningProfileScrapViewMatrix(QObject* parent = nullptr);
 
-    class Data : public cwAbstractScrapViewMatrix::Data {
+    class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
     public:
         Data() = default;
         Data(QVector3D from, QVector3D to) :
@@ -23,6 +23,7 @@ public:
 
         QMatrix4x4 matrix() const;
         Data *clone() const;
+        cwScrap::ScrapType type() const;
 
     private:
         QVector3D From;
@@ -37,6 +38,7 @@ public:
     }
 
     cwRunningProfileScrapViewMatrix *clone() const;
+
 
 protected:
     cwRunningProfileScrapViewMatrix(const cwRunningProfileScrapViewMatrix& other);

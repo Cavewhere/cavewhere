@@ -44,7 +44,7 @@ QMatrix4x4 cwProjectedProfileScrapViewMatrix::Data::matrix() const
     QQuaternion profilePitch = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0);
 
     //Profile aligned with the compass direction
-    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, azimuth() - 90.0);
+    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, azimuth());
 
     //Combine the rotation to create the shot's profile view rotation
     QQuaternion profileQuat = profilePitch * profileYaw;
@@ -58,5 +58,10 @@ QMatrix4x4 cwProjectedProfileScrapViewMatrix::Data::matrix() const
 cwProjectedProfileScrapViewMatrix::Data *cwProjectedProfileScrapViewMatrix::Data::clone() const
 {
     return new cwProjectedProfileScrapViewMatrix::Data(*this);
+}
+
+cwScrap::ScrapType cwProjectedProfileScrapViewMatrix::Data::type() const
+{
+    return cwScrap::ProjectedProfile;
 }
 

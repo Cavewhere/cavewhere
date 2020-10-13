@@ -20,3 +20,8 @@ cwPlanScrapViewMatrix::Data *cwPlanScrapViewMatrix::Data::clone() const
 {
     return new cwPlanScrapViewMatrix::Data();
 }
+
+cwScrap::ScrapType cwPlanScrapViewMatrix::Data::type() const
+{
+    return cwScrap::Plan;
+}

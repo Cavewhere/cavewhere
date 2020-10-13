@@ -11,12 +11,13 @@ class CAVEWHERE_LIB_EXPORT cwPlanScrapViewMatrix : public cwAbstractScrapViewMat
 {
     Q_OBJECT
 public:
-    class Data : public cwAbstractScrapViewMatrix::Data {
+    class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
 
     public:
         Data() = default;
         QMatrix4x4 matrix() const;
         Data *clone() const;
+        cwScrap::ScrapType type() const;
     };
 
     cwPlanScrapViewMatrix(QObject* parent = nullptr);

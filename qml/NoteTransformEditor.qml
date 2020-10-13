@@ -146,6 +146,7 @@ QQ.Item {
                             id: azimuthTextInputId
                             text: scrap.viewMatrix.azimuth
                             onFinishedEditting: {
+                                console.log("Setting azimuth!" + newText)
                                 scrap.viewMatrix.azimuth = newText
                             }
                         }

@@ -21,8 +21,7 @@
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
 #include "cwStation.h"
-#include "cwScrapViewMatrix.h"
-#include "cwAbstractScrapViewMatrix.h"
+class cwAbstractScrapViewMatrix;
 class cwNote;
 class cwCave;
 
@@ -125,7 +124,7 @@ public:
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
 
-    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
+//    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
 
     void updateImage();
 
@@ -209,7 +208,6 @@ private:
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
     //The type of scrap
-    ScrapType Type = Plan;
     cwAbstractScrapViewMatrix* ViewMatrix;
 
     //The parent trip, this is for referencing the stations
@@ -348,8 +346,6 @@ inline cwTriangulatedData cwScrap::triangulationData() const {
 /**
 *
 */
-inline cwScrap::ScrapType cwScrap::type() const {
-    return Type;
-}
+
 
 #endif // CWSCRAP_H

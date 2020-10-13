@@ -101,3 +101,11 @@ QString prependTempFolder(QString filename)
 {
     return QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + filename;
 }
+
+void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta)
+{
+    INFO(v1 << "==" << v2);
+    CHECK(v1.x() == Approx(v2.x()).margin(delta));
+    CHECK(v1.y() == Approx(v2.y()).margin(delta));
+    CHECK(v1.z() == Approx(v2.z()).margin(delta));
+}

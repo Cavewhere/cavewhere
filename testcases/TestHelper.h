@@ -111,6 +111,8 @@ QVector3D roundToDecimal(QVector3D v, int decimals);
 
 void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2);
 
+void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta = 0.000001);
+
 /**
  * @brief checkStationLookup
  * @param lookup1

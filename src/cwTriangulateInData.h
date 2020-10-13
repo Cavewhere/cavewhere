@@ -18,7 +18,6 @@
 #include "cwNoteTranformation.h"
 #include "cwLead.h"
 #include "cwScrap.h"
-#include "cwScrapViewMatrix.h"
 #include "cwAbstractScrapViewMatrix.h"
 
 class cwTriangulatePrivateData;
@@ -45,9 +44,6 @@ public:
 
     double noteImageResolution() const;
     void setNoteImageResolution(double dotsPerMeter);
-
-    void setType(cwScrap::ScrapType type);
-    cwScrap::ScrapType type() const;
 
     cwAbstractScrapViewMatrix::Data* viewMatrix() const;
     void setViewMatrix(cwAbstractScrapViewMatrix::Data* view);
