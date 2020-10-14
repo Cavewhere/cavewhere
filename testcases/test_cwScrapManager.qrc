@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>datasets/test_cwScrapManager/scrapGuessNeigborPlan.cw</file>
         <file>datasets/test_cwScrapManager/ignoreInvalidScrap.cw</file>
+        <file>datasets/test_cwScrapManager/ProjectProfile-test-v3.cw</file>
     </qresource>
 </RCC>

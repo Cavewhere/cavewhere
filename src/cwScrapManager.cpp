@@ -324,15 +324,23 @@ void cwScrapManager::connectScrap(cwScrap* scrap) {
     connect(scrap, &cwScrap::leadsInserted, this, &cwScrapManager::scrapLeadInserted);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwScrapManager::scrapLeadRemoved);
     connect(scrap, &cwScrap::leadsDataChanged, this, &cwScrapManager::scrapLeadUpdated);
-    connect(scrap, &cwScrap::viewMatrixChanged, this, [this, scrap]()
-    {
-        qDebug() << "Martix changed:" << scrap->viewMatrix();
-        connect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged, this, [this, scrap]() {
-            qDebug() << "ViewMatrix changed:" << scrap->viewMatrix()->matrix();
+
+    auto connectViewMatrix = [scrap, this]() {
+        connect(scrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged,
+                this, [this, scrap]()
+        {
             regenerateScrapGeometry(scrap);
         });
+    };
+
+    connect(scrap, &cwScrap::viewMatrixChanged,
+            this, [this, scrap, connectViewMatrix]()
+    {
+        connectViewMatrix();
         regenerateScrapGeometry(scrap);
     });
+
+    connectViewMatrix();
 }
 
 /**
