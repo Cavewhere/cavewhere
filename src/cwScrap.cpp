@@ -456,18 +456,13 @@ void cwScrap::updateNoteTransformation() {
         };
         break;
     case Plan:
+    case ProjectedProfile:
         averageFunc = [this](auto list)
         {
             return planAverageTransform(list);
         };
         break;
-    case ProjectedProfile:
-        qDebug() << "Profile note transform hasn't been implement yet" << LOCATION;
-        averageFunc = [this](auto list) {
-            return cwNoteTranformation();
-        };
-        break;
-    };
+    }
 
     //Do the calculations
     cwNoteTranformation averageTransformation = averageFunc(shotStations);
@@ -565,15 +560,16 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
     //Remove the z for plan view
     switch(type()) {
+    case ProjectedProfile:
+        //Rotate into the correct view
+        station1RealPos = viewMatrix()->matrix().map(station1RealPos);
+        station2RealPos = viewMatrix()->matrix().map(station2RealPos);
     case Plan:
         station1RealPos.setZ(0.0);
         station2RealPos.setZ(0.0);
         break;
     case RunningProfile:
         //Keep the full point, because running profile keeps the full length
-        break;
-    case ProjectedProfile:
-        qDebug() << "Implement me!" << LOCATION;
         break;
     }
 
@@ -604,7 +600,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     /**
       Calculates the shot transform in plan view between station1 and station2
       */
-    auto planCalcTransformation = [&]()->ScrapShotTransform {
+    auto projectedCalcTransformation = [&]()->ScrapShotTransform {
             QVector3D zeroVector(0.0, 1.0, 0.0);
             double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::radiansToDegrees();
             QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
@@ -619,7 +615,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     /**
       Calculates the shot transform in running profile view between station1 and station2
       */
-    auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
+    auto runningProfileCalcTrasnformation = [&]()->ScrapShotTransform {
             QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
             QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
 
@@ -640,12 +636,10 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
     switch(type()) {
     case Plan:
-        return planCalcTransformation();
-    case RunningProfile:
-        return profileCalcTrasnformation();
     case ProjectedProfile:
-        qDebug() << "Implement me scrapshottransform" << LOCATION;
-        return ScrapShotTransform();
+        return projectedCalcTransformation();
+    case RunningProfile:
+        return runningProfileCalcTrasnformation();
     }
     return ScrapShotTransform();
 }
@@ -902,14 +896,14 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     /**
       Calculates the error in plan mode
       */
-    auto calcErrorForPlan = [&calcErrorUsingMatrix, worldToNoteMatrix, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+    auto calcErrorForProjected = [&calcErrorUsingMatrix, worldToNoteMatrix, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
         calcErrorUsingMatrix(stationName, stationPosition, worldToNoteMatrix * offsetMatrix);
     };
 
     /**
       Calculates the error for running profile mode
       */
-    auto calcErrorForProfile = [&calcErrorUsingMatrix, worldToNoteMatrix, prevStationPos, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+    auto calcErrorForRunningProfile = [&calcErrorUsingMatrix, worldToNoteMatrix, prevStationPos, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
         QMatrix4x4 worldToProfileNoteMatrix;
 
         //Rotate into a profile
@@ -931,19 +925,14 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     //Figure out how we are going to calculate the error, choose the function pointer
     std::function<void (const QString&, QVector3D)> calcError;
     switch(type()) {
+    case ProjectedProfile: //This is currently broken
     case Plan:
-        calcError = calcErrorForPlan;
+        calcError = calcErrorForProjected;
         break;
     case RunningProfile:
-        calcError = calcErrorForProfile;
+        calcError = calcErrorForRunningProfile;
         break;
-    case ProjectedProfile:
-        qDebug() << "Scrap Error not implement" << LOCATION;
-        calcError = [](const QString&, QVector3D) {
-
-        };
     }
-
 
     //Calculate the error each station
     foreach(cwStation station, neigborStations) {
