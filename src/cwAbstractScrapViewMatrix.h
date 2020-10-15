@@ -20,6 +20,7 @@ public:
     class Data {
     public:
         Data() = default;
+        virtual ~Data() = default;
         virtual QMatrix4x4 matrix() const = 0;
         virtual Data* clone() const = 0;
         virtual cwScrap::ScrapType type() const = 0;
