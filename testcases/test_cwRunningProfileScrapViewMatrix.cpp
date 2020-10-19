@@ -10,8 +10,15 @@ TEST_CASE("Running profile scrap view matrix should produce the correct ViewMatr
     cwRunningProfileScrapViewMatrix matrix;
     CHECK(matrix.type() == cwScrap::RunningProfile);
     CHECK(matrix.data()->type() == cwScrap::RunningProfile);
+    CHECK(matrix.matrix() == QMatrix4x4());
 
     QVector3D origin;
+
+    INFO("Invalid")
+    cwRunningProfileScrapViewMatrix::Data invalid(QVector3D(1.0, 2.0, 3.0), QVector3D(1.0, 2.0, 3.0));
+    fuzzyCompareVector(invalid.from(), QVector3D(1.0, 2.0, 3.0));
+    fuzzyCompareVector(invalid.to(), QVector3D(1.0, 2.0, 3.0));
+    CHECK(invalid.matrix() == QMatrix4x4());
 
     //Make sure that matrix works correctly
     INFO("North");

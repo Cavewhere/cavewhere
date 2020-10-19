@@ -21,6 +21,14 @@ cwRunningProfileScrapViewMatrix::cwRunningProfileScrapViewMatrix(const cwRunning
 
 QMatrix4x4 cwRunningProfileScrapViewMatrix::Data::matrix() const
 {
+    if(!Valid) {
+        return QMatrix4x4();
+    }
+
+    if(to() == from()) {
+        return QMatrix4x4();
+    }
+
     //Calculate the compass and clino from the shot
     QVector3D shotDirection = to() - from();
     QVector3D yAxis(0.0, 1.0, 0.0);

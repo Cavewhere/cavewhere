@@ -14,6 +14,7 @@ public:
     public:
         Data() = default;
         Data(QVector3D from, QVector3D to) :
+            Valid(true),
             From(from),
             To(to)
         {}
@@ -26,6 +27,7 @@ public:
         cwScrap::ScrapType type() const;
 
     private:
+        bool Valid = false;
         QVector3D From;
         QVector3D To;
 

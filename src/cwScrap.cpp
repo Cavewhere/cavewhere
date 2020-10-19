@@ -925,7 +925,7 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     //Figure out how we are going to calculate the error, choose the function pointer
     std::function<void (const QString&, QVector3D)> calcError;
     switch(type()) {
-    case ProjectedProfile: //This is currently broken
+    case ProjectedProfile:
     case Plan:
         calcError = calcErrorForProjected;
         break;
@@ -949,6 +949,8 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
 /**
   This creates a QMatrix4x4 that can be used to transform a station's position in
   3D to normalize note coordinates
+
+  This function is only valid in plan and projected profiles
   */
 QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) const {
     if(parentNote() == nullptr) { return QMatrix4x4(); }
@@ -964,9 +966,10 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
-    QMatrix4x4 toNormalizedNote = noteStationOffset *
-            dotsOnPageMatrix *
-            noteTransformMatrix;
+    QMatrix4x4 toNormalizedNote = noteStationOffset
+            * dotsOnPageMatrix
+            * noteTransformMatrix
+            * viewMatrix()->matrix(); //Change the view passed on the projection
 
     return toNormalizedNote;
 }

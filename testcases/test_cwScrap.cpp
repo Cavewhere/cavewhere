@@ -245,11 +245,12 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     };
 
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw"));
+//    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlan.cw"));
+//    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborPlanContinuous.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
-    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw"));
+//    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
+//    rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw"));
+//    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw"));
 
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
@@ -272,11 +273,12 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
             INFO("Center station:" << noteStation.name().toStdString());
 
             foreach(cwStation neighbor, neighbors) {
+                INFO("Neighbor:" << neighbor.name().toStdString());
                 auto found = std::find_if(scrapStations.begin(), scrapStations.end(), [neighbor](const cwNoteStation& station) {
-                    return station.name() == neighbor.name();
+                    return station.name().compare(neighbor.name(), Qt::CaseInsensitive) == 0;
                 });
 
-                CHECK(found != scrapStations.end());
+                REQUIRE(found != scrapStations.end());
 
                 cwNoteStation neighborNoteStation = *found;
 
