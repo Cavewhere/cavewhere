@@ -41,6 +41,21 @@ QQ.Item {
     }
 
     Binding {
+        target: northInteraction
+        property: "upText"
+        value: {
+            switch(scrap.type) {
+            case Scrap.Plan:
+                return "north"
+            case Scrap.RunningProfile:
+                return "up"
+            case Scrap.ProjectedProfile:
+                return "up"
+            }
+        }
+    }
+
+    Binding {
         target: scaleInteraction
         property: "noteTransform"
         value: noteTransform
@@ -77,9 +92,15 @@ QQ.Item {
 
             HelpArea {
                 id: scrapTypeHelpId
-                text: "The scrap type designates how CaveWhere will interperate the scrap. A running
-                        profile will warp the scrap vertically along the centerline. Plan will warp
-                        the scrap in plan view"
+                text: "The scrap type designates how CaveWhere will interperate the scrap.<br>
+<ul>
+<li><b>Plan</b>: Projects the scrap on a plane aligned with the ground.</li>
+<li><b>Running Profile</b>: Creates a projected profile for each shot and wraps the scrap along each scrap.
+This projection is generally the best for <b>horizontal passage</b> with profiles because it will wrap around
+corners.</li>
+<li><b>Projected Profiles<\b>: Projects the scrap on vertial plane aligned azimuth settings. This projection
+is generally the best for <b>deep pits</b> where the profile is drawn on a single plane.<\\li><\\ul>"
+
                 width: columnLayoutId.width
             }
 
@@ -111,10 +132,10 @@ QQ.Item {
                                 Setting this incorrectly may cause warping issues."
                             case Scrap.RunningProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
-                            case Scrap.ProjectProfile:
+                            case Scrap.ProjectedProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
-                                    return "Error..."
+                                return "Error..."
                             }
                         }
                     }
@@ -146,7 +167,6 @@ QQ.Item {
                             id: azimuthTextInputId
                             text: scrap.viewMatrix.azimuth
                             onFinishedEditting: {
-                                console.log("Setting azimuth!" + newText)
                                 scrap.viewMatrix.azimuth = newText
                             }
                         }

@@ -32,6 +32,8 @@ QQ.Item {
                     return "qrc:/icons/north.png"
                 case Scrap.RunningProfile:
                     return "qrc:/icons/up.png"
+                case Scrap.ProjectedProfile:
+                    return "qrc:/icons/up.png"
                 default:
                     return "qrc:/icons/error.png"
                 }
@@ -48,6 +50,8 @@ QQ.Item {
                 case Scrap.Plan:
                     return "North"
                 case Scrap.RunningProfile:
+                    return "Up"
+                case Scrap.ProjectedProfile:
                     return "Up"
                 default:
                     return "Error"
