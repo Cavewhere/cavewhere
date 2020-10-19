@@ -24,12 +24,14 @@
 #include "cwTripCalibration.h"
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Our includes
 #include "TestHelper.h"
 
 //Qt includes
 #include <QtGlobal>
+#include <QSignalSpy>
 
 class TestRow {
 public:
@@ -220,6 +222,39 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
         root->futureManagerModel()->waitForFinished();
 
         INFO("Finished after plotManager!");
+        checkScrapTransform(currentScrap, row);
+
+        currentScrap->setCalculateNoteTransform(false);
+
+        //Force recalculation
+        INFO("Filename:" << row.Filename.toStdString());
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == true);
+        checkScrapTransform(currentScrap, row);
+    }
+}
+
+TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 24.07, 229.57, 0.05, 0.005));
+
+
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = firstScrap(project);
+        currentScrap->setCalculateNoteTransform(true);
+
+        QSignalSpy matrixChanged(currentScrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged);
+
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+        projectedViewMatix->setAzimuth(10.0);
+
+        CHECK(matrixChanged.size() == 1);
+
         checkScrapTransform(currentScrap, row);
 
         currentScrap->setCalculateNoteTransform(false);

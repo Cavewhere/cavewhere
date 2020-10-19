@@ -32,18 +32,21 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    ViewMatrix(new cwPlanScrapViewMatrix(this)),
+    ViewMatrix(nullptr),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false)
 {
     setCalculateNoteTransform(true);
+    setViewMatrix(new cwPlanScrapViewMatrix(this));
+
 }
 
 cwScrap::cwScrap(const cwScrap& other)
     : QObject(nullptr),
       NoteTransformation(new cwNoteTranformation(this)),
       CalculateNoteTransform(false),
+      ViewMatrix(nullptr),
       ParentNote(nullptr),
       ParentCave(nullptr),
       TriangulationDataDirty(false)
@@ -1148,8 +1151,8 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    ViewMatrix = other.ViewMatrix->clone();
-    ViewMatrix->setParent(this);
+
+    setViewMatrix(other.ViewMatrix->clone());
 
     emit stationsReset();
 
@@ -1172,7 +1175,32 @@ QStringList cwScrap::allNeighborStations(const QString &stationName) const
 //        QSet<cwStation> tripStations = trip->neighboringStations(stationName);
 //        neigborStations.unite(tripStations);
 //    }
-//    return neigborStations;
+    //    return neigborStations;
+}
+
+/**
+ * Connects the view matrix to update the note transform for the scrap
+ */
+void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
+{
+    if(ViewMatrix == viewMatrix) {
+        return;
+    }
+
+    if(ViewMatrix) {
+        ViewMatrix->deleteLater();
+    }
+
+    ViewMatrix = viewMatrix;
+
+    if(ViewMatrix) {
+        ViewMatrix->setParent(this);
+        connect(ViewMatrix, &cwAbstractScrapViewMatrix::matrixChanged,
+                this, &cwScrap::updateNoteTransformation);
+
+        emit typeChanged();
+        emit viewMatrixChanged();
+    }
 }
 
 /**
@@ -1206,25 +1234,21 @@ void cwScrap::updateImage()
 */
 void cwScrap::setType(ScrapType type) {
     if(this->type() != type) {
-
-        ViewMatrix->deleteLater();
+        cwAbstractScrapViewMatrix* newViewMatrix;
 
         switch(type) {
         case Plan:
-            ViewMatrix = new cwPlanScrapViewMatrix(this);
+            newViewMatrix = new cwPlanScrapViewMatrix(this);
             break;
         case RunningProfile:
-            ViewMatrix = new cwRunningProfileScrapViewMatrix(this);
+            newViewMatrix = new cwRunningProfileScrapViewMatrix(this);
             break;
         case ProjectedProfile:
-            ViewMatrix = new cwProjectedProfileScrapViewMatrix(this);
+            newViewMatrix = new cwProjectedProfileScrapViewMatrix(this);
             break;
         }
 
-        Q_ASSERT(this->type() == type);
-
-        emit typeChanged();
-        emit viewMatrixChanged();
+        setViewMatrix(newViewMatrix);
     }
 }
 

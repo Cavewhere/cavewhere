@@ -237,6 +237,8 @@ private:
 
     QStringList allNeighborStations(const QString& stationName) const;
 
+    void setViewMatrix(cwAbstractScrapViewMatrix* viewMatrix);
+
 private slots:
 //    void updateStationsWithNewCave();
 
