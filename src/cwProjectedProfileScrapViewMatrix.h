@@ -12,8 +12,15 @@ class CAVEWHERE_LIB_EXPORT cwProjectedProfileScrapViewMatrix : public cwAbstract
     Q_OBJECT
 
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
+    Q_PROPERTY(AzimuthDirection direction READ direction WRITE setDirection NOTIFY directionChanged)
 
 public:
+    enum AzimuthDirection {
+        LookingAt,
+        LeftToRight,
+        RightToLeft
+    };
+
     class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
     public:
         Data(double azimuth) :
@@ -25,6 +32,11 @@ public:
         void setAzimuth(double azimuth) { Azimuth = azimuth; }
         double azimuth() const { return Azimuth; }
 
+        cwProjectedProfileScrapViewMatrix::AzimuthDirection direction() const { return Direction; }
+        void setDirection(cwProjectedProfileScrapViewMatrix::AzimuthDirection direction) { Direction = direction; }
+
+        double absoluteAzimuth() const;
+
         // Data interface
         QMatrix4x4 matrix() const;
         Data *clone() const;
@@ -35,12 +47,18 @@ public:
 
     private:
         double Azimuth = 0.0; //!<
+        cwProjectedProfileScrapViewMatrix::AzimuthDirection Direction = LookingAt; //!<
     };
+
+    Q_ENUM(AzimuthDirection);
 
     cwProjectedProfileScrapViewMatrix(QObject* parent = nullptr);
 
     double azimuth() const;
     void setAzimuth(double azimuth);
+
+    AzimuthDirection direction() const;
+    void setDirection(AzimuthDirection direction);
 
     const cwProjectedProfileScrapViewMatrix::Data *data() const
     {
@@ -51,6 +69,7 @@ public:
 
 signals:
     void azimuthChanged();
+    void directionChanged();
 
 protected:
     cwProjectedProfileScrapViewMatrix::Data *d() const
