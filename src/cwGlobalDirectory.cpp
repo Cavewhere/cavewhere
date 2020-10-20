@@ -38,7 +38,7 @@ void cwGlobalDirectory::setupBaseDirectory() {
 #elif defined(Q_OS_OSX)
     return QApplication::applicationDirPath() + "/../Resources/";
 #elif defined(Q_OS_LINUX)
-    return QApplication::applicationDirPath() + "/../share/yourapplication/";
+    return QApplication::applicationDirPath() + "/";
 #else
     return QApplication::applicationDirPath() + "/";
 #endif
