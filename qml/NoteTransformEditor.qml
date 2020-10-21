@@ -159,8 +159,23 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         visible: upInputId.scrapType == Scrap.ProjectedProfile
                         LabelWithHelp {
                             id: azimuthLabelId
-                            text: "Azimuth"
+                            text: "Azimuth is"
                             helpArea: azimuthHelpAreaId
+                        }
+
+                        Controls.ComboBox {
+                            id: directionComboBoxId
+                            model: scrap.viewMatrix.directionTypes
+
+                            Binding {
+                                target: directionComboBoxId
+                                property: "currentIndex"
+                                value: scrap.viewMatrix.direction
+                            }
+
+                            onCurrentIndexChanged: {
+                                scrap.viewMatrix.direction = currentIndex
+                            }
                         }
 
                         ClickTextInput {
@@ -175,7 +190,13 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                     HelpArea {
                         id: azimuthHelpAreaId
                         Layout.fillWidth: true
-                        text: "Azimuth help"
+                        text: "The projected profile azimuth direction. By default this uses <i>
+looking at </i> which is as if you were looking through the page and is normal to the scrap plane.
+Other options are parellel with the page:
+<ul>
+    <li> <i>left → right </i> The azimuth going from the left side to the right side of the page</li>
+    <li> <i>left ← right </i> The azimuth going from the right side to the left side of the page</li>
+</ul>"
                     }
 
                     ErrorHelpArea {

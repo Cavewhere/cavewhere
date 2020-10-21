@@ -13,6 +13,11 @@ class CAVEWHERE_LIB_EXPORT cwProjectedProfileScrapViewMatrix : public cwAbstract
 
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
     Q_PROPERTY(AzimuthDirection direction READ direction WRITE setDirection NOTIFY directionChanged)
+    Q_PROPERTY(QStringList directionTypes READ directionTypes CONSTANT)
+
+    QStringList directionTypes() const;
+
+
 
 public:
     enum AzimuthDirection {

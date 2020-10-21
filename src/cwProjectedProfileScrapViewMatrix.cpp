@@ -102,3 +102,11 @@ void cwProjectedProfileScrapViewMatrix::setDirection(cwProjectedProfileScrapView
         emit matrixChanged();
     }
 }
+
+QStringList cwProjectedProfileScrapViewMatrix::directionTypes() const {
+    return {
+        QString("looking at"),
+        QString("left → right"), //->
+        QString("left ← right") //<-
+    };
+}
