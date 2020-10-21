@@ -577,5 +577,6 @@ void cwRegionSaveTask::saveSurveyNetwork(CavewhereProto::SurveyNetwork *protoSur
 void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedProfileScrapViewMatrix *protoViewMatrix, cwProjectedProfileScrapViewMatrix *viewMatrix)
 {
     protoViewMatrix->set_azimuth(viewMatrix->azimuth());
+    protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
 }
 

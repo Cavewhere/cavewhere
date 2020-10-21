@@ -54,7 +54,7 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion &region)
  */
 int cwRegionIOTask::protoVersion()
 {
-    return 4;
+    return 5;
 }
 
 /**
@@ -70,6 +70,7 @@ QString cwRegionIOTask::toVersion(int protoVersion)
         {2, "0.09-beta1"},
         {3, "0.09-beta2"},
         {4, "1.0-projectedProfile"},
+        {5, "1.0-projectedProfile-v2"},
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");

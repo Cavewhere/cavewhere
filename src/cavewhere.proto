@@ -226,5 +226,13 @@ message SurveyNetwork {
 }
 
 message ProjectedProfileScrapViewMatrix {
+
+    enum Direction {
+        LookingAt = 0;
+        LeftToRight = 1;
+        RightToLeft = 2;
+    }
+
     optional double azimuth = 1;
+    optional Direction direction = 2;
 }

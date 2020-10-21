@@ -497,9 +497,16 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     if(protoScrap.type() == CavewhereProto::Scrap_ScrapType::Scrap_ScrapType_ProjectedProfile) {
         Q_ASSERT(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
         auto view = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
-        if(protoScrap.has_profileviewmatrix() && protoScrap.profileviewmatrix().has_azimuth()) {
-            view->setAzimuth(protoScrap.profileviewmatrix().azimuth());
+        if(protoScrap.has_profileviewmatrix()) {
+            if(protoScrap.profileviewmatrix().has_azimuth()) {
+                view->setAzimuth(protoScrap.profileviewmatrix().azimuth());
+            }
+            if(protoScrap.profileviewmatrix().has_direction()) {
+                view->setDirection(static_cast<cwProjectedProfileScrapViewMatrix::AzimuthDirection>(protoScrap.profileviewmatrix().direction()));
+            }
         }
+
+
     }
 }
 

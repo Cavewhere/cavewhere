@@ -229,7 +229,7 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
     root->futureManagerModel()->waitForFinished();
 }
 
-TEST_CASE("Save and load should work correctly for Projected Profile v3->v4", "[ProtoSaveLoad]") {
+TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[ProtoSaveLoad]") {
 
     auto fileCheck = [](QString filename, auto scrapCheckFunc) {
         auto root = std::make_unique<cwRootData>();
@@ -444,9 +444,11 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v4", "[
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()) != nullptr);
 
         cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
-        profileView->setAzimuth(135);
+        profileView->setAzimuth(225);
+        profileView->setDirection(cwProjectedProfileScrapViewMatrix::RightToLeft);
 
-        CHECK(profileView->azimuth() == 135);
+        CHECK(profileView->azimuth() == 225);
+        CHECK(profileView->direction() == cwProjectedProfileScrapViewMatrix::RightToLeft);
     };
 
     auto profileCheck = [](cwScrap* scrap) {
@@ -456,7 +458,9 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v4", "[
         CHECK(scrap->polygon().size() > 0);
 
         cwProjectedProfileScrapViewMatrix* profileView = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
-        CHECK(profileView->azimuth() == 135);
+        CHECK(profileView->azimuth() == 225);
+        CHECK(profileView->direction() == cwProjectedProfileScrapViewMatrix::RightToLeft);
+
     };
 
     auto newFilename = fileCheck("://datasets/test_ProtoBufferSaveLoad/ProjectProfile-test-v3.cw", originalScrapCheck);
