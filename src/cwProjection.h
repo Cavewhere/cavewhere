@@ -13,6 +13,9 @@
 #include <QMatrix4x4>
 #include <QDebug>
 
+//Our includes
+#include "cwGlobals.h"
+
 #ifdef Q_OS_WIN
 #undef far
 #undef near
@@ -23,7 +26,7 @@
  *
  * Store the data for generating the projection matri
  */
-class cwProjection
+class CAVEWHERE_LIB_EXPORT cwProjection
 {
 public:
 

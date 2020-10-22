@@ -15,6 +15,7 @@
 
 //Our includes
 #include "cwCamera.h"
+#include "cwGlobals.h"
 
 /**
   \brief This class will watch a cwCamera
@@ -26,7 +27,7 @@
 
   All items that are added to the transform need to have "position" property that's QVector3D.
   */
-class cwTransformUpdater : public QObject
+class CAVEWHERE_LIB_EXPORT cwTransformUpdater : public QObject
 {
     Q_OBJECT
 

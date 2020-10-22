@@ -10,13 +10,14 @@
 
 //Our includes
 #include "cwProjection.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QObject>
 #include <QRect>
 #include <QMatrix4x4>
 
-class cwCamera : public QObject
+class CAVEWHERE_LIB_EXPORT cwCamera : public QObject
 {
     Q_OBJECT
 

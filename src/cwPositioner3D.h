@@ -8,10 +8,14 @@
 #ifndef CWPOSITIONER3D_H
 #define CWPOSITIONER3D_H
 
+//Qt includes
 #include <QQuickItem>
 #include <QVector3D>
 
-class cwPositioner3D : public QQuickItem
+//Our includes
+#include "cwGlobals.h"
+
+class CAVEWHERE_LIB_EXPORT cwPositioner3D : public QQuickItem
 {
     Q_OBJECT
 
