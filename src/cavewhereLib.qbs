@@ -104,6 +104,7 @@ DynamicLibrary {
     cpp.cxxLanguageVersion: "c++17"
     cpp.treatWarningsAsErrors: false
     Qt.quick.compilerAvailable: false
+    cpp.minimumMacosVersion: "10.14"
 
     cpp.includePaths: [
         ".",
