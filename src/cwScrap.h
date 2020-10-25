@@ -22,6 +22,9 @@
 #include "cwLead.h"
 #include "cwStation.h"
 class cwAbstractScrapViewMatrix;
+class cwPlanScrapViewMatrix;
+class cwRunningProfileScrapViewMatrix;
+class cwProjectedProfileScrapViewMatrix;
 class cwNote;
 class cwCave;
 
@@ -209,6 +212,10 @@ private:
 
     //The type of scrap
     cwAbstractScrapViewMatrix* ViewMatrix;
+    cwPlanScrapViewMatrix* CachedPlanViewMatrix = nullptr;
+    cwRunningProfileScrapViewMatrix* CachedRunningProfileViewMatrix = nullptr;
+    cwProjectedProfileScrapViewMatrix* CachedProjectedProfileViewMatrix = nullptr;
+
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;

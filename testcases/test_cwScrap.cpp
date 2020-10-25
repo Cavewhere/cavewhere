@@ -239,7 +239,6 @@ TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
     QList<TestRow> rows;
     rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 24.07, 229.57, 0.05, 0.005));
 
-
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
         fileToProject(root->project(), row.Filename);
@@ -268,6 +267,48 @@ TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
     }
 }
 
+TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005));
+
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = firstScrap(project);
+        currentScrap->setCalculateNoteTransform(true);
+        REQUIRE(currentScrap->type() == cwScrap::RunningProfile);
+
+        TestRow runningProfileRow("", currentScrap->noteTransformation()->northUp(), 1.0 / currentScrap->noteTransformation()->scale(), 0.05, 0.005);
+        checkScrapTransform(currentScrap, runningProfileRow);
+
+        currentScrap->setType(cwScrap::ProjectedProfile);
+
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+
+        //Make sure it has change, because we've changed the type
+        CHECK(runningProfileRow.Rotation != Approx(currentScrap->noteTransformation()->northUp()));
+        CHECK(1.0 / runningProfileRow.Scale != Approx(currentScrap->noteTransformation()->scale()));
+
+        //Should definitly change
+        projectedViewMatix->setAzimuth(225.0);
+        projectedViewMatix->setDirection(cwProjectedProfileScrapViewMatrix::LeftToRight);
+        checkScrapTransform(currentScrap, row);
+
+        //Change it back to running profile
+        currentScrap->setType(cwScrap::RunningProfile);
+        checkScrapTransform(currentScrap, runningProfileRow); //Shouldbe like the original
+
+        //Change to projected profile
+        currentScrap->setType(cwScrap::ProjectedProfile);
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix2 = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+        CHECK(projectedViewMatix2->azimuth() == 225.0);
+        CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LeftToRight);
+        checkScrapTransform(currentScrap, row);
+    }
+}
 
 TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     class TestRow {

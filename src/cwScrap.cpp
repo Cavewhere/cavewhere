@@ -1188,7 +1188,7 @@ void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
     }
 
     if(ViewMatrix) {
-        ViewMatrix->deleteLater();
+        disconnect(ViewMatrix, nullptr, this, nullptr);
     }
 
     ViewMatrix = viewMatrix;
@@ -1197,6 +1197,8 @@ void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
         ViewMatrix->setParent(this);
         connect(ViewMatrix, &cwAbstractScrapViewMatrix::matrixChanged,
                 this, &cwScrap::updateNoteTransformation);
+
+        updateNoteTransformation();
 
         emit typeChanged();
         emit viewMatrixChanged();
@@ -1236,15 +1238,22 @@ void cwScrap::setType(ScrapType type) {
     if(this->type() != type) {
         cwAbstractScrapViewMatrix* newViewMatrix;
 
+        auto createOrFromCache = [](auto& cacheViewMatrix, auto create) {
+            if(!cacheViewMatrix) {
+                cacheViewMatrix = create();
+            }
+            return cacheViewMatrix;
+        };
+
         switch(type) {
         case Plan:
-            newViewMatrix = new cwPlanScrapViewMatrix(this);
+            newViewMatrix = createOrFromCache(CachedPlanViewMatrix, [this](){ return new cwPlanScrapViewMatrix(this);});
             break;
         case RunningProfile:
-            newViewMatrix = new cwRunningProfileScrapViewMatrix(this);
+            newViewMatrix = createOrFromCache(CachedRunningProfileViewMatrix, [this](){ return new cwRunningProfileScrapViewMatrix(this); });
             break;
         case ProjectedProfile:
-            newViewMatrix = new cwProjectedProfileScrapViewMatrix(this);
+            newViewMatrix = createOrFromCache(CachedProjectedProfileViewMatrix, [this](){ return new cwProjectedProfileScrapViewMatrix(this); });
             break;
         }
 
