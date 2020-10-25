@@ -165,16 +165,33 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
 
                         Controls.ComboBox {
                             id: directionComboBoxId
-                            model: scrap.viewMatrix.directionTypes
+
+                            function isValid() {
+                                return scrap && scrap.viewMatrix
+                            }
+
+                            model: {
+                                if(directionComboBoxId.isValid()) {
+                                    return scrap.viewMatrix.directionTypes
+                                }
+                                return null
+                            }
 
                             Binding {
                                 target: directionComboBoxId
                                 property: "currentIndex"
-                                value: scrap.viewMatrix.direction
+                                value: {
+                                    if(directionComboBoxId.isValid()) {
+                                        return scrap.viewMatrix.direction
+                                    }
+                                    return -1;
+                                }
                             }
 
                             onCurrentIndexChanged: {
-                                scrap.viewMatrix.direction = currentIndex
+                                if(directionComboBoxId.isValid()) {
+                                    scrap.viewMatrix.direction = currentIndex
+                                }
                             }
                         }
 
