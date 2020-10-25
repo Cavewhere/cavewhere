@@ -88,6 +88,8 @@ public:
 
     void addImages(QList<QUrl> noteImagePath, std::function<void (QList<cwImage> images)> func);
 
+    static QString supportedImageFormats();
+
 signals:
     void filenameChanged(QString newFilename);
     void undoStackChanged();
@@ -137,6 +139,9 @@ private:
 
     bool saveWillCauseDataLoss() const;
     void setTemporaryProject(bool isTemp);
+
+    void addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+                        std::function<void (cwAddImageTask*)> setImagesFunc);
 };
 
 /**

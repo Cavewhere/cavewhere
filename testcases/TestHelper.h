@@ -23,6 +23,7 @@
 #include <QMetaEnum>
 #include <QTextStream>
 #include <QVector2D>
+#include <QMatrix4x4>
 
 //Our includes
 #include "cwStationPositionLookup.h"
@@ -107,6 +108,22 @@ inline std::ostream& operator << ( std::ostream& os, QList<cwImageData> const& v
     return os;
 }
 
+inline std::ostream& operator << ( std::ostream& os, const QMatrix4x4& matrix) {
+    os << "[\n";
+    for(int r = 0; r < 4; r++) {
+        for(int c = 0; c < 4; c++) {
+            os << matrix.data()[r * 4 + c];
+
+            if(c != 3) {
+                os << ",";
+            }
+        }
+        os << "\n";
+    }
+    os << "]";
+    return os;
+}
+
 
 std::ostream &operator << ( std::ostream& os, cwError const& error);
 
@@ -117,6 +134,8 @@ double roundToDecimal(double value, int decimals);
 QVector3D roundToDecimal(QVector3D v, int decimals);
 
 void checkQVector3D(QVector3D v1, QVector3D v2, int decimals = 2);
+
+void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta = 0.000001);
 
 /**
  * @brief checkStationLookup

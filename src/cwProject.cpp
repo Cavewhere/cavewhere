@@ -21,6 +21,8 @@
 #include "cwTaskManagerModel.h"
 #include "cwAsyncFuture.h"
 #include "cwErrorListModel.h"
+#include "cwPDFConverter.h"
+#include "cwPDFSettings.h"
 
 //Qt includes
 #include <QDir>
@@ -246,6 +248,42 @@ void cwProject::setTemporaryProject(bool isTemp)
     }
 }
 
+void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBackFunc,
+                               std::function<void (cwAddImageTask *)> setImagesFunc)
+{
+    auto format = cwTextureUploadTask::format();
+
+    cwAddImageTask addImageTask;
+    addImageTask.setDatabaseFilename(filename());
+    addImageTask.setImageTypesWithFormat(format);
+
+    //Set all the noteImagePath
+    setImagesFunc(&addImageTask);
+
+    auto imagesFuture = addImageTask.images();
+
+    FutureToken.addJob({imagesFuture, "Adding Image"});
+
+    AsyncFuture::observe(imagesFuture)
+            .subscribe([this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
+    {
+        if(cwTextureUploadTask::format() != format) {
+            //Format has changed, re-run (this isn't true recursion)
+            addImageHelper(outputCallBackFunc, setImagesFunc);
+            return;
+        }
+
+        //Convert the images to cwImage
+        auto results = imagesFuture.results();
+        QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
+        {
+            return imagePtr->take();
+        });
+
+        outputCallBackFunc(images);
+    });
+}
+
 /**
   Saves the project as a new file
 
@@ -440,7 +478,7 @@ QString cwProject::createTemporaryFilename()
 {
     QDateTime seedTime = QDateTime::currentDateTime();
     return QString("%1/CavewhereTmpProject-%2.cw")
-                .arg(QDir::tempPath())
+            .arg(QDir::tempPath())
             .arg(seedTime.toMSecsSinceEpoch(), 0, 16);
 }
 
@@ -502,49 +540,69 @@ bool cwProject::isModified() const
     return saveData != currentData;
 }
 
-void cwProject::addImages(QList<QUrl> noteImagePath,
-                          std::function<void (QList<cwImage>)> func)
+void cwProject::addImages(QList<QUrl> noteImagePaths,
+                          std::function<void (QList<cwImage>)> outputCallBackFunc)
 {
+    auto isPDF = [](const QString& path) {
+        QFileInfo info(path);
+        bool pdfExtention = info.completeSuffix().compare("pdf", Qt::CaseInsensitive) == 0;
+        return pdfExtention && cwPDFConverter::isSupported();
+    };
+
     //Create a new image task
-    for(QUrl url : noteImagePath) {
+    for(QUrl url : noteImagePaths) {
         QString path = url.toLocalFile();
 
-        std::function<void ()> addImage = [this, path, func, &addImage]() {
-            auto format = cwTextureUploadTask::format();
+        if(isPDF(path)) {
+            //Convert pdf to images
+            cwPDFConverter converter;
+            converter.setSource(path);
+            converter.setResolution(cwPDFSettings::instance()->resolutionImport());
 
-            cwAddImageTask addImageTask;
-            addImageTask.setDatabaseFilename(filename());
-            addImageTask.setImageTypesWithFormat(format);
+            auto future = converter.convert();
 
-            //Set all the noteImagePath
-            addImageTask.setNewImagesPath({path}); //noteImagePath);
+            FutureToken.addJob({future, "Converting PDF"});
 
-            auto imagesFuture = addImageTask.images();
-
-            FutureToken.addJob({imagesFuture, "Adding Image"});
-
-            AsyncFuture::observe(imagesFuture)
-                    .subscribe([imagesFuture, func, format, addImage]()
-            {
-                if(cwTextureUploadTask::format() != format) {
-                    //Format has changed, re-run (this isn't true recursion)
-                    addImage();
-                    return;
+            AsyncFuture::observe(future).subscribe([this, future, outputCallBackFunc](){
+                for(auto image : future.results()) {
+                    addImageHelper(outputCallBackFunc,
+                                   [image](cwAddImageTask* task)
+                    {
+                        task->setNewImages({image});
+                    });
                 }
-
-                //Convert the images to cwImage
-                auto results = imagesFuture.results();
-                QList<cwImage> images = cw::transform(results, [](const cwTrackedImagePtr& imagePtr)
-                {
-                    return imagePtr->take();
-                });
-
-                func(images);
             });
-        };
 
-        addImage();
+        } else {
+            //Normal image
+            addImageHelper(outputCallBackFunc,
+                           [path](cwAddImageTask* task)
+            {
+                task->setNewImagesPath({path});
+            });
+        }
     }
+}
+
+/**
+ * Returns all the image formats
+ */
+QString cwProject::supportedImageFormats()
+{
+    QStringList formats = cwAddImageTask::supportedImageFormats();
+
+    if(cwPDFConverter::isSupported()) {
+        formats.append("pdf");
+    }
+
+    QStringList withWildCards;
+    std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
+                   [](const QString& format)
+    {
+        return "*." + format;
+    });
+
+    return withWildCards.join(' ');
 }
 
 /**

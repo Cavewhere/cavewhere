@@ -15,6 +15,8 @@
 #include "cwSurveyNoteModel.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapsEntity.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwRunningProfileScrapViewMatrix.h"
 
 //Qt includes
 #include <QFile>
@@ -145,4 +147,94 @@ TEST_CASE("cwScrapManager should update the cwScrapEntity project correctly", "[
 
     CHECK(oldName != project->filename());
     CHECK(rootData->scrapManager()->scrapsEntity()->project() == project->filename());
+}
+
+TEST_CASE("cwScrapManager shouldn't update scraps that are invalid", "[cwScrapManager]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, "://datasets/test_cwScrapManager/ignoreInvalidScrap.cw");
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    auto cave = project->cavingRegion()->cave(0);
+    REQUIRE(project->cavingRegion()->cave(0)->tripCount() == 1);
+    auto trip = cave->trip(0);
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    auto note = notes.at(0);
+    auto scrap = new cwScrap();
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    rootData->futureManagerModel()->waitForFinished();
+
+    note->addScrap(scrap);
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    rootData->futureManagerModel()->waitForFinished();
+
+    scrap->addPoint(QPointF(0.0, 0.0));
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    scrap->addPoint(QPointF(0.0, 1.0));
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    scrap->addPoint(QPointF(1.0, 1.0));
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    scrap->addPoint(QPointF(1.0, 0.0));
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+
+    cwNoteStation noteStation;
+    noteStation.setPositionOnNote(QPointF(0.5, 0.5));
+    noteStation.setName("a1");
+
+    scrap->addStation(noteStation);
+    CHECK(rootData->futureManagerModel()->rowCount() == 1);
+    rootData->futureManagerModel()->waitForFinished();
+
+    scrap->removeStation(0);
+    CHECK(rootData->futureManagerModel()->rowCount() == 1);
+    rootData->futureManagerModel()->waitForFinished();
+}
+
+TEST_CASE("cwScrapManager should update on viewMatrix change", "[cwScrapManager]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    fileToProject(project, "://datasets/test_cwScrapManager/ProjectProfile-test-v3.cw");
+
+    REQUIRE(project->cavingRegion()->caveCount() == 1);
+    auto cave = project->cavingRegion()->cave(0);
+    REQUIRE(project->cavingRegion()->cave(0)->tripCount() == 1);
+    auto trip = cave->trip(0);
+    auto notes = trip->notes()->notes();
+    REQUIRE(notes.size() == 1);
+    auto note = notes.at(0);
+    REQUIRE(note->scraps().size() == 1);
+    auto scrap = note->scraps().at(0);
+
+    CHECK(scrap->type() == cwScrap::ProjectedProfile);
+    auto profile = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+    REQUIRE(profile);
+    CHECK(profile->azimuth() == 135.0);
+
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    CHECK(scrap->triangulationData().isStale() == false);
+    profile->setAzimuth(136.0);
+
+
+    CHECK(rootData->futureManagerModel()->rowCount() == 1);
+    CHECK(scrap->triangulationData().isStale() == true);
+
+    rootData->futureManagerModel()->waitForFinished();
+
+    CHECK(rootData->futureManagerModel()->rowCount() == 0);
+    CHECK(scrap->triangulationData().isStale() == false);
+
+    SECTION("Switch to running profile") {
+        scrap->setType(cwScrap::RunningProfile);
+        CHECK(dynamic_cast<cwRunningProfileScrapViewMatrix*>(scrap->viewMatrix()));
+
+        CHECK(rootData->futureManagerModel()->rowCount() == 1);
+        CHECK(scrap->triangulationData().isStale() == true);
+
+        rootData->futureManagerModel()->waitForFinished();
+
+        CHECK(rootData->futureManagerModel()->rowCount() == 0);
+        CHECK(scrap->triangulationData().isStale() == false);
+    }
 }

@@ -3,7 +3,6 @@ import qbs.TextFile
 import qbs.Process
 import qbs.FileInfo
 import qbs.File
-//import "qbsModules/CavewhereApp.qbs" as CavewhereApp
 
 Project {
 
@@ -80,6 +79,7 @@ Project {
 
         cpp.cxxLanguageVersion: "c++17"
         cpp.treatWarningsAsErrors: false
+        cpp.minimumMacosVersion: "10.14"
 
         cpp.includePaths: [
             applicationId.prefix + "/src",

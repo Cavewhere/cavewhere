@@ -17,6 +17,7 @@ CppApplication {
 
     cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++17"
+    cpp.minimumMacosVersion: "10.14"
 //    cpp.treatWarningsAsErrors: true
 
     qbs.installPrefix: ""

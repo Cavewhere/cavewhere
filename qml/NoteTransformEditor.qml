@@ -41,6 +41,21 @@ QQ.Item {
     }
 
     Binding {
+        target: northInteraction
+        property: "upText"
+        value: {
+            switch(scrap.type) {
+            case Scrap.Plan:
+                return "north"
+            case Scrap.RunningProfile:
+                return "up"
+            case Scrap.ProjectedProfile:
+                return "up"
+            }
+        }
+    }
+
+    Binding {
         target: scaleInteraction
         property: "noteTransform"
         value: noteTransform
@@ -63,7 +78,9 @@ QQ.Item {
                     id: typeComboBox
                     implicitWidth: 175
                     model: scrap ? scrap.types : null
-                    onCurrentIndexChanged: if(scrap) { scrap.type = currentIndex; }
+                    onCurrentIndexChanged: if(scrap) {
+                                               scrap.type = currentIndex;
+                                           }
 
                     Binding {
                         target: typeComboBox
@@ -75,9 +92,15 @@ QQ.Item {
 
             HelpArea {
                 id: scrapTypeHelpId
-                text: "The scrap type designates how CaveWhere will interperate the scrap. A running
-                        profile will warp the scrap vertically along the centerline. Plan will warp
-                        the scrap in plan view"
+                text: "The scrap type designates how CaveWhere will interperate the scrap.<br>
+<ul>
+<li><b>Plan</b>: Projects the scrap on a plane aligned with the ground.</li>
+<li><b>Running Profile</b>: Creates a projected profile for each shot and wraps the scrap along each scrap.
+This projection is generally the best for <b>horizontal passage</b> with profiles because it will wrap around
+corners.</li>
+<li><b>Projected Profiles<\b>: Projects the scrap on vertial plane aligned azimuth settings. This projection
+is generally the best for <b>deep pits</b> where the profile is drawn on a single plane.<\\li><\\ul>"
+
                 width: columnLayoutId.width
             }
 
@@ -109,8 +132,10 @@ QQ.Item {
                                 Setting this incorrectly may cause warping issues."
                             case Scrap.RunningProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
+                            case Scrap.ProjectedProfile:
+                                return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             default:
-                                    return "Error..."
+                                return "Error..."
                             }
                         }
                     }
@@ -127,6 +152,72 @@ QQ.Item {
                         id: scaleHelpAreaId
                         Layout.fillWidth: true
                         text: "You can set the <b>scale</b> of the scrap. Setting this incorrectly may cause warping issues."
+                    }
+
+                    RowLayout {
+                        id: azimuthInput
+                        visible: upInputId.scrapType == Scrap.ProjectedProfile
+                        LabelWithHelp {
+                            id: azimuthLabelId
+                            text: "Azimuth is"
+                            helpArea: azimuthHelpAreaId
+                        }
+
+                        Controls.ComboBox {
+                            id: directionComboBoxId
+
+                            function isValid() {
+                                return scrap && scrap.viewMatrix
+                            }
+
+                            model: {
+                                if(directionComboBoxId.isValid()) {
+                                    return scrap.viewMatrix.directionTypes
+                                }
+                                return null
+                            }
+
+                            Binding {
+                                target: directionComboBoxId
+                                property: "currentIndex"
+                                value: {
+                                    if(directionComboBoxId.isValid()) {
+                                        return scrap.viewMatrix.direction
+                                    }
+                                    return -1;
+                                }
+                            }
+
+                            onCurrentIndexChanged: {
+                                if(directionComboBoxId.isValid()) {
+                                    scrap.viewMatrix.direction = currentIndex
+                                }
+                            }
+                        }
+
+                        ClickTextInput {
+                            id: azimuthTextInputId
+                            text: scrap.viewMatrix.azimuth
+                            onFinishedEditting: {
+                                scrap.viewMatrix.azimuth = newText
+                            }
+                        }
+
+                        Text {
+                            text: "°"
+                        }
+                    }
+
+                    HelpArea {
+                        id: azimuthHelpAreaId
+                        Layout.fillWidth: true
+                        text: "The projected profile azimuth direction. By default this uses <i>
+looking at </i> which is as if you were looking through the page and is normal to the scrap plane.
+Other options are parellel with the page:
+<ul>
+    <li> <i>left → right </i> The azimuth going from the left side to the right side of the page</li>
+    <li> <i>left ← right </i> The azimuth going from the right side to the left side of the page</li>
+</ul>"
                     }
 
                     ErrorHelpArea {

@@ -54,6 +54,7 @@ namespace CavewhereProto {
     class Shot;
     class StationPositionLookup;
     class Lead;
+    class ScrapViewMatrix;
 };
 
 namespace QtProto {

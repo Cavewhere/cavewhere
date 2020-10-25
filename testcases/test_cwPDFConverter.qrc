@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>datasets/test_cwPDFConverter/2page-test.pdf</file>
+        <file>datasets/test_cwPDFConverter/page1-300.png</file>
+        <file>datasets/test_cwPDFConverter/page2-300.png</file>
+    </qresource>
+</RCC>

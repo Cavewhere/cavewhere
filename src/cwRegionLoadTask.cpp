@@ -25,6 +25,7 @@
 #include "cwSurveyNetwork.h"
 #include "cavewhereVersion.h"
 #include "cwProject.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -491,7 +492,22 @@ void cwRegionLoadTask::loadScrap(const CavewhereProto::Scrap& protoScrap, cwScra
     loadNoteTranformation(protoScrap.notetransformation(), scrap->noteTransformation());
     scrap->setCalculateNoteTransform(protoScrap.calculatenotetransform());
     scrap->setTriangulationData(loadTriangulatedData(protoScrap.triangledata()));
-    scrap->setType((cwScrap::ScrapType)protoScrap.type());
+    scrap->setType(static_cast<cwScrap::ScrapType>(protoScrap.type()));
+
+    if(protoScrap.type() == CavewhereProto::Scrap_ScrapType::Scrap_ScrapType_ProjectedProfile) {
+        Q_ASSERT(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix()));
+        auto view = static_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+        if(protoScrap.has_profileviewmatrix()) {
+            if(protoScrap.profileviewmatrix().has_azimuth()) {
+                view->setAzimuth(protoScrap.profileviewmatrix().azimuth());
+            }
+            if(protoScrap.profileviewmatrix().has_direction()) {
+                view->setDirection(static_cast<cwProjectedProfileScrapViewMatrix::AzimuthDirection>(protoScrap.profileviewmatrix().direction()));
+            }
+        }
+
+
+    }
 }
 
 /**
@@ -681,6 +697,7 @@ int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoR
 {
     return protoRegion.has_version() ? protoRegion.version() : 0;
 }
+
 
 /**
  * @brief cwRegionLoadTask::loadString

@@ -208,12 +208,5 @@ cwSettings* cwRootData::settings() const {
 }
 
 QString cwRootData::cwRootData::supportImageFormats() const {
-    QStringList formats = cwAddImageTask::supportedImageFormats();
-    QStringList withWildCards;
-    std::transform(formats.begin(), formats.end(), std::back_inserter(withWildCards),
-                   [](const QString& format)
-    {
-        return "*." + format;
-    });
-    return withWildCards.join(' ');
+    return cwProject::supportedImageFormats();
 }

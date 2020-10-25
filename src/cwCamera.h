@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwProjection.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QObject>
@@ -20,7 +21,7 @@
 #include <Qt3DRender/QCameraLens>
 
 
-class cwCamera : public Qt3DCore::QEntity
+class CAVEWHERE_LIB_EXPORT cwCamera : public Qt3DCore::QEntity
 {
     Q_OBJECT
 

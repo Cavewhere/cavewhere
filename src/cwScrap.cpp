@@ -16,6 +16,9 @@
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwKeywordModel.h"
+#include "cwPlanScrapViewMatrix.h"
+#include "cwRunningProfileScrapViewMatrix.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Qt includes
 #include <QDebug>
@@ -30,7 +33,7 @@ cwScrap::cwScrap(QObject *parent) :
     QObject(parent),
     NoteTransformation(new cwNoteTranformation(this)),
     CalculateNoteTransform(false),
-    Type(Plan),
+    ViewMatrix(nullptr),
     ParentNote(nullptr),
     ParentCave(nullptr),
     TriangulationDataDirty(false),
@@ -38,12 +41,15 @@ cwScrap::cwScrap(QObject *parent) :
 {
     updateTypeKeyword();
     setCalculateNoteTransform(true);
+    setViewMatrix(new cwPlanScrapViewMatrix(this));
+
 }
 
 cwScrap::cwScrap(const cwScrap& other)
     : QObject(nullptr),
       NoteTransformation(new cwNoteTranformation(this)),
       CalculateNoteTransform(false),
+      ViewMatrix(nullptr),
       ParentNote(nullptr),
       ParentCave(nullptr),
       TriangulationDataDirty(false),
@@ -448,18 +454,25 @@ void cwScrap::updateNoteTransformation() {
     QList< QPair<cwNoteStation, cwNoteStation> > shotStations = noteShots();
 
     //Choose the averaging function
-    std::function<cwNoteTranformation (cwScrap*, QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
+    std::function<cwNoteTranformation (QList< QPair<cwNoteStation, cwNoteStation> > )> averageFunc;
     switch(type()) {
-    case cwScrap::RunningProfile:
-        averageFunc = std::mem_fn(&cwScrap::runningProfileAverageTransform);
+    case RunningProfile:
+        averageFunc = [this](auto list)
+        {
+            return runningProfileAverageTransform(list);
+        };
         break;
-    case cwScrap::Plan:
-        averageFunc = std::mem_fn(&cwScrap::planAverageTransform);
+    case Plan:
+    case ProjectedProfile:
+        averageFunc = [this](auto list)
+        {
+            return planAverageTransform(list);
+        };
         break;
-    };
+    }
 
     //Do the calculations
-    cwNoteTranformation averageTransformation = averageFunc(this, shotStations);
+    cwNoteTranformation averageTransformation = averageFunc(shotStations);
     NoteTransformation->setScale(averageTransformation.scale());
     NoteTransformation->setNorthUp(averageTransformation.northUp());
 }
@@ -559,6 +572,10 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
     //Remove the z for plan view
     switch(type()) {
+    case ProjectedProfile:
+        //Rotate into the correct view
+        station1RealPos = viewMatrix()->matrix().map(station1RealPos);
+        station2RealPos = viewMatrix()->matrix().map(station2RealPos);
     case Plan:
         station1RealPos.setZ(0.0);
         station2RealPos.setZ(0.0);
@@ -595,7 +612,7 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     /**
       Calculates the shot transform in plan view between station1 and station2
       */
-    auto planCalcTransformation = [&]()->ScrapShotTransform {
+    auto projectedCalcTransformation = [&]()->ScrapShotTransform {
             QVector3D zeroVector(0.0, 1.0, 0.0);
             double angleToZero = acos(QVector3D::dotProduct(zeroVector, realVector)) * cwGlobals::radiansToDegrees();
             QVector3D crossProduct = QVector3D::crossProduct(zeroVector, realVector);
@@ -610,11 +627,11 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
     /**
       Calculates the shot transform in running profile view between station1 and station2
       */
-    auto profileCalcTrasnformation = [&]()->ScrapShotTransform {
+    auto runningProfileCalcTrasnformation = [&]()->ScrapShotTransform {
             QMatrix4x4 toNoteToWorldProfile = profileTransform.Mirror * profileTransform.Rotation;
             QVector3D afterNoteVector = toNoteToWorldProfile * noteVector;
 
-            QMatrix4x4 toProfile =  cwScrap::toProfileRotation(station1RealPos, station2RealPos);
+            QMatrix4x4 toProfile = cwRunningProfileScrapViewMatrix::Data(station1RealPos, station2RealPos).matrix();
             QVector3D realProfileVector = toProfile.mapVector(realVector);
 
             double clinoDiff = acos(QVector3D::dotProduct(realProfileVector, afterNoteVector)) * cwGlobals::radiansToDegrees();
@@ -631,9 +648,10 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 
     switch(type()) {
     case Plan:
-        return planCalcTransformation();
+    case ProjectedProfile:
+        return projectedCalcTransformation();
     case RunningProfile:
-        return profileCalcTrasnformation();
+        return runningProfileCalcTrasnformation();
     }
     return ScrapShotTransform();
 }
@@ -890,18 +908,18 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     /**
       Calculates the error in plan mode
       */
-    auto calcErrorForPlan = [&calcErrorUsingMatrix, worldToNoteMatrix, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+    auto calcErrorForProjected = [&calcErrorUsingMatrix, worldToNoteMatrix, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
         calcErrorUsingMatrix(stationName, stationPosition, worldToNoteMatrix * offsetMatrix);
     };
 
     /**
       Calculates the error for running profile mode
       */
-    auto calcErrorForProfile = [&calcErrorUsingMatrix, worldToNoteMatrix, prevStationPos, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
+    auto calcErrorForRunningProfile = [&calcErrorUsingMatrix, worldToNoteMatrix, prevStationPos, offsetMatrix](const QString& stationName, QVector3D stationPosition) {
         QMatrix4x4 worldToProfileNoteMatrix;
 
         //Rotate into a profile
-        QMatrix4x4 profileRotation = toProfileRotation(prevStationPos, stationPosition);
+        QMatrix4x4 profileRotation = cwRunningProfileScrapViewMatrix::Data(prevStationPos, stationPosition).matrix();
 
         //Mirror right to left, left to right, running profile can be drawn either way
         for(int i = 0; i < 2; i++) {
@@ -919,11 +937,12 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
     //Figure out how we are going to calculate the error, choose the function pointer
     std::function<void (const QString&, QVector3D)> calcError;
     switch(type()) {
-    case cwScrap::Plan:
-        calcError = calcErrorForPlan;
+    case ProjectedProfile:
+    case Plan:
+        calcError = calcErrorForProjected;
         break;
-    case cwScrap::RunningProfile:
-        calcError = calcErrorForProfile;
+    case RunningProfile:
+        calcError = calcErrorForRunningProfile;
         break;
     }
 
@@ -942,17 +961,13 @@ QString cwScrap::guessNeighborStationName(const cwNoteStation& previousStation, 
 /**
   This creates a QMatrix4x4 that can be used to transform a station's position in
   3D to normalize note coordinates
+
+  This function is only valid in plan and projected profiles
   */
 QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) const {
     if(parentNote() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip() == nullptr) { return QMatrix4x4(); }
     if(parentNote()->parentTrip()->parentCave() == nullptr) { return QMatrix4x4(); }
-
-//    cwCave* parentCave = parentNote()->parentTrip()->parentCave();
-//    cwStationPositionLookup stationLookup = parentCave->stationPositionLookup();
-
-    //The position of the selected station
-//    QVector3D stationPos = stationLookup.position(referenceStation.name());
 
     //Create the matrix to covert global position into note position
     QMatrix4x4 noteTransformMatrix = noteTransformation()->matrix(); //Matrix from page coordinates to cave coordinates
@@ -960,16 +975,13 @@ QMatrix4x4 cwScrap::mapWorldToNoteMatrix(const cwNoteStation& referenceStation) 
 
     QMatrix4x4 dotsOnPageMatrix = parentNote()->metersOnPageMatrix().inverted();
 
-//    QMatrix4x4 offsetMatrix;
-//    offsetMatrix.translate(-stationPos);
-
     QMatrix4x4 noteStationOffset;
     noteStationOffset.translate(QVector3D(referenceStation.positionOnNote()));
 
-    QMatrix4x4 toNormalizedNote = noteStationOffset *
-            dotsOnPageMatrix *
-            noteTransformMatrix;
-//            offsetMatrix;
+    QMatrix4x4 toNormalizedNote = noteStationOffset
+            * dotsOnPageMatrix
+            * noteTransformMatrix
+            * viewMatrix()->matrix(); //Change the view passed on the projection
 
     return toNormalizedNote;
 }
@@ -987,18 +999,11 @@ void cwScrap::setParentNote(cwNote* note) {
 
         if(ParentNote != nullptr) {
             ParentCave = parentNote()->parentCave();
-            //            connect(ParentNote, SIGNAL(parentTripChanged()), SLOT(updateStationsWithNewCave()));
         }
-
-        //        updateStationsWithNewCave();
     }
 }
 
-//void cwScrap::updateStationsWithNewCave() {
-//    for(int i = 0; i < Stations.size(); i++) {
-//        Stations[i].setCave(parentCave());
-//    }
-//}
+
 
 /**
   Clamps the point within the scrap
@@ -1155,7 +1160,8 @@ const cwScrap & cwScrap::copy(const cwScrap &other) {
     *NoteTransformation = *(other.NoteTransformation);
     setCalculateNoteTransform(other.CalculateNoteTransform);
     TriangulationData = other.TriangulationData;
-    Type = other.Type;
+
+    setViewMatrix(other.ViewMatrix->clone());
 
     updateTypeKeyword();
 
@@ -1180,7 +1186,34 @@ QStringList cwScrap::allNeighborStations(const QString &stationName) const
 //        QSet<cwStation> tripStations = trip->neighboringStations(stationName);
 //        neigborStations.unite(tripStations);
 //    }
-//    return neigborStations;
+    //    return neigborStations;
+}
+
+/**
+ * Connects the view matrix to update the note transform for the scrap
+ */
+void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
+{
+    if(ViewMatrix == viewMatrix) {
+        return;
+    }
+
+    if(ViewMatrix) {
+        disconnect(ViewMatrix, nullptr, this, nullptr);
+    }
+
+    ViewMatrix = viewMatrix;
+
+    if(ViewMatrix) {
+        ViewMatrix->setParent(this);
+        connect(ViewMatrix, &cwAbstractScrapViewMatrix::matrixChanged,
+                this, &cwScrap::updateNoteTransformation);
+
+        updateNoteTransformation();
+
+        emit typeChanged();
+        emit viewMatrixChanged();
+    }
 }
 
 /**
@@ -1206,51 +1239,46 @@ void cwScrap::setTriangulationData(cwTriangulatedData data) {
     emit triangulationDataChange();
 }
 
-/**
- * @brief cwTriangulateTask::profileViewRotation
- * @param fromStationPos
- * @param toStationPos
- * @return This returns the rotation matrix that will rotate the view from fromStationPos to toStationPos
- * in a profile view. This will remove the azimuth from the shot between fromStationPos and toStationPos.
- * It will also show the pitch of the shot.
- */
-QMatrix4x4 cwScrap::toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos)
-{
-    //Calculate the compass and clino from the shot
-    QVector3D shotDirection = toStationPos - fromStationPos; //stations.last().position() - stations.first().position();
-    QVector3D yAxis(0.0, 1.0, 0.0);
-    QVector3D eulerAngles = QQuaternion::rotationTo(yAxis, shotDirection.normalized()).toEulerAngles();
-
-    //Rotate the profile view
-    QQuaternion profilePitch = QQuaternion::fromAxisAndAngle(1.0, 0.0, 0.0, -90.0);
-
-    //Profile aligned with the compass direction
-    QQuaternion profileYaw = QQuaternion::fromAxisAndAngle(0.0, 0.0, 1.0, -eulerAngles.z() - 90.0);
-
-    //Combine the rotation to create the shot's profile view rotation
-    QQuaternion profileQuat = profilePitch * profileYaw;
-
-    QMatrix4x4 viewRotationMatrix;
-    viewRotationMatrix.rotate(profileQuat);
-
-    return viewRotationMatrix;
-}
-
 void cwScrap::updateImage()
 {
     emit pointsReset();
 }
 
 /**
-* Sets the type
-* The scrap type tells the warping algorithm how to warp the scrap. Scrap type can be Plan (default)
-* and RunningProfile.
+* Sets the scrap type on how it's going to be projected
 */
 void cwScrap::setType(ScrapType type) {
-    if(Type != type) {
-        Type = type;
+    if(this->type() != type) {
+        cwAbstractScrapViewMatrix* newViewMatrix;
+
+        auto createOrFromCache = [](auto& cacheViewMatrix, auto create) {
+            if(!cacheViewMatrix) {
+                cacheViewMatrix = create();
+            }
+            return cacheViewMatrix;
+        };
+
+        switch(type) {
+        case Plan:
+            newViewMatrix = createOrFromCache(CachedPlanViewMatrix, [this](){ return new cwPlanScrapViewMatrix(this);});
+            break;
+        case RunningProfile:
+            newViewMatrix = createOrFromCache(CachedRunningProfileViewMatrix, [this](){ return new cwRunningProfileScrapViewMatrix(this); });
+            break;
+        case ProjectedProfile:
+            newViewMatrix = createOrFromCache(CachedProjectedProfileViewMatrix, [this](){ return new cwProjectedProfileScrapViewMatrix(this); });
+            break;
+        }
+
+        setViewMatrix(newViewMatrix);
         updateTypeKeyword();
-        updateNoteTransformation();
-        emit typeChanged();
     }
+}
+
+QStringList cwScrap::types() const {
+    return {"Plan", "Running Profile", "Project Profile"};
+}
+
+cwScrap::ScrapType cwScrap::type() const {
+    return viewMatrix()->type();
 }

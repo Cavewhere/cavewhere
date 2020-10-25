@@ -21,6 +21,10 @@
 #include "cwTriangulatedData.h"
 #include "cwLead.h"
 #include "cwStation.h"
+class cwAbstractScrapViewMatrix;
+class cwPlanScrapViewMatrix;
+class cwRunningProfileScrapViewMatrix;
+class cwProjectedProfileScrapViewMatrix;
 class cwNote;
 class cwCave;
 class cwKeywordModel;
@@ -37,17 +41,25 @@ class CAVEWHERE_LIB_EXPORT cwScrap : public QObject
 
     Q_PROPERTY(cwNoteTranformation* noteTransformation READ noteTransformation NOTIFY noteTransformationChanged)
     Q_PROPERTY(bool calculateNoteTransform READ calculateNoteTransform WRITE setCalculateNoteTransform NOTIFY calculateNoteTransformChanged)
+
     Q_PROPERTY(ScrapType type READ type WRITE setType NOTIFY typeChanged)
+    Q_PROPERTY(cwAbstractScrapViewMatrix* viewMatrix READ viewMatrix NOTIFY viewMatrixChanged)
     Q_PROPERTY(QStringList types READ types CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
-    Q_ENUMS(StationDataRole LeadDataRole ScrapType)
 public:
+    enum ScrapType {
+        Plan,
+        RunningProfile,
+        ProjectedProfile
+    };
+    Q_ENUM(ScrapType);
 
     enum StationDataRole {
         StationName,
         StationPosition
     };
+    Q_ENUM(StationDataRole);
 
     enum LeadDataRole {
         LeadPositionOnNote,
@@ -59,11 +71,7 @@ public:
         LeadCompleted,
         LeadNumberOfRoles
     };
-
-    enum ScrapType {
-        Plan = 0,
-        RunningProfile = 1
-    };
+    Q_ENUM(LeadDataRole)
 
     explicit cwScrap(QObject *parent = 0);
     cwScrap(const cwScrap& other);
@@ -75,6 +83,7 @@ public:
     void setParentCave(cwCave* cave);
     cwCave* parentCave() const;
 
+    cwAbstractScrapViewMatrix* viewMatrix() const;
     ScrapType type() const;
     void setType(ScrapType type);
     QStringList types() const;
@@ -122,7 +131,7 @@ public:
     void setTriangulationData(cwTriangulatedData data);
     cwTriangulatedData triangulationData() const;
 
-    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
+//    static QMatrix4x4 toProfileRotation(QVector3D fromStationPos, QVector3D toStationPos);
 
     void updateImage();
 
@@ -157,6 +166,7 @@ signals:
 
     void noteTransformationChanged();
     void calculateNoteTransformChanged();
+    void viewMatrixChanged();
     void typeChanged();
 
 private:
@@ -208,7 +218,11 @@ private:
     bool CalculateNoteTransform; //!< If true this will automatically calculate the note transform
 
     //The type of scrap
-    ScrapType Type; //!<
+    cwAbstractScrapViewMatrix* ViewMatrix;
+    cwPlanScrapViewMatrix* CachedPlanViewMatrix = nullptr;
+    cwRunningProfileScrapViewMatrix* CachedRunningProfileViewMatrix = nullptr;
+    cwProjectedProfileScrapViewMatrix* CachedProjectedProfileViewMatrix = nullptr;
+
 
     //The parent trip, this is for referencing the stations
     cwNote* ParentNote;
@@ -240,6 +254,8 @@ private:
     const cwScrap& copy(const cwScrap& other);
 
     QStringList allNeighborStations(const QString& stationName) const;
+
+    void setViewMatrix(cwAbstractScrapViewMatrix* viewMatrix);
 
 private slots:
 //    void updateStationsWithNewCave();
@@ -335,6 +351,11 @@ inline cwCave *cwScrap::parentCave() const {
     return ParentCave;
 }
 
+inline cwAbstractScrapViewMatrix *cwScrap::viewMatrix() const
+{
+    return ViewMatrix;
+}
+
 /**
   \brief Gets the triangulation data
   */
@@ -343,20 +364,8 @@ inline cwTriangulatedData cwScrap::triangulationData() const {
 }
 
 /**
-* Returns The scrap type.
-* The scrap type tells the warping algorithm how to warp the scrap.
+*
 */
-inline cwScrap::ScrapType cwScrap::type() const {
-    return Type;
-}
-
-/**
-* @brief cwScrap::types
-* @return
-*/
-inline QStringList cwScrap::types() const {
-    return QStringList() << "Plan" << "Running Profile";
-}
 
 /**
 * Returns the keywords for the scrap

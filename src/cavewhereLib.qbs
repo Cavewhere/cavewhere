@@ -11,6 +11,8 @@ import "../qbsModules/GitProbe.qbs" as GitProbe
   files for the application and for the testcases.
   */
 DynamicLibrary {
+    id: cavewhereLibId
+
     name: "cavewhere-lib"
 
     //For mac os x we need to build dylib instead of framework bundle. When running
@@ -19,7 +21,14 @@ DynamicLibrary {
 //    consoleApplication: true
 
     readonly property string gitVersion: git.productVersion
-//    readonly property string rpath: buildDirectory
+
+    //This is a work around for debug QtPdf on windows to work
+    readonly property bool win32QPDFExists: {
+        return File.exists(Qt.core.binPath + "/Qt5Pdfd.dll")
+
+    }
+    //    readonly property string rpath: buildDirectory
+
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -33,9 +42,11 @@ DynamicLibrary {
             "concurrent",
             "3dcore",
             "3drender",
-            "svg"
+            "svg",
+            //"pdf" //This doesn't work under debug
         ]
     }
+
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
     Depends { name: "plotsauce" }
@@ -47,6 +58,11 @@ DynamicLibrary {
     Depends { name: "asyncfuture" }
     Depends { name: "s3tc-dxt-decompression" }
     Depends { name: "bundle" }
+
+    Depends {
+        name: "Qt.pdf"
+        required: false
+    }
 
     GitProbe {
         id: git
@@ -93,6 +109,7 @@ DynamicLibrary {
     cpp.cxxLanguageVersion: "c++17"
     cpp.treatWarningsAsErrors: false
     Qt.quick.compilerAvailable: false
+    cpp.minimumMacosVersion: "10.14"
 
     cpp.includePaths: [
         ".",
@@ -184,10 +201,37 @@ DynamicLibrary {
             "-D_SCL_SECURE_NO_WARNINGS", //Ignore warning from protobuf
         ]
 
-        cpp.dynamicLibraries: [
-            "OpenGL32"
-        ]
+        cpp.dynamicLibraries: {
+            var base = [
+                        "OpenGL32",
+                    ]
+            if(qbs.buildVariant == "debug" && cavewhereLibId.win32QPDFExists) {
+                base.push("Qt5Pdfd")
+            }
+            return base
+        }
 
+        //Manually add QPdf on windows for debugging to work
+        cpp.includePaths: {
+            if(qbs.buildVariant == "debug" && cavewhereLibId.win32QPDFExists) {
+                return outer.concat(
+                            Qt.core.incPath + "/QtPdf"
+                            )
+            }
+            return outer;
+        }
+
+    }
+
+    Group {
+        name: "Windows QPDF Install"
+        condition: qbs.targetOS.contains("windows") && Qt.pdf.present
+
+        qbs.install: qbs.buildVariant == "release"
+
+        files: [
+            Qt.core.binPath + "/Qt5Pdf.dll"
+        ]
     }
 
     cpp.defines: {
@@ -203,6 +247,12 @@ DynamicLibrary {
 
         if(qbs.targetOS.contains("windows")) {
             base = base.concat('CAVEWHERE_LIB')
+        }
+
+        console.error("cavewhereLibId:" + cavewhereLibId.win32QPDFExists)
+
+        if(Qt.pdf.present || cavewhereLibId.win32QPDFExists) {
+            base = base.concat('WITH_PDF_SUPPORT')
         }
 
         return base;

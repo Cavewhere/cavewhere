@@ -148,7 +148,7 @@ void cwImageCompressionUpdater::recompressScraps(const QList<cwScrap *>& scraps)
         for(auto scrap : scraps) {
             //See if scrap
             auto image = scrap->triangulationData().croppedImage();
-            if(!database.mipmapsValid(image, usingCompression)) {
+            if(image.isOriginalValid() && !database.mipmapsValid(image, usingCompression)) {
                 scrap->updateImage();
             }
         }

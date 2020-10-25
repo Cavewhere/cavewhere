@@ -27,5 +27,10 @@
         <file>datasets/scrapAutoCalculate/runningProfileRotate.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileRotateMirror.cw</file>
         <file>datasets/scrapAutoCalculate/runningProfileUpsideDown.cw</file>
+        <file>datasets/scrapAutoCalculate/projectedProfile-90left.cw</file>
+        <file>datasets/scrapAutoCalculate/projectedProfile-90right.cw</file>
+        <file>datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw</file>
+        <file>datasets/scrapAutoCalculate/projectedProfile-180.cw</file>
+        <file>datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw</file>
     </qresource>
 </RCC>

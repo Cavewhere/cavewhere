@@ -44,9 +44,9 @@ int main(int argc, char *argv[])
 
     cwOpenGLSettings::setApplicationRenderer();
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
 
     cwApplication a(argc, argv);
-    a.setAttribute(Qt::AA_DisableShaderDiskCache);
 
     cwRootData* rootData = new cwRootData();
 

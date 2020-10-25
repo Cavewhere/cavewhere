@@ -18,6 +18,7 @@ Interaction {
     property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
     property NoteTransform noteTransform
+    property string upText: "north"
     property alias transformUpdater: northArrow.transformUpdater
 
     focus: visible
@@ -119,7 +120,7 @@ Interaction {
 
     HelpBox {
         id: helpBoxId
-        text: "<b>Click</b> the north arrow's first point"
+        text: "<b>Click</b> the " + upText + " arrow's first point"
     }
 
     states: [
@@ -151,7 +152,7 @@ Interaction {
 
             QQ.PropertyChanges {
                 target: helpBoxId
-                text: "<b>Click</b> the north arrow's second point"
+                text: "<b>Click</b> the " + upText + " arrow's second point"
             }
 
             QQ.PropertyChanges {

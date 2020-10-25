@@ -24,12 +24,14 @@
 #include "cwTripCalibration.h"
 #include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
+#include "cwProjectedProfileScrapViewMatrix.h"
 
 //Our includes
 #include "TestHelper.h"
 
 //Qt includes
 #include <QtGlobal>
+#include <QSignalSpy>
 
 class TestRow {
 public:
@@ -104,6 +106,14 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfile.cw", -1.8869214928, 175.592));
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
     rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw",
+                0.0, 256.0));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90left.cw",
+                270.08, 255.66));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90right.cw",
+                89.94, 255.78));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-180.cw",
+                        180, 255.24));
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);
@@ -225,6 +235,80 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     }
 }
 
+TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 24.07, 229.57, 0.05, 0.005));
+
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = firstScrap(project);
+        currentScrap->setCalculateNoteTransform(true);
+
+        QSignalSpy matrixChanged(currentScrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged);
+
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+        projectedViewMatix->setAzimuth(10.0);
+
+        CHECK(matrixChanged.size() == 1);
+
+        checkScrapTransform(currentScrap, row);
+
+        currentScrap->setCalculateNoteTransform(false);
+
+        //Force recalculation
+        INFO("Filename:" << row.Filename.toStdString());
+        CHECK(currentScrap->calculateNoteTransform() == false);
+        currentScrap->setCalculateNoteTransform(true);
+        CHECK(currentScrap->calculateNoteTransform() == true);
+        checkScrapTransform(currentScrap, row);
+    }
+}
+
+TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
+    QList<TestRow> rows;
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005));
+
+    foreach(TestRow row, rows) {
+        auto root = std::make_unique<cwRootData>();
+        fileToProject(root->project(), row.Filename);
+        auto project = root->project();
+        cwScrap* currentScrap = firstScrap(project);
+        currentScrap->setCalculateNoteTransform(true);
+        REQUIRE(currentScrap->type() == cwScrap::RunningProfile);
+
+        TestRow runningProfileRow("", currentScrap->noteTransformation()->northUp(), 1.0 / currentScrap->noteTransformation()->scale(), 0.05, 0.005);
+        checkScrapTransform(currentScrap, runningProfileRow);
+
+        currentScrap->setType(cwScrap::ProjectedProfile);
+
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+
+        //Make sure it has change, because we've changed the type
+        CHECK(runningProfileRow.Rotation != Approx(currentScrap->noteTransformation()->northUp()));
+        CHECK(1.0 / runningProfileRow.Scale != Approx(currentScrap->noteTransformation()->scale()));
+
+        //Should definitly change
+        projectedViewMatix->setAzimuth(225.0);
+        projectedViewMatix->setDirection(cwProjectedProfileScrapViewMatrix::LeftToRight);
+        checkScrapTransform(currentScrap, row);
+
+        //Change it back to running profile
+        currentScrap->setType(cwScrap::RunningProfile);
+        checkScrapTransform(currentScrap, runningProfileRow); //Shouldbe like the original
+
+        //Change to projected profile
+        currentScrap->setType(cwScrap::ProjectedProfile);
+        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
+        auto projectedViewMatix2 = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
+        CHECK(projectedViewMatix2->azimuth() == 225.0);
+        CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LeftToRight);
+        checkScrapTransform(currentScrap, row);
+    }
+}
 
 TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     class TestRow {
@@ -242,6 +326,7 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfile.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileRotate90.cw"));
     rows.append(TestRow("://datasets/scrapGuessNeighbor/scrapGuessNeigborProfileContinuous.cw"));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw"));
 
     foreach(TestRow row, rows) {
         INFO("Testing:" << row.Filename.toStdString());
@@ -264,11 +349,12 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
             INFO("Center station:" << noteStation.name().toStdString());
 
             foreach(cwStation neighbor, neighbors) {
+                INFO("Neighbor:" << neighbor.name().toStdString());
                 auto found = std::find_if(scrapStations.begin(), scrapStations.end(), [neighbor](const cwNoteStation& station) {
-                    return station.name() == neighbor.name();
+                    return station.name().compare(neighbor.name(), Qt::CaseInsensitive) == 0;
                 });
 
-                CHECK(found != scrapStations.end());
+                REQUIRE(found != scrapStations.end());
 
                 cwNoteStation neighborNoteStation = *found;
 
@@ -277,54 +363,6 @@ TEST_CASE("Guess neighbor station name", "[cwScrap]") {
                 CHECK(neighborNoteStation.name().toUpper().toStdString() == guessedName.toStdString());
             }
         }
-    }
-}
-
-/**
- * This test the profileViewRotation() function in cwScrap
- */
-TEST_CASE("Test profile view rotation", "[cwScrap]") {
-
-    class TestRow {
-    public:
-        TestRow() {}
-        TestRow(QVector3D origin, QVector3D toStation, QVector3D result) :
-            Origin(origin),
-            ToStation(toStation),
-            Result(result)
-        {}
-
-        QVector3D Origin;
-        QVector3D ToStation;
-        QVector3D Result;
-    };
-
-    QVector3D origin(0.0, 0.0, 0.0);
-    QVector3D origin1(5.2, 4.2, 1.2);
-
-    QList<TestRow> rows;
-    rows.append(TestRow(origin, QVector3D(0.0, 0.0, 0.0), QVector3D(0.0, 0.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(1.0, 0.0, 0.0), QVector3D(1.0, 0.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(-1.0, 0.0, 0.0), QVector3D(1.0, 0.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(0.0, 1.0, 0.0), QVector3D(1.0, 0.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(0.0, -1.0, 0.0), QVector3D(1.0, 0.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(0.0, 0.0, 1.0), QVector3D(0.0, 1.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(0.0, 0.0, -1.0), QVector3D(0.0, -1.0, 0.0)));
-    rows.append(TestRow(origin, QVector3D(1.0, 1.0, -1.0), QVector3D(1.4142135623730951, -1.0, 0.0)));
-    rows.append(TestRow(origin1, origin1 + QVector3D(1.0, 1.0, -1.0), QVector3D(1.4142135623730951, -1.0, 0.0)));
-
-    for(int i = 0; i < rows.size(); i++) {
-        const TestRow& row = rows.at(i);
-        QMatrix4x4 rotate = cwScrap::toProfileRotation(row.Origin, row.ToStation);
-
-        QMatrix4x4 tranlate;
-        tranlate.translate(-row.Origin);
-
-        QMatrix4x4 matrix = rotate * tranlate;
-
-        QVector3D calculatedResult = matrix * row.ToStation;
-
-        checkQVector3D(calculatedResult, row.Result, 5);
     }
 }
 
