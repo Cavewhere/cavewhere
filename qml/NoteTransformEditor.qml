@@ -185,6 +185,10 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                                 scrap.viewMatrix.azimuth = newText
                             }
                         }
+
+                        Text {
+                            text: "°"
+                        }
                     }
 
                     HelpArea {
