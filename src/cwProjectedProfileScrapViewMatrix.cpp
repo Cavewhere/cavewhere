@@ -48,9 +48,9 @@ double cwProjectedProfileScrapViewMatrix::Data::absoluteAzimuth() const
         case LookingAt:
             return 0.0;
         case LeftToRight:
-            return 90.0;
-        case RightToLeft:
             return -90.0;
+        case RightToLeft:
+            return 90.0;
         }
         return std::numeric_limits<double>::quiet_NaN();
     };
