@@ -266,19 +266,6 @@ TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]"
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
         cwScrap* currentScrap = firstScrap(project);
-//        currentScrap->setCalculateNoteTransform(true);
-
-//        QSignalSpy matrixChanged(currentScrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged);
-
-//        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
-//        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
-//        projectedViewMatix->setAzimuth(10.0);
-
-//        CHECK(matrixChanged.size() == 1);
-
-//        checkScrapTransform(currentScrap, row);
-
-//        currentScrap->setCalculateNoteTransform(false);
 
         //Force recalculation
         INFO("Filename:" << row.Filename.toStdString());
