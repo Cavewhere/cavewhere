@@ -166,6 +166,8 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         Controls.ComboBox {
                             id: directionComboBoxId
 
+                            enabled: !checkableBoxId.checked
+
                             function isValid() {
                                 return scrap && scrap.viewMatrix
                             }
@@ -198,6 +200,7 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         ClickTextInput {
                             id: azimuthTextInputId
                             text: scrap.viewMatrix.azimuth
+                            readOnly: checkableBoxId.checked
                             onFinishedEditting: {
                                 scrap.viewMatrix.azimuth = newText
                             }

@@ -180,6 +180,8 @@ private:
         double Scale;
         QVector3D ErrorVector;
         double RotationDiff;
+
+        cwNoteTranformation toNoteTransform() const;
     };
 
     /**
@@ -236,8 +238,8 @@ private:
     ScrapShotTransform calculateShotTransformation(cwNoteStation station1,
                                                    cwNoteStation station2,
                                                    const ProfileTransform& profileTransform) const;
-    cwNoteTranformation averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
-    cwNoteTranformation planAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
+    ScrapShotTransform averageTransformations(QList< ScrapShotTransform > shotTransforms) const;
+    cwNoteTranformation projectedAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
     cwNoteTranformation runningProfileAverageTransform(QList< QPair<cwNoteStation, cwNoteStation> > shotStations) const;
 
     const cwScrap& copy(const cwScrap& other);
