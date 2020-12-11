@@ -40,9 +40,9 @@ cwScrap::cwScrap(QObject *parent) :
     TriangulationDataDirty(false),
     KeywordModel(new cwKeywordModel(this))
 {
-    updateTypeKeyword();
     setCalculateNoteTransform(true);
     setViewMatrix(new cwPlanScrapViewMatrix(this));
+    updateTypeKeyword();
 
 }
 
