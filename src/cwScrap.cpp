@@ -19,6 +19,7 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwMinimizer.h"
 
 //Qt includes
 #include <QDebug>
@@ -463,12 +464,56 @@ void cwScrap::updateNoteTransformation() {
         };
         break;
     case Plan:
+        averageFunc = [this](auto list)
+        {
+            return projectedAverageTransform(list);
+        };
+        break;
     case ProjectedProfile:
         averageFunc = [this](auto list)
         {
-            return planAverageTransform(list);
+            auto angleDiff = [](const ScrapShotTransform& t1, const ScrapShotTransform& t2) {
+                auto diffError = t1.ErrorVector - t2.ErrorVector;
+                return diffError.length();
+            };
+
+            auto scaleDiff = [](const ScrapShotTransform& t1, const ScrapShotTransform& t2) {
+                return t1.Scale - t2.Scale;
+            };
+
+            auto stdDev = [this](auto list, auto diffFunc) {
+                QList<ScrapShotTransform> transformations = calculateShotTransformations(list);
+                ScrapShotTransform averageTransform = averageTransformations(transformations);
+
+                auto stdOfValue = [=](auto diffFunc) {
+                    double sum = 0.0;
+                    for(auto transformation : transformations) {
+                        auto diff = diffFunc(transformation, averageTransform);
+                        sum += diff * diff;
+                    }
+                    return sqrt(sum / static_cast<double>(transformations.size()));
+                };
+
+                return stdOfValue(diffFunc);
+            };
+
+            auto matrix = static_cast<cwProjectedProfileScrapViewMatrix*>(viewMatrix());
+
+            cwMinimizer minimzer;
+            minimzer.setIncrement({10, 2, 0.4, 0.1}); //62 iteration to find best 0.1 azimuth
+            minimzer.setInitialRange(0.0, 360.0);
+            minimzer.setFunction([&](double azimuth) {
+                    matrix->setAzimuth(azimuth);
+                    return stdDev(list, angleDiff); //Min the min std devation in the angle
+            });
+
+            double bestAzimuth = minimzer.findMin();
+            matrix->setAzimuth(bestAzimuth);
+
+            return projectedAverageTransform(list);
         };
         break;
+
     }
 
     //Do the calculations
@@ -659,10 +704,10 @@ cwScrap::ScrapShotTransform cwScrap::calculateShotTransformation(cwNoteStation s
 /**
   This will average all the transformatons into one transfromation
   */
-cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) const {
+cwScrap::ScrapShotTransform cwScrap::averageTransformations(QList< ScrapShotTransform > shotTransforms) const {
 
     if(shotTransforms.empty()) {
-        return cwNoteTranformation();
+        return ScrapShotTransform();
     }
 
     //Values to be averaged
@@ -684,33 +729,23 @@ cwNoteTranformation cwScrap::averageTransformations(QList< ScrapShotTransform > 
 
     if(numberValidTransforms == 0.0) {
         qDebug() << "No valid transfroms" << LOCATION;
-        return cwNoteTranformation();
+        return ScrapShotTransform();
     }
 
     //Do the averaging
     errorVectorAverage = errorVectorAverage / numberValidTransforms;
     scaleAverage = scaleAverage / numberValidTransforms;
 
-
-    cwNoteTranformation transformation;
-    double angle = transformation.calculateNorth(QPointF(0.0, 0.0), errorVectorAverage.toPointF());
-
-//    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
-
-    transformation.setNorthUp(angle);
-    transformation.scaleNumerator()->setValue(1);
-    transformation.scaleDenominator()->setValue(scaleAverage);
-
-    return transformation;
+    return ScrapShotTransform(scaleAverage, errorVectorAverage);
 }
 
 /**
   Finds the average transfrom for the plan, based on all the shots in the scrap
   */
-cwNoteTranformation cwScrap::planAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
+cwNoteTranformation cwScrap::projectedAverageTransform(QList<QPair<cwNoteStation, cwNoteStation> > shotStations) const
 {
     QList<ScrapShotTransform> transformations = calculateShotTransformations(shotStations);
-    cwNoteTranformation averageTransformation = averageTransformations(transformations);
+    cwNoteTranformation averageTransformation = averageTransformations(transformations).toNoteTransform();
     return averageTransformation;
 }
 
@@ -803,7 +838,7 @@ cwNoteTranformation cwScrap::runningProfileAverageTransform(QList<QPair<cwNoteSt
 //    qDebug() << "Best rotation:" << minError.Rotation;
 
     //Using the mimimized error, find the average transform
-    cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations);
+    cwNoteTranformation averageTransformation = averageTransformations(minError.Transformations).toNoteTransform();
 
 //    qDebug() << "Average Transform:" << averageTransformation.northUp() << averageTransformation.scale();
 
@@ -1198,16 +1233,10 @@ void cwScrap::setViewMatrix(cwAbstractScrapViewMatrix *viewMatrix)
         return;
     }
 
-    if(ViewMatrix) {
-        disconnect(ViewMatrix, nullptr, this, nullptr);
-    }
-
     ViewMatrix = viewMatrix;
 
     if(ViewMatrix) {
         ViewMatrix->setParent(this);
-        connect(ViewMatrix, &cwAbstractScrapViewMatrix::matrixChanged,
-                this, &cwScrap::updateNoteTransformation);
 
         updateNoteTransformation();
 
@@ -1281,4 +1310,18 @@ QStringList cwScrap::types() const {
 
 cwScrap::ScrapType cwScrap::type() const {
     return viewMatrix()->type();
+}
+
+cwNoteTranformation cwScrap::ScrapShotTransform::toNoteTransform() const
+{
+    cwNoteTranformation transformation;
+    double angle = transformation.calculateNorth(QPointF(0.0, 0.0), ErrorVector.toPointF());
+
+//    qDebug() << "ErrorVectorAverage:" << errorVectorAverage;
+
+    transformation.setNorthUp(angle);
+    transformation.scaleNumerator()->setValue(1);
+    transformation.scaleDenominator()->setValue(Scale);
+
+    return transformation;
 }

@@ -51,11 +51,26 @@ public:
         ScaleEpsilon(scaleEpsilon)
     {}
 
+    TestRow(QString filename,
+            double rotation,
+            double scale,
+            double rotationEpsilon,
+            double scaleEpsilon,
+            double profileAzimuth) :
+        Filename(filename),
+        Rotation(rotation),
+        Scale(scale),
+        RotationEpsilon(rotationEpsilon),
+        ScaleEpsilon(scaleEpsilon),
+        ProfileAzimuth(profileAzimuth)
+    {}
+
     TestRow() :
         Rotation(0.0),
         Scale(0.0),
         RotationEpsilon(0.0),
-        ScaleEpsilon(0.0)
+        ScaleEpsilon(0.0),
+        ProfileAzimuth(0.0)
     {}
 
     QString Filename;
@@ -63,6 +78,7 @@ public:
     double Scale;
     double RotationEpsilon;
     double ScaleEpsilon;
+    double ProfileAzimuth;
 };
 
 cwScrap* scrap(const cwProject* project, int caveIndex, int tripIndex, int noteIndex, int scrapIndex) {
@@ -96,6 +112,12 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
     CHECK(realScale == Approx(row.Scale).epsilon(row.ScaleEpsilon));
     INFO("Calc Up:" << transform->northUp() << " Row Up:" << row.Rotation );
     CHECK(transform->northUp() == Approx(row.Rotation).epsilon(row.RotationEpsilon));
+
+    if(scrap->type() == cwScrap::ProjectedProfile) {
+        auto viewMatrix = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
+        REQUIRE(viewMatrix);
+        CHECK(viewMatrix->azimuth() == row.ProfileAzimuth);
+    }
 }
 
 TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
@@ -107,13 +129,13 @@ TEST_CASE("Auto Calculate Note Transform", "[cwScrap]") {
     rows.append(TestRow(":/datasets/scrapAutoCalculate/runningProfileMirror.cw", -2.2934958439, 176.721));
     rows.append(TestRow("://datasets/scrapAutoCalculate/runningProfileUpsideDown.cw",  87.8188708214, 1729.652));
     rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw",
-                0.0, 256.0));
+                0.0, 255.962, 0.05, 0.05, 135.7));
     rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90left.cw",
-                270.08, 255.66));
+                270.08, 255.66, 0.05, 0.05, 134.2));
     rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-90right.cw",
-                89.94, 255.78));
+                89.955, 255.667, 0.05, 0.05, 136.3));
     rows.append(TestRow("://datasets/scrapAutoCalculate/projectedProfile-180.cw",
-                        180, 255.24));
+                        180, 255.193, 0.05, 0.05, 135.6));
 
     foreach(TestRow row, rows) {
         auto project = fileToProject(row.Filename);
@@ -235,28 +257,15 @@ TEST_CASE("Auto calculate if survey station change position", "[cwScrap]") {
     }
 }
 
-TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
+TEST_CASE("Auto calculate should work on projected profile azimuth", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 24.07, 229.57, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-v3.cw", 0.0, 255.967, 0.05, 0.005, 135.7));
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
         fileToProject(root->project(), row.Filename);
         auto project = root->project();
         cwScrap* currentScrap = firstScrap(project);
-        currentScrap->setCalculateNoteTransform(true);
-
-        QSignalSpy matrixChanged(currentScrap->viewMatrix(), &cwAbstractScrapViewMatrix::matrixChanged);
-
-        REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
-        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
-        projectedViewMatix->setAzimuth(10.0);
-
-        CHECK(matrixChanged.size() == 1);
-
-        checkScrapTransform(currentScrap, row);
-
-        currentScrap->setCalculateNoteTransform(false);
 
         //Force recalculation
         INFO("Filename:" << row.Filename.toStdString());
@@ -269,7 +278,7 @@ TEST_CASE("Auto calculate if the azimuth / matrix has changed", "[cwScrap]") {
 
 TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
     QList<TestRow> rows;
-    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005));
+    rows.append(TestRow("://datasets/scrapAutoCalculate/ProjectProfile-test-startRunning.cw", 359.85, 257.162, 0.05, 0.005, 134.4));
 
     foreach(TestRow row, rows) {
         auto root = std::make_unique<cwRootData>();
@@ -285,16 +294,10 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         currentScrap->setType(cwScrap::ProjectedProfile);
 
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
-        auto projectedViewMatix = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
 
         //Make sure it has change, because we've changed the type
         CHECK(runningProfileRow.Rotation != Approx(currentScrap->noteTransformation()->northUp()));
         CHECK(1.0 / runningProfileRow.Scale != Approx(currentScrap->noteTransformation()->scale()));
-
-        //Should definitly change
-        projectedViewMatix->setAzimuth(225.0);
-        projectedViewMatix->setDirection(cwProjectedProfileScrapViewMatrix::LeftToRight);
-        checkScrapTransform(currentScrap, row);
 
         //Change it back to running profile
         currentScrap->setType(cwScrap::RunningProfile);
@@ -304,8 +307,8 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         currentScrap->setType(cwScrap::ProjectedProfile);
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
         auto projectedViewMatix2 = static_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix());
-        CHECK(projectedViewMatix2->azimuth() == 225.0);
-        CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LeftToRight);
+        CHECK(projectedViewMatix2->azimuth() == 134.4);
+        CHECK(projectedViewMatix2->direction() == cwProjectedProfileScrapViewMatrix::LookingAt);
         checkScrapTransform(currentScrap, row);
     }
 }
