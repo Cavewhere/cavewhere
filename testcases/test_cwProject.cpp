@@ -282,7 +282,7 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
                 REQUIRE(images.size() == 1);
                 CHECK(images.at(0).isOriginalValid());
                 CHECK(images.at(0).isIconValid());
-                CHECK(images.at(0).originalSize() == row.pageSizes.at(checked));
+                CHECK(row.pageSizes.contains(images.at(0).originalSize()));
                 checked++;
             });
 
