@@ -78,6 +78,7 @@ void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, cwCave *cave
                     cwStation station = firstChunk->stations().first();
 
                     stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << endl;
+//                    stream << "*fix " << station.name() << " " << 100 << " " << 10 << " " << 0 << endl;
                 }
             }
         }

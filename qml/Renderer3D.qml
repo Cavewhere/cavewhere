@@ -152,96 +152,42 @@ QQ2.Item {
                 ]
             }
 
-            Entity {
-                id: grid
+            GridPlaneEntity {}
 
-                PlaneMesh {
-                    id: plane
-                    width: 1000
-                    height: 1000
-                    meshResolution: Qt.size(2,2)
-                }
+            TerrainEntity {}
 
-                Transform {
-                    id: planeTransform
-                    rotationX: 90
-                }
+//            PhongMaterial {
+//                id: material
+//            }
 
-                Material {
-                    id: gridMatrial
+//            PhongMaterial {
+//                id: materialX
+//                ambient: "red"
+//            }
 
-                    parameters: [
-                        Parameter { name: "model"; value: planeTransform.matrix }
-                    ]
+//            PhongMaterial {
+//                id: materialY
+//                ambient: "green"
+//            }
 
-                    effect: Effect {
-                        techniques: [
-                            Technique {
-                                // GL 2 Technique
-                                filterKeys: [ forward ]
-                                graphicsApiFilter {
-                                    api: GraphicsApiFilter.OpenGL
-                                    profile: GraphicsApiFilter.NoProfile
-                                    majorVersion: 2
-                                    minorVersion: 1
-                                }
+//            PhongMaterial {
+//                id: materialZ
+//                ambient: "blue"
+//            }
 
-                                renderPasses: [
-                                    RenderPass {
-                                        shaderProgram: ShaderProgram {
-                                            vertexShaderCode: loadSource("qrc:/shaders/grid.vert")
-                                            fragmentShaderCode: loadSource("qrc:/shaders/grid.frag")
-                                        }
+//            TorusMesh {
+//                id: torusMesh
+//                radius: 5
+//                minorRadius: 1
+//                rings: 100
+//                slices: 20
+//            }
 
-                                        renderStates: [
-                                            noCullingId
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-
-                components: [
-                    plane,
-                    planeTransform,
-                    gridMatrial,
-                ]
-            }
-
-            PhongMaterial {
-                id: material
-            }
-
-            PhongMaterial {
-                id: materialX
-                ambient: "red"
-            }
-
-            PhongMaterial {
-                id: materialY
-                ambient: "green"
-            }
-
-            PhongMaterial {
-                id: materialZ
-                ambient: "blue"
-            }
-
-            TorusMesh {
-                id: torusMesh
-                radius: 5
-                minorRadius: 1
-                rings: 100
-                slices: 20
-            }
-
-            Transform {
-                id: torusTransform
-                //                    scale3D: Qt.vector3d(1.5, 1, 0.5)
-                //                    rotation: fromAxisAndAngle(Qt.vector3d(1, 0, 0), 45)
-            }
+//            Transform {
+//                id: torusTransform
+//                //                    scale3D: Qt.vector3d(1.5, 1, 0.5)
+//                //                    rotation: fromAxisAndAngle(Qt.vector3d(1, 0, 0), 45)
+//            }
 
 //            Entity {
 //                id: torusEntity
@@ -250,55 +196,55 @@ QQ2.Item {
 
             //                rooscrapsEntity,
 
-            SphereMesh {
-                id: sphereMesh
-                radius: 3
-            }
+//            SphereMesh {
+//                id: sphereMesh
+//                radius: 3
+//            }
 
-            Transform {
-                id: sphereTransformX
-                property real userAngle: 0.0
-                matrix: {
-                    var m = Qt.matrix4x4();
-                    m.rotate(userAngle, Qt.vector3d(0, 1, 0));
-                    m.translate(Qt.vector3d(20, 0, 0));
-                    return m;
-                }
-            }
+//            Transform {
+//                id: sphereTransformX
+//                property real userAngle: 0.0
+//                matrix: {
+//                    var m = Qt.matrix4x4();
+//                    m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+//                    m.translate(Qt.vector3d(20, 0, 0));
+//                    return m;
+//                }
+//            }
 
-            Transform {
-                id: sphereTransformY
-                property real userAngle: 0.0
-                matrix: {
-                    var m = Qt.matrix4x4();
-                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
-                    m.translate(Qt.vector3d(0, 20, 0));
-                    return m;
-                }
-            }
+//            Transform {
+//                id: sphereTransformY
+//                property real userAngle: 0.0
+//                matrix: {
+//                    var m = Qt.matrix4x4();
+//                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+//                    m.translate(Qt.vector3d(0, 20, 0));
+//                    return m;
+//                }
+//            }
 
-            Transform {
-                id: sphereTransformZ
-                property real userAngle: 0.0
-                matrix: {
-                    var m = Qt.matrix4x4();
-                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
-                    m.translate(Qt.vector3d(0, 0, 20));
-                    return m;
-                }
-            }
+//            Transform {
+//                id: sphereTransformZ
+//                property real userAngle: 0.0
+//                matrix: {
+//                    var m = Qt.matrix4x4();
+//                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+//                    m.translate(Qt.vector3d(0, 0, 20));
+//                    return m;
+//                }
+//            }
 
 
-            Transform {
-                id: sphereTransformZ2
-                property real userAngle: 0.0
-                matrix: {
-                    var m = Qt.matrix4x4();
-                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
-                    m.translate(Qt.vector3d(0, 0, 10));
-                    return m;
-                }
-            }
+//            Transform {
+//                id: sphereTransformZ2
+//                property real userAngle: 0.0
+//                matrix: {
+//                    var m = Qt.matrix4x4();
+//                    //                        m.rotate(userAngle, Qt.vector3d(0, 1, 0));
+//                    m.translate(Qt.vector3d(0, 0, 10));
+//                    return m;
+//                }
+//            }
 
 //            Entity {
 //                id: sphereEntityX
