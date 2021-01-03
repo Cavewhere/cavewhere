@@ -279,17 +279,15 @@ TEST_CASE("cwProject should add PDF correctly", "[cwProject]") {
             int checked = 0;
 
             project->addImages(filenames, [&checked, row](QList<cwImage> images){
-                REQUIRE(images.size() == row.pageSizes.size());
-                for(int i = 0; i < images.size(); i++) {
-                    CHECK(images.at(i).isOriginalValid());
-                    CHECK(images.at(i).isIconValid());
-                    CHECK(images.at(i).originalSize() == row.pageSizes.at(i));
-                }
+                REQUIRE(images.size() == 1);
+                CHECK(images.at(0).isOriginalValid());
+                CHECK(images.at(0).isIconValid());
+                CHECK(row.pageSizes.contains(images.at(0).originalSize()));
                 checked++;
             });
 
             rootData->futureManagerModel()->waitForFinished();
-            CHECK(checked == filenames.size());
+            CHECK(checked == row.pageSizes.size());
         }
     }
 }
