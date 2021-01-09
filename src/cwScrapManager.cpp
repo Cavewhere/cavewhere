@@ -65,6 +65,8 @@ void cwScrapManager::setProject(cwProject *project) {
 
             connect(Project, &cwProject::filenameChanged,
                     this, updateProfileFilename);
+
+            updateProfileFilename();
         }
     }
 }

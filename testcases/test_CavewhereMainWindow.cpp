@@ -291,3 +291,95 @@ TEST_CASE("Test Qt3D Deadlock", "[CavewhereMainWindow]") {
     loop.exec();
     CHECK(true);
 }
+
+TEST_CASE("Test create survey and carpet a single scrap", "[CavewhereMainWindow]") {
+    cwGlobalDirectory::setupBaseDirectory();
+
+    //Register all of the cavewhere types
+    cwQMLRegister::registerQML();
+
+    auto firstAppEngine = MainHelper::createApplicationEnigne();
+    cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());
+    REQUIRE(rootData);
+
+    QEventLoop loop;
+    QTimer::singleShot(2000, [rootData, firstAppEngine, &loop]() {
+        auto project = rootData->project();
+
+        //Switch to the data page
+        rootData->pageSelectionModel()->setCurrentPageAddress("Data");
+
+        auto cave = new cwCave();
+        auto trip = new cwTrip();
+
+        cave->setName("test1");
+        trip->setName("trip1");
+
+        project->cavingRegion()->addCave(cave);
+        cave->addTrip(trip);
+
+        rootData->pageSelectionModel()->setCurrentPageAddress("Data/Cave=test1/Trip=trip1");
+
+        auto chunk = new cwSurveyChunk();
+
+        trip->addChunk(chunk);
+
+        chunk->appendNewShot();
+
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "1");
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "2");
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10");
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "45");
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "10");
+
+        QList<QUrl> filenames {
+            QUrl::fromLocalFile(copyToTempFolder("://datasets/test_CavewhereMainWindow/scanCrop.png"))
+        };
+
+        trip->notes()->addFromFiles(filenames);
+
+        //Wait for the notes to load
+        rootData->futureManagerModel()->waitForFinished();
+
+        REQUIRE(trip->notes()->notes().size() == 1);
+        auto note = trip->notes()->notes().at(0);
+
+        auto scrap = new cwScrap();
+        note->addScrap(scrap);
+
+        scrap->addPoint(QPointF(0.25, 0.25));
+        scrap->addPoint(QPointF(0.25, 0.75));
+        scrap->addPoint(QPointF(0.75, 0.75));
+        scrap->addPoint(QPointF(0.75, 0.25));
+
+        cwNoteStation s1;
+        s1.setName("1");
+        s1.setPositionOnNote(QPointF(0.33, 0.33));
+        scrap->addStation(cwNoteStation(s1));
+
+        cwNoteStation s2;
+        s2.setName("2");
+        s2.setPositionOnNote(QPointF(0.66, 0.66));
+        scrap->addStation(cwNoteStation(s2));
+
+        rootData->futureManagerModel()->waitForFinished();
+
+        rootData->pageSelectionModel()->setCurrentPageAddress("View");
+
+        QTimer::singleShot(1000, [firstAppEngine, &loop, scrap](){
+            //Check that the scrap data exists
+            CHECK(scrap->triangulationData().croppedImage().isMipmapsValid() == true);
+            CHECK(scrap->triangulationData().points().size() > 0);
+            CHECK(scrap->triangulationData().texCoords().size() == scrap->triangulationData().points().size());
+            CHECK(scrap->triangulationData().indices().size() > 0);
+            CHECK(scrap->triangulationData().isStale() == false);
+            CHECK(scrap->triangulationData().isNull() == false);
+
+            delete firstAppEngine;
+            loop.quit();
+        });
+    });
+
+    loop.exec();
+    CHECK(true);
+}
