@@ -18,6 +18,7 @@
 #include <QQuickItem>
 
 //Our includes
+#include "cwGlobals.h"
 class cwPage;
 
 /**
@@ -25,7 +26,7 @@ class cwPage;
  *
  * This class manages page links, current page, and history of pages.
  */
-class cwPageSelectionModel : public QObject
+class CAVEWHERE_LIB_EXPORT cwPageSelectionModel : public QObject
 {
     Q_OBJECT
 

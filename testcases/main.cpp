@@ -33,6 +33,9 @@ int main( int argc, char* argv[] )
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_DisableShaderDiskCache);
 
+    //This is a workaround to https://bugreports.qt.io/browse/QTBUG-83871
+    qputenv("QT3D_SCENE3D_STOP_RENDER_HIDDEN", "1");
+
     QApplication app(argc, argv);
 
     {

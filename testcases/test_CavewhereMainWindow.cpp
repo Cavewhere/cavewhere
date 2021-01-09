@@ -16,6 +16,8 @@
 #include "cwTrip.h"
 #include "cwScrap.h"
 #include "cwOpenGLSettings.h"
+#include "cwSurveyChunk.h"
+#include "cwPageSelectionModel.h"
 
 //Qt includes
 #include <QQmlApplicationEngine>
@@ -23,7 +25,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <QSettings>
-
+#include <QtGlobal>
 
 class MainHelper {
 public:
@@ -241,3 +243,51 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
     cwOpenGLSettings::instance()->setUseDXT1Compression(true);
 }
 
+TEST_CASE("Test Qt3D Deadlock", "[CavewhereMainWindow]") {
+    cwGlobalDirectory::setupBaseDirectory();
+
+    //Register all of the cavewhere types
+    cwQMLRegister::registerQML();
+
+    auto firstAppEngine = MainHelper::createApplicationEnigne();
+    cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());
+    REQUIRE(rootData);
+
+    QEventLoop loop;
+    QTimer::singleShot(2000, [rootData, firstAppEngine, &loop]() {
+        auto project = rootData->project();
+
+        //Switch to the data page
+        rootData->pageSelectionModel()->setCurrentPageAddress("Data");
+
+        auto cave = new cwCave();
+        auto trip = new cwTrip();
+
+        cave->setName("test1");
+        trip->setName("trip1");
+
+        project->cavingRegion()->addCave(cave);
+        cave->addTrip(trip);
+
+        auto chunk = new cwSurveyChunk();
+
+        trip->addChunk(chunk);
+
+        chunk->appendNewShot();
+
+        chunk->setData(cwSurveyChunk::StationNameRole, 0, "1");
+        chunk->setData(cwSurveyChunk::StationNameRole, 1, "2");
+        chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, "10");
+        chunk->setData(cwSurveyChunk::ShotCompassRole, 0, "45");
+        chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "10");
+
+        QTimer::singleShot(1000, [firstAppEngine, &loop](){
+            qDebug() << "Done";
+            delete firstAppEngine;
+            loop.quit();
+        });
+    });
+
+    loop.exec();
+    CHECK(true);
+}
