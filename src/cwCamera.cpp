@@ -17,7 +17,7 @@ using namespace Qt3DCore;
 
 cwCamera::cwCamera(Qt3DCore::QNode *parent) :
     Qt3DCore::QEntity(parent),
-    ZoomScale(1/10.0),
+    ZoomScale(5.0), //Change this to zoom in and out in ortho view
     Transform(new Qt3DCore::QTransform(this)),
     CameraLens(new Qt3DRender::QCameraLens(this))
 {

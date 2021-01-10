@@ -36,12 +36,17 @@ QQ2.Item {
             components: [
                 RenderSettings {
                     id: sceneRootRenderPolicy
-                    renderPolicy: RenderSettings.OnDemand //RenderSettings.Always //RenderSettings.OnDemand
+                    renderPolicy: RenderSettings.Always //RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
-
                         RenderSurfaceSelector {
                             TechniqueFilter {
                                 matchAll: [ FilterKey { name: "renderingStyle"; value: "forward" } ]
+
+                                ClearBuffers {
+                                    clearColor: Qt.rgba(0.0, 0.0, 0.0, 0.0);
+                                    buffers: ClearBuffers.ColorDepthBuffer
+                                    NoDraw {}
+                                }
 
                                 //This is to provide access to tiling the render to a raster formate (such as a PNG)
                                 CaptureTileFrameNode {
@@ -60,6 +65,10 @@ QQ2.Item {
             CullFace {
                 id: noCullingId
                 mode: CullFace.NoCulling
+            }
+
+            Layer {
+                id: transparentLayerId
             }
 
             CW.Camera {

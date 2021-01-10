@@ -19,6 +19,21 @@ Entity {
         rotationX: 90
     }
 
+    BlendEquation {
+        id: blendingId
+        blendFunction: BlendEquation.Add
+    }
+
+    //To test out different blend functions
+    //http://www.andersriggelsen.dk/glblendfunc.php
+    BlendEquationArguments {
+        id: blendArguments
+        sourceAlpha: BlendEquationArguments.One
+        sourceRgb: BlendEquationArguments.One
+        destinationAlpha: BlendEquationArguments.One
+        destinationRgb: BlendEquationArguments.OneMinusSourceAlpha
+    }
+
     Material {
         id: gridMatrial
 
@@ -46,7 +61,9 @@ Entity {
                             }
 
                             renderStates: [
-                                noCullingId
+                                noCullingId,
+                                blendingId,
+                                blendArguments
                             ]
                         }
                     ]
@@ -59,5 +76,6 @@ Entity {
         plane,
         planeTransform,
         gridMatrial,
+        transparentLayerId
     ]
 }

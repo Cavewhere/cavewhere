@@ -2,14 +2,19 @@ import QtQuick 2.0
 import Qt3D.Core 2.1
 import Qt3D.Render 2.1
 
-ClearBuffers {
-    property alias camera: cameraSelectorId.camera
-    default property alias cameraChildren: cameraSelectorId.childNodes
 
-    clearColor: Qt.rgba(0.0, 0.0, 0.0, 0.0);
-    buffers: ClearBuffers.ColorDepthBuffer
+CameraSelector {
+    id: cameraSelectorId
 
-    CameraSelector {
-        id: cameraSelectorId
+    LayerFilter {
+        objectName: "opaqueLayerFilter"
+        layers: [transparentLayerId]
+        filterMode: LayerFilter.DiscardAnyMatchingLayers //Only match non-transparent entity ie opaque
+    }
+
+    LayerFilter {
+        objectName: "transparentLayerFilter"
+        layers: [transparentLayerId]
     }
 }
+
