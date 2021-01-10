@@ -213,7 +213,6 @@ QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, c
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QObject* object = component->beginCreate(context);
-    object->setParent(this);
 
     Q_ASSERT(dynamic_cast<QQuickItem*>(object) != nullptr);
     QQuickItem* item = static_cast<QQuickItem*>(object);
