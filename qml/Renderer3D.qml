@@ -114,6 +114,7 @@ QQ2.Item {
 
             Effect {
                 id: scrapEffect
+                objectName: "scrapEffect"
 
                 techniques: [
                     Technique {
@@ -142,20 +143,13 @@ QQ2.Item {
                 ]
             }
 
-            CW.LinePlotMesh {
-                id: linePlotMeshId
-                points: rootData.renderEntity.linePlotMesh.points
-                indexes: rootData.renderEntity.linePlotMesh.indexes
-            }
-
             Entity {
                 id: linePlotEntity
                 components: [
-                    linePlotMeshId,
+                     rootData.renderEntity.linePlotMesh,
                     lineMaterial,
                     inersectorId
                 ]
-                //            components: [ rootData.renderEntity.linePlotMesh ]
             }
 
             Entity {

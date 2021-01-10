@@ -16,23 +16,20 @@ cwLinePlotMesh::cwLinePlotMesh(Qt3DCore::QNode *parent)
 
     QAttribute* pointAttribute = new QAttribute();
     pointAttribute->setAttributeType(QAttribute::VertexAttribute);
-    pointAttribute->setDataSize(3);
-    pointAttribute->setDataType(QAttribute::Float);
+    pointAttribute->setVertexSize(3);
+    pointAttribute->setVertexBaseType(QAttribute::Float);
     pointAttribute->setByteOffset(0);
     pointAttribute->setBuffer(new Qt3DRender::QBuffer());
-    pointAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     pointAttribute->setName("vertexPosition");
 
     QAttribute* indexAttribute = new QAttribute();
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
-    indexAttribute->setDataType(QAttribute::UnsignedInt);
+    indexAttribute->setVertexBaseType(QAttribute::UnsignedInt);
     indexAttribute->setBuffer(new Qt3DRender::QBuffer());
-    indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     geometry()->addAttribute(pointAttribute);
     geometry()->addAttribute(indexAttribute);
 
-//    setVertexCount(2);
     setPrimitiveType(QGeometryRenderer::Lines);
 }
 
@@ -60,12 +57,10 @@ void cwLinePlotMesh::setIndexes(QVector<unsigned int> indexData)
 {
     if(!indexData.isEmpty()) {
         IndexData = indexData;
-//        qDebug() << "IndexData:" << IndexData;
         auto indexAttribute = geometry()->attributes().at(IndexAttribute);
         const char* indexes = reinterpret_cast<const char*>(&IndexData[0]);
         int size = IndexData.size() * sizeof(unsigned int);
         indexAttribute->buffer()->setData(QByteArray(indexes, size)); //deep copy
-//        qDebug() << "data when set:" << indexAttribute->buffer()->data();
         indexAttribute->setCount(indexData.size());
         emit indexesChanged();
     }
