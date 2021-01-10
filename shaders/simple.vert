@@ -1,14 +1,21 @@
-/**************************************************************************
-**
-**    Copyright (C) 2013 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
+#version 150 core
 
-in vec3 Vertex;
-uniform mat4 ModelViewProjectionMatrix;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
 
-void main(void)
+out vec3 position;
+out vec2 texCoord;
+
+uniform mat4 modelView;
+uniform mat4 mvp;
+//uniform mat3 texCoordTransform;
+
+void main()
 {
-    gl_Position = ModelViewProjectionMatrix * Vertex;
+//    vec3 tt = texCoordTransform * vec3(vertexTexCoord, 1.0);
+//    texCoord = (tt / tt.z).xy;
+    texCoord = vertexTexCoord.xy;
+    position = vec3( modelView * vec4( vertexPosition, 1.0 ) );
+
+    gl_Position = mvp * vec4( vertexPosition, 1.0 );
 }

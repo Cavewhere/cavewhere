@@ -15,27 +15,65 @@ Entity {
 
         PlaneMesh {
             id: plane
-            width: 100
-            height: 100
-            meshResolution: Qt.size(2,2)
+            width: 1
+            height: 1
+            meshResolution: Qt.size(10, 10)
+            mirrored: true
         }
 
         Transform {
             id: planeTransform
             rotationX: 90
-            scale3D: Qt.vector3d(1.0, 1.0, -1.0);
-            translation: Qt.vector3d(0.0, 0.0, 100);
+//            scale3D: Qt.vector3d(1.0, 1.0, -1.0);
+            translation: Qt.vector3d(0.0, 0.0, -300);
+        }
+
+        Material {
+            id: terrianMaterial
+
+            parameters: [
+                Parameter { name: "diffuseTexture"; value: offscreenTexture }
+            ]
+
+            effect: Effect {
+                techniques: [
+                    Technique {
+                        // GL 2 Technique
+                        filterKeys: [ forward ]
+                        graphicsApiFilter {
+                            api: GraphicsApiFilter.OpenGL
+                            profile: GraphicsApiFilter.NoProfile
+                            majorVersion: 2
+                            minorVersion: 1
+                        }
+
+                        renderPasses: [
+                            RenderPass {
+                                shaderProgram: ShaderProgram {
+                                    vertexShaderCode: loadSource("qrc:/shaders/simple.vert")
+                                    fragmentShaderCode: loadSource("qrc:/shaders/simple.frag")
+                                }
+
+                                renderStates: [
+                                    noCullingId,
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
         }
 
         TextureMaterial {
             id: terrainTextureId
             texture: offscreenTexture
+//            alphaBlending: true
         }
 
         components: [
             plane,
             planeTransform,
-            terrainTextureId
+            terrianMaterial
         ]
     }
 
@@ -68,28 +106,37 @@ Entity {
 
             Plugin {
                 id: mapPlugin
-                name: "osm" // "mapboxgl", "esri", ...
-
-                PluginParameter {
-                    name: "osm.mapping.providersrepository.disabled"
-                    value: "true"
-                }
-
-                PluginParameter {
-                    name: "osm.mapping.providersrepository.address"
-                    value: "http://maps-redirect.qt.io/osm/5.6/"
-                }
+                name: "esri"
             }
 
             plugin: mapPlugin
-            center: QtPositioning.coordinate(59.91, 10.75) // Oslo
-            zoomLevel: 17
+            center: QtPositioning.coordinate(38.436962, -109.930055)
+            zoomLevel: 16
+
+            activeMapType: supportedMapTypes[1]
+
+            onSupportedMapTypesChanged: {
+               console.log("Supported MapType:");
+               for (var i = 0; i < mapId.supportedMapTypes.length; i++) {
+                  console.log(i, supportedMapTypes[i].name);
+               }
+            }
 
             onVisibleRegionChanged: {
                 var bounding = visibleRegion.boundingGeoRectangle();
                 console.debug("Visbile area:" + visibleRegion.boundingGeoRectangle())
                 console.debug("topLeft:" + mapId.fromCoordinate(bounding.topLeft))
                 console.debug("bottomRight:" + mapId.fromCoordinate(bounding.bottomRight))
+
+                var verticalDistance = bounding.topLeft.distanceTo(bounding.bottomLeft);
+                var horizontalDistance = bounding.topLeft.distanceTo(bounding.topRight);
+
+                plane.width = horizontalDistance;
+                plane.height = verticalDistance;
+//                planeTransform.scale3D = Qt.vector3d(horizontalDistance, verticalDistance, -1.0);
+
+                console.log("Size:" + horizontalDistance + "," + verticalDistance)
+
             }
         }
     }

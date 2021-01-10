@@ -1,14 +1,14 @@
-/**************************************************************************
-**
-**    Copyright (C) 2013 by Philip Schuchardt
-**    www.cavewhere.com
-**
-**************************************************************************/
+#version 150 core
 
-uniform sampler2D qt_Texture0;
-varying vec4 qt_TexCoord0;
+uniform sampler2D diffuseTexture;
 
-void main(void)
+in vec3 position;
+in vec2 texCoord;
+
+out vec4 fragColor;
+
+void main()
 {
-    gl_FragColor = texture2D(qt_Texture0, qt_TexCoord0.st);
+    float darken = gl_FrontFacing ? 1.0 : 0.75;
+    fragColor = darken * texture( diffuseTexture, texCoord );
 }
