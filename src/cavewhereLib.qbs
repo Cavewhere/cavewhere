@@ -43,6 +43,7 @@ DynamicLibrary {
             "3dcore",
             "3drender",
             "svg",
+            "positioning"
             //"pdf" //This doesn't work under debug
         ]
     }
@@ -91,6 +92,7 @@ DynamicLibrary {
                 "svg",
                 "3dcore",
                 "3drender",
+                "positioning"
             ]
         }
 
