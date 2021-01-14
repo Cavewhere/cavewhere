@@ -13,6 +13,7 @@ class cwTrip;
 class cwLength;
 class cwErrorModel;
 class cwCavingRegion;
+class cwFixedStationModel;
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"
@@ -36,6 +37,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwFixedStationModel fixedStations READ fixedStations CONSTANT)
 
 
     Q_ENUMS(Roles)
@@ -84,6 +86,7 @@ public:
     bool isStationPositionLookupStale() const;
 
     QList< cwStation > stations() const;
+    cwFixedStationModel* fixedStations() const;
 
 signals:
     void beginInsertTrips(int begin, int end);
@@ -110,6 +113,8 @@ private:
     bool StationPositionModelStale;
 
     cwSurveyNetwork Network;
+
+    cwFixedStationModel* FixedStations;
 
     cwCave& Copy(const cwCave& object);
     void addTripNullHelper();
@@ -236,6 +241,15 @@ inline cwStationPositionLookup cwCave::stationPositionLookup() const
 inline cwSurveyNetwork cwCave::network() const
 {
     return Network;
+}
+
+/**
+ * @brief cwCave::fixedStations
+ * @return Returns the model that holds all the stations that have a geographical location
+ */
+inline cwFixedStationModel *cwCave::fixedStations() const
+{
+    return FixedStations;
 }
 
 /**

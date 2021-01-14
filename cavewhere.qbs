@@ -334,5 +334,99 @@ Project {
         }
     }
 
+    Product {
+        name: "vcpkg"
+        type: ["application"]
+
+        Group {
+            files: ["vcpkg/bootstrap-vcpkg.bat"]
+            fileTags: ["vcpkg-bootstrap"]
+        }
+
+        Rule {
+            inputs: ["vcpkg-boostrap"]
+            Artifact {
+                filePath: "vcpkg/vcpkg.exe"
+                fileTags: ["application"]
+            }
+            prepare: {
+                var cmd = new Command("bootstrap-vcpkg.bat");
+                cmd.description = "bootstrapping vcpkg";
+                cmd.workingDirectory = product.sourceDirectory + "/vcpkg";
+                return [cmd];
+            }
+        }
+    }
+
+    Product {
+        name: "proj4"
+        type: ["dynamiclibrary"]
+
+        Depends { name: "vcpkg" }
+        Depends { name :"cpp" }
+
+        Export {
+            Depends { name: "cpp" }
+            cpp.includePaths: [
+                "vcpkg/packages/proj4_x64-windows/include"
+            ]
+            cpp.libraryPaths: [
+                "vcpkg/packages/proj4_x64-windows/debug/lib"
+            ]
+            cpp.dynamicLibraries: [
+                "proj_d"
+            ]
+        }
+
+        Rule {
+            inputs: []
+            multiplex: true
+
+            Artifact {
+                fileTags: ["dynamiclibrary"]
+            }
+            prepare: {
+                var cmd = new Command("vcpkg.exe", ["install", "proj4:x64-windows"]);
+                cmd.description = "fetching and installing proj4";
+                cmd.workingDirectory = product.sourceDirectory + "/vcpkg";
+                return [cmd];
+            }
+        }
+    }
+
+    Product {
+        name: "vpckgDlls"
+
+        Depends {
+            name: "proj4"
+        }
+
+        Group {
+            name: "proj4-windows-debug-dlls"
+            files: [
+                "vcpkg/packages/libjpeg-turbo_x64-windows/debug/bin/turbojpeg.dll",
+                "vcpkg/packages/libjpeg-turbo_x64-windows/debug/bin/jpeg62.dll",
+                "vcpkg/packages/sqlite3_x64-windows/debug/bin/sqlite3.dll",
+                "vcpkg/packages/liblzma_x64-windows/debug/bin/lzmad.dll",
+                "vcpkg/packages/tiff_x64-windows/debug/bin/tiffd.dll",
+                "vcpkg/packages/zlib_x64-windows/debug/bin/zlibd1.dll",
+                "vcpkg/packages/proj4_x64-windows/debug/bin/proj_d.dll"
+            ]
+
+            qbs.install: true
+        }
+
+        /* This needs to be replace the enviromental variable PROJ_LIB=D:\docs\Projects\cavewhere\cavewhere\vcpkg\packages\proj4_x64-windows\share\proj4
+        Group {
+            name: "proj4-database"
+            files: [
+                "vcpkg/packages/proj4_x64-windows/share/proj4/proj.db"
+            ]
+            qbs.install: true
+        }
+        */
+
+
+    }
 
 }

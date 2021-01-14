@@ -59,6 +59,7 @@ DynamicLibrary {
     Depends { name: "asyncfuture" }
     Depends { name: "s3tc-dxt-decompression" }
     Depends { name: "bundle" }
+    Depends { name: "proj4" }
 
     Depends {
         name: "Qt.pdf"

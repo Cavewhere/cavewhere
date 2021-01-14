@@ -17,6 +17,7 @@ message Cave {
     optional StationPositionLookup stationPositionLookup = 5;
     optional bool stationPositionLookupStale = 6;
     optional SurveyNetwork network = 7;
+    optional FixedStationModel fixedStations = 8;
 }
 
 message Trip {
@@ -235,4 +236,16 @@ message ProjectedProfileScrapViewMatrix {
 
     optional double azimuth = 1;
     optional Direction direction = 2;
+}
+
+message FixedStationModel {
+    repeated FixedStation stations = 1;
+}
+
+message FixedStation {
+    optional QtProto.QString stationName = 1;
+    optional QtProto.QString latitude = 2;
+    optional QtProto.QString longitude = 3;
+    optional QtProto.QString altitude = 4;
+    optional Units.LengthUnit altitudeUnit = 5;
 }

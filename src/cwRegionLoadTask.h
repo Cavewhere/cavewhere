@@ -23,6 +23,8 @@ class cwImageResolution;
 class cwNoteStation;
 class cwNoteTranformation;
 class cwLength;
+class cwFixedStationModel;
+class cwFixedStation;
 #include "cwTeamMember.h"
 #include "cwStation.h"
 #include "cwShot.h"
@@ -31,6 +33,7 @@ class cwLength;
 #include "cwStationPositionLookup.h"
 #include "cwLead.h"
 #include "cwRegionLoadResult.h"
+#include "cwFixedStation.h"
 
 //Google protobuffer
 namespace CavewhereProto {
@@ -55,6 +58,8 @@ namespace CavewhereProto {
     class StationPositionLookup;
     class Lead;
     class ScrapViewMatrix;
+    class FixedStation;
+    class FixedStationModel;
 };
 
 namespace QtProto {
@@ -135,16 +140,18 @@ private:
     cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
     int loadFileVersion(const CavewhereProto::CavingRegion& protoRegion);
+    void loadFixedStationModel(const CavewhereProto::FixedStationModel& protoModel, cwFixedStationModel* model);
+    cwFixedStation loadFixedStation(const CavewhereProto::FixedStation& stationProto) const;
 
     //Utils
-    QString loadString(const QtProto::QString& protoString);
-    QDate loadDate(const QtProto::QDate& protoDate);
-    QSize loadSize(const QtProto::QSize& protoSize);
-    QSizeF loadSizeF(const QtProto::QSizeF &protoSize);
-    QPointF loadPointF(const QtProto::QPointF& protoPointF);
-    QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D);
-    QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D);
-    QStringList loadStringList(const QtProto::QStringList& protoStringList);
+    QString loadString(const QtProto::QString& protoString) const;
+    QDate loadDate(const QtProto::QDate& protoDate) const;
+    QSize loadSize(const QtProto::QSize& protoSize) const ;
+    QSizeF loadSizeF(const QtProto::QSizeF &protoSize) const;
+    QPointF loadPointF(const QtProto::QPointF& protoPointF) const;
+    QVector3D loadVector3D(const QtProto::QVector3D& protoVector3D) const;
+    QVector2D loadVector2D(const QtProto::QVector2D& protoVector2D) const;
+    QStringList loadStringList(const QtProto::QStringList& protoStringList) const;
 
     template<typename F>
     void runAfterConnected(F func) {

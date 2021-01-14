@@ -84,3 +84,45 @@ TEST_CASE("cwFixedStation should be invalid with bad values", "[cwFixedStation]"
         CHECK(s.isValid() == true);
     }
 }
+
+TEST_CASE("cwFixedStation should compare correctly", "[cwFixedStation]") {
+    cwFixedStation s;
+    s.setStationName("a1");
+    s.setLatitude("40.2");
+    s.setLongitude("20.1");
+    s.setAltitude("23.0");
+
+    cwFixedStation other = s;
+    CHECK(other == s);
+
+    SECTION("station name changed") {
+        s.setStationName("a2");
+        CHECK(other != s);
+    }
+
+    SECTION("lat changed") {
+        s.setLatitude("30.0");
+        CHECK(other != s);
+    }
+
+    SECTION("long changed") {
+        s.setLongitude("21.0");
+        CHECK(other != s);
+    }
+
+    SECTION("altitude changed") {
+        s.setAltitude("10.0");
+        CHECK(other != s);
+    }
+
+    SECTION("altitude units changed") {
+        s.setAltitudeUnit(cwUnits::Feet);
+        CHECK(other != s);
+    }
+
+    SECTION("detach") {
+        other.setAltitude("22.0");
+        other.setAltitude("23.0");
+        CHECK(other == s);
+    }
+}

@@ -25,6 +25,7 @@
 #include "cwScrap.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwFixedStationModel.h"
 
 //std includes
 #include <memory>
@@ -466,6 +467,48 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
     auto newFilename = fileCheck("://datasets/test_ProtoBufferSaveLoad/ProjectProfile-test-v3.cw", originalScrapCheck);
 
     fileCheck(newFilename, profileCheck);
+}
+
+TEST_CASE("Save and load should work correctly with fixed stations", "[ProtoSaveLoad]") {
+    auto root = std::make_unique<cwRootData>();
+    auto cave = new cwCave();
+    auto fixedStations = cave->fixedStations();
+
+    cwFixedStation f1;
+    f1.setStationName("a1");
+    f1.setLatitude("0.1");
+    f1.setLongitude("100");
+    f1.setAltitude("30.0");
+
+    cwFixedStation f2;
+    f2.setStationName("a2");
+    f2.setLatitude("0.2");
+    f2.setLatitude("0.3");
+    f2.setAltitude("10.0");
+
+    QList<cwFixedStation> stationList({f1, f2});
+
+    fixedStations->append(stationList);
+
+    root->region()->addCave(cave);
+
+    auto filename = prependTempFolder(QString("test_cwSurveyNetwork-") + QUuid::createUuid().toString().remove(QRegularExpression("{|}|-")) + ".cw");
+    root->project()->saveAs(filename);
+    root->project()->waitSaveToFinish();
+
+    root->project()->newProject();
+    root->futureManagerModel()->waitForFinished();
+
+    REQUIRE(root->region()->caveCount() == 0);
+    root->project()->loadFile(filename);
+    root->project()->waitLoadToFinish();
+
+    CHECK(root->project()->errorModel()->count() == 0);
+
+    REQUIRE(root->region()->caveCount() == 1);
+    auto loadedCave = root->region()->cave(0);
+    CHECK(loadedCave->fixedStations()->size() == stationList.size());
+    CHECK(loadedCave->fixedStations()->toList() == stationList);
 }
 
 

@@ -32,6 +32,8 @@
 #include "cwSQLManager.h"
 #include "cavewhereVersion.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwFixedStation.h"
+#include "cwFixedStationModel.h"
 
 //Google protobuffer
 #include "cavewhere.pb.h"
@@ -136,6 +138,7 @@ void cwRegionSaveTask::saveCave(CavewhereProto::Cave *protoCave, cwCave *cave)
     saveStationLookup(protoCave->mutable_stationpositionlookup(), cave->stationPositionLookup());
     protoCave->set_stationpositionlookupstale(cave->isStationPositionLookupStale());
     saveSurveyNetwork(protoCave->mutable_network(), cave->network());
+    saveFixedStations(protoCave->mutable_fixedstations(), cave->fixedStations());
 }
 
 /**
@@ -578,5 +581,23 @@ void cwRegionSaveTask::saveProjectedScrapViewMatrix(CavewhereProto::ProjectedPro
 {
     protoViewMatrix->set_azimuth(viewMatrix->azimuth());
     protoViewMatrix->set_direction(static_cast<CavewhereProto::ProjectedProfileScrapViewMatrix::Direction >(viewMatrix->direction()));
+}
+
+void cwRegionSaveTask::saveFixedStations(CavewhereProto::FixedStationModel *protoFixedStations, cwFixedStationModel *model)
+{
+    auto stations = model->toList();
+    for(const auto& station : qAsConst(stations)) {
+        auto protoStation = protoFixedStations->add_stations();
+        saveFixedStation(protoStation, station);
+    }
+}
+
+void cwRegionSaveTask::saveFixedStation(CavewhereProto::FixedStation *protoFixedStation, const cwFixedStation &station)
+{
+    saveString(protoFixedStation->mutable_stationname(), station.stationName());
+    saveString(protoFixedStation->mutable_latitude(), station.latitude());
+    saveString(protoFixedStation->mutable_longitude(), station.longitude());
+    saveString(protoFixedStation->mutable_altitude(), station.altitude());
+    protoFixedStation->set_altitudeunit(static_cast<CavewhereProto::Units_LengthUnit>(station.altitudeUnit()));
 }
 

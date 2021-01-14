@@ -46,6 +46,7 @@ public:
     void addConnectionToTripCalibrations(const char* signal, QObject* reciever, const char* slot);
     void addConnectionToChunks(const char* signal, QObject* reciever, const char* slot);
     void addConnectionToChunkCalibrations(const char* signal, QObject* reciver, const char* slot);
+    void addConnectionToFixedStations(const char* signal, QObject* reciever, const char* slot);
 
 signals:
     void regionChanged();
@@ -81,6 +82,7 @@ private:
    QList<Connection> ChunkConnections;
    QList<Connection> TripCalibrationConnections;
    QList<Connection> ChunkCalibrationConnections;
+   QList<Connection> FixedStationConnections;
 
    void connectCaves(cwCavingRegion* region);
    void connectCave(cwCave* cave);

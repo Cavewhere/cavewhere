@@ -26,6 +26,8 @@
 #include "cavewhereVersion.h"
 #include "cwProject.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwFixedStation.h"
+#include "cwFixedStationModel.h"
 
 //Qt includes
 #include <QSqlQuery>
@@ -280,6 +282,10 @@ void cwRegionLoadTask::loadCave(const CavewhereProto::Cave& protoCave, cwCave *c
         cave->setSurveyNetwork(network);
     } else {
         cave->setStationPositionLookupStale(false);
+    }
+
+    if(protoCave.has_fixedstations()) {
+        loadFixedStationModel(protoCave.fixedstations(), cave->fixedStations());
     }
 }
 
@@ -698,13 +704,50 @@ int cwRegionLoadTask::loadFileVersion(const CavewhereProto::CavingRegion &protoR
     return protoRegion.has_version() ? protoRegion.version() : 0;
 }
 
+void cwRegionLoadTask::loadFixedStationModel(const CavewhereProto::FixedStationModel &protoModel, cwFixedStationModel *model)
+{
+    QList<cwFixedStation> stations;
+    stations.reserve(protoModel.stations_size());
+    for(int i = 0; i < protoModel.stations_size(); i++) {
+        auto protoStation = protoModel.stations(i);
+        stations.append(loadFixedStation(protoStation));
+    }
+    model->append(stations);
+}
+
+cwFixedStation cwRegionLoadTask::loadFixedStation(const CavewhereProto::FixedStation &stationProto) const
+{
+    cwFixedStation station;
+    if(stationProto.has_stationname()) {
+        station.setStationName(loadString(stationProto.stationname()));
+    }
+
+    if(stationProto.has_latitude()) {
+        station.setLatitude(loadString(stationProto.latitude()));
+    }
+
+    if(stationProto.has_longitude()) {
+        station.setLongitude(loadString(stationProto.longitude()));
+    }
+
+    if(stationProto.has_altitude()) {
+        station.setAltitude(loadString(stationProto.altitude()));
+    }
+
+    if(stationProto.has_altitudeunit()) {
+        station.setAltitudeUnit(static_cast<cwUnits::LengthUnit>(stationProto.altitudeunit()));
+    }
+
+    return station;
+}
+
 
 /**
  * @brief cwRegionLoadTask::loadString
  * @param protoString
  * @return
  */
-QString cwRegionLoadTask::loadString(const QtProto::QString& protoString)
+QString cwRegionLoadTask::loadString(const QtProto::QString& protoString) const
 {
     const std::string& string = protoString.stringdata();
     return QString::fromUtf8(string.c_str(), string.length());
@@ -715,7 +758,7 @@ QString cwRegionLoadTask::loadString(const QtProto::QString& protoString)
  * @param protoDate
  * @return
  */
-QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate)
+QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate) const
 {
     return QDate(protoDate.year(), protoDate.month(), protoDate.day());
 }
@@ -725,7 +768,7 @@ QDate cwRegionLoadTask::loadDate(const QtProto::QDate& protoDate)
  * @param protoSize
  * @return
  */
-QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize)
+QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize) const
 {
     QSize size;
     size.setWidth(protoSize.width());
@@ -738,7 +781,7 @@ QSize cwRegionLoadTask::loadSize(const QtProto::QSize &protoSize)
  * @param protoSize
  * @return
  */
-QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize)
+QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize) const
 {
     QSizeF size;
     size.setWidth(protoSize.width());
@@ -751,7 +794,7 @@ QSizeF cwRegionLoadTask::loadSizeF(const QtProto::QSizeF &protoSize)
  * @param protoPointF
  * @return
  */
-QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF)
+QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF) const
 {
     return QPointF (protoPointF.x(), protoPointF.y());
 }
@@ -761,7 +804,7 @@ QPointF cwRegionLoadTask::loadPointF(const QtProto::QPointF& protoPointF)
  * @param protoVector3D
  * @return
  */
-QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D)
+QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D) const
 {
     return QVector3D(protoVector3D.x(), protoVector3D.y(), protoVector3D.z());
 }
@@ -771,7 +814,7 @@ QVector3D cwRegionLoadTask::loadVector3D(const QtProto::QVector3D &protoVector3D
  * @param protoVector2D
  * @return
  */
-QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D)
+QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D) const
 {
     return QVector2D(protoVector2D.x(), protoVector2D.y());
 }
@@ -781,7 +824,7 @@ QVector2D cwRegionLoadTask::loadVector2D(const QtProto::QVector2D &protoVector2D
  * @param protoStringList
  * @return
  */
-QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoStringList)
+QStringList cwRegionLoadTask::loadStringList(const QtProto::QStringList &protoStringList) const
 {
     QStringList list;
     list.reserve(protoStringList.strings_size());

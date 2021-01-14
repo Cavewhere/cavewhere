@@ -22,6 +22,7 @@ class cwCave;
 class cwProject;
 #include "cwUndoer.h"
 #include "cwGlobals.h"
+#include "cwFixedStation.h"
 
 class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cwUndoer
 {
@@ -60,6 +61,9 @@ public:
     int indexOf(cwCave* cave);
 
     cwProject* parentProject() const;
+
+    cwFixedStation origin() const;
+
 signals:
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);

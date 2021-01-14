@@ -40,3 +40,9 @@
 [submodule "testcases/s3tc-dxt-decompression"]
 	path = testcases/s3tc-dxt-decompression
         url = https://github.com/Cavewhere/s3tc-dxt-decompression.git
+[submodule "PROJ"]
+	path = PROJ
+	url = https://github.com/OSGeo/PROJ.git
+[submodule "vcpkg"]
+	path = vcpkg
+	url = https://github.com/microsoft/vcpkg

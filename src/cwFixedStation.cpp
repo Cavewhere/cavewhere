@@ -110,3 +110,16 @@ bool cwFixedStation::isValid() const
     auto coord = toGeoCoordinate();
     return !stationName().isEmpty() && coord.isValid();
 }
+
+bool cwFixedStation::operator==(const cwFixedStation &other) const
+{
+    if(data.data() == other.data.data()) {
+        return true;
+    }
+
+    return data->stationName == other.stationName()
+            && data->latitude == other.latitude()
+            && data->longitude == other.longitude()
+            && data->altitude == other.altitude()
+            && data->altitudeUnit == other.altitudeUnit();
+}

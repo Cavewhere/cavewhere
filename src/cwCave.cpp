@@ -12,6 +12,7 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
+#include "cwFixedStationModel.h"
 
 //Qt includes
 #include <QThread>
@@ -21,7 +22,8 @@ cwCave::cwCave(QObject* parent) :
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
     ErrorModel(new cwErrorModel(this)),
-    StationPositionModelStale(false)
+    StationPositionModelStale(false),
+    FixedStations(new cwFixedStationModel(this))
 {
     Length->setUnit(cwUnits::Meters);
     Depth->setUnit(cwUnits::Meters);
@@ -41,7 +43,8 @@ cwCave::cwCave(const cwCave& object) :
     Length(new cwLength(this)),
     Depth(new cwLength(this)),
     ErrorModel(new cwErrorModel(this)),
-    StationPositionModelStale(false)
+    StationPositionModelStale(false),
+    FixedStations(new cwFixedStationModel(this))
 {
     Copy(object);
 }
@@ -98,6 +101,9 @@ cwCave& cwCave::Copy(const cwCave& object) {
 
     StationPositionModelStale = object.StationPositionModelStale;
     Network = object.Network;
+
+    FixedStations->clear();
+    FixedStations->append(object.FixedStations->toList());
 
     return *this;
 }

@@ -12,6 +12,7 @@
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
+#include "cwFixedStationModel.h"
 
 cwSurveyChunkSignaler::cwSurveyChunkSignaler(QObject *parent) : QObject(parent)
 {
@@ -173,6 +174,20 @@ void cwSurveyChunkSignaler::addConnectionToChunkCalibrations(const char *signal,
     ChunkCalibrationConnections.append(connection);
 }
 
+void cwSurveyChunkSignaler::addConnectionToFixedStations(const char *signal, QObject *reciever, const char *slot)
+{
+    Connection connection(signal, reciever, slot);
+
+    if(!Region.isNull()) {
+        foreach(cwCave* cave, Region->caves()) {
+            auto fixedStationModel = cave->fixedStations();
+            connection.connect(fixedStationModel);
+        }
+    }
+
+    FixedStationConnections.append(connection);
+}
+
 /**
  * @brief cwSurveyChunkSignaler::connectCaves
  * @param region
@@ -193,6 +208,7 @@ void cwSurveyChunkSignaler::connectCave(cwCave* cave) {
     connect(cave, &cwCave::insertedTrips, this, &cwSurveyChunkSignaler::connectAddedTrips);
     connect(cave, &cwCave::beginRemoveTrips, this, &cwSurveyChunkSignaler::disconnectRemovedTrips);
     connectAll(cave, CaveConnections); //Connect to all user added connections
+    connectAll(cave->fixedStations(), FixedStationConnections);
     connectTrips(cave);
 }
 
@@ -250,6 +266,7 @@ void cwSurveyChunkSignaler::disconnectCave(cwCave *cave)
 {
 
     disconnectAll(cave, CaveConnections);
+    disconnectAll(cave->fixedStations(), FixedStationConnections);
 
     if(cave->hasTrips()) {
         disconnectTrips(cave, 0, cave->tripCount() - 1);

@@ -13,6 +13,14 @@ class cwFixedStationData;
 
 class CAVEWHERE_LIB_EXPORT cwFixedStation
 {
+    Q_GADGET
+
+    Q_PROPERTY(QString latitude READ latitude WRITE setLatitude)
+    Q_PROPERTY(QString longitude READ longitude WRITE setLongitude)
+    Q_PROPERTY(QString altitude READ altitude WRITE setAltitude)
+    Q_PROPERTY(cwUnits::LengthUnit altitudeUnit READ altitudeUnit WRITE setAltitudeUnit)
+    Q_PROPERTY(QString stationName READ stationName WRITE setStationName)
+
 public:
     cwFixedStation();
     cwFixedStation(const cwFixedStation &);
@@ -34,9 +42,11 @@ public:
     QString stationName() const;
     void setStationName(const QString& stationName);
 
-    QGeoCoordinate toGeoCoordinate() const;
+    Q_INVOKABLE QGeoCoordinate toGeoCoordinate() const;
+    Q_INVOKABLE bool isValid() const;
 
-    bool isValid() const;
+    bool operator==(const cwFixedStation& other) const;
+    bool operator!=(const cwFixedStation& other) const { return !operator==(other); }
 
 private:
     QSharedDataPointer<cwFixedStationData> data;

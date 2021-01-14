@@ -10,6 +10,7 @@
 #include "cwCave.h"
 #include "cwDebug.h"
 #include "cwProject.h"
+#include "cwFixedStationModel.h"
 
 //Qt includes
 #include <QThread>
@@ -239,6 +240,16 @@ int cwCavingRegion::indexOf(cwCave* cave) {
 cwProject *cwCavingRegion::parentProject() const
 {
     return dynamic_cast<cwProject*>(parent());
+}
+
+cwFixedStation cwCavingRegion::origin() const
+{
+    for(auto cave : qAsConst(Caves)) {
+        if(!cave->fixedStations()->isEmpty()) {
+            return cave->fixedStations()->first();
+        }
+    }
+    return cwFixedStation();
 }
 
 /**
