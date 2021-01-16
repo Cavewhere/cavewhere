@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick 2.12 as QQ
 import Cavewhere 1.0
 import QtQml 2.2
 import QtQuick.Controls 1.2 as Controls;
@@ -134,6 +134,54 @@ StandardPage {
         }
 
         ColumnLayout {
+
+            AddButton {
+                text: "Add Fixed Station"
+                onClicked:  {
+                    var station = currentCave.fixedStations.fixedStation("",
+                                                                         "0.0",
+                                                                         "0.0",
+                                                                         "0.0");
+                    currentCave.fixedStations.append(station);
+                }
+            }
+
+            QQ.TableView {
+                model: currentCave.fixedStations
+
+                Layout.fillWidth: true
+                implicitHeight: 200
+
+                delegate: QQ.Rectangle {
+                    implicitWidth: 100
+                    implicitHeight: 50
+                    border.width: 1
+
+                    DoubleClickTextInput {
+                        id: tripNameText
+                        anchors.fill: parent
+                        text: display
+//                        font.bold: true
+//                        font.pixelSize: 20
+
+                        onFinishedEditting: {
+                            var modelIndex = currentCave.fixedStations.index(row, column);
+                            console.log("Index:" + index + "ModelIndex" + modelIndex + "Text:" + newText)
+                            currentCave.fixedStations.setData(modelIndex, newText)
+                        }
+                    }
+
+//                    QQ.Text {
+//                        anchors.centerIn: parent
+//                    }
+                }
+            }
+
+
+            BreakLine {
+
+            }
+
 
             AddAndSearchBar {
                 Layout.fillWidth: true

@@ -173,8 +173,8 @@ void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, cwCave *cave
             writeLine(toFixedString(firstStation.name(), Point({0.0, 0.0, 0.0})));
         } else {
             //Use fixed station
-            for(int i = 0; i < cave->fixedStations()->count(); i++) {
-                auto station = cave->fixedStations()->at(i);
+            for(int i = 0; i < cave->fixedStations()->rowCount(); i++) {
+                auto station = cave->fixedStations()->row(i);
                 writeLine(toFixedString(station.stationName(), toXY(station.toGeoCoordinate())));
             }
         }

@@ -36,7 +36,7 @@ QQ2.Item {
             components: [
                 RenderSettings {
                     id: sceneRootRenderPolicy
-                    renderPolicy: RenderSettings.Always //RenderSettings.OnDemand
+                    renderPolicy: RenderSettings.OnDemand //RenderSettings.Always //RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
                         RenderSurfaceSelector {
                             TechniqueFilter {
@@ -107,7 +107,7 @@ QQ2.Item {
                                 RenderPass {
                                     renderStates: [
                                     LineWidth {
-                                            value: 5
+                                            value: 1
                                         }
                                     ]
                                     shaderProgram: ShaderProgram {

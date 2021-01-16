@@ -37,7 +37,7 @@ class CAVEWHERE_LIB_EXPORT cwCave : public QAbstractListModel, public cwUndoer
     Q_PROPERTY(cwLength* length READ length CONSTANT)
     Q_PROPERTY(cwLength* depth READ depth CONSTANT)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
-    Q_PROPERTY(cwFixedStationModel fixedStations READ fixedStations CONSTANT)
+    Q_PROPERTY(cwFixedStationModel* fixedStations READ fixedStations CONSTANT)
 
 
     Q_ENUMS(Roles)

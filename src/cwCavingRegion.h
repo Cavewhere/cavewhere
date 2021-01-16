@@ -29,6 +29,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_OBJECT
 
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
+    Q_PROPERTY(cwFixedStation origin READ origin NOTIFY originChanged);
 
     Q_ENUMS(Roles)
 public:
@@ -72,6 +73,8 @@ signals:
     void removedCaves(int begin, int end);
 
     void caveCountChanged();
+
+    void originChanged();
 
 public slots:
 
@@ -119,6 +122,9 @@ private:
         virtual void redo();
         virtual void undo();
     };
+
+    void connectOrigin();
+
 };
 
 typedef QSharedPointer<cwCavingRegion> cwCavingRegionPtr;

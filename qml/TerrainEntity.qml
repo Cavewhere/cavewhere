@@ -110,8 +110,8 @@ Entity {
             }
 
             plugin: mapPlugin
-            center: QtPositioning.coordinate(38.436962, -109.930055)
-            zoomLevel: 16
+            center: rootData.region.origin.toGeoCoordinate() //QtPositioning.coordinate(38.436962, -109.930055)
+            zoomLevel: 17
 
             activeMapType: supportedMapTypes[1]
 

@@ -27,7 +27,7 @@ TEST_CASE("cwCave should copy fixed stations correctly", "[cwCave]") {
 
     fixedStations->append({f1, f2});
 
-    CHECK(fixedStations->size() == 2);
+    CHECK(fixedStations->rowCount() == 2);
 
     cwCave other(cave);
 

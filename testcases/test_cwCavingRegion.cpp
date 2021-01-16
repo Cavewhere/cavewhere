@@ -12,13 +12,20 @@
 #include "cwLinePlotManager.h"
 #include "cwFixedStationModel.h"
 
+//Qt includes
+#include <QSignalSpy>
+
 TEST_CASE("cwCavingRegion should handle fixed stations correctly", "[cwCavingRegion]") {
     cwRootData rootData;
     auto region = rootData.region();
 
+    QSignalSpy originSpy(region, &cwCavingRegion::originChanged);
+
     cwCave* cave = new cwCave();
     cave->setName("cave1");
     region->addCave(cave);
+
+    CHECK(originSpy.size() == 1);
 
     cwTrip* trip = new cwTrip();
     cave->addTrip(trip);
@@ -50,6 +57,9 @@ TEST_CASE("cwCavingRegion should handle fixed stations correctly", "[cwCavingReg
         s1.setAltitude("1000");
         s1.setStationName("a1");
         cave->fixedStations()->append(s1);
+
+        CHECK(originSpy.size() == 2);
+        CHECK(region->origin() == s1);
 
         rootData.linePlotManager()->waitToFinish();
         rootData.taskManagerModel()->waitForTasks();
@@ -106,6 +116,46 @@ TEST_CASE("cwCavingRegion should handle fixed stations correctly", "[cwCavingReg
 
             CHECK(cave2->stationPositionLookup().hasPosition("x2"));
             CHECK(cave2->stationPositionLookup().position("x2") == QVector3D(201.7, 151.88, 300.0));
+
+            CHECK(originSpy.size() == 2);
+            CHECK(region->origin() == s1);
+
+            SECTION("Remove first cave") {
+                region->removeCave(0);
+
+                CHECK(originSpy.size() == 3);
+                CHECK(region->origin() == s2);
+
+                SECTION("Update fixed station") {
+                    auto firstStationIndex = cave2->fixedStations()->index(0, cave2->fixedStations()->column("Latitude"));
+                    CHECK(cave2->fixedStations()->setData(firstStationIndex, "30.0", Qt::EditRole));
+
+                    CHECK(originSpy.size() == 4);
+                    s2.setLatitude("30.0");
+                    CHECK(region->origin() == s2);
+
+                    firstStationIndex = cave2->fixedStations()->index(0, cave2->fixedStations()->column("Longitude"));
+                    CHECK(cave2->fixedStations()->setData(firstStationIndex, "31.0", Qt::EditRole));
+
+                    CHECK(originSpy.size() == 5);
+                    s2.setLongitude("31.0");
+                    CHECK(region->origin() == s2);
+
+                    firstStationIndex = cave2->fixedStations()->index(0, cave2->fixedStations()->column("Altitude"));
+                    CHECK(cave2->fixedStations()->setData(firstStationIndex, "11.0", Qt::EditRole));
+
+                    CHECK(originSpy.size() == 6);
+                    s2.setAltitude("11.0");
+                    CHECK(region->origin() == s2);
+
+                    firstStationIndex = cave2->fixedStations()->index(0, cave2->fixedStations()->column("Station"));
+                    CHECK(cave2->fixedStations()->setData(firstStationIndex, "x2", Qt::EditRole));
+
+                    CHECK(originSpy.size() == 7);
+                    s2.setStationName("x2");
+                    CHECK(region->origin() == s2);
+                }
+            }
         }
     }
 }

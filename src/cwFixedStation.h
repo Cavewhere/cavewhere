@@ -52,4 +52,6 @@ private:
     QSharedDataPointer<cwFixedStationData> data;
 };
 
+Q_DECLARE_METATYPE(cwFixedStation)
+
 #endif // CWFIXEDSTATION_H

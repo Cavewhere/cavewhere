@@ -19,6 +19,7 @@
 cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent)
 {
+    connectOrigin();
 }
 
 /**
@@ -29,6 +30,7 @@ cwCavingRegion::cwCavingRegion(const cwCavingRegion& object) :
     cwUndoer(object.undoStack())
 {
     copy(object);
+    connectOrigin();
 }
 
 /**
@@ -158,6 +160,73 @@ void cwCavingRegion::addCaveHelper() {
     endUndoMacro();
 }
 
+void cwCavingRegion::connectOrigin()
+{
+    auto connections = std::make_shared<QList<QMetaObject::Connection>>();
+
+    auto disconnectAll = [connections]() {
+        for(const auto& connection : *connections) {
+            QObject::disconnect(connection);
+        }
+        connections->clear();
+    };
+
+    auto watchFirstCave = [this, connections, disconnectAll]() {
+        disconnectAll();
+
+        if(caveCount() > 0) {
+            auto cave = caves().first();
+
+            auto dataChanged = connect(cave->fixedStations(), &cwFixedStationModel::dataChanged,
+                                       this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight)
+            {
+                Q_UNUSED(bottomRight);
+                if(topLeft.row() == 0) {
+                    emit originChanged();
+                }
+            });
+
+            auto rowsInserted = connect(cave->fixedStations(), &cwFixedStationModel::rowsInserted,
+                                        this, [this](const QModelIndex& parent, int begin, int end)
+            {
+                Q_UNUSED(parent);
+                Q_UNUSED(end);
+                if(begin == 0) {
+                    emit originChanged();
+                }
+            });
+
+            auto rowRemoved = connect(cave->fixedStations(), &cwFixedStationModel::rowsRemoved,
+                                      this, [this](const QModelIndex& parent, int begin, int end)
+            {
+                Q_UNUSED(parent);
+                Q_UNUSED(end);
+                if(begin == 0) {
+                    emit originChanged();
+                }
+            });
+
+            connections->append({dataChanged, rowsInserted, rowRemoved});
+        }
+
+        emit originChanged();
+    };
+
+    connect(this, &cwCavingRegion::insertedCaves, this, [watchFirstCave](int begin, int end) {
+        Q_UNUSED(end);
+        if(begin == 0) {
+            watchFirstCave();
+        }
+    });
+
+    connect(this, &cwCavingRegion::removedCaves, this, [watchFirstCave](int begin, int end) {
+        Q_UNUSED(end);
+        if(begin == 0) {
+            watchFirstCave();
+        }
+    });
+}
+
 /**
   \brief Adds a cave to the region
   */
@@ -246,7 +315,7 @@ cwFixedStation cwCavingRegion::origin() const
 {
     for(auto cave : qAsConst(Caves)) {
         if(!cave->fixedStations()->isEmpty()) {
-            return cave->fixedStations()->first();
+            return cave->fixedStations()->firstRow();
         }
     }
     return cwFixedStation();

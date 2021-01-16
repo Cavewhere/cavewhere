@@ -507,7 +507,7 @@ TEST_CASE("Save and load should work correctly with fixed stations", "[ProtoSave
 
     REQUIRE(root->region()->caveCount() == 1);
     auto loadedCave = root->region()->cave(0);
-    CHECK(loadedCave->fixedStations()->size() == stationList.size());
+    CHECK(loadedCave->fixedStations()->rowCount() == stationList.size());
     CHECK(loadedCave->fixedStations()->toList() == stationList);
 }
 

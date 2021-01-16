@@ -124,6 +124,8 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwFixedStation.h"
+#include "cwFixedStationModel.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -151,6 +153,7 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
     qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+    qRegisterMetaType<cwFixedStation>("cwFixedStation");
 
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
@@ -274,10 +277,11 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwRunningProfileScrapViewMatrix>("Cavewhere", 1, 0, "RunningProfileScrapViewMatrix");
     qmlRegisterType<cwProjectedProfileScrapViewMatrix>("Cavewhere", 1, 0, "ProjectedProfileScrapViewMatrix");
 
-
+    qmlRegisterAnonymousType<cwFixedStation>("Cavewhere", 1);
+    qmlRegisterType<cwFixedStationModel>("Cavewhere", 1, 0, "FixedStationModel");
 
     qmlRegisterType<cwKeywordItemFilterModel>("Cavewhere", 1, 0, "KeywordItemFilterModel");
     qmlRegisterType<cwKeywordItem>("Cavewhere", 1, 0, "KeywordItem");
-    qmlRegisterType<cwKeyword>();
+    qmlRegisterAnonymousType<cwKeyword>("Cavewhere", 1);
 
 }
