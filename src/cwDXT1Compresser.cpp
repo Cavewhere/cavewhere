@@ -43,56 +43,60 @@ QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::compress(const QLis
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::openglCompression(const QList<QImage> &images, bool threaded)
 {
-    auto compressImages = [images]() {
-        QOffscreenSurface* surface = nullptr;
-        auto createSurface = [&surface]() {
-            surface = new QOffscreenSurface();
-            surface->create();
-        };
+    auto deferredSurface = std::make_shared<AsyncFuture::Deferred<QOffscreenSurface*>>();
 
-        if(QThread::currentThread() == QCoreApplication::instance()->thread()) {
-            createSurface();
-        } else {
-            QMetaObject::invokeMethod(QCoreApplication::instance(), createSurface, Qt::BlockingQueuedConnection);
-        }
-
-        auto compressionContext = std::make_unique<QOpenGLContext>();
-        compressionContext->create();
-        bool contextOkay = compressionContext->makeCurrent(surface);
-
-        Q_ASSERT(contextOkay);
-
-        OpenGLCompresser compresser;
-        compresser.initializeOpenGLFunctions();
-
-        QList<cwDXT1Compresser::CompressedImage> compressedImages;
-        for(auto image : images) {
-            compressedImages.append(compresser.openglDxt1Compression(image));
-        }
-
-        compressionContext->doneCurrent();
-        QMetaObject::invokeMethod(surface, [surface](){surface->deleteLater();});
-
-        return compressedImages;
+    auto createSurface = [deferredSurface]() {
+        Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+        auto surface = new QOffscreenSurface();
+        surface->create();
+        deferredSurface->complete(surface);
     };
 
-    QFuture<CompressedImage> future;
-    if(QOpenGLContext::supportsThreadedOpenGL() && threaded) {
-        auto concurrentFuture = QtConcurrent::run(compressImages);
+    QMetaObject::invokeMethod(QCoreApplication::instance(), createSurface);
 
-        //This converts QList<CompressImage> to a future with the results in it, that can be iterated
-        future = AsyncFuture::observe(concurrentFuture).subscribe([concurrentFuture](){
-            return AsyncFuture::completed(concurrentFuture.result());
-        }).future();
-    } else if(QOpenGLContext::supportsThreadedOpenGL() || QThread::currentThread() == QCoreApplication::instance()->thread()){
-        future = AsyncFuture::completed(compressImages());
-    } else {
-        QList<cwDXT1Compresser::CompressedImage> images;
-        QMetaObject::invokeMethod(QCoreApplication::instance(), compressImages, Qt::BlockingQueuedConnection, &images);
-        future = AsyncFuture::completed(images);
-    }
+    auto surfaceFuture = deferredSurface->future();
+    return AsyncFuture::observe(surfaceFuture).subscribe([surfaceFuture, images, threaded]() {
+        auto surface = surfaceFuture.result();
 
-    return future;
+        auto compressImages = [images, surface]() {
+            auto compressionContext = std::make_unique<QOpenGLContext>();
+            compressionContext->create();
+            bool contextOkay = compressionContext->makeCurrent(surface);
+
+            Q_ASSERT(contextOkay);
+
+            OpenGLCompresser compresser;
+            compresser.initializeOpenGLFunctions();
+
+            QList<cwDXT1Compresser::CompressedImage> compressedImages;
+            for(auto image : images) {
+                compressedImages.append(compresser.openglDxt1Compression(image));
+            }
+
+            compressionContext->doneCurrent();
+            QMetaObject::invokeMethod(surface, [surface](){surface->deleteLater();});
+
+            return compressedImages;
+        };
+
+        QFuture<CompressedImage> future;
+        if(QOpenGLContext::supportsThreadedOpenGL() && threaded) {
+            auto concurrentFuture = QtConcurrent::run(compressImages);
+
+            //This converts QList<CompressImage> to a future with the results in it, that can be iterated
+            future = AsyncFuture::observe(concurrentFuture).subscribe([concurrentFuture](){
+                return AsyncFuture::completed(concurrentFuture.result());
+            }).future();
+        } else if(QOpenGLContext::supportsThreadedOpenGL() || QThread::currentThread() == QCoreApplication::instance()->thread()){
+            future = AsyncFuture::completed(compressImages());
+        } else {
+            QList<cwDXT1Compresser::CompressedImage> images;
+            QMetaObject::invokeMethod(QCoreApplication::instance(), compressImages, Qt::BlockingQueuedConnection, &images);
+            future = AsyncFuture::completed(images);
+        }
+
+        return future;
+    }).future();
 }
 
 QFuture<cwDXT1Compresser::CompressedImage> cwDXT1Compresser::squishCompression(const QList<QImage> &images, bool threaded)
