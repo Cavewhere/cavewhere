@@ -21,7 +21,7 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         Material(new QMaterial())
 {
 
-    QAttribute* pointAttribute = new QAttribute();
+    QAttribute* pointAttribute = new QAttribute(this);
     pointAttribute->setAttributeType(QAttribute::VertexAttribute);
     pointAttribute->setDataSize(3);
     pointAttribute->setDataType(QAttribute::Float);
@@ -30,7 +30,7 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     pointAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     pointAttribute->setName("vertexPosition");
 
-    QAttribute* texCoordAttribute = new QAttribute();
+    QAttribute* texCoordAttribute = new QAttribute(this);
     texCoordAttribute->setAttributeType(QAttribute::VertexAttribute);
     texCoordAttribute->setDataSize(2);
     texCoordAttribute->setDataType(QAttribute::Float);
@@ -39,7 +39,7 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     texCoordAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     texCoordAttribute->setName("scrapTexCoord");
 
-    QAttribute* indexAttribute = new QAttribute();
+    QAttribute* indexAttribute = new QAttribute(this);
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setDataType(QAttribute::UnsignedInt);
     indexAttribute->setBuffer(new Qt3DRender::QBuffer());
@@ -52,9 +52,10 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
-    Material = new QMaterial();
+    Material = new QMaterial(this);
 
-    ScrapTexture = new QTexture2D();
+    ScrapTexture = new QTexture2D(this);
+
     Material->addParameter(new QParameter("scrapTexture", ScrapTexture));
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
 
