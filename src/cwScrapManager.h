@@ -35,6 +35,7 @@ class cwRegionTreeModel;
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
+#include "cwAsyncFuture.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -77,7 +78,8 @@ private:
 
     //The task that'll be run
     cwProject* Project;
-    QFuture<void> TriangulateFuture;
+    cwAsyncFuture::Restarter<void> TriangulateRestarter;
+//    QFuture<void> TriangulateFuture;
     cwFutureManagerToken FutureManagerToken;
 
     //The gl scraps that need updating
