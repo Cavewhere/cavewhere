@@ -39,11 +39,14 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
+    TriangulateRestarter.onFutureChanged([this](){
+        FutureManagerToken.addJob({TriangulateRestarter.future(), "Updating Scaps"});
+    });
 }
 
 cwScrapManager::~cwScrapManager()
 {
-    TriangulateFuture.cancel();
+    TriangulateRestarter.future().cancel();
     waitForFinish();
 }
 
@@ -470,11 +473,10 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             taskFinished(dirtyScraps, scrapDatas);
         }).future();
 
-        FutureManagerToken.addJob({finalFuture, "Updating Scaps"});
         return finalFuture;
     };
 
-    cwAsyncFuture::restart(&TriangulateFuture, run);
+    TriangulateRestarter.restart(run);
 }
 
 /**
@@ -848,5 +850,5 @@ void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
 
 void cwScrapManager::waitForFinish()
 {
-    cwAsyncFuture::waitForFinished(TriangulateFuture);
+    cwAsyncFuture::waitForFinished(TriangulateRestarter.future());
 }
