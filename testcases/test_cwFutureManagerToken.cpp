@@ -79,4 +79,13 @@ TEST_CASE("cwFutureManagerToken should be thread safe", "[cwFutureManagerToken]"
 
         CHECK(model->rowCount() == 0);
     }
+
+    SECTION("isValid should work correctly") {
+
+        cwFutureManagerModel model;
+        CHECK(model.token().isValid() == true);
+
+        cwFutureManagerToken t;
+        CHECK(t.isValid() == false);
+    }
 }

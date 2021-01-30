@@ -21,6 +21,8 @@ public:
     bool operator==(const cwFutureManagerToken& token) const;
     bool operator!=(const cwFutureManagerToken& token) const;
 
+    bool isValid() const { return !Model.isNull(); }
+
 private:
     QPointer<cwFutureManagerModel> Model;
 };

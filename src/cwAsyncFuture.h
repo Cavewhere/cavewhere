@@ -40,38 +40,42 @@ public:
     template<typename T>
     class Restarter {
     public:
-        Restarter() = default;
+        Restarter(QObject* context) :
+            Context(context)
+        {
+
+        }
+
         Restarter(const Restarter& other) = delete;
         Restarter& operator=(const Restarter& other) = delete;
 
         void restart(std::function<QFuture<T> ()> runFunction) {
-            if(runFunction) {
-                if(!Future.isRunning()) {
-                    setFuture(runFunction());
-                } else {
-                    //Update the run function so we use the most update one
-                    this->runFunction = runFunction;
+            Q_ASSERT(runFunction);
 
-                    //Only setup the watch and cancel the future once
-                    if(!isCanceled) {
-                        //Watch for when the Future is cancelled
-                        AsyncFuture::observe(Future).subscribe(
-                                    [](){}, //Do nothing on finished
-                        [this]()
-                        {
-                            //Recursive call
-                            Q_ASSERT(Future.isCanceled());
-                            setFuture(this->runFunction());
-                        });
-
-                        //Cancel
-                        isCanceled = true;
-                        Future.cancel();
-                    }
-                }
+            if(!Future.isRunning()) {
+                setFuture(runFunction());
             } else {
+                //Update the run function so we use the most update one
+                this->runFunction = runFunction;
 
+                //Only setup the watch and cancel the future once
+                if(!isCanceled) {
+                    //Watch for when the Future is cancelled
+                    AsyncFuture::observe(Future).context(Context,
+                                [](){}, //Do nothing on finished
+                    [this]()
+                    {
+                        //Recursive call
+                        Q_ASSERT(Future.isCanceled());
+                        setFuture(this->runFunction());
+                    });
+
+                    //Cancel
+                    isCanceled = true;
+                    Future.cancel();
+                }
             }
+
         }
 
         void onFutureChanged(std::function<void ()> changedCallback) {
@@ -86,6 +90,7 @@ public:
         std::function<QFuture<T> ()> runFunction;
         std::function<void ()> changedCallback;
         QFuture<T> Future;
+        QObject* Context;
         bool isCanceled = false;
 
         void setFuture(QFuture<T> future) {

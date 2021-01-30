@@ -34,6 +34,7 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
     LinePlotManager(nullptr),
     Project(nullptr),
+    TriangulateRestarter(this),
     GLScraps(nullptr),
     AutomaticUpdate(true)
 {
