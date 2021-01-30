@@ -237,7 +237,7 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutu
 
 TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with cwAsyncFuture::Restarter", "[cwFutureManagerModel]") {
 
-    cwAsyncFuture::Restarter<int> restarter;
+    cwAsyncFuture::Restarter<int> restarter(QCoreApplication::instance());
     cwFutureManagerModel model;
 
     QAtomicInt count(0);
