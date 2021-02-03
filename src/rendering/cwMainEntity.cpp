@@ -8,3 +8,19 @@ cwMainEntity::cwMainEntity(QObject* obj)
 {
 
 }
+
+cwMainEntity::~cwMainEntity()
+{
+    if(!LinePlotMesh.isNull() && LinePlotMesh->parentNode() == nullptr) {
+        //Hasn't been assigned to an entity yet
+        delete LinePlotMesh;
+    }
+}
+
+/**
+* @brief cwMainEntity::linePlot
+* @return
+*/
+cwLinePlotMesh* cwMainEntity::linePlotMesh() const {
+    return LinePlotMesh;
+}

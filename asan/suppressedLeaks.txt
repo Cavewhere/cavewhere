@@ -3,3 +3,15 @@ leak:libfontconfig.so
 leak:libfreetype.so
 leak:libwebp.so
 leak:__interceptor_calloc
+leak:libopenglrenderer.so
+leak:QObjectPrivate::addConnection
+leak:QIconLoader::findIconHelper
+leak:QArrayData::allocate
+leak:QObjectPrivate::connectImpl
+leak:QObject::QObject
+leak:QThreadPrivate::QThreadPrivate
+leak:QMetaObjectPrivate::connect
+leak:Qt3DCore::QDownloadHelperServicePrivate::init
+leak:Qt3DCore::QDownloadNetworkWorker::QDownloadNetworkWorker
+leak:queuedConnectionTypes
+leak:QObject::deleteLater

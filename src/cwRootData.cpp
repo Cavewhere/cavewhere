@@ -41,7 +41,7 @@
 
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
-    RenderEntity(new cwMainEntity),
+    RenderEntity(new cwMainEntity(this)),
     KeywordItemModel(new cwKeywordItemModel(this)),
     DefaultTrip(new cwTrip(this)),
     DefaultTripCalibration(new cwTripCalibration(this))

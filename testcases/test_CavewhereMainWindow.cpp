@@ -362,6 +362,7 @@ TEST_CASE("Test create survey and carpet a single scrap", "[CavewhereMainWindow]
         s2.setPositionOnNote(QPointF(0.66, 0.66));
         scrap->addStation(cwNoteStation(s2));
 
+        rootData->taskManagerModel()->waitForTasks();
         rootData->futureManagerModel()->waitForFinished();
 
         rootData->pageSelectionModel()->setCurrentPageAddress("View");

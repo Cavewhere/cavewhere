@@ -172,6 +172,9 @@ void cwImageItem::initializeShaders() {
         ImageProgram->addShader(imageVertexShader);
         ImageProgram->addShader(imageFragmentShader);
 
+        imageVertexShader->setParent(ImageProgram);
+        imageFragmentShader->setParent(ImageProgram);
+
         bool linkingErrors = ImageProgram->link();
         if(!linkingErrors) {
             qDebug() << "Linking errors:" << ImageProgram->log();
@@ -299,7 +302,9 @@ void cwImageItem::paint(QPainter* painter) {
 void cwImageItem::releaseResources()
 {
     delete GLResources;
+    delete ImageProgram;
 }
+
 
 /**
  * @brief cwImageItem::updatePaintNode

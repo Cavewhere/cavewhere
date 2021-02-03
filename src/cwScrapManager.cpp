@@ -43,6 +43,10 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
+    if(!ScrapsEntity.isNull() && !ScrapsEntity->parentEntity()) {
+        delete ScrapsEntity;
+    }
+
     TriangulateFuture.cancel();
     waitForFinish();
 }
@@ -123,6 +127,11 @@ void cwScrapManager::setLinePlotManager(cwLinePlotManager *linePlotManager)
         }
     }
 }
+
+cwScrapsEntity* cwScrapManager::scrapsEntity() const {
+    return ScrapsEntity;
+}
+
 
 void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
 {

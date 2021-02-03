@@ -145,11 +145,16 @@ QQ2.Item {
 
             Entity {
                 id: linePlotEntity
+
                 components: [
-                     rootData.renderEntity.linePlotMesh,
+                    rootData.renderEntity.linePlotMesh,
                     lineMaterial,
                     inersectorId
                 ]
+
+                QQ2.Component.onCompleted: {
+                    rootData.renderEntity.linePlotMesh.parent = linePlotEntity
+                }
             }
 
             Entity {
@@ -322,6 +327,8 @@ QQ2.Item {
 
             Entity {
                 id: cppEntities
+
+
             }
 
         }

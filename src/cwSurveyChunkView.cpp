@@ -906,6 +906,15 @@ void cwSurveyChunkView::createTitlebar() {
     UpTitle->setParentItem(this);
     DownTitle->setParentItem(this);
 
+    StationTitle->setParent(this);
+    DistanceTitle->setParent(this);
+    AzimuthTitle->setParent(this);
+    ClinoTitle->setParent(this);
+    LeftTitle->setParent(this);
+    RightTitle->setParent(this);
+    UpTitle->setParent(this);
+    DownTitle->setParent(this);
+
     StationTitle->setProperty("text", "Station");
     DistanceTitle->setProperty("text", "Distance");
     AzimuthTitle->setProperty("text", "Azimuth");
@@ -943,6 +952,7 @@ void cwSurveyChunkView::createTitlebar() {
 
     ErrorItem = qobject_cast<QQuickItem*>(QMLComponents->errorDelegate()->create());
     ErrorItem->setParentItem(this);
+    ErrorItem->setParent(this);
 }
 
 /**

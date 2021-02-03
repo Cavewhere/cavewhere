@@ -44,6 +44,7 @@ cwGLViewer::cwGLViewer(QQuickItem *parent) :
 }
 
 cwGLViewer::~cwGLViewer() {
+    delete Camera;
 }
 
 void cwGLViewer::privateResizeGL() {

@@ -3,6 +3,7 @@
 
 //Qt inculdes
 #include <QObject>
+#include <QPointer>
 
 //Our inculdes
 class cwLinePlotMesh;
@@ -15,20 +16,15 @@ class cwMainEntity : public QObject
 
 public:
     cwMainEntity(QObject* obj = nullptr);
+    ~cwMainEntity();
 
     cwLinePlotMesh* linePlotMesh() const;
 
 private:
-    cwLinePlotMesh* LinePlotMesh;
+    QPointer<cwLinePlotMesh> LinePlotMesh;
 
 };
 
-/**
-* @brief cwMainEntity::linePlot
-* @return
-*/
-inline cwLinePlotMesh* cwMainEntity::linePlotMesh() const {
-    return LinePlotMesh;
-}
+
 
 #endif // CWMAINENTITY_H
