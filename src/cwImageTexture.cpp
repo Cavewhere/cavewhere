@@ -194,7 +194,7 @@ void cwImageTexture::updateData() {
     if(mipmaps.isEmpty()) { return; }
 
     QSize firstLevel = mipmaps.first().second;
-    if(!cwTextureUploadTask::isDivisibleBy4(firstLevel) && results.type == cwTextureUploadTask::DXT1Mipmaps) {
+    if(!cwTextureUploadTask::isDivisibleBy4(firstLevel) && results.format == cwTextureUploadTask::DXT1Mipmaps) {
         qDebug() << "Trying to upload an image that isn't divisible by 4. This will crash ANGLE on windows." << LOCATION;
         TextureDirty = false;
         return;
@@ -224,7 +224,7 @@ void cwImageTexture::updateData() {
         Q_ASSERT(mipmaps.at(mipmapLevel - 1 > 0 ? mipmapLevel - 1 : 0).second.width() >= size.width());
 
         if(size.width() < maxTextureSize && size.height() < maxTextureSize) {
-            switch(results.type) {
+            switch(results.format) {
             case cwTextureUploadTask::DXT1Mipmaps:
                 glCompressedTexImage2D(GL_TEXTURE_2D, trueMipmapLevel, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                        size.width(), size.height(), 0,
@@ -275,7 +275,7 @@ void cwImageTexture::startLoadingImage()
         cwTextureUploadTask uploadTask;
         uploadTask.setImage(image());
         uploadTask.setProjectFilename(ProjectFilename);
-        uploadTask.setType(TextureType);
+        uploadTask.setFormat(TextureType);
         UploadedTextureFuture = uploadTask.mipmaps();
         FutureManagerToken.addJob({UploadedTextureFuture, "Updating Texture"});
 

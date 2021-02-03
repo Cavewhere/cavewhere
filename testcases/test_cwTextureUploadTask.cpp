@@ -11,6 +11,7 @@
 #include "cwNote.h"
 #include "cwTextureUploadTask.h"
 #include "cwAsyncFuture.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QSqlDatabase>
@@ -18,6 +19,8 @@
 #include <QSqlError>
 
 TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
+
+    cwOpenGLSettings::instance()->setToDefault();
 
     auto project = fileToProject("://datasets/test_cwTextureUploadTask/cwTextureUploadTask.cw");
 
@@ -48,7 +51,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());
-        task.setType(cwTextureUploadTask::DXT1Mipmaps);
+        task.setFormat(cwTextureUploadTask::DXT1Mipmaps);
         auto resultsFuture = task.mipmaps();
 
         cwAsyncFuture::waitForFinished(resultsFuture);
@@ -69,7 +72,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
                                                  { 8 , QSize(1, 1) },
                                              });
 
-        CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
+        CHECK(results.format == cwTextureUploadTask::DXT1Mipmaps);
         CHECK(results.scaleTexCoords.x() == Approx(0.997024));
         CHECK(results.scaleTexCoords.y() == Approx(1.0));
 
@@ -80,7 +83,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
         cwTextureUploadTask task;
         task.setImage(note->image());
         task.setProjectFilename(project->filename());
-        task.setType(cwTextureUploadTask::OpenGL_RGBA);
+        task.setFormat(cwTextureUploadTask::OpenGL_RGBA);
         auto resultsFuture = task.mipmaps();
 
         cwAsyncFuture::waitForFinished(resultsFuture);
@@ -90,7 +93,7 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
                                                  { 3280320 , QSize(1005, 816) }
                                              });
 
-        CHECK(results.type == cwTextureUploadTask::OpenGL_RGBA);
+        CHECK(results.format == cwTextureUploadTask::OpenGL_RGBA);
         CHECK(results.scaleTexCoords.x() == Approx(1.0));
         CHECK(results.scaleTexCoords.y() == Approx(1.0));
         checkMipmaps(results, mipmaps);

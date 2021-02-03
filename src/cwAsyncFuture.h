@@ -37,24 +37,70 @@ public:
         return watcher.isFinished();
     }
 
-    template<class T, typename RunFunc>
-    static void restart(QFuture<T>* future, RunFunc run) {
-        future->cancel();
+    template<typename T>
+    class Restarter {
+    public:
+        Restarter(QObject* context) :
+            Context(context)
+        {
 
-        if(!future->isRunning()) {
-            *future = run();
-
-            AsyncFuture::observe(*future).subscribe(
-                        [](){},
-            [future, run]()
-            {
-                //Recursive call
-                *future = QFuture<T>();
-                Q_ASSERT(!future->isRunning());
-                restart(future, run);
-            });
         }
-    }
+
+        Restarter(const Restarter& other) = delete;
+        Restarter& operator=(const Restarter& other) = delete;
+
+        void restart(std::function<QFuture<T> ()> runFunction) {
+            Q_ASSERT(runFunction);
+
+            if(!Future.isRunning()) {
+                setFuture(runFunction());
+            } else {
+                //Update the run function so we use the most update one
+                this->runFunction = runFunction;
+
+                //Only setup the watch and cancel the future once
+                if(!isCanceled) {
+                    //Watch for when the Future is cancelled
+                    AsyncFuture::observe(Future).context(Context,
+                                [](){}, //Do nothing on finished
+                    [this]()
+                    {
+                        //Recursive call
+                        Q_ASSERT(Future.isCanceled());
+                        setFuture(this->runFunction());
+                    });
+
+                    //Cancel
+                    isCanceled = true;
+                    Future.cancel();
+                }
+            }
+
+        }
+
+        void onFutureChanged(std::function<void ()> changedCallback) {
+            this->changedCallback = changedCallback;
+        }
+
+        QFuture<T> future() const {
+            return Future;
+        }
+
+    private:
+        std::function<QFuture<T> ()> runFunction;
+        std::function<void ()> changedCallback;
+        QFuture<T> Future;
+        QObject* Context;
+        bool isCanceled = false;
+
+        void setFuture(QFuture<T> future) {
+            isCanceled = false;
+            Future = future;
+            if(changedCallback) {
+                changedCallback();
+            }
+        }
+    };
 };
 
 #endif // CWASYNCFUTURE_H

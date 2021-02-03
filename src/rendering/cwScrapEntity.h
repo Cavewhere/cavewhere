@@ -16,6 +16,7 @@
 //Our includes
 class cwScrap;
 class cwTextureImage;
+class cwTexture;
 #include "cwGlobals.h"
 #include "cwImage.h"
 
@@ -63,7 +64,7 @@ private:
 
     Qt3DRender::QTechnique* Technique; //!<
     Qt3DRender::QMaterial* Material; //!<
-    Qt3DRender::QTexture2D* ScrapTexture;
+    cwTexture* ScrapTexture;
     Qt3DRender::QEffect* Effect; //!<
 
     QVector<QVector3D> Points;

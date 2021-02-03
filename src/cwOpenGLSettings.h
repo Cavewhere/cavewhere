@@ -230,6 +230,8 @@ private:
         QVariant settingsValue = setting.value(key, defaultValue);
         value = static_cast<T>(std::invoke(variantFunc, settingsValue));
     }
+
+    static void initialize(cwOpenGLSettings* openGLSettings);
 };
 
 Q_DECLARE_METATYPE(QVector<cwOpenGLSettings::Renderer>)

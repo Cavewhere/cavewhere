@@ -73,9 +73,7 @@ inline int cwFutureManagerModel::interval() const {
 *
 */
 inline cwFutureManagerToken cwFutureManagerModel::token() {
-    cwFutureManagerModel* model = this;
-    cwFutureManagerToken token(model);
-    return token;
+    return cwFutureManagerToken(this);
 }
 
 

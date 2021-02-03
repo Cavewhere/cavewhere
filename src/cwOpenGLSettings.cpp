@@ -107,106 +107,111 @@ QVector<cwOpenGLSettings::Renderer> cwOpenGLSettings::supportedRenders() const
 #endif
 }
 
+void cwOpenGLSettings::initialize(cwOpenGLSettings* openGLSettings) {
+    TesterSettings tester; //This is used to test if the settings crashes on initialization
+
+    Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+
+    auto surface = std::make_unique<QOffscreenSurface>();
+    surface->create();
+
+    auto context = std::make_unique<QOpenGLContext>();
+    context->create();
+    bool contextOkay = context->makeCurrent(surface.get());
+    if(contextOkay) {
+        auto glFunctions = std::make_unique<QOpenGLFunctions>();
+        glFunctions->initializeOpenGLFunctions();
+
+        openGLSettings->Vendor = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_VENDOR))));
+        openGLSettings->Version = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_VERSION))));
+        openGLSettings->ShadingVersion = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_SHADING_LANGUAGE_VERSION))));
+        openGLSettings->OpenGLRenderer = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_RENDERER))));
+
+        auto extentions = context->extensions();
+        std::transform(extentions.begin(), extentions.end(), std::back_inserter(openGLSettings->Extentions),
+                       [](const QByteArray& extention){
+            return QString::fromLocal8Bit(extention);
+        });
+
+        openGLSettings->DXT1Supported = context->extensions().contains("GL_EXT_texture_compression_s3tc_srgb")
+                || context->extensions().contains("GL_EXT_texture_compression_s3tc");
+        openGLSettings->AnisotropySupported = context->extensions().contains("GL_EXT_texture_filter_anisotropic");
+
+        if(openGLSettings->DXT1Supported) {
+            openGLSettings->GPUGeneratedDXT1Supported = testGPU_DXT1();
+        }
+
+        cwOpenGLSettings defaultSettings;
+
+        auto minFilterDefault = [&defaultSettings, openGLSettings]() {
+            if(openGLSettings->Vendor.contains("ANGLE")) {
+                return MinLinear;
+            }
+            return defaultSettings.MinNearest_Mipmap_Linear;
+        };
+
+        //Bind the bool* away, and just have nullptr
+        auto toInt = std::bind(&QVariant::toInt, std::placeholders::_1, nullptr);
+
+        openGLSettings->load(openGLSettings->RendererType,
+                        defaultSettings.RendererType,
+                        rendererKey(),
+                        &cwOpenGLSettings::rootKey,
+                        toInt);
+
+        openGLSettings->load(openGLSettings->DXT1Compression,
+                        defaultSettings.DXT1Compression,
+                        dXT1CompressionKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        &QVariant::toBool);
+
+        openGLSettings->load(openGLSettings->Mipmaps,
+                        defaultSettings.Mipmaps,
+                        mipmapsKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        &QVariant::toBool);
+
+        openGLSettings->load(openGLSettings->NativeTextRendering,
+                        defaultSettings.NativeTextRendering,
+                        nativeTextRenderingKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        &QVariant::toBool);
+
+        openGLSettings->load(openGLSettings->UseAnisotropy,
+                        defaultSettings.UseAnisotropy,
+                        useAnisotropyKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        &QVariant::toBool);
+
+        openGLSettings->load(openGLSettings->mMagFilter,
+                        defaultSettings.mMagFilter,
+                        magFilterKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        toInt);
+
+        openGLSettings->load(openGLSettings->mMinFilter,
+                        minFilterDefault(),
+                        minFilterKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        toInt);
+
+        openGLSettings->load(openGLSettings->mDXT1Algorithm,
+                        openGLSettings->GPUGeneratedDXT1Supported ? DXT1_GPU : DXT1_Squish,
+                        dXT1GenerateAlgroKey(),
+                        &cwOpenGLSettings::keyWithDevice,
+                        toInt);
+
+    } else {
+        openGLSettings->Version = "Unknown, couldn't create context";
+    }
+}
+
 void cwOpenGLSettings::initialize()
 {
     if(!Singleton) {
-        TesterSettings tester; //This is used to test if the settings crashes on initialization
-
         Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
         Singleton = new cwOpenGLSettings(QCoreApplication::instance());
-
-        auto surface = std::make_unique<QOffscreenSurface>();
-        surface->create();
-
-        auto context = std::make_unique<QOpenGLContext>();
-        context->create();
-        bool contextOkay = context->makeCurrent(surface.get());
-        if(contextOkay) {
-            auto glFunctions = std::make_unique<QOpenGLFunctions>();
-            glFunctions->initializeOpenGLFunctions();
-
-            Singleton->Vendor = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_VENDOR))));
-            Singleton->Version = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_VERSION))));
-            Singleton->ShadingVersion = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_SHADING_LANGUAGE_VERSION))));
-            Singleton->OpenGLRenderer = QString::fromLocal8Bit(QByteArray(reinterpret_cast<const char*>(glFunctions->glGetString(GL_RENDERER))));
-
-            auto extentions = context->extensions();
-            std::transform(extentions.begin(), extentions.end(), std::back_inserter(Singleton->Extentions),
-                           [](const QByteArray& extention){
-                return QString::fromLocal8Bit(extention);
-            });
-
-            Singleton->DXT1Supported = context->extensions().contains("GL_EXT_texture_compression_s3tc_srgb")
-                    || context->extensions().contains("GL_EXT_texture_compression_s3tc");
-            Singleton->AnisotropySupported = context->extensions().contains("GL_EXT_texture_filter_anisotropic");
-
-            if(Singleton->DXT1Supported) {
-                Singleton->GPUGeneratedDXT1Supported = testGPU_DXT1();
-            }
-
-            cwOpenGLSettings defaultSettings;
-
-            auto minFilterDefault = [&defaultSettings]() {
-                if(Singleton->Vendor.contains("ANGLE")) {
-                    return MinLinear;
-                }
-                return defaultSettings.MinNearest_Mipmap_Linear;
-            };
-
-            //Bind the bool* away, and just have nullptr
-            auto toInt = std::bind(&QVariant::toInt, std::placeholders::_1, nullptr);
-
-            Singleton->load(Singleton->RendererType,
-                            defaultSettings.RendererType,
-                            rendererKey(),
-                            &cwOpenGLSettings::rootKey,
-                            toInt);
-
-            Singleton->load(Singleton->DXT1Compression,
-                            defaultSettings.DXT1Compression,
-                            dXT1CompressionKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            &QVariant::toBool);
-
-            Singleton->load(Singleton->Mipmaps,
-                            defaultSettings.Mipmaps,
-                            mipmapsKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            &QVariant::toBool);
-
-            Singleton->load(Singleton->NativeTextRendering,
-                            defaultSettings.NativeTextRendering,
-                            nativeTextRenderingKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            &QVariant::toBool);
-
-            Singleton->load(Singleton->UseAnisotropy,
-                            defaultSettings.UseAnisotropy,
-                            useAnisotropyKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            &QVariant::toBool);
-
-            Singleton->load(Singleton->mMagFilter,
-                            defaultSettings.mMagFilter,
-                            magFilterKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            toInt);
-
-            Singleton->load(Singleton->mMinFilter,
-                            minFilterDefault(),
-                            minFilterKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            toInt);
-
-            Singleton->load(Singleton->mDXT1Algorithm,
-                            Singleton->GPUGeneratedDXT1Supported ? DXT1_GPU : DXT1_Squish,
-                            dXT1GenerateAlgroKey(),
-                            &cwOpenGLSettings::keyWithDevice,
-                            toInt);      
-
-        } else {
-            Singleton->Version = "Unknown, couldn't create context";
-        }
+        initialize(Singleton);
     }
 }
 
@@ -217,8 +222,10 @@ cwOpenGLSettings *cwOpenGLSettings::instance()
 
 void cwOpenGLSettings::cleanup()
 {
-    delete Singleton;
-    Singleton = nullptr;
+    if(Singleton) {
+        delete Singleton;
+        Singleton = nullptr;
+    }
 }
 
 cwOpenGLSettings::Renderer cwOpenGLSettings::perviousRenderer()
@@ -240,15 +247,20 @@ cwOpenGLSettings::Renderer cwOpenGLSettings::perviousRenderer()
 
 void cwOpenGLSettings::setToDefault()
 {
-    cwOpenGLSettings defaultSettings;
-    setMipmaps(defaultSettings.useMipmaps());
-    setMagFilter(defaultSettings.magFilter());
-    setMinFilter(defaultSettings.minFilter());
-    setRendererType(defaultSettings.rendererType());
-    setDXT1Algorithm(defaultSettings.dxt1Algorithm());
-    setUseAnisotropy(defaultSettings.useAnisotropy());
-    setUseDXT1Compression(defaultSettings.useDXT1Compression());
-    setNativeTextRendering(defaultSettings.useNativeTextRendering());
+    //Clear all keys
+    QSettings settings;
+    settings.remove(keyWithDevice(testingKey()));
+    settings.remove(keyWithDevice(rendererKey()));
+    settings.remove(keyWithDevice(dXT1CompressionKey()));
+    settings.remove(keyWithDevice(mipmapsKey()));
+    settings.remove(keyWithDevice(nativeTextRenderingKey()));
+    settings.remove(keyWithDevice(useAnisotropyKey()));
+    settings.remove(keyWithDevice(magFilterKey()));
+    settings.remove(keyWithDevice(minFilterKey()));
+    settings.remove(keyWithDevice(dXT1GenerateAlgroKey()));
+
+    //Re-initilize the object
+    initialize(this);
 }
 
 QString cwOpenGLSettings::rootKey(const QString &subKey) const

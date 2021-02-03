@@ -12,20 +12,20 @@ using namespace Qt3DRender;
 cwLinePlotMesh::cwLinePlotMesh(Qt3DCore::QNode *parent)
     : QGeometryRenderer(parent)
 {
-    setGeometry(new QGeometry());
+    setGeometry(new QGeometry(this));
 
-    QAttribute* pointAttribute = new QAttribute();
+    QAttribute* pointAttribute = new QAttribute(this);
     pointAttribute->setAttributeType(QAttribute::VertexAttribute);
     pointAttribute->setVertexSize(3);
     pointAttribute->setVertexBaseType(QAttribute::Float);
     pointAttribute->setByteOffset(0);
-    pointAttribute->setBuffer(new Qt3DRender::QBuffer());
+    pointAttribute->setBuffer(new Qt3DRender::QBuffer(this));
     pointAttribute->setName("vertexPosition");
 
-    QAttribute* indexAttribute = new QAttribute();
+    QAttribute* indexAttribute = new QAttribute(this);
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setVertexBaseType(QAttribute::UnsignedInt);
-    indexAttribute->setBuffer(new Qt3DRender::QBuffer());
+    indexAttribute->setBuffer(new Qt3DRender::QBuffer(this));
 
     geometry()->addAttribute(pointAttribute);
     geometry()->addAttribute(indexAttribute);

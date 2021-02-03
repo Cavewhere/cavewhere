@@ -7,22 +7,25 @@
 #include <QTextureImageData>
 using namespace Qt3DRender;
 
+//Async includes
+#include "asyncfuture.h"
+
 
 cwTextureDataGenerator::cwTextureDataGenerator()
 {
 
 }
 
-cwTextureDataGenerator::cwTextureDataGenerator(const QString project,
-                                               const cwImage& image,
+cwTextureDataGenerator::cwTextureDataGenerator(const QByteArray& data,
+                                               QSize size,
                                                int mipmapLevel,
-                                               int gen,
-                                               Qt3DCore::QNodeId texId) :
-    Project(project),
-    Image(image),
+                                               cwTextureUploadTask::Format format,
+                                               int imageId) :
+    Data(data),
+    Size(size),
     MipmapLevel(mipmapLevel),
-    Generation(gen),
-    TextureId(texId)
+    Format(format),
+    ImageId(imageId)
 {
 
 }
@@ -31,48 +34,56 @@ Qt3DRender::QTextureImageDataPtr cwTextureDataGenerator::operator ()()
 {
     QTextureImageDataPtr textureData = QTextureImageDataPtr::create();
 
-    textureData->setWidth(0);
-    textureData->setHeight(0);
-    textureData->setMipLevels(0);
+    if(Data.isEmpty()) {
+        textureData->setWidth(1);
+        textureData->setHeight(1);
+        textureData->setMipLevels(1);
+        textureData->setDepth(1);
+        textureData->setFaces(1);
+        textureData->setLayers(1);
+        textureData->setTarget(QOpenGLTexture::Target2D);
+        textureData->setFormat(QOpenGLTexture::RGBA8_UNorm);
+        textureData->setPixelFormat(QOpenGLTexture::RGBA);
+        textureData->setPixelType(QOpenGLTexture::UInt8);
+
+        QImage redImage(1, 1, QImage::Format_RGBA8888);
+        redImage.fill(Qt::red);
+
+        textureData->setData(QByteArray(reinterpret_cast<const char*>(redImage.constBits()), redImage.sizeInBytes()),
+                             4,
+                             false);
+
+        return textureData;
+    }
+
+    textureData->setWidth(Size.width());
+    textureData->setHeight(Size.height());
+    textureData->setMipLevels(1);
     textureData->setDepth(1);
     textureData->setFaces(1);
     textureData->setLayers(1);
     textureData->setTarget(QOpenGLTexture::Target2D);
 
-    cwTextureUploadTask task;
-    task.setThreading(cwTextureUploadTask::NoThreading);
-    task.setImage(image());
-    task.setProjectFilename(project());
-    task.setMipmapLevel(MipmapLevel);
-    task.setType(cwTextureUploadTask::DXT1Mipmaps);
-
-    auto result = task.mipmaps().result();
-    auto mipmaps = result.mipmaps;
-    if(mipmaps.isEmpty()) {
-        return textureData;
-    }
-    Q_ASSERT(mipmaps.size() >= 1);
-
-    auto firstMipmap = mipmaps.first();
-
     int blockSize = 0;
-    switch(result.type) {
-        case cwTextureUploadTask::DXT1Mipmaps:
+    bool isCompressed = false;
+    switch(Format) {
+    case cwTextureUploadTask::DXT1Mipmaps:
         textureData->setFormat(QOpenGLTexture::RGB_DXT1);
         blockSize = 8;
+        isCompressed = true;
         break;
     case cwTextureUploadTask::OpenGL_RGBA:
         textureData->setFormat(QOpenGLTexture::RGBA8_UNorm);
         blockSize = 4;
+        isCompressed = false;
         break;
     default:
         Q_ASSERT_X(false, LOCATION_STR, "Unhandled texture format");
     }
 
-    textureData->setWidth(firstMipmap.second.width());
-    textureData->setHeight(firstMipmap.second.height());
-    textureData->setMipLevels(1);
-    textureData->setData(firstMipmap.first, blockSize, true);
+    textureData->setPixelFormat(QOpenGLTexture::RGBA);
+    textureData->setPixelType(QOpenGLTexture::UInt8);
+    textureData->setData(Data, blockSize, isCompressed);
 
     return textureData;
 }
@@ -82,7 +93,11 @@ bool cwTextureDataGenerator::operator ==(const Qt3DRender::QTextureImageDataGene
     auto otherPtr = &other;
     if(otherPtr == nullptr) { return false; }
     const cwTextureDataGenerator *otherFunctor = functor_cast<cwTextureDataGenerator>(&other);
+
     return (otherFunctor != Q_NULLPTR
-                            && otherFunctor->Generation == Generation
-                            && otherFunctor->TextureId == TextureId);
+            && otherFunctor->Format == Format
+            && otherFunctor->Size == Size
+            && otherFunctor->MipmapLevel == MipmapLevel
+            && otherFunctor->ImageId == ImageId
+            && otherFunctor->Data.size() == Data.size());
 }

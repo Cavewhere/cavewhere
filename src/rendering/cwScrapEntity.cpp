@@ -2,6 +2,8 @@
 #include "cwScrapEntity.h"
 #include "cwScrap.h"
 #include "cwTextureImage.h"
+#include "cwTextureUploadTask.h"
+#include "cwTexture.h"
 
 //Qt includes
 #include <Qt3DRender/QGeometryRenderer>
@@ -15,13 +17,16 @@
 using namespace Qt3DCore;
 using namespace Qt3DRender;
 
+//Async Future
+#include "asyncfuture.h"
+
 cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         QEntity(parent),
-        GeometryRenderer(new QGeometryRenderer()),
-        Material(new QMaterial())
+        GeometryRenderer(new QGeometryRenderer(this)),
+        Material(new QMaterial(this))
 {
 
-    QAttribute* pointAttribute = new QAttribute();
+    QAttribute* pointAttribute = new QAttribute(this);
     pointAttribute->setAttributeType(QAttribute::VertexAttribute);
     pointAttribute->setDataSize(3);
     pointAttribute->setDataType(QAttribute::Float);
@@ -30,7 +35,7 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     pointAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     pointAttribute->setName("vertexPosition");
 
-    QAttribute* texCoordAttribute = new QAttribute();
+    QAttribute* texCoordAttribute = new QAttribute(this);
     texCoordAttribute->setAttributeType(QAttribute::VertexAttribute);
     texCoordAttribute->setDataSize(2);
     texCoordAttribute->setDataType(QAttribute::Float);
@@ -39,24 +44,30 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     texCoordAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     texCoordAttribute->setName("scrapTexCoord");
 
-    QAttribute* indexAttribute = new QAttribute();
+    QAttribute* indexAttribute = new QAttribute(this);
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setDataType(QAttribute::UnsignedInt);
     indexAttribute->setBuffer(new Qt3DRender::QBuffer());
     indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     //Create geometry
-    QGeometry* geometry = new QGeometry();
+    QGeometry* geometry = new QGeometry(this);
     geometry->addAttribute(pointAttribute);
     geometry->addAttribute(texCoordAttribute);
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
-    Material = new QMaterial();
 
-    ScrapTexture = new QTexture2D();
-    Material->addParameter(new QParameter("scrapTexture", ScrapTexture));
+    ScrapTexture = new cwTexture(this);
+
+    auto scrapTextureParameter = new QParameter("scrapTexture", nullptr); //ScrapTexture->texture());
+
+    Material->addParameter(scrapTextureParameter);
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
+
+    connect(ScrapTexture, &cwTexture::textureChanged, this, [scrapTextureParameter, this]() {
+        scrapTextureParameter->setValue(QVariant::fromValue(ScrapTexture->texture()));
+    });
 
     //Setup what type we are drawing
     GeometryRenderer->setPrimitiveType(QGeometryRenderer::Triangles);
@@ -144,32 +155,7 @@ void cwScrapEntity::updateGeometry()
  */
 void cwScrapEntity::updateTexture(const cwImage &image)
 {
-    auto numberOfMipmaps = image.mipmaps().size();
-    auto oldNumberOfMipmaps = ScrapTexture->textureImages().size();
-    if(oldNumberOfMipmaps < numberOfMipmaps) {
-        //Add textures
-        for(int i = oldNumberOfMipmaps; i < numberOfMipmaps; i++) {
-            ScrapTexture->addTextureImage(new cwTextureImage());
-        }
-    } else if(oldNumberOfMipmaps > numberOfMipmaps) {
-        //Remove textures
-        for(int i = oldNumberOfMipmaps - 1; i >= numberOfMipmaps; i--) {
-            auto oldImage = ScrapTexture->textureImages().at(i);
-            ScrapTexture->removeTextureImage(oldImage);
-            oldImage->deleteLater();
-        }
-    }
-
-    Q_ASSERT(ScrapTexture->textureImages().size() == image.mipmaps().size());
-
-    for(int i = 0; i < image.mipmaps().size(); i++) {
-        Q_ASSERT(dynamic_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i)));
-        auto texture = static_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i));
-
-        texture->setProjectFilename(project());
-        texture->setImage(image);
-        texture->setMipLevel(i);
-    }
+    ScrapTexture->setImage(image);
 }
 
 /**
@@ -179,12 +165,7 @@ void cwScrapEntity::updateTexture(const cwImage &image)
 void cwScrapEntity::setProject(QString project) {
     if(this->project() != project) {
         Project = project;
-
-        for(auto textureImage : ScrapTexture->textureImages()) {
-            Q_ASSERT(dynamic_cast<cwTextureImage*>(textureImage));
-            auto texture = static_cast<cwTextureImage*>(textureImage);
-            texture->setProjectFilename(project);
-        }
+        ScrapTexture->setProject(project);
         emit projectChanged();
     }
 }

@@ -37,6 +37,7 @@ class cwKeywordItemModel;
 #include "cwImageProvider.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
+#include "cwAsyncFuture.h"
 
 /**
     The scrap manager listens to changes in the notes and creates all
@@ -65,6 +66,7 @@ public:
     void setAutomaticUpdate(bool automaticUpdate);
 
     cwScrapsEntity* scrapsEntity() const;
+
     void waitForFinish();
 
 signals:
@@ -82,12 +84,13 @@ private:
 
     //The task that'll be run
     cwProject* Project;
-    QFuture<void> TriangulateFuture;
+    cwAsyncFuture::Restarter<void> TriangulateRestarter;
+//    QFuture<void> TriangulateFuture;
     cwKeywordItemModel* KeywordItemModel;
     cwFutureManagerToken FutureManagerToken;
 
     //The gl scraps that need updating
-    cwScrapsEntity* ScrapsEntity; //!<
+    QPointer<cwScrapsEntity> ScrapsEntity; //!<
     cwGLScraps* GLScraps;
 
     bool AutomaticUpdate; //!<
@@ -169,13 +172,6 @@ inline bool cwScrapManager::automaticUpdate() const {
     return AutomaticUpdate;
 }
 
-/**
-* @brief class::scrapsEntity
-* @return
-*/
-inline cwScrapsEntity* cwScrapManager::scrapsEntity() const {
-    return ScrapsEntity;
-}
 
 
 

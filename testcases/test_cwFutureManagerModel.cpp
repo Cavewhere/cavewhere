@@ -234,3 +234,41 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutu
 
     CHECK(count == runs + 1);
 }
+
+TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with cwAsyncFuture::Restarter", "[cwFutureManagerModel]") {
+
+    cwAsyncFuture::Restarter<int> restarter(QCoreApplication::instance());
+    cwFutureManagerModel model;
+
+    QAtomicInt count(0);
+
+    restarter.onFutureChanged([&model, &restarter]() {
+        model.addJob({restarter.future(), "Job}"});
+    });
+
+    for(int i = 0; i < 20; i++) {
+        auto run = [&count, i]() {
+            auto concurrentRun = [&count, i]() {
+                QThread::msleep(10);
+                count++;
+                return i;
+            };
+
+            auto future = QtConcurrent::run(concurrentRun);
+            return future;
+        };
+
+        restarter.restart(run);
+    }
+
+    model.waitForFinished();
+
+    CHECK(restarter.future().isRunning() == false);
+    REQUIRE(restarter.future().isCanceled() == false);
+    CHECK(restarter.future().isFinished() == true);
+    CHECK(restarter.future().result() == 19); //We restarted from 0 to 19
+
+    int finalCount = count;
+    CHECK(finalCount <= 2);
+    CHECK(finalCount >= 1);
+}
