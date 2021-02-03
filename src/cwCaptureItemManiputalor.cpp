@@ -169,6 +169,7 @@ QQuickItem *cwCaptureItemManiputalor::createInteractionItem()
     Q_ASSERT(item != nullptr);
 
     item->setParentItem(this);
+    item->setParent(this);
 
     return item;
 }

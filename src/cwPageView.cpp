@@ -217,6 +217,7 @@ QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, c
     Q_ASSERT(dynamic_cast<QQuickItem*>(object) != nullptr);
     QQuickItem* item = static_cast<QQuickItem*>(object);
     item->setParentItem(this);
+    item->setParent(this);
     PageItems.append(item);
 
     //For this to work propertly, we set the properties before the component has been complete

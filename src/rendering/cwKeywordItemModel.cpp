@@ -19,6 +19,8 @@ void cwKeywordItemModel::addItem(cwKeywordItem *item)
     auto iter = std::lower_bound(Items.begin(), Items.end(), item);
     int index = static_cast<int>(std::distance(Items.begin(), iter));
 
+    item->setParent(this);
+
     //Make sure entity doesn't already exist, entity has two cwKeywordComponent, which isn't allowed
 //    Q_ASSERT((*iter)->object() != item->object());
 

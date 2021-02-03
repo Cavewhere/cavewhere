@@ -17,8 +17,8 @@ using namespace Qt3DRender;
 
 cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         QEntity(parent),
-        GeometryRenderer(new QGeometryRenderer()),
-        Material(new QMaterial())
+        GeometryRenderer(new QGeometryRenderer(this)),
+        Material(new QMaterial(this))
 {
 
     QAttribute* pointAttribute = new QAttribute(this);
@@ -46,16 +46,13 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     //Create geometry
-    QGeometry* geometry = new QGeometry();
+    QGeometry* geometry = new QGeometry(this);
     geometry->addAttribute(pointAttribute);
     geometry->addAttribute(texCoordAttribute);
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
-    Material = new QMaterial(this);
-
     ScrapTexture = new QTexture2D(this);
-
     Material->addParameter(new QParameter("scrapTexture", ScrapTexture));
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
 

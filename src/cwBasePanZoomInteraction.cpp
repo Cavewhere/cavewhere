@@ -13,7 +13,7 @@
 
 cwBasePanZoomInteraction::cwBasePanZoomInteraction(QQuickItem *parent) :
     cwInteraction(parent),
-    Camera(new cwCamera())
+    Camera(nullptr)
 {
 
 }
@@ -23,7 +23,6 @@ cwBasePanZoomInteraction::cwBasePanZoomInteraction(QQuickItem *parent) :
   */
 void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
     if(Camera != camera) {
-
 //        if(Camera->parent() == this) {
 //            //Delete camera's that are owned my this object
 //            Camera->deleteLater();
@@ -39,6 +38,7 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
   \brief Initializes the pan with the first point in the pan
   */
  void cwBasePanZoomInteraction::panFirstPoint(QPointF firstMousePoint) {
+     if(!Camera) { return; }
      LastPanPoint = Camera->mapToGLViewport(firstMousePoint.toPoint());
      Camera->unProject(LastPanPoint, 0.1f);
  }
@@ -49,6 +49,8 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
    This will pan the note
    */
  void cwBasePanZoomInteraction::panMove(QPointF mousePosition) {
+     if(!Camera) { return; }
+
      QPoint currentPanPoint = Camera->mapToGLViewport(mousePosition.toPoint());
 
      QVector3D unProjectedCurrent = Camera->unProject(currentPanPoint, 0.1f);
@@ -67,6 +69,8 @@ void cwBasePanZoomInteraction::setCamera(cwCamera* camera) {
    \brief zooms in or out depending on what the user does.
    */
  void cwBasePanZoomInteraction::zoom(int delta, QPointF position) {
+     if(!Camera) { return; }
+
      //Calc the scaleFactor
      float scaleFactor = 1.1f;
      if(delta < 0) {

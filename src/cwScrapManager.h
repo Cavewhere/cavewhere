@@ -66,6 +66,7 @@ public:
     void setAutomaticUpdate(bool automaticUpdate);
 
     cwScrapsEntity* scrapsEntity() const;
+
     void waitForFinish();
 
 signals:
@@ -89,7 +90,7 @@ private:
     cwFutureManagerToken FutureManagerToken;
 
     //The gl scraps that need updating
-    cwScrapsEntity* ScrapsEntity; //!<
+    QPointer<cwScrapsEntity> ScrapsEntity; //!<
     cwGLScraps* GLScraps;
 
     bool AutomaticUpdate; //!<
@@ -171,13 +172,6 @@ inline bool cwScrapManager::automaticUpdate() const {
     return AutomaticUpdate;
 }
 
-/**
-* @brief class::scrapsEntity
-* @return
-*/
-inline cwScrapsEntity* cwScrapManager::scrapsEntity() const {
-    return ScrapsEntity;
-}
 
 
 

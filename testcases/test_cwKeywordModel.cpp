@@ -175,9 +175,9 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
         }
 
         SECTION("cwKeywordModel should handle cwKeywordModel extentions propertly") {
-            cwKeywordModel* keywordModelCave = new cwKeywordModel;
-            cwKeywordModel* keywordModelTrip = new cwKeywordModel;
-            cwKeywordModel* keywordModelScrap = new cwKeywordModel;
+            auto keywordModelCave = std::make_unique<cwKeywordModel>();
+            auto keywordModelTrip = std::make_unique<cwKeywordModel>();
+            auto keywordModelScrap = std::make_unique<cwKeywordModel>();
 
             keywordModelCave->setObjectName("keywordModelCave");
             keywordModelTrip->setObjectName("keywordModelTrip");
@@ -199,8 +199,8 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                        {"Type", "scrap"}
                                    });
 
-            keywordModelTrip->addExtension(keywordModelCave);
-            keywordModelScrap->addExtension(keywordModelTrip);
+            keywordModelTrip->addExtension(keywordModelCave.get());
+            keywordModelScrap->addExtension(keywordModelTrip.get());
 
             modelKeywords.clear();
             modelKeywords.append({
@@ -208,7 +208,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                      {"Country", "USA"}
                                  });
 
-            checkRows(keywordModelCave);
+            checkRows(keywordModelCave.get());
 
             modelKeywords.clear();
             modelKeywords.append({
@@ -220,7 +220,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                      {"Country", "USA"}
                                  });
 
-            checkRows(keywordModelTrip);
+            checkRows(keywordModelTrip.get());
 
             modelKeywords.clear();
             modelKeywords.append({
@@ -233,13 +233,13 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                      {"Country", "USA"}
                                  });
 
-            checkRows(keywordModelScrap);
+            checkRows(keywordModelScrap.get());
 
-            QSignalSpy aboutinsertSpy(keywordModelScrap, &cwKeywordModel::rowsAboutToBeInserted);
-            QSignalSpy insertSpy(keywordModelScrap, &cwKeywordModel::rowsInserted);
-            QSignalSpy aboutRemovedSpy(keywordModelScrap, &cwKeywordModel::rowsAboutToBeRemoved);
-            QSignalSpy removeSpy(keywordModelScrap, &cwKeywordModel::rowsRemoved);
-            QSignalSpy dataChanged(keywordModelScrap, &cwKeywordModel::dataChanged);
+            QSignalSpy aboutinsertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeInserted);
+            QSignalSpy insertSpy(keywordModelScrap.get(), &cwKeywordModel::rowsInserted);
+            QSignalSpy aboutRemovedSpy(keywordModelScrap.get(), &cwKeywordModel::rowsAboutToBeRemoved);
+            QSignalSpy removeSpy(keywordModelScrap.get(), &cwKeywordModel::rowsRemoved);
+            QSignalSpy dataChanged(keywordModelScrap.get(), &cwKeywordModel::dataChanged);
 
             SpyChecker spyChecker {
                 {&aboutinsertSpy, 0},
@@ -266,7 +266,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                          {"test", "sauce"}
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
                 spyChecker[&aboutinsertSpy] = 1;
                 spyChecker[&insertSpy] = 1;
                 spyChecker.requireSpies();
@@ -299,7 +299,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                          {"Country", "USA"},
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
                 spyChecker[&aboutinsertSpy] = 1;
                 spyChecker[&insertSpy] = 1;
                 spyChecker.requireSpies();
@@ -325,7 +325,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                          {"Country", "USA"},
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
                 spyChecker[&aboutRemovedSpy] = 1;
                 spyChecker[&removeSpy] = 1;
                 spyChecker.requireSpies();
@@ -353,7 +353,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                          {"Country", "Greenland"}
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
 
                 spyChecker[&dataChanged] = 1;
                 spyChecker.requireSpies();
@@ -367,14 +367,14 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             }
 
             SECTION("Check deletion 1") {
-                delete keywordModelTrip;
+                keywordModelTrip.reset(nullptr);
 
                 modelKeywords.clear();
                 modelKeywords.append({
                                          {"Type", "scrap"},
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
                 spyChecker[&aboutRemovedSpy] = 1;
                 spyChecker[&removeSpy] = 1;
                 spyChecker.requireSpies();
@@ -389,7 +389,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             }
 
             SECTION("Check deletion 2") {
-                delete keywordModelCave;
+                keywordModelCave.reset(nullptr);
 
                 modelKeywords.clear();
                 modelKeywords.append({
@@ -400,7 +400,7 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
                                          {"Date", "2019-08-22"}
                                      });
 
-                checkRows(keywordModelScrap);
+                checkRows(keywordModelScrap.get());
                 spyChecker[&aboutRemovedSpy] = 1;
                 spyChecker[&removeSpy] = 1;
                 spyChecker.requireSpies();
