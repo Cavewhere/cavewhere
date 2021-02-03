@@ -11,6 +11,7 @@
 #include "cwImageProvider.h"
 #include "cwAsyncFuture.h"
 #include "cwImageDatabase.h"
+#include "cwOpenGLSettings.h"
 
 //Qt includes
 #include <QDebug>
@@ -19,6 +20,11 @@
 #include "asyncfuture.h"
 
 TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]") {
+
+    cwOpenGLSettings::instance()->setToDefault();
+
+    REQUIRE(cwOpenGLSettings::instance()->useDXT1Compression() == true);
+    REQUIRE(cwOpenGLSettings::instance()->useMipmaps() == true);
 
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();
@@ -61,6 +67,11 @@ TEST_CASE("cwTrackedImage should delete images from database", "[cwTrackedImage]
 }
 
 TEST_CASE("cwTrackImage should work with QSharedPointer's custom delete function", "[cwTrackedImage]") {
+
+    cwOpenGLSettings::instance()->setToDefault();
+
+    REQUIRE(cwOpenGLSettings::instance()->useDXT1Compression() == true);
+    REQUIRE(cwOpenGLSettings::instance()->useMipmaps() == true);
 
     QSharedPointer<cwTrackedImage> trackedImage;
 

@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     format.setRedBufferSize(8);
     format.setGreenBufferSize(8);
     format.setBlueBufferSize(8);
-//    format.setSamples(4);
+    format.setSamples(16);
     QSurfaceFormat::setDefaultFormat(format);
 
     QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();

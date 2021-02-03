@@ -5,23 +5,21 @@
 #include <QTextureImageDataGenerator>
 #include <QNode>
 #include <QString>
-
+#include <QAbstractTexture>
 
 //Our includes
 #include "cwImage.h"
+#include "cwTextureUploadTask.h"
 
 class cwTextureDataGenerator : public Qt3DRender::QTextureImageDataGenerator
 {
 public:
     cwTextureDataGenerator();
-    cwTextureDataGenerator(const QString project,
-                           const cwImage& image,
+    cwTextureDataGenerator(const QByteArray& data,
+                           QSize size,
                            int mipmapLevel,
-                           int gen,
-                           Qt3DCore::QNodeId texId);
-
-    QString project() const;
-    cwImage image() const;
+                           cwTextureUploadTask::Format format,
+                           int imageId);
 
     Qt3DRender::QTextureImageDataPtr operator ()() Q_DECL_FINAL;
     bool operator ==(const QTextureImageDataGenerator& other) const Q_DECL_FINAL;
@@ -29,24 +27,15 @@ public:
     QT3D_FUNCTOR(cwTextureDataGenerator)
 
 private:
-    QString Project;
-    cwImage Image;
-    int MipmapLevel = -1;
-    int Generation = -1;
-    Qt3DCore::QNodeId TextureId;
+
+    QByteArray Data;
+    QSize Size;
+    int MipmapLevel;
+    cwTextureUploadTask::Format Format;
+    int ImageId = -1;
 
 
 };
-
-inline QString cwTextureDataGenerator::project() const
-{
-    return Project;
-}
-
-inline cwImage cwTextureDataGenerator::image() const
-{
-    return Image;
-}
 
 
 

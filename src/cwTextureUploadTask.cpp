@@ -89,7 +89,7 @@ QFuture<cwTextureUploadTask::UploadResult> cwTextureUploadTask::mipmaps() const
             Q_ASSERT(false);
         }
 
-        results.type = currentFormat;
+        results.format = currentFormat;
         return results;
     };
 

@@ -209,7 +209,7 @@ void cwPageView::showPage(QQuickItem *pageItem)
  */
 QQuickItem *cwPageView::createChildItemFromComponent(QQmlComponent *component, cwPage* page)
 {
-    component->setParent(this);
+//    component->setParent(this);
 
     QQmlContext* context = QQmlEngine::contextForObject(this);
     QObject* object = component->beginCreate(context);

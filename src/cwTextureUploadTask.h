@@ -39,7 +39,7 @@ public:
     public:
         QList< QPair< QByteArray, QSize > > mipmaps;
         QVector2D scaleTexCoords;
-        Format type = Unknown;
+        Format format = Unknown;
     };
 
     explicit cwTextureUploadTask();
@@ -48,7 +48,7 @@ public:
     void setImage(cwImage image);
     void setProjectFilename(QString filename);
     void setMipmapLevel(int level);
-    void setType(Format type);
+    void setFormat(Format type);
     void setThreading(Threading threading);
 
     QFuture<cwTextureUploadTask::UploadResult> mipmaps() const;
@@ -66,8 +66,7 @@ private:
 
     void loadMipmapsFromDisk();
 
-    void updateScaleTexCoords();
-    
+    void updateScaleTexCoords();    
 };
 
 /**
@@ -97,7 +96,7 @@ inline void cwTextureUploadTask::setMipmapLevel(int level)
 }
 
 
-inline void cwTextureUploadTask::setType(cwTextureUploadTask::Format type)
+inline void cwTextureUploadTask::setFormat(cwTextureUploadTask::Format type)
 {
     this->type = type;
 }

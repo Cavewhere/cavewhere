@@ -28,7 +28,7 @@ QQ2.Item {
 
     Scene3D {
         anchors.fill: parent
-        multisample: false
+        multisample: true
 
         Entity {
             id: sceneRoot
@@ -36,7 +36,7 @@ QQ2.Item {
             components: [
                 RenderSettings {
                     id: sceneRootRenderPolicy
-                    renderPolicy: RenderSettings.OnDemand //RenderSettings.Always //RenderSettings.OnDemand
+                    renderPolicy: RenderSettings.Always //RenderSettings.OnDemand
                     activeFrameGraph: Viewport {
 
                         RenderSurfaceSelector {

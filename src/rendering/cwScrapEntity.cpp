@@ -2,6 +2,8 @@
 #include "cwScrapEntity.h"
 #include "cwScrap.h"
 #include "cwTextureImage.h"
+#include "cwTextureUploadTask.h"
+#include "cwTexture.h"
 
 //Qt includes
 #include <Qt3DRender/QGeometryRenderer>
@@ -14,6 +16,9 @@
 #include <QVector2D>
 using namespace Qt3DCore;
 using namespace Qt3DRender;
+
+//Async Future
+#include "asyncfuture.h"
 
 cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
         QEntity(parent),
@@ -52,9 +57,17 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
-    ScrapTexture = new QTexture2D(this);
-    Material->addParameter(new QParameter("scrapTexture", ScrapTexture));
+
+    ScrapTexture = new cwTexture(this);
+
+    auto scrapTextureParameter = new QParameter("scrapTexture", nullptr); //ScrapTexture->texture());
+
+    Material->addParameter(scrapTextureParameter);
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
+
+    connect(ScrapTexture, &cwTexture::textureChanged, this, [scrapTextureParameter, this]() {
+        scrapTextureParameter->setValue(QVariant::fromValue(ScrapTexture->texture()));
+    });
 
     //Setup what type we are drawing
     GeometryRenderer->setPrimitiveType(QGeometryRenderer::Triangles);
@@ -142,32 +155,7 @@ void cwScrapEntity::updateGeometry()
  */
 void cwScrapEntity::updateTexture(const cwImage &image)
 {
-    auto numberOfMipmaps = image.mipmaps().size();
-    auto oldNumberOfMipmaps = ScrapTexture->textureImages().size();
-    if(oldNumberOfMipmaps < numberOfMipmaps) {
-        //Add textures
-        for(int i = oldNumberOfMipmaps; i < numberOfMipmaps; i++) {
-            ScrapTexture->addTextureImage(new cwTextureImage());
-        }
-    } else if(oldNumberOfMipmaps > numberOfMipmaps) {
-        //Remove textures
-        for(int i = oldNumberOfMipmaps - 1; i >= numberOfMipmaps; i--) {
-            auto oldImage = ScrapTexture->textureImages().at(i);
-            ScrapTexture->removeTextureImage(oldImage);
-            oldImage->deleteLater();
-        }
-    }
-
-    Q_ASSERT(ScrapTexture->textureImages().size() == image.mipmaps().size());
-
-    for(int i = 0; i < image.mipmaps().size(); i++) {
-        Q_ASSERT(dynamic_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i)));
-        auto texture = static_cast<cwTextureImage*>(ScrapTexture->textureImages().at(i));
-
-        texture->setProjectFilename(project());
-        texture->setImage(image);
-        texture->setMipLevel(i);
-    }
+    ScrapTexture->setImage(image);
 }
 
 /**
@@ -177,12 +165,7 @@ void cwScrapEntity::updateTexture(const cwImage &image)
 void cwScrapEntity::setProject(QString project) {
     if(this->project() != project) {
         Project = project;
-
-        for(auto textureImage : ScrapTexture->textureImages()) {
-            Q_ASSERT(dynamic_cast<cwTextureImage*>(textureImage));
-            auto texture = static_cast<cwTextureImage*>(textureImage);
-            texture->setProjectFilename(project);
-        }
+        ScrapTexture->setProject(project);
         emit projectChanged();
     }
 }
