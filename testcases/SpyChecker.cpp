@@ -2,7 +2,7 @@
 #include "SpyChecker.h"
 
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch.hpp>
 
 SpyChecker::SpyChecker()
 {

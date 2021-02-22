@@ -65,14 +65,22 @@ QString cwGlobals::findExecutable(QStringList executables)
 {
     QString execPath;
 
-    foreach(QString appName, executables) {
-        QDir appDir(QApplication::applicationDirPath());
-        QString currentPlotSaucePath = appDir.absoluteFilePath(appName);
+    auto path = qgetenv("PATH");
+    auto paths = QString::fromLocal8Bit(path).split(';');
+    paths.prepend(QApplication::applicationDirPath());
 
-        QFileInfo fileInfo(currentPlotSaucePath);
-        if(fileInfo.exists() && fileInfo.isExecutable()) {
-            execPath = currentPlotSaucePath;
-            break;
+    foreach(QString appName, executables) {
+        for(const auto& directory : paths) {
+            QDir appDir(directory);
+            QString currentPath = appDir.absoluteFilePath(appName);
+
+            qDebug() << "Current path:" << currentPath;
+
+            QFileInfo fileInfo(currentPath);
+            if(fileInfo.exists() && fileInfo.isExecutable()) {
+                execPath = currentPath;
+                break;
+            }
         }
     }
 

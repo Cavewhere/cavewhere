@@ -1,5 +1,5 @@
 #include "TestHelper.h"
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 //Qt includes
 #include <QStandardPaths>
