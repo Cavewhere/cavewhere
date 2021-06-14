@@ -45,9 +45,6 @@
 //Sqlite lite includes
 #include "sqlite3.h"
 
-//Zlib includes
-#include <zlib.h>
-
 //Async includes
 #include <asyncfuture.h>
 

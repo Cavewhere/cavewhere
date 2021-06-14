@@ -74,8 +74,6 @@ QString cwGlobals::findExecutable(QStringList executables)
             QDir appDir(directory);
             QString currentPath = appDir.absoluteFilePath(appName);
 
-            qDebug() << "Current path:" << currentPath;
-
             QFileInfo fileInfo(currentPath);
             if(fileInfo.exists() && fileInfo.isExecutable()) {
                 execPath = currentPath;
