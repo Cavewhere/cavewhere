@@ -95,29 +95,16 @@ ColumnLayout {
 
         function restartRotation(toRotation) {
 
-            if(toRotation > 180) {
-                toRotation = toRotation - 360;
-            }
-
             var from = turnTableInteraction.azimuth;
-            if(from > 180) {
-                from = from - 360.0;
+            if (from < 180 && toRotation > 180) {
+                from = from + 360;
             }
-
-            var angle = Math.abs((toRotation - turnTableInteraction.azimuth) % 360.0);
-            if(angle > 180) {
-                angle = 360.0 - angle;
+            var angle = (toRotation - from) % 360.0;
+            var to = from + angle;
+            if (from > 180 && toRotation < 180) {
+                from = from - 360;
             }
-
-            var to = 0
-            if(from <= toRotation) {
-                //Shortest path is clockwise
-                to = from + angle
-            } else {
-                //Shortest path is counter clockwise
-                to = from - angle
-            }
-
+            
             azimuthAnimationId.from = from
             azimuthAnimationId.to = to
             azimuthAnimationId.restart()
