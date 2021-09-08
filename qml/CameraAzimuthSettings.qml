@@ -104,7 +104,7 @@ ColumnLayout {
             if (from > 180 && toRotation < 180) {
                 from = from - 360;
             }
-            
+
             azimuthAnimationId.from = from
             azimuthAnimationId.to = to
             azimuthAnimationId.restart()
