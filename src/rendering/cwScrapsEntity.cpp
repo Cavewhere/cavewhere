@@ -24,9 +24,10 @@ void cwScrapsEntity::addScrap(cwScrap* scrap)
 {
     if(!ScrapToEntity.contains(scrap)) {
         cwScrapEntity* entity = new cwScrapEntity();
-        entity->setScrap(scrap);
-        entity->setEffect(Effect);
+        entity->setFutureManagerToken(FutureToken);
         entity->setProject(Project);
+        entity->setEffect(Effect);
+        entity->setScrap(scrap);
 
         if(keywordItemModel()) {
             auto keywordItem = new cwKeywordItem();
@@ -106,6 +107,14 @@ void cwScrapsEntity::setKeywordItemModel(cwKeywordItemModel* keywordItemModel) {
     if(KeywordItemModel != keywordItemModel) {
         KeywordItemModel = keywordItemModel;
         emit keywordItemModelChanged();
+    }
+}
+
+void cwScrapsEntity::setFutureManagerToken(const cwFutureManagerToken &token)
+{
+    FutureToken = token;
+    for(auto scrapEntity : ScrapToEntity.values()) {
+        scrapEntity->setFutureManagerToken(token);
     }
 }
 

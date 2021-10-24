@@ -92,7 +92,6 @@ void cwTexture::updateTextures()
                 newTexture->addTextureImage(textureImage);
             }
 
-            qDebug() << "Done";
             setTexture(newTexture);
         },
         [newTexture]() {

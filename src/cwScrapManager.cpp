@@ -143,6 +143,7 @@ void cwScrapManager::setFutureManagerToken(cwFutureManagerToken token)
     if(GLScraps) {
         GLScraps->setFutureManagerToken(token);
     }
+    ScrapsEntity->setFutureManagerToken(token);
 }
 
 void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)

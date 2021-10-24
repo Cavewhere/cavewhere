@@ -19,6 +19,7 @@ class cwTextureImage;
 class cwTexture;
 #include "cwGlobals.h"
 #include "cwImage.h"
+#include "cwFutureManagerToken.h"
 
 class CAVEWHERE_LIB_EXPORT cwScrapEntity : public Qt3DCore::QEntity
 {
@@ -39,6 +40,9 @@ public:
 
     Qt3DRender::QEffect* effect() const;
     void setEffect(Qt3DRender::QEffect* effect);
+
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken token);
 
     Qt3DRender::QMaterial* material() const;
 

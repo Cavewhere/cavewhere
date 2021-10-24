@@ -199,3 +199,8 @@ void cwScrapEntity::setEffect(Qt3DRender::QEffect* effect) {
         emit effectChanged();
     }
 }
+
+void cwScrapEntity::setFutureManagerToken(cwFutureManagerToken token)
+{
+    ScrapTexture->setFutureToken(token);
+}

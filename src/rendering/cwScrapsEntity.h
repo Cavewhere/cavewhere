@@ -9,6 +9,7 @@
 class cwScrap;
 class cwScrapEntity;
 class cwKeywordItemModel;
+#include "cwFutureManagerToken.h"
 
 class cwScrapsEntity : public Qt3DCore::QEntity
 {
@@ -33,6 +34,8 @@ public:
     cwKeywordItemModel* keywordItemModel() const;
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
+    void setFutureManagerToken(const cwFutureManagerToken& token);
+
 signals:
     void effectChanged();
     void projectChanged();
@@ -43,6 +46,7 @@ private:
     QHash<cwScrap*, cwScrapEntity*> ScrapToEntity;
     QString Project; //!<
     cwKeywordItemModel* KeywordItemModel = nullptr; //!<
+    cwFutureManagerToken FutureToken;
 
 };
 
