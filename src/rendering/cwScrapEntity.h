@@ -60,12 +60,12 @@ private:
     };
 
     QPointer<cwScrap> Scrap;
-    Qt3DRender::QGeometryRenderer* GeometryRenderer;
+    Qt3DRender::QGeometryRenderer* GeometryRenderer = nullptr;
 
-    Qt3DRender::QTechnique* Technique; //!<
-    Qt3DRender::QMaterial* Material; //!<
-    cwTexture* ScrapTexture;
-    Qt3DRender::QEffect* Effect; //!<
+    Qt3DRender::QTechnique* Technique = nullptr; //!<
+    Qt3DRender::QMaterial* Material = nullptr; //!<
+    cwTexture* ScrapTexture = nullptr;
+    Qt3DRender::QEffect* Effect = nullptr; //!<
 
     QVector<QVector3D> Points;
     QVector<QVector2D> TexCoords;

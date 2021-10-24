@@ -7,13 +7,16 @@
 #include "cwOpenGLSettings.h"
 #include "cwDebug.h"
 
+//Qt includes
+#include <QTextureImage>
+
 //Async includes
 #include "asyncfuture.h"
 
 cwTexture::cwTexture(Qt3DCore::QNode *parent) :
     Qt3DCore::QNode(parent),
     TextureFuture(this),
-    Texture(createTexture())
+    Texture(nullptr)
 {
     auto settings = cwOpenGLSettings::instance();
     connect(settings, &cwOpenGLSettings::useDXT1CompressionChanged, this, &cwTexture::updateTextures);
@@ -89,6 +92,7 @@ void cwTexture::updateTextures()
                 newTexture->addTextureImage(textureImage);
             }
 
+            qDebug() << "Done";
             setTexture(newTexture);
         },
         [newTexture]() {
@@ -97,8 +101,6 @@ void cwTexture::updateTextures()
     };
 
     TextureFuture.restart(run);
-
-//    cwAsyncFuture::restart(&TextureFuture, run);
 }
 
 bool cwTexture::useMipmaps() const
@@ -108,6 +110,8 @@ bool cwTexture::useMipmaps() const
 
 Qt3DRender::QTexture2D *cwTexture::createTexture()
 {
+    Q_ASSERT(QThread::currentThread() == this->thread());
+
     auto texture = new Qt3DRender::QTexture2D(this);
     auto settings = cwOpenGLSettings::instance();
 
@@ -184,6 +188,7 @@ void cwTexture::setTexture(Qt3DRender::QTexture2D *texture)
 {
     auto oldTexture = Texture;
     Texture = std::move(texture);
+    Texture->setParent(this);
     emit textureChanged();
     oldTexture->deleteLater();
 }

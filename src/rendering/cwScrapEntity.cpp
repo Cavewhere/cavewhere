@@ -40,14 +40,14 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     texCoordAttribute->setDataSize(2);
     texCoordAttribute->setDataType(QAttribute::Float);
     texCoordAttribute->setByteOffset(0);
-    texCoordAttribute->setBuffer(new Qt3DRender::QBuffer());
+    texCoordAttribute->setBuffer(new Qt3DRender::QBuffer(this));
     texCoordAttribute->buffer()->setType(Qt3DRender::QBuffer::VertexBuffer);
     texCoordAttribute->setName("scrapTexCoord");
 
     QAttribute* indexAttribute = new QAttribute(this);
     indexAttribute->setAttributeType(QAttribute::IndexAttribute);
     indexAttribute->setDataType(QAttribute::UnsignedInt);
-    indexAttribute->setBuffer(new Qt3DRender::QBuffer());
+    indexAttribute->setBuffer(new Qt3DRender::QBuffer(this));
     indexAttribute->buffer()->setType(Qt3DRender::QBuffer::IndexBuffer);
 
     //Create geometry
@@ -57,17 +57,19 @@ cwScrapEntity::cwScrapEntity(Qt3DCore::QNode* parent) :
     geometry->addAttribute(indexAttribute);
     GeometryRenderer->setGeometry(geometry);
 
-
     ScrapTexture = new cwTexture(this);
 
-    auto scrapTextureParameter = new QParameter("scrapTexture", nullptr); //ScrapTexture->texture());
+    auto scrapTextureParameter = new QParameter("scrapTexture", nullptr); // ScrapTexture->texture());
 
     Material->addParameter(scrapTextureParameter);
     Material->addParameter(new QParameter("texCoordsScale", QVector2D(1.0, 1.0)));
 
     connect(ScrapTexture, &cwTexture::textureChanged, this, [scrapTextureParameter, this]() {
         scrapTextureParameter->setValue(QVariant::fromValue(ScrapTexture->texture()));
+        setEnabled(true);
     });
+
+    setEnabled(false);
 
     //Setup what type we are drawing
     GeometryRenderer->setPrimitiveType(QGeometryRenderer::Triangles);

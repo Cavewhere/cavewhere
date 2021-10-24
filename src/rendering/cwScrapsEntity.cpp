@@ -23,7 +23,7 @@ cwScrapsEntity::cwScrapsEntity(Qt3DCore::QNode* parent) :
 void cwScrapsEntity::addScrap(cwScrap* scrap)
 {
     if(!ScrapToEntity.contains(scrap)) {
-        cwScrapEntity* entity = new cwScrapEntity(this);
+        cwScrapEntity* entity = new cwScrapEntity();
         entity->setScrap(scrap);
         entity->setEffect(Effect);
         entity->setProject(Project);
@@ -36,6 +36,11 @@ void cwScrapsEntity::addScrap(cwScrap* scrap)
         }
 
         ScrapToEntity.insert(scrap, entity);
+
+        //This is a node traverse work around, Qt3D crashes when cwScrapEntity parent
+        //is assigned in the constructor. The scrap entity needs to be completely created
+        //and the assigned.
+        entity->setParent(this);
     }
 }
 
