@@ -155,6 +155,14 @@ QQ2.Item {
                 QQ2.Component.onCompleted: {
                     rootData.renderEntity.linePlotMesh.parent = linePlotEntity
                 }
+
+                //We'll probably have to change this once we support multiple centerlines
+                //Or want to break the centerline up by survey
+                //This is a good example on how to manage keyword data in qml
+                StaticKeywordItem {
+                    object: linePlotEntity
+                    type: "Centerline"
+                }
             }
 
             Entity {
@@ -206,6 +214,11 @@ QQ2.Item {
                             }
                         ]
                     }
+                }
+
+                StaticKeywordItem {
+                    object: grid
+                    type: "Grid"
                 }
 
                 components: [
@@ -351,6 +364,11 @@ QQ2.Item {
         anchors.fill: parent
         camera: cwCameraId
         region: rootData.region
+
+        StaticKeywordItem {
+            object: labelView
+            type: "Station labels"
+        }
     }
 
     CW.LeadView {
@@ -359,7 +377,10 @@ QQ2.Item {
         regionModel: rootData.regionTreeModel
         camera: cwCameraId
         visible: rootData.leadsVisible
+
+        StaticKeywordItem {
+            object: leadViewId
+            type: "Leads"
+        }
     }
-
-
 }
