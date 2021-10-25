@@ -267,6 +267,11 @@ QHash<int, QByteArray> cwKeywordModel::roleNames() const
     };
 }
 
+cwKeyword cwKeywordModel::createKeyword(const QString key, QString value) const
+{
+    return cwKeyword(key, value);
+}
+
 int cwKeywordModel::firstIndex(cwKeywordModel *model) const
 {
     if(model == nullptr) {

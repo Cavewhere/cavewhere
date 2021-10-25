@@ -26,8 +26,8 @@ public:
 
     cwKeywordItemModel(QObject* parent = nullptr);
 
-    void addItem(cwKeywordItem* item);
-    void removeItem(cwKeywordItem* item);
+    Q_INVOKABLE void addItem(cwKeywordItem* item);
+    Q_INVOKABLE void removeItem(cwKeywordItem* item);
 
     QVariant data(const QModelIndex& index, int role) const;
     int rowCount(const QModelIndex& index = QModelIndex()) const;

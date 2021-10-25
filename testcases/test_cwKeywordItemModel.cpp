@@ -21,6 +21,7 @@
 #include <QVector>
 #include <QSignalSpy>
 #include <QMetaObject>
+#include <QCoreApplication>
 
 using namespace Qt3DCore;
 
@@ -79,8 +80,14 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
     item1->setObject(entity1.get());
     item2->setObject(entity2.get());
 
+    CHECK(item1->parent() == nullptr);
+    CHECK(item2->parent() == nullptr);
+
     model->addItem(item1);
     model->addItem(item2);
+
+    CHECK(item1->parent() == model.get());
+    CHECK(item2->parent() == model.get());
 
     checker[&addSpy] = 2;
     checker.checkSpies();
@@ -99,6 +106,7 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
 
     add(item1);
     add(item2);
+
 
     //Model sort entites by pointer
 

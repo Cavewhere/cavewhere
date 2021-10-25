@@ -119,6 +119,7 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeyword.h"
 #include "cwKeywordItem.h"
+#include "cwKeywordModel.h"
 #include "cwPDFSettings.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwPlanScrapViewMatrix.h"
@@ -151,6 +152,7 @@ void cwQMLRegister::registerQML()
     qRegisterMetaType<cwImage>("cwImage");
     qRegisterMetaType<GLuint>("GLuint");
     qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+    qRegisterMetaType<cwKeyword>("cwKeyword");
 
     qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");
@@ -278,6 +280,7 @@ void cwQMLRegister::registerQML()
 
     qmlRegisterType<cwKeywordItemFilterModel>("Cavewhere", 1, 0, "KeywordItemFilterModel");
     qmlRegisterType<cwKeywordItem>("Cavewhere", 1, 0, "KeywordItem");
-    qmlRegisterType<cwKeyword>();
+    qmlRegisterType<cwKeywordModel>("Cavewhere", 1, 0, "KeywordModel");
+    qmlRegisterUncreatableType<cwKeyword>("Cavewhere", 1, 0, "cwKeyword", "Can be created with cwKeywordModel");
 
 }

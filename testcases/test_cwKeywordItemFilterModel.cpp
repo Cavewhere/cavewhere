@@ -50,7 +50,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
             auto listElement = list.at(i);
             CHECK(index.data(cwKeywordItemFilterModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
 
-            auto entities = index.data(cwKeywordItemFilterModel::ObjectsRole).value<QVector<QEntity*>>();
+            auto entities = index.data(cwKeywordItemFilterModel::ObjectsRole).value<QList<QObject*>>();
             int entitiesCount = index.data(cwKeywordItemFilterModel::ObjectCountRole).value<int>();
             CHECK(entities.size() == entitiesCount);
             CHECK(entities.size() == listElement.entities.size());
@@ -181,6 +181,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
         spyCheck[&resetSpy] = 1;
         spyCheck.checkSpies();
         spyCheck.clearSpyCounts();
+
 
         SECTION("Same last key") {
             model->setLastKey("type");

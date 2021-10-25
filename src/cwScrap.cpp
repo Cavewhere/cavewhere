@@ -525,6 +525,12 @@ void cwScrap::updateNoteTransformation() {
 void cwScrap::updateTypeKeyword()
 {
     KeywordModel->add(cwKeyword(cwKeywordModel::TypeKey, types().at(type())));
+
+    if(type() == RunningProfile || type() == ProjectedProfile) {
+        KeywordModel->add(cwKeyword("Orientation", "Profile"));
+    } else {
+        KeywordModel->add(cwKeyword("Orientation", "Plan"));
+    }
 }
 
 /**

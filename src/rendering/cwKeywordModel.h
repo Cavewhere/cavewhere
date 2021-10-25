@@ -22,9 +22,9 @@ public:
 
     cwKeywordModel(QObject* parent = nullptr);
 
-    void add(const cwKeyword& keyword);
+    Q_INVOKABLE void add(const cwKeyword& keyword);
     void addKeywords(const QVector<cwKeyword>& keywords);
-    void remove(const cwKeyword& keyword);
+    Q_INVOKABLE void remove(const cwKeyword& keyword);
     void removeAll(QString key);
     QVector<cwKeyword> keywords() const;
 
@@ -38,6 +38,8 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
     static const QString TypeKey;
+
+    Q_INVOKABLE cwKeyword createKeyword(const QString key, QString value) const;
 
 private:
     QVector<cwKeywordModel*> Extentions;

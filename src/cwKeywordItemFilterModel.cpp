@@ -71,10 +71,11 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
             connect(KeywordModel, &cwKeywordItemModel::rowsInserted,
                     this, [this, createPairs](const QModelIndex& parent, int begin, int end)
             {
-                if(isRunning()) {
+                //FIXME: Needs to update possible keys if a new key is added
+//                if(isRunning()) {
                     updateAllRows();
                     return;
-                }
+//                }
 
                 auto pairs = createPairs(parent, begin, end);
 
@@ -176,6 +177,8 @@ void cwKeywordItemFilterModel::waitForFinished()
 
 void cwKeywordItemFilterModel::updateAllRows()
 {
+    qDebug() << "Update rows";
+
     int entityCount = keywordModel()->rowCount(QModelIndex());
 
     QVector<EntityAndKeywords> entities;
@@ -242,6 +245,7 @@ void cwKeywordItemFilterModel::updateAllRows()
         endResetModel();
 
         if(oldPossibleKeys != Data.PossibleKeys) {
+            qDebug() << "Possible keys:" << Data.PossibleKeys;
             emit possibleKeysChanged();
         }
     }

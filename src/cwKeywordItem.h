@@ -17,6 +17,7 @@ class CAVEWHERE_LIB_EXPORT cwKeywordItem : public QObject
 
 public:
     cwKeywordItem(QObject* parent = nullptr);
+    ~cwKeywordItem();
 
     cwKeywordModel* keywordModel() const;
 

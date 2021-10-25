@@ -224,6 +224,12 @@ void cwKeywordItemModel::remove(cwKeywordItem* item, DisconnectionType type)
     Q_ASSERT(item);
 
     auto iter = std::lower_bound(Items.begin(), Items.end(), item);
+
+    if(iter == Items.end()) {
+        //Item doesn't exist
+        return;
+    }
+
     Q_ASSERT(*iter == item);
 
     int index = static_cast<int>(std::distance(Items.begin(), iter));

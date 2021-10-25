@@ -31,7 +31,13 @@ Item {
                         for(var i in objectsRole) {
                             var obj = objectsRole[i];
                             console.log("Changing visiblity of " + obj)
-                            obj.enabled = checked
+                            if('enabled' in obj) {
+                                obj.enabled = checked
+                            }
+
+                            if('visible' in obj) {
+                                obj.visible = checked
+                            }
                         }
                     }
                 }

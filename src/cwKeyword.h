@@ -34,6 +34,8 @@ private:
     QString Value; //!<
 };
 
+Q_DECLARE_METATYPE(cwKeyword)
+
 /**
 * Returns the key of the key word
 */
