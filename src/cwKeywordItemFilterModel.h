@@ -156,6 +156,10 @@ private:
 
     Filter createDefaultFilter();
 
+    static QSet<QString> createPossibleKeys(const QList<cwKeyword>& keywords, const QVector<EntityAndKeywords> entities);
+
+
+
 };
 
 /**

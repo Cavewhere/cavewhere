@@ -2,6 +2,7 @@
 #include "cwKeywordItemFilterModel.h"
 #include "cwKeyword.h"
 #include "cwAsyncFuture.h"
+#include "cwGlobals.h"
 
 //Async includes
 #include "asyncfuture.h"
@@ -20,9 +21,6 @@ cwKeywordItemFilterModel::~cwKeywordItemFilterModel()
     waitForFinished();
 }
 
-/**
-*
-*/
 void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel) {
     if(KeywordModel != keywordModel) {
 
@@ -71,17 +69,36 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
             connect(KeywordModel, &cwKeywordItemModel::rowsInserted,
                     this, [this, createPairs](const QModelIndex& parent, int begin, int end)
             {
-                //FIXME: Needs to update possible keys if a new key is added
-//                if(isRunning()) {
+                if(isRunning()) {
                     updateAllRows();
                     return;
-//                }
+                }
 
                 auto pairs = createPairs(parent, begin, end);
 
                 auto filter = createDefaultFilter();
                 for(auto pair : pairs) {
                     filter.filterEntity(pair);
+                }
+
+                //Any new keys
+                auto keys = createPossibleKeys(keywords(), pairs);
+                auto oldKeys = possibleKeys(); //Assume this is sorted
+
+                auto newKeys = QStringList();
+                for(const auto& key : qAsConst(keys)) {
+                    auto iter = std::lower_bound(oldKeys.begin(), oldKeys.end(), key);
+                    if(iter == oldKeys.end() || *iter != key) {
+                        //New, key
+                        newKeys.append(key);
+                    }
+                }
+
+                if(!newKeys.isEmpty()) {
+                    newKeys.append(oldKeys);
+                    std::sort(newKeys.begin(), newKeys.end());
+                    Data.PossibleKeys = newKeys;
+                    emit possibleKeysChanged();
                 }
             });
 
@@ -177,8 +194,6 @@ void cwKeywordItemFilterModel::waitForFinished()
 
 void cwKeywordItemFilterModel::updateAllRows()
 {
-    qDebug() << "Update rows";
-
     int entityCount = keywordModel()->rowCount(QModelIndex());
 
     QVector<EntityAndKeywords> entities;
@@ -202,26 +217,11 @@ void cwKeywordItemFilterModel::updateAllRows()
         insertRow.lastKey = lastKey;
         insertRow.data = &newModelData;
 
-        QSet<QString> possibleKeys;
-        auto addKeys = [&possibleKeys](const EntityAndKeywords& objectKeywords) {
-            for(auto keyword : objectKeywords.keywords) {
-                possibleKeys.insert(keyword.key());
-            }
-        };
-
-        auto removeKeys = [&possibleKeys](QList<cwKeyword> keywords) {
-            for(auto keyword : keywords) {
-                possibleKeys.remove(keyword.key());
-            }
-        };
-
-        for(auto entity : entities) {
+        for(const auto& entity : qAsConst(entities)) {
             insertRow.filterEntity(entity);
-            addKeys(entity);
         }
 
-        removeKeys(keywords);
-        newModelData.PossibleKeys = possibleKeys.toList();
+        newModelData.PossibleKeys = cw::toList(createPossibleKeys(keywords, entities));
         std::sort(newModelData.PossibleKeys.begin(), newModelData.PossibleKeys.end());
 
         return newModelData;
@@ -245,7 +245,6 @@ void cwKeywordItemFilterModel::updateAllRows()
         endResetModel();
 
         if(oldPossibleKeys != Data.PossibleKeys) {
-            qDebug() << "Possible keys:" << Data.PossibleKeys;
             emit possibleKeysChanged();
         }
     }
@@ -293,6 +292,30 @@ cwKeywordItemFilterModel::Filter cwKeywordItemFilterModel::createDefaultFilter()
     return insertRow;
 }
 
+QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QList<cwKeyword> &keywords,
+                                                           const QVector<EntityAndKeywords> entities)
+{
+    QSet<QString> possibleKeys;
+    auto addKeys = [&possibleKeys](const EntityAndKeywords& objectKeywords) {
+        for(const auto& keyword : qAsConst(objectKeywords.keywords)) {
+            possibleKeys.insert(keyword.key());
+        }
+    };
+
+    auto removeKeys = [&possibleKeys](QList<cwKeyword> keywords) {
+        for(const auto& keyword : qAsConst(keywords)) {
+            possibleKeys.remove(keyword.key());
+        }
+    };
+
+    for(const auto& entity : qAsConst(entities)) {
+        addKeys(entity);
+    }
+
+    removeKeys(keywords);
+    return possibleKeys;
+}
+
 /**
 *
 */
@@ -316,7 +339,7 @@ void cwKeywordItemFilterModel::setLastKey(QString keyLast) {
 }
 
 void cwKeywordItemFilterModel::Filter::addEntity(const QString &value,
-                                                   QObject *entity)
+                                                 QObject *entity)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);

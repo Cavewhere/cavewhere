@@ -182,6 +182,28 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
         spyCheck.checkSpies();
         spyCheck.clearSpyCounts();
 
+        SECTION("Adding a key") {
+            keywordModel1->add({"a", "bestScrap"});
+            CHECK(model->possibleKeys() == QStringList({"a", "cave", "trip", "type"}));
+            spyCheck[&possibleKeysSpy]++;
+            spyCheck[&dataChangedSpy]++;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+
+            keywordModel1->add({"cave1", "bestScrap"});
+            CHECK(model->possibleKeys() == QStringList({"a", "cave", "cave1", "trip", "type"}));
+            spyCheck[&possibleKeysSpy]++;
+            spyCheck[&dataChangedSpy]++;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+
+            keywordModel1->add({"type3", "bestScrap"});
+            CHECK(model->possibleKeys() == QStringList({"a", "cave", "cave1", "trip", "type", "type3"}));
+            spyCheck[&possibleKeysSpy]++;
+            spyCheck[&dataChangedSpy]++;
+            spyCheck.checkSpies();
+            spyCheck.clearSpyCounts();
+        }
 
         SECTION("Same last key") {
             model->setLastKey("type");
