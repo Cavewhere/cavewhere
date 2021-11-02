@@ -148,7 +148,7 @@ ColumnLayout {
         target: turnTableInteraction
         property: "azimuth"
         duration: 10000
-        loops: Animation.Infinite
+        loops: QQ.Animation.Infinite
 
         function startCurrentPosition() {
             fullRotationAnimation.from = turnTableInteraction.azimuth
