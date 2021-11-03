@@ -189,5 +189,7 @@ void cwTexture::setTexture(Qt3DRender::QTexture2D *texture)
     Texture = std::move(texture);
     Texture->setParent(this);
     emit textureChanged();
-    oldTexture->deleteLater();
+    if(oldTexture) {
+        oldTexture->deleteLater();
+    }
 }
