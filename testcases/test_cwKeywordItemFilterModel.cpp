@@ -373,8 +373,12 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
             }
 
             SECTION("Change key in keyword") {
+                CHECK(model->possibleKeys() == QStringList({"trip", "type"}));
+
                 auto firstIndex = keywordModel2->index(0);
                 keywordModel2->setData(firstIndex, "type2", cwKeywordModel::KeyRole);
+
+                CHECK(model->possibleKeys() == QStringList({"trip", "type", "type2"}));
 
                 modelData = {
                     {"line", {entity3.get()}},
@@ -385,8 +389,22 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
 
                 spyCheck[&dataChangedSpy] = 1;
                 spyCheck[&removeSpy] = 1;
+                spyCheck[&possibleKeysSpy]++;
                 spyCheck.requireSpies();
                 spyCheck.clearSpyCounts();
+
+                SECTION("Remove the type2 section") {
+                    keywordModel2->removeAll("type2");
+                    CHECK(model->possibleKeys() == QStringList({"trip", "type"}));
+                }
+
+                SECTION("Change all types to type2") {
+                    keywordModel1->setData(keywordModel1->index(0), "type2", cwKeywordModel::KeyRole);
+                    keywordModel3->setData(keywordModel1->index(0), "type2", cwKeywordModel::KeyRole);
+                    keywordModel4->setData(keywordModel1->index(0), "type2", cwKeywordModel::KeyRole);
+
+                    CHECK(model->possibleKeys() == QStringList({"trip", "type2"}));
+                }
             }
 
             SECTION("Add entity") {
