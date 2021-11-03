@@ -281,6 +281,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwKeywordItemFilterModel>("Cavewhere", 1, 0, "KeywordItemFilterModel");
     qmlRegisterType<cwKeywordItem>("Cavewhere", 1, 0, "KeywordItem");
     qmlRegisterType<cwKeywordModel>("Cavewhere", 1, 0, "KeywordModel");
-    qmlRegisterUncreatableType<cwKeyword>("Cavewhere", 1, 0, "cwKeyword", "Can be created with cwKeywordModel");
+    qmlRegisterUncreatableType<cwKeyword>("Cavewhere", 1, 0, "Keyword", "Can be created with cwKeywordModel");
 
 }
