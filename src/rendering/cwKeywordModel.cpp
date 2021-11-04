@@ -4,7 +4,11 @@
 //Qt includes
 #include <QDebug>
 
-const QString cwKeywordModel::TypeKey = "Type";
+const QString cwKeywordModel::TypeKey = QStringLiteral("Type");
+const QString cwKeywordModel::TripNameKey = QStringLiteral("Trip");
+const QString cwKeywordModel::YearKey = QStringLiteral("Year");
+const QString cwKeywordModel::DateKey = QStringLiteral("Date");
+const QString cwKeywordModel::CaverKey = QStringLiteral("Caver");
 
 cwKeywordModel::cwKeywordModel(QObject *parent) :
     QAbstractListModel (parent)
@@ -74,6 +78,12 @@ void cwKeywordModel::removeAll(QString key)
             iter++;
         }
     }
+}
+
+void cwKeywordModel::replace(const cwKeyword &keyword)
+{
+    removeAll(keyword.key());
+    add(keyword);
 }
 
 /**

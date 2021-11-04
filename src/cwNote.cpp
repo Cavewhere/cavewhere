@@ -12,6 +12,7 @@
 #include "cwDebug.h"
 #include "cwImageResolution.h"
 #include "cwSurveyNoteModel.h"
+#include "cwKeywordModel.h"
 
 //Std includes
 #include "cwMath.h"
@@ -125,6 +126,10 @@ void cwNote::setParentTrip(cwTrip* trip) {
         ParentTrip = trip;
         setParent(trip);
         setParentCave(trip->parentCave());
+
+        for(auto scrap : Scraps) {
+            scrap->keywordModel()->addExtension(trip->keywordModel());
+        }
     }
 }
 
@@ -236,6 +241,10 @@ void cwNote::setupScrap(cwScrap *scrap) {
     scrap->setParent(this);
     scrap->setParentNote(this);
     scrap->setParentCave(ParentCave);
+    if(parentTrip()) {
+        qDebug() << "Setting up parent trip!" << parentTrip();
+        scrap->keywordModel()->addExtension(parentTrip()->keywordModel());
+    }
 }
 
 /**

@@ -13,6 +13,7 @@
 #include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwErrorModel.h"
+#include "cwKeywordModel.h"
 
 //Qt includes
 #include <QMap>
@@ -27,8 +28,11 @@ cwTrip::cwTrip(QObject *parent) :
     DateTime = QDateTime(QDate::currentDate());
     Notes = new cwSurveyNoteModel(this);
     ErrorModel = new cwErrorModel(this);
+    KeywordModel = new cwKeywordModel(this);
 
     Notes->setParentTrip(this);
+
+    KeywordModel->addExtension(Team->keywordModel());
 
 //    qDebug() << "Creating:" << this;
 }
@@ -36,6 +40,7 @@ cwTrip::cwTrip(QObject *parent) :
 void cwTrip::Copy(const cwTrip& object)
 {
     ParentCave = nullptr;
+    KeywordModel = new cwKeywordModel(this);
 
     //Copy the name of the trip
     setName(object.Name);
@@ -44,6 +49,7 @@ void cwTrip::Copy(const cwTrip& object)
     //Copy the team
     Team = new cwTeam(*(object.Team));
     Team->setParent(this);
+    KeywordModel->addExtension(Team->keywordModel());
 
     //Copy the calibration
     Calibration = new cwTripCalibration(*(object.Calibration));
@@ -401,11 +407,13 @@ cwTrip::NameCommand::NameCommand(cwTrip* trip, QString name) {
 
 void cwTrip::NameCommand::redo() {
     Trip->Name = NewName;
+    Trip->KeywordModel->replace({cwKeywordModel::TripNameKey, Trip->Name});
     emit Trip->nameChanged();
 }
 
 void cwTrip::NameCommand::undo() {
     Trip->Name = OldName;
+    Trip->KeywordModel->replace({cwKeywordModel::TripNameKey, Trip->Name});
     emit Trip->nameChanged();
 }
 
@@ -418,11 +426,15 @@ cwTrip::DateCommand::DateCommand(cwTrip* trip, QDateTime date) {
 
 void cwTrip::DateCommand::redo() {
     Trip->DateTime = NewDate;
+    Trip->keywordModel()->replace({cwKeywordModel::YearKey, Trip->DateTime.toString("yyyy")});
+    Trip->keywordModel()->replace({cwKeywordModel::DateKey, Trip->DateTime.toString("yyyy-MM-dd")});
     emit Trip->dateChanged(Trip->DateTime);
 }
 
 void cwTrip::DateCommand::undo() {
     Trip->DateTime = OldDate;
+    Trip->keywordModel()->replace({cwKeywordModel::YearKey, Trip->DateTime.toString("yyyy")});
+    Trip->keywordModel()->replace({cwKeywordModel::DateKey, Trip->DateTime.toString("yyyy-MM-dd")});
     emit Trip->dateChanged(Trip->DateTime);
 }
 

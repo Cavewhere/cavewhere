@@ -24,6 +24,7 @@ class cwTripCalibration;
 class cwSurveyNoteModel;
 class cwShot;
 class cwErrorModel;
+class cwKeywordModel;
 
 //Qt include
 #include <QObject>
@@ -46,6 +47,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwTripCalibration* calibration READ calibrations WRITE setCalibration NOTIFY calibrationChanged)  
     Q_PROPERTY(cwCave* parentCave READ parentCave WRITE setParentCave NOTIFY parentCaveChanged)
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
+    Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -92,6 +94,8 @@ public:
     void stationPositionModelUpdated();
 
     cwErrorModel* errorModel() const;
+    cwKeywordModel* keywordModel() const { return KeywordModel; }
+
 signals:
     void nameChanged();
     void dateChanged(QDateTime date);
@@ -117,6 +121,7 @@ protected:
     QPointer<cwCave> ParentCave;
     cwSurveyNoteModel* Notes;
     cwErrorModel* ErrorModel; //!<
+    cwKeywordModel* KeywordModel;
 
     //Units
 

@@ -26,6 +26,7 @@ public:
     void addKeywords(const QVector<cwKeyword>& keywords);
     Q_INVOKABLE void remove(const cwKeyword& keyword);
     void removeAll(QString key);
+    Q_INVOKABLE void replace(const cwKeyword& keyword);
     QVector<cwKeyword> keywords() const;
 
     QVariant data(const QModelIndex& index, int role) const;
@@ -38,6 +39,10 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
     static const QString TypeKey;
+    static const QString TripNameKey;
+    static const QString YearKey;
+    static const QString DateKey;
+    static const QString CaverKey;
 
     Q_INVOKABLE cwKeyword createKeyword(const QString key, QString value) const;
 
