@@ -3,6 +3,7 @@
 #include "cwKeyword.h"
 #include "cwAsyncFuture.h"
 #include "cwGlobals.h"
+#include "cwKeywordModel.h"
 
 //Async includes
 #include "asyncfuture.h"
@@ -11,9 +12,35 @@
 #include <QtConcurrent>
 
 cwKeywordItemFilterModel::cwKeywordItemFilterModel(QObject *parent) :
-    QAbstractListModel(parent)
+    QAbstractListModel(parent),
+    FilterKeywords(new cwKeywordModel(this))
 {
+    connect(FilterKeywords, &cwKeywordModel::rowsInserted,
+            this, [this](const QModelIndex& parent, int first, int last)
+    {
+        Q_UNUSED(parent);
+        Q_UNUSED(first);
+        Q_UNUSED(last);
+        updateAllRows();
+    });
 
+    connect(FilterKeywords, &cwKeywordModel::rowsRemoved,
+            this, [this](const QModelIndex& parent, int first, int last)
+    {
+        Q_UNUSED(parent);
+        Q_UNUSED(first);
+        Q_UNUSED(last);
+        updateAllRows();
+    });
+
+    connect(FilterKeywords, &cwKeywordModel::dataChanged,
+            this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
+    {
+        Q_UNUSED(topLeft);
+        Q_UNUSED(bottomRight);
+        Q_UNUSED(roles);
+        updateAllRows();
+    });
 }
 
 cwKeywordItemFilterModel::~cwKeywordItemFilterModel()
@@ -49,7 +76,7 @@ void cwKeywordItemFilterModel::setKeywordModel(cwKeywordItemModel* keywordModel)
 
             auto updatePossibleKeys = [=]() {
                 //Any new keys
-                auto keys = cw::toList(createPossibleKeys(keywords(), entities()));
+                auto keys = cw::toList(createPossibleKeys(filterKeywords()->keywords(), entities()));
                 std::sort(keys.begin(), keys.end());
 
                 if(keys != possibleKeys()) {
@@ -214,7 +241,7 @@ QVector<cwKeywordItemFilterModel::EntityAndKeywords> cwKeywordItemFilterModel::e
 void cwKeywordItemFilterModel::updateAllRows()
 {
     auto entities = this->entities();
-    auto keywords = this->keywords();
+    auto keywords = this->filterKeywords()->keywords();
     auto lastKey = this->lastKey();
 
     //This method does all the filtering of the rows in the model
@@ -289,7 +316,7 @@ cwKeywordItemFilterModel::Filter cwKeywordItemFilterModel::createDefaultFilter()
     };
 
     Filter insertRow;
-    insertRow.keywords = Keywords;
+    insertRow.keywords = FilterKeywords->keywords();
     insertRow.lastKey = LastKey;
     insertRow.data = &Data;
     insertRow.beginRemoveFuction = beginRemoveFunction;
@@ -301,7 +328,7 @@ cwKeywordItemFilterModel::Filter cwKeywordItemFilterModel::createDefaultFilter()
     return insertRow;
 }
 
-QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QList<cwKeyword> &keywords,
+QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QVector<cwKeyword> &keywords,
                                                            const QVector<EntityAndKeywords> entities)
 {
     QSet<QString> possibleKeys;
@@ -311,7 +338,7 @@ QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QList<cwKeyword
         }
     };
 
-    auto removeKeys = [&possibleKeys](QList<cwKeyword> keywords) {
+    auto removeKeys = [&possibleKeys](const QVector<cwKeyword>& keywords) {
         for(const auto& keyword : qAsConst(keywords)) {
             possibleKeys.remove(keyword.key());
         }
@@ -325,15 +352,24 @@ QSet<QString> cwKeywordItemFilterModel::createPossibleKeys(const QList<cwKeyword
     return possibleKeys;
 }
 
-/**
-*
-*/
-void cwKeywordItemFilterModel::setKeywords(QList<cwKeyword> keywords) {
-    if(Keywords != keywords) {
-        Keywords = keywords;
-        updateAllRows();
-        emit keywordsChanged();
+void cwKeywordItemFilterModel::addKeywordFromLastKey(const QString& value)
+{
+    FilterKeywords->add(cwKeyword(lastKey(), value));
+//    updateAllRows();
+//    emit keywordsChanged();
+}
+
+void cwKeywordItemFilterModel::removeLastKeyword()
+{
+    if(FilterKeywords->rowCount() > 0) {
+        //Find and remove the last keyword
+        FilterKeywords->remove(FilterKeywords->index(FilterKeywords->rowCount() - 1)
+                         .data(cwKeywordModel::KeywordRole)
+                         .value<cwKeyword>());
     }
+
+//    updateAllRows();
+//    emit keywordsChanged();
 }
 
 /**

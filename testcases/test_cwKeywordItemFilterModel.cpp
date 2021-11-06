@@ -32,7 +32,8 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly", "[cwKeywordItem
     cwKeywordItemFilterModel model;
     CHECK(model.rowCount(QModelIndex()) == 1);
     CHECK(model.keywordModel() == nullptr);
-    CHECK(model.keywords().size() == 0);
+    CHECK(model.filterKeywords() != nullptr);
+    CHECK(model.filterKeywords()->parent() == &model);
     CHECK(model.lastKey().isEmpty());
     CHECK(model.otherCategory().isEmpty() == false);
 }
@@ -251,9 +252,9 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
         }
 
         SECTION("Second level") {
-            model->setKeywords({
-                                  {"cave", "cave1"}
-                               });
+            model->filterKeywords()->setKeywords({
+                                               {"cave", "cave1"}
+                                           });
 
             modelData = {
                 {"line", {entity3.get()}},
@@ -454,10 +455,10 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
         }
 
         SECTION("Third level") {
-            model->setKeywords({
-                                  {"cave", "cave2"},
-                                  {"trip", "trip3"}
-                               });
+            model->filterKeywords()->setKeywords({
+                                               {"cave", "cave2"},
+                                               {"trip", "trip3"}
+                                           });
 
             modelData = {
                 {"point", {entity4.get()}},

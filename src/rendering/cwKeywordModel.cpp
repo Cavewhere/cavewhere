@@ -86,6 +86,32 @@ void cwKeywordModel::replace(const cwKeyword &keyword)
     add(keyword);
 }
 
+void cwKeywordModel::remove(int index)
+{
+    if(index >= 0 && index < Keywords.size()) {
+        beginRemoveRows(QModelIndex(), index, index);
+        CachedRowCount--;
+        Keywords.removeAt(index);
+        endRemoveRows();
+    }
+}
+
+void cwKeywordModel::clear()
+{
+    if(!Keywords.isEmpty()) {
+        beginRemoveRows(QModelIndex(), 0, Keywords.size() - 1);
+        CachedRowCount -= Keywords.size();
+        Keywords.clear();
+        endRemoveRows();
+    }
+}
+
+void cwKeywordModel::setKeywords(const QVector<cwKeyword> &keywords)
+{
+    clear();
+    addKeywords(keywords);
+}
+
 /**
 Returns the data from the model
  */
@@ -259,10 +285,12 @@ void cwKeywordModel::removeExtension(cwKeywordModel *model)
     int modelLastIndex = rowCount() - lastCount - 1;
     int count = modelLastIndex - modelFirstIndex + 1;
 
-    beginRemoveRows(QModelIndex(), modelFirstIndex, modelLastIndex);
-    CachedRowCount -= count;
-    Extentions.erase(keywordToRemoveIter);
-    endRemoveRows();
+    if(modelFirstIndex <= modelLastIndex) {
+        beginRemoveRows(QModelIndex(), modelFirstIndex, modelLastIndex);
+        CachedRowCount -= count;
+        Extentions.erase(keywordToRemoveIter);
+        endRemoveRows();
+    }
 }
 
 /**
@@ -338,6 +366,10 @@ int cwKeywordModel::rowCount(const QModelIndex &parent) const
  */
 QVector<cwKeyword> cwKeywordModel::keywords() const
 {
+    if(Extentions.isEmpty()) {
+        return Keywords;
+    }
+
     QVector<cwKeyword> keywords;
     keywords.reserve(rowCount());
     for(int i = 0; i < rowCount(); i++) {

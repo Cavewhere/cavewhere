@@ -5,6 +5,7 @@
 #include "cwKeywordItemModel.h"
 #include "cwGlobals.h"
 #include "cwKeyword.h"
+class cwKeywordModel;
 
 //Qt includes
 #include <Qt3DCore/QEntity>
@@ -19,9 +20,9 @@ class CAVEWHERE_LIB_EXPORT cwKeywordItemFilterModel : public QAbstractListModel
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
-    Q_PROPERTY(QList<cwKeyword> keywords READ keywords WRITE setKeywords NOTIFY keywordsChanged)
-    Q_PROPERTY(QString lastKey READ lastKey WRITE setLastKey NOTIFY keyLastChanged)
+    Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged FINAL)
+    Q_PROPERTY(cwKeywordModel* filterKeywords READ filterKeywords FINAL) //The keywords that we will filter by
+    Q_PROPERTY(QString lastKey READ lastKey WRITE setLastKey NOTIFY keyLastChanged) //Last key we should filter by
     Q_PROPERTY(QStringList possibleKeys READ possibleKeys NOTIFY possibleKeysChanged)
 
 public:
@@ -39,8 +40,10 @@ public:
     cwKeywordItemModel* keywordModel() const;
     void setKeywordModel(cwKeywordItemModel* keywordModel);
 
-    QList<cwKeyword> keywords() const;
-    void setKeywords(QList<cwKeyword> keywords);
+    cwKeywordModel* filterKeywords() const;
+
+    Q_INVOKABLE void addKeywordFromLastKey(const QString &value);
+    Q_INVOKABLE void removeLastKeyword();
 
     QString lastKey() const;
     void setLastKey(QString lastKey);
@@ -113,7 +116,7 @@ private:
     class Filter {
 
     public:
-        QList<cwKeyword> keywords;
+        QVector<cwKeyword> keywords;
         QString lastKey;
         ModelData* data;
 
@@ -141,7 +144,7 @@ private:
         static bool lessThan(const Row& row, const QString& value);
     };
 
-    QList<cwKeyword> Keywords; //!<
+    cwKeywordModel* FilterKeywords; //!<
     QString LastKey; //!<
     QStringList PossibleKeys; //!<
     ModelData Data;
@@ -156,7 +159,7 @@ private:
 
     Filter createDefaultFilter();
 
-    static QSet<QString> createPossibleKeys(const QList<cwKeyword>& keywords, const QVector<EntityAndKeywords> entities);
+    static QSet<QString> createPossibleKeys(const QVector<cwKeyword>& keywords, const QVector<EntityAndKeywords> entities);
     QVector<EntityAndKeywords> entities() const;
 
 };
@@ -166,13 +169,6 @@ private:
 */
 inline cwKeywordItemModel* cwKeywordItemFilterModel::keywordModel() const {
     return KeywordModel;
-}
-
-/**
-*
-*/
-inline QList<cwKeyword> cwKeywordItemFilterModel::keywords() const {
-    return Keywords;
 }
 
 /**
@@ -188,6 +184,14 @@ inline QString cwKeywordItemFilterModel::lastKey() const {
 */
 inline QStringList cwKeywordItemFilterModel::possibleKeys() const {
     return Data.PossibleKeys;
+}
+
+/**
+* @brief cwKeywordItemFilterModel::keywords
+* @return
+*/
+inline cwKeywordModel* cwKeywordItemFilterModel::filterKeywords() const {
+    return FilterKeywords;
 }
 
 #endif // CWKEYWORDENTITYFILTERMODEL_H

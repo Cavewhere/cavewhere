@@ -14,6 +14,28 @@ Item {
     ColumnLayout {
         anchors.fill: parent
 
+        Repeater {
+            model: filterModel.filterKeywords
+            delegate: RowLayout {
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+
+                RoundButton {
+                    id: xButtonId
+                    icon.source: "qrc:///icons/x.png"
+                    icon.width: 32
+                    icon.height: 32
+                    onClicked: {
+                        filterModel.filterKeywords.remove(index)
+                    }
+                }
+
+                Text {
+                    text: keyRole + " = " + valueRole
+                }
+            }
+        }
+
         ComboBox {
             id: comboBoxId
             model: filterModel.possibleKeys
@@ -42,13 +64,25 @@ Item {
                     }
                 }
 
-                Text {
-                    text: valueRole
+                RoundButton {
+                    width: 32
+                    height: 32
+
+                    visible: objectCountRole > 1
+
+                    icon.source: "qrc:///icons/rightCircleArrow-32x32.png"
+                    icon.width: 32
+                    icon.height: 32
+
+                    onClicked: {
+                        filterModel.addKeywordFromLastKey(valueRole);
+                    }
                 }
 
                 Text {
-                    text: "(" + objectCountRole + ")"
+                    text: valueRole + " (" + objectCountRole + ")"
                 }
+
             }
         }
     }

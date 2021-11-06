@@ -27,6 +27,9 @@ public:
     Q_INVOKABLE void remove(const cwKeyword& keyword);
     void removeAll(QString key);
     Q_INVOKABLE void replace(const cwKeyword& keyword);
+    Q_INVOKABLE void remove(int index);
+    void clear();
+    void setKeywords(const QVector<cwKeyword>& keywords);
     QVector<cwKeyword> keywords() const;
 
     QVariant data(const QModelIndex& index, int role) const;

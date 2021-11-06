@@ -130,6 +130,36 @@ TEST_CASE("cwKeywordModel should add and remove keywords correctly", "[cwKeyword
             checkRows(&model);
         }
 
+        SECTION("Clear the model") {
+            model.clear();
+            modelKeywords.clear();
+
+            CHECK(insertSpy.size() == 0);
+            CHECK(aboutinsertSpy.size() == 0);
+            CHECK(removeSpy.size() == 1);
+            CHECK(aboutRemovedSpy.size() == 1);
+
+            checkRows(&model);
+        }
+
+        SECTION("Test replacing keywords with new list of keywords") {
+            QVector<cwKeyword> newKeywords {
+                {"key4", "value3"},
+                {"key5", "value4"},
+                {"key6", "value3"},
+            };
+
+            model.setKeywords(newKeywords);
+            modelKeywords = newKeywords;
+
+            CHECK(insertSpy.size() == 1);
+            CHECK(aboutinsertSpy.size() == 1);
+            CHECK(removeSpy.size() == 1);
+            CHECK(aboutRemovedSpy.size() == 1);
+
+            checkRows(&model);
+        }
+
         SECTION("Test setData") {
             QSignalSpy dataChangedSpy(&model, &cwKeywordModel::dataChanged);
 
