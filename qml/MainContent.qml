@@ -102,6 +102,13 @@ QQ.Item {
         }
     }
 
+    QQ.Component {
+        id: resizePageComponent
+        ResizeAppWindowPage {
+            anchors.fill: parent
+        }
+    }
+
     QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
         var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
@@ -109,6 +116,7 @@ QQ.Item {
         rootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
         rootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         rootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
+        rootData.pageSelectionModel.registerPage(null, "Resize", resizePageComponent);
         rootData.pageSelectionModel.gotoPage(viewPage);
     }
 }
