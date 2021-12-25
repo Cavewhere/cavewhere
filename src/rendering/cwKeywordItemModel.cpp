@@ -212,6 +212,19 @@ QModelIndex cwKeywordItemModel::indexOf(cwKeywordItem* item) const
     return QModelIndex();
 }
 
+QVector<cwEntityAndKeywords> cwKeywordItemModel::entityAndKeywords() const
+{
+    QVector<cwEntityAndKeywords> entities;
+    entities.reserve(Items.size());
+
+    for(auto item : Items) {
+        entities.append(cwEntityAndKeywords(item->object(),
+                                            item->keywordModel()->keywords()));
+    }
+
+    return entities;
+}
+
 cwKeywordModel *cwKeywordItemModel::keywordModel(const QModelIndex &index) const
 {
     Q_ASSERT(index.isValid());

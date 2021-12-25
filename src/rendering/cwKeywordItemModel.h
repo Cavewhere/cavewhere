@@ -3,11 +3,14 @@
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QObject>
 
 //Our includes
 #include "cwGlobals.h"
 class cwKeywordItem;
 class cwKeywordModel;
+#include "cwKeyword.h"
+#include "cwEntityAndKeywords.h"
 
 class CAVEWHERE_LIB_EXPORT cwKeywordItemModel : public QAbstractItemModel
 {
@@ -35,6 +38,9 @@ public:
     QModelIndex index(int row, int column, const QModelIndex& parent) const;
     QModelIndex parent(const QModelIndex& index) const;
     QModelIndex indexOf(cwKeywordItem *item) const;
+
+    QVector<cwEntityAndKeywords> entityAndKeywords() const;
+
 
 private:
 
