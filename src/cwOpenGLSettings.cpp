@@ -17,8 +17,8 @@
 #include <QSettings>
 #include <QVariant>
 
-//Stc3 decompression
-#include "s3tc.h"
+//squish decompression
+#include "squish.h"
 
 cwOpenGLSettings* cwOpenGLSettings::Singleton = nullptr;
 
@@ -293,11 +293,15 @@ bool cwOpenGLSettings::testGPU_DXT1()
     QVector<unsigned int> openGLImage(size.width() * size.height(), 0);
     QVector<unsigned int> squishImage(size.width() * size.height(), 0);
 
-    s3tc::BlockDecompressImageDXT1(size.width(), size.height(),
-                             reinterpret_cast<const unsigned char*>(openGLResult.data.constData()), openGLImage.data());
+    squish::DecompressImage(reinterpret_cast<squish::u8*>(openGLImage.data()),
+                            size.width(), size.height(),
+                            reinterpret_cast<const unsigned char*>(openGLResult.data.constData()),
+                            squish::kDxt1);
 
-    s3tc::BlockDecompressImageDXT1(size.width(), size.height(),
-                                   reinterpret_cast<const unsigned char*>(squishResult.data.constData()), squishImage.data());
+    squish::DecompressImage(reinterpret_cast<squish::u8*>(squishImage.data()),
+                            size.width(), size.height(),
+                            reinterpret_cast<const unsigned char*>(squishResult.data.constData()),
+                            squish::kDxt1);
 
     double sumOfSquares = 0;
     for(int r = 0; r < size.height(); r++) {
