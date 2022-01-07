@@ -37,6 +37,3 @@
 [submodule "asyncfuture"]
 	path = asyncfuture
         url = https://github.com/vpicaver/asyncfuture.git
-[submodule "testcases/s3tc-dxt-decompression"]
-	path = testcases/s3tc-dxt-decompression
-        url = https://github.com/Cavewhere/s3tc-dxt-decompression.git

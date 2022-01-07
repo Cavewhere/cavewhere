@@ -13,7 +13,8 @@ CppApplication {
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
     Depends { name: "asyncfuture" }
-    Depends { name: "s3tc-dxt-decompression" }
+    Depends { name: "squish" }
+    //Depends { name: "s3tc-dxt-decompression" }
 
     cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++17"

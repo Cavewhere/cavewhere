@@ -7,8 +7,9 @@
 #include "cwImageData.h"
 #include "cwOpenGLUtils.h"
 
-//Stc3 decompression
-#include "s3tc.h"
+//squish decompression
+#include "squish.h"
+//#include "s3tc.h"
 
 void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cwImageData &mipmap)
 {
@@ -20,8 +21,10 @@ void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cw
 
         QVector<unsigned int> image(size.dim.width() * size.dim.height(), 0);
 
-        s3tc::BlockDecompressImageDXT1(size.dim.width(), size.dim.height(),
-                                 reinterpret_cast<const unsigned char*>(mipmap.data().constData()), image.data());
+        squish::DecompressImage(reinterpret_cast<squish::u8*>(image.data()),
+                                size.dim.width(), size.dim.height(),
+                                mipmap.data().constData(),
+                                squish::kDxt1);
 
         //Checks that the add images dxt1 compression is working okay, if this breaks, then
         //compression isn't working
@@ -36,7 +39,8 @@ void DXT1BlockCompare::compare(const DXT1BlockCompare::TestImage &size, const cw
                 QRgb decompressedColor = cwOpenGLUtils::toQRgba(image.at(imageIndex));
 
                 INFO("BlockIndex:" << blockIndex << " ImageIndex:" << imageIndex << " Image block index:" << imageIndex / 16);
-                INFO("Color:" << color.name().toStdString() << " DecompressedColor:" << QColor(decompressedColor).name().toStdString());
+                INFO("Color:" << color.name().toStdString()
+                     << " DecompressedColor:" << QColor(decompressedColor).name().toStdString());
                 CHECK(cwOpenGLUtils::fuzzyCompareColors(color, decompressedColor) <= 16);
             }
         }

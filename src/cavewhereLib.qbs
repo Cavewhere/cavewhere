@@ -56,7 +56,6 @@ DynamicLibrary {
     Depends { name: "dewalls" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "asyncfuture" }
-    Depends { name: "s3tc-dxt-decompression" }
     Depends { name: "bundle" }
 
     Depends {

@@ -23,10 +23,10 @@ int cwOpenGLUtils::fuzzyCompareColors(QColor c1, QColor c2) {
 }
 
 QRgb cwOpenGLUtils::toQRgba(unsigned int color) {
-    //Get shifty``
-    int r = (color & 0xFF000000) >> 24;
-    int g = (color & 0x00FF0000) >> 16;
-    int b = (color & 0x0000FF00) >> 8;
-    int a = (color & 0x000000FF);
+    //Get shifty
+    int a = (color & 0xFF000000) >> 24;
+    int b = (color & 0x00FF0000) >> 16;
+    int g = (color & 0x0000FF00) >> 8;
+    int r = (color & 0x000000FF);
     return qRgba(r, g, b, a);
 }
