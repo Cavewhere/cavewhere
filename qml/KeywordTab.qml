@@ -1,9 +1,10 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.12
-import QtQuick.Controls 2.12
+import QtQuick.Controls 2.15
 import Cavewhere 1.0
 
 Item {
+    id: keywordTabId
 
     KeywordItemFilterModel {
         id: filterModel
@@ -18,7 +19,7 @@ Item {
             model: filterModel.filterKeywords
             delegate: RowLayout {
                 Layout.fillHeight: true
-                Layout.fillWidth: true
+                Layout.fillWidth: true 
 
                 RoundButton {
                     id: xButtonId
@@ -38,7 +39,10 @@ Item {
 
         ComboBox {
             id: comboBoxId
+
             model: filterModel.possibleKeys
+
+
         }
 
         ListView {
@@ -49,6 +53,40 @@ Item {
 
             delegate: RowLayout {
                 CheckBox {
+                    checked: Qt.Checked
+//                    {
+
+//                        var visible = 0;
+//                        var hidden = 0;
+
+//                        for(var i in objectsRole) {
+//                            var obj = objectsRole[i]
+//                            if('visible' in obj) {
+//                                if(obj.visible) {
+//                                    visible++
+//                                } else {
+//                                    hidden++
+//                                }
+//                            } else if('enabled' in obj) {
+//                                if(obj.enabled) {
+//                                    visible++
+//                                } else {
+//                                    hidden++;
+//                                }
+//                            }
+
+//                            if(visible > 0 && hidden > 0) {
+//                                return Qt.PartiallyChecked
+//                            }
+//                        }
+
+//                        if(visible > 0) {
+//                            return Qt.Checked
+//                        } else {
+//                            return Qt.Unchecked
+//                        }
+//                    }
+
                     onCheckedChanged: {
                         for(var i in objectsRole) {
                             var obj = objectsRole[i];

@@ -16,7 +16,7 @@ class CAVEWHERE_LIB_EXPORT cwKeyword
 
 public:
     cwKeyword() = default;
-    cwKeyword(const QString key, QString value);
+    cwKeyword(const QString& key, const QString& value);
 
     QString key() const;
     void setKey(QString key);

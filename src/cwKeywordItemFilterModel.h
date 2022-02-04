@@ -8,7 +8,6 @@
 class cwKeywordModel;
 
 //Qt includes
-#include <Qt3DCore/QEntity>
 #include <QList>
 #include <QAbstractListModel>
 #include <QFuture>

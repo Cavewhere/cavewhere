@@ -101,6 +101,11 @@ void cwKeywordItemModel::removeItem(cwKeywordItem *item)
     disconnect(item, nullptr, this, nullptr);
 }
 
+cwKeywordItem *cwKeywordItemModel::item(int row) const
+{
+    return Items.at(row);
+}
+
 QVariant cwKeywordItemModel:: data(const QModelIndex &index, int role) const
 {
     if(!index.isValid()) { return QVariant(); }

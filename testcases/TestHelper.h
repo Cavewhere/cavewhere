@@ -61,7 +61,7 @@ inline std::ostream& operator << ( std::ostream& os, QMetaProperty const& value 
     return os;
 }
 
-inline std::ostream& operator << ( std::ostream& os, QModelIndex const& value) {
+inline std::ostream& operator << ( std::ostream& os, QModelIndex value) {
 
     auto printIndex = [&]() {
         os << "(" << value.row() << "," << value.column() << ")";
@@ -76,6 +76,10 @@ inline std::ostream& operator << ( std::ostream& os, QModelIndex const& value) {
     }
 
     return os;
+}
+
+inline std::ostream& operator <<( std::ostream& os, QPersistentModelIndex value) {
+    return os << static_cast<QModelIndex>(value);
 }
 
 inline std::ostream& operator << ( std::ostream& os, cwKeyword const& value) {

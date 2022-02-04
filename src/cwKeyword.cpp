@@ -1,7 +1,7 @@
 #include "cwKeyword.h"
 
 
-cwKeyword::cwKeyword(const QString key, QString value) :
+cwKeyword::cwKeyword(const QString& key, const QString& value) :
     Key(key),
     Value(value)
 {

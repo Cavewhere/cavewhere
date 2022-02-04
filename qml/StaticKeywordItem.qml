@@ -11,5 +11,4 @@ KeywordItem {
         keywordItem.keywordModel.add(keyword);
         rootData.keywordItemModel.addItem(keywordItem)
     }
-
 }

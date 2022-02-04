@@ -14,10 +14,11 @@
 
 using namespace Qt3DCore;
 
-class ListElement {
+namespace test_cwKeywordItemFilterModel  {
+class Element {
 public:
-    ListElement() {}
-    ListElement(const QString& value, const QVector<QEntity*> entities) :
+    Element() {}
+    Element(const QString& value, const QVector<QEntity*> entities) :
         value(value),
         entities(entities)
     {}
@@ -25,8 +26,9 @@ public:
     QString value;
     QVector<QEntity*> entities;
 };
+}
 
-
+using namespace test_cwKeywordItemFilterModel;
 
 TEST_CASE("cwKeywordItemFilterModel should initilize correctly", "[cwKeywordItemFilterModel]") {
     cwKeywordItemFilterModel model;
@@ -42,7 +44,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
 
     auto model = std::make_unique<cwKeywordItemFilterModel>();
 
-    auto check = [&model](const QModelIndex& root, const QVector<ListElement>& list) {        
+    auto check = [&model](const QModelIndex& root, const QVector<Element>& list) {
         REQUIRE(list.size() == model->rowCount(root));
         for(int i = 0; i < model->rowCount(root); i++) {
             INFO("Index:" << i);
@@ -143,7 +145,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
     keywordEntityModel->addItem(component4);
 
     //CHECK default model
-    QVector<ListElement> lists {
+    QVector<Element> lists {
         {cwKeywordItemFilterModel::otherCategory(), {}}
     };
     check(QModelIndex(), lists);
@@ -170,7 +172,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
         model->setLastKey("type");
         model->waitForFinished();
 
-        QVector<ListElement> modelData {
+        QVector<Element> modelData {
             {"line", {entity3.get()}},
             {"point", {entity4.get()}},
             {"scrap", {entity1.get(), entity2.get()}},
@@ -223,7 +225,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
             model->setLastKey("unknown");
             model->setLastKey("trip");
 
-            QVector<ListElement> modelData {
+            QVector<Element> modelData {
                 {"trip1", {entity1.get()}},
                 {"trip2", {entity2.get(), entity3.get()}},
                 {"trip3", {entity4.get()}},
@@ -240,7 +242,7 @@ TEST_CASE("cwKeywordItemFilterModel should initilize correctly with keys", "[cwK
 
             model->waitForFinished();
 
-            QVector<ListElement> modelData {
+            QVector<Element> modelData {
                 {cwKeywordItemFilterModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}},
             };
 

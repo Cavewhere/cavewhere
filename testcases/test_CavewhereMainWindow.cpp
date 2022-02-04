@@ -384,3 +384,43 @@ TEST_CASE("Test create survey and carpet a single scrap", "[CavewhereMainWindow]
     loop.exec();
     CHECK(true);
 }
+
+//TEST_CASE("Crash on load. Traverse Node tree", "[CavewhereMainWindow]") {
+//    cwGlobalDirectory::setupBaseDirectory();
+
+//    //Register all of the cavewhere types
+//    cwQMLRegister::registerQML();
+
+//    auto firstAppEngine = MainHelper::createApplicationEnigne();
+//    cwRootData* rootData = qobject_cast<cwRootData*>(firstAppEngine->rootContext()->contextProperty("rootData").value<QObject*>());
+//    REQUIRE(rootData);
+
+////    auto filename = copyToTempFolder("://datasets/test_cwProject/Phake Cave 3000.cw");
+//    auto filename = copyToTempFolder("C:/Users/vpica/Desktop/Burja.cw");
+
+//    QEventLoop loop;
+//    QTimer::singleShot(2000, [rootData, filename, firstAppEngine, &loop]() {
+
+//        REQUIRE(cwOpenGLSettings::instance());
+//        cwOpenGLSettings::instance()->setUseDXT1Compression(false);
+
+//        auto project = rootData->project();
+//        project->loadFile(filename);
+//        project->waitLoadToFinish();
+
+//        INFO("Filename:" << project->filename());
+
+//        rootData->taskManagerModel()->waitForTasks();
+//        rootData->futureManagerModel()->waitForFinished();
+
+//        REQUIRE(project->cavingRegion()->caveCount() == 1);
+//        auto cave = project->cavingRegion()->cave(0);
+
+//        QTimer::singleShot(5000, [firstAppEngine, &loop](){
+//            loop.quit();
+//        });
+//    });
+
+//    loop.exec();
+//    CHECK(true);
+//}

@@ -1,5 +1,5 @@
-#ifndef CWKEYWORDENTITYFILTER_H
-#define CWKEYWORDENTITYFILTER_H
+#ifndef CWKEYWORDGROUPBYKEYMODEL_H
+#define CWKEYWORDGROUPBYKEYMODEL_H
 
 //Our include
 #include "cwKeywordItemModel.h"
@@ -7,9 +7,9 @@
 #include "cwKeyword.h"
 #include "cwEntityAndKeywords.h"
 class cwKeywordModel;
+class cwEntityKeywordsModel;
 
 //Qt includes
-#include <Qt3DCore/QEntity>
 #include <QList>
 #include <QAbstractListModel>
 #include <QFuture>
@@ -17,13 +17,30 @@ class cwKeywordModel;
 //Std includes
 #include <memory>
 
-class CAVEWHERE_LIB_EXPORT cwKeywordItemFilter : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwKeywordGroupByKeyModel : public QAbstractListModel
 {
     Q_OBJECT
 
-    Q_PROPERTY(QVector<cwEntityAndKeywords> entities READ entities WRITE setEntities NOTIFY entitiesChanged)
-    Q_PROPERTY(QVector<cwEntityAndKeywords> acceptedEntites READ acceptedEntites NOTIFY acceptedEntitesChanged)
-//    Q_PROPERTY(QFuture<void> modelFuture READ modelFuture NOTIFY modelFutureChanged)
+    Q_PROPERTY(cwEntityKeywordsModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceChanged)
+    Q_PROPERTY(cwEntityKeywordsModel* acceptedModel READ acceptedModel CONSTANT)
+
+
+
+
+
+
+
+
+
+
+
+
+
+//    Q_PROPERTY(QVector<cwEntityAndKeywords> entities READ entities WRITE setEntities NOTIFY entitiesChanged)
+//    Q_PROPERTY(QVector<cwEntityAndKeywords> acceptedEntites READ acceptedEntites NOTIFY acceptedEntitesChanged)
+
+
+    //    Q_PROPERTY(QFuture<void> modelFuture READ modelFuture NOTIFY modelFutureChanged)
 
     Q_PROPERTY(QString key READ key WRITE setKey NOTIFY keyChanged) //Last key we should filter by
 //    Q_PROPERTY(bool inverted READ inverted WRITE setInverted NOTIFY invertedChanged)
@@ -49,13 +66,19 @@ public:
 
     Q_ENUM(Role)
 
-    cwKeywordItemFilter(QObject* parent = nullptr);
-    ~cwKeywordItemFilter();
+    cwKeywordGroupByKeyModel(QObject* parent = nullptr);
+    ~cwKeywordGroupByKeyModel();
 
-    QVector<cwEntityAndKeywords> entities() const;
-    void setEntities(QVector<cwEntityAndKeywords> entries);
+    cwEntityKeywordsModel* sourceModel() const;
+    void setSourceModel(cwEntityKeywordsModel* source);
 
-    QVector<cwEntityAndKeywords> acceptedEntites() const;
+    cwEntityKeywordsModel* acceptedModel() const;
+
+//    QVector<cwEntityAndKeywords> entities() const;
+//    void setEntities(QVector<cwEntityAndKeywords> entries);
+
+//    QVector<cwEntityAndKeywords> acceptedEntites() const;
+
 
     QString key() const;
     void setKey(QString lastKey);
@@ -92,8 +115,9 @@ public:
 
 
 signals:
-    void entitiesChanged();
-    void acceptedEntitesChanged();
+//    void entitiesChanged();
+//    void acceptedEntitesChanged();
+    void sourceChanged();
     void invertedChanged();
     void keyChanged();
     void possibleKeysChanged();
@@ -122,7 +146,7 @@ private:
     class ModelData {
     public:
         QVector<Row> Rows;
-        Row OtherRow = Row(cwKeywordItemFilter::otherCategory(), {}, false);
+        Row OtherRow = Row(cwKeywordGroupByKeyModel::otherCategory(), {}, false);
 //        QStringList PossibleKeys;
 
         int otherRowIndex() const {
@@ -178,8 +202,12 @@ private:
         static bool lessThan(const Row& row, const QString& value);
     };
 
-    QVector<cwEntityAndKeywords> mEntries; //Entities passed to this filter
-    QVector<cwEntityAndKeywords> mAcceptedEntries; //Enities that have been filtered
+    cwEntityKeywordsModel* mSourceModel; //!<
+    cwEntityKeywordsModel* mAcceptedModel; //!<
+
+
+    //    QVector<cwEntityAndKeywords> mEntries; //Entities passed to this filter
+//    QVector<cwEntityAndKeywords> mAcceptedEntries; //Enities that have been filtered
 
     bool mInverted; //!<
     QString mKey; //!<
@@ -207,8 +235,16 @@ private:
 
 };
 
-inline QVector<cwEntityAndKeywords> cwKeywordItemFilter::entities() const {
-    return mEntries;
+//inline QVector<cwEntityAndKeywords> cwKeywordItemKeyFilter::entities() const {
+//    return mEntries;
+//}
+
+inline cwEntityKeywordsModel* cwKeywordGroupByKeyModel::sourceModel() const {
+    return mSourceModel;
+}
+
+inline cwEntityKeywordsModel* cwKeywordGroupByKeyModel::acceptedModel() const {
+    return mAcceptedModel;
 }
 
 /**
@@ -227,7 +263,7 @@ inline QVector<cwEntityAndKeywords> cwKeywordItemFilter::entities() const {
 /**
 *
 */
-inline QString cwKeywordItemFilter::key() const {
+inline QString cwKeywordGroupByKeyModel::key() const {
     return mKey;
 }
 

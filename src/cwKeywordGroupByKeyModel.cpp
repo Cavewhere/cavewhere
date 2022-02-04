@@ -1,5 +1,5 @@
 //Our includes
-#include "cwKeywordItemFilter.h"
+#include "cwKeywordGroupByKeyModel.h"
 #include "cwKeyword.h"
 #include "cwAsyncFuture.h"
 #include "cwGlobals.h"
@@ -11,7 +11,7 @@
 //Qt includes
 #include <QtConcurrent>
 
-cwKeywordItemFilter::cwKeywordItemFilter(QObject *parent) :
+cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
     QAbstractListModel(parent)
 //    mFilterKeywords(new cwKeywordModel(this))
 {
@@ -45,26 +45,26 @@ cwKeywordItemFilter::cwKeywordItemFilter(QObject *parent) :
     mFilter = createDefaultFilter();
 }
 
-cwKeywordItemFilter::~cwKeywordItemFilter()
+cwKeywordGroupByKeyModel::~cwKeywordGroupByKeyModel()
 {
 //    waitForFinished();
 }
 
-void cwKeywordItemFilter::setEntities(QVector<cwEntityAndKeywords> entries) {
-//    if(mEntries != entries) {
-        mEntries = entries;
-        emit entitiesChanged();
-        updateAllRows();
-//    }
-}
+//void cwKeywordGroupByKeyModel::setEntities(QVector<cwEntityAndKeywords> entries) {
+////    if(mEntries != entries) {
+//        mEntries = entries;
+//        emit entitiesChanged();
+//        updateAllRows();
+////    }
+//}
 
-int cwKeywordItemFilter::rowCount(const QModelIndex &parent) const
+int cwKeywordGroupByKeyModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent)
     return Data.size();
 }
 
-QVariant cwKeywordItemFilter::data(const QModelIndex &index, int role) const
+QVariant cwKeywordGroupByKeyModel::data(const QModelIndex &index, int role) const
 {
     if(!index.isValid()) { return QVariant(); }
 
@@ -84,7 +84,7 @@ QVariant cwKeywordItemFilter::data(const QModelIndex &index, int role) const
     return QVariant();
 }
 
-QHash<int, QByteArray> cwKeywordItemFilter::roleNames() const
+QHash<int, QByteArray> cwKeywordGroupByKeyModel::roleNames() const
 {
     static const QHash<int, QByteArray> roles = {
         {ObjectsRole, "objectsRole" },
@@ -95,17 +95,17 @@ QHash<int, QByteArray> cwKeywordItemFilter::roleNames() const
     return roles;
 }
 
-QString cwKeywordItemFilter::otherCategory()
+QString cwKeywordGroupByKeyModel::otherCategory()
 {
     return QStringLiteral("Others");
 }
 
-QModelIndex cwKeywordItemFilter::otherIndex() const
+QModelIndex cwKeywordGroupByKeyModel::otherIndex() const
 {
     return index(rowCount() - 1);
 }
 
-void cwKeywordItemFilter::updateFilterEntries()
+void cwKeywordGroupByKeyModel::updateFilterEntries()
 {
 
 
@@ -134,35 +134,35 @@ void cwKeywordItemFilter::updateFilterEntries()
 //    return entities;
 //}
 
-void cwKeywordItemFilter::updateAllRows()
+void cwKeywordGroupByKeyModel::updateAllRows()
 {
 
 
-    auto entities = this->entities();
-//    auto keywords = this->filterKeywords()->keywords();
-    auto lastKey = this->key();
+//    auto entities = this->entities();
+////    auto keywords = this->filterKeywords()->keywords();
+//    auto lastKey = this->key();
 
-    if(lastKey.isEmpty()) {
-        Data.OtherRow.entities = cwEntityAndKeywords::justEnitites(entities);
-        emit dataChanged(otherIndex(), otherIndex(), {ObjectsRole, ObjectCountRole});
-        return;
-    }
+//    if(lastKey.isEmpty()) {
+//        Data.OtherRow.entities = cwEntityAndKeywords::justEnitites(entities);
+//        emit dataChanged(otherIndex(), otherIndex(), {ObjectsRole, ObjectCountRole});
+//        return;
+//    }
 
-    //This method does all the filtering of the rows in the model
-//    auto rows = [this, entities]() {
-//        ModelData newModelData;
+//    //This method does all the filtering of the rows in the model
+////    auto rows = [this, entities]() {
+////        ModelData newModelData;
 
-//        Filter insertRow;
-//        insertRow.keywords = keywords;
-//        insertRow.lastKey = lastKey;
-//        insertRow.data = &newModelData;
-        mFilter.lastKey = this->key();
+////        Filter insertRow;
+////        insertRow.keywords = keywords;
+////        insertRow.lastKey = lastKey;
+////        insertRow.data = &newModelData;
+//        mFilter.lastKey = this->key();
 
-        for(const auto& entity : qAsConst(entities)) {
-            mFilter.filterEntity(entity);
-        }
+//        for(const auto& entity : qAsConst(entities)) {
+//            mFilter.filterEntity(entity);
+//        }
 
-        emit acceptedEntitesChanged();
+//        emit acceptedEntitesChanged();
 
 //        newModelData.PossibleKeys = cw::toList(createPossibleKeys(keywords, entities));
 //        std::sort(newModelData.PossibleKeys.begin(), newModelData.PossibleKeys.end());
@@ -201,7 +201,7 @@ void cwKeywordItemFilter::updateAllRows()
 //    return mEntries.isRunning() && mFilterEntries.isRunning() && mLastModelData.isRunning();
 //}
 
-cwKeywordItemFilter::Filter cwKeywordItemFilter::createDefaultFilter()
+cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
 {
     auto beginInsertFunction = [this](int i) {
         beginInsertRows(QModelIndex(), i, i);
@@ -284,7 +284,7 @@ cwKeywordItemFilter::Filter cwKeywordItemFilter::createDefaultFilter()
 /**
 *
 */
-void cwKeywordItemFilter::setKey(QString keyLast) {
+void cwKeywordGroupByKeyModel::setKey(QString keyLast) {
     if(mKey != keyLast) {
         mKey = keyLast;
         updateAllRows();
@@ -295,7 +295,7 @@ void cwKeywordItemFilter::setKey(QString keyLast) {
 /**
  * Will invert all the accepted
  */
-void cwKeywordItemFilter::invert()
+void cwKeywordGroupByKeyModel::invert()
 {
     if(rowCount() > 0) {
 
@@ -305,11 +305,11 @@ void cwKeywordItemFilter::invert()
         }
 
         emit dataChanged(index(0), index(rowCount() - 1), {AcceptedRole});
-        emit acceptedEntitesChanged();
+//        emit acceptedEntitesChanged();
     }
 }
 
-void cwKeywordItemFilter::Filter::addEntity(const QString &value,
+void cwKeywordGroupByKeyModel::Filter::addEntity(const QString &value,
                                                  QObject *entity)
 {
     auto& rows = data->Rows;
@@ -333,13 +333,13 @@ void cwKeywordItemFilter::Filter::addEntity(const QString &value,
     }
 }
 
-void cwKeywordItemFilter::Filter::addEntityToOther(QObject *entity)
+void cwKeywordGroupByKeyModel::Filter::addEntityToOther(QObject *entity)
 {
     data->OtherRow.entities.append(entity);
     dataChanged(data->otherRowIndex());
 }
 
-void cwKeywordItemFilter::Filter::removeEntity(const QString &value, QObject *entity)
+void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, QObject *entity)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
@@ -373,7 +373,7 @@ void cwKeywordItemFilter::Filter::removeEntity(const QString &value, QObject *en
     }
 }
 
-void cwKeywordItemFilter::Filter::beginInsert(const QVector<Row>::iterator &iter) const
+void cwKeywordGroupByKeyModel::Filter::beginInsert(const QVector<Row>::iterator &iter) const
 {
     if(beginInsertFunction) {
         int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
@@ -381,14 +381,14 @@ void cwKeywordItemFilter::Filter::beginInsert(const QVector<Row>::iterator &iter
     }
 }
 
-void cwKeywordItemFilter::Filter::endInsert() const
+void cwKeywordGroupByKeyModel::Filter::endInsert() const
 {
     if(endInsertFunction) {
         endInsertFunction();
     }
 }
 
-void cwKeywordItemFilter::Filter::beginRemove(const QVector<Row>::iterator &iter) const
+void cwKeywordGroupByKeyModel::Filter::beginRemove(const QVector<Row>::iterator &iter) const
 {
     if(beginRemoveFuction) {
         int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
@@ -396,32 +396,32 @@ void cwKeywordItemFilter::Filter::beginRemove(const QVector<Row>::iterator &iter
     }
 }
 
-void cwKeywordItemFilter::Filter::endRemove() const
+void cwKeywordGroupByKeyModel::Filter::endRemove() const
 {
     if(endRemoveFunction) {
         endRemoveFunction();
     }
 }
 
-void cwKeywordItemFilter::Filter::dataChanged(const QVector<Row>::iterator &iter) const
+void cwKeywordGroupByKeyModel::Filter::dataChanged(const QVector<Row>::iterator &iter) const
 {
     int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
     dataChanged(index);
 }
 
-void cwKeywordItemFilter::Filter::dataChanged(int index) const
+void cwKeywordGroupByKeyModel::Filter::dataChanged(int index) const
 {
     if(dataChangedFunction) {
         dataChangedFunction(index, {ObjectsRole, ObjectCountRole});
     }
 }
 
-bool cwKeywordItemFilter::Filter::lessThan(const cwKeywordItemFilter::Row &row, const QString &value)
+bool cwKeywordGroupByKeyModel::Filter::lessThan(const cwKeywordGroupByKeyModel::Row &row, const QString &value)
 {
     return row.value < value;
 }
 
-void cwKeywordItemFilter::Filter::filterEntity(const cwEntityAndKeywords &pair)
+void cwKeywordGroupByKeyModel::Filter::filterEntity(const cwEntityAndKeywords &pair)
 {
 
 //    if(keywords.isEmpty()) {
@@ -454,7 +454,7 @@ void cwKeywordItemFilter::Filter::filterEntity(const cwEntityAndKeywords &pair)
     }
 }
 
-QSet<QString> cwKeywordItemFilter::Filter::entityValues(QObject *entity) const
+QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(QObject *entity) const
 {
     QSet<QString> valuesOfEntity;
     for(auto row : data->Rows) {
@@ -479,44 +479,44 @@ QSet<QString> cwKeywordItemFilter::Filter::entityValues(QObject *entity) const
 //    }
 //}
 
-QVector<cwEntityAndKeywords> cwKeywordItemFilter::acceptedEntites() const {
+//QVector<cwEntityAndKeywords> cwKeywordGroupByKeyModel::acceptedEntites() const {
 
-    //Sort the mEntities for faster lookup when generating the acceptedEntities
-    QVector<cwEntityAndKeywords> allEntities = mEntries;
-    std::sort(allEntities.begin(), allEntities.end(),
-              [](const cwEntityAndKeywords& left, const cwEntityAndKeywords& right)
-    {
-         return left.entity() < right.entity();
-    });
+//    //Sort the mEntities for faster lookup when generating the acceptedEntities
+//    QVector<cwEntityAndKeywords> allEntities = mEntries;
+//    std::sort(allEntities.begin(), allEntities.end(),
+//              [](const cwEntityAndKeywords& left, const cwEntityAndKeywords& right)
+//    {
+//         return left.entity() < right.entity();
+//    });
 
-    QVector<cwEntityAndKeywords> accepted;
-    accepted.reserve(mEntries.size());
+//    QVector<cwEntityAndKeywords> accepted;
+//    accepted.reserve(mEntries.size());
 
-    //Go through all the rows
-    for(int i = 0; i < rowCount(); i++) {
-        auto index = this->index(i);
-        bool groupAccepted = index.data(cwKeywordItemFilter::AcceptedRole).toBool();
-        if(groupAccepted) {
-            auto objects = index.data(cwKeywordItemFilter::ObjectsRole).value<QVector<QObject*>>();
+//    //Go through all the rows
+//    for(int i = 0; i < rowCount(); i++) {
+//        auto index = this->index(i);
+//        bool groupAccepted = index.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool();
+//        if(groupAccepted) {
+//            auto objects = index.data(cwKeywordGroupByKeyModel::ObjectsRole).value<QVector<QObject*>>();
 
-            //For each row, get the objects that are accepted and add them to the accepted list
-            for(auto object : objects) {
-                auto iter = std::lower_bound(allEntities.begin(), allEntities.end(),
-                                             object,
-                                             [](const cwEntityAndKeywords& entityAndKeywords, const QObject* other)
-                {
-                    return entityAndKeywords.entity() < other;
-                });
-                accepted.append(*iter);
-            }
-        }
-    }
+//            //For each row, get the objects that are accepted and add them to the accepted list
+//            for(auto object : objects) {
+//                auto iter = std::lower_bound(allEntities.begin(), allEntities.end(),
+//                                             object,
+//                                             [](const cwEntityAndKeywords& entityAndKeywords, const QObject* other)
+//                {
+//                    return entityAndKeywords.entity() < other;
+//                });
+//                accepted.append(*iter);
+//            }
+//        }
+//    }
 
-    return accepted;
-}
+//    return accepted;
+//}
 
 
-bool cwKeywordItemFilter::setData(const QModelIndex &index, const QVariant &value, int role)
+bool cwKeywordGroupByKeyModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
     if(index.isValid() && role == AcceptedRole) {
         auto& row = Data.row(index.row());
@@ -524,9 +524,16 @@ bool cwKeywordItemFilter::setData(const QModelIndex &index, const QVariant &valu
         if(newAccepted != row.accepted) {
             row.accepted = newAccepted;
             emit dataChanged(index, index, {AcceptedRole});
-            emit acceptedEntitesChanged();
+//            emit acceptedEntitesChanged();
         }
         return true;
     }
     return false;
+}
+
+void cwKeywordGroupByKeyModel::setSourceModel(cwEntityKeywordsModel* source) {
+    if(mSourceModel != source) {
+        mSourceModel = source;
+        emit sourceChanged();
+    }
 }

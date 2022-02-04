@@ -31,6 +31,7 @@ public:
 
     Q_INVOKABLE void addItem(cwKeywordItem* item);
     Q_INVOKABLE void removeItem(cwKeywordItem* item);
+    cwKeywordItem* item(int row) const;
 
     QVariant data(const QModelIndex& index, int role) const;
     int rowCount(const QModelIndex& index = QModelIndex()) const;
