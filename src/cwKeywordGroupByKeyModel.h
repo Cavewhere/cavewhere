@@ -6,8 +6,10 @@
 #include "cwGlobals.h"
 #include "cwKeyword.h"
 #include "cwEntityAndKeywords.h"
+#include "cwKeywordFilterModel.h"
 class cwKeywordModel;
 class cwEntityKeywordsModel;
+class cwKeywordFilterModel;
 
 //Qt includes
 #include <QList>
@@ -21,20 +23,8 @@ class CAVEWHERE_LIB_EXPORT cwKeywordGroupByKeyModel : public QAbstractListModel
 {
     Q_OBJECT
 
-    Q_PROPERTY(cwEntityKeywordsModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceChanged)
-    Q_PROPERTY(cwEntityKeywordsModel* acceptedModel READ acceptedModel CONSTANT)
-
-
-
-
-
-
-
-
-
-
-
-
+    Q_PROPERTY(QAbstractItemModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceChanged)
+    Q_PROPERTY(cwKeywordFilterModel* acceptedModel READ acceptedModel CONSTANT)
 
 //    Q_PROPERTY(QVector<cwEntityAndKeywords> entities READ entities WRITE setEntities NOTIFY entitiesChanged)
 //    Q_PROPERTY(QVector<cwEntityAndKeywords> acceptedEntites READ acceptedEntites NOTIFY acceptedEntitesChanged)
@@ -69,40 +59,15 @@ public:
     cwKeywordGroupByKeyModel(QObject* parent = nullptr);
     ~cwKeywordGroupByKeyModel();
 
-    cwEntityKeywordsModel* sourceModel() const;
-    void setSourceModel(cwEntityKeywordsModel* source);
+    QAbstractItemModel* sourceModel() const;
+    void setSourceModel(QAbstractItemModel* source);
 
-    cwEntityKeywordsModel* acceptedModel() const;
-
-//    QVector<cwEntityAndKeywords> entities() const;
-//    void setEntities(QVector<cwEntityAndKeywords> entries);
-
-//    QVector<cwEntityAndKeywords> acceptedEntites() const;
-
+    cwKeywordFilterModel* acceptedModel() const;
 
     QString key() const;
     void setKey(QString lastKey);
 
     void invert();
-
-//    bool inverted() const;
-//    void setInverted(bool inverted);
-
-//    QFuture<void> modelFuture() const;
-
-//    cwKeywordItemModel* keywordModel() const;
-//    void setKeywordModel(cwKeywordItemModel* keywordModel);
-
-
-//    cwKeywordModel* filterKeywords() const;
-
-
-
-//    Q_INVOKABLE void addKeywordFromLastKey(const QString &value);
-//    Q_INVOKABLE void removeLastKeyword();
-
-
-//    QStringList possibleKeys() const;
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
@@ -113,10 +78,9 @@ public:
     static QString otherCategory();
     QModelIndex otherIndex() const;
 
+    static void setVisiblityProperty(QObject* object, bool accepted);
 
 signals:
-//    void entitiesChanged();
-//    void acceptedEntitesChanged();
     void sourceChanged();
     void invertedChanged();
     void keyChanged();
@@ -127,14 +91,15 @@ private:
     class Row {
     public:
         Row() {}
-        Row(const QString& value, QVector<QObject*> entities, bool accepted) :
+        Row(const QString& value, const QVector<QPersistentModelIndex>& indexes, bool accepted) :
             value(value),
-            entities(entities),
+            indexes(indexes),
             accepted(accepted)
         {}
 
         QString value;
-        QVector<QObject*> entities;
+        QVector<QPersistentModelIndex> indexes;
+//        QVector<QObject*> entities;
         bool accepted;
 
         bool operator<(const Row& other) {
@@ -147,7 +112,6 @@ private:
     public:
         QVector<Row> Rows;
         Row OtherRow = Row(cwKeywordGroupByKeyModel::otherCategory(), {}, false);
-//        QStringList PossibleKeys;
 
         int otherRowIndex() const {
             return size() - 1;
@@ -170,12 +134,17 @@ private:
             }
             return OtherRow;
         }
+
+        void clear() {
+            Rows.clear();
+            OtherRow = Row(cwKeywordGroupByKeyModel::otherCategory(), {}, false);
+        }
     };
 
     class Filter {
 
     public:
-        QString lastKey;
+        QString key;
         ModelData* data;
 
         std::function<void (int)> beginInsertFunction;
@@ -184,13 +153,16 @@ private:
         std::function<void (int)> beginRemoveFuction;
         std::function<void ()> endRemoveFunction;
 
-        void filterEntity(const cwEntityAndKeywords& pair);
-        QSet<QString> entityValues(QObject* entity) const;
-        void removeEntity(const QString& value, QObject* entity);
+        void filterEntity(const QModelIndex &sourceIndex);
+        void removeEntityFromAllRows(const QModelIndex &sourceIndex);
+        QSet<QString> entityValues(const QModelIndex &sourceIndex) const;
 
     private:
-        void addEntity(const QString& value, QObject* entity);
-        void addEntityToOther(QObject* entity);
+        void addEntity(const QString& value, const QModelIndex &sourceIndex);
+        void removeEntity(const QString& value, const QModelIndex &sourceIndex);
+        bool removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex &sourceIndex);
+        bool removeEntityFromRow(int i, Row& row, const QModelIndex &sourceIndex);
+        void addEntityToOther(const QModelIndex &sourceIndex);
 
         void beginInsert(const QVector<Row>::iterator& iter) const;
         void endInsert() const;
@@ -202,9 +174,8 @@ private:
         static bool lessThan(const Row& row, const QString& value);
     };
 
-    cwEntityKeywordsModel* mSourceModel; //!<
-    cwEntityKeywordsModel* mAcceptedModel; //!<
-
+    QAbstractItemModel* mSourceModel = nullptr; //!<
+    cwKeywordFilterModel* mAcceptedModel; //!<
 
     //    QVector<cwEntityAndKeywords> mEntries; //Entities passed to this filter
 //    QVector<cwEntityAndKeywords> mAcceptedEntries; //Enities that have been filtered
@@ -213,7 +184,7 @@ private:
     QString mKey; //!<
 
 //    QStringList PossibleKeys; //!<
-    ModelData Data;
+    ModelData mData;
 
     Filter mFilter;
 
@@ -222,28 +193,44 @@ private:
 //    cwKeywordItemModel* KeywordModel = nullptr; //!<
 
     void updateAllRows();
-    void updateFilterEntries();
+
 //    void waitForFinished();
 
 //    bool isRunning() const;
 
     Filter createDefaultFilter();
 
-//    static QSet<QString> createPossibleKeys(const QVector<cwKeyword>& keywords, const QVector<EntityAndKeywords> entities);
-//    QVector<EntityAndKeywords> entities() const;
+    template<typename DataChangeFunc>
+    void setAccepted(const QModelIndex& rowIndex, bool accepted, DataChangeFunc func)
+    {
+        auto& row = mData.row(rowIndex.row());
+        if(accepted != row.accepted) {
+            row.accepted = accepted;
 
+            for(auto index : row.indexes) {
+                if(accepted) {
+                    mAcceptedModel->accept(index);
+                } else {
+                    mAcceptedModel->remove(index);
+                }
+            }
 
+            if constexpr (!std::is_same<decltype (func), std::nullptr_t>::value) {
+                func();
+            }
+        }
+    }
 };
 
 //inline QVector<cwEntityAndKeywords> cwKeywordItemKeyFilter::entities() const {
 //    return mEntries;
 //}
 
-inline cwEntityKeywordsModel* cwKeywordGroupByKeyModel::sourceModel() const {
+inline QAbstractItemModel* cwKeywordGroupByKeyModel::sourceModel() const {
     return mSourceModel;
 }
 
-inline cwEntityKeywordsModel* cwKeywordGroupByKeyModel::acceptedModel() const {
+inline cwKeywordFilterModel* cwKeywordGroupByKeyModel::acceptedModel() const {
     return mAcceptedModel;
 }
 

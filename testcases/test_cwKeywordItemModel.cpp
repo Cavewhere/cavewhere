@@ -146,20 +146,6 @@ TEST_CASE("cwKeywordItemModel should add / remove and update component correctly
 
     checkModel();
 
-    SECTION("Check that entityAndKeywords works correctly") {
-        auto entityKeywords = model->entityAndKeywords();
-
-        REQUIRE(items.size() == entityKeywords.size());
-        for(int i = 0; i < items.size(); i++) {
-            const auto& testItem = items.at(i);
-            const auto& item = entityKeywords.at(i);
-
-            INFO("i:" << i);
-            CHECK(testItem->object() == item.entity());
-            CHECK(testItem->keywordModel()->keywords() == item.keywords());
-        }
-    }
-
     SECTION("Add empty component") {
         auto componentEmpty = new cwKeywordItem();
 

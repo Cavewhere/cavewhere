@@ -10,7 +10,7 @@
 class cwKeywordItem;
 class cwKeywordModel;
 #include "cwKeyword.h"
-#include "cwEntityAndKeywords.h"
+//#include "cwEntityAndKeywords.h"
 
 class CAVEWHERE_LIB_EXPORT cwKeywordItemModel : public QAbstractItemModel
 {
@@ -40,7 +40,7 @@ public:
     QModelIndex parent(const QModelIndex& index) const;
     QModelIndex indexOf(cwKeywordItem *item) const;
 
-    QVector<cwEntityAndKeywords> entityAndKeywords() const;
+//    QVector<cwEntityAndKeywords> entityAndKeywords() const;
 
 
 private:

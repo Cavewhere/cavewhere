@@ -4,77 +4,50 @@
 #include "cwAsyncFuture.h"
 #include "cwGlobals.h"
 #include "cwKeywordModel.h"
+#include "cwKeywordFilterModel.h"
 
 //Async includes
 #include "asyncfuture.h"
 
 //Qt includes
 #include <QtConcurrent>
+#include <QQuickItem>
+#include <QEntity>
 
 cwKeywordGroupByKeyModel::cwKeywordGroupByKeyModel(QObject *parent) :
-    QAbstractListModel(parent)
-//    mFilterKeywords(new cwKeywordModel(this))
+    QAbstractListModel(parent),
+    mAcceptedModel(new cwKeywordFilterModel(this))
 {
-//    connect(mFilterKeywords, &cwKeywordModel::rowsInserted,
-//            this, [this](const QModelIndex& parent, int first, int last)
-//    {
-//        Q_UNUSED(parent);
-//        Q_UNUSED(first);
-//        Q_UNUSED(last);
-//        updateAllRows();
-//    });
-
-//    connect(mFilterKeywords, &cwKeywordModel::rowsRemoved,
-//            this, [this](const QModelIndex& parent, int first, int last)
-//    {
-//        Q_UNUSED(parent);
-//        Q_UNUSED(first);
-//        Q_UNUSED(last);
-//        updateAllRows();
-//    });
-
-//    connect(mFilterKeywords, &cwKeywordModel::dataChanged,
-//            this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
-//    {
-//        Q_UNUSED(topLeft);
-//        Q_UNUSED(bottomRight);
-//        Q_UNUSED(roles);
-//        updateAllRows();
-//    });
-
     mFilter = createDefaultFilter();
 }
 
 cwKeywordGroupByKeyModel::~cwKeywordGroupByKeyModel()
 {
-//    waitForFinished();
 }
-
-//void cwKeywordGroupByKeyModel::setEntities(QVector<cwEntityAndKeywords> entries) {
-////    if(mEntries != entries) {
-//        mEntries = entries;
-//        emit entitiesChanged();
-//        updateAllRows();
-////    }
-//}
 
 int cwKeywordGroupByKeyModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent)
-    return Data.size();
+    return mData.size();
 }
 
 QVariant cwKeywordGroupByKeyModel::data(const QModelIndex &index, int role) const
 {
     if(!index.isValid()) { return QVariant(); }
 
-    auto row = Data.row(index.row());
+    auto row = mData.row(index.row());
 
     switch(role) {
-    case ObjectsRole:
-        return QVariant::fromValue(row.entities);
+    case ObjectsRole: {
+        QVector<QObject*> objects;
+        objects.reserve(row.indexes.size());
+        for(auto index : row.indexes) {
+            objects.append(index.data(cwKeywordItemModel::ObjectRole).value<QObject*>());
+        }
+        return QVariant::fromValue(objects);
+    }
     case ObjectCountRole:
-        return row.entities.size();
+        return row.indexes.size();
     case ValueRole:
         return row.value;
     case AcceptedRole:
@@ -105,101 +78,35 @@ QModelIndex cwKeywordGroupByKeyModel::otherIndex() const
     return index(rowCount() - 1);
 }
 
-void cwKeywordGroupByKeyModel::updateFilterEntries()
+/**
+ * Static function that apply visiblity to QQuickItems and QEntity
+ */
+void cwKeywordGroupByKeyModel::setVisiblityProperty(QObject *object, bool accepted)
 {
-
-
+    if(auto item = dynamic_cast<QQuickItem*>(object)) {
+        item->setVisible(accepted);
+    } else if(auto entity = dynamic_cast<Qt3DCore::QEntity*>(object)) {
+        item->setEnabled(accepted);
+    }
 }
-
-//void cwKeywordItemFilter::waitForFinished()
-//{
-////    cwAsyncFuture::waitForFinished(mEntries);
-////    cwAsyncFuture::waitForFinished(mFilterEntries);
-////    cwAsyncFuture::waitForFinished(mLastModelData);
-//    Q_ASSERT(isRunning() == false);
-//}
-
-//QVector<cwKeywordItemFilter::EntityAndKeywords> cwKeywordItemFilter::entities() const {
-//    int entityCount = keywordModel()->rowCount(QModelIndex());
-
-//    QVector<EntityAndKeywords> entities;
-//    entities.reserve(entityCount);
-
-//    for(int i = 0; i < entityCount; i++) {
-//        auto entityIndex = keywordModel()->index(i, 0, QModelIndex());
-//        EntityAndKeywords pair(entityIndex);
-//        entities.append(pair);
-//    }
-
-//    return entities;
-//}
 
 void cwKeywordGroupByKeyModel::updateAllRows()
 {
+    beginResetModel();
+    mData.clear();
 
+    //Use an empty filter to prevent signals from being emitting
+    Filter filter;
+    filter.data = &mData;
+    filter.key = mKey;
 
-//    auto entities = this->entities();
-////    auto keywords = this->filterKeywords()->keywords();
-//    auto lastKey = this->key();
+    for(int i = 0; i < mSourceModel->rowCount(); i++) {
+        auto index = mSourceModel->index(i, 0, QModelIndex());
+        filter.filterEntity(index);
+    }
 
-//    if(lastKey.isEmpty()) {
-//        Data.OtherRow.entities = cwEntityAndKeywords::justEnitites(entities);
-//        emit dataChanged(otherIndex(), otherIndex(), {ObjectsRole, ObjectCountRole});
-//        return;
-//    }
-
-//    //This method does all the filtering of the rows in the model
-////    auto rows = [this, entities]() {
-////        ModelData newModelData;
-
-////        Filter insertRow;
-////        insertRow.keywords = keywords;
-////        insertRow.lastKey = lastKey;
-////        insertRow.data = &newModelData;
-//        mFilter.lastKey = this->key();
-
-//        for(const auto& entity : qAsConst(entities)) {
-//            mFilter.filterEntity(entity);
-//        }
-
-//        emit acceptedEntitesChanged();
-
-//        newModelData.PossibleKeys = cw::toList(createPossibleKeys(keywords, entities));
-//        std::sort(newModelData.PossibleKeys.begin(), newModelData.PossibleKeys.end());
-
-//        return newModelData;
-//    };
-
-
-
-//    if(isRunning()) {
-//        LastRun.cancel();
-//        LastModelData.cancel();
-//    }
-
-//    //Run the job on the threadpool
-//    auto runFuture = QtConcurrent::run(rows);
-//    LastModelData = runFuture;
-
-//    LastRun = AsyncFuture::observe(runFuture).subscribe([=]()
-//    {
-//        //Updated the model will new filtered results
-//        beginResetModel();
-//        auto oldPossibleKeys = Data.PossibleKeys;
-//        Data = runFuture.result();
-//        endResetModel();
-
-//        if(oldPossibleKeys != Data.PossibleKeys) {
-//            emit possibleKeysChanged();
-//        }
-//    }
-//    ).future();
+    endResetModel();
 }
-
-//bool cwKeywordItemFilter::isRunning() const
-//{
-//    return mEntries.isRunning() && mFilterEntries.isRunning() && mLastModelData.isRunning();
-//}
 
 cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
 {
@@ -225,9 +132,8 @@ cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
     };
 
     Filter insertRow;
-//    insertRow.keywords = mFilterKeywords->keywords();
-    insertRow.lastKey = mKey;
-    insertRow.data = &Data;
+    insertRow.key = mKey;
+    insertRow.data = &mData;
     insertRow.beginRemoveFuction = beginRemoveFunction;
     insertRow.endRemoveFunction = endRemoveFunction;
     insertRow.beginInsertFunction = beginInsertFunction;
@@ -237,49 +143,7 @@ cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
     return insertRow;
 }
 
-//QSet<QString> cwKeywordItemFilter::createPossibleKeys(const QVector<cwKeyword> &keywords,
-//                                                           const QVector<EntityAndKeywords> entities)
-//{
-//    QSet<QString> possibleKeys;
-//    auto addKeys = [&possibleKeys](const EntityAndKeywords& objectKeywords) {
-//        for(const auto& keyword : qAsConst(objectKeywords.keywords)) {
-//            possibleKeys.insert(keyword.key());
-//        }
-//    };
 
-//    auto removeKeys = [&possibleKeys](const QVector<cwKeyword>& keywords) {
-//        for(const auto& keyword : qAsConst(keywords)) {
-//            possibleKeys.remove(keyword.key());
-//        }
-//    };
-
-//    for(const auto& entity : qAsConst(entities)) {
-//        addKeys(entity);
-//    }
-
-//    removeKeys(keywords);
-//    return possibleKeys;
-//}
-
-//void cwKeywordItemFilter::addKeywordFromLastKey(const QString& value)
-//{
-//    mFilterKeywords->add(cwKeyword(key(), value));
-////    updateAllRows();
-////    emit keywordsChanged();
-//}
-
-//void cwKeywordItemFilter::removeLastKeyword()
-//{
-//    if(mFilterKeywords->rowCount() > 0) {
-//        //Find and remove the last keyword
-//        mFilterKeywords->remove(mFilterKeywords->index(mFilterKeywords->rowCount() - 1)
-//                         .data(cwKeywordModel::KeywordRole)
-//                         .value<cwKeyword>());
-//    }
-
-////    updateAllRows();
-////    emit keywordsChanged();
-//}
 
 /**
 *
@@ -298,79 +162,89 @@ void cwKeywordGroupByKeyModel::setKey(QString keyLast) {
 void cwKeywordGroupByKeyModel::invert()
 {
     if(rowCount() > 0) {
-
         for(int i = 0; i < rowCount(); i++) {
-            auto& row = Data.row(i);
-            row.accepted = !row.accepted;
+            auto& row = mData.row(i);
+            setAccepted(index(i), !row.accepted, nullptr);
         }
 
         emit dataChanged(index(0), index(rowCount() - 1), {AcceptedRole});
-//        emit acceptedEntitesChanged();
     }
 }
 
 void cwKeywordGroupByKeyModel::Filter::addEntity(const QString &value,
-                                                 QObject *entity)
+                                                 const QModelIndex& sourceIndex)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
-        if(!iter->entities.contains(entity)) {
+        if(!iter->indexes.contains(sourceIndex)) {
             //Add to an existing row, dataChanged
-            iter->entities.append(entity);
+            iter->indexes.append(sourceIndex);
             dataChanged(iter);
         }
     } else {
         beginInsert(iter);
-        rows.insert(iter, Row(value, {entity}, true));
+        rows.insert(iter, Row(value, {sourceIndex}, true));
         endInsert();
     }
 
-    bool removed = data->OtherRow.entities.removeOne(entity);
+    bool removed = data->OtherRow.indexes.removeOne(sourceIndex);
     if(removed) {
         dataChanged(data->otherRowIndex());
     }
 }
 
-void cwKeywordGroupByKeyModel::Filter::addEntityToOther(QObject *entity)
+void cwKeywordGroupByKeyModel::Filter::addEntityToOther(const QModelIndex& sourceIndex)
 {
-    data->OtherRow.entities.append(entity);
+    data->OtherRow.indexes.append(sourceIndex);
     dataChanged(data->otherRowIndex());
 }
 
-void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, QObject *entity)
+void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, const QModelIndex& sourceIndex)
 {
     auto& rows = data->Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
-        bool removed = iter->entities.removeOne(entity);
+        bool removed = removeEntityFromRow(iter, sourceIndex);
         if(removed) {
-            if(iter->entities.isEmpty()) {
-                //No more entities
-                beginRemove(iter);
-                rows.erase(iter);
-                endRemove();
-            } else {
-                dataChanged(iter);
-            }
-
             bool stillContainsEntity = false;
             for(auto row : rows) {
-                if(row.entities.contains(entity)) {
+                if(row.indexes.contains(sourceIndex)) {
                     stillContainsEntity = true;
                     break;
                 }
             }
 
             if(!stillContainsEntity) {
-                addEntityToOther(entity);
+                addEntityToOther(sourceIndex);
             }
         }
     } else {
-        addEntityToOther(entity);
+        addEntityToOther(sourceIndex);
     }
+}
+
+bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex& sourceIndex)
+{
+    return removeEntityFromRow(std::distance(data->Rows.begin(), iter), *iter, sourceIndex);
+}
+
+bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, const QModelIndex& sourceIndex)
+{
+    bool removed = row.indexes.removeOne(sourceIndex);
+    if(removed) {
+        if(row.indexes.isEmpty()) {
+            //No more entities
+            beginRemoveFuction(i);
+            data->Rows.removeAt(i);
+            endRemoveFunction();
+        } else {
+            dataChanged(i);
+        }
+    }
+    return removed;
 }
 
 void cwKeywordGroupByKeyModel::Filter::beginInsert(const QVector<Row>::iterator &iter) const
@@ -421,119 +295,119 @@ bool cwKeywordGroupByKeyModel::Filter::lessThan(const cwKeywordGroupByKeyModel::
     return row.value < value;
 }
 
-void cwKeywordGroupByKeyModel::Filter::filterEntity(const cwEntityAndKeywords &pair)
+void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceIndex)
 {
+    auto keywords = sourceIndex.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
 
-//    if(keywords.isEmpty()) {
-//        addEntityToOther(pair.entity);
-//    }
-
-//    for(const auto& keyword : keywords) {
-//        if(!pair.keywords.contains(keyword)) {
-//            //Missing one of the keywords
-//            removeEntity(keyword.value(), pair.entity);
-//            return;
-//        }
-//    }
+    addEntityToOther(sourceIndex);
 
     //Existing values for the entity
-    QSet<QString> oldValues = entityValues(pair.entity());
+    QSet<QString> oldValues = entityValues(sourceIndex);
 
-    for(const auto& keyword : pair.keywords()) {
-        if(keyword.key() == lastKey) {
+    for(const auto& keyword : qAsConst(keywords)) {
+        if(keyword.key() == key) {
             if(!oldValues.contains(keyword.value())) {
-                addEntity(keyword.value(), pair.entity());
+                addEntity(keyword.value(), sourceIndex);
             } else {
+                //Doesn't have to be removed
                 oldValues.remove(keyword.value());
             }
         }
     }
 
     for(const auto& valueToRemove : oldValues) {
-        removeEntity(valueToRemove, pair.entity());
+        removeEntity(valueToRemove, sourceIndex);
     }
 }
 
-QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(QObject *entity) const
+void cwKeywordGroupByKeyModel::Filter::removeEntityFromAllRows(const QModelIndex& sourceIndex)
+{
+    for(auto iter = data->Rows.begin(); iter < data->Rows.end(); iter++) {
+        removeEntityFromRow(iter, sourceIndex);
+    }
+    removeEntityFromRow(data->otherRowIndex(), data->OtherRow, sourceIndex);
+}
+
+QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(const QModelIndex& sourceIndex) const
 {
     QSet<QString> valuesOfEntity;
-    for(auto row : data->Rows) {
-        if(row.entities.contains(entity)) {
+    for(const auto& row : data->Rows) {
+        if(row.indexes.contains(sourceIndex)) {
             valuesOfEntity.insert(row.value);
         }
     }
     return valuesOfEntity;
 }
 
-//cwKeywordItemFilter::EntityAndKeywords::EntityAndKeywords(const QModelIndex &entityIndex)
-//{
-//    Q_ASSERT(entityIndex.parent() == QModelIndex());
-//    entity = entityIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-//    keywords = entityIndex.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
-//}
-
-//void cwKeywordItemFilter::setInverted(bool inverted) {
-//    if(mInverted != inverted) {
-//        mInverted = inverted;
-//        emit invertedChanged();
-//    }
-//}
-
-//QVector<cwEntityAndKeywords> cwKeywordGroupByKeyModel::acceptedEntites() const {
-
-//    //Sort the mEntities for faster lookup when generating the acceptedEntities
-//    QVector<cwEntityAndKeywords> allEntities = mEntries;
-//    std::sort(allEntities.begin(), allEntities.end(),
-//              [](const cwEntityAndKeywords& left, const cwEntityAndKeywords& right)
-//    {
-//         return left.entity() < right.entity();
-//    });
-
-//    QVector<cwEntityAndKeywords> accepted;
-//    accepted.reserve(mEntries.size());
-
-//    //Go through all the rows
-//    for(int i = 0; i < rowCount(); i++) {
-//        auto index = this->index(i);
-//        bool groupAccepted = index.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool();
-//        if(groupAccepted) {
-//            auto objects = index.data(cwKeywordGroupByKeyModel::ObjectsRole).value<QVector<QObject*>>();
-
-//            //For each row, get the objects that are accepted and add them to the accepted list
-//            for(auto object : objects) {
-//                auto iter = std::lower_bound(allEntities.begin(), allEntities.end(),
-//                                             object,
-//                                             [](const cwEntityAndKeywords& entityAndKeywords, const QObject* other)
-//                {
-//                    return entityAndKeywords.entity() < other;
-//                });
-//                accepted.append(*iter);
-//            }
-//        }
-//    }
-
-//    return accepted;
-//}
-
-
 bool cwKeywordGroupByKeyModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
     if(index.isValid() && role == AcceptedRole) {
-        auto& row = Data.row(index.row());
-        bool newAccepted = value.toBool();
-        if(newAccepted != row.accepted) {
-            row.accepted = newAccepted;
+        setAccepted(index, value.toBool(), [this, index]() {
             emit dataChanged(index, index, {AcceptedRole});
-//            emit acceptedEntitesChanged();
-        }
+        });
         return true;
     }
     return false;
 }
 
-void cwKeywordGroupByKeyModel::setSourceModel(cwEntityKeywordsModel* source) {
+void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
+    //Source must be a cwKeywordItemModel or cwKeywordFilterModel
+    Q_ASSERT(dynamic_cast<cwKeywordItemModel*>(source)
+             || dynamic_cast<cwKeywordFilterModel*>(source)
+             || source == nullptr);
+
     if(mSourceModel != source) {
+        if(mSourceModel) {
+            disconnect(mSourceModel, nullptr, this, nullptr);
+        }
+
         mSourceModel = source;
+
+        if(mSourceModel) {
+
+            auto toIndex = [this](int rowIndex) {
+                return mSourceModel->index(rowIndex, 0, QModelIndex());
+            };
+
+            auto updateEntity = [this, toIndex](int sourceRow) {
+                mFilter.filterEntity(toIndex(sourceRow));
+            };
+
+            connect(mSourceModel, &QAbstractItemModel::dataChanged,
+                    this, [updateEntity](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
+            {
+                if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
+                    for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
+                        updateEntity(i);
+                    }
+                }
+            });
+
+            connect(mSourceModel, &QAbstractItemModel::rowsInserted,
+                    this, [updateEntity](const QModelIndex& parent, int begin, int last)
+            {
+                if(parent == QModelIndex()) {
+                    for(int i = begin; i <= last; i++) {
+                        updateEntity(i);
+                    }
+                }
+            });
+
+            connect(mSourceModel, &QAbstractItemModel::rowsRemoved,
+                    this, [this, toIndex](const QModelIndex& parent, int begin, int last)
+            {
+                if(parent == QModelIndex()) {
+                    for(int i = begin; i <= last; i++) {
+                        mFilter.removeEntityFromAllRows(toIndex(i));
+                    }
+                }
+            });
+
+            updateAllRows();
+        }
+
+        mAcceptedModel->setSourceModel(mSourceModel);
+
         emit sourceChanged();
     }
 }
