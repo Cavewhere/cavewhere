@@ -95,14 +95,16 @@ void cwKeywordGroupByKeyModel::updateAllRows()
     beginResetModel();
     mData.clear();
 
-    //Use an empty filter to prevent signals from being emitting
-    Filter filter;
-    filter.data = &mData;
-    filter.key = mKey;
+    if(mSourceModel) {
+        //Use an empty filter to prevent signals from being emitting
+        Filter filter;
+        filter.model = this;
+        filter.key = mKey;
 
-    for(int i = 0; i < mSourceModel->rowCount(); i++) {
-        auto index = mSourceModel->index(i, 0, QModelIndex());
-        filter.filterEntity(index);
+        for(int i = 0; i < mSourceModel->rowCount(); i++) {
+            auto index = mSourceModel->index(i, 0, QModelIndex());
+            filter.filterEntity(index);
+        }
     }
 
     endResetModel();
@@ -133,7 +135,7 @@ cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
 
     Filter insertRow;
     insertRow.key = mKey;
-    insertRow.data = &mData;
+    insertRow.model = this;
     insertRow.beginRemoveFuction = beginRemoveFunction;
     insertRow.endRemoveFunction = endRemoveFunction;
     insertRow.beginInsertFunction = beginInsertFunction;
@@ -143,7 +145,13 @@ cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
     return insertRow;
 }
 
-
+void cwKeywordGroupByKeyModel::setAcceptIndex(const QModelIndex &index, bool accepted) {
+    if(accepted) {
+        mAcceptedModel->insert(index);
+    } else {
+        mAcceptedModel->remove(index);
+    }
+}
 
 /**
 *
@@ -151,6 +159,7 @@ cwKeywordGroupByKeyModel::Filter cwKeywordGroupByKeyModel::createDefaultFilter()
 void cwKeywordGroupByKeyModel::setKey(QString keyLast) {
     if(mKey != keyLast) {
         mKey = keyLast;
+        mFilter.key = mKey;
         updateAllRows();
         emit keyChanged();
     }
@@ -174,43 +183,49 @@ void cwKeywordGroupByKeyModel::invert()
 void cwKeywordGroupByKeyModel::Filter::addEntity(const QString &value,
                                                  const QModelIndex& sourceIndex)
 {
-    auto& rows = data->Rows;
+    auto& rows = model->mData.Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
         if(!iter->indexes.contains(sourceIndex)) {
             //Add to an existing row, dataChanged
             iter->indexes.append(sourceIndex);
+            model->setAcceptIndex(sourceIndex, iter->accepted);
             dataChanged(iter);
         }
     } else {
         beginInsert(iter);
-        rows.insert(iter, Row(value, {sourceIndex}, true));
+        constexpr bool defaultAccepted = true;
+        rows.insert(iter, Row(value, {sourceIndex}, defaultAccepted));
+        model->setAcceptIndex(sourceIndex, defaultAccepted);
         endInsert();
     }
 
-    bool removed = data->OtherRow.indexes.removeOne(sourceIndex);
+    bool removed = model->mData.OtherRow.indexes.removeOne(sourceIndex);
     if(removed) {
-        dataChanged(data->otherRowIndex());
+        dataChanged(model->mData.otherRowIndex());
     }
 }
 
 void cwKeywordGroupByKeyModel::Filter::addEntityToOther(const QModelIndex& sourceIndex)
 {
-    data->OtherRow.indexes.append(sourceIndex);
-    dataChanged(data->otherRowIndex());
+    if(!model->mData.OtherRow.indexes.contains(sourceIndex)) {
+        model->mData.OtherRow.indexes.append(sourceIndex);
+        model->setAcceptIndex(sourceIndex, model->mData.OtherRow.accepted);
+        dataChanged(model->mData.otherRowIndex());
+    }
 }
 
 void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, const QModelIndex& sourceIndex)
 {
-    auto& rows = data->Rows;
+    auto& rows = model->mData.Rows;
     auto iter = std::lower_bound(rows.begin(), rows.end(), value, &lessThan);
 
     if(iter != rows.end() && iter->value == value) {
         bool removed = removeEntityFromRow(iter, sourceIndex);
         if(removed) {
             bool stillContainsEntity = false;
-            for(auto row : rows) {
+            for(const auto& row : rows) {
                 if(row.indexes.contains(sourceIndex)) {
                     stillContainsEntity = true;
                     break;
@@ -228,17 +243,17 @@ void cwKeywordGroupByKeyModel::Filter::removeEntity(const QString &value, const 
 
 bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(QVector<Row>::iterator iter, const QModelIndex& sourceIndex)
 {
-    return removeEntityFromRow(std::distance(data->Rows.begin(), iter), *iter, sourceIndex);
+    return removeEntityFromRow(std::distance(model->mData.Rows.begin(), iter), *iter, sourceIndex);
 }
 
 bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, const QModelIndex& sourceIndex)
 {
     bool removed = row.indexes.removeOne(sourceIndex);
     if(removed) {
-        if(row.indexes.isEmpty()) {
+        if(row.indexes.isEmpty() && &row != &model->mData.OtherRow) {
             //No more entities
             beginRemoveFuction(i);
-            data->Rows.removeAt(i);
+            model->mData.Rows.removeAt(i);
             endRemoveFunction();
         } else {
             dataChanged(i);
@@ -250,7 +265,7 @@ bool cwKeywordGroupByKeyModel::Filter::removeEntityFromRow(int i, Row &row, cons
 void cwKeywordGroupByKeyModel::Filter::beginInsert(const QVector<Row>::iterator &iter) const
 {
     if(beginInsertFunction) {
-        int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
+        int index = static_cast<int>(std::distance(model->mData.Rows.begin(), iter));
         beginInsertFunction(index);
     }
 }
@@ -265,7 +280,7 @@ void cwKeywordGroupByKeyModel::Filter::endInsert() const
 void cwKeywordGroupByKeyModel::Filter::beginRemove(const QVector<Row>::iterator &iter) const
 {
     if(beginRemoveFuction) {
-        int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
+        int index = static_cast<int>(std::distance(model->mData.Rows.begin(), iter));
         beginRemoveFuction(index);
     }
 }
@@ -279,7 +294,7 @@ void cwKeywordGroupByKeyModel::Filter::endRemove() const
 
 void cwKeywordGroupByKeyModel::Filter::dataChanged(const QVector<Row>::iterator &iter) const
 {
-    int index = static_cast<int>(std::distance(data->Rows.begin(), iter));
+    int index = static_cast<int>(std::distance(model->mData.Rows.begin(), iter));
     dataChanged(index);
 }
 
@@ -305,6 +320,7 @@ void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceInd
     QSet<QString> oldValues = entityValues(sourceIndex);
 
     for(const auto& keyword : qAsConst(keywords)) {
+        //One of sourceIndex's keys matches the key were's filtering by
         if(keyword.key() == key) {
             if(!oldValues.contains(keyword.value())) {
                 addEntity(keyword.value(), sourceIndex);
@@ -322,16 +338,16 @@ void cwKeywordGroupByKeyModel::Filter::filterEntity(const QModelIndex& sourceInd
 
 void cwKeywordGroupByKeyModel::Filter::removeEntityFromAllRows(const QModelIndex& sourceIndex)
 {
-    for(auto iter = data->Rows.begin(); iter < data->Rows.end(); iter++) {
+    for(auto iter = model->mData.Rows.begin(); iter < model->mData.Rows.end(); iter++) {
         removeEntityFromRow(iter, sourceIndex);
     }
-    removeEntityFromRow(data->otherRowIndex(), data->OtherRow, sourceIndex);
+    removeEntityFromRow(model->mData.otherRowIndex(), model->mData.OtherRow, sourceIndex);
 }
 
 QSet<QString> cwKeywordGroupByKeyModel::Filter::entityValues(const QModelIndex& sourceIndex) const
 {
     QSet<QString> valuesOfEntity;
-    for(const auto& row : data->Rows) {
+    for(const auto& row : qAsConst(model->mData.Rows)) {
         if(row.indexes.contains(sourceIndex)) {
             valuesOfEntity.insert(row.value);
         }
@@ -390,16 +406,20 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
                     for(int i = begin; i <= last; i++) {
                         updateEntity(i);
                     }
+                } else {
+                    updateEntity(parent.row());
                 }
             });
 
             connect(mSourceModel, &QAbstractItemModel::rowsRemoved,
-                    this, [this, toIndex](const QModelIndex& parent, int begin, int last)
+                    this, [this, toIndex, updateEntity](const QModelIndex& parent, int begin, int last)
             {
                 if(parent == QModelIndex()) {
                     for(int i = begin; i <= last; i++) {
                         mFilter.removeEntityFromAllRows(toIndex(i));
                     }
+                } else {
+                    updateEntity(parent.row());
                 }
             });
 

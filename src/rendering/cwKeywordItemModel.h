@@ -4,6 +4,7 @@
 //Qt includes
 #include <QAbstractItemModel>
 #include <QObject>
+#include <QDebug>
 
 //Our includes
 #include "cwGlobals.h"
@@ -39,9 +40,6 @@ public:
     QModelIndex index(int row, int column, const QModelIndex& parent) const;
     QModelIndex parent(const QModelIndex& index) const;
     QModelIndex indexOf(cwKeywordItem *item) const;
-
-//    QVector<cwEntityAndKeywords> entityAndKeywords() const;
-
 
 private:
 

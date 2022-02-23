@@ -4,21 +4,24 @@
 //Qt includes
 #include <QAbstractListModel>
 #include <QPointer>
+#include <QConcatenateTablesProxyModel>
+#include <QSortFilterProxyModel>
+#include <QSet>
 
 //Our includes
 class cwKeywordItemModel;
 class cwKeywordGroupByKeyModel;
-class cwEntityKeywordsModel;
-#include "cwEntityAndKeywords.h"
+class cwKeywordFilterModel;
+#include "cwGlobals.h"
 
-class cwKeywordFilterPipelineModel : public QAbstractListModel
+class CAVEWHERE_LIB_EXPORT cwKeywordFilterPipelineModel : public QAbstractListModel
 {
     Q_OBJECT
 
     Q_PROPERTY(cwKeywordItemModel* keywordModel READ keywordModel WRITE setKeywordModel NOTIFY keywordModelChanged)
     Q_PROPERTY(QStringList operators READ operators CONSTANT)
-    Q_PROPERTY(QVector<cwEntityAndKeywords> acceptedEntities READ acceptedEntities NOTIFY acceptedEntitiesChanged)
-
+    Q_PROPERTY(QAbstractItemModel* acceptedModel READ acceptedModel CONSTANT)
+    Q_PROPERTY(QAbstractItemModel* rejectedModel READ rejectedModel CONSTANT)
 
 public:
     enum Role {
@@ -27,15 +30,17 @@ public:
     };
 
     enum Operator {
-        OR,
-        AND,
-        None
+        Or,
+        And
     };
 
     explicit cwKeywordFilterPipelineModel(QObject *parent = nullptr);
 
     cwKeywordItemModel *keywordModel() const;
     void setKeywordModel(cwKeywordItemModel* keywordModel);
+
+    QAbstractItemModel* acceptedModel() const;
+    QAbstractItemModel* rejectedModel() const;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     QVariant data(const QModelIndex &index, int role) const;
@@ -44,7 +49,10 @@ public:
 
     QStringList operators() const;
 
-    QVector<cwEntityAndKeywords> acceptedEntities() const;
+    void insertRow(int i);
+    void addRow();
+
+    void removeRow(int i );
 
 signals:
     void keywordModelChanged();
@@ -59,12 +67,31 @@ private:
     QPointer<cwKeywordItemModel> mKeywordModel; //!<
     QStringList mOperators; //!<
     QVector<Row> mRows;
-    QVector<cwEntityAndKeywords> mAcceptedEntities; //!<
-    cwEntityKeywordsModel* mEntityKeywords;
+
+    QConcatenateTablesProxyModel* mAcceptedModel; //!<
+    QSet<QObject*> mAccepted;
+
+    cwKeywordFilterModel* mRejectedModel;
 
 
+    void link(int i);
+    void linkPipelineAt(int i);
+    void linkLast(int i);
+    void linkFirst(int i);
 
+    template<typename F>
+    void runAtRow(int i, F func) {
+        if(i >= 0 && i < mRows.size()) {
+            func(mRows[i]);
+        }
+    }
 };
+
+
+inline QAbstractItemModel* cwKeywordFilterPipelineModel::acceptedModel() const {
+    return mAcceptedModel;
+}
+
 
 
 #endif // CWKEYWORDFILTERPIPELINEMODEL_H

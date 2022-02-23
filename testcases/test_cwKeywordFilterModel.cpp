@@ -47,7 +47,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
 
     SECTION("Add single row to be filtered") {
         auto sourceIndex = model->index(3, 0, QModelIndex());
-        filter->accept(sourceIndex);
+        filter->insert(sourceIndex);
 
         CHECK(filter->rowCount() == 1);
 
@@ -63,7 +63,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
         QVector<int> indexes = {0, 9, 4, 7};
         for(auto i : indexes) {
             auto sourceIndex = model->index(i, 0, QModelIndex());
-            filter->accept(sourceIndex);
+            filter->insert(sourceIndex);
             spyChecker[insertedSpy]++;
             spyChecker[aboutToBeInsertedspy]++;
         }
@@ -100,7 +100,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
         spyChecker.checkSpies();
 
         SECTION("Add existing index") {
-            filter->accept(model->index(9, 0, QModelIndex()));
+            filter->insert(model->index(9, 0, QModelIndex()));
 
             //Should be rejected
             checkIndexes();
@@ -108,7 +108,7 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
         }
 
         SECTION("Add bad index") {
-            filter->accept(QModelIndex());
+            filter->insert(QModelIndex());
 
             //Should be rejected
             checkIndexes();

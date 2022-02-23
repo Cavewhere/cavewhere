@@ -25,13 +25,13 @@ namespace test_cwKeywordGroupByKeyModelModel {
 class Element {
 public:
     Element() = default;
-    Element(const QString& value, const QVector<QObject*>& entities, bool accepted) :
-        value(value),
+    Element(const QString& key, const QVector<QObject*>& entities, bool accepted) :
+        key(key),
         entities(entities),
         accepted(accepted)
     {}
 
-    QString value;
+    QString key;
     QVector<QObject*> entities;
     bool accepted;
 };
@@ -57,11 +57,13 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
         REQUIRE(list.size() == model->rowCount(root));
 
         for(int i = 0; i < model->rowCount(root); i++) {
-            INFO("Index:" << i);
 
             auto index = model->index(i, 0, root);
             auto listElement = list.at(i);
-            CHECK(index.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == listElement.value.toStdString());
+
+            INFO("Index:" << i << " " << listElement.key.toStdString());
+
+            CHECK(index.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == listElement.key.toStdString());
             CHECK(index.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == listElement.accepted);
 
             auto entities = index.data(cwKeywordGroupByKeyModel::ObjectsRole).value<QVector<QObject*>>();
@@ -73,22 +75,19 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
                 CHECK(entities.contains(entity));
             }
 
-            if(listElement.accepted) {
-                //Make sure accepted entites are in the filtered list
-
-                auto hasEntity = [&model](QObject* entity) {
-                    for(int i = 0; i < model->acceptedModel()->rowCount(); i++) {
-                        auto acceptedIndex = model->acceptedModel()->index(i);
-                        if(acceptedIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>() == entity) {
-                            return true;
-                        }
+            auto hasEntity = [&model](QObject* entity) {
+                for(int i = 0; i < model->acceptedModel()->rowCount(); i++) {
+                    auto acceptedIndex = model->acceptedModel()->index(i);
+                    if(acceptedIndex.data(cwKeywordItemModel::ObjectRole).value<QObject*>() == entity) {
+                        return true;
                     }
-                    return false;
-                };
-
-                for(auto entity : entities) {
-                    hasEntity(entity);
                 }
+                return false;
+            };
+
+            for(auto entity : entities) {
+                INFO("Entity:" << entity << " " << entity->objectName().toStdString());
+                CHECK(listElement.accepted == hasEntity(entity));
             }
         }
     };
@@ -246,5 +245,17 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
                 check(QModelIndex(), lists);
             }
         }
+
+        SECTION("Replace should work correctly") {
+            keywordModel3->replace({"type", "scrap"});
+
+            lists = {
+                {"point", {entity4.get()}, true},
+                {"scrap", {entity1.get(), entity2.get(), entity3.get()}, true},
+                {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+            };
+
+            check(QModelIndex(), lists);
+        }      
     }
 }

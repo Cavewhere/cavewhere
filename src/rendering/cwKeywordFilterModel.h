@@ -25,7 +25,7 @@ public:
     QModelIndex mapFromSource(const QModelIndex &sourceIndex) const;
 
     //Filter by objects
-    void accept(const QModelIndex& sourceIndex);
+    void insert(const QModelIndex& sourceIndex);
     void remove(const QModelIndex& sourceIndex);
 
 private:
@@ -50,20 +50,23 @@ private:
         }
 
         const auto acceptedObject = toObject(sourceIndex);
-        const auto iter = findAcceptedObject(acceptedObject);
 
-        auto toIndex = [this](const auto iter)->QModelIndex {
-            if(iter == mAcceptedSourceIndexes.end()) {
-                return QModelIndex();
-            } else {
-                return *iter;
+        if(acceptedObject) {
+            const auto iter = findAcceptedObject(acceptedObject);
+
+            auto toIndex = [this](const auto iter)->QModelIndex {
+                if(iter == mAcceptedSourceIndexes.end()) {
+                    return QModelIndex();
+                } else {
+                    return *iter;
+                }
+            };
+
+            if(objectCompareFunc(toObject(toIndex(iter)), acceptedObject))
+            {
+                int row = std::distance(mAcceptedSourceIndexes.begin(), iter);
+                return actionFunc(row, iter);
             }
-        };
-
-        if(objectCompareFunc(toObject(toIndex(iter)), acceptedObject)) {
-            //Not found, add the object
-            int row = std::distance(mAcceptedSourceIndexes.begin(), iter);
-            return actionFunc(row, iter);
         }
 
         return R();

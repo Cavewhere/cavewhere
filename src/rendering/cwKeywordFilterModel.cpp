@@ -29,7 +29,7 @@ cwKeywordFilterModel::cwKeywordFilterModel(QObject *parent) : QAbstractProxyMode
                         endRemoveRows();
 
                         //Re-accept the sourceIndex
-                        accept(sourceIndex);
+                        insert(sourceIndex);
                     }
                 }
             });
@@ -37,10 +37,11 @@ cwKeywordFilterModel::cwKeywordFilterModel(QObject *parent) : QAbstractProxyMode
             mRowsAboutToBeRemoved = connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeRemoved,
                                             this, [this](const QModelIndex& parent, int begin, int last)
             {
-                Q_UNUSED(parent);
-                for(int i = begin; i <= last; i++) {
-                    auto sourceIndex = sourceModel()->index(i, 0, QModelIndex());
-                    remove(sourceIndex);
+                if(parent == QModelIndex()) {
+                    for(int i = begin; i <= last; i++) {
+                        auto sourceIndex = sourceModel()->index(i, 0, QModelIndex());
+                        remove(sourceIndex);
+                    }
                 }
             });
         }
@@ -74,7 +75,7 @@ int cwKeywordFilterModel::rowCount(const QModelIndex &parent) const
 int cwKeywordFilterModel::columnCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    return 0;
+    return 1;
 }
 
 QModelIndex cwKeywordFilterModel::mapToSource(const QModelIndex &proxyIndex) const
@@ -96,7 +97,7 @@ QModelIndex cwKeywordFilterModel::mapFromSource(const QModelIndex &sourceIndex) 
     });
 }
 
-void cwKeywordFilterModel::accept(const QModelIndex& sourceIndex)
+void cwKeywordFilterModel::insert(const QModelIndex& sourceIndex)
 {
     findElementRunAction<void>(sourceIndex,
                                std::not_equal_to<QObject*>(),
@@ -112,7 +113,7 @@ void cwKeywordFilterModel::remove(const QModelIndex& sourceIndex)
 {
     findElementRunAction<void>(sourceIndex,
                                std::equal_to<QObject*>(),
-                               [this](int row, auto iter)
+                               [this, sourceIndex](int row, auto iter)
     {
         beginRemoveRows(QModelIndex(), row, row);
         mAcceptedSourceIndexes.erase(iter);

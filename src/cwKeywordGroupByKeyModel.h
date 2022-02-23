@@ -99,8 +99,7 @@ private:
 
         QString value;
         QVector<QPersistentModelIndex> indexes;
-//        QVector<QObject*> entities;
-        bool accepted;
+        bool accepted = false;
 
         bool operator<(const Row& other) {
             return value < other.value;
@@ -145,7 +144,7 @@ private:
 
     public:
         QString key;
-        ModelData* data;
+        cwKeywordGroupByKeyModel* model;
 
         std::function<void (int)> beginInsertFunction;
         std::function<void ()> endInsertFunction;
@@ -208,18 +207,17 @@ private:
             row.accepted = accepted;
 
             for(auto index : row.indexes) {
-                if(accepted) {
-                    mAcceptedModel->accept(index);
-                } else {
-                    mAcceptedModel->remove(index);
-                }
+                setAcceptIndex(index, accepted);
             }
 
+            //Only enable if func isn't nullptr
             if constexpr (!std::is_same<decltype (func), std::nullptr_t>::value) {
                 func();
             }
         }
     }
+
+    void setAcceptIndex(const QModelIndex& index, bool accepted);
 };
 
 //inline QVector<cwEntityAndKeywords> cwKeywordItemKeyFilter::entities() const {
