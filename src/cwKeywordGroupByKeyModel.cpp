@@ -104,7 +104,7 @@ void cwKeywordGroupByKeyModel::updateAllRows()
         for(int i = 0; i < mSourceModel->rowCount(); i++) {
             auto index = mSourceModel->index(i, 0, QModelIndex());
             filter.filterEntity(index);
-        }
+        }      
     }
 
     endResetModel();
@@ -161,6 +161,10 @@ void cwKeywordGroupByKeyModel::setKey(QString keyLast) {
         mKey = keyLast;
         mFilter.key = mKey;
         updateAllRows();
+
+        //Accept or reject other category if mkey isn't set
+        setData(otherIndex(), mKey.isEmpty(), AcceptedRole);
+
         emit keyChanged();
     }
 }
@@ -379,8 +383,9 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
 
         mSourceModel = source;
 
-        if(mSourceModel) {
+        mAcceptedModel->setSourceModel(mSourceModel);
 
+        if(mSourceModel) {
             auto toIndex = [this](int rowIndex) {
                 return mSourceModel->index(rowIndex, 0, QModelIndex());
             };
@@ -425,8 +430,6 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
 
             updateAllRows();
         }
-
-        mAcceptedModel->setSourceModel(mSourceModel);
 
         emit sourceChanged();
     }

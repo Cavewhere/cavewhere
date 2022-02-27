@@ -12,6 +12,7 @@
 class cwKeywordItemModel;
 class cwKeywordGroupByKeyModel;
 class cwKeywordFilterModel;
+class cwUniqueValueFilterModel;
 #include "cwGlobals.h"
 
 class CAVEWHERE_LIB_EXPORT cwKeywordFilterPipelineModel : public QAbstractListModel
@@ -61,7 +62,7 @@ signals:
 private:
     struct Row {
         cwKeywordGroupByKeyModel* filter;
-        Operator modelOperator; //Operators are append before the model. The first filter should be None
+        Operator modelOperator; //Operators are append before the model.
     };
 
     QPointer<cwKeywordItemModel> mKeywordModel; //!<
@@ -69,7 +70,8 @@ private:
     QVector<Row> mRows;
 
     QConcatenateTablesProxyModel* mAcceptedModel; //!<
-    QSet<QObject*> mAccepted;
+    cwUniqueValueFilterModel* mUniqueAcceptedModel;
+//    QSet<QObject*> mAccepted;
 
     cwKeywordFilterModel* mRejectedModel;
 
@@ -88,9 +90,7 @@ private:
 };
 
 
-inline QAbstractItemModel* cwKeywordFilterPipelineModel::acceptedModel() const {
-    return mAcceptedModel;
-}
+
 
 
 

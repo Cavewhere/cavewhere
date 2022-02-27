@@ -161,13 +161,14 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
 
     //CHECK default model
     QVector<Element> lists {
-        {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+        {cwKeywordGroupByKeyModel::otherCategory(), {}, true}
     };
     check(QModelIndex(), lists);
 
     model->setSourceModel(keywordEntityModel.get());
     lists = {
-        {cwKeywordGroupByKeyModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}, false}
+        //This other should be true when type isn't set
+        {cwKeywordGroupByKeyModel::otherCategory(), {entity1.get(), entity2.get(), entity3.get(), entity4.get()}, true}
     };
 
     check(QModelIndex(), lists);
@@ -192,6 +193,7 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
         spyCheck[resetSpy]++;
         spyCheck[aboutToResetSpy]++;
         spyCheck[keySpy]++;
+        spyCheck[dataChangedSpy]++;
         spyCheck.checkSpies();
 
         SECTION("Set to a different key") {
@@ -256,6 +258,6 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
             };
 
             check(QModelIndex(), lists);
-        }      
+        }
     }
 }

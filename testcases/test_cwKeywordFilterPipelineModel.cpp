@@ -20,6 +20,8 @@ TEST_CASE("cwKeywordFilterPipelineModel should initilize correctly", "[cwKeyword
 }
 
 TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipelineModel]") {
+    qDebug() << "Start test";
+
     cwKeywordFilterPipelineModel model;
 
     auto keywordEntityModel = std::make_unique<cwKeywordItemModel>();
@@ -85,12 +87,23 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     model.setKeywordModel(keywordEntityModel.get());
 
     auto keywordModelSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::keywordModelChanged);
+    auto rowsInsertedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsInserted);
+    auto rowsAboutToBeInsertedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeInserted);
+    auto rowsRemovedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeRemoved);
+    auto rowsAboutToBeRemovedSpy = pipelineSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeRemoved);
+
     auto acceptedRowsInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsInserted);
     auto acceptedRowsAboutToBeInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeInserted);
     auto acceptedRowsRemovedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsRemoved);
     auto acceptedRowsAboutToBeRemovedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::rowsAboutToBeRemoved);
+    auto accetpedColumnInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::columnsInserted);
+    auto accetpedColumnAboutToBeInsertedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::columnsAboutToBeInserted);
+    auto accetpedColumnRemovedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::columnsRemoved);
+    auto accetpedColumnAboutToBeRemovedSpy = acceptedSpy.findSpy(&cwKeywordFilterPipelineModel::columnsAboutToBeRemoved);
 
     pipelineSpy[keywordModelSpy]++;
+    acceptedSpy[acceptedRowsInsertedSpy] = 4;
+    acceptedSpy[acceptedRowsAboutToBeInsertedSpy] = 4;
 
     pipelineSpy.checkSpies();
     acceptedSpy.checkSpies();
@@ -120,10 +133,17 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
         }
     };
 
+    acceptedObjects = {
+        entity1.get(),
+        entity2.get(),
+        entity3.get(),
+        entity4.get()
+    };
+
     REQUIRE(model.rowCount() == 1);
     CHECK(model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
     CHECK(model.index(0).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
-    CHECK(model.acceptedModel()->rowCount() == 0);
+    CHECK(model.acceptedModel()->rowCount() == 4);
     checkAcceptedRejected();
 
     SECTION("Set the first key") {
@@ -136,9 +156,6 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
         auto groupByFirstIndex = groupBy->index(0);
         CHECK(groupByFirstIndex.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "line");
         CHECK(groupByFirstIndex.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
-
-        acceptedSpy[acceptedRowsAboutToBeInsertedSpy] += 4;
-        acceptedSpy[acceptedRowsInsertedSpy] += 4;
 
         pipelineSpy.checkSpies();
         acceptedSpy.checkSpies();
@@ -300,6 +317,111 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                 pipelineSpy.checkSpies();
 
                 checkAcceptedRejected();
+            }
+
+            SECTION("Add row") {
+                //Make sure we're and'ing the new row
+                qDebug() << "Add row";
+                model.addRow();
+
+                REQUIRE(model.rowCount() == 2);
+                CHECK(model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
+                CHECK(model.index(0).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
+                CHECK(model.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
+                CHECK(model.index(1).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
+
+                acceptedSpy[acceptedRowsInsertedSpy] += 2;
+                acceptedSpy[acceptedRowsAboutToBeInsertedSpy] += 2;
+                acceptedSpy[acceptedRowsAboutToBeRemovedSpy] += 2;
+                acceptedSpy[acceptedRowsRemovedSpy] += 2;
+//                acceptedSpy[accetpedColumnAboutToBeInsertedSpy]++;
+//                acceptedSpy[accetpedColumnInsertedSpy]++;
+//                acceptedSpy[accetpedColumnAboutToBeRemovedSpy]++;
+//                acceptedSpy[accetpedColumnRemovedSpy]++;
+
+                pipelineSpy[rowsInsertedSpy]++;
+                pipelineSpy[rowsAboutToBeInsertedSpy]++;
+
+                acceptedSpy.checkSpies();
+                pipelineSpy.checkSpies();
+                checkAcceptedRejected();
+
+                SECTION("Update second model") {
+                    //Set the type
+                    auto groupBy1 = model.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<cwKeywordGroupByKeyModel*>();
+                    REQUIRE(groupBy1);
+
+                    groupBy1->setKey("trip");
+                    CHECK(groupBy1->rowCount() == 3);
+
+                    acceptedSpy.checkSpies();
+                    pipelineSpy.checkSpies();
+                    checkAcceptedRejected();
+
+                    auto groupByFirstIndex = groupBy1->index(0);
+                    CHECK(groupByFirstIndex.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "trip2");
+                    CHECK(groupByFirstIndex.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                    auto groupBy2Index = groupBy1->index(1);
+                    CHECK(groupBy2Index.data(cwKeywordGroupByKeyModel::ValueRole).toString().toStdString() == "trip3");
+                    CHECK(groupBy2Index.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+
+                    SECTION("Accept only trip2") {
+                        CHECK(groupBy1->setData(groupBy2Index, false, cwKeywordGroupByKeyModel::AcceptedRole));
+                        CHECK(groupByFirstIndex.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == true);
+                        CHECK(groupBy2Index.data(cwKeywordGroupByKeyModel::AcceptedRole).toBool() == false);
+
+                        acceptedObjects = {
+                            entity3.get()
+                        };
+
+                        rejectedObjects = {
+                            entity1.get(),
+                            entity2.get(),
+                            entity4.get()
+                        };
+
+                        acceptedSpy[acceptedRowsAboutToBeRemovedSpy]++;
+                        acceptedSpy[acceptedRowsRemovedSpy]++;
+
+                        acceptedSpy.checkSpies();
+                        pipelineSpy.checkSpies();
+                        checkAcceptedRejected();
+
+                        SECTION("Set OR operator") {
+                            qDebug() << "Or";
+                            CHECK(model.setData(model.index(1), cwKeywordFilterPipelineModel::Or, cwKeywordFilterPipelineModel::OperatorRole));
+
+                            REQUIRE(model.rowCount() == 2);
+                            CHECK(model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
+                            CHECK(model.index(0).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::And);
+                            CHECK(model.index(1).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<QAbstractItemModel*>() != nullptr);
+                            CHECK(model.index(1).data(cwKeywordFilterPipelineModel::OperatorRole).toInt() == cwKeywordFilterPipelineModel::Or);
+
+                            acceptedObjects = {
+                                entity1.get(),
+                                entity2.get(),
+                                entity3.get()
+                            };
+
+                            rejectedObjects = {
+                                entity4.get()
+                            };
+
+                            //Reject type=scraps or accept trip==(trip1 or trip2)
+
+                            checkAcceptedRejected();
+
+                            for(int i = 0; i < model.acceptedModel()->rowCount(); i++) {
+                                auto index = model.acceptedModel()->index(i, 0);
+                                qDebug() << "Accepted:" << index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+                            }
+                        }
+                    }
+                }
+
+//                SECTION("Insert row") {
+
+//                }
             }
         }
     }

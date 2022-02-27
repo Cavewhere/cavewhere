@@ -110,7 +110,7 @@ private:
     class ModelData {
     public:
         QVector<Row> Rows;
-        Row OtherRow = Row(cwKeywordGroupByKeyModel::otherCategory(), {}, false);
+        Row OtherRow = defaultOther();
 
         int otherRowIndex() const {
             return size() - 1;
@@ -136,7 +136,12 @@ private:
 
         void clear() {
             Rows.clear();
-            OtherRow = Row(cwKeywordGroupByKeyModel::otherCategory(), {}, false);
+            OtherRow = defaultOther();
+        }
+
+    private:
+        inline Row defaultOther() {
+            return Row(cwKeywordGroupByKeyModel::otherCategory(), {}, true);
         }
     };
 
