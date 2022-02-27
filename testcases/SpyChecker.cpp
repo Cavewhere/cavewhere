@@ -53,13 +53,19 @@ SpyChecker SpyChecker::makeChecker(QObject *object)
 {
     SpyChecker checker;
 
+    QSet<QString> spyNames;
     auto metaObject = object->metaObject();
+    spyNames.reserve(metaObject->methodCount());
     for(int i = 0; i < metaObject->methodCount(); i++) {
         auto method = metaObject->method(i);
         if(method.methodType() == QMetaMethod::Signal) {
-            QSignalSpy* spy = new QSignalSpy(object, method);
-            spy->setObjectName(method.name() + "Spy");
-            checker.insert(spy, 0);
+            QString objName = method.name() + "Spy";
+            if(!spyNames.contains(objName)) {
+                QSignalSpy* spy = new QSignalSpy(object, method);
+                spy->setObjectName(objName);
+                spyNames.insert(spy->objectName());
+                checker.insert(spy, 0);
+            }
         }
     }
 
