@@ -105,37 +105,41 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
             };
 
                         connect(mKeywordModel, &cwKeywordItemModel::rowsInserted,
-                        this, [addToRejected](const QModelIndex& parent, int begin, int last)
+                        this, [addToRejected, this](const QModelIndex& parent, int begin, int last)
                 {
                     Q_UNUSED(parent);
                     if(parent == QModelIndex()) {
                         for(int i = begin; i <= last; i++) {
                             addToRejected(i);
                         }
+                        updatePossibleKeys();
                     }
                 });
 
                 connect(mKeywordModel, &cwKeywordItemModel::rowsAboutToBeRemoved,
-                        this, [removeFromRejected](const QModelIndex& parent, int begin, int last)
+                        this, [this, removeFromRejected](const QModelIndex& parent, int begin, int last)
                 {
                     if(parent == QModelIndex()) {
                         for(int i = begin; i <= last; i++) {
                             removeFromRejected(i);
                         }
+                        updatePossibleKeys();
                     }
                 });
 
                 connect(mKeywordModel, &cwKeywordItemModel::dataChanged,
-                        this, [addToRejected](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
+                        this, [this, addToRejected](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
                 {
                     if(roles.contains(cwKeywordItemModel::KeywordsRole)) {
                         for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
                             addToRejected(i);
                         }
+                        updatePossibleKeys();
                     }
                 });
             }
 
+            updatePossibleKeys();
             emit keywordModelChanged();
         }
     }
@@ -290,6 +294,20 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
         if(!mRows.isEmpty() && i == 0) {
             mRows.first().filter->setSourceModel(mKeywordModel);
         }
+    }
+
+    void cwKeywordFilterPipelineModel::updatePossibleKeys()
+    {
+        QSet<QString> keys;
+        for(int i = 0; i < mKeywordModel->rowCount(); i++) {
+            auto index = mKeywordModel->index(i, 0, QModelIndex());
+            auto keywords = index.data(cwKeywordItemModel::KeywordsRole).value<QVector<cwKeyword>>();
+            for(auto keyword : keywords) {
+                keys.insert(keyword.key());
+            }
+        }
+        mPossibleKeys = QStringList(keys.begin(), keys.end());
+        std::sort(mPossibleKeys.begin(), mPossibleKeys.end());
     }
 
     cwKeywordItemModel *cwKeywordFilterPipelineModel::keywordModel() const {

@@ -151,6 +151,10 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
     CHECK(model.acceptedModel()->rowCount() == 4);
     checkAcceptedRejected();
 
+    SECTION("Possible keys") {
+        CHECK(model.possibleKeys() == QStringList({"cave", "trip", "type"}));
+    }
+
     SECTION("Set the first key") {
         auto groupBy = model.index(0).data(cwKeywordFilterPipelineModel::FilterModelObjectRole).value<cwKeywordGroupByKeyModel*>();
         REQUIRE(groupBy);

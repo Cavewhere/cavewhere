@@ -7,6 +7,7 @@
 #include <QConcatenateTablesProxyModel>
 #include <QSortFilterProxyModel>
 #include <QSet>
+#include <QMap>
 
 //Our includes
 class cwKeywordItemModel;
@@ -23,6 +24,7 @@ class CAVEWHERE_LIB_EXPORT cwKeywordFilterPipelineModel : public QAbstractListMo
     Q_PROPERTY(QStringList operators READ operators CONSTANT)
     Q_PROPERTY(QAbstractItemModel* acceptedModel READ acceptedModel CONSTANT)
     Q_PROPERTY(QAbstractItemModel* rejectedModel READ rejectedModel CONSTANT)
+    Q_PROPERTY(QStringList possibleKeys READ possibleKeys NOTIFY possibleKeysChanged)
 
 public:
     enum Role {
@@ -55,9 +57,12 @@ public:
 
     void removeRow(int i );
 
+    QStringList possibleKeys() const;
+
 signals:
     void keywordModelChanged();
     void acceptedEntitiesChanged();
+    void possibleKeysChanged();
 
 private:
     struct Row {
@@ -68,6 +73,7 @@ private:
     QPointer<cwKeywordItemModel> mKeywordModel; //!<
     QStringList mOperators; //!<
     QVector<Row> mRows;
+    QStringList mPossibleKeys;
 
     QConcatenateTablesProxyModel* mAcceptedModel; //!<
     cwUniqueValueFilterModel* mUniqueAcceptedModel;
@@ -87,8 +93,13 @@ private:
             func(mRows[i]);
         }
     }
+
+    void updatePossibleKeys();
 };
 
+inline QStringList cwKeywordFilterPipelineModel::possibleKeys() const {
+    return mPossibleKeys;
+}
 
 
 

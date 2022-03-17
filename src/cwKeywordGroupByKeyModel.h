@@ -69,7 +69,6 @@ signals:
     void sourceChanged();
     void invertedChanged();
     void keyChanged();
-    void possibleKeysChanged();
     void modelFutureChanged();
     void acceptByDefaultChanged();
 
