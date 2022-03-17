@@ -500,6 +500,22 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                             }
 
                             SECTION("Set back to AND opertar") {
+                                //By !Scrap && !Trip2
+                                //keywordModel1->add({"type", "scrap"}); //false
+                                //keywordModel1->add({"trip", "trip1"}); //true
+                                //
+                                //keywordModel2->add({"type", "scrap"}); //false
+                                //keywordModel2->add({"trip", "trip2"}); //true
+                                //keywordModel2->add({"cave", "cave1"}); //-
+                                //
+                                //keywordModel3->add({"type", "line"}); //true
+                                //keywordModel3->add({"trip", "trip2"}); //true
+                                //keywordModel3->add({"cave", "cave1"}); //-
+                                //
+                                //keywordModel4->add({"type", "point"}); //true
+                                //keywordModel4->add({"trip", "trip3"}); //true
+                                //keywordModel4->add({"cave", "cave2"});
+
                                 CHECK(model.setData(model.index(1), cwKeywordFilterPipelineModel::And, cwKeywordFilterPipelineModel::OperatorRole));
 
                                 REQUIRE(model.rowCount() == 2);
@@ -523,10 +539,6 @@ TEST_CASE("cwKeywordFilterPipelineModel filter correctly", "[cwKeywordFilterPipe
                         }
                     }
                 }
-
-                //                SECTION("Insert row") {
-
-                //                }
             }
         }
     }
