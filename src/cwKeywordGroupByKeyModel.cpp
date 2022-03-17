@@ -199,9 +199,8 @@ void cwKeywordGroupByKeyModel::Filter::addEntity(const QString &value,
         }
     } else {
         beginInsert(iter);
-        constexpr bool defaultAccepted = true;
-        rows.insert(iter, Row(value, {sourceIndex}, defaultAccepted));
-        model->setAcceptIndex(sourceIndex, defaultAccepted);
+        rows.insert(iter, Row(value, {sourceIndex}, model->acceptByDefault()));
+        model->setAcceptIndex(sourceIndex, model->acceptByDefault());
         endInsert();
     }
 
@@ -432,5 +431,12 @@ void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
         }
 
         emit sourceChanged();
+    }
+}
+
+void cwKeywordGroupByKeyModel::setAcceptedByDefault(bool acceptByDefault) {
+    if(mAcceptedByDefault != acceptByDefault) {
+        mAcceptedByDefault = acceptByDefault;
+        emit acceptByDefaultChanged();
     }
 }

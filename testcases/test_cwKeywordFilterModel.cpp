@@ -14,24 +14,28 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
     auto model = std::make_unique<cwKeywordItemModel>();
 
     //Generate the items for the model
-    const auto numItems = 10;
-    for(int i = 0; i < numItems; i++) {
-        auto name = [i](const QString& label) {
-          return label + QString::number(i);
-        };
+    auto populateModel = [](cwKeywordItemModel* model) {
+        const auto numItems = 10;
+        for(int i = 0; i < numItems; i++) {
+            auto name = [i](const QString& label) {
+                return label + QString::number(i);
+            };
 
-        auto item = new cwKeywordItem();
-        item->setObjectName(name("item"));
-        item->keywordModel()->setObjectName(name("keywordModel"));
-        auto entity = new QObject(model.get());
-        entity->setObjectName(name("entity"));
+            auto item = new cwKeywordItem();
+            item->setObjectName(name("item"));
+            item->keywordModel()->setObjectName(name("keywordModel"));
+            auto entity = new QObject(model);
+            entity->setObjectName(name("entity"));
 
-        item->keywordModel()->add({"name", name("name")});
-        item->keywordModel()->add({"date", name("date")});
+            item->keywordModel()->add({"name", name("name")});
+            item->keywordModel()->add({"date", name("date")});
 
-        item->setObject(entity);
-        model->addItem(item);
-    }
+            item->setObject(entity);
+            model->addItem(item);
+        }
+    };
+
+    populateModel(model.get());
 
     auto filter = std::make_unique<cwKeywordFilterModel>();
     filter->setSourceModel(model.get());
@@ -44,6 +48,9 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
     auto aboutToBeInsertedspy = spyChecker.findSpy(&cwKeywordFilterModel::rowsAboutToBeInserted);
     auto removedSpy = spyChecker.findSpy(&cwKeywordFilterModel::rowsRemoved);
     auto aboutToBeRemovedSpy = spyChecker.findSpy(&cwKeywordFilterModel::rowsAboutToBeRemoved);
+    auto resetSpy = spyChecker.findSpy(&cwKeywordFilterModel::modelReset);
+    auto aboutToBeResetSpy = spyChecker.findSpy(&cwKeywordFilterModel::modelAboutToBeReset);
+    auto sourceModelChangedSpy = spyChecker.findSpy(&cwKeywordFilterModel::sourceModelChanged);
 
     SECTION("Add single row to be filtered") {
         auto sourceIndex = model->index(3, 0, QModelIndex());
@@ -68,8 +75,8 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
             spyChecker[aboutToBeInsertedspy]++;
         }
 
-        auto checkIndexes = [&filter, &indexes, &model]() {
-            auto sourceIndexes = [&indexes, &model]() {
+        auto checkIndexesWithModel = [&filter, &indexes](cwKeywordItemModel* model) {
+            auto sourceIndexes = [&indexes, model]() {
                 QVector<QPersistentModelIndex> sourceIndexes;
                 for(int i : indexes) {
                     sourceIndexes.append(model->index(i, 0, QModelIndex()));
@@ -94,6 +101,10 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
                 CHECK(filter->mapToSource(filterIndex) == sourceIndexes.at(i));
                 CHECK(filter->mapFromSource(sourceIndexes.at(i)) == filterIndex);
             }
+        };
+
+        auto checkIndexes = [checkIndexesWithModel, &model](){
+            checkIndexesWithModel(model.get());
         };
 
         checkIndexes();
@@ -185,6 +196,25 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
             spyChecker[aboutToBeInsertedspy]++;
 
             checkIndexes();
+            spyChecker.checkSpies();
+        }
+
+        SECTION("Filter should handle sourceModel change") {
+            auto model2 = std::make_unique<cwKeywordItemModel>();
+            populateModel(model2.get());
+
+            filter->setSourceModel(model2.get());
+
+            CHECK(filter->sourceModel() == model2.get());
+
+            indexes = {};
+
+            checkIndexesWithModel(model2.get());
+
+            spyChecker[aboutToBeRemovedSpy]++;
+            spyChecker[removedSpy]++;
+            spyChecker[sourceModelChangedSpy]++;
+
             spyChecker.checkSpies();
         }
     }

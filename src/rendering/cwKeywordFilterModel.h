@@ -21,6 +21,7 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const;
     int columnCount(const QModelIndex &parent) const;
 
+    void setSourceModel(QAbstractItemModel *sourceModel);
     QModelIndex mapToSource(const QModelIndex &proxyIndex) const;
     QModelIndex mapFromSource(const QModelIndex &sourceIndex) const;
 
@@ -76,6 +77,7 @@ private:
     R findElementRunAction(const QModelIndex& sourceIndex, C objectCompareFunc, F actionFunc) const {
         return const_cast<cwKeywordFilterModel*>(this)->findElementRunAction<R,C,F>(sourceIndex, objectCompareFunc, actionFunc);
     }
+
 
 };
 

@@ -25,28 +25,10 @@ class CAVEWHERE_LIB_EXPORT cwKeywordGroupByKeyModel : public QAbstractListModel
 
     Q_PROPERTY(QAbstractItemModel* sourceModel READ sourceModel WRITE setSourceModel NOTIFY sourceChanged)
     Q_PROPERTY(cwKeywordFilterModel* acceptedModel READ acceptedModel CONSTANT)
-
-//    Q_PROPERTY(QVector<cwEntityAndKeywords> entities READ entities WRITE setEntities NOTIFY entitiesChanged)
-//    Q_PROPERTY(QVector<cwEntityAndKeywords> acceptedEntites READ acceptedEntites NOTIFY acceptedEntitesChanged)
-
-
-    //    Q_PROPERTY(QFuture<void> modelFuture READ modelFuture NOTIFY modelFutureChanged)
-
     Q_PROPERTY(QString key READ key WRITE setKey NOTIFY keyChanged) //Last key we should filter by
-//    Q_PROPERTY(bool inverted READ inverted WRITE setInverted NOTIFY invertedChanged)
-
-//    Q_PROPERTY(QStringList possibleKeys READ possibleKeys NOTIFY possibleKeysChanged)
+    Q_PROPERTY(bool acceptByDefault READ acceptByDefault WRITE setAcceptedByDefault NOTIFY acceptByDefaultChanged)
 
 public:
-//    class EntityAndKeywords {
-//    public:
-//        EntityAndKeywords() = default;
-//        EntityAndKeywords(const QModelIndex& entityIndex);
-
-//        QObject* entity = nullptr;
-//        QVector<cwKeyword> keywords;
-//    };
-
     enum Role {
         ObjectsRole,
         ObjectCountRole,
@@ -67,6 +49,9 @@ public:
     QString key() const;
     void setKey(QString lastKey);
 
+    bool acceptByDefault() const;
+    void setAcceptedByDefault(bool acceptByDefault);
+
     void invert();
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
@@ -86,6 +71,7 @@ signals:
     void keyChanged();
     void possibleKeysChanged();
     void modelFutureChanged();
+    void acceptByDefaultChanged();
 
 private:
     class Row {
@@ -181,26 +167,16 @@ private:
     QAbstractItemModel* mSourceModel = nullptr; //!<
     cwKeywordFilterModel* mAcceptedModel; //!<
 
-    //    QVector<cwEntityAndKeywords> mEntries; //Entities passed to this filter
-//    QVector<cwEntityAndKeywords> mAcceptedEntries; //Enities that have been filtered
-
     bool mInverted; //!<
     QString mKey; //!<
 
-//    QStringList PossibleKeys; //!<
+    bool mAcceptedByDefault = true; //!<
+
     ModelData mData;
 
     Filter mFilter;
 
-//    QFuture<void> LastRun;
-
-//    cwKeywordItemModel* KeywordModel = nullptr; //!<
-
     void updateAllRows();
-
-//    void waitForFinished();
-
-//    bool isRunning() const;
 
     Filter createDefaultFilter();
 
@@ -225,10 +201,6 @@ private:
     void setAcceptIndex(const QModelIndex& index, bool accepted);
 };
 
-//inline QVector<cwEntityAndKeywords> cwKeywordItemKeyFilter::entities() const {
-//    return mEntries;
-//}
-
 inline QAbstractItemModel* cwKeywordGroupByKeyModel::sourceModel() const {
     return mSourceModel;
 }
@@ -238,48 +210,16 @@ inline cwKeywordFilterModel* cwKeywordGroupByKeyModel::acceptedModel() const {
 }
 
 /**
-* @brief cwKeywordItemFilter::filteredEntries
-* @return
-*/
-
-
-///**
-//*
-//*/
-//inline cwKeywordItemModel* cwKeywordItemFilter::keywordModel() const {
-//    return KeywordModel;
-//}
-
-/**
 *
 */
 inline QString cwKeywordGroupByKeyModel::key() const {
     return mKey;
 }
 
+inline bool cwKeywordGroupByKeyModel::acceptByDefault() const {
+    return mAcceptedByDefault;
+}
 
-///**
-//*
-//*/
-//inline QStringList cwKeywordItemFilter::possibleKeys() const {
-//    return Data.PossibleKeys;
-//}
-
-///**
-//* @brief cwKeywordItemFilter::keywords
-//* @return
-//*/
-//inline cwKeywordModel* cwKeywordItemFilter::filterKeywords() const {
-//    return mFilterKeywords;
-//}
-
-//inline bool cwKeywordItemFilter::inverted() const {
-//    return mInverted;
-//}
-
-//inline QFuture<void> cwKeywordItemFilter::modelFuture() const {
-//    return mLastModelData0;
-//}
 
 
 #endif // CWKEYWORDENTITYFILTERMODEL_H

@@ -24,6 +24,13 @@ public:
 
     bool contains(const QVariant& key) const;
 
+    void printRows() {
+        qDebug() << "cwUniqueValueFilterModel:";
+        for(int i = 0; i < mUniqueIndex.size(); i++) {
+            qDebug() << "\trow:" << i << mUniqueIndex.at(i).index << uniqueValue(mUniqueIndex.at(i).index) << mUniqueIndex.at(i).value;
+        }
+    }
+
 public:
     QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;
     QModelIndex parent(const QModelIndex &child) const;
@@ -83,7 +90,13 @@ private:
 
     template<typename T>
     bool contains(T iter, const QModelIndex& sourceIndex) const {
-        return iter != mUniqueIndex.end() && iter->value == uniqueValue(sourceIndex);
+        if(iter == mUniqueIndex.end()) {
+            qDebug() << "contains: iter at end";
+        } else {
+            qDebug() << "contains:" << (iter->value == uniqueValue(sourceIndex)) << iter->index << uniqueValue(iter->index) << iter->value << uniqueValue(sourceIndex);
+        }
+
+        return iter != mUniqueIndex.end() && uniqueValue(iter->index) == uniqueValue(sourceIndex);
     }
 
     inline bool isValid() {

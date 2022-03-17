@@ -1,5 +1,8 @@
 #include "cwUniqueValueFilterModel.h"
 
+//TODO: remove
+#include "cwKeywordItemModel.h"
+
 cwUniqueValueFilterModel::cwUniqueValueFilterModel(QObject *parent) : QAbstractProxyModel(parent)
 {
     
@@ -133,6 +136,8 @@ QVector<cwUniqueValueFilterModel::Row>::iterator cwUniqueValueFilterModel::findP
 void cwUniqueValueFilterModel::connectSourceModel()
 {
     auto insert = [this](const QModelIndex& index) {
+        qDebug() << "Try to insert:" << index << toRow(index).value;
+
         this->findRunAction<void>(index,
                             [this, index](auto iter)
         {
@@ -145,11 +150,15 @@ void cwUniqueValueFilterModel::connectSourceModel()
             beginInsertRows(QModelIndex(), row, row);
             qDebug() << "Insert:" << toRow(index).value;
             mUniqueIndex.insert(iter, toRow(index));
+            for(int i = 0; i < mUniqueIndex.size(); i++) {
+                qDebug() << "i:" << 0 << mUniqueIndex.at(i).index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+            }
             endInsertRows();
         });
     };
 
     auto remove = [this](auto iter, const QModelIndex& sourceIndex) {
+        qDebug() << "Try to remove" << sourceIndex << toRow(sourceIndex).value;
         auto findNextIndex = [this, sourceIndex](const QVariant& value)
         {
             auto n = this->sourceModel()->rowCount();
@@ -185,6 +194,7 @@ void cwUniqueValueFilterModel::connectSourceModel()
     {
         Q_UNUSED(parent);
 
+        qDebug() << "Insert:" << first << last;
         for(int i = first; i <= last; i++) {
             const auto index = this->sourceModel()->index(i, 0);
             insert(index);
@@ -210,9 +220,23 @@ void cwUniqueValueFilterModel::connectSourceModel()
         }
     });
 
+    connect(sourceModel(), &QAbstractItemModel::modelAboutToBeReset,
+            this, [this]()
+    {
+        qDebug() << "Model reset" << sourceModel()->rowCount();
+    });
+
+    connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeMoved,
+            this, [](const QModelIndex &sourceParent, int sourceStart, int sourceEnd,
+            const QModelIndex &destinationParent, int destinationRow)
+    {
+        qDebug() << "Rows moved";
+    });
+
     connect(sourceModel(), &QAbstractItemModel::dataChanged,
             this, [this, insert, remove](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int> roles)
     {
+        qDebug() << "sourceIndex dataChanged!";
         if(roles.contains(mUniqueRole)) {
             for(int i = topLeft.row(); i <= bottomRight.row(); i++) {
                 const auto sourceIndex = this->sourceModel()->index(i, 0);
@@ -262,5 +286,5 @@ void cwUniqueValueFilterModel::setLessThan(std::function<bool (const QVariant &,
 bool cwUniqueValueFilterModel::contains(const QVariant &key) const
 {
     auto iter = findProxyIndex(key);
-    return iter != mUniqueIndex.end();
+    return iter != mUniqueIndex.end() && iter->value == key;
 }

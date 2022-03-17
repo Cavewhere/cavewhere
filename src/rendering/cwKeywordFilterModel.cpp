@@ -9,43 +9,7 @@
 
 cwKeywordFilterModel::cwKeywordFilterModel(QObject *parent) : QAbstractProxyModel(parent)
 {
-    connect(this, &cwKeywordFilterModel::sourceModelChanged,
-            this, [this]()
-    {
-        disconnect(mDataChanged);
-        disconnect(mRowsAboutToBeRemoved);
 
-        if(sourceModel()) {
-            mDataChanged = connect(sourceModel(), &QAbstractItemModel::dataChanged,
-                                   this, [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
-            {
-                //Update the index when the object has changed
-                if(roles.contains(cwKeywordItemModel::ObjectRole)) {
-                    for(int row = topLeft.row(); row <= bottomRight.row(); row++) {
-                        auto sourceIndex = sourceModel()->index(row, 0, topLeft.parent());
-                        int oldRow = mAcceptedSourceIndexes.indexOf(sourceIndex);
-                        beginRemoveRows(QModelIndex(), oldRow, oldRow);
-                        mAcceptedSourceIndexes.removeAt(oldRow);
-                        endRemoveRows();
-
-                        //Re-accept the sourceIndex
-                        insert(sourceIndex);
-                    }
-                }
-            });
-
-            mRowsAboutToBeRemoved = connect(sourceModel(), &QAbstractItemModel::rowsAboutToBeRemoved,
-                                            this, [this](const QModelIndex& parent, int begin, int last)
-            {
-                if(parent == QModelIndex()) {
-                    for(int i = begin; i <= last; i++) {
-                        auto sourceIndex = sourceModel()->index(i, 0, QModelIndex());
-                        remove(sourceIndex);
-                    }
-                }
-            });
-        }
-    });
 }
 
 
@@ -139,8 +103,52 @@ QVector<QPersistentModelIndex>::const_iterator cwKeywordFilterModel::findAccepte
     return const_cast<QVector<QPersistentModelIndex>::const_iterator>(const_cast<cwKeywordFilterModel*>(this)->findAcceptedObject(object));
 }
 
+void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
+{
+    if(this->sourceModel() != sourceModel) {
+        qDebug() << "SourceModel changed:" << this->sourceModel() << sourceModel;
+        if(this->sourceModel()) {
+            disconnect(mDataChanged);
+            disconnect(mRowsAboutToBeRemoved);
+        }
 
+        if(!mAcceptedSourceIndexes.isEmpty()) {
+            beginRemoveRows(QModelIndex(), 0, mAcceptedSourceIndexes.size() - 1);
+            mAcceptedSourceIndexes.clear();
+            endRemoveRows();
+        }
 
+        if(sourceModel) {
+            mDataChanged = connect(sourceModel, &QAbstractItemModel::dataChanged,
+                                   this, [this, sourceModel](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles)
+            {
+                //Update the index when the object has changed
+                if(roles.contains(cwKeywordItemModel::ObjectRole)) {
+                    for(int row = topLeft.row(); row <= bottomRight.row(); row++) {
+                        auto sourceIndex = sourceModel->index(row, 0, topLeft.parent());
+                        int oldRow = mAcceptedSourceIndexes.indexOf(sourceIndex);
+                        beginRemoveRows(QModelIndex(), oldRow, oldRow);
+                        mAcceptedSourceIndexes.removeAt(oldRow);
+                        endRemoveRows();
 
+                        //Re-accept the sourceIndex
+                        insert(sourceIndex);
+                    }
+                }
+            });
 
+            mRowsAboutToBeRemoved = connect(sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
+                                            this, [this, sourceModel](const QModelIndex& parent, int begin, int last)
+            {
+                if(parent == QModelIndex()) {
+                    for(int i = begin; i <= last; i++) {
+                        auto sourceIndex = sourceModel->index(i, 0, QModelIndex());
+                        remove(sourceIndex);
+                    }
+                }
+            });
+        }
 
+        QAbstractProxyModel::setSourceModel(sourceModel);
+    }
+}

@@ -102,6 +102,7 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
     auto aboutToResetSpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::modelAboutToBeReset);
     auto keySpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::keyChanged);
     auto sourceSpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::sourceChanged);
+    auto acceptByDefaultChangedSpy = spyCheck.findSpy(&cwKeywordGroupByKeyModel::acceptByDefaultChanged);
 
     auto component1 = new cwKeywordItem();
     auto component2 = new cwKeywordItem();
@@ -258,6 +259,98 @@ TEST_CASE("cwKeyordItemKeyFilter should categorize objects correctly", "[cwKeywo
             };
 
             check(QModelIndex(), lists);
+        }
+
+        SECTION("Add new category") {
+            auto component = new cwKeywordItem();
+            component->setObjectName("newComponent");
+            cwKeywordModel* keywordModel = component->keywordModel();
+            keywordModel->setObjectName("newKeywordModel");
+            auto entity = std::make_unique<QObject>();
+            entity->setObjectName("newEntity");
+
+            keywordModel->add({"type", "area"});
+            keywordModel->add({"trip", "trip1"});
+            keywordModel->add({"cave", "cave2"});
+
+            component->setObject(entity.get());
+            keywordEntityModel->addItem(component);
+
+            lists = {
+                {"area", {entity.get()}, true},
+                {"line", {entity3.get()}, true},
+                {"point", {entity4.get()}, true},
+                {"scrap", {entity1.get(), entity2.get()}, true},
+                {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+            };
+
+            check(QModelIndex(), lists);
+        }
+    }
+
+    SECTION("acceptedByDefault is false") {
+        CHECK(model->acceptByDefault() == true);
+        model->setAcceptedByDefault(false);
+        CHECK(model->acceptByDefault() == false);
+
+        spyCheck[acceptByDefaultChangedSpy]++;
+
+        SECTION("Set key") {
+            model->setKey("type");
+
+            lists = {
+                {"line", {entity3.get()}, false},
+                {"point", {entity4.get()}, false},
+                {"scrap", {entity1.get(), entity2.get()}, false},
+                {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+            };
+
+            check(QModelIndex(), lists);
+
+            spyCheck[resetSpy]++;
+            spyCheck[aboutToResetSpy]++;
+            spyCheck[keySpy]++;
+            spyCheck[dataChangedSpy]++;
+            spyCheck.checkSpies();
+
+            SECTION("Set to a different key") {
+                model->setKey("trip");
+
+                lists = {
+                    {"trip1", {entity1.get()}, false},
+                    {"trip2", {entity2.get(), entity3.get()}, false},
+                    {"trip3", {entity4.get(),}, false},
+                    {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+                };
+
+                check(QModelIndex(), lists);
+            }
+
+            SECTION("Add new category") {
+                auto component = new cwKeywordItem();
+                component->setObjectName("newComponent");
+                cwKeywordModel* keywordModel = component->keywordModel();
+                keywordModel->setObjectName("newKeywordModel");
+                auto entity = std::make_unique<QObject>();
+                entity->setObjectName("newEntity");
+
+                keywordModel->add({"type", "area"});
+                keywordModel->add({"trip", "trip1"});
+                keywordModel->add({"cave", "cave2"});
+
+                component->setObject(entity.get());
+                keywordEntityModel->addItem(component);
+
+                lists = {
+                    {"area", {entity.get()}, false},
+                    {"line", {entity3.get()}, false},
+                    {"point", {entity4.get()}, false},
+                    {"scrap", {entity1.get(), entity2.get()}, false},
+                    {cwKeywordGroupByKeyModel::otherCategory(), {}, false}
+                };
+
+                check(QModelIndex(), lists);
+            }
         }
     }
 }
