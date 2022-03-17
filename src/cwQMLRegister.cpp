@@ -125,6 +125,10 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwProjectedProfileScrapViewMatrix.h"
+#include "cwKeywordFilterModel.h"
+#include "cwKeywordFilterPipelineModel.h"
+#include "cwKeywordGroupByKeyModel.h"
+#include "cwKeywordVisibility.h"
 
 //Qt registeration
 #include <QQuickView>
@@ -277,10 +281,13 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwProjectedProfileScrapViewMatrix>("Cavewhere", 1, 0, "ProjectedProfileScrapViewMatrix");
 
 
-
     qmlRegisterType<cwKeywordItemFilterModel>("Cavewhere", 1, 0, "KeywordItemFilterModel");
     qmlRegisterType<cwKeywordItem>("Cavewhere", 1, 0, "KeywordItem");
     qmlRegisterType<cwKeywordModel>("Cavewhere", 1, 0, "KeywordModel");
+    qmlRegisterType<cwKeywordFilterModel>("Cavewhere", 1, 0, "KeywordFilterModel");
+    qmlRegisterType<cwKeywordFilterPipelineModel>("Cavewhere", 1, 0, "KeywordFilterPipelineModel");
+    qmlRegisterType<cwKeywordGroupByKeyModel>("Cavewhere", 1, 0, "KeywordGroupByKeyModel");
+    qmlRegisterType<cwKeywordVisibility>("Cavewhere", 1, 0, "KeywordVisibility");
     qmlRegisterUncreatableType<cwKeyword>("Cavewhere", 1, 0, "Keyword", "Can be created with cwKeywordModel");
 
 }

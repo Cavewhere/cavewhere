@@ -308,6 +308,7 @@ void cwKeywordFilterPipelineModel::setKeywordModel(cwKeywordItemModel* keywordMo
         }
         mPossibleKeys = QStringList(keys.begin(), keys.end());
         std::sort(mPossibleKeys.begin(), mPossibleKeys.end());
+        emit possibleKeysChanged();
     }
 
     cwKeywordItemModel *cwKeywordFilterPipelineModel::keywordModel() const {

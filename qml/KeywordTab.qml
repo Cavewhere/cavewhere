@@ -6,54 +6,115 @@ import Cavewhere 1.0
 Item {
     id: keywordTabId
 
-    KeywordItemFilterModel {
-        id: filterModel
+    KeywordFilterPipelineModel {
+        id: pipelineModelId
         keywordModel: rootData.keywordItemModel
-        lastKey: comboBoxId.currentText
+
+        onPossibleKeysChanged: {
+
+        }
     }
+
+    KeywordVisibility {
+        visibleModel: pipelineModelId.acceptedModel
+        hideModel: pipelineModelId.rejectedModel
+    }
+
+//    KeywordItemFilterModel {
+//        id: filterModel
+//        keywordModel: rootData.keywordItemModel
+//        lastKey: comboBoxId.currentText
+//    }
 
     ColumnLayout {
         anchors.fill: parent
 
         Repeater {
-            model: filterModel.filterKeywords
-            delegate: RowLayout {
+            model: pipelineModelId
+            delegate: ColumnLayout {
                 Layout.fillHeight: true
-                Layout.fillWidth: true 
 
-                RoundButton {
-                    id: xButtonId
-                    icon.source: "qrc:///icons/x.png"
-                    icon.width: 32
-                    icon.height: 32
-                    onClicked: {
-                        filterModel.filterKeywords.remove(index)
+                RowLayout {
+                    ComboBox {
+                        id: comboBoxId
+                        model: pipelineModelId.possibleKeys //TODO: need possible keys
+
+                        onCurrentTextChanged: {
+                            filterModelObjectRole.key = currentText
+                        }
                     }
+
+                    Button {
+                        text: "Or"
+                        onClicked: {
+                            //Todo: add row if last in pipeline
+                            //Set last row to or
+                        }
+                    }
+
+//                    Button {
+//                        text: "And"
+//                    }
                 }
 
-                Text {
-                    text: keyRole + " = " + valueRole
+
+
+                ListView {
+                    model: filterModelObjectRole
+
+                    Layout.fillHeight: true
+                    Layout.fillWidth: true
+
+                    delegate: RowLayout {
+                        CheckBox {
+                            checked: acceptedRole
+                            onCheckedChanged: {
+                                var modelIndex = filterModelObjectRole.index(index, 0);
+                                filterModelObjectRole.setData(modelIndex, checked, KeywordGroupByKeyModel.AcceptedRole);
+                            }
+                        }
+
+                        Text {
+                            text: valueRole + " (" + objectCountRole + ")"
+                        }
+                    }
                 }
             }
         }
 
-        ComboBox {
-            id: comboBoxId
 
-            model: filterModel.possibleKeys
+//        Repeater {
+//            model: filterModel.filterKeywords
+//            delegate: RowLayout {
+//                Layout.fillHeight: true
+//                Layout.fillWidth: true
+
+//                RoundButton {
+//                    id: xButtonId
+//                    icon.source: "qrc:///icons/x.png"
+//                    icon.width: 32
+//                    icon.height: 32
+//                    onClicked: {
+//                        filterModel.filterKeywords.remove(index)
+//                    }
+//                }
+
+//                Text {
+//                    text: keyRole + " = " + valueRole
+//                }
+//            }
+//        }
 
 
-        }
+//        ListView {
+//            model: filterModel
 
-        ListView {
-            model: filterModel
+//            Layout.fillHeight: true
+//            Layout.fillWidth: true
 
-            Layout.fillHeight: true
-            Layout.fillWidth: true
-
-            delegate: RowLayout {
-                CheckBox {
-                    checked: Qt.Checked
+//            delegate: RowLayout {
+//                CheckBox {
+//                    checked: Qt.Checked
 //                    {
 
 //                        var visible = 0;
@@ -87,41 +148,41 @@ Item {
 //                        }
 //                    }
 
-                    onCheckedChanged: {
-                        for(var i in objectsRole) {
-                            var obj = objectsRole[i];
-                            console.log("Changing visiblity of " + obj)
-                            if('enabled' in obj) {
-                                obj.enabled = checked
-                            }
+//                    onCheckedChanged: {
+//                        for(var i in objectsRole) {
+//                            var obj = objectsRole[i];
+//                            console.log("Changing visiblity of " + obj)
+//                            if('enabled' in obj) {
+//                                obj.enabled = checked
+//                            }
 
-                            if('visible' in obj) {
-                                obj.visible = checked
-                            }
-                        }
-                    }
-                }
+//                            if('visible' in obj) {
+//                                obj.visible = checked
+//                            }
+//                        }
+//                    }
+//                }
 
-                RoundButton {
-                    width: 32
-                    height: 32
+//                RoundButton {
+//                    width: 32
+//                    height: 32
 
-                    visible: objectCountRole > 1
+//                    visible: objectCountRole > 1
 
-                    icon.source: "qrc:///icons/rightCircleArrow-32x32.png"
-                    icon.width: 32
-                    icon.height: 32
+//                    icon.source: "qrc:///icons/rightCircleArrow-32x32.png"
+//                    icon.width: 32
+//                    icon.height: 32
 
-                    onClicked: {
-                        filterModel.addKeywordFromLastKey(valueRole);
-                    }
-                }
+//                    onClicked: {
+//                        filterModel.addKeywordFromLastKey(valueRole);
+//                    }
+//                }
 
-                Text {
-                    text: valueRole + " (" + objectCountRole + ")"
-                }
+//                Text {
+//                    text: valueRole + " (" + objectCountRole + ")"
+//                }
 
-            }
-        }
+//            }
+//        }
     }
 }

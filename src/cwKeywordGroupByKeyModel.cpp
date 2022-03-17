@@ -63,7 +63,7 @@ QHash<int, QByteArray> cwKeywordGroupByKeyModel::roleNames() const
         {ObjectsRole, "objectsRole" },
         {ObjectCountRole, "objectCountRole"},
         {ValueRole, "valueRole"},
-        {AcceptedRole, "filterRole"}
+        {AcceptedRole, "acceptedRole"}
     };
     return roles;
 }

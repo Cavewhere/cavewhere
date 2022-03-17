@@ -56,7 +56,7 @@ public:
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const;
     QVariant data(const QModelIndex& index, int role) const;
-    bool setData(const QModelIndex &index, const QVariant &value, int role);
+    Q_INVOKABLE bool setData(const QModelIndex &index, const QVariant &value, int role);
 
     QHash<int, QByteArray> roleNames() const;
 
@@ -67,7 +67,6 @@ public:
 
 signals:
     void sourceChanged();
-    void invertedChanged();
     void keyChanged();
     void modelFutureChanged();
     void acceptByDefaultChanged();
