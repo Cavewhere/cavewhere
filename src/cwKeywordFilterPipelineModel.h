@@ -31,11 +31,13 @@ public:
         FilterModelObjectRole,
         OperatorRole //OR or AND operator
     };
+    Q_ENUM(Role);
 
     enum Operator {
         Or,
         And
     };
+    Q_ENUM(Operator);
 
     explicit cwKeywordFilterPipelineModel(QObject *parent = nullptr);
 
@@ -53,7 +55,7 @@ public:
     QStringList operators() const;
 
     void insertRow(int i);
-    void addRow();
+    Q_INVOKABLE void addRow();
 
     void removeRow(int i );
 

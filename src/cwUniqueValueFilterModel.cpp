@@ -150,9 +150,9 @@ void cwUniqueValueFilterModel::connectSourceModel()
             beginInsertRows(QModelIndex(), row, row);
             qDebug() << "Insert:" << toRow(index).value;
             mUniqueIndex.insert(iter, toRow(index));
-            for(int i = 0; i < mUniqueIndex.size(); i++) {
-                qDebug() << "i:" << 0 << mUniqueIndex.at(i).index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
-            }
+//            for(int i = 0; i < mUniqueIndex.size(); i++) {
+//                qDebug() << "i:" << 0 << mUniqueIndex.at(i).index.data(cwKeywordItemModel::ObjectRole).value<QObject*>();
+//            }
             endInsertRows();
         });
     };

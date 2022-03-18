@@ -26,7 +26,7 @@ Item {
 //        lastKey: comboBoxId.currentText
 //    }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
 
         Repeater {
@@ -44,17 +44,26 @@ Item {
                         }
                     }
 
-                    Button {
-                        text: "Or"
-                        onClicked: {
-                            //Todo: add row if last in pipeline
-                            //Set last row to or
+                    ColumnLayout {
+                        Button {
+                            width: 20
+                            text: "Or"
+                            onClicked: {
+                                pipelineModelId.addRow();
+                                var lastRow = pipelineModelId.rowCount() - 1;
+                                var index = pipelineModelId.index(lastRow, 0);
+                                pipelineModelId.setData(index, KeywordFilterPipelineModel.Or, KeywordFilterPipelineModel.OperatorRole);
+                            }
+                        }
+
+                        Button {
+                            width: 20
+                            text: "And"
+                            onClicked: {
+                                pipelineModelId.addRow();
+                            }
                         }
                     }
-
-//                    Button {
-//                        text: "And"
-//                    }
                 }
 
 
