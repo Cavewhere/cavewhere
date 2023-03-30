@@ -99,6 +99,6 @@ void cwSurvexportTask::runTask() {
     done();
 }
 
-void cwSurvexportTask::printErrors() {
+void cwSurvexportTask::printErrors() const {
     qDebug() << "PlotSauce errors: " << SurvexportProcess->errorString();
 }

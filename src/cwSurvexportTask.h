@@ -25,6 +25,9 @@ public:
     void setSurvex3DFile(QString inputFile);
     QString outputFilename() const;
 
+public slots:
+    void printErrors() const;
+
 protected:
     void runTask();
 
