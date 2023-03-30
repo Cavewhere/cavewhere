@@ -72,7 +72,7 @@ DynamicLibrary {
         cpp.includePaths: [
             ".",
             "utils",
-            product.buildDirectory + "/versionInfo"
+            cavewhereLibId.buildDirectory + "/versionInfo"
         ]
 
         Depends { name: "Qt";
