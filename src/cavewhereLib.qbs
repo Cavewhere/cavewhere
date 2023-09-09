@@ -27,8 +27,6 @@ DynamicLibrary {
         return File.exists(Qt.core.binPath + "/Qt5Pdfd.dll")
 
     }
-    //    readonly property string rpath: buildDirectory
-
 
     Depends { name: "cpp" }
     Depends { name: "Qt";
@@ -47,10 +45,7 @@ DynamicLibrary {
 
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
-    Depends { name: "plotsauce" }
-    Depends { name: "protoc" }
-    Depends { name: "protobuf" }
-    Depends { name: "z" }
+    Depends { name: "ConanProtobuf" }
     Depends { name: "dewalls" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "asyncfuture" }
@@ -99,7 +94,8 @@ DynamicLibrary {
         qbs.install: qbs.targetOS.contains("windows")
     }
 
-//    cpp.rpaths: [Qt.core.libPath]
+    ConanProtobuf.conanJsonFile: project.conanJsonFile
+
     cpp.cxxLanguageVersion: "c++17"
     cpp.treatWarningsAsErrors: false
     Qt.quick.compilerAvailable: false
@@ -255,11 +251,8 @@ DynamicLibrary {
         name: "ProtoFiles"
 
         files: [
-            "cavewhere.proto",
-            "qt.proto"
+            "*.proto",
         ]
-
-        fileTags: ["proto"]
     }
 
     Group {
@@ -286,62 +279,6 @@ DynamicLibrary {
             "../resources.qrc",
             "../fonts/fonts.qrc"
         ]
-    }
-
-    Rule {
-        id: protoCompiler
-        inputs: ["proto"]
-        inputsFromDependencies: ["application"]
-        multiplex: true
-
-        outputArtifacts: {
-            var artifacts = [];
-
-            for(var i in inputs.proto) {
-                var baseName = FileInfo.baseName(inputs.proto[i].filePath)
-                var fullPath = "serialization/" + baseName
-                var headerPath = fullPath + ".pb.h"
-                var srcPath = fullPath + ".pb.cc"
-
-                var headerArtifact = { filePath: headerPath, fileTags: ["hpp"] }
-                var srcArtifact = { filePath: srcPath, fileTags: ["cpp"] }
-
-                artifacts.push(headerArtifact)
-                artifacts.push(srcArtifact)
-            }
-
-            return artifacts
-        }
-
-        outputFileTags: ["hpp", "cpp"]
-
-        prepare: {
-            var protoc = "protoc-not-found"
-
-            for(var i in inputs.application) {
-                if(inputs.application[i].filePath.contains("protoc")) {
-                    protoc = inputs.application[i].filePath
-                }
-            }
-
-            var commands = [];
-            for(var i in inputs.proto) {
-                var proto_path = FileInfo.path(inputs.proto[i].filePath)
-                var cpp_out = product.buildDirectory + "/serialization"
-
-                var protoPathArg = "--proto_path=" + proto_path
-                var cppOutArg = "--cpp_out=" + cpp_out
-                var inputFile = inputs.proto[i].filePath
-
-                var cmd = new Command(protoc,
-                                      [protoPathArg, cppOutArg, inputFile])
-                cmd.description = "Running protoc on " + inputFile + "with args " + protoc + " " + protoPathArg + " " + cppOutArg
-                cmd.highlight = 'codegen'
-
-                commands.push(cmd)
-            }
-            return commands;
-        }
     }
 
     Rule {

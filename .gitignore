@@ -982,3 +982,17 @@ cavewhereCheck.cppcheck
 build-CavewhereApp-iphoneos_clang_Qt_5_7_0_for_iOS-Debug/qtc_iphoneos_50085524-debug/qtc_iphoneos_50085524-debug.bg
 build-cavewhereLib-Desktop_Qt_5_5_1_clang_64bit-Debug/qtc_Desktop__e049b762-debug/qtc_Desktop__e049b762-debug.bg
 build-asyncfuture-Desktop_Qt_5_12_7_MSVC2017_64bit-Debug
+build-dewalls-Desktop_Qt_5_15_2_MSVC2019_64bit-Debug
+build-dewalls-Desktop_Qt_5_15_2_MSVC2019_64bit-Release
+build-dewalls-No_Qt-Debug
+conanBuild/graph_info.json
+conanBuild/conan.lock
+conanBuild/conanbuildinfo.cmake
+conanBuild/conanbuildinfo.json
+conanBuild/conanbuildinfo.qbs
+conanBuild/conanbuildinfo.txt
+conanBuild/conaninfo.txt
+conan.lock
+conanbuildinfo.txt
+conaninfo.txt
+graph_info.json

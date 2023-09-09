@@ -2,7 +2,7 @@
 #include "cwLead.h"
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 //QVector
 #include <QVector>

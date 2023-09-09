@@ -6,7 +6,7 @@
 **************************************************************************/
 
 #define CATCH_CONFIG_RUNNER
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 //Qt includes
 #include <QApplication>

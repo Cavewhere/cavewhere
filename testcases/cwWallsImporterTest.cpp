@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 #include "cwWallsImporter.h"
 #include "wallsunits.h"
 #include "cwTrip.h"

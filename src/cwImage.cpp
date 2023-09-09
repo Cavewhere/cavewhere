@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwImage.h"
-#include "cwGunZipReader.h"
 #include "cwProject.h"
 
 //Qt includes

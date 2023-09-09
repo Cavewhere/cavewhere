@@ -15,12 +15,12 @@
 #include <QProcess>
 #include <QReadWriteLock>
 
-class cwPlotSauceTask : public cwTask
+class cwSurvexportTask : public cwTask
 {
     Q_OBJECT
 
 public:
-    cwPlotSauceTask(QObject* parent = nullptr);
+    cwSurvexportTask(QObject* parent = nullptr);
 
     void setSurvex3DFile(QString inputFile);
     QString outputXMLFile() const;
@@ -30,7 +30,7 @@ protected:
 
 private:
     //The filename of the survex 3d file
-    static QString plotSauceExtension() { return QLatin1String(".xml.gz"); }
+    static QString extension() { return QLatin1String(".csv"); }
 
     QString Survex3DFileName;
 

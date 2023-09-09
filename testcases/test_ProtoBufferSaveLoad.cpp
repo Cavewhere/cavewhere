@@ -35,7 +35,7 @@
 #include <QUuid>
 
 //catch includes
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 TEST_CASE("Save / Load should work with cwSurveyNetwork", "[ProtoSaveLoad]") {
 

@@ -3,8 +3,31 @@ import qbs.TextFile
 import qbs.Process
 import qbs.FileInfo
 import qbs.File
+import qbs.Probes
+import qbs.Environment
 
 Project {
+
+    //Run the conan probe first, because probes are run in order on how they're found
+    Probes.ConanfileProbe {
+        id: conan
+        conanfilePath: project.sourceDirectory + "/conanfile.py"
+        generators: ["qbs", "json"]
+        settings: {
+            var build_variant = "unknown_build_type"
+            if(qbs.buildVariant === "debug") {
+                build_variant = "Debug"
+            } else if(qbs.buildVariant === "release") {
+                build_variant = "Release"
+            }
+
+            return ({
+                        build_type: build_variant
+                    })
+        }
+    }
+
+    property string conanJsonFile: conan.generatedFilesPath + "/conanbuildinfo.json"
 
     property string installDir: {
         if(qbs.targetOS.contains("macos")) {
@@ -14,22 +37,38 @@ Project {
     }
 
     property string codeSign
+//    property var conanJson: conanJsonProbe.conanJson
+
+
+
+//    Probe {
+//        id: conanJsonProbe
+//        property var conanJson: {}
+//        property string conanfile: project.sourceDirectory + "/conanbuildinfo.json"
+//        configure: {
+//            var fileHandle = TextFile(conanfile, TextFile.ReadOnly)
+//            var jsonText = fileHandle.readAll();
+//            conanJson = JSON.parse(jsonText);
+//        }
+//    }
 
     references: [
         "src/cavewhereLib.qbs",
-        "survex/survex.qbs",
+        //"survex/survex.qbs",
         "squish/squish.qbs",
-        "plotsauce/plotsauce.qbs",
+        //"plotsauce/plotsauce.qbs",
         "QMath3d/QMath3d.qbs",
-        "protobuf/protobuf.qbs",
-        "zlib/zlib.qbs",
+        //"protobuf/protobuf.qbs",
+        //"zlib/zlib.qbs",
         "installer/installer.qbs",
         "testcases/testcases.qbs",
-        "dewalls/dewalls.qbs",
+        //"dewalls/dewalls.qbs",
         "qt-qml-models/QtQmlModels.qbs",
         "asyncfuture/asyncfuture.qbs",
         "autoBuild/autoBuild.qbs",
-        "testcases/combiner/combiner.qbs"
+        "testcases/s3tc-dxt-decompression/s3tc-dxt-decompression.qbs",
+        "testcases/combiner/combiner.qbs",
+        conan.generatedFilesPath + "/conanbuildinfo.qbs"
     ]
 
     qbsSearchPaths: ["qbsModules"]
@@ -54,20 +93,34 @@ Project {
         property string prefix: project.sourceDirectory
 
         Depends { name: "cpp" }
+        Depends { name: "cavewhere-lib" }
         Depends { name: "Qt"
             submodules: [ "core",
                 "gui",
                 "widgets",
                 "quick",
                 "sql",
-                "test"
+                "test",
             ]
         }
-        Depends { name: "cavewhere-lib" }
         Depends { name: "libqtqmltricks-qtqmlmodels" }
         Depends { name: "bundle" }
-        Depends { name: "cavern" }
+//        Depends { name: "survex" }
         Depends { name: "cavewhere-test" }
+        Depends { name: "ConanEnvironment" }
+
+        ConanEnvironment.conanJsonFile: conanJsonFile
+
+//        cpp.setupRunEnviroment: {
+//            var env = new Environment.getEnv("PATH"); //, qbs.pathListSeparator, true);
+////            env.append("C:\tacos");
+////            env.set();
+//            console.error("I get here!" + env)
+//        }
+
+//        setupRunEnvironment: {
+//            console.error("I get here!");
+//        }
 
         consoleApplication: {
             if(qbs.targetOS.contains("windows")) {
@@ -87,16 +140,19 @@ Project {
             buildDirectory + "/versionInfo"
         ]
 
-//        cpp.rpaths: [
-//            Qt.core.libPath
-//        ]
-
         qbs.installPrefix: ""
 
         Group {
             name: "main"
             files: [
                 "main.cpp"
+            ]
+        }
+
+        Group {
+            name: "conan"
+            files: [
+                "conanfile.py"
             ]
         }
 
@@ -275,63 +331,5 @@ Project {
             qbs.install: true
             qbs.installSourceBase: product.buildDirectory
         }
-
-        Rule {
-            id: protoCompiler
-            inputs: ["proto"]
-            inputsFromDependencies: ["application"]
-            multiplex: true
-
-            outputArtifacts: {
-                var artifacts = [];
-
-                for(var i in inputs.proto) {
-                    var baseName = FileInfo.baseName(inputs.proto[i].filePath)
-                    var fullPath = "serialization/" + baseName
-                    var headerPath = fullPath + ".pb.h"
-                    var srcPath = fullPath + ".pb.cc"
-
-                    var headerArtifact = { filePath: headerPath, fileTags: ["hpp"] }
-                    var srcArtifact = { filePath: srcPath, fileTags: ["cpp"] }
-
-                    artifacts.push(headerArtifact)
-                    artifacts.push(srcArtifact)
-                }
-
-                return artifacts
-            }
-
-            outputFileTags: ["hpp", "cpp"]
-
-            prepare: {
-                var protoc = "protoc-not-found"
-
-                for(var i in inputs.application) {
-                    if(inputs.application[i].filePath.contains("protoc")) {
-                        protoc = inputs.application[i].filePath
-                    }
-                }
-
-                var commands = [];
-                for(var i in inputs.proto) {
-                    var proto_path = FileInfo.path(inputs.proto[i].filePath)
-                    var cpp_out = product.buildDirectory + "/serialization"
-
-                    var protoPathArg = "--proto_path=" + proto_path
-                    var cppOutArg = "--cpp_out=" + cpp_out
-                    var inputFile = inputs.proto[i].filePath
-
-                    var cmd = new Command(protoc,
-                                          [protoPathArg, cppOutArg, inputFile])
-                    cmd.description = "Running protoc on " + inputFile + "with args " + protoc + " " + protoPathArg + " " + cppOutArg
-                    cmd.highlight = 'codegen'
-
-                    commands.push(cmd)
-                }
-                return commands;
-            }
-        }
     }
-
-
 }

@@ -6,7 +6,7 @@
 **************************************************************************/
 
 //Catch includes
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 //Our includes
 #include "cwSurveyNetwork.h"

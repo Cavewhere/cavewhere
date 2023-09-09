@@ -13,10 +13,13 @@ CppApplication {
     Depends { name: "dewalls" }
     Depends { name: "cavewhere-lib" }
     Depends { name: "asyncfuture" }
-    Depends { name: "squish" }
-    //Depends { name: "s3tc-dxt-decompression" }
+    Depends { name: "s3tc-dxt-decompression" }
+    Depends { name: "catch2" }
+    Depends { name: "ConanEnvironment" }
 
-    cpp.includePaths: ["catch"]
+    ConanEnvironment.conanJsonFile: project.conanJsonFile
+
+    //cpp.includePaths: ["catch"]
     cpp.cxxLanguageVersion: "c++17"
     cpp.minimumMacosVersion: "10.14"
 //    cpp.treatWarningsAsErrors: true
@@ -76,12 +79,12 @@ CppApplication {
         excludeFiles: "../dewalls/test/dewallstests.cpp"
     }
 
-    Group {
-        name: "CatchTestLibrary"
-        files: [
-            "catch/catch.hpp",
-        ]
-    }
+//    Group {
+//        name: "CatchTestLibrary"
+//        files: [
+//            "catch/catch.hpp",
+//        ]
+//    }
 
     Group {
         fileTagsFilter: ["application"]
