@@ -5,10 +5,6 @@ project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
-
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
 include(UpdateVersion.cmake)
@@ -40,8 +36,15 @@ find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
 
-# Add dynamic library
+#### Cavewhere-lib ######
 add_library(cavewhere-lib SHARED)
+
+set_target_properties(cavewhere-lib PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
+
 target_link_libraries(cavewhere-lib
     PUBLIC
     Qt::Core
@@ -128,6 +131,13 @@ add_custom_command(TARGET cavewhere-lib POST_BUILD
 #### cavewhere-test ####
 add_executable(cavewhere-test)
 
+set_target_properties(cavewhere-test PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
+
+
 file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
 file(GLOB cavewhere_test_H_FILES "testcases/*.h")
 target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
@@ -148,6 +158,12 @@ add_executable(CaveWhere
     main.cpp
 )
 
+set_target_properties(CaveWhere PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
+    AUTOUIC ON
+)
+
 target_link_libraries(CaveWhere
     PRIVATE
     Qt::Core
@@ -162,6 +178,7 @@ target_link_libraries(CaveWhere
 file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
-
+#### Install ####
+include(installer/installer.cmake)
 
 
