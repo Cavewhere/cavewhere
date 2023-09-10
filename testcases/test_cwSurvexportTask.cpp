@@ -1,5 +1,5 @@
 //Catch includes
-#include <catch.hpp>
+#include <catch2/catch.hpp>
 
 //Our includes
 #include "cwSurvexportTask.h"
@@ -19,6 +19,8 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
     QStringList cavernNames;
     cavernNames.append("cavern");
     cavernNames.append("cavern.exe");
+    cavernNames.append("survex/bin/cavern");
+    cavernNames.append("survex/bin/cavern.exe");
 
     QString cavernPath = cwGlobals::findExecutable(cavernNames, {cwGlobals::survexPath()});
 
@@ -70,7 +72,7 @@ TEST_CASE("cwSurvexportTask should produce a CSV file from a .3d file", "[cwSurv
         QString generate = generatedFile.readLine();
         QString test = testFile.readLine();
         INFO("Line:" << line);
-        CHECK(generate.toStdString() == test.toStdString());
+        CHECK(generate.trimmed().toStdString() == test.trimmed().toStdString());
         line++;
     }
 

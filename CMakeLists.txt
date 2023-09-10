@@ -38,6 +38,7 @@ find_package(Qt5
 
 find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
+find_package(Catch2 REQUIRED)
 
 # Add dynamic library
 add_library(cavewhere-lib SHARED)
@@ -54,12 +55,12 @@ target_link_libraries(cavewhere-lib
     Qt::Svg
     Qt::Pdf
     QtQmlModels
-    PRIVATE
-    QMath3d
     qtasyncfuture
     dewalls
-    protobuf::protobuf
+    QMath3d
     libsquish::libsquish
+    PRIVATE
+    protobuf::protobuf
 )
 
 qt_add_resources(QT_RESOURCES
@@ -124,6 +125,25 @@ add_custom_command(TARGET cavewhere-lib POST_BUILD
     $<TARGET_FILE_DIR:cavewhere-lib>
 )
 
+#### cavewhere-test ####
+add_executable(cavewhere-test)
+
+file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
+file(GLOB cavewhere_test_H_FILES "testcases/*.h")
+target_sources(cavewhere-test PRIVATE ${cavewhere_test_CPP_FILES} ${cavewhere_test_H_FILES})
+
+file(GLOB cavewhere_test_qrc_FILES "testcases/*.qrc")
+qt_add_resources(cavewhere_test_QT_RESOURCES ${cavewhere_test_qrc_FILES})
+target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
+
+target_link_libraries(cavewhere-test
+    PRIVATE
+    Qt::Test
+    Catch2::Catch2
+    cavewhere-lib
+)
+
+#### CaveWhere ####
 add_executable(CaveWhere
     main.cpp
 )
