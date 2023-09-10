@@ -13,11 +13,11 @@ class CaveWhereConan(ConanFile):
     requires = [
     ("catch2/2.13.4"),
     ("protobuf/3.12.4"),
-    ("survex/1.2.44@cave-software/dev"),
-    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
+#    ("survex/1.2.44@cave-software/dev"),
+#    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
     ("sqlite3/3.34.1"),
     ("protobuf/3.12.4"),
-    ("QbsToolchainProfile/1.0@cave-software/dev")
+    ("libsquish/1.15"),
     ]
 
     options = {"system_qt": [True, False],

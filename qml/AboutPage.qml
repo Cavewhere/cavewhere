@@ -22,9 +22,8 @@ StandardPage {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: {
-                return "Copyright 2020 Philip Schuchardt"
+                return "Copyright 2023 Philip Schuchardt"
             }
         }
     }
-
 }
