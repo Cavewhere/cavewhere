@@ -18,9 +18,13 @@
 #include <QApplication>
 #include <QDebug>
 
+const QString cwSurvexportTask::Extension = ".csv";
+
 cwSurvexportTask::cwSurvexportTask(QObject* parent) :
     cwTask(parent)
 {
+
+//    connect(PlotSauceProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(plotSauceFinished(int,QProcess::ExitStatus)));
 
 }
 
@@ -36,12 +40,8 @@ void cwSurvexportTask::setSurvex3DFile(QString inputFile) {
 /**
   \brief Gets the path to the output file
   */
-QString cwSurvexportTask::outputXMLFile() const {
-    QString inputFile = survex3DFilename();
-    auto inputInfo = QFileInfo(inputFile);
-    QString outputFile = inputInfo.absoluteDir().path() + "/" + inputInfo.completeBaseName() + extension();
-
-    QFileInfo info(outputFile);
+QString cwSurvexportTask::outputFilename() const {
+    QFileInfo info(survex3DFilename().append(Extension));
     if(info.exists()) {
         return info.absoluteFilePath();
     } else {
@@ -65,39 +65,42 @@ void cwSurvexportTask::runTask() {
         return;
     }
 
-    auto process = std::make_unique<QProcess>();
-    auto surexportPtr = process.get();
-    connect(surexportPtr, &QProcess::errorOccurred,
-            surexportPtr,
-            [surexportPtr]()
-    {
-         qDebug() << "survexport errors: " << surexportPtr->errorString();
-    });
+    SurvexportProcess = new QProcess();
+    connect(SurvexportProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
 
     QString inputFile = survex3DFilename();
+    QString outputFile = inputFile + Extension;
 
-    QStringList plotSauceAppNames;
-    plotSauceAppNames.append("survexport");
-    plotSauceAppNames.append("survexport.exe");
+    QStringList survexportNames;
+    survexportNames.append("survexport");
+    survexportNames.append("survexport.exe");
+    survexportNames.append("survex/bin/survexport");
+    survexportNames.append("survex/bin/survexport.exe");
 
-    QString path = cwGlobals::findExecutable(plotSauceAppNames);
+    QString survexportPath = cwGlobals::findExecutable(survexportNames, {cwGlobals::survexPath()});
 
     //Found plot sauce executable?
-    if(path.isEmpty()) {
-        qDebug() << "Can't find plotsauce executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
+    if(survexportPath.isEmpty()) {
+        qDebug() << "Can't find survexport executable!  This means cavewhere can't do loop closure or line ploting!!! Oh the horror!";
         done();
         return;
     }
 
-    QStringList arguments = {
-        "--csv",
-        inputFile
-    };
+    QStringList arguments;
+    arguments.append("--station-names");
+    arguments.append("--csv");
+    arguments.append(inputFile);
+    arguments.append(outputFile);
 
-    process->setWorkingDirectory(QFileInfo(inputFile).absoluteDir().path());
-    process->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
-    process->start(path, arguments);
-    process->waitForFinished();
+    SurvexportProcess->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    SurvexportProcess->start(survexportPath, arguments);
+    SurvexportProcess->waitForFinished();
+
+    delete SurvexportProcess;
 
     done();
+}
+
+void cwSurvexportTask::printErrors() const {
+    qDebug() << "PlotSauce errors: " << SurvexportProcess->errorString();
 }

@@ -5,17 +5,17 @@
 **
 **************************************************************************/
 
-#ifndef CWPLOTSAUCETASK_H
-#define CWPLOTSAUCETASK_H
+#ifndef CWSURVEXPORTTASK_H
+#define CWSURVEXPORTTASK_H
 
 //Our includes
 #include "cwTask.h"
+#include "cwGlobals.h"
 
 //Qt includes
 #include <QProcess>
-#include <QReadWriteLock>
 
-class cwSurvexportTask : public cwTask
+class CAVEWHERE_LIB_EXPORT cwSurvexportTask : public cwTask
 {
     Q_OBJECT
 
@@ -23,19 +23,23 @@ public:
     cwSurvexportTask(QObject* parent = nullptr);
 
     void setSurvex3DFile(QString inputFile);
-    QString outputXMLFile() const;
+    QString outputFilename() const;
+
+public slots:
+    void printErrors() const;
 
 protected:
     void runTask();
 
 private:
     //The filename of the survex 3d file
-    static QString extension() { return QLatin1String(".csv"); }
-
+    static const QString Extension;
     QString Survex3DFileName;
+
+    QProcess* SurvexportProcess;
 
     QString survex3DFilename() const;
 
 };
 
-#endif // CWPLOTSAUCETASK_H
+#endif // CWSURVEXPORTTASK_H

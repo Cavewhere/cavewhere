@@ -2,13 +2,11 @@
 #include "cwPDFConverter.h"
 #include "cwDebug.h"
 
-#ifdef WITH_PDF_SUPPORT
-//Qt includes
-#include <QPdfDocument>
-#endif
-
 //AsyncFuture
 #include "asyncfuture.h"
+
+//Qt includes
+#include <QPdfDocument>
 
 cwPDFConverter::cwPDFConverter(QObject *parent) : QObject(parent)
 {
@@ -41,7 +39,6 @@ void cwPDFConverter::setResolution(int resolution) {
  */
 QFuture<QImage> cwPDFConverter::convert()
 {
-#ifdef WITH_PDF_SUPPORT
     QPdfDocument document;
     auto error = document.load(source());
 
@@ -89,11 +86,6 @@ QFuture<QImage> cwPDFConverter::convert()
     };
 
     return QtConcurrent::mapped(pages, convertPage);
-#else
-    //No support for pdf conversion
-    qDebug() << "cwPDFConverter::convert() failed... CaveWhere wasn't built with PDF import support" << LOCATION;
-    return QFuture<QImage>();
-#endif
 }
 
 void cwPDFConverter::setError(const QString &errorMessage)
@@ -108,9 +100,5 @@ void cwPDFConverter::setError(const QString &errorMessage)
 * Returns true if the converter will work, and falso if it doesn't
 */
 bool cwPDFConverter::isSupported()  {
-#ifdef WITH_PDF_SUPPORT
     return true;
-#else
-    return false;
-#endif
 }

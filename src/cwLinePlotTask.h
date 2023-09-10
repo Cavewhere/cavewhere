@@ -18,7 +18,7 @@ class cwLinePlotGeometryTask;
 class cwSurvexExporterRegionTask;
 class cwCavernTask;
 class cwSurvexportTask;
-class cwStationCSVTask;
+class cwSurvexportCSVTask;
 class cwScrap;
 class cwTrip;
 class cwCave;
@@ -202,7 +202,7 @@ private:
     //Sub tasks
     cwCavernTask* CavernTask;
     cwSurvexportTask* PlotSauceTask;
-    cwStationCSVTask* PlotSauceParseTask;
+    cwSurvexportCSVTask* PlotSauceParseTask;
     cwLinePlotGeometryTask* CenterlineGeometryTask;
     cwFindUnconnectedSurveyChunksTask* UnconnectedSurveyChunkTask;
 

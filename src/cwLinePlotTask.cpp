@@ -11,7 +11,7 @@
 #include "cwCavernTask.h"
 #include "cwCavingRegion.h"
 #include "cwSurvexportTask.h"
-#include "cwStationCSVTask.h"
+#include "cwSurvexportCSVTask.h"
 #include "cwLinePlotGeometryTask.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -71,7 +71,7 @@ cwLinePlotTask::cwLinePlotTask(QObject *parent) :
     PlotSauceTask = new cwSurvexportTask();
     PlotSauceTask->setParentTask(this);
 
-    PlotSauceParseTask = new cwStationCSVTask();
+    PlotSauceParseTask = new cwSurvexportCSVTask();
     PlotSauceParseTask->setParentTask(this);
 
     CenterlineGeometryTask = new cwLinePlotGeometryTask();
@@ -197,7 +197,7 @@ void cwLinePlotTask::readXML() {
     }
 
 //    qDebug() << "Reading xml" << "Status" << status() << PlotSauceTask->outputXMLFile();
-    PlotSauceParseTask->setSurvexportCSVFile(PlotSauceTask->outputXMLFile());
+    PlotSauceParseTask->setSurvexportCSVFile(PlotSauceTask->outputFilename());
     PlotSauceParseTask->start();
 }
 

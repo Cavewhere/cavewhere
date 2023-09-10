@@ -45,7 +45,10 @@ DynamicLibrary {
 
     Depends { name: "QMath3d" }
     Depends { name: "squish" }
-    Depends { name: "ConanProtobuf" }
+//    Depends { name: "plotsauce" }
+    Depends { name: "protoc" }
+    Depends { name: "protobuf" }
+    Depends { name: "z" }
     Depends { name: "dewalls" }
     Depends { name: "libqtqmltricks-qtqmlmodels" }
     Depends { name: "asyncfuture" }
@@ -67,7 +70,7 @@ DynamicLibrary {
         cpp.includePaths: [
             ".",
             "utils",
-            product.buildDirectory + "/versionInfo"
+            cavewhereLibId.buildDirectory + "/versionInfo"
         ]
 
         Depends { name: "Qt";

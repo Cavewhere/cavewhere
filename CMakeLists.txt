@@ -33,6 +33,7 @@ find_package(Qt5
     Concurrent
     Svg
     Test
+    Pdf
     REQUIRED)
 
 find_package(Protobuf REQUIRED)
@@ -51,6 +52,7 @@ target_link_libraries(cavewhere-lib
     Qt::Xml
     Qt::Concurrent
     Qt::Svg
+    Qt::Pdf
     QtQmlModels
     PRIVATE
     QMath3d
@@ -106,6 +108,7 @@ qt5_wrap_ui(UI_HEADERS
 )
 
 target_compile_definitions(cavewhere-lib PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
+target_compile_definitions(cavewhere-lib PRIVATE "WITH_PDF_SUPPORT")
 
 target_sources(cavewhere-lib PRIVATE ${UI_HEADERS})
 
