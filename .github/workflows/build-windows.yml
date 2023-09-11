@@ -23,19 +23,26 @@ jobs:
       with:
         msbuild-architecture: x64
 
+    - name: Cache Conan packages
+      uses: actions/cache@v2
+      with:
+        path: .conan
+        key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.py') }}
+        restore-keys: |
+          ${{ runner.os }}-conan-
+
     - name: Install Conan
       run: pip install conan==1.60.2
 
     - name: Conan Profile
       run: conan profile new default --detect
 
-    - name: Conan Install Dependencies
-      run: conan install . --build missing -o CaveWhere/*:system_qt=False
-
     - name: Add Conan Remotes
       run: |
-        conan remote add conan-center https://center.conan.io
         conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
+
+    - name: Conan Install Dependencies
+      run: conan install . --build missing -o CaveWhere/*:system_qt=False
 
     - name: Create Build Directory
       run: mkdir build
@@ -54,3 +61,60 @@ jobs:
       with:
         name: windows-artifact
         path: build/Cavewhere*64bit.exe
+
+
+#name: Build on Windows
+#
+#on:
+#  push:
+#    branches:
+#      - WIP-cmake
+#  pull_request:
+#    branches:
+#      - '*'
+#
+#jobs:
+#  build:
+#    runs-on: windows-2019
+#
+#    steps:
+#    - name: Checkout code
+#      uses: actions/checkout@v4
+#      with:
+#        submodules: 'recursive'
+#
+#    - name: Setup MSBuild
+#      uses: microsoft/setup-msbuild@v1.1
+#      with:
+#        msbuild-architecture: x64
+#
+#    - name: Install Conan
+#      run: pip install conan==1.60.2
+#
+#    - name: Conan Profile
+#      run: conan profile new default --detect
+#
+#    - name: Add Conan Remotes
+#      run: |
+#      conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
+#
+#    - name: Conan Install Dependencies
+#      run: conan install . --build missing -o CaveWhere/*:system_qt=False
+#
+#    - name: Create Build Directory
+#      run: mkdir build
+#
+#    - name: CMake Configure
+#      run: cmake -S . -B build
+#
+#    - name: CMake Build
+#      run: cmake --build build --target all
+#
+#    - name: CMake Build Windows Installer
+#      run: cmake --build build --target windowsInstaller
+#
+#    - name: Upload Artifact
+#      uses: actions/upload-artifact@v3
+#      with:
+#        name: windows-artifact
+#        path: build/Cavewhere*64bit.exe
