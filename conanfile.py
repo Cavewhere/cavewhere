@@ -28,6 +28,7 @@ class CaveWhereConan(ConanFile):
         # Or add a new requirement!
         if not self.options.system_qt:
            self.requires("qt/5.15.10")
+           self.requires("zlib/1.2.13")
 
 #    def set_version(self):
 #        git = tools.Git()
