@@ -14,12 +14,20 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: 'recursive'
 
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+      with:
+        msbuild-architecture: x64
+
     - name: Install Conan
       run: pip install conan
+
+    - name: Conan Profile
+      run: conan profile detect
 
     - name: Conan Install Dependencies
       run: conan install . --build missing -o CaveWhere:system_qt=False
@@ -42,7 +50,7 @@ jobs:
       run: cmake --build build --target windowsInstaller
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: windows-artifact
         path: build/Cavewhere*64bit.exe
