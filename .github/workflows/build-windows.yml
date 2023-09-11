@@ -24,7 +24,7 @@ jobs:
         msbuild-architecture: x64
 
     - name: Install Conan
-      run: pip install conan
+      run: pip install conan==1.60.2
 
     - name: Conan Profile
       run: conan profile detect
