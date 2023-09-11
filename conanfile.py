@@ -22,7 +22,7 @@ class CaveWhereConan(ConanFile):
 
     options = {"system_qt": [True, False]}
     default_options = {"system_qt": True}
-    generators = "qbs", "json"
+    generators = "cmake_paths", "json"
 
     def requirements(self):
         # Or add a new requirement!
