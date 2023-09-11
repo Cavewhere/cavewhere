@@ -27,7 +27,7 @@ jobs:
       run: pip install conan==1.60.2
 
     - name: Conan Profile
-      run: conan profile detect
+      run: conan profile new default --detect
 
     - name: Conan Install Dependencies
       run: conan install . --build missing -o CaveWhere/*:system_qt=False
