@@ -13,6 +13,12 @@ jobs:
     runs-on: windows-2019
 
     steps:
+    - name: install aptinstall
+      run: pip install aqtinstall
+
+    - name: What versions of qt are avaliable
+      run: aqt list-qt windows desktop
+
     - name: Checkout code
       uses: actions/checkout@v4
       with:
