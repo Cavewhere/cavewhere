@@ -41,8 +41,22 @@ jobs:
       run: |
         conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
 
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.15'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+        dir: '${{ github.workspace }}/'
+        install-deps: 'true'
+        modules: 'qtpdf'
+        #archives: 'qtbase qtsvg'
+        cache: 'true'
+        cache-key-prefix: 'install-qt-action'
+
     - name: Conan Install Dependencies
-      run: conan install . --build missing -o CaveWhere/*:system_qt=False
+      run: conan install . --build missing
 
     - name: Create Build Directory
       run: mkdir build
