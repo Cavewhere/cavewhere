@@ -1,0 +1,48 @@
+name: Build on Windows
+
+on:
+  push:
+    branches:
+      - WIP-cmake
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+
+    - name: Install Conan
+      run: pip install conan
+
+    - name: Conan Install Dependencies
+      run: conan install . --build missing -o CaveWhere:system_qt=False
+
+    - name: Add Conan Remotes
+      run: |
+        conan remote add conan-center https://center.conan.io
+        conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
+
+    - name: Create Build Directory
+      run: mkdir build
+
+    - name: CMake Configure
+      run: cmake -S . -B build
+
+    - name: CMake Build
+      run: cmake --build build --target all
+
+    - name: CMake Build Windows Installer
+      run: cmake --build build --target windowsInstaller
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: windows-artifact
+        path: build/Cavewhere*64bit.exe

@@ -20,16 +20,14 @@ class CaveWhereConan(ConanFile):
     ("libsquish/1.15"),
     ]
 
-    options = {"system_qt": [True, False],
-               "system_qbs": [True, False]}
-    default_options = {"system_qt": True,
-                      "system_qbs": True }
+    options = {"system_qt": [True, False]}
+    default_options = {"system_qt": True}
     generators = "qbs", "json"
 
     def requirements(self):
         # Or add a new requirement!
         if not self.options.system_qt:
-           self.requires("qt/5.15.2")
+           self.requires("qt/5.15.10")
 
 #    def set_version(self):
 #        git = tools.Git()
@@ -48,13 +46,3 @@ class CaveWhereConan(ConanFile):
         if not self.options.system_qt:
             self.options["qt"].shared = True
 
-        self.options["dewalls"].system_qt = self.options.system_qt
-        self.options["dewalls"].system_qbs = self.options.system_qbs
-
-    def source(self):
-        self.run("git clone  https://github.com/Cavewhere/dewalls.git --branch master .")
-        self.run("git pull --tags")
-
-    def build_requirements(self):
-        if not self.options.system_qbs:
-            self.build_requires("Qbs/1.17.0@cave-software/dev")
