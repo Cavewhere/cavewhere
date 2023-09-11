@@ -6,7 +6,9 @@
 #include "asyncfuture.h"
 
 //Qt includes
+#ifdef WITH_PDF_SUPPORT
 #include <QPdfDocument>
+#endif
 
 cwPDFConverter::cwPDFConverter(QObject *parent) : QObject(parent)
 {
@@ -39,6 +41,7 @@ void cwPDFConverter::setResolution(int resolution) {
  */
 QFuture<QImage> cwPDFConverter::convert()
 {
+#ifdef WITH_PDF_SUPPORT
     QPdfDocument document;
     auto error = document.load(source());
 
@@ -86,6 +89,10 @@ QFuture<QImage> cwPDFConverter::convert()
     };
 
     return QtConcurrent::mapped(pages, convertPage);
+#else
+    setError("PDF Renderer not enabled");
+    return QFuture<QImage>();
+#endif
 }
 
 void cwPDFConverter::setError(const QString &errorMessage)
@@ -100,5 +107,9 @@ void cwPDFConverter::setError(const QString &errorMessage)
 * Returns true if the converter will work, and falso if it doesn't
 */
 bool cwPDFConverter::isSupported()  {
+#ifdef WITH_PDF_SUPPORT
     return true;
+#else
+    return false;
+#endif
 }

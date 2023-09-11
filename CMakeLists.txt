@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.5.0)
 
 project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 
+option(WITH_PDF "Build with PDF support" ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -29,8 +31,8 @@ find_package(Qt5
     Concurrent
     Svg
     Test
-    Pdf
     REQUIRED)
+
 
 find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
@@ -56,7 +58,6 @@ target_link_libraries(cavewhere-lib
     Qt::Xml
     Qt::Concurrent
     Qt::Svg
-    Qt::Pdf
     QtQmlModels
     qtasyncfuture
     dewalls
@@ -65,6 +66,13 @@ target_link_libraries(cavewhere-lib
     PRIVATE
     protobuf::protobuf
 )
+
+# Conditionally find the package and include directories
+if(WITH_PDF)
+    find_package(Qt5 COMPONENTS Pdf REQUIRED)
+    target_link_libraries(cavewhere-lib PRIVATE Qt::Pdf)
+    target_compile_definitions(cavewhere-lib PRIVATE "WITH_PDF_SUPPORT")
+endif()
 
 qt_add_resources(QT_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
@@ -112,7 +120,6 @@ qt5_wrap_ui(UI_HEADERS
 )
 
 target_compile_definitions(cavewhere-lib PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-target_compile_definitions(cavewhere-lib PRIVATE "WITH_PDF_SUPPORT")
 
 target_sources(cavewhere-lib PRIVATE ${UI_HEADERS})
 
