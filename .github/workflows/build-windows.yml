@@ -22,7 +22,7 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
       with:
         msbuild-architecture: x64
- #       vs-version: '[19.0,19.29)'
+        vs-version: '[16.07,16.10)'
 
     - name: Install Conan
       run: pip install conan==1.60.2
