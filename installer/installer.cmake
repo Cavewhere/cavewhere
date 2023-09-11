@@ -100,8 +100,9 @@ add_dependencies(deployCavewhere prepare_deploy CaveWhere cavewhere-test)
 
 
 if(WIN32)
-    include("GitHash.cmake")
-    get_hash("${BINARY_DIR}/current_git_hash.txt" CAVEWHERE_VERSION)
+  #  include("GitHash.cmake")
+  #  get_hash("${BINARY_DIR}/current_git_hash.txt" CAVEWHERE_VERSION)
+  #  message(STATUS "Current git hash: ${CAVEWHERE_VERSION}")
 
     # Determine the architecture
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
@@ -118,17 +119,19 @@ if(WIN32)
     endif()
 
 
-# Add custom command to run InnoConfigure.cmake and generate cavewhere.iss
-set(redist_version "v14.29.30139") #This can be queried by double clicking on the vc_redist.x64.exe
-set(inno_in_file "${CMAKE_SOURCE_DIR}/installer/windows/cavewhere.iss.in")
+    # Add custom command to run InnoConfigure.cmake and generate cavewhere.iss
+    set(redist_version "v14.29.30139") #This can be queried by double clicking on the vc_redist.x64.exe
+    set(inno_in_file "${CMAKE_SOURCE_DIR}/installer/windows/cavewhere.iss.in")
 
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/cavewhere.iss
         COMMAND ${CMAKE_COMMAND}
         -DISS_IN=${inno_in_file}
         -DISS=${CMAKE_BINARY_DIR}/cavewhere.iss
+        -DGET_HASH_CMAKE=${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake
+        -DCAVEWHERE_VERSION_FILE=${BINARY_DIR}/current_git_hash.txt
         -DCAVEWHERE_NAME=${CAVEWHERE_NAME}
-        -DCAVEWHER_VERSION=${CAVEWHERE_VERSION}
+       # -DCAVEWHER_VERSION=${CAVEWHERE_VERSION}
         -DARCH_ALLOWED=${architecturesAllowed}
         -DINSTALL_64BIT=${architecturesInstallIn64BitMode}
         -DARCH=${arch}
