@@ -72,8 +72,7 @@ jobs:
       uses: seanmiddleditch/gha-setup-ninja@v3
 
     - name: CMake Configure
-      #run: cmake -GNinja -S D:/a/cavewhere/cavewhere/ -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_TOOLCHAIN_FILE=D:/a/cavewhere/cavewhere/conan_paths.cmake -B build
-      run: cmake -S D:/a/cavewhere/cavewhere/ -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_TOOLCHAIN_FILE=D:/a/cavewhere/cavewhere/conan_paths.cmake -B build
+      run: cmake -G Ninja -S D:/a/cavewhere/cavewhere/ -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_MODULE_PATH="D:/a/cavewhere/cavewhere" -B build
 
     - name: CMake Build
       run: cmake --build build --target all
