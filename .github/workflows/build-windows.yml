@@ -30,7 +30,7 @@ jobs:
       run: conan profile detect
 
     - name: Conan Install Dependencies
-      run: conan install . --build missing -o CaveWhere:system_qt=False
+      run: conan install . --build missing -o CaveWhere/*:system_qt=False
 
     - name: Add Conan Remotes
       run: |
