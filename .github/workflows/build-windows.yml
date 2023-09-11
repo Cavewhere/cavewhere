@@ -13,11 +13,11 @@ jobs:
     runs-on: windows-2019
 
     steps:
-    - name: install aptinstall
-      run: pip install aqtinstall
+    #- name: install aptinstall
+    #  run: pip install aqtinstall
 
-    - name: What versions of qt are avaliable
-      run: aqt list-qt windows desktop
+    #- name: What versions of qt are avaliable
+    #  run: aqt list-qt windows desktop
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -67,8 +67,12 @@ jobs:
     - name: Create Build Directory
       run: mkdir build
 
+
+    - name: Install ninja-build tool
+      uses: seanmiddleditch/gha-setup-ninja@v3
+
     - name: CMake Configure
-      run: cmake -GNinja -DWITH_PDF=OFF -B build
+      run: cmake -GNinja -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:\a\cavewhere\cavewhere\Qt\5.15.2\msvc2019_64" -B build
 
     - name: CMake Build
       run: cmake --build build --target all
