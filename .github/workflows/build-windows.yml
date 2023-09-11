@@ -26,6 +26,11 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Fetch tags for survex
+      run: |
+        cd survex
+        git fetch --tags
+
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.1
       with:
