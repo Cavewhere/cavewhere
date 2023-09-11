@@ -16,6 +16,8 @@ add_subdirectory(QMath3d)
 add_subdirectory(asyncfuture)
 add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
+
+set(SURVEX_CONAN_EXPORTED ON)
 add_subdirectory(survex)
 
 # All packages we need to find
