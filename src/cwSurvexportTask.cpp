@@ -72,10 +72,10 @@ void cwSurvexportTask::runTask() {
     QString outputFile = inputFile + Extension;
 
     QStringList survexportNames;
-    survexportNames.append("survexport");
-    survexportNames.append("survexport.exe");
     survexportNames.append("survex/bin/survexport");
     survexportNames.append("survex/bin/survexport.exe");
+    survexportNames.append("survexport");
+    survexportNames.append("survexport.exe");
 
     QString survexportPath = cwGlobals::findExecutable(survexportNames, {cwGlobals::survexPath()});
 

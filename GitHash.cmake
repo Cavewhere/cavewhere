@@ -1,0 +1,5 @@
+function(get_hash HASH_FILE HASH_OUTPUT_VAR)
+    file(READ "${HASH_FILE}" local_hash)
+    string(STRIP ${local_hash} local_hash)
+    set(${HASH_OUTPUT_VAR} ${local_hash} PARENT_SCOPE)
+endfunction()

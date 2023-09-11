@@ -1,4 +1,5 @@
 #ifndef cavewhereVersion_H
 #define cavewhereVersion_H
-static const QString CavewhereVersion = "@CAVEWHERE_VERSION@";
+#include <QString>
+static const QString CavewhereVersion = QStringLiteral("@CAVEWHERE_VERSION@");
 #endif

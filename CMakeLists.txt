@@ -156,6 +156,7 @@ target_link_libraries(cavewhere-test
 #### CaveWhere ####
 add_executable(CaveWhere
     main.cpp
+    Cavewhere.rc
 )
 
 set_target_properties(CaveWhere PROPERTIES
@@ -175,10 +176,18 @@ target_link_libraries(CaveWhere
     cavewhere-lib
 )
 
+if(WIN32)
+    target_link_options(CaveWhere PRIVATE
+        $<$<AND:$<CONFIG:Release>,$<STREQUAL:${CMAKE_SYSTEM_NAME},Windows>>:/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup>
+    )
+endif()
+
 file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
-#### Install ####
+#### Building Installer for Windows and Mac ####
+set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include(installer/installer.cmake)
 
 
