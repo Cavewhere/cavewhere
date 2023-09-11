@@ -19,7 +19,7 @@ jobs:
         submodules: 'recursive'
 
     - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v2
       with:
         vs-version: '[16.0,16.10)'
         msbuild-architecture: x64
