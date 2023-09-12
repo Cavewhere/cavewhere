@@ -79,7 +79,7 @@ jobs:
         mkdir ..\build\conan-dependencies
 
     - name: Conan Install Dependencies
-      run: conan install . --build missing --install-folder ../build/conan-dependencies -o CaveWhere/*:system_qt=False
+      run: conan install . --build missing --install-folder ../build/conan-dependencies
 
     - name: ls build
       run: |
