@@ -77,7 +77,7 @@ jobs:
       run: mkdir build
 
     - name: Conan Install Dependencies
-      run: conan install ./build --build missing
+      run: conan install . --build missing --install-folder build
 
     - name: ls build
       run: |
