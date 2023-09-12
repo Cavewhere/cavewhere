@@ -73,11 +73,17 @@ jobs:
     - name: Install perl Locale::PO
       run: cpan install Locale::PO
 
-    - name: Conan Install Dependencies
-      run: conan install . --build missing
-
     - name: Create Build Directory
       run: mkdir build
+
+    - name: Conan Install Dependencies
+      run: conan install ./build --build missing
+
+    - name: ls build
+      run: |
+        ls -la build
+        ls -la build/conan-dependencies
+        ls -la .
 
     - name: Install ninja-build tool
       uses: seanmiddleditch/gha-setup-ninja@v3
