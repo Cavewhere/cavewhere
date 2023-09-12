@@ -30,6 +30,7 @@ jobs:
       run: |
         cd survex
         git fetch --tags
+        git fetch --all
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.1
