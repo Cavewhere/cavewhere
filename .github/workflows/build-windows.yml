@@ -81,9 +81,9 @@ jobs:
 
     - name: ls build
       run: |
-        ls -la build
-        ls -la build/conan-dependencies
-        ls -la .
+        dir build
+        dir build\conan-dependencies
+        dir .
 
     - name: Install ninja-build tool
       uses: seanmiddleditch/gha-setup-ninja@v3
