@@ -74,22 +74,24 @@ jobs:
       run: cpan install Locale::PO
 
     - name: Create Build Directory
-      run: mkdir build
+      run: \
+        mkdir ..\build
+        mkdir ..\build\conan-dependencies
 
     - name: Conan Install Dependencies
-      run: conan install . --build missing --install-folder build
+      run: conan install . --build missing --install-folder ../build/conan-dependencies -o CaveWhere/*:system_qt=False
 
     - name: ls build
       run: |
-        dir build
-        dir build\conan-dependencies
+        dir ..\build
+        dir ..\build\conan-dependencies
         dir .
 
     - name: Install ninja-build tool
       uses: seanmiddleditch/gha-setup-ninja@v3
 
     - name: CMake Configure
-      run: cmake -G Ninja -S D:/a/cavewhere/cavewhere/ -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_MODULE_PATH="D:/a/cavewhere/cavewhere" -B build
+      run: cmake -G Ninja -S D:/a/cavewhere/cavewhere/ -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_MODULE_PATH="D:/a/cavewhere/build/conan-dependencies" -B "D:/a/cavewhere/build"
 
     - name: CMake Build
       run: cmake --build build --target all
