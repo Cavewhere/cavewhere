@@ -69,8 +69,8 @@ QString cwCavernTask::output3dFileName() const {
      QString outputFile = inputFile + survex3dExtension();
 
      QStringList cavernAppNames;
-     cavernAppNames.append("survex/bin/cavern");
-     cavernAppNames.append("survex/bin/cavern.exe");
+     cavernAppNames.append("survex/cavern");
+     cavernAppNames.append("survex/cavern.exe");
      cavernAppNames.append("cavern");
      cavernAppNames.append("cavern.exe");
 

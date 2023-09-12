@@ -17,7 +17,7 @@ add_subdirectory(asyncfuture)
 add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
 
-set(SURVEX_CONAN_EXPORTED ON)
+set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 add_subdirectory(survex)
 
 # All packages we need to find

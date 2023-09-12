@@ -72,8 +72,8 @@ void cwSurvexportTask::runTask() {
     QString outputFile = inputFile + Extension;
 
     QStringList survexportNames;
-    survexportNames.append("survex/bin/survexport");
-    survexportNames.append("survex/bin/survexport.exe");
+    survexportNames.append("survex/survexport");
+    survexportNames.append("survex/survexport.exe");
     survexportNames.append("survexport");
     survexportNames.append("survexport.exe");
 

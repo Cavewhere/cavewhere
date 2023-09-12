@@ -18,6 +18,14 @@ class CaveWhereConan(ConanFile):
     ("sqlite3/3.34.1"),
     ("protobuf/3.12.4"),
     ("libsquish/1.15"),
+
+    #We handle survex dependancies here for now, since we're using conan
+    ("wxwidgets/3.1.4@bincrafters/stable"),
+    ("glew/2.2.0"),
+    ("proj/9.1.0"),
+    ("libtiff/4.5.0"),
+    ("zlib/1.2.13")
+
     ]
 
     options = {"system_qt": [True, False]}
@@ -46,4 +54,11 @@ class CaveWhereConan(ConanFile):
     def configure(self):
         if not self.options.system_qt:
             self.options["qt"].shared = True
+
+
+        #This is survex dependancy
+        self.options["wxwidgets"].webview=False
+        self.options["proj"].shared=True
+        self.options["zlib"].shared=True
+        self.options["wxwidgets"].shared=True
 

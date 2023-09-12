@@ -14,8 +14,8 @@ if(WIN32)
 
     # Define the destination directory
     set(DEPLOY_QML_DIR "${DEPLOY_DIR}/qml")
-    set(DEPLOY_SURVEX_DIR "${DEPLOY_DIR}/survex/bin")
-    set(SURVEX_BIN_DIR "${BINARY_DIR}/survex/bin")
+    set(DEPLOY_SURVEX_DIR "${DEPLOY_DIR}/survex")
+    set(SURVEX_BIN_DIR "${BINARY_DIR}/survex")
 
 
     # Define the list of files to copy
@@ -31,11 +31,13 @@ if(WIN32)
     set(QML_FILES_TO_COPY ${cavewhere_QML_FILES})
 
     file(GLOB survex_msg_files "${SURVEX_BIN_DIR}/*.msg")
+    file(GLOB survex_dlls "${SURVEX_BIN_DIR}/*.dll")
 
     set(survex_files_to_copy
         "${SURVEX_BIN_DIR}/cavern${CMAKE_EXECUTABLE_SUFFIX}"
         "${SURVEX_BIN_DIR}/survexport${CMAKE_EXECUTABLE_SUFFIX}"
         ${survex_msg_files}
+        ${survex_dlls}
     )
 
     set(DEPOLY_COPY_TIMESTAMP "${CMAKE_CURRENT_BINARY_DIR}/deploy-copy-timestamp.txt")
