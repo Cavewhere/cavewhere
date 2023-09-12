@@ -15,22 +15,24 @@ class CaveWhereConan(ConanFile):
     ("protobuf/3.12.4"),
 #    ("survex/1.2.44@cave-software/dev"),
 #    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
-    ("sqlite3/3.34.1"),
+    ("sqlite3/3.43.0"),
     ("protobuf/3.12.4"),
     ("libsquish/1.15"),
 
     #We handle survex dependancies here for now, since we're using conan
-    ("wxwidgets/3.1.4@bincrafters/stable"),
+    ("wxwidgets/3.1.5@bincrafters/stable"),
     ("glew/2.2.0"),
-    ("proj/9.1.0"),
-    ("libtiff/4.5.0"),
-    ("zlib/1.2.13")
+#    ("proj/6.3.1"),
+    ("proj/9.2.1"),
+    ("zlib/1.2.13"),
+    ("libtiff/4.0.9"),
+
 
     ]
 
     options = {"system_qt": [True, False]}
     default_options = {"system_qt": True}
-    generators = "cmake_find_package", "cmake_paths", "json"
+    generators = "cmake_find_package", "cmake_paths", "cmake", "json"
 
     def requirements(self):
         # Or add a new requirement!
@@ -57,8 +59,10 @@ class CaveWhereConan(ConanFile):
 
 
         #This is survex dependancy
-        self.options["wxwidgets"].webview=False
-        self.options["proj"].shared=True
-        self.options["zlib"].shared=True
+        #self.options["wxwidgets"].webview=False
         self.options["wxwidgets"].shared=True
+        self.options["proj"].shared=True
+#        self.options["tiff"].shared=True
+        self.options["proj"].with_tiff=False
+        self.options["zlib"].shared=True
 

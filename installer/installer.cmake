@@ -36,8 +36,6 @@ if(WIN32)
     set(survex_files_to_copy
         "${SURVEX_BIN_DIR}/cavern${CMAKE_EXECUTABLE_SUFFIX}"
         "${SURVEX_BIN_DIR}/survexport${CMAKE_EXECUTABLE_SUFFIX}"
-        ${survex_msg_files}
-        ${survex_dlls}
     )
 
     set(DEPOLY_COPY_TIMESTAMP "${CMAKE_CURRENT_BINARY_DIR}/deploy-copy-timestamp.txt")
@@ -53,7 +51,9 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy ${QML_FILES_TO_COPY} ${DEPLOY_QML_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEPLOY_SURVEX_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${survex_files_to_copy} ${DEPLOY_SURVEX_DIR}
-        #COMMAND ${CMAKE_COMMAND} -E touch ${DEPOLY_COPY_TIMESTAMP}
+        COMMAND ${CMAKE_COMMAND} -E copy ${survex_msg_files} ${DEPLOY_SURVEX_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy ${survex_dlls} ${DEPLOY_SURVEX_DIR}
+
         COMMENT "Copying files to deploy directory"
         VERBATIM
     )
