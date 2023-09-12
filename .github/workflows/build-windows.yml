@@ -74,7 +74,7 @@ jobs:
       run: cpan install Locale::PO
 
     - name: Create Build Directory
-      run: \
+      run: |
         mkdir ..\build
         mkdir ..\build\conan-dependencies
 
