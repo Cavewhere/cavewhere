@@ -24,13 +24,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
+        fetch-depth: 0
         submodules: 'recursive'
 
-    - name: Fetch tags for survex
-      run: |
-        cd survex
-        git fetch --tags
-        git fetch --all
+    #- name: Fetch tags for survex
+    #  run: |
+    #    cd survex
+    #    git fetch --tags
+    #    git fetch --all
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.1
