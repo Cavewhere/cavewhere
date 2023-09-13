@@ -3,6 +3,19 @@ find_package(Qt5 COMPONENTS Core)
 get_target_property(QtCore_location Qt5::Core LOCATION)
 get_filename_component(Qt_bin_dir ${QtCore_location} DIRECTORY)
 
+set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)
+include(${conanbuildinfo})
+
+# If Qt_bin_dir is empty
+if(NOT Qt_bin_dir)
+    set(Qt_bin_dir ${CONAN_BIN_DIRS_QT})
+endif()
+
+# if Qt_bin_dir doesn't exist
+if(NOT Qt_bin_dir)
+    message(FATAL_ERROR "Qt bin dir not found")
+endif()
+
 set(CAVEWHERE_NAME "Cavewhere")
 
 if(WIN32)
@@ -26,8 +39,13 @@ if(WIN32)
         "${BINARY_DIR}/cavewhere-lib${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/dewalls${CMAKE_SHARED_LIBRARY_SUFFIX}"
         "${BINARY_DIR}/QMath3d${CMAKE_SHARED_LIBRARY_SUFFIX}"
-        "${Qt_bin_dir}/Qt5Pdf${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        "${CONAN_BIN_DIRS_ZLIB}/zlib1.dll"
     )
+
+    if(WITH_PDF)
+        append(ROOT_FILES_TO_COPY "${Qt_bin_dir}/Qt5Pdf${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    endif()
+
     set(QML_FILES_TO_COPY ${cavewhere_QML_FILES})
 
     file(GLOB survex_msg_files "${SURVEX_BIN_DIR}/*.msg")

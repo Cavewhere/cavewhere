@@ -38,16 +38,17 @@ jobs:
       with:
         msbuild-architecture: x64
 
-    - name: Cache Conan packages
-      uses: actions/cache@v2
-      with:
-        path: .conan
-        key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.py') }}
-        restore-keys: |
-          ${{ runner.os }}-conan-
-
     - name: Install Conan
       run: pip install conan==1.60.2
+
+    - name: Set USERPROFILE (aka home dir) env
+      run: echo "USERPROFILE=${{ runner.env.USERPROFILE }}" >> $GITHUB_ENV
+
+    - name: Cache Conan packages
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.USERPROFILE }}/.conan
+        key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.py') }}
 
     - name: Conan Profile
       run: conan profile new default --detect
@@ -56,19 +57,19 @@ jobs:
       run: |
         conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
 
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: '5.15.2'
-        host: 'windows'
-        target: 'desktop'
-        arch: 'win64_msvc2019_64'
-        dir: '${{ github.workspace }}/'
-        install-deps: 'true'
-        #modules: 'qtpdf'
-        #archives: 'qtbase qtsvg'
-        cache: 'true'
-        cache-key-prefix: 'install-qt-action'
+    #- name: Install Qt
+    #  uses: jurplel/install-qt-action@v3
+    #  with:
+    #    version: '5.15.2'
+    #    host: 'windows'
+    #    target: 'desktop'
+    #    arch: 'win64_msvc2019_64'
+    #    dir: '${{ github.workspace }}/'
+    #    install-deps: 'true'
+    #    #modules: 'qtpdf'
+    #    #archives: 'qtbase qtsvg'
+    #    cache: 'true'
+    #    cache-key-prefix: 'install-qt-action'
 
     - name: Install perl Locale::PO
       run: cpan install Locale::PO
@@ -79,7 +80,11 @@ jobs:
         mkdir ..\build\conan-dependencies
 
     - name: Conan Install Dependencies
-      run: conan install . --build missing --install-folder ../build/conan-dependencies
+      run: conan install . --build missing --install-folder ../build/conan-dependencies -o CaveWhere/*:system_qt=False
+
+    - name: Run Conan Environment Setup
+      run: call ..\build\conan-dependencies\conanrun.bat
+      shell: cmd
 
     - name: ls build
       run: |
@@ -91,13 +96,13 @@ jobs:
       uses: seanmiddleditch/gha-setup-ninja@v3
 
     - name: CMake Configure
-      run: cmake -G Ninja -S "D:/a/cavewhere/cavewhere" -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_PREFIX_PATH="D:/a/cavewhere/cavewhere/Qt/5.15.2/msvc2019_64" -DCMAKE_MODULE_PATH="D:/a/cavewhere/build/conan-dependencies" -B "D:/a/cavewhere/build"
+      run: cmake -G Ninja -S "../cavewhere" -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_MODULE_PATH="%cd:\=/%/../build/conan-dependencies" -B "../build"
 
     - name: CMake Build
-      run: cmake --build "D:/a/cavewhere/build" --target all
+      run: cmake --build "../build" --target all
 
     - name: CMake Build Windows Installer
-      run: cmake --build "D:/a/cavewhere/build" --target windowsInstaller
+      run: cmake --build "../build" --target windowsInstaller
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v3

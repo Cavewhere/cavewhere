@@ -3,7 +3,7 @@ import os, sys
 
 class CaveWhereConan(ConanFile):
     name = "CaveWhere"
-    license = "MIT"
+    license = "GPL"
     author = "Philip Schuchardt vpicaver@gmail.com"
     url = "https://github.com/Cavewhere/Cavewhere"
     description = "Undergound Cave Survey and Mapping Software"
@@ -15,7 +15,7 @@ class CaveWhereConan(ConanFile):
     ("protobuf/3.12.4"),
 #    ("survex/1.2.44@cave-software/dev"),
 #    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
-    ("sqlite3/3.43.0"),
+    ("sqlite3/3.42.0"),
     ("protobuf/3.12.4"),
     ("libsquish/1.15"),
 
@@ -25,20 +25,21 @@ class CaveWhereConan(ConanFile):
 #    ("proj/6.3.1"),
     ("proj/9.2.1"),
     ("zlib/1.2.13"),
-    ("libtiff/4.0.9"),
+    ("libtiff/4.5.1"),
 
 
     ]
 
     options = {"system_qt": [True, False]}
     default_options = {"system_qt": True}
-    generators = "cmake_find_package", "cmake_paths", "cmake", "json"
+    generators = "cmake_find_package", "cmake_paths", "cmake", "json", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
         # Or add a new requirement!
         if not self.options.system_qt:
            self.requires("qt/5.15.10")
-           self.requires("zlib/1.2.13")
+           self.requires("libpng/1.6.40"),
+           self.requires("libjpeg/9e"),
 
 #    def set_version(self):
 #        git = tools.Git()
@@ -56,13 +57,17 @@ class CaveWhereConan(ConanFile):
     def configure(self):
         if not self.options.system_qt:
             self.options["qt"].shared = True
-
+            self.options["qt"].qtquickcontrols2 = True
+            self.options["qt"].qtdeclarative = True
+            self.options["qt"].qtsvg = True
+            self.options["qt"].qttools = True
+            self.options["qt"].qttranslations = True
 
         #This is survex dependancy
         #self.options["wxwidgets"].webview=False
         self.options["wxwidgets"].shared=True
         self.options["proj"].shared=True
 #        self.options["tiff"].shared=True
-        self.options["proj"].with_tiff=False
+#        self.options["proj"].with_tiff=False
         self.options["zlib"].shared=True
 

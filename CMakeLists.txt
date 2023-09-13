@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.5.0)
 
 project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 
+
 option(WITH_PDF "Build with PDF support" ON)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -21,6 +22,9 @@ set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 add_subdirectory(survex)
 
 # All packages we need to find
+find_package(Protobuf REQUIRED)
+find_package(libsquish REQUIRED)
+find_package(Catch2 REQUIRED)
 find_package(Qt5
     COMPONENTS
     Core
@@ -35,11 +39,6 @@ find_package(Qt5
     Test
     REQUIRED)
 
-
-find_package(Protobuf REQUIRED)
-find_package(libsquish REQUIRED)
-find_package(Catch2 REQUIRED)
-
 #### Cavewhere-lib ######
 add_library(cavewhere-lib SHARED)
 
@@ -51,15 +50,15 @@ set_target_properties(cavewhere-lib PROPERTIES
 
 target_link_libraries(cavewhere-lib
     PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::OpenGL
-    Qt::Xml
-    Qt::Concurrent
-    Qt::Svg
+    Qt5::Core
+    Qt5::Gui
+    Qt5::Widgets
+    Qt5::Quick
+    Qt5::Sql
+    Qt5::OpenGL
+    Qt5::Xml
+    Qt5::Concurrent
+    Qt5::Svg
     QtQmlModels
     qtasyncfuture
     dewalls
@@ -157,7 +156,7 @@ target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
 
 target_link_libraries(cavewhere-test
     PRIVATE
-    Qt::Test
+    Qt5::Test
     Catch2::Catch2
     cavewhere-lib
 )
@@ -176,12 +175,12 @@ set_target_properties(CaveWhere PROPERTIES
 
 target_link_libraries(CaveWhere
     PRIVATE
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::Test
+    Qt5::Core
+    Qt5::Gui
+    Qt5::Widgets
+    Qt5::Quick
+    Qt5::Sql
+    Qt5::Test
     cavewhere-lib
 )
 
