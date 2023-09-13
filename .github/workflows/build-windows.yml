@@ -96,7 +96,7 @@ jobs:
       uses: seanmiddleditch/gha-setup-ninja@v3
 
     - name: CMake Configure
-      run: cmake -G Ninja -S "../cavewhere" -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_MODULE_PATH="%cd:\=/%/../build/conan-dependencies" -B "../build"
+      run: cmake -G Ninja -S "../cavewhere" -DCMAKE_BUILD_TYPE=Release -DWITH_PDF=OFF -DCMAKE_MODULE_PATH="D:/a/cavewhere/build/conan-dependencies" -B "../build"
 
     - name: CMake Build
       run: cmake --build "../build" --target all
