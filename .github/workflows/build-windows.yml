@@ -22,7 +22,45 @@ jobs:
       run: pip install conan==1.60.2
 
     - name: Home directory
-      run: echo "Home: ${{ runner.env.USERPROFILE }}"
+      run: echo "Home name: Build on Windows
+
+on:
+  push:
+    branches:
+      - WIP-cmake
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build-cache:
+    runs-on: windows-2019
+    env:
+      CONAN_REVISIONS_ENABLED: 1
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Conan
+      run: pip install conan==1.60.2
+
+    #- name: Home directory
+    #  run: echo "Home: ${{ runner.env.USERPROFILE }}"
+
+    - name: Cache Conan packages
+      uses: actions/cache@v3
+      with:
+        path: ${{ runner.env.USERPROFILE }}/.conan
+        key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.py') }}
+
+    - name: Conan Profile
+      run: conan profile new default --detect
+
+    - name: Add Conan Remotes
+      run: |
+        conan remote add bincrafters https://bincrafters.jfrog.io/artifactory/api/conan/public-conan
+
+"
 
     - name: Cache Conan packages
       uses: actions/cache@v3
