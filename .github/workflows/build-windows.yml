@@ -9,11 +9,12 @@ on:
       - '*'
 
 jobs:
-  build:
+  build-cache:
     runs-on: windows-2019
     env:
       CONAN_REVISIONS_ENABLED: 1
 
+    steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
