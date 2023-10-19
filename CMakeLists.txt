@@ -60,7 +60,7 @@ target_link_libraries(cavewhere-lib
     Qt5::Concurrent
     Qt5::Svg
     QtQmlModels
-    qtasyncfuture
+    asyncfuture
     dewalls
     QMath3d
     libsquish::libsquish

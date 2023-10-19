@@ -135,8 +135,10 @@ void cwImageCompressionUpdater::recompressNotes(QList<cwNote *> notes)
             return finalFuture;
         });
 
-        auto combine = AsyncFuture::combine() << noteFutures;
-        FutureToken.addJob({combine.future(), "Compressing"});
+        if(!noteFutures.isEmpty()) {
+            auto combine = AsyncFuture::combine() << noteFutures;
+            FutureToken.addJob({combine.future(), "Compressing"});
+        }
     }
 }
 
