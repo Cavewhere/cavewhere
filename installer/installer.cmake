@@ -98,7 +98,7 @@ if(WIN32)
             "-qmldir=${CMAKE_INSTALL_PREFIX}/${BUNDLE_NAME}/Contents/Resources/qml"
             "-appstore-compliant")
 else()
-    message(FATAL_ERROR "Unsupported OS")
+ message(FATAL_ERROR "Unsupported OS")
 endif()
 
 # Custom command to run deployment app

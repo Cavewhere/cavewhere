@@ -11,7 +11,7 @@ class CaveWhereConan(ConanFile):
     version = "1.0"
     settings = "os", "compiler", "build_type", "arch"
     requires = [
-    ("catch2/2.13.4"),
+    ("catch2/2.13.10"),
     ("protobuf/3.12.4"),
 #    ("survex/1.2.44@cave-software/dev"),
 #    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
@@ -20,7 +20,7 @@ class CaveWhereConan(ConanFile):
     ("libsquish/1.15"),
 
     #We handle survex dependancies here for now, since we're using conan
-    ("wxwidgets/3.1.5@bincrafters/stable"),
+#    ("wxwidgets/3.1.5@bincrafters/stable"),
     ("glew/2.2.0"),
 #    ("proj/6.3.1"),
     ("proj/9.2.1"),

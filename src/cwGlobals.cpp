@@ -64,7 +64,9 @@ QString cwGlobals::convertFromURL(QString filenameUrl)
  */
 QString cwGlobals::findExecutable(QStringList executables)
 {
-    return findExecutable(executables, {QDir(QApplication::applicationDirPath())});
+    auto paths = systemPaths();
+    paths.append(QDir(QApplication::applicationDirPath()));
+    return findExecutable(executables, paths);
 }
 
 /**
@@ -74,14 +76,9 @@ QString cwGlobals::findExecutable(const QStringList &executables, const QList<QD
 {
     QString execPath;
 
-    auto path = qgetenv("PATH");
-    auto paths = QString::fromLocal8Bit(path).split(';');
-    paths.prepend(QApplication::applicationDirPath());
-
     foreach(QString appName, executables) {
-        for(const auto& directory : paths) {
-            QDir appDir(directory);
-            QString currentPath = appDir.absoluteFilePath(appName);
+        for(const auto& directory : dirs) {
+            QString currentPath = directory.absoluteFilePath(appName);
 
             QFileInfo fileInfo(currentPath);
             if(fileInfo.exists() && fileInfo.isExecutable()) {
@@ -106,7 +103,7 @@ QList<QDir> cwGlobals::systemPaths()
     QString seperator;
 #ifdef Q_OS_WIN
     seperator = ";";
-#elif Q_OS_UNIX
+#elif defined(Q_OS_UNIX)
     seperator = ":";
 #endif
 
@@ -114,7 +111,7 @@ QList<QDir> cwGlobals::systemPaths()
     if(env.contains("PATH") && !seperator.isEmpty()) {
         QString path = env.value("PATH");
         QStringList dirStringList = path.split(seperator);
-        for(auto dirStr : dirStringList) {
+	for(auto dirStr : dirStringList) {
             QDir dir(dirStr);
             if(dir.exists()) {
                 dirs.append(dir);
@@ -133,7 +130,7 @@ QList<QDir> cwGlobals::survexPath()
 {
 #ifdef Q_OS_WIN
     return {QDir(QStringLiteral("c:/Program Files (x86)/Survex")), QDir(QStringLiteral("c:/Program Files (x86)/Survex"))};
-#elif Q_OS_UNIX
+#elif defined(Q_OS_UNIX)
     return systemPaths();
 #else
     return {};

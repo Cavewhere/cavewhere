@@ -19,7 +19,7 @@ add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
-add_subdirectory(survex)
+#add_subdirectory(survex)
 
 # All packages we need to find
 find_package(Protobuf REQUIRED)
@@ -193,9 +193,10 @@ endif()
 file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
-#### Building Installer for Windows and Mac ####
-set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-include(installer/installer.cmake)
-
+if(WIN32)
+	#### Building Installer for Windows and Mac ####
+	set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+	include(installer/installer.cmake)
+endif()
 
