@@ -40,8 +40,11 @@ pipx install conan==1.63.0
    Clone the CaveWhere repository and checkout the correct branch (assuming `WIP-cmake` in this case). Initialize and update the submodules:
 
    ```bash
+   git clone https://github.com/Cavewhere/cavewhere.git
+   cd cavewhere
    git checkout --track origin/WIP-cmake
    git submodule update --init --recursive
+   cd ..
    ```
 
 2. **Create a Build Directory**
