@@ -1,5 +1,5 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwRunningProfileScrapViewMatrix.h"
@@ -14,7 +14,7 @@ TEST_CASE("Running profile scrap view matrix should produce the correct ViewMatr
 
     QVector3D origin;
 
-    INFO("Invalid")
+    INFO("Invalid");
     cwRunningProfileScrapViewMatrix::Data invalid(QVector3D(1.0, 2.0, 3.0), QVector3D(1.0, 2.0, 3.0));
     fuzzyCompareVector(invalid.from(), QVector3D(1.0, 2.0, 3.0));
     fuzzyCompareVector(invalid.to(), QVector3D(1.0, 2.0, 3.0));

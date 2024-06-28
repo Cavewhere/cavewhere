@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwScrapManager.h"
@@ -86,7 +87,7 @@ TEST_CASE("cwScrapManager should make the file size grow when re-calculaing scra
 
     auto nextSize = file.size();
     double ratio = nextSize / static_cast<double>(firstSize);
-    CHECK(ratio <= Approx(1.01));
+    CHECK(ratio <= Catch::Approx(1.01));
 }
 
 TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]") {

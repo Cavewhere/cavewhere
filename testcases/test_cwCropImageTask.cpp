@@ -1,5 +1,5 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwCropImageTask.h"
@@ -75,7 +75,7 @@ TEST_CASE("cwCropImageTask should crop DXT1 images correctly", "[cwCropImageTask
         REQUIRE(mipmaps.size() == sizes.size());
 
         for(int i = 0; i < mipmapImageData.size(); i++) {
-            INFO("mipmap:" << i)
+            INFO("mipmap:" << i);
             auto mipmap = mipmapImageData.at(i);
             auto size = sizes.at(i);
             DXT1BlockCompare::compare(size, mipmap);

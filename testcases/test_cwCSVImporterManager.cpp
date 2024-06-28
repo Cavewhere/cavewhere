@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Our includes
 #include "cwCSVImporterManager.h"
@@ -12,15 +13,18 @@
 #include "cwErrorListModel.h"
 #include "cwCSVLineModel.h"
 
+constexpr double delta = 0.001;
+using Catch::Matchers::WithinAbs;
+
 class Checker {
 public:
 
     static void check(const cwShot& testShot, const cwShot& shot) {
-        CHECK(testShot.distance() == Approx(shot.distance()));
-        CHECK(testShot.compass() == Approx(shot.compass()));
-        CHECK(testShot.backCompass() == Approx(shot.backCompass()));
-        CHECK(testShot.clino() == Approx(shot.clino()));
-        CHECK(testShot.backClino() == Approx(shot.backClino()));
+        CHECK_THAT(testShot.distance(), WithinAbs(shot.distance(), delta));
+        CHECK_THAT(testShot.compass(), WithinAbs(shot.compass(), delta));
+        CHECK_THAT(testShot.backCompass(), WithinAbs(shot.backCompass(), delta));
+        CHECK_THAT(testShot.clino(), WithinAbs(shot.clino(), delta));
+        CHECK_THAT(testShot.backClino(), WithinAbs(shot.backClino(), delta));
 
         CHECK(testShot.distanceState() == shot.distanceState());
         CHECK(testShot.compassState() == shot.compassState());
@@ -31,10 +35,10 @@ public:
 
     static void check(const cwStation& testStation, const cwStation& station) {
         CHECK(testStation.name().toStdString() == station.name().toStdString());
-        CHECK(testStation.left() == Approx(station.left()));
-        CHECK(testStation.right() == Approx(station.right()));
-        CHECK(testStation.up() == Approx(station.up()));
-        CHECK(testStation.down() == Approx(station.down()));
+        CHECK_THAT(testStation.left(), WithinAbs(station.left(), delta));
+        CHECK_THAT(testStation.right(), WithinAbs(station.right(), delta));
+        CHECK_THAT(testStation.up(), WithinAbs(station.up(), delta));
+        CHECK_THAT(testStation.down(), WithinAbs(station.down(), delta));
 
         CHECK(testStation.leftInputState() == station.leftInputState());
         CHECK(testStation.rightInputState() == station.rightInputState());

@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "TestHelper.h"
@@ -70,8 +71,8 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
                                              });
 
         CHECK(results.type == cwTextureUploadTask::DXT1Mipmaps);
-        CHECK(results.scaleTexCoords.x() == Approx(0.997024));
-        CHECK(results.scaleTexCoords.y() == Approx(1.0));
+        CHECK(results.scaleTexCoords.x() == Catch::Approx(0.997024));
+        CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
 
         checkMipmaps(results, mipmaps);
     }
@@ -91,8 +92,8 @@ TEST_CASE("cwTextureUploadTask should run correctly", "[cwTextureUploadTask]") {
                                              });
 
         CHECK(results.type == cwTextureUploadTask::OpenGL_RGBA);
-        CHECK(results.scaleTexCoords.x() == Approx(1.0));
-        CHECK(results.scaleTexCoords.y() == Approx(1.0));
+        CHECK(results.scaleTexCoords.x() == Catch::Approx(1.0));
+        CHECK(results.scaleTexCoords.y() == Catch::Approx(1.0));
         checkMipmaps(results, mipmaps);
 
         QImage image("://datasets/test_cwTextureUploadTask/PhakeCave.PNG");

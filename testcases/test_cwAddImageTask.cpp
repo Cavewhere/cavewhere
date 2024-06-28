@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwAddImageTask.h"
@@ -348,7 +349,7 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     auto regenerateFileSize = file.size();
     double ratio = regenerateFileSize / static_cast<double>(baseFileSize);
     INFO("Filename:" << filename);
-    CHECK(ratio <= Approx(1.0)); //Make sure this hasn't grown
+    CHECK(ratio <= Catch::Approx(1.0)); //Make sure this hasn't grown
 }
 
 TEST_CASE("cwAddImageTask should regenerate dxt1 mipmaps if in RGB", "[cwAddImageTask]") {

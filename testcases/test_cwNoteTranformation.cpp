@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwNoteTranformation.h"
@@ -40,28 +41,28 @@ TEST_CASE("cwNoteTransformation should update correctly", "[cwNoteTransformation
     SECTION("Check that scale updating works") {
         SECTION("Change scale directly") {
             transform.setScale(500.0);
-            CHECK(transform.scale() == Approx(500.0));
+            CHECK(transform.scale() == Catch::Approx(500.0));
             spyChecker[&scaleSpy]++;
             spyChecker.checkSpies();
         }
 
         SECTION("Change numerator") {
             transform.scaleNumerator()->setValue(400.0);
-            CHECK(transform.scale() == Approx(400.0));
+            CHECK(transform.scale() == Catch::Approx(400.0));
             spyChecker[&scaleSpy]++;
             spyChecker.checkSpies();
         }
 
         SECTION("Change denominator") {
             transform.scaleDenominator()->setValue(500.0);
-            CHECK(transform.scale() == Approx(1 / 500.0));
+            CHECK(transform.scale() == Catch::Approx(1 / 500.0));
             spyChecker[&scaleSpy]++;
             spyChecker.checkSpies();
         }
 
         SECTION("Change scale") {
             transform.scaleObject()->setScale(250);
-            CHECK(transform.scale() == Approx(250.0));
+            CHECK(transform.scale() == Catch::Approx(250.0));
             spyChecker[&scaleSpy]++;
             spyChecker.checkSpies();
         }
@@ -71,7 +72,7 @@ TEST_CASE("cwNoteTransformation should update correctly", "[cwNoteTransformation
             transform.scaleDenominator()->setValue(80.0);
             transform.scaleNumerator()->setUnit(cwUnits::Centimeters);
             transform.scaleDenominator()->setUnit(cwUnits::Meters);
-            CHECK(transform.scale() == Approx(0.02 / 80.0));
+            CHECK(transform.scale() == Catch::Approx(0.02 / 80.0));
             spyChecker[&scaleSpy] += 4;
             spyChecker.checkSpies();
         }

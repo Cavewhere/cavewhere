@@ -1,5 +1,6 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Our includes
 #include "cwSurvexportCSVTask.h"
@@ -44,9 +45,9 @@ TEST_CASE("cwSurvexportCSVTask should parse survexport CSV output correctly", "[
     for(auto station : stations) {
         CHECK(lookup.hasPosition(station.name));
         QVector3D lookupPos = lookup.position(station.name);
-        CHECK(lookupPos.x() == Approx(station.position.x()));
-        CHECK(lookupPos.y() == Approx(station.position.y()));
-        CHECK(lookupPos.z() == Approx(station.position.z()));
+        CHECK(lookupPos.x() == Catch::Approx(station.position.x()));
+        CHECK(lookupPos.y() == Catch::Approx(station.position.y()));
+        CHECK(lookupPos.z() == Catch::Approx(station.position.z()));
     }
 
     CHECK(lookup.positions().size() == stations.size());

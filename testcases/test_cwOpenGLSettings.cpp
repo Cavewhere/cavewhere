@@ -1,5 +1,5 @@
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Our includes
 #include "cwOpenGLSettings.h"
@@ -85,7 +85,7 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
         CHECK(initSettings->extentions().isEmpty() == false);
 
         auto checkVersion = [](const QString& version) {
-            INFO("Version:" << version.toStdString())
+            INFO("Version:" << version.toStdString());
                     QRegularExpression versionExpression("^\\d+\\.\\d+");
             auto match = versionExpression.match(version);
             CHECK(match.hasMatch());

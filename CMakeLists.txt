@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.5.0)
 project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 
 
-option(WITH_PDF "Build with PDF support" ON)
+option(WITH_PDF "Build with PDF support" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
-#add_subdirectory(survex)
+add_subdirectory(survex)
 
 # All packages we need to find
 find_package(Protobuf REQUIRED)

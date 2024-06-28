@@ -6,7 +6,8 @@
 **************************************************************************/
 
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
@@ -136,7 +137,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(9.9984903336));
+            CHECK(cave->length()->value() == Catch::Approx(9.9984903336));
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-7.07, 7.07, 0.0));
@@ -147,7 +148,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0));
+            CHECK(cave->length()->value() == Catch::Approx(10.0));
             CHECK(cave->depth()->value() == 10.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
@@ -158,8 +159,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0).epsilon(0.01));
-            CHECK(cave->depth()->value() == Approx(3.8299).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
+            CHECK(cave->depth()->value() == Catch::Approx(3.8299).epsilon(0.01));
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 9.24, -3.83));
         }
@@ -169,8 +170,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(0.0).epsilon(0.01));
-            CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(0.0).epsilon(0.01));
+            CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
         }
@@ -193,8 +194,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 INFO("i:" << i);
 
-                CHECK(cave->length()->value() == Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
-                CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+                CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
+                CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
                 CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
                 CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
@@ -210,8 +211,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 int i = total - 2;
 
-                CHECK(cave->length()->value() == Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
-                CHECK(cave->depth()->value() == Approx(0.0).epsilon(0.01));
+                CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
+                CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
 
                 CHECK(cave->stationPositionLookup().hasPosition(QString("a3-%1").arg(i)) == true);
 
@@ -275,7 +276,7 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->length()->value() == Approx(10.0).epsilon(0.01));
+            CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
             CHECK(cave->depth()->value() == 0.0);
             CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
             CHECK(cave->stationPositionLookup().position("a2") == QVector3D(7.07, 7.07, 0.0));

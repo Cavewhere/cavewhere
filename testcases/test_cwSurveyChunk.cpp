@@ -7,7 +7,7 @@
 
 //Catch includes
 #define CATCH_CONFIG_SFINAE
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
 #include "cwError.h"

@@ -129,9 +129,12 @@ QList<QDir> cwGlobals::systemPaths()
 QList<QDir> cwGlobals::survexPath()
 {
 #ifdef Q_OS_WIN
-    return {QDir(QStringLiteral("c:/Program Files (x86)/Survex")), QDir(QStringLiteral("c:/Program Files (x86)/Survex"))};
+    return {QDir(QCoreApplication::applicationDirPath()), QDir(QStringLiteral("c:/Program Files (x86)/Survex")), QDir(QStringLiteral("c:/Program Files (x86)/Survex"))};
 #elif defined(Q_OS_UNIX)
-    return systemPaths();
+    QList<QDir> dirs;
+    dirs.append(QDir(QCoreApplication::applicationDirPath()));
+    dirs.append(systemPaths());
+    return dirs;
 #else
     return {};
 #endif

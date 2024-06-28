@@ -2,7 +2,7 @@
 #include "SpyChecker.h"
 
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 SpyChecker::SpyChecker()
 {
@@ -18,7 +18,7 @@ SpyChecker::SpyChecker(const std::initializer_list<std::pair<QSignalSpy *, int> 
 void SpyChecker::checkSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
-        INFO("Key:" << iter.key()->objectName().toStdString())
+        INFO("Key:" << iter.key()->objectName().toStdString());
         CHECK(iter.key()->size() == iter.value());
     }
 }
@@ -26,7 +26,7 @@ void SpyChecker::checkSpies() const
 void SpyChecker::requireSpies() const
 {
     for(auto iter = begin(); iter != end(); iter++) {
-        INFO("Key:" << iter.key()->objectName().toStdString())
+        INFO("Key:" << iter.key()->objectName().toStdString());
         REQUIRE(iter.key()->size() == iter.value());
     }
 }

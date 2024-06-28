@@ -6,7 +6,8 @@
 **************************************************************************/
 
 //Catch includes
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
 #include "cwScrap.h"
@@ -109,14 +110,14 @@ void checkScrapTransform(cwScrap* scrap, const TestRow& row) {
     double realScale = 1.0 / transform->scale();
 
     INFO("Calc Scale:" << realScale << " Row Scale:" << row.Scale );
-    CHECK(realScale == Approx(row.Scale).epsilon(row.ScaleEpsilon));
+    CHECK(realScale == Catch::Approx(row.Scale).epsilon(row.ScaleEpsilon));
     INFO("Calc Up:" << transform->northUp() << " Row Up:" << row.Rotation );
-    CHECK(transform->northUp() == Approx(row.Rotation).epsilon(row.RotationEpsilon));
+    CHECK(transform->northUp() == Catch::Approx(row.Rotation).epsilon(row.RotationEpsilon));
 
     if(scrap->type() == cwScrap::ProjectedProfile) {
         auto viewMatrix = dynamic_cast<cwProjectedProfileScrapViewMatrix*>(scrap->viewMatrix());
         REQUIRE(viewMatrix);
-        CHECK(viewMatrix->azimuth() == Approx(row.ProfileAzimuth).margin(0.1));
+        CHECK(viewMatrix->azimuth() == Catch::Approx(row.ProfileAzimuth).margin(0.1));
     }
 }
 
@@ -296,8 +297,8 @@ TEST_CASE("Auto calculate if the scrap type has changed", "[cwScrap]") {
         REQUIRE(dynamic_cast<cwProjectedProfileScrapViewMatrix*>(currentScrap->viewMatrix()));
 
         //Make sure it has change, because we've changed the type
-        CHECK(runningProfileRow.Rotation != Approx(currentScrap->noteTransformation()->northUp()));
-        CHECK(1.0 / runningProfileRow.Scale != Approx(currentScrap->noteTransformation()->scale()));
+        CHECK(runningProfileRow.Rotation != Catch::Approx(currentScrap->noteTransformation()->northUp()));
+        CHECK(1.0 / runningProfileRow.Scale != Catch::Approx(currentScrap->noteTransformation()->scale()));
 
         //Change it back to running profile
         currentScrap->setType(cwScrap::RunningProfile);

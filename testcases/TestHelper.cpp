@@ -1,5 +1,6 @@
 #include "TestHelper.h"
-#include <catch2/catch.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Qt includes
 #include <QStandardPaths>
@@ -104,8 +105,9 @@ QString prependTempFolder(QString filename)
 
 void fuzzyCompareVector(QVector3D v1, QVector3D v2, double delta)
 {
+    using Catch::Matchers::WithinAbs;
     INFO(v1 << "==" << v2);
-    CHECK(v1.x() == Approx(v2.x()).margin(delta));
-    CHECK(v1.y() == Approx(v2.y()).margin(delta));
-    CHECK(v1.z() == Approx(v2.z()).margin(delta));
+    CHECK_THAT(v1.x(), WithinAbs(v2.x(), delta));
+    CHECK_THAT(v1.y(), WithinAbs(v2.y(), delta));
+    CHECK_THAT(v1.z(), WithinAbs(v2.z(), delta));
 }

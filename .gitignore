@@ -997,3 +997,4 @@ conanbuildinfo.txt
 conaninfo.txt
 graph_info.json
 CMakeLists.txt.user
+build
