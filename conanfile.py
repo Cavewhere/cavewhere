@@ -20,14 +20,13 @@ class CaveWhereConan(ConanFile):
     ("libsquish/[>=1.15]"),
 
     #We handle survex dependancies here for now, since we're using conan
-#    ("wxwidgets/3.1.5@bincrafters/stable"),
+    ("wxwidgets/[>=3.2.5]"),
     ("glew/[>=2.2.0]"),
 #    ("proj/6.3.1"),
     ("proj/[>=9.2.1]"),
     # ("zlib/[>=1.2.13]"),
     ("libtiff/[>=4.5.1]"),
-
-
+    ("gdal/[>=3.4.3]"),
     ]
 
     options = {"system_qt": [True, False]}
@@ -35,9 +34,11 @@ class CaveWhereConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain", "VirtualBuildEnv", "VirtualRunEnv"
 
     def requirements(self):
+        self.requires("expat/2.6.2", override=True)
+
         # Or add a new requirement!
         if not self.options.system_qt:
-           self.requires("qt/5.15.10")
+           self.requires("qt/5.15.14")
            self.requires("libpng/1.6.40"),
            self.requires("libjpeg/9e"),
 
