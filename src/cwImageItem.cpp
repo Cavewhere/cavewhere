@@ -20,6 +20,7 @@
 //QT includes
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
+#include <QPainter>
 
 cwImageItem::cwImageItem(QQuickItem *parent) :
     cwGLViewer(parent),

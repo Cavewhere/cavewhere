@@ -15,7 +15,7 @@
 
 //Our includes
 #include "cwInteraction.h"
-class cwScrapView;
+#include "cwScrapView.h"
 class cwScrapItem;
 class cwScrap;
 

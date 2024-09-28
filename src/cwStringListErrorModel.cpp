@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QIcon>
+#include <QRegularExpression>
 #include <QDebug>
 
 cwStringListErrorModel::cwStringListErrorModel(QObject *parent) :
@@ -30,9 +31,9 @@ QVariant  cwStringListErrorModel::data(const QModelIndex &index, int role) const
     case Qt::DisplayRole:
         return error;
     case Qt::DecorationRole: {
-        if(error.contains(QRegExp("^error:", Qt::CaseInsensitive))) {
+        if (error.contains(QRegularExpression("^error:", QRegularExpression::CaseInsensitiveOption))) {
             return QIcon(":icons/stopSignError.png");
-        } else if(error.contains(QRegExp("^warning:", Qt::CaseInsensitive))) {
+        } else if (error.contains(QRegularExpression("^warning:", QRegularExpression::CaseInsensitiveOption))) {
             return QIcon(":icons/warning.png");
         }
         return QVariant();

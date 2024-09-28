@@ -10,7 +10,8 @@
 
 //Qt includes
 #include <QDoubleValidator>
-#include <QRegExp>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
 
 cwClinoValidator::cwClinoValidator(QObject *parent) :
     cwValidator(parent)
@@ -31,9 +32,9 @@ QValidator::State cwClinoValidator::validate ( QString & input, int & pos ) cons
 
     switch(state) {
     case QValidator::Invalid: {
-        QRegExpValidator upDownValidator;
-        QRegExp regexp("up|down", Qt::CaseInsensitive);
-        upDownValidator.setRegExp(regexp);
+        QRegularExpressionValidator upDownValidator;
+        QRegularExpression regexp("up|down", QRegularExpression::CaseInsensitiveOption);
+        upDownValidator.setRegularExpression(regexp);
         return upDownValidator.validate(input, pos);
     }
     case QValidator::Acceptable: {

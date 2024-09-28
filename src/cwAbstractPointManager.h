@@ -14,8 +14,8 @@
 #include <QQuickItem>
 
 //Our includes
-class cwTransformUpdater;
-class cwSelectionManager;
+#include "cwTransformUpdater.h"
+#include "cwSelectionManager.h"
 
 /**
  * @brief The cwAbsrtactPointManager class

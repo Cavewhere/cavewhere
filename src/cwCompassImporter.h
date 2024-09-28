@@ -15,7 +15,7 @@
 #include "cwGlobals.h"
 
 //Qt include
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QStringList>
 class QFile;
 
@@ -57,9 +57,9 @@ private:
     bool CurrentFileGood;
 
     //Regex
-    QRegExp SurveyNameRegExp;
-    QRegExp DateRegExp;
-    QRegExp CalibrationRegExp;
+    QRegularExpression SurveyNameRegExp;
+    QRegularExpression DateRegExp;
+    QRegularExpression CalibrationRegExp;
     cwStationRenamer StationRenamer;
 
     void verifyCompassDataFileExists();

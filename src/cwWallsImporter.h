@@ -15,7 +15,6 @@
 
 //Qt include
 #include <QObject>
-#include <QRegExp>
 #include <QStringList>
 #include <QSet>
 class QFile;

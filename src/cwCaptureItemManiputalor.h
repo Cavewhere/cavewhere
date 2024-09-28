@@ -15,7 +15,7 @@
 #include <QQmlComponent>
 
 //Our includes
-class cwCaptureManager;
+#include "cwCaptureManager.h"
 class cwCaptureItem;
 
 class cwCaptureItemManiputalor : public QQuickItem

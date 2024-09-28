@@ -7,7 +7,7 @@
 #include "SpyChecker.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly", "[cwProjectedProfileScrapViewMatrix]")
 {
@@ -22,9 +22,9 @@ TEST_CASE("cwProjectedProfileScrapViewMatrix should create the matrix correctly"
     CHECK(matrixData->matrix() == view.matrix());
     CHECK(matrixData->azimuth() == view.azimuth());
 
-    QSignalSpy azimuthChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::azimuthChanged);
-    QSignalSpy matrixChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::matrixChanged);
-    QSignalSpy directionChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::directionChanged);
+    cwSignalSpy azimuthChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::azimuthChanged);
+    cwSignalSpy matrixChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::matrixChanged);
+    cwSignalSpy directionChangedSpy(&view, &cwProjectedProfileScrapViewMatrix::directionChanged);
 
     azimuthChangedSpy.setObjectName("azimuthChangedSpy");
     matrixChangedSpy.setObjectName("matrixChangedSpy");

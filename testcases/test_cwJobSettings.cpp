@@ -9,7 +9,7 @@
 #include <QThread>
 #include <QThreadPool>
 #include <QSettings>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwJobSettings should initilize correctly and update settings correcly", "[cwJobSettings]") {
     cwJobSettings::initialize();
@@ -19,8 +19,8 @@ TEST_CASE("cwJobSettings should initilize correctly and update settings correcly
     CHECK(settings == settings2);
     REQUIRE(settings);
 
-    QSignalSpy threadCountSpy(settings, &cwJobSettings::threadCountChanged);
-    QSignalSpy autoUpdateSpy(settings, &cwJobSettings::automaticUpdateChanged);
+    cwSignalSpy threadCountSpy(settings, &cwJobSettings::threadCountChanged);
+    cwSignalSpy autoUpdateSpy(settings, &cwJobSettings::automaticUpdateChanged);
 
     threadCountSpy.setObjectName("threadCountSpy");
     autoUpdateSpy.setObjectName("autoUpdateSpy");

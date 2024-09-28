@@ -32,7 +32,7 @@
 
 //Qt includes
 #include <QtGlobal>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 class TestRow {
 public:

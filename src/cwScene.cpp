@@ -167,7 +167,7 @@ void cwScene::checkForGLError(const QByteArray& location)
 {
     auto error = glGetError();
     if(error != GL_NO_ERROR) {
-        qDebug() << "GL Error:" << hex << error << location;
+        qDebug() << "GL Error:" << error << location;
     }
 }
 

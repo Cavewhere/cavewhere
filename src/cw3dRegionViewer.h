@@ -20,8 +20,8 @@
 //class cwGLScraps;
 //class cwGLGridPlane;
 class cwGeometryItersecter;
-class cwOrthogonalProjection;
-class cwPerspectiveProjection;
+#include "cwOrthogonalProjection.h"
+#include "cwPerspectiveProjection.h"
 
 class cw3dRegionViewer : public cwGLViewer
 {
@@ -57,24 +57,9 @@ private:
 
 };
 
-Q_DECLARE_METATYPE(cw3dRegionViewer*)
+// Q_DECLARE_METATYPE(cw3dRegionViewer*)
 
 
-/**
-* @brief cw3dRegionViewer::orthoProjectionObject
-* @return
-*/
-inline cwOrthogonalProjection* cw3dRegionViewer::orthoProjection() const {
-    return OrthognalProjection;
-}
-
-/**
-* @brief cw3dRegionViewer::perspectiveProjectionObject
-* @return
-*/
-inline cwPerspectiveProjection* cw3dRegionViewer::perspectiveProjection() const {
-    return PerspectiveProjection;
-}
 
 
 #endif // CW3DREGIONVIEWER_H

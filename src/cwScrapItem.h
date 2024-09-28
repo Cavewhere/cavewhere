@@ -14,14 +14,13 @@
 #include <QQmlListProperty>
 
 //Our includes
-class cwScrap;
-class cwTransformUpdater;
-class cwScrapStationView;
-class cwScrapOutlinePointView;
+#include "cwScrap.h"
+#include "cwTransformUpdater.h"
+#include "cwScrapStationView.h"
+#include "cwScrapLeadView.h"
+#include "cwScrapOutlinePointView.h"
+#include "cwSelectionManager.h"
 class cwSGPolygonNode;
-class cwSGLinesNode;
-class cwSelectionManager;
-class cwScrapLeadView;
 
 /**
   \brief This draws a scrap

@@ -18,7 +18,7 @@
 #include <QQuickItem>
 
 //Our includes
-class cwPage;
+#include "cwPage.h"
 
 /**
  * @brief The cwPageSelectionModel class

@@ -24,7 +24,7 @@
 #include <QDebug>
 #include <QVariant>
 #include <QSet>
-#include <QRegExp>
+#include <QRegularExpression>
 
 //Std includes
 #include <math.h>
@@ -639,11 +639,13 @@ QString cwSurveyChunk::guessLastStationName() const {
   wouldn't work. Stations that don't work, will return an empty string.
   */
 QString cwSurveyChunk::guessNextStation(QString stationName) const {
-    //Look for numbers to increament
-    QRegExp regexp("(\\D*)(\\d+)");
-    if(regexp.exactMatch(stationName)) {
-        QString surveyNamePrefix = regexp.cap(1);
-        QString stationNumberString = regexp.cap(2);
+    // Look for numbers to increment
+    QRegularExpression regexp("(\\D*)(\\d+)");
+    QRegularExpressionMatch match = regexp.match(stationName);
+
+    if (match.hasMatch()) {
+        QString surveyNamePrefix = match.captured(1);
+        QString stationNumberString = match.captured(2);
 
         int stationNumber = stationNumberString.toInt();
         stationNumber++;

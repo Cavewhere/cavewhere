@@ -11,7 +11,7 @@
 //Qt includes
 #include <QOpenGLBuffer>
 #include <QQuaternion>
-#include <QStateMachine>
+// #include <QStateMachine>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QOpenGLShaderProgram>
@@ -21,15 +21,15 @@
 
 //Our includes
 #include "cwCamera.h"
-class cwMouseEventTransition;
+// class cwMouseEventTransition;
 class cwGLShader;
 class cwShaderDebugger;
 class cwCavingRegion;
 class cwCave;
 class cwScene;
-#include "cwStation.h"
-#include "cwRegularTile.h"
-#include "cwEdgeTile.h"
+// #include "cwStation.h"
+// #include "cwRegularTile.h"
+// #include "cwEdgeTile.h"
 #include "cwCollisionRectKdTree.h"
 
 

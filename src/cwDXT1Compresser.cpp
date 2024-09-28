@@ -7,7 +7,6 @@
 
 //Qt includes
 #include <QPoint>
-#include <QGLWidget>
 #include <QtConcurrent>
 #include <QOffscreenSurface>
 #include <QOpenGLFunctions>
@@ -177,7 +176,7 @@ public:
     }
 
     QPoint Position;
-    const QImage image;
+    QImage image;
     u8 const* RGBA;
     void* BlockData;
 };

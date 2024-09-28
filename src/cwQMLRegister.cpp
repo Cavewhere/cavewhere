@@ -84,7 +84,6 @@
 #include "cwQuickSceneView.h"
 #include "cwCaptureItemManiputalor.h"
 #include "cwCaptureGroupModel.h"
-#include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwPageView.h"
@@ -223,7 +222,6 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<QGraphicsScene>("Cavewhere", 1, 0, "GraphicsScene");
     qmlRegisterType<cwCaptureItemManiputalor>("Cavewhere", 1, 0, "CaptureItemManiputalor");
     qmlRegisterType<cwCaptureGroupModel>("Cavewhere", 1, 0, "CaptureGroupModel");
-    qmlRegisterType<cwEventRecorderModel>("Cavewhere", 1, 0, "EventRecorderModel");
     qmlRegisterType<cwTaskManagerModel>("Cavewhere", 1, 0, "TaskManagerModel");
     qmlRegisterType<cwPageSelectionModel>("Cavewhere", 1, 0, "PageSelectionModel");
     qmlRegisterType<cwPageView>("Cavewhere", 1, 0, "PageView");

@@ -23,7 +23,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QThreadPool>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Std includes
 #include <random>
@@ -97,7 +97,7 @@ TEST_CASE("cwScrapManager auto update should work propertly", "[cwScrapManager]"
 
     rootData->futureManagerModel()->waitForFinished();
 
-    QSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
+    cwSignalSpy addRowSpy(rootData->futureManagerModel(), &cwFutureManagerModel::rowsInserted);
 
     auto scrapManager = rootData->scrapManager();
     CHECK(scrapManager->automaticUpdate() == true);

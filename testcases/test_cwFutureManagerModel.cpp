@@ -8,7 +8,7 @@
 
 //Qt includes
 #include <QtConcurrent>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Async includes
 #include <asyncfuture.h>
@@ -18,14 +18,14 @@ TEST_CASE("cwFutureManagerModel should add and watch futures correctly", "[cwFut
 
     cwFutureManagerModel model;
 
-    QSignalSpy rowsInsertedSpy(&model, &cwFutureManagerModel::rowsInserted);
-    QSignalSpy rowsRemovedSpy(&model, &cwFutureManagerModel::rowsRemoved);
-    QSignalSpy rowsMovedSpy(&model, &cwFutureManagerModel::rowsMoved);
-    QSignalSpy columnsInsertedSpy(&model, &cwFutureManagerModel::columnsInserted);
-    QSignalSpy columnsRemovedSpy(&model, &cwFutureManagerModel::columnsRemoved);
-    QSignalSpy columnsMovedSpy(&model, &cwFutureManagerModel::columnsMoved);
-    QSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
-    QSignalSpy intervalChangedSpy(&model, &cwFutureManagerModel::intervalChanged);
+    cwSignalSpy rowsInsertedSpy(&model, &cwFutureManagerModel::rowsInserted);
+    cwSignalSpy rowsRemovedSpy(&model, &cwFutureManagerModel::rowsRemoved);
+    cwSignalSpy rowsMovedSpy(&model, &cwFutureManagerModel::rowsMoved);
+    cwSignalSpy columnsInsertedSpy(&model, &cwFutureManagerModel::columnsInserted);
+    cwSignalSpy columnsRemovedSpy(&model, &cwFutureManagerModel::columnsRemoved);
+    cwSignalSpy columnsMovedSpy(&model, &cwFutureManagerModel::columnsMoved);
+    cwSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+    cwSignalSpy intervalChangedSpy(&model, &cwFutureManagerModel::intervalChanged);
 
     SpyChecker spyChecker({
                               {&rowsInsertedSpy, 0},
@@ -177,7 +177,7 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
         }
     });
 
-    QSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
+    cwSignalSpy dataChangedSpy(&model, &cwFutureManagerModel::dataChanged);
 
     QVector<int> ints(size);
     std::iota(ints.begin(), ints.end(), ints.size());
@@ -200,7 +200,7 @@ TEST_CASE("Update should update number of steps correctly", "[cwFutureManagerMod
     }).future();
 
 
-    model.addJob({nextFuture2, "ChainedFutures"});
+    model.addJob({QFuture<void>(nextFuture2), "ChainedFutures"});
 
     REQUIRE(cwAsyncFuture::waitForFinished(nextFuture2, size * sleepTime * 3));
 }
@@ -220,14 +220,14 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly", "[cwFutu
     int runs = 5;
     for(int i = 0; i < runs; i++) {
         auto future = QtConcurrent::run(std::bind(func, i));
-        model.addJob({future, QString("Future %1").arg(i)});
+        model.addJob({QFuture<void>(future), QString("Future %1").arg(i)});
     }
 
     QTimer timer;
     timer.setInterval(sleepTime * 0.5);
     timer.singleShot(sleepTime * 0.5, [func, &model]() {
         auto future = QtConcurrent::run(std::bind(func, 10));
-        model.addJob({future, QString("delayed future")});
+        model.addJob({QFuture<void>(future), QString("delayed future")});
     });
 
     model.waitForFinished();
@@ -243,7 +243,7 @@ TEST_CASE("cwFutureManagerModel waitForFinished should work correctly with cwAsy
     QAtomicInt count(0);
 
     restarter.onFutureChanged([&model, &restarter]() {
-        model.addJob({restarter.future(), "Job}"});
+        model.addJob({QFuture<void>(restarter.future()), "Job}"});
     });
 
     for(int i = 0; i < 20; i++) {

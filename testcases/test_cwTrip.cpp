@@ -5,12 +5,12 @@
 #include "cwTrip.h"
 
 //Qt inculdes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwTrip should strip the datestamp away from date", "[cwTrip]") {
     cwTrip trip;
 
-    QSignalSpy spy(&trip, &cwTrip::dateChanged);
+    cwSignalSpy spy(&trip, &cwTrip::dateChanged);
 
     CHECK(trip.date().time().hour() == 0);
     CHECK(trip.date().time().minute() == 0);

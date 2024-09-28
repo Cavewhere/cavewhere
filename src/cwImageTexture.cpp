@@ -16,6 +16,7 @@
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 #include <QVector2D>
+#include <QFuture>
 #include <QWindow>
 
 //Async future
@@ -274,7 +275,7 @@ void cwImageTexture::startLoadingImage()
         uploadTask.setProjectFilename(ProjectFilename);
         uploadTask.setType(TextureType);
         UploadedTextureFuture = uploadTask.mipmaps();
-        FutureManagerToken.addJob({UploadedTextureFuture, "Updating Texture"});
+        FutureManagerToken.addJob(cwFuture(QFuture<void>(UploadedTextureFuture), "Updating Texture"));
 
         AsyncFuture::observe(UploadedTextureFuture).subscribe([this](){
             markAsDirty();

@@ -35,11 +35,11 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
 
     QString caveName = cave->name().remove(" ");
 
-    stream << "*begin " << caveName << " ;" << cave->name() << endl << endl;
+    stream << "*begin " << caveName << " ;" << cave->name() << Qt::endl << Qt::endl;
 
     //This fucks up shit in cavern
-   // stream << "*sd compass 2.0 degrees" << endl;
-   // stream << "*sd clino 2.0 degrees" << endl << endl;
+   // stream << "*sd compass 2.0 degrees" << Qt::endl;
+   // stream << "*sd clino 2.0 degrees" << Qt::endl << Qt::endl;
 
     //Add fix station to tie the cave down
     fixFirstStation(stream, cave);
@@ -52,10 +52,10 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, cwCave* cave) {
         cwTrip* trip = cave->trip(i);
         TripExporter->writeTrip(stream, trip);
         TotalProgress += trip->numberOfStations();
-        stream << endl;
+        stream << Qt::endl;
     }
 
-    stream << "*end ; End of " << cave->name() << endl;
+    stream << "*end ; End of " << cave->name() << Qt::endl;
 
     return true;
 }
@@ -77,7 +77,7 @@ void cwSurvexExporterCaveTask::fixFirstStation(QTextStream &stream, cwCave *cave
                 if(!firstChunk->stations().isEmpty()) {
                     cwStation station = firstChunk->stations().first();
 
-                    stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << endl;
+                    stream << "*fix " << station.name() << " " << 0 << " " << 0 << " " << 0 << Qt::endl;
                 }
             }
         }

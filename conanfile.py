@@ -16,14 +16,13 @@ class CaveWhereConan(ConanFile):
     ("protobuf/[>=3.12.4]"),
 #    ("survex/1.2.44@cave-software/dev"),
 #    ("dewalls/7e97092a144f153cb9ed7d318808208e9b35c74f@cave-software/dev"),
-    ("sqlite3/[>=3.42.0]"),
+#   ("sqlite3/[>=3.42.0]"}),
     ("libsquish/[>=1.15]"),
 
     #We handle survex dependancies here for now, since we're using conan
     ("wxwidgets/[>=3.2.5]"),
     ("glew/[>=2.2.0]"),
-#    ("proj/6.3.1"),
-    ("proj/[>=9.2.1]"),
+    ("proj/9.3.1"),
     # ("zlib/[>=1.2.13]"),
     ("libtiff/[>=4.5.1]"),
     ("gdal/[>=3.4.3]"),
@@ -35,12 +34,15 @@ class CaveWhereConan(ConanFile):
 
     def requirements(self):
         self.requires("expat/2.6.2", override=True)
+        self.requires("sqlite3/3.46.1", override=True)
+        # self.requires("proj/9.5.0", override=True)
+        self.requires("libpng/1.6.44", override=True)
 
         # Or add a new requirement!
-        if not self.options.system_qt:
-           self.requires("qt/5.15.14")
-           self.requires("libpng/1.6.40"),
-           self.requires("libjpeg/9e"),
+        # if not self.options.system_qt:
+        #    self.requires("qt/5.15.14")
+        #    self.requires("libpng/1.6.40"),
+        #    self.requires("libjpeg/9e"),
 
 #    def set_version(self):
 #        git = tools.Git()

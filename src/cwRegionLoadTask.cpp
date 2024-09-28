@@ -294,7 +294,7 @@ void cwRegionLoadTask::loadTrip(const CavewhereProto::Trip& protoTrip, cwTrip *t
     QDate tripDate = loadDate(protoTrip.date());
 
     trip->setName(tripName);
-    trip->setDate(QDateTime(tripDate));
+    trip->setDate(QDateTime(tripDate, QTime()));
 
     loadSurveyNoteModel(protoTrip.notemodel(), trip->notes());
     loadTripCalibration(protoTrip.tripcalibration(), trip->calibrations());

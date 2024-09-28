@@ -1,6 +1,6 @@
 # Determine the target OS
-find_package(Qt5 COMPONENTS Core)
-get_target_property(QtCore_location Qt5::Core LOCATION)
+find_package(Qt6 COMPONENTS Core)
+get_target_property(QtCore_location Qt6::Core LOCATION)
 get_filename_component(Qt_bin_dir ${QtCore_location} DIRECTORY)
 
 set(conanbuildinfo ${CMAKE_BINARY_DIR}/conan-dependencies/conanbuildinfo.cmake)

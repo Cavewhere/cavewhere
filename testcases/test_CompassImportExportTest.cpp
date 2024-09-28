@@ -24,7 +24,7 @@
 //Qt includes
 #include <QFile>
 #include <QFileInfo>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("Export/Import Compass", "[Compass]") {
 
@@ -54,7 +54,7 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
 
     auto importFromCompass = std::make_unique<cwCompassImporter>();
-    QSignalSpy messageSpy(importFromCompass.get(), SIGNAL(statusMessage(QString)));
+    cwSignalSpy messageSpy(importFromCompass.get(), SIGNAL(statusMessage(QString)));
     importFromCompass->setCompassDataFiles(QStringList() << exportFile);
     importFromCompass->start();
     importFromCompass->waitToFinish();
@@ -188,7 +188,7 @@ TEST_CASE("Test 15 char format is okay", "[Compass]") {
 
     auto importFromCompass = std::make_unique<cwCompassImporter>();
 
-    QSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
+    cwSignalSpy messageSpy(importFromCompass.get(), &cwCompassImporter::statusMessage);
 
     importFromCompass->setCompassDataFiles({datasetFile});
     importFromCompass->start();

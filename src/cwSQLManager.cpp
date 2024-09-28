@@ -74,7 +74,7 @@ bool cwSQLManager::beginTransaction(const QSqlDatabase& database, QueryType type
     QString beginTransationQuery = "BEGIN TRANSACTION";
     QSqlQuery query = database.exec(beginTransationQuery);
     QSqlError error = query.lastError();
-    while (error.isValid() && error.nativeErrorCode() == SQLITE_BUSY) {
+    while (error.isValid() && error.nativeErrorCode().toInt() == SQLITE_BUSY) {
         //Try to wait until the database becomes less busy
         QThread::currentThread()->sleep(250);
         query = database.exec(beginTransationQuery);
@@ -82,7 +82,7 @@ bool cwSQLManager::beginTransaction(const QSqlDatabase& database, QueryType type
     }
 
     if(error.isValid()) {
-        if(error.nativeErrorCode() != SQLITE_BUSY) {
+        if(error.nativeErrorCode().toInt() != SQLITE_BUSY) {
             //Some other error
             qDebug() << "Database error when trying to begin transaction:" << error << error.text() << LOCATION;
             return false;

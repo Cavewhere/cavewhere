@@ -10,8 +10,9 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlApplicationEngine>
 class QQuickView;
-class QQmlApplicationEngine;
+
 
 //Our includes
 #include "cwGlobals.h"

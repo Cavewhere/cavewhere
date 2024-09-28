@@ -41,7 +41,7 @@
 #include <QtConcurrentMap>
 #include <QFontMetrics>
 #include <QRay3D>
-#include <QGLFunctions>
+#include <QOpenGLFunctions>
 
 //const float cw3dRegionViewer::DefaultPitch = 90.0f;
 //const float cw3dRegionViewer::DefaultAzimuth = 0.0f;
@@ -71,6 +71,23 @@ cw3dRegionViewer::cw3dRegionViewer(QQuickItem *parent) :
 void cw3dRegionViewer::resizeGL() {
     emit resized();
 }
+
+/**
+* @brief cw3dRegionViewer::orthoProjectionObject
+* @return
+*/
+ cwOrthogonalProjection* cw3dRegionViewer::orthoProjection() const {
+    return OrthognalProjection;
+}
+
+/**
+* @brief cw3dRegionViewer::perspectiveProjectionObject
+* @return
+*/
+ cwPerspectiveProjection* cw3dRegionViewer::perspectiveProjection() const {
+    return PerspectiveProjection;
+}
+
 
 ///**
 //  Initializes the last click for the panning state

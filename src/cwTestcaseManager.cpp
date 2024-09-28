@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QApplication>
+#include <QRegularExpression>
 #include <QDebug>
 
 cwTestcaseManager::cwTestcaseManager() :
@@ -104,7 +105,7 @@ void cwTestcaseManager::addToResult(QString line)
 }
 
 /**
- * This splits arugments based on spaces and quotes
+ * This splits arguments based on spaces and quotes
  */
 QStringList cwTestcaseManager::argumentList() const
 {
@@ -112,22 +113,20 @@ QStringList cwTestcaseManager::argumentList() const
 
     QString arguments = this->arguments();
 
-
-    QRegExp findNext("(?:(?!\\\\)\"(.+)(?!\\\\)\")|(\\S+)");
+    QRegularExpression findNext("(?:(?!\\\\)\"(.+)(?!\\\\)\")|(\\S+)");
     Q_ASSERT(findNext.isValid());
 
-    int pos = 0;
-    while((pos = findNext.indexIn(arguments, pos)) != -1) {
+    QRegularExpressionMatchIterator i = findNext.globalMatch(arguments);
+    while (i.hasNext()) {
+        QRegularExpressionMatch match = i.next();
 
-        if(!findNext.cap(1).isEmpty()) {
-            QString quotedSting = findNext.cap(1);
-            quotedSting.remove('\\');
-            list.append(quotedSting);
+        if (!match.captured(1).isEmpty()) {
+            QString quotedString = match.captured(1);
+            quotedString.remove('\\');
+            list.append(quotedString);
         } else {
-            list.append(findNext.cap(2));
+            list.append(match.captured(2));
         }
-
-        pos += findNext.matchedLength();
     }
 
     return list;

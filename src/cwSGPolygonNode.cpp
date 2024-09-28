@@ -12,7 +12,6 @@
 //Qt includes
 #include <QSGGeometry>
 #include <QSGFlatColorMaterial>
-#include <qgl.h>
 
 cwSGPolygonNode::cwSGPolygonNode() {
     QSGFlatColorMaterial *material = new QSGFlatColorMaterial;
@@ -29,7 +28,7 @@ void cwSGPolygonNode::setPolygon(const QPolygonF &polygon) {
     cwTriangulate::Process(polygon, results);
 
     QSGGeometry *geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), results.size());
-    geometry->setDrawingMode(GL_TRIANGLES);
+    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
 
     for(int i = 0; i < results.size(); i++) {
         const QPointF& point = results.at(i);

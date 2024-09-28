@@ -10,9 +10,9 @@
 
 //Our include
 class cwTrip;
-class cwLength;
-class cwErrorModel;
 class cwCavingRegion;
+#include "cwErrorModel.h"
+#include "cwLength.h"
 #include "cwStation.h"
 #include "cwUndoer.h"
 #include "cwStationPositionLookup.h"

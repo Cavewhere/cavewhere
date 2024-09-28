@@ -11,7 +11,6 @@
 //Qt includes
 #include <QSGGeometry>
 #include <QSGFlatColorMaterial>
-#include <qgl.h>
 #include <QLineF>
 
 
@@ -34,7 +33,7 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
 {
     int numberOfPoints = lines.size() * 2;
 
-    geometry()->setDrawingMode(GL_LINES);
+    geometry()->setDrawingMode(QSGGeometry::DrawLines);
     geometry()->setLineWidth(LineWidth);
     geometry()->allocate(numberOfPoints);
 
@@ -55,7 +54,7 @@ void cwSGLinesNode::setLines(const QVector<QLineF> &lines)
  */
 void cwSGLinesNode::setLineStrip(const QVector<QPointF> &points)
 {
-    geometry()->setDrawingMode(GL_LINE_STRIP);
+    geometry()->setDrawingMode(QSGGeometry::DrawLineStrip);
     geometry()->setLineWidth(lineWidth());
     geometry()->allocate(points.size());
 

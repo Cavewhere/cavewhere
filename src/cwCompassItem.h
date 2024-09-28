@@ -10,6 +10,8 @@
 
 //Our includes
 #include "cwGLObject.h"
+#include "cwCamera.h"
+#include "cwShaderDebugger.h"
 class cwCamera;
 
 //Qt includes

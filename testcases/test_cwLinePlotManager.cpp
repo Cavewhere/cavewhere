@@ -28,7 +28,7 @@
 //Qt includes
 #include <QThread>
 #include <QApplication>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     auto project = fileToProject(":/datasets/network.cw");
@@ -797,10 +797,10 @@ TEST_CASE("cwLinePlotManager automatic update should work", "[cwLinePlotManager]
     chunk->appendShot(s1, s2, shot1);
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
-    QSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
+    cwSignalSpy autoUpdateSpy(plotManager.get(), &cwLinePlotManager::automaticUpdateChanged);
     autoUpdateSpy.setObjectName("autoUpdateSpy");
 
-    QSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
 
     SpyChecker spyChecker {

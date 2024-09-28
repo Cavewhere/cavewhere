@@ -45,19 +45,19 @@ bool cwSurvexExporterRegionTask::writeRegion(QTextStream& stream, cwCavingRegion
 
     TotalProgress = 0;
 
-    stream << "*begin  ;All the caves" << endl;
+    stream << "*begin  ;All the caves" << Qt::endl;
 
     for(int i = 0; i < region->caveCount(); i++) {
         cwCave* cave = region->cave(i);
         bool good = CaveExporter->writeCave(stream, cave);
-        stream << endl;
+        stream << Qt::endl;
 
         if(!good) {
             return false;
         }
     }
 
-    stream << "*end" << endl;
+    stream << "*end" << Qt::endl;
 
     return true;
 }

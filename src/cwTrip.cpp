@@ -24,7 +24,7 @@ cwTrip::cwTrip(QObject *parent) :
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
     Calibration = new cwTripCalibration(this);
-    DateTime = QDateTime(QDate::currentDate());
+    DateTime = QDateTime(QDate::currentDate(), QTime());
     Notes = new cwSurveyNoteModel(this);
     ErrorModel = new cwErrorModel(this);
 
@@ -111,7 +111,7 @@ void cwTrip::setName(QString name) {
   */
 void cwTrip::setDate(QDateTime date) {
     if(date != DateTime && !date.isNull()) {
-        pushUndo(new DateCommand(this, QDateTime(date.date()))); //Strips the time away
+        pushUndo(new DateCommand(this, QDateTime(date.date(), QTime()))); //Strips the time away
     }
 }
 

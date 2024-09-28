@@ -2,7 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Our includes
 #include "cwCaptureManager.h"
@@ -14,8 +14,8 @@ TEST_CASE("cwCaptureManager should update filename with the correct extention", 
     CHECK(manager.filename().toString().toStdString() == "");
     CHECK(manager.fileType() == cwCaptureManager::PNG);
 
-    QSignalSpy filenameSpy(&manager, &cwCaptureManager::filenameChanged);
-    QSignalSpy fileTypeSpy(&manager, &cwCaptureManager::fileTypeChanged);
+    cwSignalSpy filenameSpy(&manager, &cwCaptureManager::filenameChanged);
+    cwSignalSpy fileTypeSpy(&manager, &cwCaptureManager::fileTypeChanged);
 
     SpyChecker checker = {
         {&filenameSpy, 0},

@@ -9,8 +9,8 @@ SpyChecker::SpyChecker()
 
 }
 
-SpyChecker::SpyChecker(const std::initializer_list<std::pair<QSignalSpy *, int> > &list) :
-    QHash<QSignalSpy *, int> (list)
+SpyChecker::SpyChecker(const std::initializer_list<std::pair<cwSignalSpy *, int> > &list) :
+    QHash<cwSignalSpy *, int> (list)
 {
 
 }

@@ -21,10 +21,10 @@
 #include "cw3dRegionViewer.h"
 #include "cwProjection.h"
 #include "cwGlobals.h"
+#include "cwErrorListModel.h"
+#include "cwCaptureGroupModel.h"
 class cwCaptureViewport;
 class cwCaptureItem;
-class cwCaptureGroupModel;
-class cwErrorListModel;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
 {

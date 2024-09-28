@@ -225,12 +225,17 @@ QString cwChipdataExportCaveTask::formatNumber(double number, int maxPrecision, 
 {
     QString formatted = QString::number(number, 'f', maxPrecision);
     int decimalIndex = formatted.indexOf('.');
+
     if (decimalIndex >= 0) {
-        int trimIndex = QRegExp("\\.?0+$").indexIn(formatted);
-        if (trimIndex >= 0) {
+        QRegularExpression re(R"(\.?0+$)");
+        QRegularExpressionMatch match = re.match(formatted);
+
+        if (match.hasMatch()) {
+            int trimIndex = match.capturedStart(0);
             formatted = formatted.left(trimIndex);
         }
     }
+
     return formatted.rightJustified(columnWidth, ' ', true);
 }
 

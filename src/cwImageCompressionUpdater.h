@@ -6,9 +6,9 @@
 #include <QPointer>
 
 //Our includes
-class cwRegionTreeModel;
 class cwNote;
 class cwScrap;
+#include "cwRegionTreeModel.h"
 #include "cwFutureManagerToken.h"
 
 class cwImageCompressionUpdater : public QObject

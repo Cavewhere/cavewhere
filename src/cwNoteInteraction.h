@@ -9,7 +9,7 @@
 #define CWNOTEINTERACTION_H
 
 //Our includes
-class cwNote;
+#include "cwNote.h"
 #include "cwBasePanZoomInteraction.h"
 
 

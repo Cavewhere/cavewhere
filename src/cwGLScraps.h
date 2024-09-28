@@ -14,8 +14,8 @@
 #include "cwImageTexture.h"
 #include "cwGeometryItersecter.h"
 #include "cwFutureManagerToken.h"
+#include "cwProject.h"
 class cwCavingRegion;
-class cwProject;
 class cwScrap;
 
 //Qt includes

@@ -8,7 +8,7 @@
 //Qt includes
 #include <QRegularExpression>
 #include <QSettings>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
     auto checkUserDefaults = [](const cwOpenGLSettings& settings) {
@@ -43,16 +43,16 @@ TEST_CASE("cwOpenGLSettings should initilize correctly", "[cwOpenGLSettings]") {
 
         checkUserDefaults(*initSettings);
 
-        QSignalSpy restartSpy(initSettings, &cwOpenGLSettings::needsRestartChanged);
-        QSignalSpy dxt1ComprossedSpy(initSettings, &cwOpenGLSettings::useDXT1CompressionChanged);
-        QSignalSpy mipmapsSpy(initSettings, &cwOpenGLSettings::useMipmapsChanged);
-        QSignalSpy aniotropySpy(initSettings, &cwOpenGLSettings::useAnisotropyChanged);
-        QSignalSpy nativeTextRenderingSpy(initSettings, &cwOpenGLSettings::useNativeTextRenderingChanged);
-        QSignalSpy magFilterSpy(initSettings, &cwOpenGLSettings::magFilterChanged);
-        QSignalSpy minFilterSpy(initSettings, &cwOpenGLSettings::minFilterChanged);
-        QSignalSpy dxt1AlgoSpy(initSettings, &cwOpenGLSettings::dxt1AlgorithmChanged);
-        QSignalSpy rendererSpy(initSettings, &cwOpenGLSettings::rendererTypeChanged);
-        QSignalSpy currentSupportedSpy(initSettings, &cwOpenGLSettings::currentSupportedRendererChanged);
+        cwSignalSpy restartSpy(initSettings, &cwOpenGLSettings::needsRestartChanged);
+        cwSignalSpy dxt1ComprossedSpy(initSettings, &cwOpenGLSettings::useDXT1CompressionChanged);
+        cwSignalSpy mipmapsSpy(initSettings, &cwOpenGLSettings::useMipmapsChanged);
+        cwSignalSpy aniotropySpy(initSettings, &cwOpenGLSettings::useAnisotropyChanged);
+        cwSignalSpy nativeTextRenderingSpy(initSettings, &cwOpenGLSettings::useNativeTextRenderingChanged);
+        cwSignalSpy magFilterSpy(initSettings, &cwOpenGLSettings::magFilterChanged);
+        cwSignalSpy minFilterSpy(initSettings, &cwOpenGLSettings::minFilterChanged);
+        cwSignalSpy dxt1AlgoSpy(initSettings, &cwOpenGLSettings::dxt1AlgorithmChanged);
+        cwSignalSpy rendererSpy(initSettings, &cwOpenGLSettings::rendererTypeChanged);
+        cwSignalSpy currentSupportedSpy(initSettings, &cwOpenGLSettings::currentSupportedRendererChanged);
 
         restartSpy.setObjectName("restartSpy");
         dxt1ComprossedSpy.setObjectName("dxt1CompressedSpy");

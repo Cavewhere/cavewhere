@@ -150,7 +150,7 @@ private:
 
 };
 
-Q_DECLARE_METATYPE(cwTrip*)
+// Q_DECLARE_METATYPE(cwTrip*)
 
 /**
 Gets numberOfChunks

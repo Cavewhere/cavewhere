@@ -12,7 +12,7 @@
 #include <cwTripCalibration.h>
 
 //Qt inculdes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Our includes
 #include "TestHelper.h"
@@ -36,7 +36,7 @@ TEST_CASE("Trip Calibration Getters and setters should work", "[cwTripCalibratio
     CHECK(tripCalibration->hasFrontSights() == true);
     CHECK(tripCalibration->hasBackSights() == true);
 
-    QSignalSpy calibrationChanged(tripCalibration.get(), SIGNAL(calibrationsChanged()));
+    cwSignalSpy calibrationChanged(tripCalibration.get(), SIGNAL(calibrationsChanged()));
 
     tripCalibration->setCorrectedClinoBacksight(true);
     CHECK(tripCalibration->hasCorrectedClinoBacksight() == true);

@@ -18,9 +18,9 @@
 #include "cwImage.h"
 #include "cwImageData.h"
 #include "cwFutureManagerToken.h"
+#include "cwImageProperties.h"
 class cwGLImageItemResources;
 class cwImageTexture;
-class cwImageProperties;
 
 class cwImageItem : public cwGLViewer, protected QOpenGLFunctions
 {

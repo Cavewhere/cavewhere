@@ -17,9 +17,9 @@
 #include <QQuickItem>
 
 //Our includes
-class cwScale;
-class cw3dRegionViewer;
 class cwCamera;
+#include "cwScale.h"
+#include "cw3dRegionViewer.h"
 #include "cwProjection.h"
 #include "cwCaptureItem.h"
 #include "cwUnits.h"

@@ -47,7 +47,7 @@ void cwWallsImportData::cavesHelper(QList<cwCave*>* caves,
 
         //Copy the name and date
         currentTrip->setName(currentBlock->name());
-        currentTrip->setDate(QDateTime(currentBlock->date()));
+        currentTrip->setDate(QDateTime(currentBlock->date(), QTime()));
 
         //Copy all the team members
         currentTrip->setTeam(new cwTeam(*(currentBlock->team()))); //Copy the team

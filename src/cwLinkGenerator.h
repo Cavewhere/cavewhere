@@ -14,11 +14,11 @@
 #include <QPointer>
 
 //Our inculdes
+#include "cwPageSelectionModel.h"
 class cwCave;
 class cwNote;
 class cwScrap;
 class cwTrip;
-class cwPageSelectionModel;
 
 /**
  * @brief The cwLinkGenerator class

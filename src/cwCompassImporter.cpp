@@ -219,16 +219,19 @@ void cwCompassImporter::parseTripDate(QFile *file)
 
     if(!isFileGood(file, "survey date")) { return; }
 
-    if(DateRegExp.indexIn(dateString) == -1)  {
-        //Couldn't parse the date
-        //TODO: Add warning that we couldn't parse the date
+    // Perform the match
+    QRegularExpressionMatch match = DateRegExp.match(dateString);
+
+    if (!match.hasMatch()) {
+        // Couldn't parse the date
+        // TODO: Add warning that we couldn't parse the date
         emit statusMessage(QString("I couldn't parse the date in %1 on line %2")
-                           .arg(CurrentFilename)
-                           .arg(LineCount));
+                               .arg(CurrentFilename)
+                               .arg(LineCount));
     } else {
-        QString monthString = DateRegExp.cap(1);
-        QString dayString = DateRegExp.cap(2);
-        QString yearString = DateRegExp.cap(3);
+        QString monthString = match.captured(1);
+        QString dayString = match.captured(2);
+        QString yearString = match.captured(3);
 
         bool okay;
         int month = monthString.toInt(&okay);
@@ -286,7 +289,7 @@ void cwCompassImporter::parseTripDate(QFile *file)
         }
 
         QDate tripDate(year, month, day);
-        CurrentTrip->setDate(QDateTime(tripDate));
+        CurrentTrip->setDate(QDateTime(tripDate, QTime()));
     }
 }
 
@@ -323,14 +326,14 @@ void cwCompassImporter::parseSurveyTeam(QFile *file)
         surveyTeam.resize(100);
     }
 
-    QRegExp delimiter;
+    QRegularExpression delimiter;
     if (surveyTeam.contains(';')) {
-        delimiter = QRegExp("\\s*;\\s*");
+        delimiter = QRegularExpression("\\s*;\\s*");
     } else {
-        delimiter = QRegExp("\\s\\s+|\\s*,\\s*");
+        delimiter = QRegularExpression("\\s\\s+|\\s*,\\s*");
     }
 
-    QStringList teamList = surveyTeam.split(delimiter, QString::SkipEmptyParts);
+    QStringList teamList = surveyTeam.split(delimiter, Qt::SkipEmptyParts);
     if(!teamList.isEmpty()) {
         cwTeam* team = new cwTeam();
 
@@ -356,13 +359,14 @@ void cwCompassImporter::parseSurveyFormatAndCalibration(QFile *file)
     LineCount++;
     if(!isFileGood(file, "calibration")) { return; }
 
-    if(CalibrationRegExp.exactMatch(calibrationLine)) {
-        QString declinationString = CalibrationRegExp.cap(1);
-        QString fileFormatString = CalibrationRegExp.cap(2);
-        QString compassCorrectionString = CalibrationRegExp.cap(3);
-        QString clinoCorrectionString = CalibrationRegExp.cap(4);
-        QString lengthCorrectionString = CalibrationRegExp.cap(5);
+    QRegularExpressionMatch match = CalibrationRegExp.match(calibrationLine);
 
+    if (match.hasMatch()) {
+        QString declinationString = match.captured(1);
+        QString fileFormatString = match.captured(2);
+        QString compassCorrectionString = match.captured(3);
+        QString clinoCorrectionString = match.captured(4);
+        QString lengthCorrectionString = match.captured(5);
 
         double declination;
         if(convertNumber(declinationString, "declination", &declination)) {
@@ -480,7 +484,7 @@ void cwCompassImporter::parseSurveyData(QFile *file)
             break;
         }
 
-        QStringList dataStrings = dataLine.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+        QStringList dataStrings = dataLine.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 
         if(dataStrings.size() >= 9) {
             QString fromStationName = dataStrings.at(0);

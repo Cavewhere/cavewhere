@@ -11,7 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QMetaProperty>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 #include <QDebug>
 
 //Our includes
@@ -29,8 +29,8 @@ TEST_CASE("Fatal and warning count changing changing", "[ErrorModelTest]") {
     grandChild->setParentModel(child.get());
     child->setParentModel(parent.get());
 
-    QSignalSpy parentFatalSpy(parent.get(), SIGNAL(fatalCountChanged()));
-    QSignalSpy parentWarningSpy(parent.get(), SIGNAL(warningCountChanged()));
+    cwSignalSpy parentFatalSpy(parent.get(), SIGNAL(fatalCountChanged()));
+    cwSignalSpy parentWarningSpy(parent.get(), SIGNAL(warningCountChanged()));
 
     int size = 10;
     for(int i = 0; i < size; i++) {
@@ -99,8 +99,8 @@ TEST_CASE("Fatal and warning count changing changing", "[ErrorModelTest]") {
 //    cwErrorModel model;
 
 //    //These signal spies record when signals are emitted
-//    QSignalSpy parentErrorChangedSpy(&model, SIGNAL(parentErrorsChanged(QObject*)));
-//    QSignalSpy errorChangedSpy(&model, SIGNAL(errorsChanged(QObject*,int,int)));
+//    cwSignalSpy parentErrorChangedSpy(&model, SIGNAL(parentErrorsChanged(QObject*)));
+//    cwSignalSpy errorChangedSpy(&model, SIGNAL(errorsChanged(QObject*,int,int)));
 
 //    int index = 1;
 //    int role = 2;
@@ -268,8 +268,8 @@ TEST_CASE("Fatal and warning count changing changing", "[ErrorModelTest]") {
 //    model.addError(error2);
 
 //    //These signal spies record when signals are emitted
-//    QSignalSpy parentErrorChangedSpy(&model, SIGNAL(parentErrorsChanged(QObject*)));
-//    QSignalSpy errorChangedSpy(&model, SIGNAL(errorsChanged(QObject*,int,int)));
+//    cwSignalSpy parentErrorChangedSpy(&model, SIGNAL(parentErrorsChanged(QObject*)));
+//    cwSignalSpy errorChangedSpy(&model, SIGNAL(errorsChanged(QObject*,int,int)));
 
 //    model.setSuppressForError(error2, true);
 //    REQUIRE(model.errors(grandChild, 2, 3).size() == 1);

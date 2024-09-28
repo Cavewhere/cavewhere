@@ -38,23 +38,23 @@ bool cwApplication::notify(QObject *receiver, QEvent *event)
  * @param event
  * @return
  */
-QEvent* cwApplication::cloneEvent(QEvent *event) const
-{
-    if (dynamic_cast<QContextMenuEvent*>(event))
-        return new QContextMenuEvent(*static_cast<QContextMenuEvent*>(event));
-    else if (dynamic_cast<QKeyEvent*>(event))
-        return new QKeyEvent(*static_cast<QKeyEvent*>(event));
-    else if (dynamic_cast<QMouseEvent*>(event))
-        return new QMouseEvent(*static_cast<QMouseEvent*>(event));
-    else if (dynamic_cast<QTabletEvent*>(event))
-        return new QTabletEvent(*static_cast<QTabletEvent*>(event));
-    else if (dynamic_cast<QTouchEvent*>(event))
-        return new QTouchEvent(*static_cast<QTouchEvent*>(event));
-    else if (dynamic_cast<QWheelEvent*>(event))
-        return new QWheelEvent(*static_cast<QWheelEvent*>(event));
+// QEvent* cwApplication::cloneEvent(QEvent *event) const
+// {
+//     if (dynamic_cast<QContextMenuEvent*>(event))
+//         return new QContextMenuEvent(*static_cast<QContextMenuEvent*>(event));
+//     else if (dynamic_cast<QKeyEvent*>(event))
+//         return new QKeyEvent(*static_cast<QKeyEvent*>(event));
+//     else if (dynamic_cast<QMouseEvent*>(event))
+//         return new QMouseEvent(*static_cast<QMouseEvent*>(event));
+//     else if (dynamic_cast<QTabletEvent*>(event))
+//         return new QTabletEvent(*static_cast<QTabletEvent*>(event));
+//     else if (dynamic_cast<QTouchEvent*>(event))
+//         return new QTouchEvent(*static_cast<QTouchEvent*>(event));
+//     else if (dynamic_cast<QWheelEvent*>(event))
+//         return new QWheelEvent(*static_cast<QWheelEvent*>(event));
 
-    return nullptr;
-}
+//     return nullptr;
+// }
 
 //#ifdef QT_NO_DEBUG_STREAM
 //QDebug operator<<(QDebug str, const QEvent *ev)

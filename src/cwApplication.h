@@ -31,7 +31,7 @@ signals:
 public slots:
 
 private:
-    QEvent *cloneEvent(QEvent *event) const;
+    // QEvent *cloneEvent(QEvent *event) const;
 
 };
 

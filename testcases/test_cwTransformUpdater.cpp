@@ -7,7 +7,7 @@
 #include "cwPositioner3D.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("Transform Updater should hide QQuickItem if behind the camera", "[cwTransformUpdater]") {
 
@@ -24,7 +24,7 @@ TEST_CASE("Transform Updater should hide QQuickItem if behind the camera", "[cwT
     cwPositioner3D positionItem;
     positionItem.setPosition3D(QVector3D(0, 0, 10)); //Behind the camera
 
-    QSignalSpy visibleSpy(&positionItem, &cwPositioner3D::visibleChanged);
+    cwSignalSpy visibleSpy(&positionItem, &cwPositioner3D::visibleChanged);
 
     updater.setCamera(&camera);
     updater.addPointItem(&positionItem);

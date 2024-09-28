@@ -19,8 +19,8 @@ public:
     State validate( QString & input, int & pos ) const;
     Q_INVOKABLE int validate( QString input ) const;
 
-    static QRegExp validCharactersRegex();
-    static QRegExp invalidCharactersRegex();
+    static QRegularExpression validCharactersRegex();
+    static QRegularExpression invalidCharactersRegex();
 
 signals:
 

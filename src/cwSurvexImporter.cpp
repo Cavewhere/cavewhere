@@ -20,7 +20,6 @@
 #include <QFile>
 #include <QDebug>
 #include <QSettings>
-#include <QLinkedList>
 #include <QFileInfo>
 #include <QDir>
 #include <QThread>
@@ -208,9 +207,10 @@ bool cwSurvexImporter::openFile(QFile& file, QString filename) {
 
         //Find the filename, this is needed because, filename case insensitive
         foreach(QString entry, entries) {
-            QRegExp regExp(".+/" + entry + "(\\.svx)?$");
-            regExp.setCaseSensitivity(Qt::CaseInsensitive);
-            if(regExp.exactMatch(filename)) {
+            QString pattern = "^.+/" + QRegularExpression::escape(entry) + "(\\.svx)?$";
+            QRegularExpression regExp(pattern, QRegularExpression::CaseInsensitiveOption);
+            QRegularExpressionMatch match = regExp.match(filename);
+            if (match.hasMatch()) {
                 filename = entry;
                 break;
             }
@@ -251,16 +251,17 @@ void cwSurvexImporter::parseLine(QString line) {
     //Skip empty lines
     if(line.isEmpty()) { return; }
 
-    QRegExp exp("^\\s*\\*begin\\s*((?:\\w|-|_)*)");
-    exp.setCaseSensitivity(Qt::CaseInsensitive);
-    if(line.contains(exp)) {
-       // qDebug() << "Has begin" << line;
-        CurrentState = InsideBegin;
-        //BeginNames.append(exp.cap(1));
+    QRegularExpression exp("^\\s*\\*begin\\s*((?:\\w|-|_)*)", QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatch match = exp.match(line);
 
-        //Create a new block
+    if (match.hasMatch()) {
+        // qDebug() << "Has begin" << line;
+        CurrentState = InsideBegin;
+        // BeginNames.append(match.captured(1));
+
+        // Create a new block
         cwTreeImportDataNode* newBlock = new cwTreeImportDataNode();
-        QString blockName = exp.cap(1).trimmed();
+        QString blockName = match.captured(1).trimmed();
         newBlock->setName(blockName);
 
         //Add the block to the structure
@@ -290,11 +291,13 @@ void cwSurvexImporter::parseLine(QString line) {
 
     if(InsideBegin) {
 
-        //Parse command
-        exp = QRegExp("^\\s*\\*(\\w+)\\s*(.*)");
-        if(line.contains(exp)) {
-            QString command = exp.cap(1);
-            QString arg = exp.cap(2).trimmed();
+        // Parse command
+        QRegularExpression exp("^\\s*\\*(\\w+)\\s*(.*)");
+        QRegularExpressionMatch match = exp.match(line);
+
+        if (match.hasMatch()) {
+            QString command = match.captured(1);
+            QString arg = match.captured(2).trimmed();
 
             if(compare(command, "end")) {
 
@@ -397,15 +400,14 @@ QString cwSurvexImporter::removeComment(QString& line) {
   \brief Tries to load the data formate
   */
 void cwSurvexImporter::parseDataFormat(QString line) {
-    //Remove *data from the line
-    QRegExp regExp("^\\s*\\*data\\s*(.*)");
-    regExp.setCaseSensitivity(Qt::CaseInsensitive);
-    if(line.contains(regExp)) {
-        line = regExp.cap(1);
+    // Remove *data from the line
+    QRegularExpression regExp("^\\s*\\*data\\s*(.*)", QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatch match = regExp.match(line);
+    if (match.hasMatch()) {
+        line = match.captured(1);
     }
 
-    QStringList dataFormatList = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
-
+    QStringList dataFormatList = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     //Remove all empty data
     dataFormatList.removeAll("");
 
@@ -500,7 +502,7 @@ list and this returns empty data
 
   */
 QStringList cwSurvexImporter::parseData(QString line) {
-    QStringList data = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+    QStringList data = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     data.removeAll(""); //Remove all empty ones
 
     QMap<DataFormatType, int> dataFormat = currentDataFormat();
@@ -673,7 +675,7 @@ QString cwSurvexImporter::fullStationName(QString name) {
     if(name.isEmpty()) { return QString(); }
 
     cwTreeImportDataNode* current = CurrentBlock;
-    QLinkedList<QString> fullNameList;
+    QStringList fullNameList;
 
     //While not the root element of the importer
     while(current->parentNode() != nullptr) {
@@ -765,14 +767,14 @@ void cwSurvexImporter::parseTeamMember(QString line) {
 
     QStringList jobAndNameList;
 
-    QRegExp splitReg("\"(\\w+\\s*)+\"|\\w+");
-    int pos = 0;
-    while ((pos = splitReg.indexIn(line, pos)) != -1) {
-        QString nameOrJob = line.mid(pos, splitReg.matchedLength());
+    QRegularExpression splitReg("\"(\\w+\\s*)+\"|\\w+");
+    QRegularExpressionMatchIterator it = splitReg.globalMatch(line);
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        QString nameOrJob = match.captured();
         nameOrJob = nameOrJob.remove('"');
         nameOrJob = nameOrJob.trimmed();
         jobAndNameList.append(nameOrJob);
-        pos += splitReg.matchedLength();
     }
 
     if(!jobAndNameList.isEmpty()) {
@@ -795,13 +797,13 @@ void cwSurvexImporter::parseTeamMember(QString line) {
   */
 void cwSurvexImporter::parseCalibrate(QString line) {
 
-    QRegExp reg("(TAPE|COMPASS|BACKCOMPASS|BACKCLINO|CLINO|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)(?:\\s*(\\S+)\\s*)?");
-    reg.setCaseSensitivity(Qt::CaseInsensitive);
+    QRegularExpression reg("^(TAPE|COMPASS|BACKCOMPASS|BACKCLINO|CLINO|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)(?:\\s*(\\S+))?$", QRegularExpression::CaseInsensitiveOption);
+    QRegularExpressionMatch match = reg.match(line);
 
-    if(reg.exactMatch(line)) {
-        QString type = reg.cap(1).toLower();
-        QString calibrationString = reg.cap(2);
-        QString scaling = reg.cap(3);
+    if (match.hasMatch()) {
+        QString type = match.captured(1).toLower();
+        QString calibrationString = match.captured(2);
+        QString scaling = match.captured(3);
 
         //Parse the calibration value
         bool okay;
@@ -880,12 +882,14 @@ void cwSurvexImporter::parseCalibrate(QString line) {
   This parses the units out of the survex importer
   */
 void cwSurvexImporter::parseUnits(QString line) {
-    QRegExp reg("(TAPE|LENGTH|COMPASS|BEARING|CLINO|GRADIENT|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)\\s*");
-    reg.setCaseSensitivity(Qt::CaseInsensitive);
+    QRegularExpression reg("(TAPE|LENGTH|COMPASS|BEARING|CLINO|GRADIENT|COUNTER|DEPTH|DECLINATION|X|Y|Z)\\s+(\\S+)\\s*",
+                           QRegularExpression::CaseInsensitiveOption);
 
-    if(reg.exactMatch(line)) {
-        QString type = reg.cap(1).toLower();
-        QString unitString = reg.cap(2);
+    QRegularExpressionMatch match = reg.match(line);
+
+    if (match.hasMatch()) {
+        QString type = match.captured(1).toLower();
+        QString unitString = match.captured(2);
 
         //Get the current calibration
         cwTripCalibration* calibration = CurrentBlock->calibration();
@@ -936,7 +940,7 @@ void cwSurvexImporter::parseUnits(QString line) {
  */
 void cwSurvexImporter::parseEquate(QString line)
 {
-    QRegExp splitRegex("\\s+");
+    QRegularExpression splitRegex("\\s+");
     QStringList equalStations = line.split(splitRegex);
 
     if(equalStations.size() <= 1) {
@@ -955,7 +959,7 @@ void cwSurvexImporter::parseEquate(QString line)
  */
 void cwSurvexImporter::parseExport(QString line)
 {
-    QStringList stations = line.split(QRegExp("\\s+"));
+    QStringList stations = line.split(QRegularExpression("\\s+"));
     nodeData(CurrentBlock)->addExportStations(stations);
 }
 
@@ -969,7 +973,7 @@ void cwSurvexImporter::parseExport(QString line)
  */
 void cwSurvexImporter::parseFlags(QString line)
 {
-    QStringList flags = line.split(QRegExp("\\s+"));
+    QStringList flags = line.split(QRegularExpression("\\s+"));
 
     bool flagOperator = true;
     bool excludeLength = false;
@@ -1015,22 +1019,24 @@ void cwSurvexImporter::runStats(QString filename) {
     //Add the file to the include stack
     IncludeStack.append(Include(file.fileName()));
 
-    QRegExp exp;
-    while(!file.atEnd() && isRunning()) {
+    QRegularExpression exp;
+    while (!file.atEnd() && isRunning()) {
         QString line = file.readLine();
 
-        //Find the include files
-        exp = QRegExp("^\\s*\\*(\\w+)\\s*(.*)");
-        if(line.contains(exp)) {
-            QString command = exp.cap(1);
-            QString args = exp.cap(2).trimmed();
+        // Find the include files
+        exp = QRegularExpression("^\\s*\\*(\\w+)\\s*(.*)");
+        QRegularExpressionMatch match = exp.match(line);
 
-            if(compare(command, "include")) {
+        if (match.hasMatch()) {
+            QString command = match.captured(1);
+            QString args = match.captured(2).trimmed();
+
+            if (compare(command, "include")) {
                 runStats(args);
             }
         }
 
-        //Add all the lines up
+        // Add all the lines up
         TotalNumberOfLines++;
     }
 

@@ -104,7 +104,7 @@ private:
     void setPrivateLRUDState(cwDistanceStates::State &memberState, cwDistanceStates::State newState);
 };
 
-inline uint qHash(const cwStation& station) {
+inline size_t qHash(const cwStation& station) {
     return qHash(station.name().toLower());
 }
 

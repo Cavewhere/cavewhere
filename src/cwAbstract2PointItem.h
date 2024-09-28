@@ -13,7 +13,7 @@
 #include <QPen>
 
 //Our includes
-class cwTransformUpdater;
+#include "cwTransformUpdater.h"
 
 class cwAbstract2PointItem : public QQuickItem
 {

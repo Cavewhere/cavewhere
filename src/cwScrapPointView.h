@@ -10,8 +10,9 @@
 
 //Our includes
 #include "cwAbstractPointManager.h"
-class cwScrap;
+#include "cwScrap.h"
 class cwScrapItem;
+// #include "cwScrapItem.h"
 
 class cwScrapPointView : public cwAbstractPointManager
 {

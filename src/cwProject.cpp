@@ -224,7 +224,7 @@ void cwProject::privateSave() {
         return saveTask.save(region.get());
     });
 
-    FutureToken.addJob({future, "Saving"});
+    FutureToken.addJob({QFuture<void>(future), "Saving"});
 
     SaveFuture = AsyncFuture::observe(future).subscribe([future, this](){
         auto errors = future.result();
@@ -262,7 +262,7 @@ void cwProject::addImageHelper(std::function<void (QList<cwImage>)> outputCallBa
 
     auto imagesFuture = addImageTask.images();
 
-    FutureToken.addJob({imagesFuture, "Adding Image"});
+    FutureToken.addJob({QFuture<void>(imagesFuture), "Adding Image"});
 
     AsyncFuture::observe(imagesFuture)
             .subscribe([this, imagesFuture, outputCallBackFunc, format, setImagesFunc]()
@@ -386,7 +386,7 @@ void cwProject::loadFile(QString filename) {
         return loadTask.load();
     });
 
-    FutureToken.addJob({loadFuture, "Loading"});
+    FutureToken.addJob({QFuture<void>(loadFuture), "Loading"});
 
     auto updateRegion = [this, filename](const cwRegionLoadResult& result) {
         setFilename(result.filename());
@@ -561,7 +561,7 @@ void cwProject::addImages(QList<QUrl> noteImagePaths,
 
             auto future = converter.convert();
 
-            FutureToken.addJob({future, "Converting PDF"});
+            FutureToken.addJob({QFuture<void>(future), "Converting PDF"});
 
             AsyncFuture::observe(future).subscribe([this, future, outputCallBackFunc](){
                 for(auto image : future.results()) {

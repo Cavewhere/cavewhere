@@ -13,7 +13,7 @@
 #include "cwErrorListModel.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 #include <QQmlGadgetListModel.h>
 
 void checkError(const cwError& error, cwErrorListModel& model, int idx) {
@@ -222,7 +222,7 @@ TEST_CASE("Basic QML Gadget List operations") {
         }
 
         SECTION("Get / Set Data") {
-            QSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
+            cwSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
 
             for(int i = 0; i < size; i++) {
                 model.setData(model.index(i), true, model.roleForName("suppressed"));
@@ -245,7 +245,7 @@ TEST_CASE("Basic QML Gadget List operations") {
         }
 
         SECTION("Check Replace") {
-            QSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
+            cwSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
 
             cwError replaceError;
             replaceError.setMessage("Replace error 1");

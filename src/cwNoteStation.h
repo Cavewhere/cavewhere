@@ -46,7 +46,7 @@ private:
     QSharedDataPointer<PrivateData> Data;
 };
 
-inline uint qHash(const cwNoteStation& note) {
+inline size_t qHash(const cwNoteStation& note) {
     return qHash(note.name());
 }
 

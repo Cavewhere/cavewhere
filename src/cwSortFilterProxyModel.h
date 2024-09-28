@@ -55,9 +55,9 @@ class cwSortFilterProxyModel : public QSortFilterProxyModel
 
     Q_PROPERTY(QByteArray filterRole READ filterRole WRITE setFilterRole)
     Q_PROPERTY(QString filterString READ filterString WRITE setFilterString)
-    Q_PROPERTY(FilterSyntax filterSyntax READ filterSyntax WRITE setFilterSyntax)
+    // Q_PROPERTY(FilterSyntax filterSyntax READ filterSyntax WRITE setFilterSyntax)
 
-    Q_ENUMS(FilterSyntax)
+    // Q_ENUMS(FilterSyntax)
 
 public:
     explicit cwSortFilterProxyModel(QObject *parent = 0);
@@ -82,8 +82,8 @@ public:
         FixedString
     };
 
-    FilterSyntax filterSyntax() const;
-    void setFilterSyntax(FilterSyntax syntax);
+    // FilterSyntax filterSyntax() const;
+    // void setFilterSyntax(FilterSyntax syntax);
 
     int count() const;
     Q_INVOKABLE QJSValue get(int index) const;

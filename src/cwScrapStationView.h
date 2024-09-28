@@ -71,7 +71,7 @@ protected:
 
 };
 
-Q_DECLARE_METATYPE(cwScrapStationView*)
+// Q_DECLARE_METATYPE(cwScrapStationView*)
 
 /**
  * @brief cwScrapStationView::qmlSource

@@ -7,11 +7,9 @@
 #include <QtConcurrent>
 
 //Our includes
-class cwColumnNameModel;
-class cwCSVImporterTask;
-class cwErrorModel;
-class cwCSVLineModel;
-#include "cwCSVImporterTask.h"
+#include "cwColumnNameModel.h"
+#include "cwCSVLineModel.h"
+#include "cwErrorModel.h"
 #include "cwCSVImporterSettings.h"
 #include "cwGlobals.h"
 #include "cwCave.h"

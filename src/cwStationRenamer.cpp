@@ -53,13 +53,14 @@ cwStation cwStationRenamer::createStation(QString originalName)
 
         // if uppercase of new name already exists, add something in to disambiguate
         if (UpperCaseRenamedStations.contains(newName.toUpper())) {
-            QRegExp namePartRegExp("\\d+\\D*$");
+            QRegularExpression namePartRegExp("\\d+\\D*$");
 
-            // determine where to insert the disambiguating number.
-            // if there are digits in the name, we will insert the disambiguating number
-            // before the last string of digits.  Otherwise, we'll append it to the end
-            int insertIndex = namePartRegExp.indexIn(newName);
-            if (insertIndex < 0) insertIndex = newName.length();
+            // Determine where to insert the disambiguating number.
+            // If there are digits in the name, we will insert the disambiguating number
+            // before the last string of digits. Otherwise, we'll append it to the end.
+            QRegularExpressionMatch match = namePartRegExp.match(newName);
+            int insertIndex = match.hasMatch() ? match.capturedStart() : -1;
+
             QString prefix = newName.left(insertIndex);
             QString suffix = newName.mid(insertIndex);
 

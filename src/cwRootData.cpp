@@ -20,7 +20,6 @@
 #include "cwQMLReload.h"
 #include "cwLicenseAgreement.h"
 #include "cwRegionSceneManager.h"
-#include "cwEventRecorderModel.h"
 #include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
@@ -81,7 +80,6 @@ cwRootData::cwRootData(QObject *parent) :
 
     //For debugging
     QMLReloader = new cwQMLReload(this);
-    EventRecorderModel = new cwEventRecorderModel(this);
 
     //For license agreement
     License = new cwLicenseAgreement(this);

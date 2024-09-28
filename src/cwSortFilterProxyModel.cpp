@@ -93,23 +93,23 @@ void cwSortFilterProxyModel::setFilterRole(const QByteArray &role)
 
 QString cwSortFilterProxyModel::filterString() const
 {
-    return filterRegExp().pattern();
+    return filterRegularExpression().pattern();
 }
 
 void cwSortFilterProxyModel::setFilterString(const QString &filter)
 {
-    setFilterRegExp(QRegExp(filter, filterCaseSensitivity(), static_cast<QRegExp::PatternSyntax>(filterSyntax())));
+    setFilterRegularExpression(QRegularExpression(filter, filterRegularExpression().patternOptions()));
 }
 
-cwSortFilterProxyModel::FilterSyntax cwSortFilterProxyModel::filterSyntax() const
-{
-    return static_cast<FilterSyntax>(filterRegExp().patternSyntax());
-}
+// cwSortFilterProxyModel::FilterSyntax cwSortFilterProxyModel::filterSyntax() const
+// {
+//     return static_cast<FilterSyntax>(filterRegExp().patternSyntax());
+// }
 
-void cwSortFilterProxyModel::setFilterSyntax(cwSortFilterProxyModel::FilterSyntax syntax)
-{
-    setFilterRegExp(QRegExp(filterString(), filterCaseSensitivity(), static_cast<QRegExp::PatternSyntax>(syntax)));
-}
+// void cwSortFilterProxyModel::setFilterSyntax(cwSortFilterProxyModel::FilterSyntax syntax)
+// {
+//     setFilterRegExp(QRegExp(filterString(), filterCaseSensitivity(), static_cast<QRegExp::PatternSyntax>(syntax)));
+// }
 
 QJSValue cwSortFilterProxyModel::get(int idx) const
 {
@@ -172,9 +172,10 @@ QHash<int, QByteArray> cwSortFilterProxyModel::roleNames() const
 
 bool cwSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
-    QRegExp rx = filterRegExp();
-    if (rx.isEmpty())
+    auto rx = filterRegularExpression();
+    if (rx.pattern().isEmpty()) {
         return true;
+    }
     QAbstractItemModel *model = sourceModel();
     if (filterRole().isEmpty()) {
         QHash<int, QByteArray> roles = roleNames();

@@ -3,16 +3,16 @@
 
 //Qt includes
 #include <QHash>
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 //Std includes
 #include <initializer_list>
 
-class SpyChecker : public QHash<QSignalSpy*, int>
+class SpyChecker : public QHash<cwSignalSpy*, int>
 {
 public:
     SpyChecker();
-    SpyChecker(const std::initializer_list<std::pair<QSignalSpy*, int>>& list);
+    SpyChecker(const std::initializer_list<std::pair<cwSignalSpy*, int>>& list);
 
     void checkSpies() const;
     void requireSpies() const;

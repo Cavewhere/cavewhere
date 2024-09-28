@@ -10,7 +10,7 @@
 #include "cwDebug.h"
 
 //Qt includes
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QMap>
 #include <QDebug>
 #include <QtConcurrentMap>
@@ -65,13 +65,16 @@ void cwUsedStationsTask::runTask() {
 }
 
 /**
-  This is a threaded helper function to createSplitStationNames
-  */
+ * This is a threaded helper function to createSplitStationNames
+ */
 cwUsedStationsTask::SplitStationName cwUsedStationsTask::splitName(cwStation station) {
-    QRegExp namePartRegExp("\\d+\\D*$");
-    int index = std::max(namePartRegExp.indexIn(station.name()), 0);
+    QRegularExpression namePartRegExp("\\d+\\D*$");
+    QRegularExpressionMatch match = namePartRegExp.match(station.name());
+    int index = match.hasMatch() ? match.capturedStart(0) : 0;
+
     QString surveyName = station.name().left(index).toUpper();
     QString stationName = station.name().mid(index);
+
     return cwUsedStationsTask::SplitStationName(surveyName, stationName);
 }
 
@@ -270,6 +273,6 @@ QList<QString> cwUsedStationsTask::groupStrings(QList<SurveyGroup> groups) const
             groupStrings.append(groupString);
         }
     }
-    return std::move(groupStrings);
+    return groupStrings;
 }
 

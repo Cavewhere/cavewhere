@@ -55,7 +55,7 @@ void WallsImporterVisitor::ensureValidTrip()
     {
         CurrentTrip = cwTripPtr(new cwTrip());
         CurrentTrip->setName(QString("%1 (%2)").arg(TripNamePrefix).arg(Trips.size()));
-        CurrentTrip->setDate(QDateTime(Parser->date()));
+        CurrentTrip->setDate(QDateTime(Parser->date(), QTime()));
 
         cwWallsImporter::importCalibrations(Parser->units(), *CurrentTrip);
     }
@@ -608,7 +608,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
         return false;
     }
 
-    QString justFilename = filename.mid(std::max(0, filename.lastIndexOf('/') + 1));
+    QString justFilename = filename.mid(std::max(qsizetype(0), filename.lastIndexOf('/') + 1));
 
     WallsSurveyParser parser;
     WallsImporterVisitor visitor(&parser, this, justFilename);
@@ -661,7 +661,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
             }
             else if (lineNumber == 1 && !visitor.comment().isEmpty())
             {
-                surveyors = visitor.comment().trimmed().split(QRegExp("\\s*;\\s*"));
+                surveyors = visitor.comment().trimmed().split(QRegularExpression("\\s*;\\s*"));
             }
         }
         catch (const SegmentParseException& ex)

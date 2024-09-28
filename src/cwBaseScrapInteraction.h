@@ -10,9 +10,9 @@
 
 //Our includes
 #include "cwNoteInteraction.h"
-class cwScrap;
-class cwImageItem;
-class cwScrapOutlinePointView;
+#include "cwScrap.h"
+#include "cwImageItem.h"
+#include "cwScrapOutlinePointView.h"
 class cwNoteTranformation;
 
 class cwBaseScrapInteraction : public cwNoteInteraction

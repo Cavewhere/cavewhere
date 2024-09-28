@@ -11,8 +11,8 @@
 
 //Our includes
 #include "cwInteraction.h"
-class cwCamera;
-class cwScene;
+#include "cwCamera.h"
+#include "cwScene.h"
 class cwMatrix4x4Animation;
 
 //Qt 3D

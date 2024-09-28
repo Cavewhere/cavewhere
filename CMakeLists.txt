@@ -25,7 +25,7 @@ add_subdirectory(survex)
 find_package(Protobuf REQUIRED)
 find_package(libsquish REQUIRED)
 find_package(Catch2 REQUIRED)
-find_package(Qt5
+find_package(Qt6
     COMPONENTS
     Core
     Gui
@@ -40,7 +40,7 @@ find_package(Qt5
     REQUIRED)
 
 #### Cavewhere-lib ######
-add_library(cavewhere-lib SHARED)
+qt_add_library(cavewhere-lib SHARED)
 
 set_target_properties(cavewhere-lib PROPERTIES
     AUTOMOC ON
@@ -50,15 +50,15 @@ set_target_properties(cavewhere-lib PROPERTIES
 
 target_link_libraries(cavewhere-lib
     PUBLIC
-    Qt5::Core
-    Qt5::Gui
-    Qt5::Widgets
-    Qt5::Quick
-    Qt5::Sql
-    Qt5::OpenGL
-    Qt5::Xml
-    Qt5::Concurrent
-    Qt5::Svg
+    Qt::Core
+    Qt::Gui
+    Qt::Widgets
+    Qt::Quick
+    Qt::Sql
+    Qt::OpenGL
+    Qt::Xml
+    Qt::Concurrent
+    Qt::Svg
     QtQmlModels
     asyncfuture
     dewalls
@@ -70,7 +70,7 @@ target_link_libraries(cavewhere-lib
 
 # Conditionally find the package and include directories
 if(WITH_PDF)
-    find_package(Qt5 COMPONENTS Pdf REQUIRED)
+    find_package(Qt6 COMPONENTS Pdf REQUIRED)
     target_link_libraries(cavewhere-lib PRIVATE Qt::Pdf)
     target_compile_definitions(cavewhere-lib PRIVATE "WITH_PDF_SUPPORT")
 endif()
@@ -115,7 +115,7 @@ set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES SKIP_AUTOMOC 
 target_sources(cavewhere-lib PRIVATE ${PROTO_SRCS} ${PROTO_HDRS})
 
 # Handle .ui files
-qt5_wrap_ui(UI_HEADERS
+qt_wrap_ui(UI_HEADERS
     cwImportTreeDataDialog.ui
     cwTaskProgressDialog.ui
 )
@@ -137,7 +137,7 @@ add_custom_command(TARGET cavewhere-lib POST_BUILD
 )
 
 #### cavewhere-test ####
-add_executable(cavewhere-test)
+qt_add_executable(cavewhere-test)
 
 set_target_properties(cavewhere-test PROPERTIES
     AUTOMOC ON
@@ -156,15 +156,16 @@ target_sources(cavewhere-test PRIVATE ${cavewhere_test_QT_RESOURCES})
 
 target_link_libraries(cavewhere-test
     PRIVATE
-    Qt5::Test
+    Qt::Test
     Catch2::Catch2
     cavewhere-lib
 )
 
 #### CaveWhere ####
-add_executable(CaveWhere
+qt_add_executable(CaveWhere
     main.cpp
     Cavewhere.rc
+    testcases/cwSignalSpy.h testcases/cwSignalSpy.cpp
 )
 
 set_target_properties(CaveWhere PROPERTIES
@@ -180,12 +181,12 @@ set_target_properties(CaveWhere PROPERTIES
 
 target_link_libraries(CaveWhere
     PRIVATE
-    Qt5::Core
-    Qt5::Gui
-    Qt5::Widgets
-    Qt5::Quick
-    Qt5::Sql
-    Qt5::Test
+    Qt::Core
+    Qt::Gui
+    Qt::Widgets
+    Qt::Quick
+    Qt::Sql
+    Qt::Test
     cavewhere-lib
 )
 
@@ -200,8 +201,8 @@ target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
 if(WIN32 OR APPLE)
 	#### Building Installer for Windows and Mac ####
-	set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-        include(installer/installer.cmake)
+#	set_target_properties(CaveWhere PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+#	set_target_properties(CaveWhere PROPERTIES SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+#        include(installer/installer.cmake)
 endif()
 

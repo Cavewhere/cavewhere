@@ -14,7 +14,7 @@
 #include <QPair>
 #include <QByteArray>
 #include <QSize>
-#include <QGLFunctions>
+// #include <QGLFunctions>
 #include <QOpenGLBuffer>
 #include <QVector2D>
 

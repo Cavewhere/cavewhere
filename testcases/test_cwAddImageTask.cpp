@@ -343,7 +343,7 @@ TEST_CASE("cwAddImageTask should not grow file size when regenerating mipmaps", 
     for(int i = 0; i < 2; i++) {
         auto regenerateAddImageFuture = addImageTask->images();
         REQUIRE(cwAsyncFuture::waitForFinished(regenerateAddImageFuture, 20000));
-        CHECK(addImageFuture != regenerateAddImageFuture);
+        CHECK(addImageFuture.result() != regenerateAddImageFuture.result());
     }
 
     auto regenerateFileSize = file.size();

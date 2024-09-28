@@ -315,7 +315,7 @@ QFuture<cwTrackedImagePtr> cwAddImageTask::images() const
             return !data.OriginalImage.isNull();
         });
 
-        QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completed(QVector<QFuture<cwTrackedImagePtr>>());
+        QFuture<QVector<QFuture<cwTrackedImagePtr>>> compressAndUploadFuture = AsyncFuture::completedWithList(QVector<QFuture<cwTrackedImagePtr>>());
 
         if(imageTypes & Mipmaps) {
             auto scaleFuture = QtConcurrent::mapped(filterData, scaleImage);

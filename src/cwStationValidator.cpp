@@ -9,7 +9,7 @@
 #include "cwStationValidator.h"
 
 //Qt includes
-#include <QRegExpValidator>
+#include <QRegularExpressionValidator>
 
 cwStationValidator::cwStationValidator(QObject *parent) :
     cwValidator(parent)
@@ -22,9 +22,9 @@ QValidator::State cwStationValidator::validate( QString & input, int & pos ) con
         return QValidator::Acceptable;
     }
 
-    QRegExpValidator validator;
+    QRegularExpressionValidator validator;
 
-    validator.setRegExp(validCharactersRegex());
+    validator.setRegularExpression(validCharactersRegex());
     return validator.validate(input, pos);
 }
 
@@ -37,9 +37,9 @@ int cwStationValidator::validate( QString input ) const {
  * @brief cwStationValidator::validCharactersRegex
  * @return Retruns the regex that makes up a valid station name
  */
-QRegExp cwStationValidator::validCharactersRegex()
+QRegularExpression cwStationValidator::validCharactersRegex()
 {
-   return QRegExp("(?:[a-zA-Z0-9]|-|_)+");
+   return QRegularExpression("(?:[a-zA-Z0-9]|-|_)+");
 }
 
 /**
@@ -48,7 +48,7 @@ QRegExp cwStationValidator::validCharactersRegex()
  *
  * This is the inverse of validCharactersRegex()
  */
-QRegExp cwStationValidator::invalidCharactersRegex()
+QRegularExpression cwStationValidator::invalidCharactersRegex()
 {
-    return QRegExp("((?![a-zA-Z0-9]|-|_).)*");
+    return QRegularExpression("((?![a-zA-Z0-9]|-|_).)*");
 }

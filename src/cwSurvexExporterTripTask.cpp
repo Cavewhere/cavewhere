@@ -51,15 +51,15 @@ void cwSurvexExporterTripTask::runTask() {
   */
 void cwSurvexExporterTripTask::writeTrip(QTextStream& stream, cwTrip* trip) {
     //Write header
-    stream << "*begin ; " << trip->name() << endl;
+    stream << "*begin ; " << trip->name() << Qt::endl;
 
     writeDate(stream, trip->date().date());
     writeTeamData(stream, trip->team());
-    writeCalibrations(stream, trip->calibrations()); stream << endl;
-    writeShotData(stream, trip); stream << endl;
+    writeCalibrations(stream, trip->calibrations()); stream << Qt::endl;
+    writeShotData(stream, trip); stream << Qt::endl;
     writeLRUDData(stream, trip);
 
-    stream << "*end" << endl;
+    stream << "*end" << Qt::endl;
 }
 
 /**
@@ -100,7 +100,7 @@ void cwSurvexExporterTripTask::writeCalibration(QTextStream& stream, QString typ
         calibrationString += scaleString;
     }
 
-    stream << calibrationString << endl;
+    stream << calibrationString << Qt::endl;
 }
 
 /**
@@ -113,10 +113,10 @@ void cwSurvexExporterTripTask::writeLengthUnits(QTextStream &stream,
     case cwUnits::Meters:
         return;
     case cwUnits::Feet:
-        stream << "*units tape feet" << endl;
+        stream << "*units tape feet" << Qt::endl;
         break;
     case cwUnits::Yards:
-        stream << "*units tape yards" << endl;
+        stream << "*units tape yards" << Qt::endl;
         break;
     default:
         //All other units are automatically converted to meters through toSupportedLength(QString length)
@@ -135,14 +135,14 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
 
     //Make sure we have data to export
     if(!hasFrontSights && !hasBackSights) {
-        stream << "; NO DATA (doesn't have front or backsight data)" << endl;
+        stream << "; NO DATA (doesn't have front or backsight data)" << Qt::endl;
         return;
     }
 
     QString dataLineComment;
 
     if(hasFrontSights && hasBackSights) {
-        stream << "*data normal from to tape compass backcompass clino backclino" << endl;
+        stream << "*data normal from to tape compass backcompass clino backclino" << Qt::endl;
         dataLineComment = QString(";%1%2 %3 %4 %5 %6 %7")
                 .arg("From", TextPadding)
                 .arg("To", TextPadding)
@@ -152,7 +152,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
                 .arg("Clino", TextPadding)
                 .arg("BackClino", TextPadding);
     } else if(hasFrontSights) {
-        stream << "*data normal from to tape compass clino" << endl;
+        stream << "*data normal from to tape compass clino" << Qt::endl;
         dataLineComment = QString(";%1%2 %3 %4 %5")
                 .arg("From", TextPadding)
                 .arg("To", TextPadding)
@@ -160,7 +160,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
                 .arg("Compass", TextPadding)
                 .arg("Clino", TextPadding);
     } else if(hasBackSights) {
-        stream << "*data normal from to tape backcompass backclino" << endl;
+        stream << "*data normal from to tape backcompass backclino" << Qt::endl;
         dataLineComment = QString(";%1%2 %3 %4 %5")
                 .arg("From", TextPadding)
                 .arg("To", TextPadding)
@@ -170,7 +170,7 @@ void cwSurvexExporterTripTask::writeShotData(QTextStream& stream, cwTrip* trip) 
     }
 
     //Write out the comment line (this is the column headers)
-    stream << dataLineComment << endl;
+    stream << dataLineComment << Qt::endl;
 
     QList<cwSurveyChunk*> chunks = trip->chunks();
     for(int i = 0; i < chunks.size(); i++) {
@@ -193,7 +193,7 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
     QString dataLineTemplate("%1 %2 %3 %4 %5");
 
     foreach(cwSurveyChunk* chunk, trip->chunks()) {
-        stream << "*data passage station left right up down ignoreall" << endl;
+        stream << "*data passage station left right up down ignoreall" << Qt::endl;
 
         foreach(cwStation station, chunk->stations()) {
             if(station.isValid()) {
@@ -204,11 +204,11 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
                         .arg(toSupportedLength(station.up(), station.upInputState()), TextPadding)
                         .arg(toSupportedLength(station.down(), station.downInputState()), TextPadding);
 
-                stream << dataLine << endl;
+                stream << dataLine << Qt::endl;
             }
         }
 
-        stream << endl;
+        stream << Qt::endl;
     }
 }
 
@@ -217,7 +217,7 @@ void cwSurvexExporterTripTask::writeLRUDData(QTextStream& stream, cwTrip* trip) 
   */
 void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
 {
-    stream << endl;
+    stream << Qt::endl;
 
     QString dataLineTemplate("*team \"%1\"");
     foreach(cwTeamMember teamMember, team->teamMembers()) {
@@ -228,7 +228,7 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
             stream << " \"" << job << "\"";
         }
 
-        stream << endl;
+        stream << Qt::endl;
     }
 }
 
@@ -238,7 +238,7 @@ void cwSurvexExporterTripTask::writeTeamData(QTextStream &stream, cwTeam* team)
 void cwSurvexExporterTripTask::writeDate(QTextStream &stream, QDate date)
 {
     if(date.isValid()) {
-        stream << "*date " << date.toString("yyyy.MM.dd") << endl;
+        stream << "*date " << date.toString("yyyy.MM.dd") << Qt::endl;
     }
 }
 
@@ -400,14 +400,14 @@ void cwSurvexExporterTripTask::writeChunk(QTextStream& stream,
 
         //Distance should be excluded, mark as duplicate
         if(!shot.isDistanceIncluded()) {
-            stream << "*flags duplicate" << endl;
+            stream << "*flags duplicate" << Qt::endl;
         }
 
-        stream << line << endl;
+        stream << line << Qt::endl;
 
         //Turn duplication off
         if(!shot.isDistanceIncluded()) {
-            stream << "*flags not duplicate" << endl;
+            stream << "*flags not duplicate" << Qt::endl;
         }
 
 //        emit progressed(i);

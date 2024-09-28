@@ -30,6 +30,7 @@ class cwCave;
 #include <QElapsedTimer>
 #include <QVector>
 #include <QSet>
+#include <QHash>
 
 class cwLinePlotTask : public cwTask
 {
@@ -185,8 +186,8 @@ private:
         QList<QPair<int, int> > scraps(QString stationName) const;
 
     private:
-        QHash<QString, int> MapStationToTrip; //Multi map of a station to multiple trips indexes
-        QHash<QString, QPair<int, int> > MapStationToScrap; //Multi map of a station to multiple scraps indexes (first index is cave, then scrap index)
+        QMultiHash<QString, int> MapStationToTrip; //Multi map of a station to multiple trips indexes
+        QMultiHash<QString, QPair<int, int> > MapStationToScrap; //Multi map of a station to multiple scraps indexes (first index is cave, then scrap index)
     };
 
     //The region data

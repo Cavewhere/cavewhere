@@ -9,14 +9,14 @@
 #include "SpyChecker.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 TEST_CASE("cwNoteTransformation should update correctly", "[cwNoteTransformation]") {
 
     cwNoteTranformation transform;
 
-    QSignalSpy scaleSpy(&transform, &cwNoteTranformation::scaleChanged);
-    QSignalSpy northUpSpy(&transform, &cwNoteTranformation::northUpChanged);
+    cwSignalSpy scaleSpy(&transform, &cwNoteTranformation::scaleChanged);
+    cwSignalSpy northUpSpy(&transform, &cwNoteTranformation::northUpChanged);
 
     scaleSpy.setObjectName("scaleSpy");
     northUpSpy.setObjectName("northUpSpy");

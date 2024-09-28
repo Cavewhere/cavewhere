@@ -22,7 +22,7 @@
 #include "TestHelper.h"
 
 //Qt includes
-#include <QSignalSpy>
+#include "cwSignalSpy.h"
 
 std::ostream& operator << ( std::ostream& os, QMap<int, cwTripCalibration*> const& value ) {
     os << "QMap<int, cwTripCalibration*>:[";
@@ -595,7 +595,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
 TEST_CASE("Tests adding removing and getting copying cwSurveyChunk calibrations", "[cwSurveyChunk]") {
 
     cwSurveyChunk chunk;
-    QSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
+    cwSignalSpy spy(&chunk, SIGNAL(calibrationsChanged()));
 
     chunk.appendNewShot();
     chunk.setData(cwSurveyChunk::StationNameRole, 0, "a1");

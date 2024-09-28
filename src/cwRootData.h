@@ -11,32 +11,29 @@
 //Qt includes
 #include <QObject>
 #include <QGuiApplication>
-class QUndoStack;
-class QOpenGLContext;
-class QQuickView;
-class QQmlApplicationEngine;
+#include <QUndoStack>
+#include <QOpenGLContext>
+#include <QQuickView>
+#include <QQmlApplicationEngine>
 
 //Our includes
 #include "cwGlobals.h"
-class cwRegionTreeModel;
-class cwCavingRegion;
-class cwLinePlotManager;
-class cwScrapManager;
-class cwProject;
-class cwTripCalibration;
-class cwTrip;
-class cwSurveyExportManager;
-class cwSurveyImportManager;
-class cwItemSelectionModel;
-class cwQMLReload;
-class cwLicenseAgreement;
-class cwRegionSceneManager;
-class cwScreen;
-class cwEventRecorderModel;
-class cwTaskManagerModel;
-class cwFutureManagerModel;
-class cwPageSelectionModel;
-class cwSettings;
+#include "cwRegionTreeModel.h"
+#include "cwCavingRegion.h"
+#include "cwLinePlotManager.h"
+#include "cwScrapManager.h"
+#include "cwProject.h"
+#include "cwTripCalibration.h"
+#include "cwTrip.h"
+#include "cwSurveyExportManager.h"
+#include "cwSurveyImportManager.h"
+#include "cwQMLReload.h"
+#include "cwLicenseAgreement.h"
+#include "cwRegionSceneManager.h"
+#include "cwTaskManagerModel.h"
+#include "cwFutureManagerModel.h"
+#include "cwPageSelectionModel.h"
+#include "cwSettings.h"
 
 #ifndef CAVEWHERE_VERSION
 #define CAVEWHERE_VERSION "Sauce-Release" //This is automaticaly update with qmake
@@ -59,8 +56,6 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(QString version READ version NOTIFY versionChanged)
     Q_PROPERTY(cwLicenseAgreement* license READ license NOTIFY licenseChanged)
     Q_PROPERTY(cwRegionSceneManager* regionSceneManager READ regionSceneManager NOTIFY regionSceneManagerChanged)
-    Q_PROPERTY(QScreen* primaryScreen READ primaryScreen CONSTANT)
-    Q_PROPERTY(cwEventRecorderModel* eventRecorderModel READ eventRecorderModel CONSTANT)
     Q_PROPERTY(cwTaskManagerModel* taskManagerModel READ taskManagerModel CONSTANT)
     Q_PROPERTY(cwFutureManagerModel* futureManagerModel READ futureManagerModel CONSTANT)
 
@@ -91,7 +86,6 @@ public:
     cwLicenseAgreement* license() const;
     cwRegionSceneManager* regionSceneManager() const;
     QScreen* primaryScreen() const;
-    cwEventRecorderModel* eventRecorderModel() const;
     cwTaskManagerModel* taskManagerModel() const;
     cwFutureManagerModel* futureManagerModel() const;
     cwPageSelectionModel* pageSelectionModel() const;
@@ -145,7 +139,6 @@ private:
     cwQMLReload* QMLReloader; //!< For reloading the QML data on the fly
     cwLicenseAgreement* License; //!<
     cwRegionSceneManager* RegionSceneManager; //!<
-    cwEventRecorderModel* EventRecorderModel; //!<
     cwTaskManagerModel* TaskManagerModel; //!<
     cwFutureManagerModel* FutureManagerModel; //!<
     cwPageSelectionModel* PageSelectionModel; //!<
@@ -246,14 +239,6 @@ inline cwRegionSceneManager* cwRootData::regionSceneManager() const {
 */
 inline QScreen* cwRootData::primaryScreen() const {
     return QGuiApplication::primaryScreen();
-}
-
-/**
-* @brief cwRoot::eventRecorderModel
-* @return Returns the event recorder model. Used to record events for debugging playback
-*/
-inline cwEventRecorderModel* cwRootData::eventRecorderModel() const {
-    return EventRecorderModel;
 }
 
 /**

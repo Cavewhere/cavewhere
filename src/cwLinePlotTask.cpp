@@ -429,7 +429,7 @@ QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStati
     double positionFactor = pow(10.0, positionPrecision);
 
     QString stationPattern = cwStationValidator::validCharactersRegex().pattern();
-    QRegExp regex(QString("(\\d+)\\.(%1)").arg(stationPattern));
+    QRegularExpression regex(QString("(\\d+)\\.(%1)").arg(stationPattern));
 
     //This vector is populated with all the stations for each cave
     QVector<cwStationPositionLookup> caveStations;
@@ -447,10 +447,11 @@ QVector<cwStationPositionLookup> cwLinePlotTask::splitLookupByCave(const cwStati
         position.setY(qRound(position.y() * positionFactor) / positionFactor);
         position.setZ(qRound(position.z() * positionFactor) / positionFactor);
 
-        if(regex.exactMatch(name)) {
+        QRegularExpressionMatch match = regex.match(name);
+        if(match.hasMatch()) {
 
-            QString caveIndexString = regex.cap(1); //Extract the index
-            QString stationName = regex.cap(2);//Extract the station
+            QString caveIndexString = match.captured(1); //Extract the index
+            QString stationName = match.captured(2);//Extract the station
             QString caveName = caveIndexString;
 
             bool okay;
@@ -690,7 +691,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
                 //Add trip to the multi hash
-                MapStationToTrip.insertMulti(station.name().toUpper(), tripIndex);
+                MapStationToTrip.insert(station.name().toUpper(), tripIndex);
             }
         }
 
@@ -700,7 +701,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
                 cwScrap* scrap = note->scrap(i);
 
                 foreach(cwNoteStation noteStation, scrap->stations()) {
-                    MapStationToScrap.insertMulti(noteStation.name().toUpper(), QPair<int, int>(tripIndex, scrapIndex));
+                    MapStationToScrap.insert(noteStation.name().toUpper(), QPair<int, int>(tripIndex, scrapIndex));
                 }
 
                 scrapIndex++;
