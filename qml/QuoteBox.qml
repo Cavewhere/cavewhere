@@ -1,6 +1,6 @@
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import Cavewhere 1.0
-import QtGraphicalEffects 1.0
+// import QtGraphicalEffects 1.0
 
 /**
 
@@ -16,8 +16,8 @@ import QtGraphicalEffects 1.0
 QQ.Item {
     id: root
     default property alias defaultChildren: childrenContainer.children
-    property alias color: boxColorOverlay.color
-    property alias borderColor: boxOutlineColorOverlay.color
+    property QQ.color color: "white" //boxColorOverlay.color
+    property QQ.color borderColor: "black" //boxOutlineColorOverlay.color
     property alias borderWidth: box.borderWidth
     property alias radius: rectangleItem.radius
     property double margin: 5
@@ -165,115 +165,115 @@ QQ.Item {
             }
         }
 
-        ColorOverlay {
-            id: boxOutlineColorOverlay
-            cached: true
-            color: "darkgray"
-            source: boxOutline
-            anchors.fill: boxOutline
-        }
+        // ColorOverlay {
+        //     id: boxOutlineColorOverlay
+        //     cached: true
+        //     color: "darkgray"
+        //     source: boxOutline
+        //     anchors.fill: boxOutline
+        // }
 
-        ColorOverlay {
-            id: boxColorOverlay
-            cached: true
-            color: "white"
-            source: box
-            anchors.fill: box
-        }
+        // ColorOverlay {
+        //     id: boxColorOverlay
+        //     cached: true
+        //     color: "white"
+        //     source: box
+        //     anchors.fill: box
+        // }
     }
 
 
-    DropShadow {
-        id: dropShadowId
+    // DropShadow {
+    //     id: dropShadowId
 
-        anchors.fill: itemWithoutShadow
+    //     anchors.fill: itemWithoutShadow
 
-        clip: false
-        cached: true
-        horizontalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
-                          + 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-        verticalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
-                        - 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
-        radius: 5
-        samples: 32
-        color: "#262626"
-        source: itemWithoutShadow
+    //     clip: false
+    //     cached: true
+    //     horizontalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
+    //                       + 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
+    //     verticalOffset: 2 * Math.cos(Math.PI / 180.0 * rotationId.angle)
+    //                     - 2 * Math.sin(Math.PI / 180.0 * rotationId.angle)
+    //     radius: 5
+    //     samples: 32
+    //     color: "#262626"
+    //     source: itemWithoutShadow
 
-        //This item is used to position the QuoteBox. This item is locate at the tip of the
-        //arrow of the quotebox
-        QQ.Item {
-            id: arrowTipId
-            x: rectangleItem.width * triangleOffset + triangleItem.implicitWidth * 0.5 + shadowPadding
-            y: shadowPadding - 2
-        }
+    //     //This item is used to position the QuoteBox. This item is locate at the tip of the
+    //     //arrow of the quotebox
+    //     QQ.Item {
+    //         id: arrowTipId
+    //         x: rectangleItem.width * triangleOffset + triangleItem.implicitWidth * 0.5 + shadowPadding
+    //         y: shadowPadding - 2
+    //     }
 
-        transform: [
-            QQ.Rotation {
-                id: rotationId
-                angle:  {
-                    switch(triangleEdge) {
-                    case Qt.TopEdge:
-                        return 0
-                    case Qt.BottomEdge:
-                        return 180
-                    case Qt.LeftEdge:
-                        return 270
-                    case Qt.RightEdge:
-                        return 90
-                    default:
-                        return 0
-                    }
-                }
-                origin.x: 0
-                origin.y: 0
+    //     transform: [
+    //         QQ.Rotation {
+    //             id: rotationId
+    //             angle:  {
+    //                 switch(triangleEdge) {
+    //                 case Qt.TopEdge:
+    //                     return 0
+    //                 case Qt.BottomEdge:
+    //                     return 180
+    //                 case Qt.LeftEdge:
+    //                     return 270
+    //                 case Qt.RightEdge:
+    //                     return 90
+    //                 default:
+    //                     return 0
+    //                 }
+    //             }
+    //             origin.x: 0
+    //             origin.y: 0
 
-                onAngleChanged:  {
-                    root.updatePosition()
-                }
-            },
+    //             onAngleChanged:  {
+    //                 root.updatePosition()
+    //             }
+    //         },
 
-            QQ.Translate {
-                x: {
-                    switch(triangleEdge) {
-                    case Qt.TopEdge:
-                        return 0;
-                    case Qt.BottomEdge:
-                        return dropShadowId.width
-                    case Qt.LeftEdge:
-                        return -triangleItem.height
-                    case Qt.RightEdge:
-                        return dropShadowId.height
-                    default:
-                        return 0
-                    }
-                }
+    //         QQ.Translate {
+    //             x: {
+    //                 switch(triangleEdge) {
+    //                 case Qt.TopEdge:
+    //                     return 0;
+    //                 case Qt.BottomEdge:
+    //                     return dropShadowId.width
+    //                 case Qt.LeftEdge:
+    //                     return -triangleItem.height
+    //                 case Qt.RightEdge:
+    //                     return dropShadowId.height
+    //                 default:
+    //                     return 0
+    //                 }
+    //             }
 
-                y: {
-                    switch(triangleEdge) {
-                    case Qt.TopEdge:
-                        return 0;
-                    case Qt.BottomEdge:
-                        return dropShadowId.height + triangleItem.height
-                    case Qt.LeftEdge:
-                        return dropShadowId.width + triangleItem.height
-                    case Qt.RightEdge:
-                        return triangleItem.height
-                    default:
-                        return 0
-                    }
-                }
+    //             y: {
+    //                 switch(triangleEdge) {
+    //                 case Qt.TopEdge:
+    //                     return 0;
+    //                 case Qt.BottomEdge:
+    //                     return dropShadowId.height + triangleItem.height
+    //                 case Qt.LeftEdge:
+    //                     return dropShadowId.width + triangleItem.height
+    //                 case Qt.RightEdge:
+    //                     return triangleItem.height
+    //                 default:
+    //                     return 0
+    //                 }
+    //             }
 
-                onXChanged: {
-                    root.updatePosition()
-                }
+    //             onXChanged: {
+    //                 root.updatePosition()
+    //             }
 
-                onYChanged:  {
-                    root.updatePosition()
-                }
-            }
-        ]
+    //             onYChanged:  {
+    //                 root.updatePosition()
+    //             }
+    //         }
+    //     ]
 
-    }
+    // }
 
     QQ.Item {
         id: childrenContainer

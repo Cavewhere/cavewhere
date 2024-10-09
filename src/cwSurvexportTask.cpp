@@ -66,7 +66,7 @@ void cwSurvexportTask::runTask() {
     }
 
     SurvexportProcess = new QProcess();
-    connect(SurvexportProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(printErrors()));
+    connect(SurvexportProcess, SIGNAL(errorOccurred(QProcess::ProcessError)), SLOT(printErrors()));
 
     QString inputFile = survex3DFilename();
     QString outputFile = inputFile + Extension;

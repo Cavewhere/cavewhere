@@ -8,6 +8,6 @@
 import QtQuick 2.0 as QQ
 
 QQ.QtObject {
-    property color inputTextColor: "blue"
-    property color normalTextColor: "black"
+    property QQ.color inputTextColor: "blue"
+    property QQ.color normalTextColor: "black"
 }

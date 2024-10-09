@@ -7,8 +7,8 @@
 
 import QtQuick 2.0 as QQ
 import Cavewhere 1.0
-import QtQuick.Controls 1.2 as Controls;
-import QtQuick.Dialogs 1.2
+import QtQuick.Controls as Controls;
+import QtQuick.Dialogs
 
 QQ.Item {
     id: iconBar
@@ -31,7 +31,7 @@ QQ.Item {
         id: fileDialogItem
         FileDialog {
             id: fileDialog
-            folder: rootData.lastDirectory
+            currentFolder: rootData.lastDirectory
         }
 
         states: [

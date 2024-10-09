@@ -1,4 +1,3 @@
-import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.12
 import Cavewhere 1.0
 
@@ -11,16 +10,16 @@ StandardPage {
         spacing: 10
 
         CavewhereLogo {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Version: " + version
+            Layout.alignment: Qt.AlignHCenter
+            text: "Version: " + RootData.version
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: {
                 return "Copyright 2023 Philip Schuchardt"
             }

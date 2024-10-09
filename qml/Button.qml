@@ -7,7 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
-import QtGraphicalEffects 1.0
+// import QtGraphicalEffects 1.0
 
 QQ.Rectangle {
     id: button
@@ -18,7 +18,7 @@ QQ.Rectangle {
     property bool iconOnTheLeft:  true
     property alias iconSize: icon.sourceSize
     property bool hasText:  text.length > 0
-    property int buttonMargin:  container.anchors.margins
+    // property int buttonMargin:  container.anchors.margins
     property bool mousePressed: false
     property bool enabled: true
     property bool globalClickToUncheck: false //This is useful, if you're connect the button to a popup
@@ -48,12 +48,12 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
-            visible: iconOnTheLeft
+            visible: button.iconOnTheLeft
         }
 
         Text {
             id: buttonText
-            visible: hasText
+            visible: button.hasText
             color: "black"
         }
 
@@ -61,19 +61,19 @@ QQ.Rectangle {
             id: iconRightId
             source: icon.source
             sourceSize: icon.sourceSize
-            visible: !iconOnTheLeft
+            visible: !button.iconOnTheLeft
         }
     }
 
-    Colorize {
-        id: colorizeEffect
-        source: buttonLayoutId
-        anchors.fill: buttonLayoutId
+    // Colorize {
+    //     id: colorizeEffect
+    //     source: buttonLayoutId
+    //     anchors.fill: buttonLayoutId
 
-        hue: 1.0
-        saturation: 0.0
-        lightness: 0.5
-    }
+    //     hue: 1.0
+    //     saturation: 0.0
+    //     lightness: 0.5
+    // }
 
     QQ.MouseArea {
         id: mouseArea
@@ -83,90 +83,87 @@ QQ.Rectangle {
         hoverEnabled: true
 
         onClicked: {
-            if(checkable) {
-                troggled = !troggled
+            if(button.checkable) {
+                button.troggled = !button.troggled
 
-                if(globalClickToUncheck) {
-                    globalDialogHandler.enabled = true
-                }
+                // if(button.globalClickToUncheck) {
+                //     button.globalDialogHandler.enabled = true
+                // }
             }
             button.clicked();
         }
 
         onPressed: {
-            mousePressed = true
+            button.mousePressed = true
         }
 
         onReleased: {
-            mousePressed = false
+            button.mousePressed = false
         }
 
-        QQ.Connections {
-            target: troggled ? globalDialogHandler : null
+        // QQ.Connections {
+        //     target: troggled ? globalDialogHandler : null
 
-            onClicked: {
-                console.log("--------------- Clicked! ----------");
-                troggled = !troggled
-                globalDialogHandler.enabled = false
-            }
-        }
+        //     onClicked: {
+        //         console.log("--------------- Clicked! ----------");
+        //         troggled = !troggled
+        //         globalDialogHandler.enabled = false
+        //     }
+        // }
     }
 
 
-    states: [
-        QQ.State {
-            name: "hover"; when: mouseArea.containsMouse && !mousePressed && enabled && !troggled
-            extend: "enabledState"
-            QQ.PropertyChanges { target: stop1; color: "#E6E6E6" }
-            QQ.PropertyChanges { target: stop2; color: "#B3B3B3" }
-        },
+//     states: [
+//         QQ.State {
+//             name: "hover"; when: mouseArea.containsMouse && !button.mousePressed && button.enabled && !button.troggled
+//             extend: "enabledState"
+//             QQ.PropertyChanges { stop1.color: "#E6E6E6" }
+//             QQ.PropertyChanges { stop2.color: "#B3B3B3" }
+//         },
 
-        QQ.State {
-            name: "mousePressedState";
-            extend: "enabledState"
-            when: (mouseArea.containsMouse && mousePressed && enabled) || troggled
-            QQ.PropertyChanges { target: stop1; color: "#B3B3B3" }
-            QQ.PropertyChanges { target: stop2; color: "#B3B3B3" }
-        },
+//         QQ.State {
+//             name: "mousePressedState";
+//             extend: "enabledState"
+//             when: (mouseArea.containsMouse && button.mousePressed && button.enabled) || button.troggled
+//             QQ.PropertyChanges { stop1.color: "#B3B3B3" }
+//             QQ.PropertyChanges { stop2.color: "#B3B3B3" }
+//         },
 
-//        QQ.State {
-//            name: "toggledState"
-//            extend: "enabledState"
-//            when: troggled
-//            QQ.PropertyChanges { target: stop1; color: "#D3D3D3" }
-//            QQ.PropertyChanges { target: stop2; color: "#FAFAFA" }
-//        },
+// //        QQ.State {
+// //            name: "toggledState"
+// //            extend: "enabledState"
+// //            when: troggled
+// //            QQ.PropertyChanges { target: stop1; color: "#D3D3D3" }
+// //            QQ.PropertyChanges { target: stop2; color: "#FAFAFA" }
+// //        },
 
-        QQ.State {
-            name: "enabledState"
-            when: enabled
-            QQ.PropertyChanges { target: stop1; color: "#FAFAFA" }
-            QQ.PropertyChanges { target: stop2; color: "#D3D3D3" }
-            QQ.PropertyChanges {
-                target: mouseArea
-                enabled: true
-            }
-            QQ.PropertyChanges {
-                target: colorizeEffect
-                visible: false
-            }
-            QQ.PropertyChanges {
-                target: buttonLayoutId
-                visible: true
-            }
-        },
+//         QQ.State {
+//             name: "enabledState"
+//             when: button.enabled
+//             QQ.PropertyChanges { stop1.color: "#FAFAFA" }
+//             QQ.PropertyChanges { stop2.color: "#D3D3D3" }
+//             QQ.PropertyChanges {
+//                 mouseArea.enabled: true
+//             }
+//             // QQ.PropertyChanges {
+//             //     target: colorizeEffect
+//             //     visible: false
+//             // }
+//             QQ.PropertyChanges {
+//                 buttonLayoutId.visible: true
+//             }
+//         },
 
-        QQ.State {
-            name: "disabledState"
-            when: !enabled
-            QQ.PropertyChanges {target: stop1; color:"#FAFAFA" }
-            QQ.PropertyChanges {target: stop2; color:"#D3D3D3" }
-            QQ.PropertyChanges {
-                target: mouseArea
-                enabled: false
-            }
-        }
+//         QQ.State {
+//             name: "disabledState"
+//             when: !button.enabled
+//             QQ.PropertyChanges {stop1.color:"#FAFAFA" }
+//             QQ.PropertyChanges {stop2.color:"#D3D3D3" }
+//             QQ.PropertyChanges {
+//                 mouseArea.enabled: false
+//             }
+//         }
 
-    ]
+    // ]
 
 }

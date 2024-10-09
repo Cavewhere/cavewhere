@@ -1,5 +1,5 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.1
+import QtQuick.Controls
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 
@@ -62,7 +62,7 @@ QQ.Item {
         property real paperHeight: 0
 
         property bool landScape: false
-        property color marginColor: "#BBE8E8E8"
+        property QQ.color marginColor: "#BBE8E8E8"
 
         border.width: 5
         color: "#00000000"

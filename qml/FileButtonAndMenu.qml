@@ -7,8 +7,8 @@
 
 // import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.0
-import QtQuick.Dialogs 1.2
+import QtQuick.Controls
+import QtQuick.Dialogs
 
 MenuBar {
     id: menuBarId
@@ -25,8 +25,8 @@ MenuBar {
     Menu {
         title: "File"
 
-        MenuItem {
-            text: "New"
+        Action {
+            id: newActionId
             shortcut: "Ctrl+N"
             onTriggered: {
                 askToSaveDialog.taskName = "creating a new file"
@@ -40,10 +40,14 @@ MenuBar {
         }
 
         MenuItem {
-            text: "Open"
+            text: "&New"
+            action: newActionId
+        }
+
+        Action {
+            id: openActionId
             shortcut: "Ctrl+O"
             onTriggered: {
-//                dataPage.resetSideBar() //Fixes a crash when a new project is loaded
                 askToSaveDialog.taskName = "opening";
                 askToSaveDialog.afterSaveFunc = function() {
                     loadFileDialog.open()
@@ -52,18 +56,28 @@ MenuBar {
             }
         }
 
+        MenuItem {
+            text: "&Open"
+            action: openActionId
+        }
+
         MenuSeparator {}
 
-        MenuItem {
-            text: "Save"
+        Action {
+            id: saveActionId
             shortcut: "Ctrl+S"
             onTriggered: {
-                if(project.canSaveDirectly) {
+                if (project.canSaveDirectly) {
                     project.save();
                 } else {
-                    saveAsFileDialog.open()
+                    saveAsFileDialog.open();
                 }
             }
+        }
+
+        MenuItem {
+            text: "&Save"
+            action: saveActionId
         }
 
         MenuItem {
@@ -89,11 +103,17 @@ MenuBar {
                 rootData.pageSelectionModel.gotoPageByName(null, "About");
             }
         }
+        Action {
+            id: quitActionId
+            shortcut: "Ctrl+Q"
+            onTriggered: {
+                applicationWindow.close(); // or Qt.quit();
+            }
+        }
 
         MenuItem {
             text: "Quit"
-            shortcut: "Ctrl+Q"
-            onTriggered: applicationWindow.close(); //Qt.quit()
+            action: quitActionId
         }
     }
 
@@ -105,25 +125,25 @@ MenuBar {
             onTriggered: scrapManager.updateAllScraps()
         }
 
-        MenuItem {
-            text: "Reload"
-            shortcut: "Ctrl+R"
-            onTriggered: {
-                //Keep the current address for the current page
-                var currentAddress = rootData.pageSelectionModel.currentPageAddress;
-                rootData.pageSelectionModel.clear();
+        // MenuItem {
+        //     text: "Reload"
+        //     shortcut: "Ctrl+R"
+        //     onTriggered: {
+        //         //Keep the current address for the current page
+        //         var currentAddress = rootData.pageSelectionModel.currentPageAddress;
+        //         rootData.pageSelectionModel.clear();
 
-                var currentSource = mainContentLoader.source;
-                mainContentLoader.source = ""
-                mainContentLoader.asynchronous = false;
-                qmlReloader.reload();
-                mainContentLoader.source = currentSource;
+        //         var currentSource = mainContentLoader.source;
+        //         mainContentLoader.source = ""
+        //         mainContentLoader.asynchronous = false;
+        //         qmlReloader.reload();
+        //         mainContentLoader.source = currentSource;
 
-                console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
+        //         console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
 
-                rootData.pageSelectionModel.currentPageAddress = currentAddress;
-            }
-        }
+        //         rootData.pageSelectionModel.currentPageAddress = currentAddress;
+        //     }
+        // }
 
         MenuItem {
             text: "Scraps Visible"
@@ -161,29 +181,29 @@ MenuBar {
             }
         }
 
-        Menu {
-            title: "Event Recording"
+        // Menu {
+        //     title: "Event Recording"
 
-            MenuItem {
-                text: eventRecorderModel.recording ? "Stop" : "Start"
-                shortcut: "Ctrl+P"
-                onTriggered: {
-                    if(eventRecorderModel.recording) {
-                        eventRecorderModel.stopRecording()
-                    } else {
-                        eventRecorderModel.startRecording()
-                    }
-                }
-            }
+        //     MenuItem {
+        //         text: eventRecorderModel.recording ? "Stop" : "Start"
+        //         shortcut: "Ctrl+P"
+        //         onTriggered: {
+        //             if(eventRecorderModel.recording) {
+        //                 eventRecorderModel.stopRecording()
+        //             } else {
+        //                 eventRecorderModel.startRecording()
+        //             }
+        //         }
+        //     }
 
-            MenuItem {
-                text: "Play Previous Recording"
-                shortcut: "Ctrl+."
-                enabled: !eventRecorderModel.recording
-                onTriggered: {
-                    eventRecorderModel.replayLastRecording();
-                }
-            }
-        }
+        //     MenuItem {
+        //         text: "Play Previous Recording"
+        //         shortcut: "Ctrl+."
+        //         enabled: !eventRecorderModel.recording
+        //         onTriggered: {
+        //             eventRecorderModel.replayLastRecording();
+        //         }
+        //     }
+        // }
     }
 }

@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.0 as Controls
+import QtQuick.Controls as Controls
 import Cavewhere 1.0
 
 DataBox {

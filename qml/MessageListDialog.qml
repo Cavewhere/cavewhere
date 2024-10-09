@@ -1,6 +1,6 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.4
-import QtQuick.Dialogs 1.2
+import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts 1.2
 
 Dialog {

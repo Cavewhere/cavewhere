@@ -1,5 +1,5 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.2 as Controls
+import QtQuick.Controls as Controls
 import QtQuick.Layouts 1.1
 import Cavewhere 1.0
 

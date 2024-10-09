@@ -15,6 +15,7 @@
 #include <QOpenGLContext>
 #include <QQuickView>
 #include <QQmlApplicationEngine>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -42,6 +43,9 @@
 class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+    QML_NAMED_ELEMENT(RootData)
 
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)

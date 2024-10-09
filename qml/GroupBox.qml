@@ -11,7 +11,7 @@ import "Theme.js" as Theme
 
 QQ.Item {
 
-    property color backgroundColor: "white"
+    property QQ.color backgroundColor: "white"
     property alias text: titleText.text
     property int contentHeight
     default property alias contentChildren: contentArea.children

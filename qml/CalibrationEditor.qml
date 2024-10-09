@@ -7,6 +7,7 @@
 
 // import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0 as QQ
+import QtQuick.Layouts
 import Cavewhere 1.0
 import "Utils.js" as Utils
 import "Theme.js" as Theme
@@ -18,8 +19,7 @@ QQ.Rectangle {
     radius: 8
     height: childrenRect.height
 
-    QQ.Column {
-
+    ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
 
@@ -30,9 +30,8 @@ QQ.Rectangle {
         }
 
         QQ.Item {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: childrenRect.height
+            Layout.fillWidth: true;
+            // height: childrenRect.height
 
             DeclainationEditor {
                 calibration: calibrationEditor.calibration
@@ -50,8 +49,7 @@ QQ.Rectangle {
 
 
         QQ.Item {
-            anchors.left: parent.left
-            anchors.right: parent.right
+            Layout.fillWidth: true
 
             height: childrenRect.height
 

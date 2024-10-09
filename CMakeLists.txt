@@ -168,6 +168,8 @@ qt_add_executable(CaveWhere
     testcases/cwSignalSpy.h testcases/cwSignalSpy.cpp
 )
 
+
+
 set_target_properties(CaveWhere PROPERTIES
     AUTOMOC ON
     AUTORCC ON
@@ -178,6 +180,24 @@ set_target_properties(CaveWhere PROPERTIES
     # MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
     RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
 )
+
+file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
+# target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
+
+# Make the file paths relative to the project directory
+set(cavewhere_RELATIVE_QML_FILES "")
+foreach(file ${cavewhere_QML_FILES})
+    file(RELATIVE_PATH relFile "${CMAKE_SOURCE_DIR}" "${file}")
+    list(APPEND cavewhere_RELATIVE_QML_FILES "${relFile}")
+endforeach()
+
+qt_add_qml_module(CaveWhere
+    URI Cavewhere
+    VERSION 1.0
+    RESOURCE_PREFIX /cavewhere
+    QML_FILES
+        ${cavewhere_RELATIVE_QML_FILES}
+    )
 
 target_link_libraries(CaveWhere
     PRIVATE
@@ -196,8 +216,7 @@ if(WIN32)
     )
 endif()
 
-file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
-target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
+
 
 if(WIN32 OR APPLE)
 	#### Building Installer for Windows and Mac ####

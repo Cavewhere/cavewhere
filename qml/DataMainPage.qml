@@ -7,8 +7,8 @@
 
 import Cavewhere 1.0
 import QtQml 2.2
-import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.2 as Controls;
+import QtQuick as QQ
+import QtQuick.Controls as Controls;
 import QtQuick.Layouts 1.1
 
 StandardPage {
@@ -59,82 +59,82 @@ StandardPage {
                 }
             }
 
-            Controls.TableView {
+            QQ.TableView {
                 id: tableViewId
                 model: rootData.region
 
                 Layout.fillHeight: true
                 implicitWidth: 450
 
-                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Cave" ; width: 200 }
-                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Length" ; width: 100 }
-                Controls.TableViewColumn { role: "caveObjectRole" ; title: "Depth" ; width: 100 }
+                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Cave" ; width: 200 }
+                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Length" ; width: 100 }
+                // QQ.TableViewColumn { role: "caveObjectRole" ; title: "Depth" ; width: 100 }
 
-                itemDelegate:
-                    QQ.Item {
+            //     itemDelegate:
+            //         QQ.Item {
 
-                    QQ.Connections {
-                        target: tableViewId
-                        onCurrentRowChanged: {
-                            exportButton.currentCave = styleData.value
-                        }
-                    }
+            //         QQ.Connections {
+            //             target: tableViewId
+            //             onCurrentRowChanged: {
+            //                 exportButton.currentCave = styleData.value
+            //             }
+            //         }
 
-                    QQ.Item {
-                        visible: styleData.column === 0
+            //         QQ.Item {
+            //             visible: styleData.column === 0
 
-                        anchors.fill: parent
+            //             anchors.fill: parent
 
-                        RowLayout {
-                            id: rowLayout
-                            spacing: 1
+            //             RowLayout {
+            //                 id: rowLayout
+            //                 spacing: 1
 
-                            ErrorIconBar {
-                                errorModel: styleData.value.errorModel
-                            }
+            //                 ErrorIconBar {
+            //                     errorModel: styleData.value.errorModel
+            //                 }
 
-                            LinkText {
-                                visible: styleData.column === 0
-                                text: styleData.value.name
-                                onClicked: {
-                                    rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                               cavePageName(styleData.value));
-                                }
-                            }
-                        }
-                    }
+            //                 LinkText {
+            //                     visible: styleData.column === 0
+            //                     text: styleData.value.name
+            //                     onClicked: {
+            //                         rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+            //                                                                    cavePageName(styleData.value));
+            //                     }
+            //                 }
+            //             }
+            //         }
 
-                    UnitValueInput {
-                        visible: styleData.column === 1 || styleData.column === 2
-                        unitValue: {
-                            switch(styleData.column) {
-                            case 1:
-                                return styleData.value.length
-                            case 2:
-                                return styleData.value.depth
-                            default:
-                                return null
-                            }
-                        }
-                        unitModel: {
-                            switch(styleData.column) {
-                            case 1:
-                                return UnitDefaults.lengthModel
-                            case 2:
-                                return UnitDefaults.depthModel
-                            default:
-                                return null
-                            }
-                        }
+            //         UnitValueInput {
+            //             visible: styleData.column === 1 || styleData.column === 2
+            //             unitValue: {
+            //                 switch(styleData.column) {
+            //                 case 1:
+            //                     return styleData.value.length
+            //                 case 2:
+            //                     return styleData.value.depth
+            //                 default:
+            //                     return null
+            //                 }
+            //             }
+            //             unitModel: {
+            //                 switch(styleData.column) {
+            //                 case 1:
+            //                     return UnitDefaults.lengthModel
+            //                 case 2:
+            //                     return UnitDefaults.depthModel
+            //                 default:
+            //                     return null
+            //                 }
+            //             }
 
-                        valueReadOnly: true
-                    }
+            //             valueReadOnly: true
+            //         }
 
-                    DataRightClickMouseMenu {
-                        anchors.fill: parent
-                        removeChallenge: removeChallengeId
-                    }
-                }
+            //         DataRightClickMouseMenu {
+            //             anchors.fill: parent
+            //             removeChallenge: removeChallengeId
+            //         }
+            //     }
             }
         }
     }

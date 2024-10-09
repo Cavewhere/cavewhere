@@ -8,7 +8,7 @@
 import QtQuick 2.0 as QQ
 import QtQuick.Controls
 import QtQuick.Window 2.0
-import QtQuick.Dialogs 1.2
+import QtQuick.Dialogs
 import Cavewhere 1.0;
 import Qt.labs.settings 1.1
 
@@ -81,8 +81,8 @@ ApplicationWindow {
         }
 
         ProgressBar {
-            minimumValue: 0
-            maximumValue: 100
+            from: 0
+            to: 100
             value: loadMainContentsId.progress * 100.
             visible: loadMainContentsId.status == QQ.Loader.Loading
         }
@@ -100,7 +100,7 @@ ApplicationWindow {
     FileDialog {
         id: loadFileDialogId
         nameFilters: ["CaveWhere File (*.cw)"]
-        folder: rootData.lastDirectory
+        currentFolder: rootData.lastDirectory
         onAccepted: {
             rootData.lastDirectory = fileUrl
             rootData.pageSelectionModel.clearHistory();
@@ -147,7 +147,6 @@ ApplicationWindow {
     }
 
     QQ.Component.onCompleted: {
-        eventRecorderModel.rootEventObject = applicationWindowId
         screenSizeSaverId.resize();
     }
 }

@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import Cavewhere 1.0
 import QtQml 2.2
-import QtQuick.Controls 1.2 as Controls;
+import QtQuick.Controls as Controls;
 import QtQuick.Layouts 1.1
 import "Utils.js" as Utils
 
@@ -144,7 +144,7 @@ StandardPage {
                 }
             }
 
-            Controls.TableView {
+            QQ.TableView {
                 id: tableViewId
                 model: currentCave
 
@@ -155,105 +155,105 @@ StandardPage {
                 //            anchors.top: parent.top
                 //            anchors.bottom: parent.bottom
 
-                Controls.TableViewColumn { role: "tripObjectRole"; title: "Trip"; }
-                Controls.TableViewColumn { role: "tripObjectRole"; title: "Date"; }
-                Controls.TableViewColumn { role: "tripObjectRole"; title: "Survey"; width: 100 }
-                Controls.TableViewColumn { role: "tripObjectRole"; title: "Length"; width: 100 }
+                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Trip"; }
+                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Date"; }
+                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Survey"; width: 100 }
+                // Controls.TableViewColumn { role: "tripObjectRole"; title: "Length"; width: 100 }
 
-                itemDelegate:
-                    QQ.Item {
-                    clip: true
+                // itemDelegate:
+                //     QQ.Item {
+                //     clip: true
 
-                    QQ.Connections {
-                        target: tableViewId
-                        onCurrentRowChanged: {
-                            if(tableViewId.currentRow === styleData.row) {
-                                exportButton.currentTrip = styleData.value
-                            }
-                        }
-                    }
+                //     QQ.Connections {
+                //         target: tableViewId
+                //         onCurrentRowChanged: {
+                //             if(tableViewId.currentRow === styleData.row) {
+                //                 exportButton.currentTrip = styleData.value
+                //             }
+                //         }
+                //     }
 
-                    TripLengthTask {
-                        id: tripLengthTask
-                        trip: styleData.value
-                    }
+                //     TripLengthTask {
+                //         id: tripLengthTask
+                //         trip: styleData.value
+                //     }
 
-                    UsedStationTaskManager {
-                        id: usedStationTaskManager
-                        trip: styleData.value
-                        bold: false
-                        abbreviated: true
-                        onlyLargestRange: true
-                    }
+                //     UsedStationTaskManager {
+                //         id: usedStationTaskManager
+                //         trip: styleData.value
+                //         bold: false
+                //         abbreviated: true
+                //         onlyLargestRange: true
+                //     }
 
-                    QQ.Item {
-                        visible: styleData.column === 0
+                //     QQ.Item {
+                //         visible: styleData.column === 0
 
-                        anchors.fill: parent
+                //         anchors.fill: parent
 
-                        RowLayout {
-                            id: rowLayout
-                            spacing: 1
+                //         RowLayout {
+                //             id: rowLayout
+                //             spacing: 1
 
-                            ErrorIconBar {
-                                errorModel: styleData.value.errorModel
-                            }
+                //             ErrorIconBar {
+                //                 errorModel: styleData.value.errorModel
+                //             }
 
-                            LinkText {
-                                text: styleData.value.name
-                                elide: Text.ElideRight
+                //             LinkText {
+                //                 text: styleData.value.name
+                //                 elide: Text.ElideRight
 
-                                onClicked: {
-                                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                                               tripPageName(styleData.value));
-                                }
-                            }
-                        }
-                    }
+                //                 onClicked: {
+                //                     rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                //                                                                tripPageName(styleData.value));
+                //                 }
+                //             }
+                //         }
+                //     }
 
-                    Text {
-                        visible: styleData.column === 1
-                        elide: Text.ElideRight
-                        anchors.fill: parent
-                        text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
-                    }
+                //     Text {
+                //         visible: styleData.column === 1
+                //         elide: Text.ElideRight
+                //         anchors.fill: parent
+                //         text: Qt.formatDateTime(styleData.value.date, "yyyy-MM-dd")
+                //     }
 
-                    Text {
-                        visible: styleData.column === 2
-                        elide: Text.ElideRight
-                        anchors.fill: parent
-                        text: {
-                            if(usedStationTaskManager.usedStations.length > 0) {
-                                return usedStationTaskManager.usedStations[0]
-                            }
-                            return ""
-                        }
-                    }
+                //     Text {
+                //         visible: styleData.column === 2
+                //         elide: Text.ElideRight
+                //         anchors.fill: parent
+                //         text: {
+                //             if(usedStationTaskManager.usedStations.length > 0) {
+                //                 return usedStationTaskManager.usedStations[0]
+                //             }
+                //             return ""
+                //         }
+                //     }
 
-                    Text {
-                        visible: styleData.column === 3
-                        elide: Text.ElideRight
-                        anchors.fill: parent
-                        text: {
-                            var unit = ""
-                            switch(styleData.value.calibration.distanceUnit) {
-                            case Units.Meters:
-                                unit = "m"
-                                break;
-                            case Units.Feet:
-                                unit = "ft"
-                                break;
-                            }
+                //     Text {
+                //         visible: styleData.column === 3
+                //         elide: Text.ElideRight
+                //         anchors.fill: parent
+                //         text: {
+                //             var unit = ""
+                //             switch(styleData.value.calibration.distanceUnit) {
+                //             case Units.Meters:
+                //                 unit = "m"
+                //                 break;
+                //             case Units.Feet:
+                //                 unit = "ft"
+                //                 break;
+                //             }
 
-                            return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
-                        }
-                    }
+                //             return Utils.fixed(tripLengthTask.length, 2) + " " + unit;
+                //         }
+                //     }
 
-                    DataRightClickMouseMenu {
-                        anchors.fill: parent
-                        removeChallenge: removeChallengeId
-                    }
-                }
+                //     DataRightClickMouseMenu {
+                //         anchors.fill: parent
+                //         removeChallenge: removeChallengeId
+                //     }
+                // }
             }
         }
 

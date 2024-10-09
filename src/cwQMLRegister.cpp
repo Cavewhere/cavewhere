@@ -241,7 +241,7 @@ void cwQMLRegister::registerQML()
     qmlRegisterType<cwLinkBarModel>("Cavewhere", 1, 0, "LinkBarModel");
     qmlRegisterType<cwErrorModel>("Cavewhere", 1, 0, "ErrorModel");
     qmlRegisterType<cwErrorListModel>("Cavewhere", 1, 0, "ErrorListModel");
-    qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "CwError", "Should only be created by cwSurveyChunk");
+    qmlRegisterUncreatableType<cwError>("Cavewhere", 1, 0, "cwError", "Should only be created by cwSurveyChunk");
 
     qmlRegisterType<cwTestcaseManager>("Cavewhere", 1, 0, "TestcaseManager");
     qmlRegisterType<cwCSVImporterManager>("Cavewhere", 1, 0, "CSVImporterManager");

@@ -7,7 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import QtQml 2.2
-import QtQuick.Controls 1.0 as Controls
+import QtQuick.Controls as Controls
 import QtQuick.Layouts 1.0
 import Cavewhere 1.0
 import "Theme.js" as Theme

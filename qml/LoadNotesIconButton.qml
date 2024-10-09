@@ -7,7 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import Cavewhere 1.0
-import QtQuick.Dialogs 1.2
+import QtQuick.Dialogs
 
 IconButton {
     id: buttonId
@@ -26,8 +26,8 @@ IconButton {
         id: fileDialog;
         nameFilters: "Images (" + rootData.supportImageFormats + ")";
         title: "Load Images"
-        selectMultiple: true
-        folder: rootData.lastDirectory
+        // selectMultiple: true
+        currentFolder: rootData.lastDirectory
         onAccepted: {
             rootData.lastDirectory = fileUrl
             buttonId.filesSelected(fileDialog.fileUrls)

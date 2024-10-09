@@ -63,7 +63,7 @@ QString cwCavernTask::output3dFileName() const {
      CavernProcess->setWorkingDirectory(workingDirectory);
 
 //     connect(CavernProcess, SIGNAL(finished(int,QProcess::ExitStatus)), SLOT(cavernFinished(int,QProcess::ExitStatus)));
-     connect(CavernProcess, SIGNAL(error(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
+     connect(CavernProcess, SIGNAL(errorOccurred(QProcess::ProcessError)), SLOT(processError(QProcess::ProcessError)));
 
      QString inputFile = survexFileName();
      QString outputFile = inputFile + survex3dExtension();

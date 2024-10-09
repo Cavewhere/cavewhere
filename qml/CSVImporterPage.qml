@@ -1,7 +1,7 @@
 import QtQuick 2.12 as QQ
 import QtQuick.Controls 2.5 as QC
 import QtQuick.Layouts 1.0
-import QtQuick.Dialogs 1.2
+import QtQuick.Dialogs
 import Cavewhere 1.0
 
 ScrollViewPage {
@@ -17,9 +17,8 @@ ScrollViewPage {
         id: openCSVFileDialogId
 
         title: "Import CSV file"
-        selectExisting: true
         nameFilters: [ "Comma Seperated (*.csv *.txt)", "All files (*)" ]
-        folder: rootData.lastDirectory
+        currentFolder: rootData.lastDirectory
 
         onAccepted: {
             rootData.lastDirectory = fileUrl

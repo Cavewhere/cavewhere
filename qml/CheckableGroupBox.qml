@@ -11,7 +11,7 @@ import "Theme.js" as Theme
 
 QQ.Item {
 
-    property color backgroundColor: "white"
+    property QQ.color backgroundColor: "white"
     property alias checked: checkbox.checked
     property alias text: checkbox.text
     property bool contentsVisible: true

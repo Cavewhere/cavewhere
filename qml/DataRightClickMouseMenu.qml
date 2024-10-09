@@ -1,5 +1,5 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.0
+import QtQuick.Controls
 
 QQ.MouseArea {
     id: rightClickMouseArea

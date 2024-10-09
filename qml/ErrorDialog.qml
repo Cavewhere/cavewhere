@@ -1,7 +1,7 @@
-import QtQuick 2.0 as QQ
-//import QtQuick.Dialogs 1.2
-import QtQuick.Layouts 1.12
-import QtQuick.Controls 2.12
+import QtQuick as QQ
+//import QtQuick.Dialogs
+//import QtQuick.Layouts
+import QtQuick.Controls as Controls
 import Cavewhere 1.0
 
 QQ.Loader {
@@ -14,13 +14,14 @@ QQ.Loader {
         loadedId.sourceComponent = null;
         loadedId.sourceComponent = dialogComponent;
         loadedId.item.errorDialog.open();
+        loadedId.item.model = model;
     }
 
     QQ.Connections {
         ignoreUnknownSignals: true
-        target: model
+        target: loadedId.model
         onCountChanged: {
-            if(model.count === 0) {
+            if(loadedId.model.count === 0) {
                 loadedId.sourceComponent = null;
             } else {
                 openDialog();
@@ -34,10 +35,11 @@ QQ.Loader {
         QQ.Item {
             id: itemId
             property alias errorDialog: errorDialogId
+            property ErrorListModel model
 
             anchors.centerIn: parent
 
-            Dialog {
+            Controls.Dialog {
                 id: errorDialogId
 
                 anchors.centerIn: parent
@@ -45,28 +47,28 @@ QQ.Loader {
                 width: 600
 
                 standardButtons: Dialog.Ok
-                title: model.count + " issue" + ((model.count > 1) ? "s" : "") + " has occurred"
+                title: itemId.model.count + " issue" + ((itemId.model.count > 1) ? "s" : "") + " has occurred"
 
                 onAccepted: {
-                    model.clear()
+                    itemId.model.clear()
                 }
 
                 onRejected:  {
-                    model.clear();
+                    itemId.model.clear();
                 }
 
                 GroupBox {
                     anchors.fill: parent
                     implicitHeight: 150
 
-                    ScrollView {
+                    Controls.ScrollView {
                         clip: true
                         anchors.fill: parent
 
                         ErrorListView {
                             id: view
                             anchors.fill: parent
-                            model: loadedId.model
+                            model: itemId.model
                         }
                     }
                 }

@@ -1,8 +1,11 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.1
+import QtQuick.Controls
 import QtQuick.Layouts 1.1
+import Cavewhere 1.0
 
 QQ.Rectangle {
+    id: pageMarginId
+
     property alias text: textId.text
     property alias unit: unitId.text
     property alias value: spinBoxId.value
@@ -23,10 +26,10 @@ QQ.Rectangle {
 
         RowLayout {
 
-            SpinBox {
+            DoubleSpinBox {
                 id: spinBoxId
-                decimals: unit === "in" ? 2 : 0
-                stepSize: unit === "in" ? .1 : 10
+                decimals: pageMarginId.unit === "in" ? 2 : 0
+                realValue: pageMarginId.unit === "in" ? .1 : 10
             }
 
             Text {

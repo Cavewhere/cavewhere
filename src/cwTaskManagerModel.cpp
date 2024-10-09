@@ -23,13 +23,13 @@ cwTaskManagerModel::cwTaskManagerModel(QObject *parent) :
     TaskProgressMapper(new QSignalMapper(this)),
     TaskNumberOfStepsMapper(new QSignalMapper(this))
 {
-    connect(TaskStartedMapper, SIGNAL(mapped(QObject*)), this, SLOT(taskHasStarted(QObject*)));
-    connect(TaskStoppedMapper, SIGNAL(mapped(QObject*)), this, SLOT(taskHasStopped(QObject*)));
-    connect(TaskFinishedMapper, SIGNAL(mapped(QObject*)), this, SLOT(taskHasFinished(QObject*)));
-    connect(TaskActiveMapper, SIGNAL(mapped(QObject*)), this, SLOT(taskIsActive(QObject*)));
-    connect(TaskNameMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateTaskName(QObject*)));
-    connect(TaskProgressMapper, SIGNAL(mapped(QObject*)), this, SLOT(updateTaskProgress(QObject*)));
-    connect(TaskNumberOfStepsMapper, SIGNAL(mapped(QObject*)),
+    connect(TaskStartedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasStarted(QObject*)));
+    connect(TaskStoppedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasStopped(QObject*)));
+    connect(TaskFinishedMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskHasFinished(QObject*)));
+    connect(TaskActiveMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(taskIsActive(QObject*)));
+    connect(TaskNameMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTaskName(QObject*)));
+    connect(TaskProgressMapper, SIGNAL(mappedObject(QObject*)), this, SLOT(updateTaskProgress(QObject*)));
+    connect(TaskNumberOfStepsMapper, SIGNAL(mappedObject(QObject*)),
             this, SLOT(updateTaskNumberOfSteps(QObject*)));
 }
 

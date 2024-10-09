@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
-import QtGraphicalEffects 1.0
+// import QtGraphicalEffects 1.0
 import "Theme.js" as Theme
 
 QQ.Item {
@@ -85,36 +85,36 @@ QQ.Item {
         }
     }
 
-    FastBlur {
-        id: fastBlurId
-        source: shadowContainerId
-        width: shadowContainerId.width
-        height: shadowContainerId.height
-        transparentBorder: true
+    // FastBlur {
+    //     id: fastBlurId
+    //     source: shadowContainerId
+    //     width: shadowContainerId.width
+    //     height: shadowContainerId.height
+    //     transparentBorder: true
 
-        visible: radius != 0
+    //     visible: radius != 0
 
-        anchors.centerIn: widgetId
-    }
+    //     anchors.centerIn: widgetId
+    // }
 
-    QQ.ParallelAnimation {
-        id: visibleAnimation
+    // QQ.ParallelAnimation {
+    //     id: visibleAnimation
 
 
-        QQ.PropertyAnimation {
-            target: fastBlurId
-            property: "radius"
-            from: 100
-            to: 0
-        }
+    //     QQ.PropertyAnimation {
+    //         target: fastBlurId
+    //         property: "radius"
+    //         from: 100
+    //         to: 0
+    //     }
 
-        QQ.PropertyAnimation {
+    //     QQ.PropertyAnimation {
 
-            target: fastBlurId
-            property: "opacity"
-            from: 0.0
-            to: 1.0
-        }
-    }
+    //         target: fastBlurId
+    //         property: "opacity"
+    //         from: 0.0
+    //         to: 1.0
+    //     }
+    // }
 
 }

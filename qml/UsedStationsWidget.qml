@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 1.0
+import QtQuick.Controls
 import Cavewhere 1.0
 
 QQ.Rectangle {

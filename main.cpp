@@ -46,6 +46,9 @@ int main(int argc, char *argv[])
 
     cwApplication a(argc, argv);
 
+    // Set the default graphics API to OpenGL
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+
     cwRootData* rootData = new cwRootData();
 
     if(argc >= 2) {

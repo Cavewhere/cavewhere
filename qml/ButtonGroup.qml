@@ -29,7 +29,7 @@ QQ.Item {
 
         QQ.Row {
             id: buttonArea
-            anchors.horizontalCenter: buttonAreaRect.horizontalCenter
+            // anchors.horizontalCenter: buttonAreaRect.horizontalCenter
 
             y: 2
 

@@ -7,7 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import Cavewhere 1.0
-import QtQuick.Controls 1.2 as Controls;
+import QtQuick.Controls as Controls;
 import QtQuick.Layouts 1.1
 import "Navigation.js" as NavigationHandler
 

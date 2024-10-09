@@ -1,8 +1,8 @@
 import QtQuick 2.0 as QQ
-import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.1
+import QtQuick.Layouts
+import QtQuick.Controls as QC
 import Cavewhere 1.0
-import QtQuick.Dialogs 1.0 as Dialogs
+import QtQuick.Dialogs as Dialogs
 import "Utils.js" as Utils
 
 QQ.Item {
@@ -75,12 +75,12 @@ QQ.Item {
         onFinishedCapture: Qt.openUrlExternally(filename)
     }
 
-    Menu {
+    QC.Menu {
         id: layerRightClickMenu
 
         property CaptureViewport capture: null
 
-        MenuItem {
+        QC.MenuItem {
             text: "Remove"
             onTriggered: {
                 if(layerRightClickMenu.capture == null) {
@@ -116,10 +116,10 @@ QQ.Item {
             RowLayout {
                 Layout.fillWidth: true
 
-                GroupBox {
+                QC.GroupBox {
                     title: "File type"
 
-                    ComboBox {
+                    QC.ComboBox {
                         id: fileTypeExportComboBox
                         model: screenCaptureManagerId.fileTypes
                     }
@@ -193,7 +193,7 @@ QQ.Item {
                 Layout.fillHeight: true //!optionsScrollViewId.visible
             }
 
-            ScrollView {
+            QC.ScrollView {
                 id: optionsScrollViewId
                 visible: false
 
@@ -206,13 +206,13 @@ QQ.Item {
 
 
 
-                    GroupBox {
+                    QC.GroupBox {
                         id: paperSizeId
                         title: "Paper Size"
 
                         ColumnLayout {
 
-                            ComboBox {
+                            QC.ComboBox {
                                 id: paperComboBoxId
                                 model: paperSizeModel
                                 textRole: "name"
@@ -290,11 +290,12 @@ QQ.Item {
                                     text: "Resolution"
                                 }
 
-                                SpinBox {
+                                QC.SpinBox {
                                     id: resolutionSpinBoxId
                                     value: screenCaptureManagerId.resolution
                                     stepSize: 100
-                                    maximumValue: 600
+                                    from: 100
+                                    to: 600
 
                                     onValueChanged: {
                                         screenCaptureManagerId.resolution = value
@@ -324,7 +325,7 @@ QQ.Item {
                         unit: "in"
                     }
 
-                    GroupBox {
+                    QC.GroupBox {
                         id: orientationId
                         title: "Orientation"
 
@@ -334,7 +335,7 @@ QQ.Item {
                                 text: "Portrait"
                             }
 
-                            Switch {
+                            QC.Switch {
                                 id: orientationSwitchId
                                 onCheckedChanged: {
                                     paperSizeInteraction.paperRectangle.landScape = checked
@@ -348,11 +349,11 @@ QQ.Item {
                         }
                     }
 
-                    GroupBox {
+                    QC.GroupBox {
                         id: layersId
                         title: "Layers"
 
-                        ScrollView {
+                        QC.ScrollView {
                             QQ.ListView {
                                 id: layerListViewId
 
@@ -408,11 +409,11 @@ QQ.Item {
                         }
                     }
 
-                    GroupBox {
+                    QC.GroupBox {
                         id: layerGroupsId
                         title: "Layer Groups"
 
-                        ScrollView {
+                        QC.ScrollView {
                             QQ.ListView {
                                 id: groupListViewId
                                 model: screenCaptureManagerId.groupModel
@@ -423,19 +424,23 @@ QQ.Item {
                                     height: 100
                                     //                                color: "red"
 
-                                    QQ.VisualDataModel {
-                                        id: visualModel
-                                        model: screenCaptureManagerId.groupModel
-                                        rootIndex: screenCaptureManagerId.groupModel.index(index)
+                                    // QQ.VisualDataModel {
+                                    //     id: visualModel
+                                    //     model: screenCaptureManagerId.groupModel
+                                    //     rootIndex: screenCaptureManagerId.groupModel.index(index)
 
+                                    //     delegate: Text {
+                                    //         text: captureNameRole
+                                    //     }
+                                    // }
+
+                                    QQ.ListView {
+                                        // model: visualModel
+                                        model: screenCaptureManagerId.groupModel
+                                        anchors.fill: parent
                                         delegate: Text {
                                             text: captureNameRole
                                         }
-                                    }
-
-                                    QQ.ListView {
-                                        model: visualModel
-                                        anchors.fill: parent
 
 
                                     }
@@ -445,7 +450,7 @@ QQ.Item {
                     }
 
 
-                    GroupBox {
+                    QC.GroupBox {
                         id: layerProperties
 
                         property var layerObject: null
@@ -587,8 +592,9 @@ QQ.Item {
     Dialogs.FileDialog {
         id: exportDialogId
         title: "Export to " + fileTypeExportComboBox.currentText
-        selectExisting: false
-        folder: rootData.lastDirectory
+        // selectExisting: false
+        fileMode: Dialogs.FileDialog.SaveFile
+        currentFolder: rootData.lastDirectory
         defaultSuffix: screenCaptureManagerId.fileTypeToExtention(screenCaptureManagerId.fileType)
         onAccepted: {
             var type = screenCaptureManagerId.typeNameToFileType(fileTypeExportComboBox.currentText);

@@ -1,6 +1,6 @@
 import QtQuick 2.0 as QQ
 import QtQuick.Layouts 1.1
-import QtQuick.Controls 1.2
+import QtQuick.Controls
 import Cavewhere 1.0
 
 FloatingGroupBox {
