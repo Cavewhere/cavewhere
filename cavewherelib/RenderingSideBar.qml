@@ -1,0 +1,165 @@
+import QtQuick 2.0 as QQ
+import QtQuick.Controls
+import QtQuick.Layouts
+import cavewherelib
+
+// TabView {
+//     id: tabViewId
+
+//     property GLTerrainRenderer viewer
+//     property Tab viewTab
+
+//     QQ.Component {
+//         id: cameraOptionsTabComponentId
+//         CameraOptionsTab {
+
+//         }
+//     }
+
+//     QQ.Component {
+//         id: exportTabComponentId
+//         ExportViewTab {
+//             view: viewer
+//         }
+//     }
+
+//     function resizeCurrentTab() {
+//         resizing = true
+//         tabViewId.Layout.maximumWidth = getTab(currentIndex).implicitWidth
+//         tabViewId.Layout.minimumWidth = getTab(currentIndex).implicitWidth
+//         tabViewId.Layout.maximumWidth = Number.MAX_VALUE
+//         resizing = false
+//     }
+
+//     onCurrentIndexChanged: {
+//         resizeCurrentTab()
+//     }
+
+//     QQ.Connections {
+//         target: {
+//             var tab = getTab(currentIndex)
+//             if(!tab) {
+//                 return null
+//             }
+//             return getTab(currentIndex).item
+//         }
+//         ignoreUnknownSignals: true
+//         onImplicitWidthChanged: {
+//             resizeCurrentTab()
+//         }
+//     }
+
+//     QQ.Component.onCompleted: {
+//         addTab("View", cameraOptionsTabComponentId);
+//         addTab("Export", exportTabComponentId);
+
+//         viewTab = getTab(0)
+//     }
+
+//     QQ.Connections {
+//         target: viewTab
+//         onLoaded: {
+//             viewTab.item.viewer = viewer
+//         }
+//     }
+
+// //    onCurrentIndexChanged: {
+// //        getTab(currentIndex).item.viewer = viewer;
+// //    }
+// }
+
+// import QtQuick 2.0 as QQ
+// import QtQuick.Controls 2.0
+// import QtQuick.Layouts 1.1
+// import cavewherelib
+
+ColumnLayout {
+    id: rootLayout
+
+    property GLTerrainRenderer viewer
+    // property Tab viewTab
+
+    TabBar {
+        id: tabBarId
+        Layout.fillWidth: true
+
+        TabButton {
+            text: "View"
+        }
+        TabButton {
+            text: "Export"
+        }
+    }
+
+    StackLayout {
+        id: stackLayoutId
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        currentIndex: tabBarId.currentIndex
+
+        QQ.Component {
+            id: cameraOptionsTabComponentId
+            CameraOptionsTab {
+                // Your CameraOptionsTab-specific logic
+            }
+        }
+
+        QQ.Component {
+            id: exportTabComponentId
+            ExportViewTab {
+                view: viewer
+            }
+        }
+
+        QQ.Item {
+            QQ.Loader {
+                sourceComponent: cameraOptionsTabComponentId
+                onLoaded: {
+                    viewTab = item
+                    viewTab.viewer = viewer
+                }
+            }
+        }
+
+        QQ.Item {
+            QQ.Loader {
+                sourceComponent: exportTabComponentId
+                onLoaded: {
+                    viewTab = item
+                    viewTab.viewer = viewer
+                }
+            }
+        }
+    }
+
+    function resizeCurrentTab() {
+        resizing = true
+        var currentTab = stackLayoutId.currentItem;
+        if (currentTab) {
+            tabBarId.Layout.maximumWidth = currentTab.implicitWidth
+            tabBarId.Layout.minimumWidth = currentTab.implicitWidth
+        }
+        tabBarId.Layout.maximumWidth = Number.MAX_VALUE
+        resizing = false
+    }
+
+    QQ.Connections {
+        target: stackLayoutId.currentItem
+        ignoreUnknownSignals: true
+        onImplicitWidthChanged: {
+            resizeCurrentTab()
+        }
+    }
+
+    QQ.Component.onCompleted: {
+        tabBarId.currentIndex = 0; // Default to first tab
+    }
+
+    QQ.Connections {
+        target: viewTab
+        onLoaded: {
+            viewTab.viewer = viewer
+        }
+    }
+}
+

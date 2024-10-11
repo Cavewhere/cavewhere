@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.0)
+cmake_minimum_required(VERSION 3.21.1)
 
 project(cavewhere VERSION 1.0.0 LANGUAGES CXX)
 
@@ -7,16 +7,17 @@ option(WITH_PDF "Build with PDF support" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QMLLS INI file")
 
 # Include the GenerateExportHeader module
 include(GenerateExportHeader)
-include(UpdateVersion.cmake)
 
 # All subdirectories
 add_subdirectory(QMath3d)
 add_subdirectory(asyncfuture)
 add_subdirectory(qt-qml-models)
 add_subdirectory(dewalls)
+add_subdirectory(cavewherelib)
 
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 add_subdirectory(survex)
@@ -39,102 +40,7 @@ find_package(Qt6
     Test
     REQUIRED)
 
-#### Cavewhere-lib ######
-qt_add_library(cavewhere-lib SHARED)
 
-set_target_properties(cavewhere-lib PROPERTIES
-    AUTOMOC ON
-    AUTORCC ON
-    AUTOUIC ON
-)
-
-target_link_libraries(cavewhere-lib
-    PUBLIC
-    Qt::Core
-    Qt::Gui
-    Qt::Widgets
-    Qt::Quick
-    Qt::Sql
-    Qt::OpenGL
-    Qt::Xml
-    Qt::Concurrent
-    Qt::Svg
-    QtQmlModels
-    asyncfuture
-    dewalls
-    QMath3d
-    libsquish::libsquish
-    PRIVATE
-    protobuf::protobuf
-)
-
-# Conditionally find the package and include directories
-if(WITH_PDF)
-    find_package(Qt6 COMPONENTS Pdf REQUIRED)
-    target_link_libraries(cavewhere-lib PRIVATE Qt::Pdf)
-    target_compile_definitions(cavewhere-lib PRIVATE "WITH_PDF_SUPPORT")
-endif()
-
-qt_add_resources(QT_RESOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/fonts/fonts.qrc
-)
-target_sources(cavewhere-lib PRIVATE ${QT_RESOURCES})
-
-# Generate the export header
-generate_export_header(cavewhere-lib
-    BASE_NAME CAVEWHERE_LIB
-    EXPORT_MACRO_NAME CAVEWHERE_LIB_EXPORT
-    EXPORT_FILE_NAME CaveWhereLibExport.h
-)
-
-# Generate cavewhereVersion.h
-update_git_version(cavewhere-lib ${CMAKE_CURRENT_SOURCE_DIR}/src/cavewhereVersion.h.in)
-
-target_include_directories(cavewhere-lib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}/versionInfo
-)
-
-# Collect source files cavewhereLib
-file(GLOB cavewherelib_CPP_FILES "src/*.cpp" "src/utils/*.cpp")
-file(GLOB cavewherelib_H_FILES "src/*.h" "src/utils/*.h")
-target_sources(cavewhere-lib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
-
-# Protobuf files
-file(GLOB protobuf_FILES "src/*.proto")
-set(Protobuf_IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-message(STATUS "CMAKE_CURRENT_SOURCE_DIR/src is set to: ${CMAKE_CURRENT_SOURCE_DIR}/src ${PROTOBUF_IMPORT_DIRS}")
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${protobuf_FILES})
-target_sources(cavewhere-lib PRIVATE ${protobuf_FILES} ${protobuf_FILES})
-
-# Add the generated files to your target
-set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES SKIP_AUTOMOC TRUE SKIP_AUTOUIC TRUE)
-target_sources(cavewhere-lib PRIVATE ${PROTO_SRCS} ${PROTO_HDRS})
-
-# Handle .ui files
-qt_wrap_ui(UI_HEADERS
-    cwImportTreeDataDialog.ui
-    cwTaskProgressDialog.ui
-)
-
-target_compile_definitions(cavewhere-lib PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
-
-target_sources(cavewhere-lib PRIVATE ${UI_HEADERS})
-
-# Copy local dependancies to the build directory
-add_custom_command(TARGET cavewhere-lib POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:dewalls>
-        $<TARGET_FILE_DIR:cavewhere-lib>
-)
-add_custom_command(TARGET cavewhere-lib POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:QMath3d>
-    $<TARGET_FILE_DIR:cavewhere-lib>
-)
 
 #### cavewhere-test ####
 qt_add_executable(cavewhere-test)
@@ -144,7 +50,6 @@ set_target_properties(cavewhere-test PROPERTIES
     AUTORCC ON
     AUTOUIC ON
 )
-
 
 file(GLOB cavewhere_test_CPP_FILES "testcases/*.cpp")
 file(GLOB cavewhere_test_H_FILES "testcases/*.h")
@@ -158,7 +63,7 @@ target_link_libraries(cavewhere-test
     PRIVATE
     Qt::Test
     Catch2::Catch2
-    cavewhere-lib
+    cavewherelib
 )
 
 #### CaveWhere ####
@@ -167,8 +72,6 @@ qt_add_executable(CaveWhere
     Cavewhere.rc
     testcases/cwSignalSpy.h testcases/cwSignalSpy.cpp
 )
-
-
 
 set_target_properties(CaveWhere PROPERTIES
     AUTOMOC ON
@@ -181,23 +84,25 @@ set_target_properties(CaveWhere PROPERTIES
     RESOURCE "${CMAKE_CURRENT_SOURCE_DIR}/cavewhereIcon.icns"
 )
 
-file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
-# target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
+# file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
+# # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
-# Make the file paths relative to the project directory
-set(cavewhere_RELATIVE_QML_FILES "")
-foreach(file ${cavewhere_QML_FILES})
-    file(RELATIVE_PATH relFile "${CMAKE_SOURCE_DIR}" "${file}")
-    list(APPEND cavewhere_RELATIVE_QML_FILES "${relFile}")
-endforeach()
+# # Make the file paths relative to the project directory
+# set(cavewhere_RELATIVE_QML_FILES "")
+# foreach(file ${cavewhere_QML_FILES})
+#     file(RELATIVE_PATH relFile "${CMAKE_SOURCE_DIR}" "${file}")
+#     list(APPEND cavewhere_RELATIVE_QML_FILES "${relFile}")
+# endforeach()
 
-qt_add_qml_module(CaveWhere
-    URI Cavewhere
-    VERSION 1.0
-    RESOURCE_PREFIX /cavewhere
-    QML_FILES
-        ${cavewhere_RELATIVE_QML_FILES}
-    )
+# qt_add_qml_module(cavewherelib
+#     URI Cavewhere
+#     VERSION 1.0
+#     RESOURCE_PREFIX /cavewhere
+#     SOURCES
+
+#     QML_FILES
+#         ${cavewhere_RELATIVE_QML_FILES}
+#     )
 
 target_link_libraries(CaveWhere
     PRIVATE
@@ -207,7 +112,7 @@ target_link_libraries(CaveWhere
     Qt::Quick
     Qt::Sql
     Qt::Test
-    cavewhere-lib
+    cavewherelib
 )
 
 if(WIN32)

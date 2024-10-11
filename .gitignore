@@ -998,3 +998,7 @@ conaninfo.txt
 graph_info.json
 CMakeLists.txt.user
 build
+*.user
+cavewherelib/.qmlls.ini
+*.user.*
+*.mo
