@@ -7,7 +7,6 @@
 
 import QtQuick as QQ
 import cavewherelib
-import QtQuick.Controls
 import QtQuick.Layouts
 
 QQ.Item {

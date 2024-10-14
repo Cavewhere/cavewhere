@@ -1,6 +1,5 @@
 import QtQuick as QQ
-import QtQuick.Controls
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 import cavewherelib
 
 QQ.Rectangle {

@@ -1,4 +1,3 @@
-import QtQuick as QQ
 import cavewherelib
 
 BaseNoteLeadInteraction {

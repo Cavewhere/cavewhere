@@ -5,8 +5,6 @@
 **
 **************************************************************************/
 
-import QtQuick as QQ
-
 CoreClickTextInput {
 
     Pallete {

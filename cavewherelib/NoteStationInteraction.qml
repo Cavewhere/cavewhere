@@ -5,7 +5,6 @@
 **
 **************************************************************************/
 
-import QtQuick as QQ
 import cavewherelib
 
 BaseNoteStationInteraction {
