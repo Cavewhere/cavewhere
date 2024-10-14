@@ -13,9 +13,13 @@
 #include "cwGlobalDirectory.h"
 class cwScrap;
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwScrapOutlinePointView : public cwScrapPointView
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapOutlinePointView)
 
 public:
     explicit cwScrapOutlinePointView(QQuickItem *parent = 0);

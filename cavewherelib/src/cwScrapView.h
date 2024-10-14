@@ -11,6 +11,7 @@
 //Qt includes
 #include <QQuickItem>
 #include <QGraphicsPolygonItem>
+#include <QQmlEngine>
 
 //Our includes
 class cwNote;
@@ -27,6 +28,7 @@ class cwSelectionManager;
 class cwScrapView : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapView)
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
     Q_PROPERTY(cwTransformUpdater* transformUpdater READ transformUpdater WRITE setTransformUpdater NOTIFY transformUpdaterChanged)

@@ -33,8 +33,8 @@ QQ.Item {
 
     onFocusChanged: {
         if(focus) {
-            if(globalShadowTextInput.coreClickInput !== null) {
-                globalShadowTextInput.coreClickInput.commitChanges()
+            if(GlobalShadowTextInput.coreClickInput !== null) {
+                GlobalShadowTextInput.coreClickInput.commitChanges()
             }
             openEditor()
         }
@@ -52,36 +52,36 @@ QQ.Item {
         //Emit the finishedEditting signal
         if(validator !== null) {
             var accepted = 2;
-            if(validator.validate(globalShadowTextInput.textInput.text) === accepted) {
-                finishedEditting(globalShadowTextInput.textInput.text)
+            if(validator.validate(GlobalShadowTextInput.textInput.text) === accepted) {
+                finishedEditting(GlobalShadowTextInput.textInput.text)
                 closeEditor();
                 return true;
             } else {
-                globalShadowTextInput.errorHelpBox.text = validator.errorText
-                globalShadowTextInput.errorHelpBox.visible = true
-                globalShadowTextInput.textInput.focus = true
+                GlobalShadowTextInput.errorHelpBox.text = validator.errorText
+                GlobalShadowTextInput.errorHelpBox.visible = true
+                GlobalShadowTextInput.textInput.focus = true
                 return false;
             }
         } else {
-            var newText = globalShadowTextInput.textInput.text
+            var newText = GlobalShadowTextInput.textInput.text
             closeEditor();
-            finishedEditting(globalShadowTextInput.textInput.text);
+            finishedEditting(GlobalShadowTextInput.textInput.text);
             return true;
         }
     }
 
     function closeEditor() {
-        globalShadowTextInput.editor.visible = false;
-        globalShadowTextInput.textInput.focus = false;
-        globalShadowTextInput.textInput.validator = null;
+        GlobalShadowTextInput.editor.visible = false;
+        GlobalShadowTextInput.textInput.focus = false;
+        GlobalShadowTextInput.textInput.validator = null;
 
-        globalShadowTextInput.enabled = false
+        GlobalShadowTextInput.enabled = false
         doubleClickArea.enabled = true;
         textAreaId.visible = true;
         isEditting = false;
-        globalShadowTextInput.errorHelpBox.visible = false;
+        GlobalShadowTextInput.errorHelpBox.visible = false;
 
-        globalShadowTextInput.coreClickInput = null
+        GlobalShadowTextInput.coreClickInput = null
     }
 
     function openEditor() {
@@ -89,30 +89,30 @@ QQ.Item {
 
         textAreaId.visible = false
 
-        globalShadowTextInput.textInput.text = clickTextInput.text
-        globalShadowTextInput.textInput.font = textAreaId.font
-        globalShadowTextInput.editor.visible = true
-        globalShadowTextInput.textInput.forceActiveFocus()
-        globalShadowTextInput.textInput.selectAll();
+        GlobalShadowTextInput.textInput.text = clickTextInput.text
+        GlobalShadowTextInput.textInput.font = textAreaId.font
+        GlobalShadowTextInput.editor.visible = true
+        GlobalShadowTextInput.textInput.forceActiveFocus()
+        GlobalShadowTextInput.textInput.selectAll();
 
         if(clickTextInput.validator !== null) {
-            globalShadowTextInput.textInput.validator = clickTextInput.validator
+            GlobalShadowTextInput.textInput.validator = clickTextInput.validator
         }
 
-        globalShadowTextInput.enabled = true
+        GlobalShadowTextInput.enabled = true
         doubleClickArea.enabled = false
         isEditting = true
 
         //Set the editor's position
-        var globalPosition = clickTextInput.mapToItem(globalShadowTextInput, 0, 0)
-        globalShadowTextInput.editor.x = globalPosition.x - 3
-        globalShadowTextInput.editor.y = globalPosition.y - 3
+        var globalPosition = clickTextInput.mapToItem(GlobalShadowTextInput, 0, 0)
+        GlobalShadowTextInput.editor.x = globalPosition.x - 3
+        GlobalShadowTextInput.editor.y = globalPosition.y - 3
 
-        globalShadowTextInput.minWidth = clickTextInput.width + 6
-        globalShadowTextInput.minHeight = clickTextInput.height + 6
+        GlobalShadowTextInput.minWidth = clickTextInput.width + 6
+        GlobalShadowTextInput.minHeight = clickTextInput.height + 6
 
         //Connect to commitChanges()
-        globalShadowTextInput.coreClickInput = clickTextInput
+        GlobalShadowTextInput.coreClickInput = clickTextInput
     }
 
     Text {
@@ -164,22 +164,24 @@ QQ.Item {
         states: [
             QQ.State {
                 name: "DOUBLE-CLICK"
-                when: doubleClickEdit && !clickTextInput.readOnly
+                when: clickTextInput.doubleClickEdit && !clickTextInput.readOnly
 
                 QQ.PropertyChanges {
-                    target: doubleClickArea
-                    propagateComposedEvents: !acceptMousePress
-                    onDoubleClicked: openEditor()
+                    doubleClickArea {
+                        propagateComposedEvents: !acceptMousePress
+                        onDoubleClicked: openEditor()
+                    }
                 }
             },
 
             QQ.State {
                 name: "SIGNLE-CLICK"
-                when: !doubleClickEdit && !clickTextInput.readOnly
+                when: !clickTextInput.doubleClickEdit && !clickTextInput.readOnly
 
                 QQ.PropertyChanges {
-                    target: doubleClickArea
-                    onClicked: openEditor()
+                    doubleClickArea {
+                        onClicked: openEditor()
+                    }
                 }
             }
         ]

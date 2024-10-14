@@ -13,6 +13,7 @@
 #include <QQuickItem>
 #include <QPointer>
 #include <QQmlComponent>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwCaptureManager.h"
@@ -21,6 +22,7 @@ class cwCaptureItem;
 class cwCaptureItemManiputalor : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CaptureItemManiputalor)
 
     Q_PROPERTY(cwCaptureManager* manager READ manager WRITE setManager NOTIFY managerChanged)
 

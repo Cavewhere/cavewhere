@@ -1,13 +1,13 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Window 2.0
+import QtQuick.Window
 import QtQuick.Controls
-import QtQuick.Layouts 1.0
+import QtQuick.Layouts
+import cavewherelib
 
 Window {
     id: window
     width: 500
     height: 600
-    visible: !license.hasReadLicenseAgreement
+    visible: !RootData.license.hasReadLicenseAgreement
     color: "#E8E8E8"
     title: "License Agreement"
 
@@ -23,23 +23,23 @@ Window {
 
         CavewhereLogo {
             id: logoId
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
         }
 
         TextArea {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            text: license.text
+            text: RootData.license.text
             readOnly: true
         }
 
         RowLayout {
-            anchors.right: parent.right
+            Layout.alignment: Qt.AlignRight
 
             Button {
                 text: "Close CaveWhere"
                 onClicked: {
-                    license.hasReadLicenseAgreement = false
+                    RootData.license.hasReadLicenseAgreement = false
                     Qt.quit()
                 }
             }
@@ -47,7 +47,7 @@ Window {
             Button {
                 text: "Accept"
                 onClicked: {
-                    license.hasReadLicenseAgreement = true
+                    RootData.license.hasReadLicenseAgreement = true
                     window.close()
                 }
             }

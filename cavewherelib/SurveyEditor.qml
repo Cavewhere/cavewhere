@@ -15,8 +15,10 @@ QQ.Item {
     id: clipArea
 
     property alias currentTrip: view.trip
-    property Calibration currentCalibration: currentTrip.calibration === null ? defaultTripCalibartion : currentTrip.calibration
+    property TripCalibration currentCalibration: currentTrip.calibration
     readonly property alias contentWidth: scrollAreaId.width //For animation
+
+    signal collapseClicked();
 
     clip: false
 
@@ -25,7 +27,7 @@ QQ.Item {
 
     TripLengthTask {
         id: tripLengthTask
-        trip: currentTrip
+        trip: clipArea.currentTrip
     }
 
     Controls.ScrollView {
@@ -77,9 +79,7 @@ QQ.Item {
                             anchors.top: parent.top
                             anchors.margins: 3
                             iconSource: "qrc:/icons/moreArrowLeft.png"
-                            onClicked: {
-                                area.state = "COLLAPSE"
-                            }
+                            onClicked:  clipArea.collapseClicked()
                         }
                     }
 
@@ -88,12 +88,12 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripNameText
-                            text: currentTrip.name
+                            text: clipArea.currentTrip.name
                             font.bold: true
                             font.pixelSize: 20
 
-                            onFinishedEditting: {
-                                currentTrip.name = newText
+                            onFinishedEditting: (newText) => {
+                                clipArea.currentTrip.name = newText
                             }
                         }
 
@@ -103,12 +103,12 @@ QQ.Item {
 
                         DoubleClickTextInput {
                             id: tripDate
-                            text: Qt.formatDate(currentTrip.date, "yyyy-MM-dd")
+                            text: Qt.formatDate(clipArea.currentTrip.date, "yyyy-MM-dd")
 
                             font.bold: true
 
-                            onFinishedEditting: {
-                                currentTrip.date = Date.fromLocaleDateString(Qt.locale(), newText, "yyyy-MM-dd");
+                            onFinishedEditting: function(newText) {
+                                clipArea.currentTrip.date = Date.fromLocaleDateString(Qt.locale(), newText, "yyyy-MM-dd");
                             }
                         }
                     }
@@ -118,14 +118,14 @@ QQ.Item {
 
                 CalibrationEditor {
                     width: view.contentWidth
-                    calibration: currentTrip === null ? null : currentTrip.calibration
+                    calibration: clipArea.currentTrip === null ? null : clipArea.currentTrip.calibration
                 }
 
                 BreakLine { }
 
                 TeamTable {
                     id: teamTable
-                    model: currentTrip !== null ? currentTrip.team : null
+                    model: clipArea.currentTrip !== null ? clipArea.currentTrip.team : null
                     width: view.contentWidth
                 }
 
@@ -136,21 +136,23 @@ QQ.Item {
                 }
 
                 SurveyErrorOverview {
-                    trip: currentTrip
+                    trip: clipArea.currentTrip
                 }
 
                 SurveyChunkGroupView {
                     id: view
 
-                    trip: defaultTrip
+                    trip: RootData.defaultTrip
 
                     height: contentHeight
                     width: view.contentWidth
 
                     viewportX: flickableAreaId.contentX;
                     viewportY: flickableAreaId.contentY;
-                    viewportWidth: scrollAreaId.viewport.width;
-                    viewportHeight: scrollAreaId.viewport.height;
+                    // viewportWidth: scrollAreaId.viewport.width;
+                    // viewportHeight: scrollAreaId.viewport.height;
+                    viewportWidth: flickableAreaId.visibleArea.widthRatio * flickableAreaId.width
+                    viewportHeight: flickableAreaId.visibleArea.heightRatio * flickableAreaId.height
 
                     onEnsureVisibleRectChanged: flickableAreaId.ensureVisible(ensureVisibleRect);
                 }
@@ -158,9 +160,9 @@ QQ.Item {
                 Text {
                     visible: !addSurveyData.visible
                     text: {
-                        if(currentTrip === null) { return "" }
+                        if(clipArea.currentTrip === null) { return "" }
                         var unit = ""
-                        switch(currentTrip.calibration.distanceUnit) {
+                        switch(clipArea.currentTrip.calibration.distanceUnit) {
                         case Units.Meters:
                             unit = "m"
                             break;
@@ -179,7 +181,7 @@ QQ.Item {
 
                     anchors.horizontalCenter: view.horizontalCenter
 
-                    visible: currentTrip !== null && currentTrip.chunkCount > 0
+                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount > 0
 
                     Text {
                         anchors.centerIn: parent
@@ -190,7 +192,7 @@ QQ.Item {
                         anchors.fill: parent
 
                         onClicked: {
-                            currentTrip.addNewChunk();
+                            clipArea.currentTrip.addNewChunk();
                         }
                     }
                 }
@@ -200,10 +202,10 @@ QQ.Item {
                     text: "Add Survey Data"
                     anchors.horizontalCenter: view.horizontalCenter
 //                    visible: true
-                    visible: currentTrip !== null && currentTrip.chunkCount === 0
+                    visible: clipArea.currentTrip !== null && clipArea.currentTrip.chunkCount === 0
 
                     onClicked: {
-                        currentTrip.addNewChunk()
+                        clipArea.currentTrip.addNewChunk()
                     }
                 }
             }
@@ -212,7 +214,7 @@ QQ.Item {
 
     QQ.MouseArea {
         anchors.fill: scrollAreaId
-        onPressed: {
+        onPressed: function(mouse) {
             scrollAreaId.forceActiveFocus()
             mouse.accepted = false;
         }

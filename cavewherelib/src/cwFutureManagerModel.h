@@ -7,6 +7,7 @@
 #include <QVector>
 #include <QFutureWatcher>
 #include <QElapsedTimer>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -16,6 +17,7 @@
 class CAVEWHERE_LIB_EXPORT cwFutureManagerModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(FutureManagerModel)
     Q_PROPERTY(int interval READ interval WRITE setInterval NOTIFY intervalChanged)
     Q_PROPERTY(cwFutureManagerToken token READ token CONSTANT)
 

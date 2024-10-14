@@ -12,6 +12,7 @@
 #include <QQuickItem>
 #include <QQmlComponent>
 #include <QMatrix4x4>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwLabel3dItem.h"
@@ -24,6 +25,7 @@ class cwLabel3dView : public QQuickItem
     friend class cwLabel3dGroup;
 
     Q_OBJECT
+    QML_NAMED_ELEMENT(Label3dView)
 
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 

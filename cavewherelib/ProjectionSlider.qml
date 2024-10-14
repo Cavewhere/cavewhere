@@ -5,10 +5,10 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 
 QQ.Item {
     id: cameraSettingsId
@@ -37,14 +37,14 @@ QQ.Item {
                 rightText: "     "
 
                 onIsLeftChanged: {
-                    if(viewer !== null) {
-                        viewer.orthoProjection.enabled = isLeft
+                    if(cameraSettingsId.viewer !== null) {
+                        cameraSettingsId.viewer.orthoProjection.enabled = isLeft
                     }
                 }
 
                 onIsRightChanged: {
-                    if(viewer !== null) {
-                        viewer.perspectiveProjection.enabled = isRight
+                    if(cameraSettingsId.viewer !== null) {
+                        cameraSettingsId.viewer.perspectiveProjection.enabled = isRight
                     }
                 }
             }
@@ -57,19 +57,19 @@ QQ.Item {
         HelpArea {
             id: projectionSliderHelpAreaId
             Layout.fillWidth: true
-            text: "CaveWhere supports two types of projections:<ul>
-<li>Orthogonal - 3D objects always appear the same size no matter how close
-or far away they are to the view. When printing or drawing a cave map, this is the
-projection you want to use.
-<li>Perspective – 3D objects appear smaller when they are further away and
- bigger when they are closer to the camera."
+            text: "CaveWhere supports two types of projections:<ul>" +
+"<li>Orthogonal - 3D objects always appear the same size no matter how close" +
+"or far away they are to the view. When printing or drawing a cave map, this is the" +
+"projection you want to use." +
+"<li>Perspective – 3D objects appear smaller when they are further away and" +
+" bigger when they are closer to the camera."
         }
     }
 
     Matrix4x4Animation {
         id: matrix4x4AnimationId
-        startValue: viewer.orthoProjection.matrix
-        endValue: viewer.perspectiveProjection.matrix
+        startValue: cameraSettingsId.viewer.orthoProjection.matrix
+        endValue: cameraSettingsId.viewer.perspectiveProjection.matrix
         duration: 1000
         currentTime: sliderId.sliderPos * 1000
 
@@ -77,7 +77,7 @@ projection you want to use.
 
         onPositionChanged: {
             if(position != 0.0 && position != 1.0) {
-                viewer.camera.setCustomProjection(currentValue)
+                cameraSettingsId.viewer.camera.setCustomProjection(currentValue)
             }
         }
     }

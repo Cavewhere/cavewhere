@@ -102,20 +102,22 @@ QQ.Rectangle {
         var length = dragLength(delta, fixedPoint)
 
         var deltaOnPaper = pixelToPaper(length); //Convert maxDelta from pixels to paper units
-        var newWidth = Math.max(captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
+        var newWidth = Math.max(interactionId.captureItem.paperSizeOfItem.width + deltaOnPaper, 0.0);
 
         if(newWidth > 0.0) {
             var position = captureItem.positionOnPaper
             var size = captureItem.paperSizeOfItem
             var before = fixedPositionToPoint(fixedPoint)
 
-            captureItem.setPaperWidthOfItem(newWidth);
+            //FIXME: note sure what this unknown call goes to
+            // captureItem.setPaperWidthOfItem(newWidth);
 
             var sizeAfter = captureItem.paperSizeOfItem
             var after = fixedPositionToPoint(fixedPoint)
 
-            captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
-                                                       position.y + (before.y - after.y)));
+            //FIXME: note sure what this unknown call goes to
+            // captureItem.setPositionAfterScale(Qt.point(position.x + (before.x - after.x),
+            //                                            position.y + (before.y - after.y)));
         }
     }
 
@@ -164,7 +166,7 @@ QQ.Rectangle {
     }
 
     onCaptureItemChanged: {
-        state = captureItem === null ? "" : "INIT_STATE"
+        state = interactionId.captureItem === null ? "" : "INIT_STATE"
     }
 
     QQ.MouseArea {
@@ -214,36 +216,37 @@ QQ.Rectangle {
             name: "INIT_STATE"
 
             QQ.PropertyChanges {
-                target: interactionId
-                width: captureItem.boundingBox.width * _scale
-                height: captureItem.boundingBox.height * _scale;
-                x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
-                y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
+                interactionId {
+                    width: captureItem.boundingBox.width * _scale
+                    height: captureItem.boundingBox.height * _scale;
+                    x: ((captureItem.boundingBox.x + captureItem.positionOnPaper.x) - captureOffset.x) * _scale;
+                    y: ((captureItem.boundingBox.y + captureItem.positionOnPaper.y) - captureOffset.y) * _scale
+                }
             }
 
             QQ.PropertyChanges {
-                target: selectMouseAreaId
+                selectMouseAreaId {
+                    onPressed: {
+                        lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
+                        positionHasChange = false;
+                    }
 
-                onPressed: {
-                    lastPoint = Utils.mousePositionToGlobal(selectMouseAreaId)
-                    positionHasChange = false;
-                }
+                    onPositionChanged: {
+                        //Translate the item
+                        var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
+                        var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
+                                             pixelToPaper(newPosition.y - lastPoint.y));
+                        var origin = captureItem.positionOnPaper;
 
-                onPositionChanged: {
-                    //Translate the item
-                    var newPosition = Utils.mousePositionToGlobal(selectMouseAreaId);
-                    var delta = Qt.point(pixelToPaper(newPosition.x - lastPoint.x),
-                                         pixelToPaper(newPosition.y - lastPoint.y));
-                    var origin = captureItem.positionOnPaper;
+                        captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
+                                                               origin.y + delta.y)
+                        lastPoint = newPosition
+                        positionHasChange = true
+                    }
 
-                    captureItem.positionOnPaper = Qt.point(origin.x + delta.x,
-                                                           origin.y + delta.y)
-                    lastPoint = newPosition
-                    positionHasChange = true
-                }
-
-                onReleased: {
-                    interactionId.selected = true
+                    onReleased: {
+                        interactionId.selected = true
+                    }
                 }
             }
         },
@@ -253,54 +256,58 @@ QQ.Rectangle {
             extend: "INIT_STATE"
 
             QQ.PropertyChanges {
-                target: selectMouseAreaId
-
-                onReleased: {
-                    if(hasClicked())
-                    {
-                        interactionId.state = "SELECTED_ROTATE_STATE"
+                selectMouseAreaId {
+                    onReleased: {
+                        if(hasClicked())
+                        {
+                            interactionId.state = "SELECTED_ROTATE_STATE"
+                        }
                     }
                 }
             }
 
             QQ.PropertyChanges {
-                target: topLeftHandle
-                imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
-                imageRotation: 0
-                onDragDelta: {
-                    //Since we're moving to topleft, make the bottom right fixed
-                    dragResizeHandler(delta, QQ.Item.BottomRight)
+                topLeftHandle {
+                    imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
+                    imageRotation: 0
+                    onDragDelta: {
+                        //Since we're moving to topleft, make the bottom right fixed
+                        dragResizeHandler(delta, QQ.Item.BottomRight)
+                    }
                 }
             }
             QQ.PropertyChanges {
-                target: topRightHandle
-                imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
-                imageRotation: 0
-                onDragDelta: {
-                    //Since we're moving the top right, make the bottom left fixed
-                    dragResizeHandler(delta, QQ.Item.BottomLeft)
+                topRightHandle {
+                    imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
+                    imageRotation: 0
+                    onDragDelta: {
+                        //Since we're moving the top right, make the bottom left fixed
+                        dragResizeHandler(delta, QQ.Item.BottomLeft)
+                    }
                 }
             }
             QQ.PropertyChanges {
-                target: bottomLeftHandle
-                imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
-                imageRotation: 0
-                onDragDelta: {
-                    //Since we're moving the bottom left, make the top right fixed
-                    dragResizeHandler(delta, QQ.Item.TopRight)
+                bottomLeftHandle {
+                    imageSource: "qrc:icons/dragArrow/arrowHighRightBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/arrowHighRight.png"
+                    imageRotation: 0
+                    onDragDelta: {
+                        //Since we're moving the bottom left, make the top right fixed
+                        dragResizeHandler(delta, QQ.Item.TopRight)
+                    }
                 }
             }
             QQ.PropertyChanges {
-                target: bottomRightHandle
-                imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
-                imageRotation: 0
-                onDragDelta: {
-                    //Since we're moving the bottom right, make the top left fixed
-                    dragResizeHandler(delta, QQ.Item.TopLeft)
+                bottomRightHandle {
+                    imageSource: "qrc:icons/dragArrow/arrowHighLeftBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/arrowHighLeft.png"
+                    imageRotation: 0
+                    onDragDelta: {
+                        //Since we're moving the bottom right, make the top left fixed
+                        dragResizeHandler(delta, QQ.Item.TopLeft)
+                    }
                 }
             }
 
@@ -311,43 +318,47 @@ QQ.Rectangle {
             extend: "INIT_STATE"
 
             QQ.PropertyChanges {
-                target: selectMouseAreaId
-
-                onReleased: {
-                    if(hasClicked())
-                    {
-                        interactionId.state = "SELECTED_RESIZE_STATE"
+                selectMouseAreaId {
+                    onReleased: {
+                        if(hasClicked())
+                        {
+                            interactionId.state = "SELECTED_RESIZE_STATE"
+                        }
                     }
                 }
             }
 
             QQ.PropertyChanges {
-                target: topLeftHandle
-                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                imageRotation: 90
-                onDragDelta: dragRotationHandler(delta, oldPoint)
+                topLeftHandle {
+                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                    imageRotation: 90
+                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                }
             }
             QQ.PropertyChanges {
-                target: topRightHandle
-                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                imageRotation: 180
-                onDragDelta: dragRotationHandler(delta, oldPoint)
+                topRightHandle {
+                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                    imageRotation: 180
+                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                }
             }
             QQ.PropertyChanges {
-                target: bottomLeftHandle
-                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                imageRotation: 0
-                onDragDelta: dragRotationHandler(delta, oldPoint)
+                bottomLeftHandle {
+                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                    imageRotation: 0
+                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                }
             }
             QQ.PropertyChanges {
-                target: bottomRightHandle
-                imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
-                selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
-                imageRotation: 270
-                onDragDelta: dragRotationHandler(delta, oldPoint)
+                bottomRightHandle {
+                    imageSource: "qrc:icons/dragArrow/rotateArrowBlack.png"
+                    selectedImageSource: "qrc:icons/dragArrow/rotateArrow.png"
+                    imageRotation: 270
+                    onDragDelta: dragRotationHandler(delta, oldPoint)
+                }
             }
         }
     ]

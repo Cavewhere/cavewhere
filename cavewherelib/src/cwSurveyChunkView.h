@@ -14,6 +14,7 @@
 #include <QList>
 #include <QVector>
 #include <QDebug>
+#include <QQmlEngine>
 class QValidator;
 
 //Our includes
@@ -28,6 +29,7 @@ class cwSurveyChunkTrimmer;
 class cwSurveyChunkView : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyChunkView)
 
     Q_PROPERTY(cwSurveyChunk* model READ model WRITE setModel NOTIFY modelChanged)
     Q_PROPERTY(cwSurveyChunkTrimmer* chunkTrimmer READ chunkTrimmer WRITE setChunkTrimmer NOTIFY chunkTrimmerChanged)

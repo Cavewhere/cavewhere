@@ -8,6 +8,9 @@
 #ifndef CWORTHOGONALPROJECTION_H
 #define CWORTHOGONALPROJECTION_H
 
+//Qt includes
+#include <QQmlEngine>
+
 //Our includes
 #include "cwAbstractProjection.h"
 class cwLength;
@@ -15,6 +18,7 @@ class cwLength;
 class cwOrthogonalProjection : public cwAbstractProjection
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(OrothogonalProjection)
 
 public:
     explicit cwOrthogonalProjection(QObject *parent = 0);

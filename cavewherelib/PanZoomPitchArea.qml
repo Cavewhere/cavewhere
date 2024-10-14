@@ -4,7 +4,7 @@ import cavewherelib
 QQ.PinchArea {
     id: pintchInteraction
     property BasePanZoomInteraction basePanZoom
-    onPinchUpdated: {
+    onPinchUpdated: (pinch) => {
         var deltaScale = pinch.scale - pinch.previousScale
         var delta = Math.round(deltaScale * 100);
 

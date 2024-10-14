@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QPointer>
 #include <QModelIndex>
+#include <QQmlEngine>
 
 //Our includes
 class cwCave;
@@ -38,6 +39,7 @@ class cwTrip;
 class cwUsedStationTaskManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(UsedStationTaskManager)
 
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)

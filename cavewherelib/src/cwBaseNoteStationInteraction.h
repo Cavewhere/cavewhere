@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QQuickItem>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwBaseNotePointInteraction.h"
@@ -17,6 +18,7 @@
 class cwBaseNoteStationInteraction : public cwBaseNotePointInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(BaseNoteStationInteraction)
 
 public:
     explicit cwBaseNoteStationInteraction(QQuickItem *parent = 0);

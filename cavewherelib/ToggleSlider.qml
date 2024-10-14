@@ -40,7 +40,7 @@ QQ.Item {
 
         onPressed: {
             if(sliderButtonId.x == 0) {
-                sliderButtonId.x = sliderRange
+                sliderButtonId.x = toggleSliderId.sliderRange
             } else {
                 sliderButtonId.x = 0
             }
@@ -81,7 +81,7 @@ QQ.Item {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 4
-            opacity: sliderButtonId.x / sliderRange
+            opacity: sliderButtonId.x / toggleSliderId.sliderRange
         }
     }
 
@@ -99,7 +99,7 @@ QQ.Item {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 4
-            opacity:  1.0 - (sliderButtonId.x / sliderRange)
+            opacity:  1.0 - (sliderButtonId.x / toggleSliderId.sliderRange)
         }
     }
 
@@ -119,25 +119,25 @@ QQ.Item {
 
             anchors.fill: parent
 
-            onPressed: {
+            onPressed: function(mouse) {
                 firstPointX = mapToItem(toggleSliderId, mouse.x, 0).x
                 behaviorId.enabled = false
             }
 
-            onPositionChanged: {
+            onPositionChanged: function(mouse) {
                 var currentPosition = mapToItem(toggleSliderId, mouse.x, 0).x;
                 var delta = currentPosition - firstPointX;
-                sliderButtonId.x = Math.min(sliderRange,
+                sliderButtonId.x = Math.min(toggleSliderId.sliderRange,
                                              Math.max(0, sliderButtonId.x + delta));
                 firstPointX = currentPosition
             }
 
             onReleased: {
                 behaviorId.enabled = true
-                var locationPercent = sliderButtonId.x / sliderRange;
+                var locationPercent = sliderButtonId.x / toggleSliderId.sliderRange;
 
                 if(locationPercent > 0.5) {
-                    sliderButtonId.x = sliderRange
+                    sliderButtonId.x = toggleSliderId.sliderRange
                 } else {
                     sliderButtonId.x = 0
                 }

@@ -16,6 +16,7 @@ class cwSurveyChunk;
 //Qt includes
 #include <QPair>
 #include <QPointer>
+#include <QQmlEngine>
 
 /**
   This class isn't thread safe!
@@ -25,6 +26,7 @@ class cwSurveyChunk;
 class cwTripLengthTask : public cwTask
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TripLengthTask)
 
     Q_PROPERTY(double length READ length NOTIFY lengthChanged)
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)

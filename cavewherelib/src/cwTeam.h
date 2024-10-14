@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QAbstractListModel>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwTeamMember.h"
@@ -17,8 +18,7 @@
 class cwTeam : public QAbstractListModel
 {
     Q_OBJECT
-
-    Q_ENUMS(TeamModelRoles)
+    QML_NAMED_ELEMENT(Team)
 
 public:
     enum TeamModelRoles{
@@ -27,6 +27,7 @@ public:
         //In a sublist
         JobsRole
     };
+    Q_ENUM(TeamModelRoles)
 
     explicit cwTeam(QObject *parent = 0);
     cwTeam(const cwTeam& team);

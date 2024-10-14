@@ -12,6 +12,7 @@
 //Qt includes
 #include <QQuickItem>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 class cwPageSelectionModel;
@@ -28,6 +29,8 @@ class cwPage;
 class cwPageView : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(PageView)
+    QML_ATTACHED(cwPageViewAttachedType)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel WRITE setPageSelectionModel NOTIFY pageSelectionModelChanged)
     Q_PROPERTY(QQmlComponent* unknownPageComponent READ unknownPageComponent WRITE setUnknownPageComponent NOTIFY unknownPageComponentChanged)

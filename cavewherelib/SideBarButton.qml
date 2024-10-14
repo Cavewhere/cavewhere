@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
-import QtQuick.Layouts 1.12
+import QtQuick as QQ
+import QtQuick.Layouts
 
 QQ.Rectangle {
     id: button
@@ -86,7 +86,7 @@ QQ.Rectangle {
 
         onEntered: button.state = "hoverState"
         onExited: button.state = ""
-        onClicked: buttonIsTroggled();
+        onClicked: button.buttonIsTroggled();
     }
 
     QQ.Rectangle {
@@ -107,76 +107,88 @@ QQ.Rectangle {
             name: "toggledState"
 
             QQ.PropertyChanges {
-                target: gradientstop1
-                position: 0
-                color: "#ffffff"
+                gradientstop1 {
+                    position: 0
+                    color: "#ffffff"
+                }
             }
 
             QQ.PropertyChanges {
-                target: gradientstop2
-                position: 1
-                color: "#000000"
+                gradientstop2 {
+                    position: 1
+                    color: "#000000"
+                }
             }
 
             QQ.PropertyChanges {
-                target: gradientstop3
-                position: 1
-                color: "#c8c0c0c0"
+                gradientstop3 {
+                    position: 1
+                    color: "#c8c0c0c0"
+                }
             }
 
             QQ.PropertyChanges {
-                target: hoverBackground
-                z: -1
-                visible: true
+                hoverBackground {
+                    z: -1
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: textLabel
-                color: "#000000"
-                styleColor: "#aaaaaa"
-                style: "Raised"
+                textLabel {
+                    color: "#000000"
+                    styleColor: "#aaaaaa"
+                    style: Text.Raised
+                }
             }
 
             QQ.PropertyChanges {
-                target: borderRectangle
-                border.color: "#313131"
+                borderRectangle {
+                    border.color: "#313131"
+                }
             }
 
             QQ.PropertyChanges {
-                target: mouseArea
-                onEntered: {}
-                onExited: {}
+                mouseArea {
+                    onEntered: {}
+                    onExited: {}
+                }
             }
         },
         QQ.State {
             name: "hoverState"
 
             QQ.PropertyChanges {
-                target: hoverBackground
-                visible: true
+                hoverBackground {
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: gradientstop1
-                position: 0
-                color: "#00d1d1d1"
+                gradientstop1 {
+                    position: 0
+                    color: "#00d1d1d1"
+                }
             }
 
             QQ.PropertyChanges {
-                target: gradientstop2
-                position: 0.47
-                color: "#32b5b5b5"
+                gradientstop2 {
+                    position: 0.47
+                    color: "#32b5b5b5"
+                }
             }
 
             QQ.PropertyChanges {
-                target: gradientstop3
-                position: 1
-                color: "#00000000"
+                gradientstop3 {
+                    position: 1
+                    color: "#00000000"
+                }
             }
 
             QQ.PropertyChanges {
-                target: borderRectangle
-                border.color: "#ffffff"
+                borderRectangle {
+                    border.color: "#ffffff"
+                }
             }
 
         }

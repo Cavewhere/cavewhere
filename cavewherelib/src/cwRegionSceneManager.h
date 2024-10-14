@@ -12,6 +12,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 class cwScene;
@@ -25,6 +26,7 @@ class cwGLObject;
 class cwRegionSceneManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(RegionSceneManager)
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwGLLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)

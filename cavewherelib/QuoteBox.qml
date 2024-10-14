@@ -1,5 +1,4 @@
 import QtQuick as QQ
-import cavewherelib
 // import QtGraphicalEffects 1.0
 
 /**
@@ -80,8 +79,10 @@ QQ.Item {
         id: itemWithoutShadow
         visible: false
 
-        width: boxOutlineColorOverlay.width + shadowPadding * 2
-        height: boxOutlineColorOverlay.height + shadowPadding * 2
+        // width: boxOutlineColorOverlay.width + shadowPadding * 2
+        // height: boxOutlineColorOverlay.height + shadowPadding * 2
+        width: box.width + root.shadowPadding * 2
+        height: box.height + root.shadowPadding * 2
 
         QQ.Item {
             id: boxOutline
@@ -90,12 +91,12 @@ QQ.Item {
 
             width: rectangleItem.width
             height: triangleItem.height + rectangleItem.height
-            x: shadowPadding
-            y: shadowPadding
+            x: root.shadowPadding
+            y: root.shadowPadding
 
             QQ.Image {
                 id: triangleItem
-                x: rectangleItem.width * triangleOffset
+                x: rectangleItem.width * root.triangleOffset
                 source: "qrc:/icons/quoteTriangle.png"
                 sourceSize.height: 10;
                 smooth: true
@@ -104,25 +105,25 @@ QQ.Item {
             QQ.Rectangle {
                 id: rectangleItem
                 width: {
-                    switch(triangleEdge) {
+                    switch(root.triangleEdge) {
                     case Qt.TopEdge:
                     case Qt.BottomEdge:
-                        return childrenContainer.width + margin
+                        return childrenContainer.width + root.margin
                     case Qt.LeftEdge:
                     case Qt.RightEdge:
-                        return childrenContainer.height + margin
+                        return childrenContainer.height + root.margin
                     default:
                         return 0
                     }
                 }
                 height: {
-                        switch(triangleEdge) {
+                        switch(root.triangleEdge) {
                         case Qt.TopEdge:
                         case Qt.BottomEdge:
-                            return childrenContainer.height + margin
+                            return childrenContainer.height + root.margin
                         case Qt.LeftEdge:
                         case Qt.RightEdge:
-                            return childrenContainer.width + margin
+                            return childrenContainer.width + root.margin
                         default:
                             return 0
                         }
@@ -277,10 +278,10 @@ QQ.Item {
 
     QQ.Item {
         id: childrenContainer
-        width: childrenRect.width + margin
-        height: childrenRect.height + margin
-        x: margin + shadowPadding
-        y: rectangleItem.y + margin + shadowPadding
+        width: childrenRect.width + root.margin
+        height: childrenRect.height + root.margin
+        x: root.margin + root.shadowPadding
+        y: rectangleItem.y + root.margin + root.shadowPadding
     }
 
     QQ.Component.onCompleted: {

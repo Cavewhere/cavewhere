@@ -11,9 +11,7 @@
 #include <QPointer>
 
 //Our includes
-#include "cwUnits.h"
 #include "cwStation.h"
-#include "cwError.h"
 #include "cwGlobals.h"
 #include "cwUndoer.h"
 #include "cwCave.h"
@@ -32,11 +30,13 @@ class cwErrorModel;
 #include <QWeakPointer>
 #include <QDate>
 #include <QUndoCommand>
+#include <QQmlEngine>
 
 
 class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Trip)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QDateTime date READ date WRITE setDate NOTIFY dateChanged)

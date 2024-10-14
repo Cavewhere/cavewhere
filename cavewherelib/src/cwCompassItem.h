@@ -22,6 +22,7 @@ class QOpenGLFramebufferObject;
 #include <QQuaternion>
 #include <QPainter>
 #include <QOpenGLFunctions>
+#include <QQmlEngine>
 
 /**
  * @brief The cwGLCompass class
@@ -31,6 +32,7 @@ class QOpenGLFramebufferObject;
 class cwCompassItem : public QQuickPaintedItem, private QOpenGLFunctions
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CompassItem)
 
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
     Q_PROPERTY(QQuaternion rotation READ rotation WRITE setRotation NOTIFY rotationChanged)

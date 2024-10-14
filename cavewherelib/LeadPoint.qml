@@ -1,9 +1,11 @@
-import QtQuick 2.12 as QQ
-import cavewherelib 1.0
-import QtQuick.Layouts 1.1
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
+import cavewherelib
+import QtQuick.Layouts
 
 PointItem {
-    id: point
+    id: pointId
     property Scrap scrap;
 
     z: selected ? 1 : 0
@@ -16,8 +18,8 @@ PointItem {
 
     LeadListener {
         id: lead
-        index: pointIndex
-        scrap: point.scrap
+        index: pointId.pointIndex
+        scrap: pointId.scrap
     }
 
     QQ.Image {
@@ -25,12 +27,12 @@ PointItem {
         source: "qrc:/icons/question.png"
         anchors.centerIn: parent
 
-        visible: !lead.completed || selected
+        visible: !lead.completed || pointId.selected
         opacity: lead.completed ? 0.6 : 1.0
 
         QQ.MouseArea {
             anchors.fill: parent
-            onClicked: selected = !selected
+            onClicked: pointId.selected = !pointId.selected
         }
     }
 
@@ -50,9 +52,9 @@ PointItem {
                     id: columnLayout
 
                     CWButton {
-                        anchors.right: parent.right
+                        Layout.alignment: Qt.AlignRight
                         iconSource: "qrc:/icons/x.png"
-                        onClicked: selected = false
+                        onClicked: pointId.selected = false
                     }
 
                     SizeEditor {
@@ -70,7 +72,7 @@ PointItem {
 
                         QQ.Connections {
                             target: lead
-                            onCompletedChanged: checkBox.checked = lead.completed
+                            function onCompletedChanged() { checkBox.checked = lead.completed }
                         }
                     }
 
@@ -81,12 +83,12 @@ PointItem {
 
                     LinkText {
                         text: "Notes"
-                        onClicked: linkGenerator.gotoScrap(scrap)
+                        onClicked: linkGenerator.gotoScrap(pointId.scrap)
 
 
                         LinkGenerator {
                             id: linkGenerator
-                            pageSelectionModel: rootData.pageSelectionModel
+                            pageSelectionModel: RootData.pageSelectionModel
                         }
                     }
                 }
@@ -95,7 +97,7 @@ PointItem {
     }
 
     QQ.Loader {
-        sourceComponent: selected ? quoteBoxComponent : null
+        sourceComponent: pointId.selected ? quoteBoxComponent : null
         asynchronous: true
     }
 }

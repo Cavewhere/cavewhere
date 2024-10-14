@@ -33,13 +33,13 @@ ShadowRectangle {
     color: Theme.errorBackground
 
     QQ.MouseArea {
-        parent: rootPopupItem
+        parent: RootPopupItem
         anchors.fill: parent
 
         visible: removeChallenge.visible
         z:1000
 
-        onPressed: {
+        onPressed: (mouse) => {
             var mappedPoint = mapToItem(removeChallenge, mouse.x, mouse.y)
 
             if(!(mappedPoint.x >= 0 &&
@@ -62,14 +62,14 @@ ShadowRectangle {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "Remove <b>" + removeName + "</b>?"
-            visible: removeName.length !== 0
+            text: "Remove <b>" + removeChallenge.removeName + "</b>?"
+            visible: removeChallenge.removeName.length !== 0
         }
 
         Button {
             text: "Remove"
             onClicked: {
-                remove();
+                removeChallenge.remove();
                 removeChallenge.state = ""
             }
         }
@@ -88,8 +88,9 @@ ShadowRectangle {
         QQ.State {
             name: "visible"
             QQ.PropertyChanges {
-                target: removeChallenge
-                visible: true
+                removeChallenge {
+                    visible: true
+                }
             }
         }
     ]

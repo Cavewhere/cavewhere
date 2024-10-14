@@ -6,13 +6,14 @@
 **************************************************************************/
 
 // import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 import "Utils.js" as Utils
 
 GroupBox {
+    id: editorId
 
-    property Calibration calibration
+    property TripCalibration calibration
 
     anchors.margins: 3
     contentHeight: tapeContent.height
@@ -41,10 +42,10 @@ GroupBox {
 
                 ClickTextInput {
                     id: tapeCalInput
-                    text: Utils.fixed(calibration.tapeCalibration, 2)
+                    text: Utils.fixed(editorId.calibration.tapeCalibration, 2)
 
-                    onFinishedEditting: {
-                        calibration.tapeCalibration = newText
+                    onFinishedEditting: (newText) => {
+                        editorId.calibration.tapeCalibration = newText
                     }
                 }
             }
@@ -59,24 +60,24 @@ GroupBox {
                 UnitInput {
                     id: lengthUnits
                     unitModel: {
-                        if(calibration !== null) {
-                            return calibration.supportedUnits;
+                        if(editorId.calibration !== null) {
+                            return editorId.calibration.supportedUnits;
                         } else {
                             return null
                         }
                     }
 
                     unit: {
-                        if(calibration !== null) {
-                            return calibration.mapToSupportUnit(calibration.distanceUnit);
+                        if(editorId.calibration !== null) {
+                            return editorId.calibration.mapToSupportUnit(editorId.calibration.distanceUnit);
                         } else {
-                            return Units.Unitless
+                            return Units.LengthUnitless
                         }
                     }
 
                     onNewUnit: {
-                        if(calibration !== null) {
-                            calibration.distanceUnit = calibration.mapToLengthUnit(unit)
+                        if(editorId.calibration !== null) {
+                            editorId.calibration.distanceUnit = editorId.calibration.mapToLengthUnit(unit)
                         }
                     }
                 }
@@ -85,11 +86,11 @@ GroupBox {
 
         HelpArea {
             id: tapeCalibarationHelpArea
-            text: "<p>Distance calibration allow you to correct a tape that's too long
-or too short.  The calibration is added to uncorrected value (the value you read off the tape) to find the true value.</p>
-<b>UncorrectedValue + Calibration = TrueValue</b>
-<p> For example, the reading in the cave was 10m. You have a tape that's a 1m short. The true measured length
-is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calibration = -1m, so 10m + (-1m) = 9m </p>"
+            text: "<p>Distance calibration allow you to correct a tape that's too long" +
+"or too short.  The calibration is added to uncorrected value (the value you read off the tape) to find the true value.</p>" +
+"<b>UncorrectedValue + Calibration = TrueValue</b>" +
+"<p> For example, the reading in the cave was 10m. You have a tape that's a 1m short. The true measured length" +
+"is 9m.  So you would enter -1 for the calibration. UncorrectedValue = 10m, Calibration = -1m, so 10m + (-1m) = 9m </p>"
 
             anchors.left: parent.left
             anchors.right: parent.right

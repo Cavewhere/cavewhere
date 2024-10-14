@@ -9,6 +9,7 @@
 #define CWINTERACTION_H
 
 #include <QQuickItem>
+#include <QQmlEngine>
 
 /**
     This is the base class for all interaction
@@ -18,6 +19,7 @@
 class cwInteraction : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Interaction)
 
 public:
     explicit cwInteraction(QQuickItem *parent = 0);
@@ -37,7 +39,6 @@ private:
 
 };
 
-Q_DECLARE_METATYPE(cwInteraction*)
 
 
 #endif // CWINTERACTION_H

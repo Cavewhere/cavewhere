@@ -16,7 +16,7 @@ QQ.Item {
     id: editor
 
     property Scrap scrap
-    property NoteTransform noteTransform
+    property NoteTranformation noteTransform
     property NoteNorthInteraction northInteraction
     property NoteScaleInteraction scaleInteraction
     property InteractionManager interactionManager
@@ -35,16 +35,16 @@ QQ.Item {
 
 
     Binding {
-        target: northInteraction
+        target: editor.northInteraction
         property: "noteTransform"
-        value: noteTransform
+        value: editor.noteTransform
     }
 
     Binding {
-        target: northInteraction
+        target: editor.northInteraction
         property: "upText"
         value: {
-            switch(scrap.type) {
+            switch(editor.scrap.type) {
             case Scrap.Plan:
                 return "north"
             case Scrap.RunningProfile:
@@ -56,9 +56,9 @@ QQ.Item {
     }
 
     Binding {
-        target: scaleInteraction
+        target: editor.scaleInteraction
         property: "noteTransform"
-        value: noteTransform
+        value: editor.noteTransform
     }
 
     FloatingGroupBox {
@@ -77,31 +77,31 @@ QQ.Item {
                 Controls.ComboBox {
                     id: typeComboBox
                     implicitWidth: 175
-                    model: scrap ? scrap.types : null
-                    onCurrentIndexChanged: if(scrap) {
-                                               scrap.type = currentIndex;
+                    model: editor.scrap ? editor.scrap.types : null
+                    onCurrentIndexChanged: if(editor.scrap) {
+                                               editor.scrap.type = currentIndex;
                                            }
 
                     Binding {
                         target: typeComboBox
                         property: "currentIndex"
-                        value: currentScrapType()
+                        value: editor.currentScrapType()
                     }
                 }
             }
 
             HelpArea {
                 id: scrapTypeHelpId
-                text: "The scrap type designates how CaveWhere will interperate the scrap.<br>
-<ul>
-<li><b>Plan</b>: Projects the scrap on a plane aligned with the ground.</li>
-<li><b>Running Profile</b>: Creates a projected profile for each shot and wraps the scrap along each scrap.
-This projection is generally the best for <b>horizontal passage</b> with profiles because it will wrap around
-corners.</li>
-<li><b>Projected Profiles<\b>: Projects the scrap on vertial plane aligned azimuth settings. This projection
-is generally the best for <b>deep pits</b> where the profile is drawn on a single plane.<\\li><\\ul>"
+                text: "The scrap type designates how CaveWhere will interperate the scrap.<br>" +
+"<ul>" +
+"<li><b>Plan</b>: Projects the scrap on a plane aligned with the ground.</li>" +
+"<li><b>Running Profile</b>: Creates a projected profile for each shot and wraps the scrap along each scrap." +
+"This projection is generally the best for <b>horizontal passage</b> with profiles because it will wrap around" +
+"corners.</li>" +
+"<li><b>Projected Profiles<\b>: Projects the scrap on vertial plane aligned azimuth settings. This projection" +
+"is generally the best for <b>deep pits</b> where the profile is drawn on a single plane.<\\li><\\ul>"
 
-                width: columnLayoutId.width
+                implicitWidth: columnLayoutId.width
             }
 
             CheckableGroupBox {
@@ -117,7 +117,7 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         id: upInputId
                         scrapType: editor.scrapType
                         noteTransform: editor.noteTransform
-                        onNorthUpInteractionActivated: interactionManager.active(northInteraction)
+                        onNorthUpInteractionActivated: editor.interactionManager.active(editor.northInteraction)
                         northUpHelp: northUpHelpArea
                         enable: !checkableBoxId.checked
                     }
@@ -126,10 +126,10 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         id: northUpHelpArea
                         Layout.fillWidth: true
                         text: {
-                            switch(scrapType) {
+                            switch(editor.scrapType) {
                             case Scrap.Plan:
-                                return "You can set the direction of <b>north</b> relative to page for a scrap.
-                                Setting this incorrectly may cause warping issues."
+                                return "You can set the direction of <b>north</b> relative to page for a scrap." +
+                                "Setting this incorrectly may cause warping issues."
                             case Scrap.RunningProfile:
                                 return "You can set the direction of <b>up</b> (the direction oppsite of gravity) relative to page for a scrap. Setting this incorrectly may cause warping issues."
                             case Scrap.ProjectedProfile:
@@ -144,7 +144,7 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                         id: scaleInputId
                         scaleObject: editor.noteTransform == null ? null : editor.noteTransform.scaleObject
                         scaleHelp: scaleHelpAreaId
-                        onScaleInteractionActivated: interactionManager.active(scaleInteraction)
+                        onScaleInteractionActivated: editor.interactionManager.active(editor.scaleInteraction)
                         autoScaling: checkableBoxId.checked
                     }
 
@@ -169,12 +169,13 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                             enabled: !checkableBoxId.checked
 
                             function isValid() {
-                                return scrap && scrap.viewMatrix
+                                return editor.scrap && editor.scrap.viewMatrix
                             }
 
                             model: {
                                 if(directionComboBoxId.isValid()) {
-                                    return scrap.viewMatrix.directionTypes
+                                    let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
+                                    return matrix.directionTypes
                                 }
                                 return null
                             }
@@ -184,7 +185,8 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                                 property: "currentIndex"
                                 value: {
                                     if(directionComboBoxId.isValid()) {
-                                        return scrap.viewMatrix.direction
+                                        let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
+                                        return matrix.direction
                                     }
                                     return -1;
                                 }
@@ -192,17 +194,20 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
 
                             onCurrentIndexChanged: {
                                 if(directionComboBoxId.isValid()) {
-                                    scrap.viewMatrix.direction = currentIndex
+                                    editor.scrap.viewMatrix.direction = currentIndex
                                 }
                             }
                         }
 
                         ClickTextInput {
                             id: azimuthTextInputId
-                            text: scrap.viewMatrix.azimuth.toFixed(1)
+                            text: {
+                                let matrix = (editor.scrap.viewMatrix as ProjectedProfileScrapViewMatrix)
+                                return matrix.azimuth.toFixed(1)
+                            }
                             readOnly: checkableBoxId.checked
-                            onFinishedEditting: {
-                                scrap.viewMatrix.azimuth = newText
+                            onFinishedEditting: (newText) => {
+                                editor.scrap.viewMatrix.azimuth = newText
                             }
                         }
 
@@ -214,13 +219,13 @@ is generally the best for <b>deep pits</b> where the profile is drawn on a singl
                     HelpArea {
                         id: azimuthHelpAreaId
                         Layout.fillWidth: true
-                        text: "The projected profile azimuth direction. By default this uses <i>
-looking at </i> which is as if you were looking through the page and is normal to the scrap plane.
-Other options are parellel with the page:
-<ul>
-    <li> <i>left → right </i> The azimuth going from the left side to the right side of the page</li>
-    <li> <i>left ← right </i> The azimuth going from the right side to the left side of the page</li>
-</ul>"
+                        text: "The projected profile azimuth direction. By default this uses <i>" +
+"looking at </i> which is as if you were looking through the page and is normal to the scrap plane." +
+"Other options are parellel with the page:" +
+"<ul>" +
+"    <li> <i>left → right </i> The azimuth going from the left side to the right side of the page</li>" +
+"    <li> <i>left ← right </i> The azimuth going from the right side to the left side of the page</li>" +
+"</ul>"
                     }
 
                     ErrorHelpArea {
@@ -241,17 +246,19 @@ Other options are parellel with the page:
 
     states: [
         QQ.State {
-            when: scrap !== null
+            when: editor.scrap !== null
 
             QQ.PropertyChanges {
-                target: editor
-                noteTransform: scrap.noteTransformation
+                editor {
+                    noteTransform: scrap.noteTransformation
+                }
             }
 
             QQ.PropertyChanges {
-                target: checkableBoxId
-                checked: scrap.calculateNoteTransform
-                onCheckedChanged: scrap.calculateNoteTransform = checked
+                checkableBoxId {
+                    checked: scrap.calculateNoteTransform
+                    onCheckedChanged: scrap.calculateNoteTransform = checked
+                }
             }
 
         }

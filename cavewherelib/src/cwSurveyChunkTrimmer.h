@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwSurveyChunk.h"
@@ -27,6 +28,7 @@
 class cwSurveyChunkTrimmer : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyChunkTrimmer)
 
     Q_PROPERTY(cwSurveyChunk* chunk READ chunk WRITE setChunk NOTIFY chunkChanged)
 

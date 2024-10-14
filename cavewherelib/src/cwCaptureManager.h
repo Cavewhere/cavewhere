@@ -16,6 +16,7 @@
 #include <QAbstractListModel>
 #include <QPointer>
 #include <QUrl>
+#include <QQmlEngine>
 
 //Our includes
 #include "cw3dRegionViewer.h"
@@ -29,6 +30,7 @@ class cwCaptureItem;
 class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CaptureManager)
 
     Q_PROPERTY(cw3dRegionViewer* view READ view WRITE setView NOTIFY viewChanged)
     Q_PROPERTY(QSizeF paperSize READ paperSize WRITE setPaperSize NOTIFY paperSizeChanged)
@@ -50,8 +52,7 @@ class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
     Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
 
-    Q_ENUMS(FileType Roles)
-public:   
+public:
     enum FileType {
         UnknownType,
         PNG, // Raster export
@@ -60,11 +61,13 @@ public:
         SVG, // Raster/Vector export
         PDF // Raster/Vector export
     };
+    Q_ENUM(FileType)
 
     enum Roles {
         LayerObjectRole,
         LayerNameRole
     };
+    Q_ENUM(Roles)
 
     explicit cwCaptureManager(QObject *parent = 0);
     virtual ~cwCaptureManager();

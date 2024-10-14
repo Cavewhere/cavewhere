@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QMatrix4x4>
 #include <QQuickItem>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwCamera.h"
@@ -30,6 +31,7 @@
 class CAVEWHERE_LIB_EXPORT cwTransformUpdater : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TransformUpdater)
 
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY matrixChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)

@@ -4,6 +4,7 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
+pragma ComponentBehavior: Bound
 
 import QtQuick 2.0 as QQ
 import cavewherelib
@@ -31,16 +32,16 @@ QQ.Item {
                 var numberOfLargeCells = 5; //Number of cells in the scale bar
                 var increments = [1.0, 2.5, 5.0];
 
-                var bestWidth = maxTotalWidth - minTotalWidth / 2.0;
+                var bestWidth = itemId.maxTotalWidth - itemId.minTotalWidth / 2.0;
 
                 //Search for the best label incement
                 for(var i = 0; i < increments.length; i++) {
                     for(var ii = -5; ii < 10; ii++) {
                         var currentLabelIncrement = increments[i] * Math.pow(10.0, ii); //In meters
-                        var currentCellWidth = currentLabelIncrement * camera.pixelsPerMeter;
+                        var currentCellWidth = currentLabelIncrement * itemId.camera.pixelsPerMeter;
                         var currentTotalWidth = currentCellWidth * numberOfLargeCells;
 
-                        if(currentTotalWidth >= minTotalWidth && currentTotalWidth <= maxTotalWidth) {
+                        if(currentTotalWidth >= itemId.minTotalWidth && currentTotalWidth <= itemId.maxTotalWidth) {
                             var currentNearest = Math.abs(bestWidth - currentTotalWidth);
                             if(currentNearest < nearestToBest) {
                                 bestCellSizeWidth = currentCellWidth;
@@ -58,7 +59,7 @@ QQ.Item {
         }
 
         property real smallCellWidth: cellWidth / smallGrid.columns
-        property real cellWidth: camera.pixelsPerMeter * meterPerCell
+        property real cellWidth: itemId.camera.pixelsPerMeter * meterPerCell
         property real cellHeight: 8
     }
 
@@ -67,11 +68,14 @@ QQ.Item {
         model: 2
         QQ.Rectangle {
             id: rect2Id
+
+            required property int index
+
             y: -height
             x: -width / 2 + index * privateData.smallCellWidth * 2
             radius: 3
             Text {
-                text: index * privateData.meterPerCell / 2
+                text: rect2Id.index * privateData.meterPerCell / 2
                 anchors.centerIn: parent
 
                 onTextChanged:  {
@@ -92,13 +96,16 @@ QQ.Item {
 
         QQ.Rectangle {
             id: rect1Id
+
+            required property int index
+
             y: -height
             x: -width / 2 + (index + 1) * privateData.cellWidth
             radius: 3
             Text {
                 text: {
-                    var text = (index + 1) * privateData.meterPerCell;
-                    if(index == 4) {
+                    var text = (rect1Id.index + 1) * privateData.meterPerCell;
+                    if(rect1Id.index == 4) {
                         return text + "m";
                     }
                     return text
@@ -125,6 +132,9 @@ QQ.Item {
             model: smallGrid.rows * smallGrid.columns
             QQ.Rectangle {
                 id: smallRectangle
+
+                required property int index
+
                 width: privateData.smallCellWidth
                 height: privateData.cellHeight
                 color: {
@@ -149,6 +159,8 @@ QQ.Item {
         QQ.Repeater {
             model: largeGrid.rows * largeGrid.columns
             QQ.Rectangle {
+                required property int index
+
                 width: privateData.cellWidth
                 height: privateData.cellHeight
                 color: {

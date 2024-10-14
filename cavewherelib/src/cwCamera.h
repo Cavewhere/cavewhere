@@ -16,10 +16,12 @@
 #include <QObject>
 #include <QRect>
 #include <QMatrix4x4>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwCamera : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Camera)
 
     //Only valid with ortho projection
     Q_PROPERTY(double pixelsPerMeter READ pixelsPerMeter NOTIFY pixelsPerMeterChanged)

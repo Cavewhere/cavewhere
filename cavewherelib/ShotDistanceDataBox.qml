@@ -15,7 +15,7 @@ DataBox {
     property bool distanceIncluded: true //This show's if the distance is include (true) or excluded
 
     QQ.Rectangle {
-        visible: !distanceIncluded
+        visible: !dataBoxId.distanceIncluded
 
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
@@ -51,9 +51,11 @@ DataBox {
 
         Controls.Menu {
             Controls.MenuItem {
-                text: distanceIncluded ? "Exclude Distance" : "Include Distance"
+                text: dataBoxId.distanceIncluded ? "Exclude Distance" : "Include Distance"
                 onTriggered: {
-                    surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole, rowIndex, !distanceIncluded)
+                    dataBoxId.surveyChunk.setData(SurveyChunk.ShotDistanceIncludedRole,
+                                                  dataBoxId.rowIndex,
+                                                  !dataBoxId.distanceIncluded)
                 }
             }
         }

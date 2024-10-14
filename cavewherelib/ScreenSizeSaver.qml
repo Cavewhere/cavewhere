@@ -1,6 +1,7 @@
 import QtQuick 2.10 as QQ
-import QtQuick.Window 2.0
-import Qt.labs.settings 1.0
+import QtQuick.Window
+import QtCore
+// import Qt.labs.settings 1.0
 
 QQ.Item {
     id: itemId
@@ -27,8 +28,9 @@ QQ.Item {
         var height = settingsId.value("height", window.height);
 
         //Clamp the width
-        var minScreenWidth = window.screen.desktopAvailableWidth; //Math.min(window.screen.width, window.screen.desktopAvailableWidth);
-        var minScreenHeight = window.screen.desktopAvailableHeight; //Math.min(window.screen.height, window.screen.desktopAvailableHeight);
+        var minScreenWidth = itemId.Screen.desktopAvailableWidth;
+        var minScreenHeight = itemId.Screen.desktopAvailableHeight;
+
 
         width = Math.min(width, minScreenWidth);
         height = Math.min(height, minScreenHeight);
@@ -52,28 +54,28 @@ QQ.Item {
 
     Settings {
         id: settingsId
-        category: windowName + window.screen.desktopAvailableWidth + "x" +
-                  window.screen.desktopAvailableHeight
+        category: itemId.windowName + itemId.Screen.desktopAvailableWidth + "x" +
+                  itemId.Screen.desktopAvailableHeight
     }
 
     QQ.Connections {
         id: settingsConnectionId
-        target: window
+        target: itemId.window
         enabled: false
-        onXChanged: {
-            settingsId.setValue("x", window.x)
+        function onXChanged() {
+            settingsId.setValue("x", itemId.window.x)
         }
 
-        onYChanged: {
-            settingsId.setValue("y", window.y)
+        function onYChanged() {
+            settingsId.setValue("y", itemId.window.y)
         }
 
-        onHeightChanged: {
-            settingsId.setValue("height", window.height)
+        function onHeightChanged() {
+            settingsId.setValue("height", itemId.window.height)
         }
 
-        onWidthChanged: {
-            settingsId.setValue("width", window.width)
+        function onWidthChanged() {
+            settingsId.setValue("width", itemId.window.width)
         }
     }
 }

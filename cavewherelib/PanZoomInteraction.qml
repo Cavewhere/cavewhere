@@ -18,9 +18,9 @@ BasePanZoomInteraction {
         QQ.MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: interaction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-            onPositionChanged: interaction.panMove(Qt.point(mouse.x, mouse.y))
-            onWheel: zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onPressed: (mouse) => interaction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+            onPositionChanged: (mouse) => interaction.panMove(Qt.point(mouse.x, mouse.y))
+            onWheel: interaction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
     }
 }

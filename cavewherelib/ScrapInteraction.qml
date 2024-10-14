@@ -15,7 +15,7 @@ BaseScrapInteraction {
 
     PanZoomPitchArea {
         anchors.fill: parent
-        basePanZoom: basePanZoomInteraction
+        basePanZoom: interaction.basePanZoomInteraction
 
         QQ.MouseArea {
             anchors.fill: parent
@@ -25,13 +25,13 @@ BaseScrapInteraction {
             property var lastPoint; //This is a Array of the last point
             property var lastPointIndex; //The last point item that was added
 
-            onPressed: {
+            onPressed: (mouse) => {
                 if(pressedButtons === Qt.RightButton) {
-                    basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
                 }
 
                 if(mouse.button === Qt.LeftButton) {
-                    if(scrap === null) {
+                    if(interaction.scrap === null) {
                         interaction.addScrap()
                     }
 
@@ -55,15 +55,15 @@ BaseScrapInteraction {
                 lastPointIndex = -1
             }
 
-            onPositionChanged: {
+            onPositionChanged: (mouse) => {
                 if(pressedButtons === Qt.RightButton) {
-                    basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                 }
 
                 if(pressedButtons === Qt.LeftButton &&
                         lastPointIndex !== -1) {
-                    var noteCoords = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                    scrap.setPoint(lastPointIndex, noteCoords)
+                    var noteCoords = interaction.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                    interaction.scrap.setPoint(lastPointIndex, noteCoords)
                 }
 
                 //Is the last point snapped to something
@@ -81,7 +81,7 @@ BaseScrapInteraction {
                 interaction.forceActiveFocus()
             }
 
-            onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onWheel: interaction.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
     }
 

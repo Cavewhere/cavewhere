@@ -5,13 +5,12 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
 import cavewherelib
 
 DrawLengthInteraction {
     id: noteScaleInteraction
 
-    property NoteTransform noteTransform
+    property NoteTranformation noteTransform
     property Note note
 
     doneTextLabel: "<b>In cave length</b>"

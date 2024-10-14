@@ -1,7 +1,11 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Layouts 1.0
+import QtQuick as QQ
+import QtQuick.Layouts
+import cavewherelib
 
 QQ.Item {
+    id: itemId
+
+    required property string fullPathRole
     property alias nextArrowVisible: moreArrowId.visible
     property alias text: nameTextId.text
 
@@ -29,7 +33,7 @@ QQ.Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked:  {
-                    rootData.pageSelectionModel.currentPageAddress = fullPathRole;
+                    RootData.pageSelectionModel.currentPageAddress = itemId.fullPathRole;
                 }
             }
         }

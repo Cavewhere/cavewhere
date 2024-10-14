@@ -18,13 +18,13 @@ QQ.MouseArea {
     property bool ignoreLength;
 
     signal pointSelected()
-    signal pointMoved(var noteCoord)
+    signal pointMoved(point noteCoord)
 
 //    onClicked: pointSelected()
 
     onReleased: ({ })
 
-    onPressed: {
+    onPressed: (mouse) => {
         lastPoint = Qt.point(mouse.x, mouse.y);
         ignoreLength = false;
 

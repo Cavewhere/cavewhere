@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QSortFilterProxyModel>
+#include <QQmlEngine>
 
 //Our inculdes
 #include "cwGlobals.h"
@@ -10,6 +11,7 @@
 class CAVEWHERE_LIB_EXPORT cwFutureFilterModel : public QSortFilterProxyModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(FutureFilterModel)
 
     Q_PROPERTY(int delayTime READ delayTime WRITE setDelayTime NOTIFY delayTimeChanged)
 

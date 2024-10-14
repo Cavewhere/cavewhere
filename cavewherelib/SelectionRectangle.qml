@@ -22,7 +22,7 @@ QQ.Rectangle {
         hoverEnabled: true
         cursorShape: Qt.SplitHCursor
         onPressed: { }
-        onPositionChanged: {
+        onPositionChanged: (mouse) => {
             if(pressed) {
                 var leftSide = mapToItem(selectionRectangleId.parent, mouse.x, 0).x
                 var rightSide = selectionRectangleId.x + selectionRectangleId.width;
@@ -46,7 +46,7 @@ QQ.Rectangle {
         hoverEnabled: true
         cursorShape: Qt.SplitHCursor
         onPressed: { }
-        onPositionChanged: {
+        onPositionChanged: (mouse) => {
             if(pressed) {
                 var leftSide = selectionRectangleId.x;
                 var rightSide = mapToItem(selectionRectangleId.parent, mouse.x, 0).x
@@ -69,7 +69,7 @@ QQ.Rectangle {
         hoverEnabled: true
         cursorShape: Qt.SplitVCursor
         onPressed: { }
-        onPositionChanged: {
+        onPositionChanged: (mouse) => {
             if(pressed) {
                 var topSide = mapToItem(selectionRectangleId.parent, 0, mouse.y).y
                 var bottomSide = selectionRectangleId.y + selectionRectangleId.height
@@ -93,7 +93,7 @@ QQ.Rectangle {
         hoverEnabled: true
         cursorShape: Qt.SplitVCursor
         onPressed: { }
-        onPositionChanged: {
+        onPositionChanged: (mouse) => {
             if(pressed) {
                 var topSide = selectionRectangleId.y
                 var bottomSide = mapToItem(selectionRectangleId.parent, 0, mouse.y).y

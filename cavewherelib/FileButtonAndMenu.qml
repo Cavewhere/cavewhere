@@ -6,13 +6,14 @@
 **************************************************************************/
 
 // import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Controls
 import QtQuick.Dialogs
+import cavewherelib
 
 MenuBar {
     id: menuBarId
-    property var terrainRenderer; //For taking screenshots
+    // property var terrainRenderer; //For taking screenshots
 //    property var dataPage; //Should be a DataMainPage
     property QQ.Loader mainContentLoader;
     property FileDialog loadFileDialog;
@@ -29,13 +30,13 @@ MenuBar {
             id: newActionId
             shortcut: "Ctrl+N"
             onTriggered: {
-                askToSaveDialog.taskName = "creating a new file"
-                askToSaveDialog.afterSaveFunc = function() {
-                    rootData.pageSelectionModel.clearHistory()
-                    rootData.pageSelectionModel.gotoPageByName(null, "View")
+                menuBarId.askToSaveDialog.taskName = "creating a new file"
+                menuBarId.askToSaveDialog.afterSaveFunc = function() {
+                    RootData.pageSelectionModel.clearHistory()
+                    RootData.pageSelectionModel.gotoPageByName(null, "View")
                     project.newProject();
                 }
-                askToSaveDialog.askToSave();
+                menuBarId.askToSaveDialog.askToSave();
             }
         }
 
@@ -48,11 +49,11 @@ MenuBar {
             id: openActionId
             shortcut: "Ctrl+O"
             onTriggered: {
-                askToSaveDialog.taskName = "opening";
-                askToSaveDialog.afterSaveFunc = function() {
+                menuBarId.askToSaveDialog.taskName = "opening";
+                menuBarId.askToSaveDialog.afterSaveFunc = function() {
                     loadFileDialog.open()
                 }
-                askToSaveDialog.askToSave();
+                menuBarId.askToSaveDialog.askToSave();
             }
         }
 
@@ -67,10 +68,10 @@ MenuBar {
             id: saveActionId
             shortcut: "Ctrl+S"
             onTriggered: {
-                if (project.canSaveDirectly) {
-                    project.save();
+                if (RootData.project.canSaveDirectly) {
+                    RootData.project.save();
                 } else {
-                    saveAsFileDialog.open();
+                    menuBarId.saveAsFileDialog.open();
                 }
             }
         }
@@ -84,7 +85,7 @@ MenuBar {
             id: saveAsMenuItem
             text: "Save As"
             onTriggered:{
-                saveAsFileDialog.open()
+                menuBarId.saveAsFileDialog.open()
             }
         }
 
@@ -93,21 +94,21 @@ MenuBar {
         MenuItem {
             text: "Settings"
             onTriggered: {
-                rootData.pageSelectionModel.gotoPageByName(null, "Settings");
+                RootData.pageSelectionModel.gotoPageByName(null, "Settings");
             }
         }
 
         MenuItem {
             text: "About"
             onTriggered: {
-                rootData.pageSelectionModel.gotoPageByName(null, "About");
+                RootData.pageSelectionModel.gotoPageByName(null, "About");
             }
         }
         Action {
             id: quitActionId
             shortcut: "Ctrl+Q"
             onTriggered: {
-                applicationWindow.close(); // or Qt.quit();
+                menuBarId.applicationWindow.close(); // or Qt.quit();
             }
         }
 
@@ -122,7 +123,7 @@ MenuBar {
 
         MenuItem {
             text: "Compute Scraps"
-            onTriggered: scrapManager.updateAllScraps()
+            onTriggered: RootData.scrapManager.updateAllScraps()
         }
 
         // MenuItem {
@@ -130,8 +131,8 @@ MenuBar {
         //     shortcut: "Ctrl+R"
         //     onTriggered: {
         //         //Keep the current address for the current page
-        //         var currentAddress = rootData.pageSelectionModel.currentPageAddress;
-        //         rootData.pageSelectionModel.clear();
+        //         var currentAddress = RootData.pageSelectionModel.currentPageAddress;
+        //         RootData.pageSelectionModel.clear();
 
         //         var currentSource = mainContentLoader.source;
         //         mainContentLoader.source = ""
@@ -141,43 +142,43 @@ MenuBar {
 
         //         console.log("Loader status:" + mainContentLoader.status + "Loader:" + QQ.Loader.Ready + " " + currentAddress)
 
-        //         rootData.pageSelectionModel.currentPageAddress = currentAddress;
+        //         RootData.pageSelectionModel.currentPageAddress = currentAddress;
         //     }
         // }
 
         MenuItem {
             text: "Scraps Visible"
-            checked: regionSceneManager.scraps.visible
+            checked: RootData.regionSceneManager.scraps.visible
             checkable: true
             onTriggered: {
-                regionSceneManager.scraps.visible = !regionSceneManager.scraps.visible
-                terrainRenderer.update()
+                RootData.regionSceneManager.scraps.visible = !RootData.regionSceneManager.scraps.visible
+                // terrainRenderer.update()
             }
         }
 
         MenuItem {
             text: "Leads Visible"
-            checked: rootData.leadsVisible
+            checked: RootData.leadsVisible
             checkable: true
             onTriggered: {
-                rootData.leadsVisible = !rootData.leadsVisible
+                RootData.leadsVisible = !RootData.leadsVisible
             }
         }
 
 
         MenuItem {
             text: "Station Labels Visible"
-            checked: rootData.stationsVisible
+            checked: RootData.stationsVisible
             checkable: true
             onTriggered: {
-                rootData.stationsVisible = !rootData.stationsVisible
+                RootData.stationsVisible = !RootData.stationsVisible
             }
         }
 
         MenuItem {
             text: "Testcases"
             onTriggered: {
-                rootData.pageSelectionModel.gotoPageByName(null, "Testcases");
+                RootData.pageSelectionModel.gotoPageByName(null, "Testcases");
             }
         }
 

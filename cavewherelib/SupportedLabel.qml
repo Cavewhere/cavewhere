@@ -10,24 +10,22 @@ RowLayout {
     QQ.Image {
         id: stopId
         source: "qrc:/icons/stopSignError.png"
-        width: 16
-        height: 16
-        visible: !supported
+        sourceSize: Qt.size(16, 16)
+        visible: !rootId.supported
     }
 
     QQ.Image {
         id: goodId
         source: "qrc:/icons/good.png"
-        width: stopId.width
-        height: stopId.height
-        visible: supported
+        sourceSize: stopId.sourceSize
+        visible: rootId.supported
     }
 
     Text {
         id: textId
 
         text: {
-            var supportText = supported ? "supported" : "unsupported"
+            var supportText = rootId.supported ? "supported" : "unsupported"
             return rootId.text + " is " + supportText;
         }
     }

@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwAbstractScrapViewMatrix.h"
@@ -10,6 +11,7 @@
 class CAVEWHERE_LIB_EXPORT cwProjectedProfileScrapViewMatrix : public cwAbstractScrapViewMatrix
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ProjectedProfileScrapViewMatrix)
 
     Q_PROPERTY(double azimuth READ azimuth WRITE setAzimuth NOTIFY azimuthChanged)
     Q_PROPERTY(AzimuthDirection direction READ direction WRITE setDirection NOTIFY directionChanged)
@@ -25,6 +27,7 @@ public:
         LeftToRight,
         RightToLeft
     };
+    Q_ENUM(AzimuthDirection)
 
     class CAVEWHERE_LIB_EXPORT Data : public cwAbstractScrapViewMatrix::Data {
     public:
@@ -55,7 +58,6 @@ public:
         cwProjectedProfileScrapViewMatrix::AzimuthDirection Direction = LookingAt; //!<
     };
 
-    Q_ENUM(AzimuthDirection);
 
     cwProjectedProfileScrapViewMatrix(QObject* parent = nullptr);
 

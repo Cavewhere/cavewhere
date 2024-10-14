@@ -9,12 +9,14 @@
 #define CWVALIDATOR_H
 
 #include <QValidator>
+#include <QQmlEngine>
 #include <QDebug>
 
 class cwValidator : public QValidator
 {
     Q_OBJECT
 
+    QML_NAMED_ELEMENT(Validator)
     Q_PROPERTY(QString errorText READ errorText WRITE setErrorText NOTIFY errorTextChanged)
 
 public:

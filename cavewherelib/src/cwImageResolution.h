@@ -12,9 +12,15 @@
 #include "cwUnitValue.h"
 class cwLength;
 
+//Qt includes
+#include <QQmlEngine>
+
+
 class cwImageResolution : public cwUnitValue
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ImageResolution)
+
 public:
     explicit cwImageResolution(QObject *parent = 0);
     cwImageResolution(double value, cwUnits::ImageResolutionUnit unit, QObject* parent = 0);

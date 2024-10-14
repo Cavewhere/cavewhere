@@ -38,19 +38,19 @@ RegionViewer {
         id: labelView
         anchors.fill: parent
         camera: renderer.camera
-        region: rootData.region
-        visible: rootData.stationsVisible
+        region: RootData.region
+        visible: RootData.stationsVisible
     }
 
     LeadView {
         id: leadViewId
         anchors.fill: parent
-        regionModel: rootData.regionTreeModel
+        regionModel: RootData.regionTreeModel
         camera: renderer.camera
-        visible: rootData.leadsVisible
+        visible: RootData.leadsVisible
     }
 
-    QQ.Row {
+    Row {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 20
         anchors.right: parent.right

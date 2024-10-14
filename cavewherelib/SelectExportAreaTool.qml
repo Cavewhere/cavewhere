@@ -67,15 +67,17 @@ QQ.Item {
             QQ.State {
                 name: "ACTIVE_STATE"
                 QQ.PropertyChanges {
-                    target: toolButtonId
-                    enabled: false
+                    toolButtonId {
+                        enabled: false
+                    }
                 }
 
                 QQ.PropertyChanges {
-                    target: interactionId
-                    onHasDraggedChanged: {
-                        if(hasDragged) {
-                            toolButtonId.state = "CAN_DONE_STATE"
+                    interactionId {
+                        onHasDraggedChanged: {
+                            if(hasDragged) {
+                                toolButtonId.state = "CAN_DONE_STATE"
+                            }
                         }
                     }
                 }
@@ -84,28 +86,30 @@ QQ.Item {
             QQ.State {
                 name: "CAN_DONE_STATE"
                 QQ.PropertyChanges {
-                    target: toolButtonId
-                    text: "Done"
-                    enabled: true
-                    onClicked: {
-                        var caputerRect = Qt.rect(selectionRectangleId.x,
-                                                  selectionRectangleId.y,
-                                                  selectionRectangleId.width,
-                                                  selectionRectangleId.height)
+                    toolButtonId {
+                        text: "Done"
+                        enabled: true
+                        onClicked: {
+                            var caputerRect = Qt.rect(selectionRectangleId.x,
+                                                      selectionRectangleId.y,
+                                                      selectionRectangleId.width,
+                                                      selectionRectangleId.height)
 
-                        resetTool()
+                            resetTool()
 
-                        toolId.addRectangle(caputerRect)
+                            toolId.addRectangle(caputerRect)
+                        }
                     }
                 }
 
                 QQ.PropertyChanges {
-                    target: interactionId
-                    onHasDraggedChanged: {
-                        if(!hasDragged) {
-                            toolButtonId.state = "ACTIVE_STATE"
-                        } else {
-                            toolButtonId.state = ""
+                    interactionId {
+                        onHasDraggedChanged: {
+                            if(!hasDragged) {
+                                toolButtonId.state = "ACTIVE_STATE"
+                            } else {
+                                toolButtonId.state = ""
+                            }
                         }
                     }
                 }

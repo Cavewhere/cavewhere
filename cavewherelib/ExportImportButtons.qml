@@ -31,90 +31,96 @@ QQ.Item {
         id: fileDialogItem
         FileDialog {
             id: fileDialog
-            currentFolder: rootData.lastDirectory
+            currentFolder: RootData.lastDirectory
         }
 
         states: [
             QQ.State {
                 name: "EXPORT_TRIP_SURVEX"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Export " + exportManager.currentTripName + " to survex"
-                    nameFilters: ["Survex (*.svx)"]
-                    selectExisting: false
-                    selectMultiple: false
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        exportManager.exportSurvexTrip(fileUrl);
+                    fileDialog {
+                        title: "Export " + exportManager.currentTripName + " to survex"
+                        nameFilters: ["Survex (*.svx)"]
+                        selectExisting: false
+                        selectMultiple: false
+                        onAccepted: {
+                            RootData.lastDirectory = fileUrl
+                            exportManager.exportSurvexTrip(fileUrl);
+                        }
                     }
                 }
             },
             QQ.State {
                 name: "EXPORT_CAVE_SURVEX"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Export " + exportManager.currentCaveName + " to survex"
-                    nameFilters: ["Survex (*.svx)"]
-                    selectExisting: false
-                    selectMultiple: false
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        exportManager.exportSurvexCave(fileUrl);
+                    fileDialog {
+                        title: "Export " + exportManager.currentCaveName + " to survex"
+                        nameFilters: ["Survex (*.svx)"]
+                        selectExisting: false
+                        selectMultiple: false
+                        onAccepted: {
+                            RootData.lastDirectory = fileUrl
+                            exportManager.exportSurvexCave(fileUrl);
+                        }
                     }
                 }
             },
             QQ.State {
                 name: "EXPORT_REGION_SURVEX"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Export All Caves to survex"
-                    nameFilters: ["Survex (*.svx)"]
-                    selectExisting: false
-                    selectMultiple: false
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        exportManager.exportSurvexRegion(fileUrl);
+                    fileDialog {
+                        title: "Export All Caves to survex"
+                        nameFilters: ["Survex (*.svx)"]
+                        selectExisting: false
+                        selectMultiple: false
+                        onAccepted: {
+                            RootData.lastDirectory = fileUrl
+                            exportManager.exportSurvexRegion(fileUrl);
+                        }
                     }
                 }
             },
             QQ.State {
                 name: "EXPORT_CAVE_COMPASS"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Export " + exportManager.currentCaveName + " to compass"
-                    nameFilters: ["Compass (*.dat)"]
-                    selectExisting: false
-                    selectMultiple: false
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        exportManager.exportCaveToCompass(fileUrl);
+                    fileDialog {
+                        title: "Export " + exportManager.currentCaveName + " to compass"
+                        nameFilters: ["Compass (*.dat)"]
+                        selectExisting: false
+                        selectMultiple: false
+                        onAccepted: {
+                            RootData.lastDirectory = fileUrl
+                            exportManager.exportCaveToCompass(fileUrl);
+                        }
                     }
                 }
             },
             QQ.State {
                 name: "EXPORT_CAVE_CHIPDATA"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Export " + exportManager.currentCaveName + " to chipdata"
-                    nameFilters: ["Chipdata (*.*)"]
-                    selectExisting: false
-                    selectMultiple: false
-                    onAccepted: {
-                        exportManager.exportCaveToChipdata(fileUrl);
+                    fileDialog {
+                        title: "Export " + exportManager.currentCaveName + " to chipdata"
+                        nameFilters: ["Chipdata (*.*)"]
+                        selectExisting: false
+                        selectMultiple: false
+                        onAccepted: {
+                            exportManager.exportCaveToChipdata(fileUrl);
+                        }
                     }
                 }
             },
             QQ.State {
                 name: "IMPORT_COMPASS"
                 QQ.PropertyChanges {
-                    target: fileDialog
-                    title: "Import from Compass"
-                    nameFilters: ["Compass (*.dat)"]
-                    selectExisting: true
-                    selectMultiple: true
-                    onAccepted: {
-                        rootData.lastDirectory = fileUrl
-                        rootData.surveyImportManager.importCompassDataFile(fileUrls);
+                    fileDialog {
+                        title: "Import from Compass"
+                        nameFilters: ["Compass (*.dat)"]
+                        selectExisting: true
+                        selectMultiple: true
+                        onAccepted: {
+                            RootData.lastDirectory = fileUrl
+                            RootData.surveyImportManager.importCompassDataFile(fileUrls);
+                        }
                     }
                 }
             }
@@ -210,7 +216,7 @@ QQ.Item {
 
                 Controls.MenuItem {
                     text: "Survex (.svx)"
-                    onTriggered: rootData.surveyImportManager.importSurvex()
+                    onTriggered: RootData.surveyImportManager.importSurvex()
                 }
 
                 Controls.MenuItem {
@@ -223,28 +229,28 @@ QQ.Item {
 
                 Controls.MenuItem {
                     text: "Walls (.wpj)"
-                    onTriggered: rootData.surveyImportManager.importWalls()
+                    onTriggered: RootData.surveyImportManager.importWalls()
                 }
 
                 Controls.MenuItem {
                     text: "Walls (.srv)"
-                    onTriggered: rootData.surveyImportManager.importWallsSrv()
+                    onTriggered: RootData.surveyImportManager.importWallsSrv()
                 }
 
                 Controls.MenuItem {
                     text: "CSV (.csv)"
                     onTriggered: {
                         var oldImportExport = iconBar.page.childPage("CSV Import");
-                        if(oldImportExport !== rootData.pageSelectionModel.currentPage) {
+                        if(oldImportExport !== RootData.pageSelectionModel.currentPage) {
                             if(oldImportExport !== null) {
-                                rootData.pageSelectionModel.unregisterPage(oldImportExport);
+                                RootData.pageSelectionModel.unregisterPage(oldImportExport);
                             }
 
-                            var page = rootData.pageSelectionModel.registerPage(iconBar.page,
+                            var page = RootData.pageSelectionModel.registerPage(iconBar.page,
                                                                                 "CSV Importer",
                                                                                 csvImporterComponent,
                                                                                 {});
-                            rootData.pageSelectionModel.gotoPage(page);
+                            RootData.pageSelectionModel.gotoPage(page);
                         }
                     }
                 }

@@ -1,8 +1,10 @@
-import QtQuick 2.0 as QQ
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
-import cavewherelib
 import QtQuick.Dialogs as Dialogs
+import cavewherelib
 import "Utils.js" as Utils
 
 QQ.Item {
@@ -54,8 +56,9 @@ QQ.Item {
 
     ChoosePaperSizeInteraction {
         id: paperSizeInteraction
-        parent: view
+        parent: exportViewTabId.view
         visible: false; //view !== null
+        paperMarginGroupBox: paperMarginGroupBoxId
 
         onWidthChanged: paperComboBoxId.updatePaperRectangleFromModel()
         onHeightChanged: paperComboBoxId.updatePaperRectangleFromModel()
@@ -188,7 +191,7 @@ QQ.Item {
             }
 
             QQ.Item {
-                width: 1
+                implicitWidth: 1
                 visible: !optionsScrollViewId.visible
                 Layout.fillHeight: true //!optionsScrollViewId.visible
             }
@@ -255,7 +258,7 @@ QQ.Item {
                                     id: paperSizeWidthInputId
                                     text: screenCaptureManagerId.paperSize.width
                                     readOnly: paperComboBoxId.currentIndex != 3
-                                    onFinishedEditting: {
+                                    onFinishedEditting: (newText) => {
                                         paperSizeModel.setProperty(paperComboBoxId.currentIndex, "width", newText)
                                         paperComboBoxId.updatePaperRectangleFromModel();
                                     }
@@ -273,7 +276,7 @@ QQ.Item {
                                 ClickTextInput {
                                     text: screenCaptureManagerId.paperSize.height
                                     readOnly: paperSizeWidthInputId.readOnly
-                                    onFinishedEditting: {
+                                    onFinishedEditting: (newText) => {
                                         paperSizeModel.setProperty(paperComboBoxId.currentIndex, "height", newText)
                                         paperComboBoxId.updatePaperRectangleFromModel();
                                     }
@@ -303,7 +306,9 @@ QQ.Item {
 
                                     QQ.Connections {
                                         target: screenCaptureManagerId
-                                        onResolutionChanged: resolutionSpinBoxId.value = screenCaptureManagerId.resolution
+                                        function onResolutionChanged() {
+                                            resolutionSpinBoxId.value = screenCaptureManagerId.resolution
+                                        }
                                     }
                                 }
 
@@ -373,17 +378,22 @@ QQ.Item {
                                 }
 
                                 delegate: Text {
+                                    id: textDelegateId
+                                    property string layerNameRole
+                                    property int index
+
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.leftMargin: 5
+
                                     text: layerNameRole
 
                                     QQ.MouseArea {
                                         anchors.fill: parent
                                         acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-                                        onClicked: {
-                                            layerListViewId.currentIndex = index
+                                        onClicked: (mouse) => {
+                                            layerListViewId.currentIndex = textDelegateId.index
 
                                             if(mouse.button == Qt.RightButton) {
                                                 layerRightClickMenu.capture = layerProperties.layerObject
@@ -402,8 +412,8 @@ QQ.Item {
 
                                 QQ.Connections {
                                     target: screenCaptureManagerId
-                                    onRowsInserted: layerListViewId.updateLayerPropertyWidget()
-                                    onRowsRemoved: layerListViewId.updateLayerPropertyWidget()
+                                    function onRowsInserted() { layerListViewId.updateLayerPropertyWidget() }
+                                    function onRowsRemoved() { layerListViewId.updateLayerPropertyWidget() }
                                 }
                             }
                         }
@@ -419,6 +429,8 @@ QQ.Item {
                                 model: screenCaptureManagerId.groupModel
 
                                 delegate: QQ.Rectangle {
+                                    id: delegateId
+                                    property string captureNameRole
 
                                     width: 100
                                     height: 100
@@ -439,7 +451,7 @@ QQ.Item {
                                         model: screenCaptureManagerId.groupModel
                                         anchors.fill: parent
                                         delegate: Text {
-                                            text: captureNameRole
+                                            text: delegateId.captureNameRole
                                         }
 
 
@@ -530,55 +542,62 @@ QQ.Item {
                                 when: typeof(layerProperties.layerObject) !== "undefined" && layerProperties.layerObject !== null
 
                                 QQ.PropertyChanges {
-                                    target: layerProperties
-                                    title: "Properies of " + layerObject.name
-                                    visible: true
-                                }
-
-                                QQ.PropertyChanges {
-                                    target: paperScaleInputId
-                                    scaleObject: layerProperties.layerObject.scaleOrtho
-                                }
-
-                                QQ.PropertyChanges {
-                                    target: sizeWidthInputId
-                                    text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
-                                    onFinishedEditting: {
-                                        layerProperties.layerObject.setPaperWidthOfItem(newText)
+                                    layerProperties {
+                                        title: "Properies of " + layerObject.name
+                                        visible: true
                                     }
                                 }
 
                                 QQ.PropertyChanges {
-                                    target: sizeHeightInputId
-                                    text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
-                                    onFinishedEditting: {
-                                        layerProperties.layerObject.setPaperHeightOfItem(newText)
+                                    paperScaleInputId {
+                                        scaleObject: layerProperties.layerObject.scaleOrtho
                                     }
                                 }
 
                                 QQ.PropertyChanges {
-                                    target: posXInputId
-                                    text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
-                                    onFinishedEditting: {
-                                        var y = layerProperties.layerObject.positionOnPaper.y
-                                        layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
+                                    sizeWidthInputId {
+                                        text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.width, 3);
+                                        onFinishedEditting: {
+                                            layerProperties.layerObject.setPaperWidthOfItem(newText)
+                                        }
                                     }
                                 }
 
                                 QQ.PropertyChanges {
-                                    target: posYInputId
-                                    text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
-                                    onFinishedEditting: {
-                                        var x = layerProperties.layerObject.positionOnPaper.x
-                                        layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
+                                    sizeHeightInputId {
+                                        text: Utils.fixed(layerProperties.layerObject.paperSizeOfItem.height, 3)
+                                        onFinishedEditting: {
+                                            layerProperties.layerObject.setPaperHeightOfItem(newText)
+                                        }
                                     }
                                 }
 
                                 QQ.PropertyChanges {
-                                    target: rotationInput
-                                    text: Utils.fixed(layerProperties.layerObject.rotation, 2);
-                                    onFinishedEditting: {
-                                        layerProperties.layerObject.rotation = newText
+                                    posXInputId {
+                                        text: Utils.fixed(layerProperties.layerObject.positionOnPaper.x, 3)
+                                        onFinishedEditting: {
+                                            var y = layerProperties.layerObject.positionOnPaper.y
+                                            layerProperties.layerObject.positionOnPaper = Qt.point(newText, y);
+                                        }
+                                    }
+                                }
+
+                                QQ.PropertyChanges {
+                                    posYInputId {
+                                        text: Utils.fixed(layerProperties.layerObject.positionOnPaper.y, 3)
+                                        onFinishedEditting: {
+                                            var x = layerProperties.layerObject.positionOnPaper.x
+                                            layerProperties.layerObject.positionOnPaper = Qt.point(x, newText);
+                                        }
+                                    }
+                                }
+
+                                QQ.PropertyChanges {
+                                    rotationInput {
+                                        text: Utils.fixed(layerProperties.layerObject.rotation, 2);
+                                        onFinishedEditting: {
+                                            layerProperties.layerObject.rotation = newText
+                                        }
                                     }
                                 }
                             }
@@ -594,12 +613,12 @@ QQ.Item {
         title: "Export to " + fileTypeExportComboBox.currentText
         // selectExisting: false
         fileMode: Dialogs.FileDialog.SaveFile
-        currentFolder: rootData.lastDirectory
+        currentFolder: RootData.lastDirectory
         defaultSuffix: screenCaptureManagerId.fileTypeToExtention(screenCaptureManagerId.fileType)
         onAccepted: {
             var type = screenCaptureManagerId.typeNameToFileType(fileTypeExportComboBox.currentText);
 
-            rootData.lastDirectory = fileUrl
+            RootData.lastDirectory = fileUrl
             screenCaptureManagerId.filename = fileUrl
             screenCaptureManagerId.fileType = type
             screenCaptureManagerId.capture()

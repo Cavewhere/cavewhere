@@ -12,6 +12,8 @@ import cavewherelib
 QQ.Rectangle {
     id: usedStationsArea
 
+    property alias cave: usedStationsModel.cave
+
     border.width: 1
     border.color: "#A7A7A7"
 
@@ -34,6 +36,8 @@ QQ.Rectangle {
             delegate: Text {
                 id: textId
 
+                required property string modelData
+
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: 3
@@ -44,8 +48,7 @@ QQ.Rectangle {
 
             UsedStationTaskManager {
                 id: usedStationsModel;
-                cave: currentCave != null ? currentCave : null
-                listenToChanges: parent.visible
+                listenToChanges: usedStationsView
             }
         }
     }

@@ -24,10 +24,11 @@ class cwTripCalibration;
 #include <QList>
 //#include <QDeclarativeListProperty>
 #include <QVariant>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     Q_OBJECT
-    Q_ENUMS(DataRole ConnectedState)
+    QML_NAMED_ELEMENT(SurveyChunk)
 
     Q_PROPERTY(cwTrip* parentTrip READ parentTrip WRITE setParentTrip NOTIFY parentTripChanged)
     Q_PROPERTY(ConnectedState connectedState READ connectedState WRITE setConnectedState NOTIFY connectedStateChanged)
@@ -59,6 +60,9 @@ public:
         Disconnected, //Not connected, the survey is just floating
         Unknown //State isn't set
     };
+    Q_ENUM(DataRole)
+    Q_ENUM(ConnectedState)
+    Q_ENUM(Direction)
 
     cwSurveyChunk(QObject *parent = 0);
     cwSurveyChunk(const cwSurveyChunk& chunk);

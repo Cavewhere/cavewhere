@@ -12,6 +12,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our inculdes
 #include "cwPageSelectionModel.h"
@@ -29,6 +30,7 @@ class cwTrip;
 class cwLinkGenerator : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LinkGenerator)
 
     Q_PROPERTY(cwPageSelectionModel* pageSelectionModel READ pageSelectionModel WRITE setPageSelectionModel NOTIFY pageSelectionModelChanged)
 

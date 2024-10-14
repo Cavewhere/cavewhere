@@ -1,19 +1,19 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Controls 2.5
+import QtQuick.Controls
 
 UnitBaseItem {
+    id: itemId
 
     width: comboBoxId.width
     height: comboBoxId.height
 
     ComboBox {
         id: comboBoxId
-        model: unitModel
-        enabled: !readOnly
-        currentIndex: unit
+        model: itemId.unitModel
+        enabled: !itemId.readOnly
+        currentIndex: itemId.unit
 
         onCurrentIndexChanged: {
-            newUnit(currentIndex)
+            itemId.newUnit(currentIndex)
         }
     }
 }

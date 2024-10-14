@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -19,6 +20,7 @@ class cwLength;
 class CAVEWHERE_LIB_EXPORT cwScale : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Scale)
 
     Q_PROPERTY(double scale READ scale WRITE setScale NOTIFY scaleChanged)
     Q_PROPERTY(cwLength* scaleNumerator READ scaleNumerator CONSTANT)

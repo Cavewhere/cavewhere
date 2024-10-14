@@ -20,7 +20,7 @@ ScrollViewPage {
             }
 
             Text {
-                text: "\"" + rootData.pageSelectionModel.currentPageAddress + "\"" + " doesn't exist..."
+                text: "\"" + RootData.pageSelectionModel.currentPageAddress + "\"" + " doesn't exist..."
                 font.italic: true
                 Layout.alignment: Qt.AlignCenter
                 visible: text.length > 0
@@ -36,7 +36,7 @@ ScrollViewPage {
                 Layout.alignment: Qt.AlignHCenter
                 text: "Back"
                 onClicked: {
-                    rootData.pageSelectionModel.back()
+                    RootData.pageSelectionModel.back()
                 }
             }
         }

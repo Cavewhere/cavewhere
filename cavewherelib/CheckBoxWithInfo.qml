@@ -17,8 +17,8 @@ ColumnLayout {
 
         QQ.Item {
             id: spacerId
-            width: 0
-            height: 1
+            implicitWidth: 0
+            implicitHeight: 1
             visible: width > 0
         }
 
@@ -29,9 +29,9 @@ ColumnLayout {
         QC.CheckBox {
             id: checkBoxId
             text: "Use " + rootId.text
-            checked: using
+            checked: rootId.using
             onCheckedChanged: {
-                using = checked;
+                rootId.using = checked;
             }
         }
     }

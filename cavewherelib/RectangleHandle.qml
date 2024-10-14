@@ -18,14 +18,14 @@ QQ.Item {
     QQ.Image {
         id: imageId
         visible: !mouseArea.containsMouse
-        source: imageSource
+        source: handle.imageSource
     }
 
     QQ.Image {
         id: selectImageId
         rotation: imageId.rotation
         visible: mouseArea.containsMouse
-        source: selectedImageSource
+        source: handle.selectedImageSource
     }
 
     QQ.MouseArea {
@@ -36,7 +36,7 @@ QQ.Item {
         anchors.fill: parent
         hoverEnabled: true
 
-        onPressed: {
+        onPressed: function(mouse) {
             mouse.accepted = true
             oldPoint = Utils.mousePositionToGlobal(mouseArea)
         }
@@ -46,7 +46,7 @@ QQ.Item {
                 var mouseToGlobal = Utils.mousePositionToGlobal(mouseArea);
                 var delta = Qt.point(oldPoint.x - mouseToGlobal.x, oldPoint.y - mouseToGlobal.y)
                 oldPoint = mouseToGlobal;
-                dragDelta(delta)
+                handle.dragDelta(delta)
             }
         }
     }

@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QMatrix4x4>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwImage.h"
@@ -24,6 +25,7 @@ class cwImageResolution;
 class CAVEWHERE_LIB_EXPORT cwNote : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Note)
 
     Q_PROPERTY(int original READ original NOTIFY originalChanged)
     Q_PROPERTY(int icon READ icon NOTIFY iconChanged)

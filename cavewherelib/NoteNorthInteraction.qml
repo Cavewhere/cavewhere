@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 
 /**
@@ -17,7 +17,7 @@ Interaction {
 
     property BasePanZoomInteraction basePanZoomInteraction
     property ImageItem imageItem
-    property NoteTransform noteTransform
+    property NoteTranformation noteTransform
     property string upText: "north"
     property alias transformUpdater: northArrow.transformUpdater
 
@@ -49,28 +49,28 @@ Interaction {
 
     PanZoomPitchArea {
         anchors.fill: parent
-        basePanZoom: basePanZoomInteraction
+        basePanZoom: interaction.basePanZoomInteraction
 
         QQ.MouseArea {
             id: mouseAreaId
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-            onPressed: {
+            onPressed: (mouse) => {
                 if(pressedButtons == Qt.RightButton) {
-                    basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
                 }
             }
 
-            onPositionChanged: {
+            onPositionChanged: (mouse) => {
                 if(pressedButtons == Qt.RightButton) {
-                    basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                 }
             }
 
-            onClicked: {
+            onClicked: (mouse) => {
                 if(mouse.button === Qt.LeftButton) {
-                    privateData.firstLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                    privateData.firstLocation = interaction.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
                     northArrow.p1 = privateData.firstLocation
                     northArrow.p2 = northArrow.p1
                     interaction.state = "WaitForSecondClick"
@@ -79,7 +79,7 @@ Interaction {
             }
 
             onWheel: {
-                basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+                interaction.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
             }
         }
     }
@@ -90,7 +90,7 @@ Interaction {
         property int angle: 0
 
         function updatePosition() {
-            var point = imageItem.mapNoteToQtViewport(northArrow.p1);
+            var point = interaction.imageItem.mapNoteToQtViewport(northArrow.p1);
             x = point.x
             y = point.y
         }
@@ -103,12 +103,12 @@ Interaction {
 
         QQ.Connections {
             target: northArrow.transformUpdater
-            onUpdated: northAngleTextId.updatePosition()
+            function onUpdated() { northAngleTextId.updatePosition() }
         }
 
         QQ.Connections {
             target: northArrow
-            onP1Changed: northAngleTextId.updatePosition()
+            function onP1Changed() { northAngleTextId.updatePosition() }
         }
     }
 
@@ -120,7 +120,7 @@ Interaction {
 
     HelpBox {
         id: helpBoxId
-        text: "<b>Click</b> the " + upText + " arrow's first point"
+        text: "<b>Click</b> the " + interaction.upText + " arrow's first point"
     }
 
     states: [
@@ -128,36 +128,38 @@ Interaction {
             name: "WaitForSecondClick"
 
             QQ.PropertyChanges {
-                target: mouseAreaId
+                mouseAreaId {
+                    hoverEnabled: true
 
-                hoverEnabled: true
-
-                onPositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-                    } else {
-                        updateArrowSecondPoint(mouse);
-                        northAngleTextId.angle = calculateNorthUp(mouse);
+                    onPositionChanged: {
+                        if(pressedButtons == Qt.RightButton) {
+                            basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                        } else {
+                            updateArrowSecondPoint(mouse);
+                            northAngleTextId.angle = calculateNorthUp(mouse);
+                        }
                     }
-                }
 
-                onClicked: {
-                    if(mouse.button === Qt.LeftButton) {
-                        updateArrowSecondPoint(mouse);
-                        noteTransform.northUp = calculateNorthUp(mouse)
-                        done()
+                    onClicked: {
+                        if(mouse.button === Qt.LeftButton) {
+                            updateArrowSecondPoint(mouse);
+                            noteTransform.northUp = calculateNorthUp(mouse)
+                            done()
+                        }
                     }
                 }
             }
 
             QQ.PropertyChanges {
-                target: helpBoxId
-                text: "<b>Click</b> the " + upText + " arrow's second point"
+                helpBoxId {
+                    text: "<b>Click</b> the " + upText + " arrow's second point"
+                }
             }
 
             QQ.PropertyChanges {
-                target: northAngleTextId
-                visible: true;
+                northAngleTextId {
+                    visible: true;
+                }
             }
         }
     ]

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick 2.0 as QQ
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -76,7 +78,7 @@ import cavewherelib
 ColumnLayout {
     id: rootLayout
 
-    property GLTerrainRenderer viewer
+    required property GLTerrainRenderer viewer
     // property Tab viewTab
 
     TabBar {
@@ -107,16 +109,15 @@ ColumnLayout {
         QQ.Component {
             id: exportTabComponentId
             ExportViewTab {
-                view: viewer
+                view: rootLayout.viewer
             }
         }
 
         QQ.Item {
             QQ.Loader {
                 sourceComponent: cameraOptionsTabComponentId
-                onLoaded: {
-                    viewTab = item
-                    viewTab.viewer = viewer
+                onLoaded:  {
+                    (item as CameraOptionsTab).viewer = rootLayout.viewer
                 }
             }
         }
@@ -125,41 +126,40 @@ ColumnLayout {
             QQ.Loader {
                 sourceComponent: exportTabComponentId
                 onLoaded: {
-                    viewTab = item
-                    viewTab.viewer = viewer
+                    (item as ExportViewTab).viewer = rootLayout.viewer
                 }
             }
         }
     }
 
-    function resizeCurrentTab() {
-        resizing = true
-        var currentTab = stackLayoutId.currentItem;
-        if (currentTab) {
-            tabBarId.Layout.maximumWidth = currentTab.implicitWidth
-            tabBarId.Layout.minimumWidth = currentTab.implicitWidth
-        }
-        tabBarId.Layout.maximumWidth = Number.MAX_VALUE
-        resizing = false
-    }
+    // function resizeCurrentTab() {
+    //     resizing = true
+    //     var currentTab = stackLayoutId.currentItem;
+    //     if (currentTab) {
+    //         tabBarId.Layout.maximumWidth = currentTab.implicitWidth
+    //         tabBarId.Layout.minimumWidth = currentTab.implicitWidth
+    //     }
+    //     tabBarId.Layout.maximumWidth = Number.MAX_VALUE
+    //     resizing = false
+    // }
 
-    QQ.Connections {
-        target: stackLayoutId.currentItem
-        ignoreUnknownSignals: true
-        onImplicitWidthChanged: {
-            resizeCurrentTab()
-        }
-    }
+    // QQ.Connections {
+    //     target: stackLayoutId.currentItem
+    //     ignoreUnknownSignals: true
+    //     onImplicitWidthChanged: {
+    //         resizeCurrentTab()
+    //     }
+    // }
 
     QQ.Component.onCompleted: {
         tabBarId.currentIndex = 0; // Default to first tab
     }
 
-    QQ.Connections {
-        target: viewTab
-        onLoaded: {
-            viewTab.viewer = viewer
-        }
-    }
+    // QQ.Connections {
+    //     target: viewTab
+    //     onLoaded: {
+    //         viewTab.viewer = viewer
+    //     }
+    // }
 }
 

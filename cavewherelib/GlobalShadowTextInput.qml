@@ -4,6 +4,7 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
+pragma Singleton
 
 import QtQuick 2.0 as QQ
 
@@ -15,7 +16,7 @@ QQ.MouseArea {
     property int minWidth: 0
     property int minHeight: 0
     property alias errorHelpBox: errorHelpBoxItem
-    property var coreClickInput //Should be a CoreClickTextInput, but isn't for QML reloading to work
+    property CoreClickTextInput coreClickInput
 
     signal enterPressed()
     signal escapePressed()
@@ -24,7 +25,7 @@ QQ.MouseArea {
     enabled: false
     visible: enabled
 
-    onPressed: {
+    onPressed: (mouse) => {
         if(coreClickInput !== null) {
             var commited = coreClickInput.commitChanges()
             if(!commited) {
@@ -45,15 +46,15 @@ QQ.MouseArea {
 
         color: "white"
 
-        width:  minWidth > input.width + 6 ? minWidth : input.width  + 6
-        height: minHeight > input.height + 6 ? minHeight : input.height + 6
+        width:  globalMouseArea.minWidth > input.width + 6 ? globalMouseArea.minWidth : input.width  + 6
+        height: globalMouseArea.minHeight > input.height + 6 ? globalMouseArea.minHeight : input.height + 6
 
         QQ.MouseArea {
             id: borderArea
 
             anchors.fill: parent
 
-            onPressed: {
+            onPressed: (mouse) => {
                 input.forceActiveFocus()
                 mouse.accepted = true
             }
@@ -73,27 +74,25 @@ QQ.MouseArea {
             signal pressKeyPressed; //This is emitted every time key is pressed
 
             QQ.KeyNavigation.tab: {
-                if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
+                if(globalMouseArea.coreClickInput === null) {
                     return null
                 }
-                return coreClickInput.QQ.KeyNavigation.tab
+                return globalMouseArea.coreClickInput.QQ.KeyNavigation.tab
             }
 
             QQ.KeyNavigation.backtab: {
-                if(typeof coreClickInput === 'undefined' || coreClickInput === null) {
+                if(globalMouseArea.coreClickInput === null) {
                     return null
                 }
-                return coreClickInput.QQ.KeyNavigation.backtab
+                return globalMouseArea.coreClickInput.QQ.KeyNavigation.backtab
             }
 
             onFocusChanged: {
-                if(!focus && editor.visible && !coreClickInput.focus) {
-                    coreClickInput.commitChanges();
+                if(!focus && globalMouseArea.editor.visible && !globalMouseArea.coreClickInput.focus) {
+                    globalMouseArea.coreClickInput.commitChanges();
                 }
 
-                if(typeof coreClickInput !== 'undefined' &&
-                        coreClickInput !== null &&
-                        coreClickInput.focus)
+                if(globalMouseArea.coreClickInput !== null && globalMouseArea.coreClickInput.focus)
                 {
                     forceActiveFocus()
                     selectAll()
@@ -116,7 +115,7 @@ QQ.MouseArea {
                 }
             }
 
-            QQ.Keys.onPressed: {
+            QQ.Keys.onPressed: (event) => {
                 pressKeyEvent = event;
                 pressKeyPressed();
             }

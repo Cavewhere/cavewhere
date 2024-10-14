@@ -1,5 +1,5 @@
-import QtQuick 2.0 as QQ
-import QtQml 2.12
+import QtQuick as QQ
+import QtQml
 import cavewherelib
 
 HelpBox {
@@ -20,8 +20,8 @@ HelpBox {
     }
 
     QQ.Connections {
-        target: rootData.project
-        onFileSaved: {
+        target: RootData.project
+        function onFileSaved() {
             savedHelpBoxId.visible = true;
             hideTimerId.start()
         }

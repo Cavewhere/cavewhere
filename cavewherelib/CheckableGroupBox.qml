@@ -6,10 +6,10 @@
 **************************************************************************/
 
 import QtQuick 2.0 as QQ
-import QtQuick.Controls 2.12 as QC
 import "Theme.js" as Theme
 
 QQ.Item {
+    id: itemId
 
     property QQ.color backgroundColor: "white"
     property alias checked: checkbox.checked
@@ -29,7 +29,7 @@ QQ.Item {
         border.color: "gray"
         radius: Theme.floatingWidgetRadius
         color: "#00000000"
-        visible: contentsVisible
+        visible: itemId.contentsVisible
 
         anchors.top: checkbox.verticalCenter
         anchors.left: parent.left
@@ -51,9 +51,9 @@ QQ.Item {
     }
 
     QQ.Rectangle {
-        color: backgroundColor
+        color: itemId.backgroundColor
         anchors.fill: checkbox
-        visible: contentsVisible
+        visible: itemId.contentsVisible
     }
 
     CheckBox {

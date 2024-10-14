@@ -5,23 +5,25 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 
 QQ.Column {
+    id: itemId
+
     property Cave currentCave: null
 
     CaveLengthComponent {
         id: caveLengthId
         text: "Length:"
-        unitValue: currentCave !== null ? currentCave.length : null
+        unitValue: itemId.currentCave !== null ? itemId.currentCave.length : null
         unitModel: UnitDefaults.lengthModel
     }
 
     CaveLengthComponent {
         id: caveDepth
         text: "Depth:"
-        unitValue: currentCave !== null ? currentCave.depth : null
+        unitValue: itemId.currentCave !== null ? itemId.currentCave.depth : null
         unitModel: UnitDefaults.depthModel
     }
 

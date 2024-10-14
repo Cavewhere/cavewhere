@@ -47,7 +47,10 @@ GroupBox {
             rows: 3
             columns: 3
 
-            QQ.Item { width: 1; height: 1}
+            component Spacer:
+                QQ.Item { implicitWidth: 1; implicitHeight: 1 }
+
+            Spacer {}
 
             PaperMarginSpinBox {
                 id: topId
@@ -55,7 +58,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            QQ.Item { width: 1; height: 1 }
+            Spacer {}
 
             PaperMarginSpinBox {
                 id: leftId
@@ -82,7 +85,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            QQ.Item { width:1; height:1 }
+            Spacer {}
 
             PaperMarginSpinBox {
                 id: bottomId
@@ -90,7 +93,7 @@ GroupBox {
                 unit: groupBoxId.unit
             }
 
-            QQ.Item { width:1; height:1 }
+            Spacer {}
         }
     }
 

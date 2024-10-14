@@ -4,7 +4,8 @@ import QtQuick.Layouts 1.12
 import cavewherelib
 
 ColumnLayout {
-    property JobSettings jobSettings: rootData.settings.jobSettings
+    id: settingsId
+    property JobSettings jobSettings: RootData.settings.jobSettings
 
     QC.GroupBox {
         title: "Job Settings"
@@ -21,10 +22,10 @@ ColumnLayout {
 
                 QC.SpinBox {
                     from: 1
-                    to: jobSettings.idleThreadCount
-                    value: jobSettings.threadCount
+                    to: settingsId.jobSettings.idleThreadCount
+                    value: settingsId.jobSettings.threadCount
                     onValueChanged: {
-                        jobSettings.threadCount = value;
+                        settingsId.jobSettings.threadCount = value;
                     }
                 }
             }
@@ -36,7 +37,7 @@ ColumnLayout {
             }
 
             Text {
-                text: "Usable threads: " + jobSettings.idleThreadCount
+                text: "Usable threads: " + settingsId.jobSettings.idleThreadCount
             }
         }
     }

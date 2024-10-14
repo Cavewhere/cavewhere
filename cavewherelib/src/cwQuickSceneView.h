@@ -12,7 +12,9 @@
 //Qt includes
 #include <QQuickPaintedItem>
 #include <QPointer>
+#include <QQmlEngine>
 class QGraphicsScene;
+
 
 /**
  * @brief The cwQuickSceneView class
@@ -22,6 +24,7 @@ class QGraphicsScene;
 class cwQuickSceneView : public QQuickPaintedItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(QuickSceneView)
 
     Q_PROPERTY(QGraphicsScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
 

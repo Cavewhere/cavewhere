@@ -12,9 +12,14 @@
 //Our includes
 #include "cwBaseNotePointInteraction.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwBaseNoteLeadInteraction : public cwBaseNotePointInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(BaseNoteLeadInteraction)
+
 public:
     cwBaseNoteLeadInteraction(QQuickItem* parent = 0);
     ~cwBaseNoteLeadInteraction();

@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QVariantMap>
+#include <QQmlEngine>
 
 //Our inculdes
 class cwPage;
@@ -32,6 +33,7 @@ class cwPage;
 class cwPageViewAttachedType : public QObject
 {
     Q_OBJECT
+    QML_ANONYMOUS
 
     Q_PROPERTY(cwPage* page READ page NOTIFY pageChanged)
     Q_PROPERTY(QVariantMap defaultProperties READ defaultProperties WRITE setDefaultProperties NOTIFY defaultPropertiesChanged)

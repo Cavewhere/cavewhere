@@ -43,7 +43,7 @@ DataBox {
 
     QQ.Rectangle {
         id: guessAreaBackground
-//        radius: 5
+        //        radius: 5
         color: Theme.floatingWidgetColor
         anchors.centerIn: parent
         visible: false
@@ -52,7 +52,7 @@ DataBox {
         QQ.MouseArea {
             anchors.fill: parent
             onClicked: {
-                commitAutoStation()
+                stationBox.commitAutoStation()
             }
         }
     }
@@ -76,7 +76,7 @@ DataBox {
             id: stationName
             anchors.horizontalCenter: parent.horizontalCenter
             color: "#333333"
-//            font.pixelSize: 11
+            //            font.pixelSize: 11
         }
     }
 
@@ -85,34 +85,37 @@ DataBox {
             name: "AutoNameState"
 
             QQ.PropertyChanges {
-                target: stationBox
+                stationBox {
 
-                onTabPressed: {
-                    commitAutoStation()
-                }
+                    onTabPressed: {
+                        commitAutoStation()
+                    }
 
-                onDeletePressed: {
-                    state = ""
-                    deletePressedHandler()
-                }
-
-                onFocusChanged: {
-                    if(!focus) {
+                    onDeletePressed: {
                         state = ""
+                        deletePressedHandler()
+                    }
+
+                    onFocusChanged: {
+                        if(!focus) {
+                            state = ""
+                        }
                     }
                 }
             }
 
             QQ.PropertyChanges {
-                target: guessArea
-                visible: true
+                guessArea {
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: guessAreaBackground
-                visible: true
-                width: guessArea.width + 6
-                height: guessArea.height
+                guessAreaBackground {
+                    visible: true
+                    width: guessArea.width + 6
+                    height: guessArea.height
+                }
             }
         }
     ]

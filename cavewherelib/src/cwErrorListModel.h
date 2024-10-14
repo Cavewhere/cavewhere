@@ -41,7 +41,6 @@ public:
     cwError at(int index) const;
     int indexOf(const cwError& error) const;
     QList<cwError> toList() const { return m_errors; }
-    void clear();
     bool isEmpty() const { return m_errors.isEmpty(); }
     int size() const { return m_errors.size(); }
     bool contains(const cwError& error) const { return m_errors.contains(error); }
@@ -50,7 +49,6 @@ public:
     void remove(const cwError& error);
     void insert(int index, const cwError& error);
     void insert(int index, const QList<cwError>& errors);
-    cwError first() const { return m_errors.first(); }
     cwError last() const { return m_errors.last(); }
 
     int rowCount(const QModelIndex &parent) const;
@@ -63,8 +61,13 @@ public:
 
     QHash<int, QByteArray> roleNames() const;
 
+public slots:
+    cwError first() const { return m_errors.first(); }
+    void clear();
+
 signals:
     void countChanged();
+
 
 private:
     QList<cwError> m_errors;

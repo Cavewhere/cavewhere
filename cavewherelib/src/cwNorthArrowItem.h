@@ -14,9 +14,13 @@ class cwTransformUpdater;
 class cwPositioner3D;
 class cwSGLinesNode;
 
+//Our includes
+#include <QQmlEngine>
+
 class cwNorthArrowItem : public cwAbstract2PointItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(NorthArrowItem)
 
 public:
     explicit cwNorthArrowItem(QQuickItem *parent = 0);

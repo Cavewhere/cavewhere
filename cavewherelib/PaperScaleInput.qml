@@ -31,8 +31,8 @@ QQ.Item {
             id: setLength
             anchors.verticalCenter: parent.verticalCenter
             iconSource: "qrc:/icons/measurement.png"
-            visible: !autoScaling && usingInteraction
-            onClicked: scaleInteractionActivated()
+            visible: !scaleInput.autoScaling && scaleInput.usingInteraction
+            onClicked: scaleInput.scaleInteractionActivated()
         }
 
         QQ.Row {
@@ -41,7 +41,7 @@ QQ.Item {
 
             LabelWithHelp {
                 id: scaleLabelId
-                helpArea: scaleHelp
+                helpArea: scaleInput.scaleHelp
                 text: "Scale"
             }
 
@@ -52,7 +52,7 @@ QQ.Item {
                     id: onPaperLengthInput
                     unitValue: null
                     valueVisible: false
-                    valueReadOnly: autoScaling
+                    valueReadOnly: scaleInput.autoScaling
                     defaultUnit: Units.LengthUnitless
                 }
             }
@@ -69,7 +69,7 @@ QQ.Item {
                     id: inCaveLengthInput
                     unitValue: null
                     valueVisible: false
-                    valueReadOnly: autoScaling
+                    valueReadOnly: scaleInput.autoScaling
                     defaultUnit: Units.LengthUnitless
                 }
             }
@@ -101,32 +101,35 @@ QQ.Item {
 
     states: [
         QQ.State {
-            when: scaleObject !== null
+            when: scaleInput.scaleObject !== null
 
             QQ.PropertyChanges {
-                target: onPaperLengthInput
-                unitValue: scaleObject.scaleNumerator
-                valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+                onPaperLengthInput {
+                    unitValue: scaleObject.scaleNumerator
+                    valueVisible: (!autoScaling || scaleObject.scaleNumerator.unit !== Units.Unitless) && !errorText.visible
+                }
             }
 
             QQ.PropertyChanges {
-                target: inCaveLengthInput
-                unitValue: scaleObject.scaleDenominator
-                valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
+                inCaveLengthInput {
+                    unitValue: scaleObject.scaleDenominator
+                    valueVisible: (!autoScaling || scaleObject.scaleDenominator.unit !== Units.Unitless) && !errorText.visible
+                }
             }
 
             QQ.PropertyChanges {
-                target: scaleText
-                text: "1:" + Utils.fixed(1 / scaleObject.scale, 1)
+                scaleText {
+                    text: "1:" + Utils.fixed(1 / scaleObject.scale, 1)
+                }
             }
 
             QQ.PropertyChanges {
-                target: errorText
-                visible: (scaleObject.scaleDenominator.unit === Units.Unitless ||
-                          scaleObject.scaleNumerator.unit === Units.Unitless) &&
-                         !(scaleObject.scaleDenominator.unit === Units.Unitless &&
-                          scaleObject.scaleNumerator.unit === Units.Unitless)
-
+                errorText {
+                    visible: (scaleObject.scaleDenominator.unit === Units.Unitless ||
+                              scaleObject.scaleNumerator.unit === Units.Unitless) &&
+                             !(scaleObject.scaleDenominator.unit === Units.Unitless &&
+                               scaleObject.scaleNumerator.unit === Units.Unitless)
+                }
             }
         }
 

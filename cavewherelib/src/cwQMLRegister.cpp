@@ -132,17 +132,17 @@ cwQMLRegister::cwQMLRegister()
 
 void cwQMLRegister::registerQML()
 {
-    qRegisterMetaType<QThread*>("QThread*");
-    qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
-    qRegisterMetaType<QList <QString> >("QList<QString>");
-    qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
-    qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
-    qRegisterMetaType<QList <cwPage* > >("QList<cwPage*>");
+    // qRegisterMetaType<QThread*>("QThread*");
+    // qRegisterMetaType<cwCavingRegion>("cwCavingRegion");
+    // qRegisterMetaType<QList <QString> >("QList<QString>");
+    // qRegisterMetaType<QList <cwImage> >("QList<cwImage>");
+    // qRegisterMetaType<QList <cwStation > >("QList<cwStation>");
+    // qRegisterMetaType<QList <cwPage* > >("QList<cwPage*>");
     // qRegisterMetaType<QList <cwCave* > >("QList<cwCave*>");
-    qRegisterMetaType<QModelIndex>("QModelIndex");
-    qRegisterMetaType<cwImage>("cwImage");
-    qRegisterMetaType<GLuint>("GLuint");
-    qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
+    // qRegisterMetaType<QModelIndex>("QModelIndex");
+    // qRegisterMetaType<cwImage>("cwImage");
+    // qRegisterMetaType<GLuint>("GLuint");
+    // qRegisterMetaType<cwUsedStationsTask::Settings>("cwUsedStationsTask::Settings");
 
     // qmlRegisterType<cwCavingRegion>("Cavewhere", 1, 0, "CavingRegion");
     // qmlRegisterType<cwCave>("Cavewhere", 1, 0, "Cave");

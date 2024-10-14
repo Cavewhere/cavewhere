@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QSettings>
 #include <QDebug>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -12,6 +13,7 @@
 class CAVEWHERE_LIB_EXPORT cwOpenGLSettings : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(OpenGLSettings)
 
     //For texture maps
     Q_PROPERTY(bool dxt1Supported READ dxt1Supported CONSTANT)

@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QOpenGLShaderProgram>
 #include <QFileSystemWatcher>
+#include <QQmlEngine>
 
 //Our includes
 class cwGLShader;
@@ -19,6 +20,8 @@ class cwGLShader;
 class cwShaderDebugger : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ShaderDebugger)
+
 public:
     explicit cwShaderDebugger(QObject *parent = 0);
 

@@ -2,8 +2,9 @@ import QtQuick 2.0 as QQ
 import cavewherelib
 
 PanZoomPitchArea {
+    id: panZoomPitchId
     property BasePanZoomInteraction basePanZoomInteraction
-    property Interaction baseNotePointInteraction
+    property BaseNotePointInteraction baseNotePointInteraction
     property ImageItem imageItem
 
     anchors.fill: parent
@@ -12,25 +13,25 @@ PanZoomPitchArea {
     QQ.MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onPressed: {
+        onPressed: function(mouse) {
             if(pressedButtons == Qt.RightButton) {
-                basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                panZoomPitchId.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
             }
         }
 
-        onReleased: {
+        onReleased: function(mouse) {
             if(mouse.button === Qt.LeftButton) {
-                var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                baseNotePointInteraction.addPoint(notePoint)
+                var notePoint = panZoomPitchId.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                panZoomPitchId.baseNotePointInteraction.addPoint(notePoint)
             }
         }
 
-        onPositionChanged: {
+        onPositionChanged: function(mouse) {
             if(pressedButtons == Qt.RightButton) {
-                basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                panZoomPitchId.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
             }
         }
 
-        onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+        onWheel: panZoomPitchId.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
     }
 }

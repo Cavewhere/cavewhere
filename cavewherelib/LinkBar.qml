@@ -1,28 +1,30 @@
-import QtQuick 2.0 as QQ
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
 import QtQuick.Controls as Controls
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 import cavewherelib
 
 RowLayout {
 
     LinkBarModel {
         id: linkBarModel
-        address: rootData.pageSelectionModel.currentPageAddress
+        address: RootData.pageSelectionModel.currentPageAddress
     }
 
     Button {
         iconSource: "qrc:/icons/leftCircleArrow-32x32.png"
-        enabled: rootData.pageSelectionModel.hasBackward
+        enabled: RootData.pageSelectionModel.hasBackward
         onClicked: {
-            rootData.pageSelectionModel.back();
+            RootData.pageSelectionModel.back();
         }
     }
 
     Button {
         iconSource: "qrc:/icons/rightCircleArrow-32x32.png"
-        enabled: rootData.pageSelectionModel.hasForward
+        enabled: RootData.pageSelectionModel.hasForward
         onClicked: {
-            rootData.pageSelectionModel.forward();
+            RootData.pageSelectionModel.forward();
         }
     }
 
@@ -36,6 +38,7 @@ RowLayout {
             id: sizeItemId
             text: "Size of text"
             visible: false
+            fullPathRole: ""
         }
 
         QQ.ListView {
@@ -54,6 +57,8 @@ RowLayout {
 
 
             delegate: LinkBarItem {
+                required property string nameRole
+                required property int index
                 nextArrowVisible: linkBarListView.count - 1 !== index
                 text: nameRole
             }
@@ -72,8 +77,8 @@ RowLayout {
             anchors.verticalCenter: parent.verticalCenter
             visible: textEnableButtonId.troggled
             focus: false
-            text: rootData.pageSelectionModel.currentPageAddress
-            onEditingFinished: rootData.pageSelectionModel.currentPageAddress = text
+            text: RootData.pageSelectionModel.currentPageAddress
+            onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
         }
     }
 

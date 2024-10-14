@@ -7,7 +7,7 @@ QQ.Item {
 
     property Trip trip: null
 
-    property var _chunkToWatch: [] //Array of chunks to watch
+    // property var _chunkToWatch: [] //Array of chunks to watch
     property int _numWarnings: trip.errorModel.warningCount
     property int _numErrors: trip.errorModel.fatalCount
 
@@ -31,13 +31,13 @@ QQ.Item {
             QQ.Image {
                 id: stopImage
                 source: "qrc:icons/stopSignError.png"
-                visible: _numErrors > 0
+                visible: overviewId._numErrors > 0
             }
 
             QQ.Image {
                 id: warningImage
                 source: "qrc:icons/warning.png"
-                visible: _numWarnings > 0
+                visible: overviewId._numWarnings > 0
             }
 
             Text {
@@ -51,19 +51,21 @@ QQ.Item {
     states: [
         QQ.State {
             name: "noErrorsOrWarnings"
-            when: _numErrors == 0 && _numWarnings == 0
+            when: overviewId._numErrors == 0 && overviewId._numWarnings == 0
 
             QQ.PropertyChanges {
-                target: overviewId
-                visible: false
+                overviewId {
+                    visible: false
+                }
             }
         },
 
         QQ.State {
             name: "hasErrorOrWarning"
             QQ.PropertyChanges {
-                target: overviewId
-                visible: true
+                overviewId {
+                    visible: true
+                }
             }
         },
 
@@ -72,9 +74,10 @@ QQ.Item {
             extend: "hasErrorOrWarning"
 
             QQ.PropertyChanges {
-                target: borderRectangle
-                border.color: "#930100"
-                color: "#FAB8B9"
+                borderRectangle {
+                    border.color: "#930100"
+                    color: "#FAB8B9"
+                }
             }
         },
 
@@ -84,42 +87,46 @@ QQ.Item {
 
 
             QQ.PropertyChanges {
-                target: borderRectangle
-                border.color: "#E06841"
-                color: "#FFFDBC"
+                borderRectangle {
+                    border.color: "#E06841"
+                    color: "#FFFDBC"
+                }
             }
         },
 
         QQ.State {
             name: "onlyErrors"
-            when: _numErrors > 0 && _numWarnings == 0
+            when: overviewId._numErrors > 0 && overviewId._numWarnings == 0
             extend: "hasError"
             QQ.PropertyChanges {
-                target: errorText
-                text: "There are <b>" + _numErrors + " errors</b>"
+                errorText {
+                    text: "There are <b>" + overviewId._numErrors + " errors</b>"
+                }
             }
         },
 
         QQ.State {
             name: "onlyWarnings"
-            when: _numErrors == 0 && _numWarnings > 0
+            when: overviewId._numErrors == 0 && overviewId._numWarnings > 0
             extend: "hasWarning"
 
             QQ.PropertyChanges {
-                target: errorText
-                text: "There are " + _numWarnings + " warnings"
+                errorText {
+                    text: "There are " + overviewId._numWarnings + " warnings"
+                }
             }
         },
 
         QQ.State {
             name: "ErrorsAndWarnings"
-            when: _numErrors > 0 && _numWarnings > 0
+            when: overviewId._numErrors > 0 && overviewId._numWarnings > 0
             extend: "hasError"
 
 
             QQ.PropertyChanges {
-                target: errorText
-                text: "There are <b>" + _numErrors + " errors</b> and " + _numWarnings + " warnings"
+                errorText {
+                    text: "There are <b>" + overviewId._numErrors + " errors</b> and " + overviewId._numWarnings + " warnings"
+                }
             }
         }
     ]

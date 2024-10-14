@@ -12,6 +12,7 @@
 //Our includes
 #include <QObject>
 #include <QAbstractListModel>
+#include <QQmlEngine>
 
 /**
  * @brief The cwLinkBarModel class
@@ -23,14 +24,16 @@
 class cwLinkBarModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LinkBarModel)
 
     Q_PROPERTY(QString address READ address WRITE setAddress NOTIFY addressChanged)
 
 public:
-    enum {
+    enum Role {
         FullPath,
         Name
     };
+    Q_ENUM(Role)
 
     cwLinkBarModel();
     ~cwLinkBarModel();

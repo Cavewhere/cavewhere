@@ -1,6 +1,4 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Controls 2.12 as QC
-import QtQuick.Layouts 1.12
+import QtQuick.Layouts
 
 ColumnLayout {
     id: rootId
@@ -19,6 +17,6 @@ ColumnLayout {
         id: checkboxId
         leftSpace: 16
         text: rootId.text
-        checkboxEnabled: supported
+        checkboxEnabled: rootId.supported
     }
 }

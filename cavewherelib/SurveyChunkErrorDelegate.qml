@@ -37,9 +37,9 @@ QQ.Rectangle {
         Text {
             id: textId
             text: {
-                if(chunk !== null) {
-                    if(chunk.errorModel.errors.count > 0) {
-                        return chunk.errorModel.errors.getFirst().message
+                if(delegateId.chunk !== null) {
+                    if(delegateId.chunk.errorModel.errors.count > 0) {
+                        return delegateId.chunk.errorModel.errors.first().message
                     }
                 }
                 return ""

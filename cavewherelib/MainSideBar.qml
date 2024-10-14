@@ -27,7 +27,7 @@ QQ.Rectangle {
       pageType should be either "View" or "Data"
       */
     function findPage(pageType) {
-        var history = rootData.pageSelectionModel.history;
+        var history = RootData.pageSelectionModel.history;
         for(var i = history.length - 1; i >= 0; i--) {
             var page = history[i];
             if(page) {
@@ -56,26 +56,26 @@ QQ.Rectangle {
             console.log("Don't know how to show page:" + pageShown);
         }
 
-        rootData.pageSelectionModel.currentPageAddress = page;
+        RootData.pageSelectionModel.currentPageAddress = page;
     }
 
     QQ.Connections {
-        target: rootData.pageSelectionModel
+        target: RootData.pageSelectionModel
 
-        onCurrentPageAddressChanged: {
-            gotoToPage = false;
-            var address = rootData.pageSelectionModel.currentPageAddress;
+        function onCurrentPageAddressChanged() {
+            sidebarArea.gotoToPage = false;
+            var address = RootData.pageSelectionModel.currentPageAddress;
 
-            if(address.search(viewPage) == 0) {
-                pageShown = 0;
-            } else if(address.search(dataPage) == 0) {
-                pageShown = 1
+            if(address.search(sidebarArea.viewPage) == 0) {
+                sidebarArea.pageShown = 0;
+            } else if(address.search(sidebarArea.dataPage) == 0) {
+                sidebarArea.pageShown = 1
             } else {
                 //Deselect both, probably in unknown page or settings page
-                pageShown = -1;
+                sidebarArea.pageShown = -1;
             }
 
-            gotoToPage = true
+            sidebarArea.gotoToPage = true
         }
     }
 
@@ -145,7 +145,7 @@ QQ.Rectangle {
 
         TaskFutureCombineModel {
             id: taskModelCombinerId
-            models: [rootData.taskManagerModel, rootData.futureManagerModel]
+            models: [RootData.taskManagerModel, RootData.futureManagerModel]
         }
 
         FutureFilterModel {
@@ -157,6 +157,11 @@ QQ.Rectangle {
         verticalLayoutDirection: QQ.ListView.BottomToTop
 
         delegate: QQ.Rectangle {
+            id: delegateId
+            required property string nameRole
+            required property int progressRole
+            required property int numberOfStepsRole
+
             anchors.left: parent.left
             anchors.right: parent.right
 
@@ -173,15 +178,15 @@ QQ.Rectangle {
 
                 Text {
                     id: nameText
-                    text: nameRole
+                    text: delegateId.nameRole
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                 }
 
                 QC.ProgressBar {
                     Layout.maximumWidth: columnLayoutId.width
-                    value: !indeterminate ? progressRole / numberOfStepsRole : 0.0
-                    indeterminate: numberOfStepsRole <= 0
+                    value: !indeterminate ? delegateId.progressRole / delegateId.numberOfStepsRole : 0.0
+                    indeterminate: delegateId.numberOfStepsRole <= 0
                 }
             }
         }
@@ -210,9 +215,9 @@ QQ.Rectangle {
 
             QC.CheckBox {
                 id: autoCheckboxId
-                checked: rootData.settings.jobSettings.automaticUpdate
+                checked: RootData.settings.jobSettings.automaticUpdate
                 onCheckedChanged: {
-                    rootData.settings.jobSettings.automaticUpdate = checked
+                    RootData.settings.jobSettings.automaticUpdate = checked
                 }
                 Layout.alignment: Qt.AlignHCenter
             }

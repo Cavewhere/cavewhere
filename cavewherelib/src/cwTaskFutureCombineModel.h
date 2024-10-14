@@ -3,10 +3,12 @@
 
 //Qt includes
 #include <QConcatenateTablesProxyModel>
+#include <QQmlEngine>
 
 class cwTaskFutureCombineModel : public QConcatenateTablesProxyModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TaskFutureCombineModel)
     Q_PROPERTY(QList<QObject*> models READ models WRITE setModels NOTIFY modelsChanged)
 
 public:

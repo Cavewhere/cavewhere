@@ -17,10 +17,12 @@
 #include <QSharedDataPointer>
 #include <QSharedData>
 #include <QStringList>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwUnitValue : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(UnitValue)
 
     Q_PROPERTY(double value READ value WRITE setValue NOTIFY valueChanged)
     Q_PROPERTY(int unit READ unit WRITE setUnit NOTIFY unitChanged)

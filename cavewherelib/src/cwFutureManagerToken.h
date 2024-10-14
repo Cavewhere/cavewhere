@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 class cwFutureManagerModel;
@@ -13,6 +14,9 @@ class cwFutureManagerModel;
 //in a thread safe way.
 class CAVEWHERE_LIB_EXPORT cwFutureManagerToken
 {
+    Q_GADGET
+    QML_NAMED_ELEMENT(futureManagerToken)
+
 public:
     cwFutureManagerToken(cwFutureManagerModel* model = nullptr);
 
@@ -32,6 +36,6 @@ inline bool cwFutureManagerToken::operator!=(const cwFutureManagerToken &token) 
     return !operator==(token);
 }
 
-Q_DECLARE_METATYPE(cwFutureManagerToken);
+// Q_DECLARE_METATYPE(cwFutureManagerToken);
 
 #endif // CWFUTUREMANAGERTOKEN_H

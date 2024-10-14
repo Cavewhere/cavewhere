@@ -48,8 +48,8 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
-            width: sourceSize.width
-            height: sourceSize.height
+            implicitWidth: sourceSize.width
+            implicitHeight: sourceSize.height
 
         }
 
@@ -90,8 +90,9 @@ QQ.Rectangle {
             name: "VISIBLE"
 
             QQ.PropertyChanges {
-                target: helpArea
-                implicitHeight: contentId.height + 10
+                helpArea {
+                    implicitHeight: contentId.height + 10
+                }
             }
         }
     ]
@@ -109,7 +110,7 @@ QQ.Rectangle {
                     property: "implicitHeight"
                     from: 0
                     to: contentId.height
-                    duration: animationToVisible ? 200 : 0
+                    duration: helpArea.animationToVisible ? 200 : 0
                 }
                 QQ.PropertyAction { target: privateData; property: "inTransition"; value: false }
             }
@@ -128,7 +129,7 @@ QQ.Rectangle {
                     target: helpArea
                     property: "implicitHeight"
                     to: 0
-                    duration: animationToInvisible ? 200 : 0
+                    duration: helpArea.animationToInvisible ? 200 : 0
                 }
 
                 QQ.PropertyAction { target: helpArea; property: "visible"; value: false }

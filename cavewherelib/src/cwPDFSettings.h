@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -10,6 +11,7 @@
 class CAVEWHERE_LIB_EXPORT cwPDFSettings : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(PDFSettings)
 
     Q_PROPERTY(bool isSupportImport READ isSupportImport CONSTANT)
     Q_PROPERTY(int resolutionImport READ resolutionImport WRITE setResolutionImport NOTIFY resolutionImportChanged)

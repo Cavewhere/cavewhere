@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QAbstractListModel>
 #include <QProcess>
+#include <QQmlEngine>
 
 /**
  * @brief The cwTestcaseManager class
@@ -22,18 +23,19 @@
 class cwTestcaseManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TestcaseManager)
 
     Q_PROPERTY(QString result READ result NOTIFY resultChanged)
     Q_PROPERTY(QString arguments READ arguments WRITE setArguments NOTIFY argumentsChanged)
     Q_PROPERTY(ProcessState processState READ processState NOTIFY processStateChanged)
 
-    Q_ENUMS(ProcessState)
 public:
     enum ProcessState {
         NotRunning = QProcess::NotRunning,
         Running = QProcess::Running,
         Starting = QProcess::Starting
     };
+    Q_ENUM(ProcessState)
 
     cwTestcaseManager();
 

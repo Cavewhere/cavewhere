@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 class cwOpenGLSettings;
@@ -13,6 +14,7 @@ class cwPDFSettings;
 class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Settings)
 
     Q_PROPERTY(cwOpenGLSettings* renderingSettings READ renderingSettings CONSTANT)
     Q_PROPERTY(cwJobSettings* jobSettings READ jobSettings CONSTANT)

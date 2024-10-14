@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -10,6 +11,7 @@
 class CAVEWHERE_LIB_EXPORT cwJobSettings : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(JobSettings)
 
     Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
     Q_PROPERTY(int idleThreadCount READ idleThreadCount CONSTANT)

@@ -9,6 +9,11 @@ QQ.ListView {
     anchors.fill: parent
 
     delegate: QQ.Rectangle {
+        id: delegateId
+        required property int type
+        required property int index
+        required property string message
+
         anchors.left: parent.left
         anchors.right: parent.right
         implicitHeight: rowLayoutId.height
@@ -25,7 +30,7 @@ QQ.ListView {
 
             QQ.Image {
                 source: {
-                    switch(type) {
+                    switch(delegateId.type) {
                     case CwError.Warning:
                         return "qrc:icons/warning.png"
                     case CwError.Fatal:
@@ -38,7 +43,7 @@ QQ.ListView {
 
             TextArea {
                 Layout.fillWidth: true
-                text: message
+                text: delegateId.message
                 readOnly: true
                 selectByMouse: true
                 wrapMode: QQ.TextEdit.WordWrap

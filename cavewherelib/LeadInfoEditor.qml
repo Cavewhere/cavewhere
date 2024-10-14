@@ -15,14 +15,14 @@ FloatingGroupBox {
 
         LeadListener {
             id: lead
-            scrap: leadView !== null ? leadView.scrap : null
-            index: leadView !== null ? leadView.selectedItemIndex : -1
+            scrap: groupBox.leadView !== null ? groupBox.leadView.scrap : null
+            index: groupBox.leadView !== null ? groupBox.leadView.selectedItemIndex : -1
         }
 
         SizeEditor {
             id: sizeEditor
-            onWidthFinishedEditting: lead.width = lead.toLeadDim(newText)
-            onHeightFinishedEditting: lead.height = lead.toLeadDim(newText)
+            onWidthFinishedEditting: (newText) => lead.width = lead.toLeadDim(newText)
+            onHeightFinishedEditting: (newText) => lead.height = lead.toLeadDim(newText)
             unit: lead.unit
             unitModel: lead.unitModel
             widthText: lead.width
@@ -39,7 +39,7 @@ FloatingGroupBox {
 
             QQ.Connections {
                 target: lead
-                onDescriptionChanged: {
+                function onDescriptionChanged() {
                     leadDescriptionArea.text = lead.description
                 }
             }

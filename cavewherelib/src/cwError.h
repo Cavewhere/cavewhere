@@ -12,6 +12,7 @@
 //Qt includes
 #include <QSharedDataPointer>
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 class cwErrorData;
@@ -32,6 +33,7 @@ class cwErrorData;
 class CAVEWHERE_LIB_EXPORT cwError
 {
     Q_GADGET
+    QML_VALUE_TYPE(cwError)
 
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
@@ -78,6 +80,20 @@ public:
 private:
     QSharedDataPointer<cwErrorData> data;
 };
+
+//For exposing enum to qml
+//See qt doc: https://doc.qt.io/qt-6/qtqml-cppintegration-definetypes.html#:~:text=Value%20types%20have%20lower%20case,to%20expose%20the%20enumeration%20separately.
+class cwErrorDerived : public cwError
+{
+    Q_GADGET
+};
+
+namespace cwErrorDerivedForeign {
+    Q_NAMESPACE
+    QML_NAMED_ELEMENT(CwError)
+    QML_FOREIGN_NAMESPACE(cwErrorDerived)
+}
+
 
 Q_DECLARE_METATYPE(cwError)
 

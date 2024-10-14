@@ -42,8 +42,9 @@ QQ.Image {
             when: mouseAreaPrevious.containsMouse
 
             QQ.PropertyChanges {
-                target: image
-                scale: 1.1
+                image {
+                    scale: 1.1
+                }
             }
         }
     ]

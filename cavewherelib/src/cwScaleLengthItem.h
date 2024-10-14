@@ -13,9 +13,13 @@
 #include "cwAbstract2PointItem.h"
 class cwSGLinesNode;
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwScaleLengthItem : public cwAbstract2PointItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScaleLengthItem)
 
 public:
     explicit cwScaleLengthItem(QQuickItem *parent = 0);

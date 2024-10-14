@@ -43,7 +43,7 @@ QQ.Item {
     }
 
     function remove(interaction) {
-        var indexToRemove = interactions.indexOf(iteraction);
+        var indexToRemove = interactions.indexOf(interaction);
         if(indexToRemove >= 0) {
             if(activeInteraction === interaction) {
                 activeDefaultInteraction();

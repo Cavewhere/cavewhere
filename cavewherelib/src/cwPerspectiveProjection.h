@@ -8,12 +8,16 @@
 #ifndef CWPERSPECTIVEPROJECTION_H
 #define CWPERSPECTIVEPROJECTION_H
 
+//Qt includes
+#include <QQmlEngine>
+
 //Our includes
 #include "cwAbstractProjection.h"
 
 class cwPerspectiveProjection : public cwAbstractProjection
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(PerspectiveProjection)
 
     Q_PROPERTY(double fieldOfView READ fieldOfView WRITE setFieldOfView NOTIFY fieldOfViewChanged)
 

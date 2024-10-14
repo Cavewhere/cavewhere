@@ -8,11 +8,17 @@
 #ifndef CWCLINOVALIDATOR_H
 #define CWCLINOVALIDATOR_H
 
+//Qt includes
+#include <QQmlEngine>
+
+//Our includes
 #include "cwValidator.h"
 
 class cwClinoValidator : public cwValidator
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ClinoValidator)
+
 public:
     explicit cwClinoValidator(QObject *parent = 0);
 

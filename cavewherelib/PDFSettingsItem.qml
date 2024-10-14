@@ -4,14 +4,15 @@ import QtQuick.Layouts 1.12
 import cavewherelib
 
 ColumnLayout {
-    property PDFSettings pdfSettings: rootData.settings.pdfSettings
+    id: itemId
+    property PDFSettings pdfSettings: RootData.settings.pdfSettings
 
     QC.GroupBox {
         title: "PDF Import Settings"
 
         ColumnLayout {
             SupportedLabel {
-                supported: pdfSetting.isSupportImport
+                supported: itemId.pdfSettings.isSupportImport
                 text: "Importing PDFs"
             }
 
@@ -26,13 +27,13 @@ ColumnLayout {
                 }
 
                 QC.SpinBox {
-                    enabled: pdfSetting.isSupportImport
+                    enabled: itemId.pdfSettings.isSupportImport
                     from: 72
                     to: 600
-                    value: pdfSettings.resolutionImport
+                    value: itemId.pdfSettings.resolutionImport
                     editable: true
                     onValueChanged: {
-                        pdfSettings.resolutionImport = value;
+                        itemId.pdfSettings.resolutionImport = value;
                     }
                 }
             }

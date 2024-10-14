@@ -11,6 +11,7 @@
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QQmlEngine>
 
 //Our includes
 class cwCaptureViewport;
@@ -19,13 +20,14 @@ class cwCaptureGroup;
 class cwCaptureGroupModel : public QAbstractItemModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CaptureGroupModel)
 
-    Q_ENUMS(Roles)
 public:
     enum Roles {
         CaptureObjectRole,
         CaptureNameRole
     };
+    Q_ENUM(Roles)
 
     explicit cwCaptureGroupModel(QObject *parent = 0);
 
@@ -48,6 +50,8 @@ private:
     QList<cwCaptureGroup*> Groups;
 
 };
+
+Q_DECLARE_OPAQUE_POINTER(cwCaptureViewport*)
 
 /**
  * @brief cwCaptureGroupModel::columnCount

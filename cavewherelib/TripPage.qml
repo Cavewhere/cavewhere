@@ -7,9 +7,7 @@
 
 import QtQuick 2.0 as QQ
 import cavewherelib
-import QtQuick.Controls as Controls
 import QtQuick.Layouts 1.1
-import "Utils.js" as Utils
 
 StandardPage {
     id: area
@@ -20,13 +18,13 @@ StandardPage {
 
     function registerSubPages() {
         var oldCarpetPage = PageView.page.childPage("Carpet")
-        if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+        if(oldCarpetPage !== RootData.pageSelectionModel.currentPage) {
             if(oldCarpetPage !== null) {
-                rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+                RootData.pageSelectionModel.unregisterPage(oldCarpetPage)
             }
 
             if(PageView.page.name !== "Carpet") {
-                var page = rootData.pageSelectionModel.registerSubPage(area.PageView.page,
+                var page = RootData.pageSelectionModel.registerSubPage(area.PageView.page,
                                                                        "Carpet",
                                                                        {"viewMode":"CARPET"});
             }
@@ -69,6 +67,10 @@ StandardPage {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         visible: true
+
+        onCollapseClicked: {
+            area.state = "COLLAPSE"
+        }
     }
 
     QQ.Rectangle {
@@ -102,7 +104,7 @@ StandardPage {
                 Text {
                     id: tripNameVerticalText
                     rotation: 270
-                    text: currentTrip.name
+                    text: area.currentTrip.name
                     x: -5
                     y: 10
                 }
@@ -113,26 +115,26 @@ StandardPage {
 
     NotesGallery {
         id: notesGallery
-        notesModel: currentTrip.notes
+        notesModel: area.currentTrip.notes
         anchors.left: surveyEditor.right
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         clip: true
 
-        onImagesAdded: {
-            currentTrip.notes.addFromFiles(images)
+        onImagesAdded: (images) => {
+            area.currentTrip.notes.addFromFiles(images)
         }
 
         onBackClicked: {
-            rootData.pageSelectionModel.back()
+            RootData.pageSelectionModel.back()
         }
 
         onModeChanged: {
             if(mode === "CARPET" && area.viewMode === "") {
                 var page = area.PageView.page
-                rootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
-                rootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
+                RootData.pageSelectionModel.gotoPageByName(area.PageView.page, "Carpet")
+                RootData.pageSelectionModel.currentPage.selectionProperties = page.selectionProperties
             }
         }
     }
@@ -148,8 +150,9 @@ StandardPage {
             name: "COLLAPSE"
 
             QQ.PropertyChanges {
-                target: collapseRectangleId
-                visible: true
+                collapseRectangleId {
+                    visible: true
+                }
             }
 
             QQ.AnchorChanges {
@@ -158,8 +161,9 @@ StandardPage {
             }
 
             QQ.PropertyChanges {
-                target: surveyEditor
-                visible: false
+                surveyEditor {
+                    visible: false
+                }
             }
         }
     ]

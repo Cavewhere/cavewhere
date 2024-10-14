@@ -8,7 +8,6 @@
 import cavewherelib
 import QtQml 2.2
 import QtQuick as QQ
-import QtQuick.Controls as Controls;
 import QtQuick.Layouts 1.1
 
 StandardPage {
@@ -35,7 +34,7 @@ StandardPage {
 
             ExportImportButtons {
                 id: exportButton
-                currentRegion: rootData.region
+                currentRegion: RootData.region
                 importVisible: true
                 page: pageId.PageView.page
             }
@@ -48,20 +47,20 @@ StandardPage {
                 Layout.fillWidth: true
                 addButtonText: "Add Cave"
                 onAdd: {
-                    region.addCave();
+                    RootData.region.addCave();
 
-                    var lastIndex = rootData.region.rowCount() - 1;
-                    var lastModelIndex = rootData.region.index(lastIndex);
-                    var lastCave = rootData.region.data(lastModelIndex, Cave.TripObjectRole);
+                    var lastIndex = RootData.region.rowCount() - 1;
+                    var lastModelIndex = RootData.region.index(lastIndex);
+                    var lastCave = RootData.region.data(lastModelIndex, Cave.TripObjectRole);
 
-                    rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                               cavePageName(lastCave));
+                    RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                               pageId.cavePageName(lastCave));
                 }
             }
 
             QQ.TableView {
                 id: tableViewId
-                model: rootData.region
+                model: RootData.region
 
                 Layout.fillHeight: true
                 implicitWidth: 450
@@ -97,7 +96,7 @@ StandardPage {
             //                     visible: styleData.column === 0
             //                     text: styleData.value.name
             //                     onClicked: {
-            //                         rootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+            //                         RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
             //                                                                    cavePageName(styleData.value));
             //                     }
             //                 }
@@ -142,36 +141,42 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            rootData.region.removeCave(indexToRemove);
+            RootData.region.removeCave(indexToRemove);
         }
     }
 
     Instantiator {
-        model: rootData.region
-        delegate: QQ.QtObject {
-            id: delegateObjectId
-            property Cave cave: caveObjectRole
-            property Page page
+        model: RootData.region
+        component PageDelegate : QQ.QtObject {
+                id: delegateObjectId
+                property Cave caveObjectRole
+                property Cave cave: caveObjectRole
+                property Page page
         }
+
+        delegate: PageDelegate {}
+
 
         onObjectAdded: {
             //In-ables the link
-            var linkId = rootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
-                                                                  cavePageName(object.cave), //Name
+            let delegate = object as PageDelegate
+            var linkId = RootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
+                                                                  pageId.cavePageName(delegate.cave), //Name
                                                                   caveOverviewPageComponent,
-                                                                  {currentCave:object.cave}
+                                                                  {currentCave:delegate.cave}
                                                                   )
 
-            object.page = linkId
-            object.page.setNamingFunction(object.cave,
+            delegate.page = linkId
+            delegate.page.setNamingFunction(delegate.cave,
                                           "nameChanged()",
                                           pageId,
                                           "cavePageName",
-                                          object.cave)
+                                          delegate.cave)
         }
 
         onObjectRemoved: {
-            rootData.pageSelectionModel.unregisterPage(object.page);
+            let delegate = object as PageDelegate
+            RootData.pageSelectionModel.unregisterPage(delegate.page);
         }
     }
 

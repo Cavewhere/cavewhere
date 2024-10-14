@@ -10,10 +10,13 @@
 
 //Qt includes
 #include <QVariantAnimation>
+#include <QQmlEngine>
 
 class cwMatrix4x4Animation : public QVariantAnimation
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Matrix4x4Animation)
+
 public:
     explicit cwMatrix4x4Animation(QObject *parent = 0);
     

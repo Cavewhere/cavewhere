@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QSize>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwImage.h"
@@ -18,6 +19,7 @@
 class cwImageProperties : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ImageProperties)
 
     Q_PROPERTY(QSize size READ size NOTIFY sizeChanged)
     Q_PROPERTY(int dotsPerMeter READ dotsPerMeter NOTIFY dotsPerMeterChanged)

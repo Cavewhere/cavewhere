@@ -15,9 +15,13 @@
 #include "cwScrapOutlinePointView.h"
 class cwNoteTranformation;
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwBaseScrapInteraction : public cwNoteInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(BaseScrapInteraction)
 
     Q_PROPERTY(cwImageItem* imageItem READ imageItem WRITE setImageItem NOTIFY imageItemChanged)
     Q_PROPERTY(cwScrapOutlinePointView* outlinePointView READ outlinePointView WRITE setOutlinePointView NOTIFY outlinePointViewChanged)

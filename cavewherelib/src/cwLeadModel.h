@@ -12,6 +12,7 @@
 //Qt includse
 #include <QAbstractListModel>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 class cwRegionTreeModel;
@@ -28,12 +29,12 @@ class cwCave;
 class cwLeadModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LeadModel)
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionTreeModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(QString referanceStation READ referanceStation WRITE setReferanceStation NOTIFY referanceStationChanged)
 
-    Q_ENUMS(Roles)
 public:
     enum Roles {
         LeadPositionOnNote = cwScrap::LeadPositionOnNote,
@@ -50,6 +51,7 @@ public:
         LeadDistanceToReferanceStation,
         LeadTrip
     };
+    Q_ENUM(Roles)
 
     explicit cwLeadModel(QObject *parent = 0);
     ~cwLeadModel();

@@ -1,8 +1,8 @@
 pragma Singleton;
-import QtQuick 2.0
+import QtQuick
 
 Item {
-    readonly property var lengthModel: ["m", "km", "ft", "mi"]
-    readonly property var depthModel: ["m", "ft"]
+    readonly property list<string> lengthModel: ["m", "km", "ft", "mi"]
+    readonly property list<string> depthModel: ["m", "ft"]
 
 }

@@ -16,7 +16,7 @@ QQ.Item {
     QQ.Image {
         anchors.right: scrollViewId.right
         anchors.bottom: scrollViewId.bottom
-        sourceSize: resizeHandleSize
+        sourceSize: rootItem.resizeHandleSize
         source: "qrc:///icons/svg/resizeCorner.svg"
 
         QQ.MouseArea {
@@ -27,11 +27,11 @@ QQ.Item {
             cursorShape: Qt.SizeFDiagCursor
             preventStealing: true
 
-            onPressed: {
+            onPressed: function(mouse) {
                 firstPoint = Qt.point(mouse.x, mouse.y);
             }
 
-            onPositionChanged: {
+            onPositionChanged: function(mouse) {
                 var currentPoint = Qt.point(mouse.x, mouse.y);
                 var delta = firstPoint - currentPoint;
                 firstPoint = currentPoint;

@@ -7,6 +7,7 @@ QQ.DropArea {
     property QQ.Item delegate
     property var model
     property int indexOffset: 0
+    required property int index
     property int insertIndex: index
 
     property var moveFunction: function(model, oldModel, index, indexOffset, oldIndex) {
@@ -15,9 +16,9 @@ QQ.DropArea {
 
     enabled: dragArea == null || !dragArea.drag.active
 
-    onEntered: {
+    onEntered: (drag) => {
         if(delegate) {
-            delegate.dropWidth = drag.source.dragWidth
+            delegate.dropWidth = (drag.source as ColumnNameDelegate).dragWidth
         }
     }
 
@@ -27,9 +28,10 @@ QQ.DropArea {
         }
     }
 
-    onDropped: {
-        var oldModel = dropAreaId.drag.source.model
-        var oldIndex = dropAreaId.drag.source.currentIndex
+    onDropped: (drop) => {
+        let srcDelegate = (drop.source) as ColumnNameDelegate
+        var oldModel = srcDelegate.model
+        var oldIndex = srcDelegate.currentIndex
 
         drop.accepted = true
 

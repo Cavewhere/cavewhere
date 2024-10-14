@@ -9,8 +9,8 @@ import QtQuick 2.0 as QQ
 
 QQ.Item {
     id: splitter
-//    anchors.bottom: parent.bottom
-//    anchors.top: parent.top
+    //    anchors.bottom: parent.bottom
+    //    anchors.top: parent.top
     //anchors.left: dataSideBar.right
     anchors.leftMargin: -width / 2
 
@@ -34,23 +34,24 @@ QQ.Item {
             QQ.State {
                 when: splitterMouseArea.pressed
                 QQ.PropertyChanges {
-                    target: splitterMouseArea
+                    splitterMouseArea {
 
-                    onPositionChanged: {
-                        //Change the databar width
-                        var mappedX = mapToItem(null, mouseX, 0).x;
+                        onPositionChanged: {
+                            //Change the databar width
+                            var mappedX = mapToItem(null, mouseX, 0).x;
 
-                        switch(expandDirection) {
-                        case "left":
-                            splitter.resizeObject.width -=  mappedX - lastMousePosition
-                            break;
-                        case "right":
-                            splitter.resizeObject.width +=  mappedX - lastMousePosition
-                            break;
+                            switch(expandDirection) {
+                                case "left":
+                                splitter.resizeObject.width -=  mappedX - lastMousePosition
+                                break;
+                                case "right":
+                                splitter.resizeObject.width +=  mappedX - lastMousePosition
+                                break;
+                            }
+
+
+                            lastMousePosition = mappedX
                         }
-
-
-                        lastMousePosition = mappedX
                     }
                 }
             }

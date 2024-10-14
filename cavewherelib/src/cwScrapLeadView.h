@@ -16,10 +16,12 @@
 
 //Qt includes
 #include <QQuickItem>
+#include <QQmlEngine>
 
 class cwScrapLeadView : public cwScrapPointView
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapLeadView)
 
 public:
     cwScrapLeadView(QQuickItem* parent = 0);

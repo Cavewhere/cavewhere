@@ -22,10 +22,12 @@ class cwScrap;
 #include <QOpenGLShaderProgram>
 #include <QOpenGLBuffer>
 #include <QSharedPointer>
+#include <QQmlEngine>
 
 class cwGLScraps : public cwGLObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(GLScraps)
 
     Q_PROPERTY(cwProject* project READ project WRITE setProject NOTIFY projectChanged)
     Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)

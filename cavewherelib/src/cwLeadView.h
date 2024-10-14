@@ -12,6 +12,7 @@
 //Qt includes
 #include <QPointer>
 #include <QModelIndex>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwAbstractPointManager.h"
@@ -31,6 +32,7 @@ class cwCamera;
 class cwLeadView : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LeadView)
 
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)

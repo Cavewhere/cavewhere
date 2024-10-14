@@ -2,6 +2,8 @@ import QtQuick 2.0 as QQ
 import cavewherelib
 
 ScrapPointItem {
+    id: scrapPointId
+
     width: 2
     height: 2
 
@@ -10,7 +12,7 @@ ScrapPointItem {
 
         anchors.fill: questionImage
 
-        visible: selected && scrapItem.selected
+        visible: scrapPointId.selected && scrapPointId.scrapItem.selected
     }
 
     QQ.Image {
@@ -22,10 +24,11 @@ ScrapPointItem {
             id: stationMouseArea
             anchors.fill: parent
 
-            onPointSelected: select();
-            onPointMoved: scrap.setLeadData(Scrap.LeadPositionOnNote,
-                                            pointIndex,
-                                            Qt.point(noteCoord.x, noteCoord.y));
+            onPointSelected: scrapPointId.select();
+            onPointMoved: (noteCoord) =>
+                          scrapPointId.scrap.setLeadData(Scrap.LeadPositionOnNote,
+                                                         scrapPointId.pointIndex,
+                                                         Qt.point(noteCoord.x, noteCoord.y));
         }
     }
 
@@ -33,7 +36,7 @@ ScrapPointItem {
         scrap.removeLead(pointIndex);
     }
 
-    QQ.Keys.onPressed: {
+    QQ.Keys.onPressed: (event) => {
         if(event.key === Qt.Key_Backspace) {
             scrap.removeLead(pointIndex);
         }

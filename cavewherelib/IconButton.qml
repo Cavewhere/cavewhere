@@ -67,8 +67,8 @@ QQ.Rectangle {
     states: [
         QQ.State {
             name: "hover"; when: mouseArea.containsMouse && iconHover.status == QQ.Image.Ready
-            QQ.PropertyChanges { target: iconHover; visible: true }
-            QQ.PropertyChanges { target: iconNormal; visible: false }
+            QQ.PropertyChanges { iconHover { visible: true } }
+            QQ.PropertyChanges { iconNormal { visible: false } }
             //            QQ.PropertyChanges { target: buttonText; font.bold: true }
         }
 

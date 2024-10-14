@@ -1,13 +1,16 @@
-import QtQuick 2.0 as QQ
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
 import QtQuick.Controls
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 
 
 QQ.Item {
+    id: itemId
 
     property TextArea textArea
     property alias category: sectionLabel.text
-    property var keywords //A string list
+    property list<string> keywords //A string list
 
     implicitWidth: 150
     implicitHeight: backgroundRectangle.height
@@ -38,20 +41,22 @@ QQ.Item {
                 Layout.fillWidth: true
 
                 QQ.Repeater {
-                    model: keywords
+                    model: itemId.keywords
 
                     delegate:
                         CWButton {
+                        required property string modelData
+
                         text: modelData
 
                         onClicked: {
                             var space = "";
-                            if(textArea.text.length !== 0 &&
-                                    textArea.text[textArea.text.length - 1] !== " ")
+                            if(itemId.textArea.text.length !== 0 &&
+                                    itemId.textArea.text[itemId.textArea.text.length - 1] !== " ")
                             {
                                 space = " ";
                             }
-                            textArea.text = textArea.text + space + modelData
+                            itemId.textArea.text = itemId.textArea.text + space + modelData
                         }
                     }
                 }

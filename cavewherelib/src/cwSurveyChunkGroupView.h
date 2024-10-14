@@ -12,6 +12,7 @@
 #include <QQuickItem>
 #include <QSignalMapper>
 #include <QPointer>
+#include <QQmlEngine>
 class QModelIndex;
 
 //Our includes
@@ -24,6 +25,7 @@ class cwSurveyChunkTrimmer;
 class cwSurveyChunkGroupView : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyChunkGroupView)
 
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
     Q_PROPERTY(float contentHeight READ contentHeight NOTIFY contentHeightChanged )

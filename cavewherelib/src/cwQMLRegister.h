@@ -14,6 +14,7 @@
 
 //Qt includes
 #include <QList>
+#include <QGraphicsScene>
 
 class CAVEWHERE_LIB_EXPORT cwQMLRegister
 {
@@ -29,6 +30,13 @@ class CaveListRegistration
     QML_FOREIGN(QList<cwCave*>)
     QML_ANONYMOUS
     // QML_SEQUENTIAL_CONTAINER(cwCave*)
+};
+
+class cwGraphicsScene : public QGraphicsScene {
+    Q_OBJECT
+    QML_NAMED_ELEMENT(QGraphicsScene)
+    QML_FOREIGN(QGraphicsScene)
+    QML_ANONYMOUS
 };
 
 #endif // CWQMLREGISTER_H

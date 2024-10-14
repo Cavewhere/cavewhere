@@ -1,5 +1,5 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Layouts 1.1
+import QtQuick as QQ
+import QtQuick.Layouts
 import cavewherelib
 import "Utils.js" as Utils
 
@@ -23,24 +23,24 @@ RowLayout {
 
     property double scaleValue
 
-    QQ.Row {
+    RowLayout {
         id: rowId
         spacing: 3
-        anchors.verticalCenter: parent.verticalCenter
+        Layout.alignment: Qt.AlignHCenter
 
         LabelWithHelp {
             id: scaleLabelId
             text: "Scale"
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
         }
 
         QQ.Rectangle {
 
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             radius: 5
 
-            width: childrenRect.width + columnOnPaper.x * 2.0
-            height: childrenRect.height
+            implicitWidth: childrenRect.width + columnOnPaper.x * 2.0
+            implicitHeight: childrenRect.height
 
             QQ.Column {
                 id: columnOnPaper
@@ -64,17 +64,16 @@ RowLayout {
         }
 
         Text {
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             text: "="
         }
 
         QQ.Rectangle {
-
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             radius: 5
 
-            width: childrenRect.width + columnInCave.x * 2.0
-            height: childrenRect.height
+            implicitWidth: childrenRect.width + columnInCave.x * 2.0
+            implicitHeight: childrenRect.height
 
             QQ.Column {
                 id: columnInCave
@@ -100,26 +99,24 @@ RowLayout {
 
 
     Text {
-        anchors.verticalCenter: parent.verticalCenter
+        Layout.alignment: Qt.AlignVCenter
         text: "="
     }
 
     Text {
         id: scaleText
-        anchors.verticalCenter: parent.verticalCenter
+        Layout.alignment: Qt.AlignVCenter
         visible: !errorText.visible
-        text: "1:" + Utils.fixed(1 / scaleValue, 1)
+        text: "1:" + Utils.fixed(1 / itemId.scaleValue, 1)
     }
 
     Text {
         id: errorText
         color: "red"
-        anchors.verticalCenter: parent.verticalCenter
+        Layout.alignment: Qt.AlignVCenter
         visible: false
         text: "Weird scaling units"
         font.italic: true
         font.bold: true
     }
-
-
 }

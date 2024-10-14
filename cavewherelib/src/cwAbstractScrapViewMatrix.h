@@ -8,10 +8,13 @@
 //Qt includes
 #include <QObject>
 #include <QMatrix4x4>
+#include <QQmlEngine>
 
 class CAVEWHERE_LIB_EXPORT cwAbstractScrapViewMatrix : public QObject {
 
     Q_OBJECT
+    QML_NAMED_ELEMENT(AbstractScrapViewMatrix)
+    QML_UNCREATABLE("Abstract class")
 
     Q_PROPERTY(QMatrix4x4 matrix READ matrix NOTIFY matrixChanged)
     Q_PROPERTY(cwScrap::ScrapType type READ type CONSTANT)

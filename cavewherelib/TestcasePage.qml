@@ -1,9 +1,9 @@
-import QtQuick 2.0 as QQ
 import QtQuick.Controls
 import QtQuick.Layouts 1.1
 import cavewherelib
 
 StandardPage {
+    id: testcasePageId
 
     function runTestcases() {
         testcases.run();
@@ -13,7 +13,7 @@ StandardPage {
     TestcaseManager {
         id: testcases
 
-        onLineAdded: {
+        onLineAdded: (newLine) => {
             textArea.append(newLine);
         }
 
@@ -53,7 +53,7 @@ StandardPage {
                     testcases.arguments = text;
                 }
                 onAccepted: {
-                    runTestcases()
+                    testcasePageId.runTestcases()
                 }
             }
 
@@ -88,7 +88,7 @@ StandardPage {
                 onClicked: {
                     switch(testcases.processState) {
                     case TestcaseManager.NotRunning:
-                        runTestcases()
+                        testcasePageId.runTestcases()
                         break;
                     case TestcaseManager.Starting:
                         break

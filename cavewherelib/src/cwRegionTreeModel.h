@@ -21,6 +21,7 @@ class cwScrap;
 #include <QtGlobal>
 #include <QDebug>
 #include <QPointer>
+#include <QQmlEngine>
 
 #define INVOKE_MEMBER(object,ptrToMember)  ((*object).*(ptrToMember))
 
@@ -33,14 +34,14 @@ class cwScrap;
 class CAVEWHERE_LIB_EXPORT cwRegionTreeModel : public QAbstractItemModel
 {
     Q_OBJECT
-    Q_ENUMS(ItemType)
-    Q_ENUMS(RoleItem)
+    QML_NAMED_ELEMENT(RegionTreeModel)
 
 public:
     enum RoleItem {
         TypeRole, //Returns an ItemType
         ObjectRole, //For exctracting the object
     };
+    Q_ENUM(RoleItem)
 
     enum ItemType {
         RegionType,
@@ -49,6 +50,7 @@ public:
         NoteType,
         ScrapType
     };
+    Q_ENUM(ItemType)
 
     explicit cwRegionTreeModel(QObject *parent = 0);
 

@@ -14,10 +14,12 @@
 #include <QSizeF>
 #include <QPointF>
 #include <QRectF>
+#include <QQmlEngine>
 
 class cwCaptureItem : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CaptureItem)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QSizeF paperSizeOfItem READ paperSizeOfItem NOTIFY paperSizeOfItemChanged)
@@ -48,8 +50,6 @@ signals:
     void rotationChanged();
     void boundingBoxChanged();
 
-public slots:
-
 private:
     QString Name; //!<
     QSizeF PaperSizeOfItem; //!<
@@ -58,8 +58,8 @@ private:
     QRectF BoundingBox; //!<
 
 protected:
-    void setPaperSizeOfItem(QSizeF paperSize);
     void setBoundingBox(QRectF boundingbox);
+    void setPaperSizeOfItem(QSizeF paperSize);
     void emitPositionOnPaper();
 
 };

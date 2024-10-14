@@ -8,9 +8,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQml 2.2
-import QtQuick.Controls as Controls;
 import QtQuick.Layouts 1.1
-import "Utils.js" as Utils
 
 StandardPage {
     id: cavePageArea
@@ -24,13 +22,13 @@ StandardPage {
     function registerSubPages() {
         if(currentCave) {
             var oldCarpetPage = PageView.page.childPage("Leads")
-            if(oldCarpetPage !== rootData.pageSelectionModel.currentPage) {
+            if(oldCarpetPage !== RootData.pageSelectionModel.currentPage) {
                 if(oldCarpetPage !== null) {
-                    rootData.pageSelectionModel.unregisterPage(oldCarpetPage)
+                    RootData.pageSelectionModel.unregisterPage(oldCarpetPage)
                 }
 
                 if(PageView.page.name !== "Leads") {
-                    var page = rootData.pageSelectionModel.registerPage(PageView.page,
+                    var page = RootData.pageSelectionModel.registerPage(PageView.page,
                                                                         "Leads",
                                                                         caveLeadsPage,
                                                                         {"cave":currentCave});
@@ -63,12 +61,12 @@ StandardPage {
 
             DoubleClickTextInput {
                 id: caveNameText
-                text: currentCave.name
+                text: cavePageArea.currentCave.name
                 font.bold: true
                 font.pixelSize: 20
 
-                onFinishedEditting: {
-                    currentCave.name = newText
+                onFinishedEditting: (newText) => {
+                    cavePageArea.currentCave.name = newText
                 }
             }
 
@@ -94,7 +92,7 @@ StandardPage {
 
             ExportImportButtons {
                 id: exportButton
-                currentRegion: rootData.region
+                currentRegion: RootData.region
                 currentCave: cavePageArea.currentCave
             }
 
@@ -102,7 +100,7 @@ StandardPage {
                 text: "Leads"
                 iconSource: "qrc:icons/question.png"
                 onClicked: {
-                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                    RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
                 }
             }
 
@@ -121,7 +119,7 @@ StandardPage {
 //                QQ.MouseArea {
 //                    anchors.fill: parent
 //                    onClicked:  {
-//            rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+//            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
 //                    }
 //                }
 //            }
@@ -133,20 +131,20 @@ StandardPage {
                 Layout.fillWidth: true
                 addButtonText: "Add Trip"
                 onAdd: {
-                    currentCave.addTrip()
+                    cavePageArea.currentCave.addTrip()
 
-                    var lastIndex = currentCave.rowCount() - 1;
-                    var lastModelIndex = currentCave.index(lastIndex);
-                    var lastTrip = currentCave.data(lastModelIndex, Cave.TripObjectRole);
+                    var lastIndex = cavePageArea.currentCave.rowCount() - 1;
+                    var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
+                    var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
 
-                    rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                               tripPageName(lastTrip));
+                    RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                                                               cavePageArea.tripPageName(lastTrip));
                 }
             }
 
             QQ.TableView {
                 id: tableViewId
-                model: currentCave
+                model: cavePageArea.currentCave
 
                 implicitWidth: 600
 
@@ -204,7 +202,7 @@ StandardPage {
                 //                 elide: Text.ElideRight
 
                 //                 onClicked: {
-                //                     rootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
+                //                     RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
                 //                                                                tripPageName(styleData.value));
                 //                 }
                 //             }
@@ -270,36 +268,41 @@ StandardPage {
     RemoveAskBox {
         id: removeChallengeId
         onRemove: {
-            currentCave.removeTrip(indexToRemove)
+            cavePageArea.currentCave.removeTrip(indexToRemove)
         }
     }
 
     Instantiator {
         id: instantiatorId
 
-        delegate: QQ.QtObject {
+        component Delegate: QQ.QtObject {
             id: delegateObjectId
-            property Trip trip: tripObjectRole
+            property Trip tripObjectRole
+            property alias trip: delegateObjectId.tripObjectRole
             property Page page
         }
 
-        onObjectAdded: {
+        delegate: Delegate {
+        }
+
+        onObjectAdded: (index, object) => {
             //In-ables the link
-            var page = rootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
-                                                                tripPageName(object.trip), //Name
+            let trip = (object as Delegate).trip
+            var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
+                                                                cavePageArea.tripPageName(trip), //Name
                                                                 tripPageComponent, //component
-                                                                {"currentTrip":object.trip}
+                                                                {"currentTrip":trip}
                                                                 )
             object.page = page;
-            page.setNamingFunction(object.trip, //The trip that's signaling
+            page.setNamingFunction(trip, //The trip that's signaling
                                    "nameChanged()", //Signal
                                    cavePageArea, //The object that has renaming function
                                    "tripPageName", //The function that will generate the name
-                                   object.trip) //The paramaters to tripPageName() function
+                                   trip) //The paramaters to tripPageName() function
         }
 
-        onObjectRemoved: {
-            rootData.pageSelectionModel.unregisterPage(object.page);
+        onObjectRemoved: (index, object) => {
+            RootData.pageSelectionModel.unregisterPage((object as Delegate).page);
         }
     }
 

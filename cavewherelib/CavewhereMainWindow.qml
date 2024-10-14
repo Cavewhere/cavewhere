@@ -5,12 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Controls
-import QtQuick.Window 2.0
+import QtQuick.Window
 import QtQuick.Dialogs
 import cavewherelib;
-import Qt.labs.settings 1.1
 
 ApplicationWindow {
     id: applicationWindowId
@@ -21,8 +20,8 @@ ApplicationWindow {
     height: 576
 
     title: {
-        var baseName = "CaveWhere - " + version
-        var filename = rootData.project.isTemporaryProject ? "New File" : rootData.project.filename;
+        var baseName = "CaveWhere - " + RootData.version
+        var filename = RootData.project.isTemporaryProject ? "New File" : RootData.project.filename;
         return baseName + "   " + filename
     }
 
@@ -94,38 +93,39 @@ ApplicationWindow {
 
     ErrorDialog {
         id: projectErrorDialog
-        model: rootData.project.errorModel
+        model: RootData.project.errorModel
     }
 
     FileDialog {
         id: loadFileDialogId
         nameFilters: ["CaveWhere File (*.cw)"]
-        currentFolder: rootData.lastDirectory
+        currentFolder: RootData.lastDirectory
         onAccepted: {
-            rootData.lastDirectory = fileUrl
-            rootData.pageSelectionModel.clearHistory();
-            rootData.pageSelectionModel.gotoPageByName(null, "View")
-            rootData.project.loadFile(fileUrl)
+            RootData.lastDirectory = selectedFile
+            RootData.pageSelectionModel.clearHistory();
+            RootData.pageSelectionModel.gotoPageByName(null, "View")
+            RootData.project.loadFile(selectedFile)
         }
     }
 
     //There's only one shadow input text editor for the cavewhere program
     //This make the input creation much faster for any thing that needs an editor
     //Only one editor can be open at a time
-    GlobalShadowTextInput {
-        id: globalShadowTextInput
-    }
+    // GlobalShadowTextInput {
+    //     id: globalShadowTextInput
+    // }
 
     //All the dialogs in cavewhere are parented under this item. This prevents
     //mouse clicks outside of the dialog
-    GlobalDialogHandler {
-        id: globalDialogHandler
-    }
+    // GlobalDialogHandler {
+    //     id: globalDialogHandler
+    // }
 
-    QQ.Item {
-        id: rootPopupItem
-        anchors.fill: parent
-    }
+    //Use RootPopupItem instead. A signleton
+    // QQ.Item {
+    //     id: rootPopupItem
+    //     anchors.fill: parent
+    // }
 
     AskToSaveDialog {
         id: askToSaveDialogId
@@ -152,6 +152,7 @@ ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
+        GlobalShadowTextInput.parent = applicationWindowId;
     }
 }
 

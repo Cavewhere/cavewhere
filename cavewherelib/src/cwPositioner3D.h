@@ -11,6 +11,7 @@
 //Qt includes
 #include <QQuickItem>
 #include <QVector3D>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGlobals.h"
@@ -18,6 +19,7 @@
 class CAVEWHERE_LIB_EXPORT cwPositioner3D : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Positioner3D)
 
     Q_PROPERTY(QVector3D position3D READ position3D WRITE setPosition3D NOTIFY position3DChanged)
 

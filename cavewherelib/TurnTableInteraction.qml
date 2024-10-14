@@ -33,10 +33,10 @@ BaseTurnTableInteraction {
         onTouchUpdated: {
             if(touchPoints.length === 1) {
                 if(touchState == "") {
-                    startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                    interactionId.startPanning(Qt.point(touchPoints[0].x, touchPoints[0].y))
                     touchState = "pan"
                 } else if(touchState == "pan") {
-                    pan(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                    interactionId.pan(Qt.point(touchPoints[0].x, touchPoints[0].y))
                 }
             } else if(touchPoints.length === 2) {
                 if(touchState == "pan") {
@@ -58,16 +58,16 @@ BaseTurnTableInteraction {
 
                     if(length(xDiff, yDiff) > startDrag) {
                         if(touchState == "") {
-                            startRotating(Qt.point(touchPoints[0].startX, touchPoints[0].startY));
+                            interactionId.startRotating(Qt.point(touchPoints[0].startX, touchPoints[0].startY));
                             touchState = "rotate"
                         }
                     }
 
                     if (touchState == "rotate"){
-                        rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                        interactionId.rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
                     }
                 } else if(touchState == "rotate") {
-                    rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
+                    interactionId.rotate(Qt.point(touchPoints[0].x, touchPoints[0].y))
                 } else if(touchState == "" || touchState == "zoom") {
                     //Zoom
                     touchState = "zoom"
@@ -93,7 +93,7 @@ BaseTurnTableInteraction {
                         centerPoint = Qt.point(touchPoints[0].startX, touchPoints[0].startY);
                     }
 
-                    zoom(centerPoint, delta)
+                    interactionId.zoom(centerPoint, delta)
                 }
             }
         }
@@ -104,19 +104,19 @@ BaseTurnTableInteraction {
             anchors.fill: parent;
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             hoverEnabled: true
-            onPressed: {
+            onPressed: function(mouse) {
                 if(mouse.button == Qt.LeftButton) {
                     state = "panState"
-                    startPanning(Qt.point(mouse.x, mouse.y));
+                    interactionId.startPanning(Qt.point(mouse.x, mouse.y));
                 } else {
                     state = "rotateState"
-                    startRotating(Qt.point(mouse.x, mouse.y));
+                    interactionId.startRotating(Qt.point(mouse.x, mouse.y));
                 }
             }
 
             onWheel: {
                 if(multiTouchArea.endMousePosition !== Qt.point(wheel.x, wheel.y)) {
-                    zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
+                    interactionId.zoom(Qt.point(wheel.x, wheel.y), -wheel.angleDelta.y)
                 }
             }
 
@@ -124,17 +124,18 @@ BaseTurnTableInteraction {
                 QQ.State {
                     name: "panState"
                     QQ.PropertyChanges {
-                        target: mouseArea;
+                        mouseArea {
 
-                        onPositionChanged: {
-                            if(mouseArea.pressed) {
-                                interactionId.pan(Qt.point(mouseX, mouseY))
+                            onPositionChanged: {
+                                if(mouseArea.pressed) {
+                                    interactionId.pan(Qt.point(mouseX, mouseY))
+                                }
                             }
-                        }
 
-                        onReleased: {
-                            interactionId.state = ""; //Go back to orginial state
-                            //                                }
+                            onReleased: {
+                                interactionId.state = ""; //Go back to orginial state
+                                //                                }
+                            }
                         }
                     }
                 },
@@ -142,16 +143,17 @@ BaseTurnTableInteraction {
                 QQ.State {
                     name: "rotateState"
                     QQ.PropertyChanges {
-                        target: mouseArea;
+                        mouseArea {
 
-                        onPositionChanged: {
-                            if(mouseArea.pressed) {
-                                interactionId.rotate(Qt.point(mouseX, mouseY));
+                            onPositionChanged: {
+                                if(mouseArea.pressed) {
+                                    interactionId.rotate(Qt.point(mouseX, mouseY));
+                                }
                             }
-                        }
 
-                        onReleased: {
-                            interactionId.state = "";
+                            onReleased: {
+                                interactionId.state = "";
+                            }
                         }
                     }
                 }

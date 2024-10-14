@@ -16,6 +16,7 @@
 #include <QHash>
 #include <QList>
 #include <QSignalMapper>
+#include <QQmlEngine>
 
 //Our includes
 class cwTask;
@@ -31,6 +32,8 @@ class cwTask;
 class CAVEWHERE_LIB_EXPORT cwTaskManagerModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TaskManagerModel)
+
 public:
     explicit cwTaskManagerModel(QObject *parent = nullptr);
 

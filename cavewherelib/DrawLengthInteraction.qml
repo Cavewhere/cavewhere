@@ -36,37 +36,37 @@ Interaction {
 
     PanZoomPitchArea {
         anchors.fill: parent
-        basePanZoom: basePanZoomInteraction
+        basePanZoom: interaction.basePanZoomInteraction
 
         QQ.MouseArea {
             id: mouseAreaId
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-            onPressed: {
+            onPressed: (mouse) => {
                 if(pressedButtons == Qt.RightButton) {
-                    basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
                 }
             }
 
-            onPositionChanged: {
+            onPositionChanged: (mouse) => {
                 if(pressedButtons == Qt.RightButton) {
-                    basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                    interaction.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
                 }
             }
 
-            onClicked: {
+            onClicked: (mouse) => {
                 if(mouse.button === Qt.LeftButton) {
-                    firstMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                    scaleLengthItem.p1 = firstMouseLocation
+                    interaction.firstMouseLocation = interaction.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                    scaleLengthItem.p1 = interaction.firstMouseLocation
                     scaleLengthItem.p2 = scaleLengthItem.p1
                     interaction.state = "WaitForSecondClick"
                     scaleLengthItem.visible = true;
                 }
             }
 
-            onWheel: {
-                basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onWheel: (wheel) => {
+                interaction.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
             }
         }
     }
@@ -91,11 +91,11 @@ Interaction {
             //This mouse area prevents the interaction from using the mouse,
             //when the user clicks in the area of the input
             anchors.fill: parent
-            onPressed: {
+            onPressed: (mouse) => {
                 mouse.accepted = true
             }
 
-            onReleased: {
+            onReleased: (mouse) => {
                 mouse.accepted = true;
             }
         }
@@ -128,7 +128,7 @@ Interaction {
                 anchors.verticalCenter: parent.verticalCenter
 
                 text: "Done"
-                onClicked: doneButtonPressed()
+                onClicked: interaction.doneButtonPressed()
             }
         }
     }
@@ -146,32 +146,34 @@ Interaction {
             name: "WaitForSecondClick"
 
             QQ.PropertyChanges {
-                target: mouseAreaId
+                mouseAreaId {
 
-                hoverEnabled: true
+                    hoverEnabled: true
 
-                onPositionChanged: {
-                    if(pressedButtons == Qt.RightButton) {
-                        basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-                    } else {
-                        scaleLengthItem.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                    onPositionChanged: {
+                        if(pressedButtons == Qt.RightButton) {
+                            basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+                        } else {
+                            scaleLengthItem.p2 = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                        }
                     }
-                }
 
-                onClicked: {
-                    if(mouse.button === Qt.LeftButton) {
-                        lengthRect.x = mouse.x - lengthRect.width * 0.5
-                        lengthRect.y = mouse.y + 10
+                    onClicked: {
+                        if(mouse.button === Qt.LeftButton) {
+                            lengthRect.x = mouse.x - lengthRect.width * 0.5
+                            lengthRect.y = mouse.y + 10
 
-                        secondMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
-                        interaction.state = "WaitForDone"
+                            secondMouseLocation = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y));
+                            interaction.state = "WaitForDone"
+                        }
                     }
                 }
             }
 
             QQ.PropertyChanges {
-                target: helpBoxId
-                text: "<b> Click </b> the length's second point"
+                helpBoxId {
+                    text: "<b> Click </b> the length's second point"
+                }
             }
         },
 
@@ -179,13 +181,15 @@ Interaction {
             name: "WaitForDone"
 
             QQ.PropertyChanges {
-                target: lengthRect
-                visible: true
+                lengthRect {
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: helpBoxId
-                visible: false
+                helpBoxId {
+                    visible: false
+                }
             }
         }
     ]

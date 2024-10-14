@@ -12,7 +12,7 @@ StandardPage {
 
     LeadModel {
         id: leadModel
-        regionModel: rootData.regionTreeModel
+        regionModel: RootData.regionTreeModel
         cave: leadPage.cave
     }
 
@@ -39,7 +39,7 @@ StandardPage {
 
             ClickTextInput {
                 text: leadModel.referanceStation.length === 0 ? "No Station" : leadModel.referanceStation
-                onFinishedEditting: {
+                onFinishedEditting: (newText) => {
                     leadModel.referanceStation = newText
                 }
             }
@@ -57,7 +57,7 @@ StandardPage {
 
         LinkGenerator {
             id: linkGenerator
-            pageSelectionModel: rootData.pageSelectionModel
+            pageSelectionModel: RootData.pageSelectionModel
         }
 
         QQ.TableView {
@@ -77,9 +77,9 @@ StandardPage {
                 //We check if the leadPage is visible to improve preformance where leadModel changes
                 source: leadPage.visible ? leadModel : null
 
-                sortOrder: tableView.sortIndicatorOrder
+                // sortOrder: tableView.sortIndicatorOrder
                 sortCaseSensitivity: Qt.CaseInsensitive
-                sortRole: tableView.getColumn(tableView.sortIndicatorColumn).role
+                // sortRole: tableView.getColumn(tableView.sortIndicatorColumn).role
 
                 // filterString: "*" + searchBox.text + "*"
                 // filterSyntax: SortFilterProxyModel.Wildcard
@@ -199,7 +199,7 @@ StandardPage {
         //                     var pos = Qt.vector3d(styleData.value.x, styleData.value.y, styleData.value.z )
 
         //                     //Change to the view page, animate to the lead position, and select it
-        //                     rootData.pageSelectionModel.currentPageAddress = "View"
+        //                     RootData.pageSelectionModel.currentPageAddress = "View"
         //                     pageView.currentPageItem.turnTableInteraction.centerOn(pos, true);
         //                     pageView.currentPageItem.leadView.select(scrap, leadIndex);
         //                 }

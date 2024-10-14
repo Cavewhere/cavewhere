@@ -14,6 +14,7 @@
 #include <QList>
 #include <QQueue>
 #include <QOpenGLFunctions>
+#include <QQmlEngine>
 class QPainter;
 
 //Our includes
@@ -31,6 +32,7 @@ class cwGeometryItersecter;
 class cwScene : public QObject, public QOpenGLFunctions
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Scene)
 
     Q_PROPERTY(cwShaderDebugger* shaderDebugger READ shaderDebugger NOTIFY shaderDebuggerChanged)
 

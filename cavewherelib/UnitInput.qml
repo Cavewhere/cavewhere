@@ -4,6 +4,7 @@
 **    www.cavewhere.com
 **
 **************************************************************************/
+pragma ComponentBehavior: Bound
 
 import QtQml 2.2
 import QtQuick 2.2 as QQ
@@ -25,12 +26,12 @@ UnitBaseItem {
 
     Text {
         id: textArea
-        color: readOnly ? "black" : pallete.inputTextColor
-        text: unitModel !== null && typeof(unitModel) !== 'undefined' ? " " + unitModel[menuId.selectedIndex] : "";
+        color: unitInput.readOnly ? "black" : pallete.inputTextColor
+        text: unitInput.unitModel !== null && typeof(unitInput.unitModel) !== 'undefined' ? " " + unitInput.unitModel[menuId.selectedIndex] : "";
 
         QQ.MouseArea {
             anchors.fill: parent
-            enabled: !readOnly
+            enabled: !unitInput.readOnly
 
             onClicked: {
                 menuId.popup()
@@ -43,13 +44,16 @@ UnitBaseItem {
             property int selectedIndex: unitInput.unit
 
             Instantiator {
-                model: unitModel
+                model: unitInput.unitModel
                 Controls.MenuItem {
+                    required property string modelData
+                    required property int index
+
                     text: modelData; //unitModel[index]
                     onTriggered: unitInput.newUnit(index)
                 }
-                onObjectAdded: menuId.insertItem(index, object)
-                onObjectRemoved: menuId.removeItem(object)
+                onObjectAdded: (index, object) => menuId.insertItem(index, object)
+                onObjectRemoved: (index, object) => menuId.removeItem(object)
             }
         }
     }

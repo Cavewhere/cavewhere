@@ -10,6 +10,7 @@ import QtQuick 2.0 as QQ
 import "Theme.js" as Theme
 
 QQ.Item {
+    id: groupBoxId
 
     property QQ.color backgroundColor: "white"
     property alias text: titleText.text
@@ -45,7 +46,7 @@ QQ.Item {
     }
 
     QQ.Rectangle {
-        color: backgroundColor
+        color: groupBoxId.backgroundColor
         anchors.fill: titleText
     }
 

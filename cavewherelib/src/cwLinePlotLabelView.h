@@ -14,9 +14,14 @@ class cwCavingRegion;
 class cwCave;
 class cwLabel3dGroup;
 
+//Qt includes
+#include <QQmlEngine>
+
+
 class cwLinePlotLabelView : public cwLabel3dView
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LinePlotLabelView)
 
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
 

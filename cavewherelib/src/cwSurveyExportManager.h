@@ -11,6 +11,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 class cwCave;
@@ -25,6 +26,7 @@ class cwCavingRegion;
 class cwSurveyExportManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyExportManager)
 
     Q_PROPERTY(QString currentCaveName READ currentCaveName NOTIFY updateMenu)
     Q_PROPERTY(QString currentTripName READ currentTripName NOTIFY updateMenu)

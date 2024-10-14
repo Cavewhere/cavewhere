@@ -5,6 +5,8 @@
 **
 **************************************************************************/
 
+pragma ComponentBehavior: Bound
+
 // import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick 2.0 as QQ
 import cavewherelib
@@ -22,7 +24,7 @@ QQ.Item {
         } else {
             teamTable.state = "NoTeam"
         }
-    //        console.debug("Update state: " + teamTable.state )
+        //        console.debug("Update state: " + teamTable.state )
     }
 
     SectionLabel {
@@ -44,7 +46,7 @@ QQ.Item {
             //            anchors.leftMargin: 10
 
             onClicked: {
-                model.addTeamMember();
+                teamTable.model.addTeamMember();
                 teamList.currentIndex = teamList.count - 1
             }
             visible: true
@@ -101,11 +103,15 @@ QQ.Item {
             //            }
 
             onCountChanged: {
-                updateState();
+                teamTable.updateState();
             }
 
             delegate: QQ.Rectangle {
                 id: rowDelegate
+
+                required property int index
+                required property string name
+                required property list<string> jobs
 
                 width: teamList.width
                 height: Math.max(25, Math.max(personNameRow.height, jobsListView.height)) + 6
@@ -119,7 +125,7 @@ QQ.Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        teamList.currentIndex = index
+                        teamList.currentIndex = rowDelegate.index
                         personNameRow.forceActiveFocus()
                     }
                     onDoubleClicked: nameText.openEditor()
@@ -157,7 +163,7 @@ QQ.Item {
                         anchors.verticalCenter: parent.verticalCenter
 
                         onClicked: {
-                            teamTable.model.removeTeamMember(index)
+                            teamTable.model.removeTeamMember(rowDelegate.index)
                         }
 
 
@@ -166,15 +172,15 @@ QQ.Item {
 
                     DoubleClickTextInput {
                         id: nameText
-                        text: name
+                        text: rowDelegate.name
 
                         anchors.left: deletePersonButton.right
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
 
-                        onFinishedEditting: {
+                        onFinishedEditting: (newText) => {
                             //Set the team name data
-                            teamTable.model.setData(index, Team.NameRole, newText)
+                            teamTable.model.setData(rowDelegate.index, Team.NameRole, newText)
                         }
                     }
                 }
@@ -192,7 +198,7 @@ QQ.Item {
                 QQ.Flow {
                     id: jobsListView
 
-                    property int rowIndex: index
+                    property int rowIndex: rowDelegate.index
 
                     anchors.left: parent.horizontalCenter
                     anchors.leftMargin: 3
@@ -203,10 +209,12 @@ QQ.Item {
 
 
                     QQ.Repeater {
-                        model: jobs
+                        model: rowDelegate.jobs
                         delegate: QQ.Rectangle {
                             id: job
                             property alias selected: job.focus
+                            required property int index
+                            required property string modelData
 
                             radius: 5
                             color: selected ? "#F39935" : "#E4CC99"
@@ -217,7 +225,7 @@ QQ.Item {
                             height: jobText.height + 6
 
                             function removeJob() {
-                                var alljobs = jobs
+                                var alljobs = rowDelegate.jobs
                                 alljobs.splice(index, 1)
                                 teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
                             }
@@ -225,17 +233,17 @@ QQ.Item {
                             DoubleClickTextInput {
                                 id: jobText
                                 anchors.centerIn: parent
-                                text: modelData
+                                text: job.modelData
 
-                                onFinishedEditting: {
-                                    var alljobs = jobs
+                                onFinishedEditting: (newText) => {
+                                    var alljobs = rowDelegate.jobs
 
                                     if(newText === "") {
                                         //Remove the job if there's no data
-                                        alljobs.splice(index, 1)
+                                        alljobs.splice(job.index, 1)
                                     } else {
                                         //Set the new text for the job
-                                        alljobs[index] = newText
+                                        alljobs[job.index] = newText
                                     }
                                     teamTable.model.setData(jobsListView.rowIndex, Team.JobsRole, alljobs)
                                 }
@@ -292,9 +300,9 @@ QQ.Item {
                             anchors.fill: parent
 
                             onClicked: {
-                                var alljobs = jobs
-                                alljobs.push("Role " + (jobs.length + 1));
-                                teamTable.model.setData(index, Team.JobsRole, alljobs)
+                                var alljobs = rowDelegate.jobs
+                                alljobs.push("Role " + (rowDelegate.jobs.length + 1));
+                                teamTable.model.setData(rowDelegate.index, Team.JobsRole, alljobs)
                             }
                         }
                     }
@@ -321,29 +329,34 @@ QQ.Item {
             }
 
             QQ.PropertyChanges {
-                target: addPerson
-                anchors.leftMargin: 0
-                text: "Add a team member"
+                addPerson {
+                    anchors.leftMargin: 0
+                    text: "Add a team member"
+                }
             }
 
             QQ.PropertyChanges {
-                target: teamList
-                height: 0
+                teamList {
+                    height: 0
+                }
             }
 
             QQ.PropertyChanges {
-                target: nameHeader
-                visible: false
+                nameHeader {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: jobHeader
-                visible: false
+                jobHeader {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: verticalLine2
-                visible: false
+                verticalLine2 {
+                    visible: false
+                }
             }
         }
     ]

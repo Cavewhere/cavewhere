@@ -12,10 +12,14 @@
 #include "cwNote.h"
 #include "cwBasePanZoomInteraction.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 
 class cwNoteInteraction : public cwInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(NoteInteraction)
 
     Q_PROPERTY(cwNote* note READ note WRITE setNote NOTIFY noteChanged)
 

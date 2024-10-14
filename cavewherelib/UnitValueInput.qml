@@ -11,7 +11,9 @@ import cavewherelib
 import "Utils.js" as Utils
 
 QQ.Row {
-    property var unitValue: null
+    id: itemId
+
+    property UnitValue unitValue: null
     property alias valueVisible: clickInput.visible
     property alias valueReadOnly: clickInput.readOnly
     property int defaultUnit
@@ -43,15 +45,17 @@ QQ.Row {
 
     ClickTextInput {
         id: clickInput
-        text: unitValue !== null ? Utils.fixed(unitValue.value, 2) : ""
-        onFinishedEditting: if(unitValue !== null) { unitValue.value = newText }
+        text: itemId.unitValue !== null ? Utils.fixed(itemId.unitValue.value, 2) : ""
+        onFinishedEditting: (newText) => {
+                                if(itemId.unitValue !== null) { itemId.unitValue.value = newText }
+                            }
     }
 
     UnitInput {
         id: unitInput
 
         function updateUnit() {
-            if(unitValue !== null && privateData.customUnitsToValue.length > 0) {
+            if(itemId.unitValue !== null && privateData.customUnitsToValue.length > 0) {
                 return privateData.valueToCustomUnits[unitValue.unit];
             } else {
                 return defaultUnit
@@ -59,8 +63,8 @@ QQ.Row {
         }
 
         unitModel: {
-            if(unitValue !== null) {
-                return unitValue.unitNames;
+            if(itemId.unitValue !== null) {
+                return itemId.unitValue.unitNames;
             } else {
                 return null
             }
@@ -69,8 +73,8 @@ QQ.Row {
         unit: updateUnit()
 
         onNewUnit: {
-            if(unitValue !== null) {
-                unitValue.unit = privateData.customUnitsToValue[unit]
+            if(itemId.unitValue !== null) {
+                itemId.unitValue.unit = privateData.customUnitsToValue[unit]
                 unitInput.unit = updateUnit()
             }
         }

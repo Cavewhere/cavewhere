@@ -12,9 +12,13 @@
 #include "cwInteraction.h"
 #include "cwCamera.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 class cwBasePanZoomInteraction : public cwInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(BasePanZoomInteraction)
 
     Q_PROPERTY(cwCamera* camera READ camera WRITE setCamera NOTIFY cameraChanged)
 

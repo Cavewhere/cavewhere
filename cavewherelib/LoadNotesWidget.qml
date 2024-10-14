@@ -19,18 +19,19 @@ QQ.Item {
 
     anchors.centerIn: parent
 
-    onVisibleChanged: {
-        if(visible) {
-            visibleAnimation.restart()
-        }
-    }
+    // onVisibleChanged: {
+    //     if(visible) {
+    //         visibleAnimation.restart()
+    //     }
+    // }
 
     QQ.Item {
         id: shadowContainerId
         width: shadowBoxId.width + 20
         height: shadowBoxId.height + 20
 
-        visible: !fastBlurId.visible
+        //FIXME: QtGraphicsEffects was removed an this probably doesn't work
+        // visible: !fastBlurId.visible
 
         ShadowRectangle {
             id: shadowBoxId
@@ -76,7 +77,7 @@ QQ.Item {
 
                     LoadNotesIconButton {
                         id: loadNoteButtonId
-                        onFilesSelected: widgetId.filesSelected(images)
+                        onFilesSelected: (images) => widgetId.filesSelected(images)
                         sourceSize: Qt.size(48, 48)
                     }
 

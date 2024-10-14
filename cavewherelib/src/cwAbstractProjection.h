@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <QObject>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwProjection.h"
@@ -18,6 +19,8 @@ class cw3dRegionViewer;
 class cwAbstractProjection : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(AbstractProjection)
+    QML_UNCREATABLE("AbstractProjection is a base class for all projection classes. It can't be created")
 
     Q_PROPERTY(cw3dRegionViewer* viewer READ viewer WRITE setViewer NOTIFY viewerChanged)
     Q_PROPERTY(double nearPlane READ nearPlane WRITE setNearPlane NOTIFY nearPlaneChanged)

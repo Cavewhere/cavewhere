@@ -1,5 +1,5 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Controls
+pragma ComponentBehavior: Bound
+import QtQuick as QQ
 import cavewherelib
 
 QQ.Item {
@@ -51,7 +51,7 @@ QQ.Item {
             id: pageView
             anchors.fill: parent
             anchors.margins: 3
-            pageSelectionModel: rootData.pageSelectionModel
+            pageSelectionModel: RootData.pageSelectionModel
         }
     }
 
@@ -61,7 +61,7 @@ QQ.Item {
             width:  parent.width
             height: parent.height
             x: 0; y: -container.currentPosition
-            scene: regionSceneManager.scene
+            scene: RootData.regionSceneManager.scene
         }
     }
 
@@ -105,11 +105,11 @@ QQ.Item {
 
     QQ.Component.onCompleted: {
         pageView.unknownPageComponent = unknownPageComponent
-        var viewPage = rootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
-        rootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
-        rootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
-        rootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
-        rootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
-        rootData.pageSelectionModel.gotoPage(viewPage);
+        var viewPage = RootData.pageSelectionModel.registerPage(null, "View", renderingComponent);
+        RootData.pageSelectionModel.registerPage(null, "Data", dataMainPageComponent);
+        RootData.pageSelectionModel.registerPage(null, "Testcases", testcasesPageComponent);
+        RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
+        RootData.pageSelectionModel.gotoPage(viewPage);
     }
 }

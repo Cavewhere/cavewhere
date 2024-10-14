@@ -8,11 +8,16 @@
 #ifndef CWCOMPASSVALIDATOR_H
 #define CWCOMPASSVALIDATOR_H
 
+//Our includes
 #include "cwValidator.h"
+
+//Qt includes
+#include <QQmlEngine>
 
 class cwCompassValidator : public cwValidator
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CompassValidator)
 public:
     explicit cwCompassValidator(QObject *parent = 0);
 

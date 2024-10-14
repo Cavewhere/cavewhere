@@ -1,9 +1,8 @@
-import QtQuick 2.0 as QQ
-import QtQuick.Controls
-import QtQuick.Layouts 1.0
+import QtQuick as QQ
 import cavewherelib
 
 QQ.Item {
+    id: itemId
 //    property var viewer;
 
     //    parent: viewer
@@ -12,10 +11,11 @@ QQ.Item {
 
     property alias paperRectangle: paperRectangleId
     property alias captureRectangle: captureRectangleId
+    required property PaperMarginGroupBox paperMarginGroupBox
 
     QQ.Rectangle {
         id: leftMargin
-        width: paperMarginGroupBoxId.leftMargin / paperRectangleId.paperWidth * paperRectangleId.width
+        width: itemId.paperMarginGroupBox.leftMargin / paperRectangleId.paperWidth * paperRectangleId.width
         anchors.top: paperRectangleId.top
         anchors.bottom: paperRectangleId.bottom
         color: paperRectangleId.marginColor
@@ -23,7 +23,7 @@ QQ.Item {
 
     QQ.Rectangle {
         id: rightMargin
-        width: paperMarginGroupBoxId.rightMargin / paperRectangleId.paperWidth * paperRectangleId.width
+        width: itemId.paperMarginGroupBox.rightMargin / paperRectangleId.paperWidth * paperRectangleId.width
         anchors.top: paperRectangleId.top
         anchors.bottom: paperRectangleId.bottom
         anchors.right: paperRectangleId.right
@@ -34,7 +34,7 @@ QQ.Item {
         id: topMargin
         anchors.left: leftMargin.right
         anchors.right: rightMargin.left
-        height: paperMarginGroupBoxId.topMargin / paperRectangleId.paperHeight * paperRectangleId.height
+        height: itemId.paperMarginGroupBox.topMargin / paperRectangleId.paperHeight * paperRectangleId.height
         color: paperRectangleId.marginColor
     }
 
@@ -43,7 +43,7 @@ QQ.Item {
         anchors.left: leftMargin.right
         anchors.right: rightMargin.left
         anchors.bottom: paperRectangleId.bottom
-        height: paperMarginGroupBoxId.bottomMargin / paperRectangleId.paperHeight * paperRectangleId.height
+        height: itemId.paperMarginGroupBox.bottomMargin / paperRectangleId.paperHeight * paperRectangleId.height
         color: paperRectangleId.marginColor
     }
 

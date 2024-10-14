@@ -13,10 +13,12 @@
 #include <QObject>
 #include <QQmlComponent>
 #include <QPointer>
+#include <QQmlEngine>
 
 class cwPage : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(Page)
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QVariantMap selectionProperties READ selectionProperties WRITE setSelectionProperties NOTIFY selectionPropertiesChanged)

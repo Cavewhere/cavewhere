@@ -10,10 +10,12 @@
 #define CWLICENSEAGREEMENT_H
 
 #include <QObject>
+#include <QQmlEngine>
 
 class cwLicenseAgreement : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LicenseAgreement)
 
     Q_PROPERTY(bool hasReadLicenseAgreement READ hasReadLicenseAgreement WRITE setHasReadLicenseAgreement NOTIFY hasReadLicenseAgreementChanged)
     Q_PROPERTY(QString text READ text NOTIFY textChanged)

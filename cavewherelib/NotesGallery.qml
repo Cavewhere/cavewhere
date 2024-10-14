@@ -5,10 +5,11 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
-import QtQuick.Controls 2.12 as QC
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
 import cavewherelib
-import "Theme.js" as Theme
 
 QQ.Rectangle {
     id: noteGallery
@@ -19,14 +20,14 @@ QQ.Rectangle {
 
     readonly property string mode: {
         switch(state) {
-        case "": return "DEFAULT"
-        case "NO_NOTES": return "DEFAULT"
-        case "CARPET": return "CARPET"
-        case "SELECT": return "CARPET"
-        case "ADD-STATION": return "CARPET"
-        case "ADD-SCRAP": return "CARPET"
-        case "ADD-LEAD": return "CARPET"
-        default: return "ERROR"
+            case "": return "DEFAULT"
+            case "NO_NOTES": return "DEFAULT"
+            case "CARPET": return "CARPET"
+            case "SELECT": return "CARPET"
+            case "ADD-STATION": return "CARPET"
+            case "ADD-SCRAP": return "CARPET"
+            case "ADD-LEAD": return "CARPET"
+            default: return "ERROR"
         }
     }
 
@@ -58,107 +59,111 @@ QQ.Rectangle {
 
     LoadNotesWidget {
         id: loadNoteWidgetId
-        onFilesSelected: noteGallery.imagesAdded(images)
+        onFilesSelected: (images) => noteGallery.imagesAdded(images)
         visible: false
     }
 
     /**
       For displaying the note as icons in a gallery
       */
-    QQ.Component {
-        id: listDelegate
+    component ListDelegate : QQ.Item {
+        id: container
 
-        QQ.Item {
-            id: container
+        property int border: 6
+        property Note noteObject
+        property url imageIconPath
+        property int index
+        property real maxImageWidth: galleryView.width
 
-            property int border: 6
-            property variant noteObject: model.noteObject
-            property real maxImageWidth: galleryView.width
+        width: maxImageWidth
+        height: maxImageWidth
 
-            width: maxImageWidth
-            height: maxImageWidth
+        QQ.Image {
+            id: imageItem
+            asynchronous: true
 
-            QQ.Image {
-                id: imageItem
-                asynchronous: true
+            anchors.centerIn: parent
 
-                anchors.centerIn: parent
+            source: container.imageIconPath
+            width: container.maxImageWidth - 2 * container.border
+            height: width;
+            fillMode: QQ.Image.PreserveAspectFit
+            rotation: container.noteObject.rotate
+            smooth: true
 
-                source: model.imageIconPath
-                width: container.maxImageWidth - 2 * container.border
-                height: width;
-                fillMode: QQ.Image.PreserveAspectFit
-                rotation: model.noteObject.rotate
-                smooth: true
-
-                function updateHeight() {
-                    if(paintedHeight == 0.0 || paintedWidth == 0.0) {
-                        container.height = container.maxImageWidth
-                        return;
-                    }
-
-                    var p1 = mapToItem(container, x, y);
-                    var p2 = mapToItem(container, x + paintedWidth, y + paintedHeight);
-                    var p3 = mapToItem(container, x, y + paintedHeight);
-                    var p4 = mapToItem(container, x + paintedWidth, y);
-
-                    var maxY = Math.max(p1.y, Math.max(p2.y, Math.max(p3.y, p4.y)));
-                    var minY = Math.min(p1.y, Math.min(p2.y, Math.min(p3.y, p4.y)));
-
-                    container.height = maxY - minY + 2 * container.border;
+            function updateHeight() {
+                if(paintedHeight == 0.0 || paintedWidth == 0.0) {
+                    container.height = container.maxImageWidth
+                    return;
                 }
 
-                onPaintedGeometryChanged: {
-                    updateHeight();
-                }
+                var p1 = mapToItem(container, x, y);
+                var p2 = mapToItem(container, x + paintedWidth, y + paintedHeight);
+                var p3 = mapToItem(container, x, y + paintedHeight);
+                var p4 = mapToItem(container, x + paintedWidth, y);
 
-                onRotationChanged:  {
-                    updateHeight();
-                }
+                var maxY = Math.max(p1.y, Math.max(p2.y, Math.max(p3.y, p4.y)));
+                var minY = Math.min(p1.y, Math.min(p2.y, Math.min(p3.y, p4.y)));
 
-                QQ.Component.onCompleted: {
-                    updateHeight();
-                }
+                container.height = maxY - minY + 2 * container.border;
             }
 
-            QQ.Image {
-                id: removeImageId
-
-                source: "qrc:/icons/red-cancel.png"
-
-                width: 24
-                height: 24
-
-                anchors.right: parent.right
-                anchors.top: parent.top
-
-                visible: galleryView.currentIndex == index
-
-                opacity: removeImageMouseArea.containsMouse ? 1.0 : .75;
-
-                QQ.MouseArea {
-                    id: removeImageMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: removeAskDialog.show()
-                }
+            onPaintedGeometryChanged: {
+                updateHeight();
             }
 
-            RemoveAskBox {
-                id: removeAskDialog
-                anchors.right: removeImageId.horizontalCenter
-                anchors.top: removeImageId.verticalCenter
-                onRemove: {
-                    notesModel.removeNote(index);
-                }
+            onRotationChanged:  {
+                updateHeight();
             }
 
-            QC.BusyIndicator {
-                anchors.centerIn: parent
-                running: imageItem.status == QQ.Image.Loading
+            QQ.Component.onCompleted: {
+                updateHeight();
             }
         }
+
+        QQ.Image {
+            id: removeImageId
+
+            source: "qrc:/icons/red-cancel.png"
+
+            width: 24
+            height: 24
+
+            anchors.right: parent.right
+            anchors.top: parent.top
+
+            visible: galleryView.currentIndex == container.index
+
+            opacity: removeImageMouseArea.containsMouse ? 1.0 : .75;
+
+            QQ.MouseArea {
+                id: removeImageMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: removeAskDialog.show()
+            }
+        }
+
+        RemoveAskBox {
+            id: removeAskDialog
+            anchors.right: removeImageId.horizontalCenter
+            anchors.top: removeImageId.verticalCenter
+            onRemove: {
+                noteGallery.notesModel.removeNote(container.index);
+            }
+        }
+
+        QC.BusyIndicator {
+            anchors.centerIn: parent
+            running: imageItem.status == QQ.Image.Loading
+        }
     }
+
+    Component {
+        id: listDelegate
+        ListDelegate {}
+    }
+
 
     QQ.Rectangle {
         id: galleryContainer
@@ -245,7 +250,7 @@ QQ.Rectangle {
 
             function updateCurrentNote() {
                 if(currentItem != null) {
-                    noteGallery.currentNote = currentItem.noteObject
+                    noteGallery.currentNote = (currentItem as ListDelegate).noteObject;
                     noteArea.image = Qt.binding(function() { return currentItem.noteObject.image });
                 } else {
                     noteGallery.currentNote = null;
@@ -258,7 +263,7 @@ QQ.Rectangle {
 
                 propagateComposedEvents: true
 
-                onClicked: {
+                onClicked: (mouse) => {
                     var index = galleryView.indexAt(galleryView.contentX + mouseX, galleryView.contentY + mouseY);
                     if(index >= 0 && index < galleryView.count) {
                         galleryView.currentIndex = index;
@@ -300,7 +305,7 @@ QQ.Rectangle {
 
             spacing: 3
 
-//            anchors.centerIn: parent
+            //            anchors.centerIn: parent
 
             IconButton {
                 id: rotateIconButtonId
@@ -310,8 +315,8 @@ QQ.Rectangle {
 
                 onClicked: {
                     //Update the note's rotation
-                    noteRotationAnimation.from = currentNote.rotate
-                    noteRotationAnimation.to = currentNote.rotate + 90
+                    noteRotationAnimation.from = noteGallery.currentNote.rotate
+                    noteRotationAnimation.to = noteGallery.currentNote.rotate + 90
                     noteRotationAnimation.start()
                 }
             }
@@ -328,7 +333,8 @@ QQ.Rectangle {
             }
 
             LoadNotesIconButton {
-                onFilesSelected: {
+                sourceSize: mainToolBar.iconSize
+                onFilesSelected: (images) =>  {
                     noteGallery.imagesAdded(images)
                 }
             }
@@ -430,7 +436,7 @@ QQ.Rectangle {
 
         visible: true
         scrapsVisible: false
-        note: currentNote
+        note: noteGallery.currentNote
     }
 
     QQ.SequentialAnimation {
@@ -445,7 +451,7 @@ QQ.Rectangle {
 
         QQ.PropertyAnimation {
             id: subAnimation
-            target: currentNote
+            target: noteGallery.currentNote
             property: "rotate"
             easing.type: QQ.Easing.InOutCubic
         }
@@ -457,41 +463,47 @@ QQ.Rectangle {
             name: "NO_NOTES"
 
             QQ.PropertyChanges {
-                target: loadNoteWidgetId
-                visible: true
+                loadNoteWidgetId {
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: galleryContainer
-                visible: false
+                galleryContainer {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: mainButtonArea
-                visible: false
+                mainButtonArea {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                visible: false
+                noteArea {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: carpetButtonArea
-                visible: false
+                carpetButtonArea {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: galleryView
-                onCountChanged: {
-                    if(count > 0) {
-                        noteGallery.state = ""
-                        galleryContainer.visible = true
-                        mainButtonArea.visible = true
-                        noteArea.visible = true
-                        currentIndex = 0;
+                galleryView {
+                    onCountChanged: {
+                        if(count > 0) {
+                            noteGallery.state = ""
+                            galleryContainer.visible = true
+                            mainButtonArea.visible = true
+                            noteArea.visible = true
+                            currentIndex = 0;
+                        }
+                        updateCurrentNote()
                     }
-                    updateCurrentNote()
                 }
             }
         },
@@ -500,29 +512,34 @@ QQ.Rectangle {
             name: "CARPET"
 
             QQ.PropertyChanges {
-                target: loadNoteWidgetId
-                visible: false
+                loadNoteWidgetId {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: mainButtonArea
-                visible: false
+                mainButtonArea {
+                    visible: false
+                }
             }
 
             QQ.PropertyChanges {
-                target: carpetButtonArea
-                visible: true
+                carpetButtonArea {
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: galleryContainer
-                anchors.top:  carpetButtonArea.bottom
-                visible: true
+                galleryContainer {
+                    anchors.top:  carpetButtonArea.bottom
+                    visible: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                scrapsVisible: true
+                noteArea {
+                    scrapsVisible: true
+                }
             }
 
         },
@@ -532,13 +549,15 @@ QQ.Rectangle {
             extend: "CARPET"
 
             QQ.PropertyChanges {
-                target: selectObjectId
-                selected: true
+                selectObjectId {
+                    selected: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                state: "SELECT"
+                noteArea {
+                    state: "SELECT"
+                }
             }
         },
 
@@ -546,13 +565,15 @@ QQ.Rectangle {
             name: "ADD-STATION"
             extend:  "CARPET"
             QQ.PropertyChanges {
-                target: addStationId
-                selected: true
+                addStationId {
+                    selected: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                state: "ADD-STATION"
+                noteArea {
+                    state: "ADD-STATION"
+                }
             }
         },
 
@@ -560,13 +581,15 @@ QQ.Rectangle {
             name: "ADD-LEAD"
             extend:  "CARPET"
             QQ.PropertyChanges {
-                target: addLeadId
-                selected: true
+                addLeadId {
+                    selected: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                state: "ADD-LEAD"
+                noteArea {
+                    state: "ADD-LEAD"
+                }
             }
         },
 
@@ -574,19 +597,21 @@ QQ.Rectangle {
             name:  "ADD-SCRAP"
             extend:  "CARPET"
             QQ.PropertyChanges {
-                target: addScrapId
-                selected: true
+                addScrapId {
+                    selected: true
+                }
             }
 
             QQ.PropertyChanges {
-                target: noteArea
-                state: "ADD-SCRAP"
+                noteArea {
+                    state: "ADD-SCRAP"
+                }
             }
         }
     ]
 
     transitions: [
-         QQ.Transition {
+        QQ.Transition {
             from: ""
             to: "SELECT"
 
@@ -614,7 +639,7 @@ QQ.Rectangle {
             }
         },
 
-         QQ.Transition {
+        QQ.Transition {
             to: ""
             from: "CARPET"
 

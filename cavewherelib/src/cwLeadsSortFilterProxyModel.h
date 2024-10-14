@@ -12,6 +12,9 @@
 //Our include
 #include "cwSortFilterProxyModel.h"
 
+//Qt includes
+#include <QQmlEngine>
+
 /**
  * @brief The cwLeadsSortFilterProxyModel class
  *
@@ -21,6 +24,7 @@
 class cwLeadsSortFilterProxyModel : public cwSortFilterProxyModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(LeadsSortFilterProxyModel)
 
 public:
     explicit cwLeadsSortFilterProxyModel(QObject *parent = 0);

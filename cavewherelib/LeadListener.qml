@@ -16,8 +16,8 @@ QQ.QtObject {
     //Private properties
     property QQ.Connections _scrapConnection:
         QQ.Connections {
-        target: scrap === null ? null : scrap
-        onLeadsDataChanged: updateData(begin, end, roles);
+        target: listener.scrap === null ? null : listener.scrap
+        function onLeadsDataChanged(begin, end, roles) { listener.updateData(begin, end, roles); }
         ignoreUnknownSignals: true
     }
 

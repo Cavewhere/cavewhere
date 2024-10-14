@@ -12,6 +12,7 @@
 //Qt includes
 #include <QObject>
 #include <QPointer>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwInteraction.h"
@@ -22,6 +23,7 @@ class cwScrap;
 class cwBaseNotePointInteraction : public cwInteraction
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(BaseNotePointInteraction)
 
     Q_PROPERTY(cwScrapView* scrapView READ scrapView WRITE setScrapView NOTIFY scrapViewChanged)
 

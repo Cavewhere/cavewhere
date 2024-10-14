@@ -21,7 +21,7 @@ Text {
         hoverEnabled: true
 
         onClicked: {
-            helpArea.visible = !helpArea.visible
+            label.helpArea.visible = !label.helpArea.visible
         }
     }
 
@@ -31,9 +31,10 @@ Text {
             when: textMouseArea.containsMouse
 
             QQ.PropertyChanges {
-                target: label
-                color: "blue"
-                font.underline: true
+                label {
+                    color: "blue"
+                    font.underline: true
+                }
             }
         }
     ]

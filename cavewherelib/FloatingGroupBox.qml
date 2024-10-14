@@ -34,8 +34,8 @@ QQ.Item {
 
         color: Theme.floatingWidgetColor
         radius: Theme.floatingWidgetRadius
-        height: boxGroupId.height + titleId.height + margin
-        width: boxGroupId.width + margin * 2
+        height: boxGroupId.height + titleId.height + floatingGroupBoxId.margin
+        width: boxGroupId.width + floatingGroupBoxId.margin * 2
         //        y: groupAreaRect.height / 2.0
     }
 
@@ -43,20 +43,20 @@ QQ.Item {
     QQ.Rectangle {
         id: boxGroupId
 
-        x: margin
+        x: floatingGroupBoxId.margin
         y: titleId.height
 
-        border.width: borderWidth
+        border.width: floatingGroupBoxId.borderWidth
         radius: Theme.floatingWidgetRadius
         color: "#00000000"
 
-        width: container.width + margin * 2;
-        height: container.height + margin * 2;
+        width: container.width + floatingGroupBoxId.margin * 2;
+        height: container.height + floatingGroupBoxId.margin * 2;
 
         QQ.Item {
             id: container
-            x: margin
-            y: margin
+            x: floatingGroupBoxId.margin
+            y: floatingGroupBoxId.margin
             width: childrenRect.width
             height: childrenRect.height
         }

@@ -12,6 +12,7 @@
 #include <QAbstractListModel>
 #include <QList>
 #include <QUrl>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwNote.h"
@@ -22,6 +23,7 @@ class cwProject;
 class CAVEWHERE_LIB_EXPORT cwSurveyNoteModel : public QAbstractListModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyNoteModel)
 
 public:
     enum Roles {

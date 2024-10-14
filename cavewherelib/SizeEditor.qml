@@ -26,7 +26,7 @@ RowLayout {
             id: widthTextId
             Layout.alignment: Qt.AlignHCenter
             QQ.KeyNavigation.tab: heightTextId
-            onFinishedEditting: widthFinishedEditting(newText)
+            onFinishedEditting: (newText) => editor.widthFinishedEditting(newText)
         }
     }
 
@@ -35,16 +35,16 @@ RowLayout {
     }
 
     TitledRectangle {
-        color: backgroundColor
+        color: editor.backgroundColor
         title: "Height"
 
         ClickTextInput {
             id: heightTextId
             readOnly: editor.readOnly
-            QQ.KeyNavigation.tab: nextTab
+            QQ.KeyNavigation.tab: editor.nextTab
             QQ.KeyNavigation.backtab: widthTextId
             Layout.alignment: Qt.AlignHCenter
-            onFinishedEditting: heightFinishedEditting(newText)
+            onFinishedEditting: (newText) => editor.heightFinishedEditting(newText)
         }
     }
 

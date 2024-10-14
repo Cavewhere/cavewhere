@@ -99,32 +99,45 @@ foreach(file ${cavewhere_H_FILES})
     list(APPEND cavewhere_RELATIVE_H_FILES "${relFile}")
 endforeach()
 
-# set_property(GLOBAL PROPERTY CMAKE_AUTOMOC ON)
-
+# Get all QML and JS files
 file(GLOB cavewhere_QML_FILES "*.qml" "*.js")
-# target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 
-# Make the file paths relative to the project directory
+# Define the list of QML singletons
+set(qml_singletons
+    "UnitDefaults.qml"
+    "GlobalShadowTextInput.qml"
+    "RootPopupItem.qml"
+)
+
+# Remove the singleton files from the regular QML file list
+foreach(singleton ${qml_singletons})
+    list(REMOVE_ITEM cavewhere_QML_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${singleton}")
+endforeach()
+
+# Make the remaining QML files relative to the project directory
 set(cavewhere_RELATIVE_QML_FILES "")
 foreach(file ${cavewhere_QML_FILES})
     file(RELATIVE_PATH relFile "${CMAKE_CURRENT_SOURCE_DIR}" "${file}")
+    message(STATUS "Adding QML file: ${relFile}")
     list(APPEND cavewhere_RELATIVE_QML_FILES "${relFile}")
 endforeach()
 
+# Set the singleton QML files as singletons
+set_source_files_properties(${qml_singletons} PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
+# Add QML module with the regular QML files and the singleton files
 qt_add_qml_module(cavewherelib
     URI cavewherelib
     VERSION 1.0
-    RESOURCE_PREFIX /cavewherelib
+    # RESOURCE_PREFIX /cavewherelib
     DEPENDENCIES
         QtQuick
     SOURCES
         ${cavewhere_RELATIVE_CPP_FILES}
         ${cavewhere_RELATIVE_H_FILES}
     QML_FILES
-        ${cavewhere_RELATIVE_QML_FILES}
-    )
-
-# set(QML_IMPORT_PATH ${CMAKE_BINARY_DIR}/qml/Cavewhere CACHE STRING "" FORCE)
+        ${cavewhere_RELATIVE_QML_FILES} ${qml_singletons}
+)
 
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
 

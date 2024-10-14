@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 
 ImageItem {
@@ -14,17 +14,19 @@ ImageItem {
     property Note note;
     property alias scrapsVisible: scrapViewId.visible
 
-    projectFilename: project.filename
+    projectFilename: RootData.project.filename
 
     clip: true
     rotation: note !== null ? note.rotate : 0
 
-    futureManagerToken: rootData.futureManagerModel.token
+    futureManagerToken: RootData.futureManagerModel.token
 
     PanZoomInteraction {
         id: panZoomInteraction
         anchors.fill: parent
-        camera: noteArea.camera
+
+        //FIXME: I'm not sure were the camera went
+        // camera: noteArea.camera
     }
 
     ScrapInteraction {
@@ -96,7 +98,7 @@ ImageItem {
         imageItem: noteArea
         basePanZoomInteraction: panZoomInteraction
         transformUpdater: transformUpdaterId
-        imageResolution: note != null ? note.imageResolution : null
+        imageResolution: noteArea.note != null ? noteArea.note.imageResolution : null
         z:1
     }
 
@@ -154,7 +156,7 @@ ImageItem {
             id: noteResolutionId
             note: noteArea.note
             onActivateDPIInteraction: interactionManagerId.active(noteDPIInteraction)
-            visible: scrapsVisible
+            visible: noteArea.scrapsVisible
         }
 
         NoteTransformEditor {

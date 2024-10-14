@@ -5,8 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
-import cavewherelib
+import QtQuick
 
 BorderImage {
     source: "qrc:icons/border.png"

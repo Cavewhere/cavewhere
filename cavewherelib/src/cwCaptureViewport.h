@@ -15,6 +15,7 @@
 #include <QPointer>
 #include <QSizeF>
 #include <QQuickItem>
+#include <QQmlEngine>
 
 //Our includes
 class cwCamera;
@@ -27,6 +28,7 @@ class cwCamera;
 class cwCaptureViewport : public cwCaptureItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(CaptureViewport)
 
     Q_PROPERTY(int resolution READ resolution WRITE setResolution NOTIFY resolutionChanged)
     Q_PROPERTY(QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged)

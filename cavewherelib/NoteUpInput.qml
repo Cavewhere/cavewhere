@@ -13,7 +13,7 @@ QQ.Item {
     id: itemId
 
     property int scrapType
-    property NoteTransform noteTransform
+    property NoteTranformation noteTransform
     property HelpArea northUpHelp
     property alias enable: setNorthButton.visible
 

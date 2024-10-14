@@ -12,11 +12,11 @@
 #include <QString>
 #include <QFutureWatcher>
 #include <QOpenGLFunctions>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwGLViewer.h"
 #include "cwImage.h"
-#include "cwImageData.h"
 #include "cwFutureManagerToken.h"
 #include "cwImageProperties.h"
 class cwGLImageItemResources;
@@ -25,6 +25,7 @@ class cwImageTexture;
 class cwImageItem : public cwGLViewer, protected QOpenGLFunctions
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ImageItem)
 
     Q_PROPERTY(cwImage image READ image WRITE setImage NOTIFY imageChanged)
     Q_PROPERTY(QString projectFilename READ projectFilename WRITE setProjectFilename NOTIFY projectFilenameChanged())

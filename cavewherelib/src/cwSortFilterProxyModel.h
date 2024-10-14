@@ -41,12 +41,16 @@
 #ifndef SORTFILTERPROXYMODEL_H
 #define SORTFILTERPROXYMODEL_H
 
+//Our includes
 #include <QtCore/qsortfilterproxymodel.h>
 #include <QtQml/qjsvalue.h>
+#include <QQmlEngine>
 
 class cwSortFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SortFilterProxyModel)
+
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(QObject *source READ source WRITE setSource)
 

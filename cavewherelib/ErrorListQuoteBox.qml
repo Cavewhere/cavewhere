@@ -1,11 +1,15 @@
-import QtQuick 2.0 as QQ
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
 import cavewherelib
-import QtQuick.Layouts 1.1
-import QtQuick.Controls 2.12 as QC
+import QtQuick.Layouts
+// import QtQuick.Controls 2.12 as QC
 
 QQ.Loader {
+    id: loaderId
 
     property ErrorListModel errors
+    required property Button errorIcon
 
     sourceComponent: visible ? quoteBoxCompent : null
 
@@ -17,7 +21,7 @@ QQ.Loader {
             id: errorQuoteBox
             z: 10
 
-            parent: rootPopupItem
+            parent: RootPopupItem
 
             function errorImageSource(errorType) {
                 switch(errorType) {
@@ -30,36 +34,42 @@ QQ.Loader {
                 }
             }
 
-            pointAtObject: errorIcon
-            pointAtObjectPosition: Qt.point(errorIcon.width * 0.5, errorIcon.height)
+            pointAtObject: loaderId.errorIcon
+            pointAtObjectPosition: Qt.point(loaderId.errorIcon.width * 0.5, loaderId.errorIcon.height)
             triangleEdge: Qt.TopEdge
 
             ColumnLayout {
                 QQ.Repeater {
                     id: repeaterId
-                    model: errors === null ? 0 : errors
+                    model: loaderId.errors === null ? 0 : loaderId.errors
                     delegate:
                         RowLayout {
+                        id: delegateId
+                        property int type
+                        property string message
+                        property bool suppressed
+                        property int index
 
                         QQ.Image {
-                            source: errorQuoteBox.errorImageSource(type)
+                            source: errorQuoteBox.errorImageSource(delegateId.type)
                         }
 
                         CheckBox {
-                            checked: suppressed
+                            id: checkBoxId
+                            checked: delegateId.suppressed
                             onCheckedChanged: {
                                 //SuppressWarning
-                                if(suppressed !== checked) {
-                                    suppressed = checked
-                                    errors.setData(index, suppressed, "suppressed")
+                                if(delegateId.suppressed !== checked) {
+                                    delegateId.suppressed = checked
+                                    loaderId.errors.setData(delegateId.index, delegateId.suppressed, "suppressed")
                                 }
                             }
-                            visible: type === CwError.Warning
+                            visible: delegateId.type === CwError.Warning
                         }
 
                         Text {
-                            text: message
-                            font.strikeout: suppressed
+                            text: delegateId.message
+                            font.strikeout: delegateId.suppressed
                         }
                     }
 

@@ -5,17 +5,16 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import cavewherelib
 import QtQuick.Dialogs
 
 IconButton {
     id: buttonId
 
-    signal filesSelected(var images)
+    signal filesSelected(list<url> images)
 
     iconSource: "qrc:icons/addNotes.png"
-    sourceSize: mainToolBar.iconSize
     text: "Load"
 
     onClicked: {
@@ -24,13 +23,13 @@ IconButton {
 
     FileDialog {
         id: fileDialog;
-        nameFilters: "Images (" + rootData.supportImageFormats + ")";
+        nameFilters: [ "Images (" + RootData.supportImageFormats + ")" ];
         title: "Load Images"
         // selectMultiple: true
-        currentFolder: rootData.lastDirectory
+        currentFolder: RootData.lastDirectory
         onAccepted: {
-            rootData.lastDirectory = fileUrl
-            buttonId.filesSelected(fileDialog.fileUrls)
+            RootData.lastDirectory = selectedFiles
+            buttonId.filesSelected(fileDialog.selectedFiles)
         }
     }
 

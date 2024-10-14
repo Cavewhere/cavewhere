@@ -9,6 +9,7 @@ import QtQuick 2.0 as QQ
 import cavewherelib
 
 Interaction {
+    id: interactionId
 
     property BasePanZoomInteraction basePanZoomInteraction
     property ScrapView scrapView
@@ -16,18 +17,18 @@ Interaction {
 
     PanZoomPitchArea {
         anchors.fill: parent
-        basePanZoom: basePanZoomInteraction
+        basePanZoom: interactionId.basePanZoomInteraction
 
         QQ.MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onPressed: basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
-            onPositionChanged: basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
-            onClicked: {
-                var notePoint = imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
-                scrapView.selectScrapAt(notePoint)
+            onPressed: (mouse) => interactionId.basePanZoomInteraction.panFirstPoint(Qt.point(mouse.x, mouse.y))
+            onPositionChanged: (mouse) => interactionId.basePanZoomInteraction.panMove(Qt.point(mouse.x, mouse.y))
+            onClicked: function(mouse) {
+                var notePoint = interactionId.imageItem.mapQtViewportToNote(Qt.point(mouse.x, mouse.y))
+                interactionId.scrapView.selectScrapAt(notePoint)
             }
-            onWheel: basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
+            onWheel: interactionId.basePanZoomInteraction.zoom(wheel.angleDelta.y, Qt.point(wheel.x, wheel.y))
         }
     }
 

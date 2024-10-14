@@ -17,6 +17,7 @@
 #include <QUrl>
 #include <QFont>
 #include <QFontDatabase>
+#include <QQmlEngine>
 
 //Our includes
 class cwCavingRegion;
@@ -32,6 +33,7 @@ class cwErrorListModel;
 class CAVEWHERE_LIB_EXPORT cwSurveyImportManager : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurveyImportManager)
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack WRITE setUndoStack NOTIFY undoStackChanged)

@@ -12,7 +12,7 @@ import cavewherelib
     This class holds the geometry and interaction for a station on a page of notes
   */
 ScrapPointItem {
-    id: noteStation
+    id: noteStationId
 
     function updateItem() {
         if(scrap !== null) {
@@ -39,7 +39,7 @@ ScrapPointItem {
         scrap.removeStation(pointIndex);
     }
 
-    QQ.Keys.onPressed: {
+    QQ.Keys.onPressed: (event) => {
         if(event.key === Qt.Key_Backspace) {
             scrap.removeStation(pointIndex);
         }
@@ -53,7 +53,7 @@ ScrapPointItem {
         anchors.right: stationName.right
         anchors.bottom: stationName.bottom
 
-        visible: selected && scrapItem.selected
+        visible: noteStationId.selected && noteStationId.scrapItem.selected
     }
 
     QQ.Image {
@@ -68,8 +68,10 @@ ScrapPointItem {
             id: stationMouseArea
             anchors.fill: parent
 
-            onPointSelected: select();
-            onPointMoved: scrap.setStationData(Scrap.StationPosition, pointIndex, Qt.point(noteCoord.x, noteCoord.y));
+            onPointSelected: noteStationId.select();
+            onPointMoved: (noteCoord) => noteStationId.scrap.setStationData(Scrap.StationPosition,
+                                                                            noteStationId.pointIndex,
+                                                                            Qt.point(noteCoord.x, noteCoord.y));
             onDoubleClicked: stationName.openEditor();
         }
     }
@@ -87,16 +89,16 @@ ScrapPointItem {
         anchors.verticalCenter: stationImage.verticalCenter
         anchors.left: stationImage.right
 
-        onFinishedEditting: {
-            scrap.setStationData(Note.StationName, pointIndex, newText);
+        onFinishedEditting: (newText) => {
+            noteStationId.scrap.setStationData(Scrap.StationName, noteStationId.pointIndex, newText);
             text = newText;
-            noteStation.forceActiveFocus();
+            noteStationId.forceActiveFocus();
         }
 
         QQ.MouseArea {
             anchors.fill: parent
             propagateComposedEvents: true
-            onClicked: select()
+            onClicked: noteStationId.select()
         }
     }
 }

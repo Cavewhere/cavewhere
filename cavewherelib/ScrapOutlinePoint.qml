@@ -26,7 +26,7 @@ ScrapPointItem {
         scrap.removePoint(pointIndex);
     }
 
-    QQ.Keys.onPressed: {
+    QQ.Keys.onPressed: (event) => {
         if(event.key === Qt.Key_Backspace) {
             scrap.removePoint(pointIndex);
         }
@@ -50,16 +50,17 @@ ScrapPointItem {
             anchors.rightMargin: -3
 
             onPointSelected: {
-                select()
+                scrapPointItem.select()
 
-                if(pointIndex === 0)
+                if(scrapPointItem.pointIndex === 0)
                 {
                     //Close the scrap
-                    scrap.close()
+                    scrapPointItem.scrap.close()
                 }
             }
 
-            onPointMoved: scrap.setPoint(pointIndex, Qt.point(noteCoord.x, noteCoord.y))
+            onPointMoved: (noteCoord) => scrapPointItem.scrap.setPoint(scrapPointItem.pointIndex,
+                                                                       Qt.point(noteCoord.x, noteCoord.y))
         }
     }
 

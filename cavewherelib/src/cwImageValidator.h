@@ -10,6 +10,7 @@
 
 #include <QObject>
 #include <QStringList>
+#include <QQmlEngine>
 
 /**
  * @brief The cwImageValidator class
@@ -17,6 +18,7 @@
 class cwImageValidator : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ImageValidator)
 
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
 

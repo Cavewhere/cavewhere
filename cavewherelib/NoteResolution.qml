@@ -6,8 +6,7 @@
 **************************************************************************/
 
 // import QtQuick 1.0 as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0 as QQ
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 import cavewherelib
 import QtQuick.Controls as Controls;
 
@@ -32,7 +31,7 @@ FloatingGroupBox {
             Button {
                 id: setResolution
                 iconSource: "qrc:/icons/measurement.png"
-                onClicked: activateDPIInteraction()
+                onClicked: floatingGroup.activateDPIInteraction()
             }
 
             LabelWithHelp {
@@ -42,7 +41,7 @@ FloatingGroupBox {
             }
 
             UnitValueInput {
-                unitValue: resolution
+                unitValue: floatingGroup.resolution
             }
 
             ContextMenuButton {
@@ -51,17 +50,17 @@ FloatingGroupBox {
                     Controls.MenuItem {
                         text: {
                             var tripName = ""
-                            if(note !== null && note.parentTrip() !== null) {
-                                tripName = note.parentTrip().name
+                            if(floatingGroup.note !== null && floatingGroup.note.parentTrip() !== null) {
+                                tripName = floatingGroup.note.parentTrip().name
                             }
                             return "Propagate resolution for each note in " + tripName
                         }
-                        onTriggered: note.propagateResolutionNotesInTrip();
+                        onTriggered: floatingGroup.note.propagateResolutionNotesInTrip();
                     }
 
                     Controls.MenuItem {
                         text: "Reset to original"
-                        onTriggered: note.resetImageResolution()
+                        onTriggered: floatingGroup.note.resetImageResolution()
                     }
                 }
 
@@ -70,9 +69,9 @@ FloatingGroupBox {
 
         HelpArea {
              id: resolutionHelpAreaId
-             width: layoutId.width
-             text: "The number of pixels per unit of length in the image. This property allows
-                    cavewhere to propertly scale the image."
+             implicitWidth: layoutId.width
+             text: "The number of pixels per unit of length in the image. This property allows" +
+                    "cavewhere to propertly scale the image."
         }
     }
 }

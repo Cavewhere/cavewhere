@@ -11,7 +11,7 @@
 //Qt includes
 #include <QQuickPaintedItem>
 #include <QQuickTransform>
-#include <QQmlListProperty>
+#include <QQmlEngine>
 
 //Our includes
 #include "cwScrap.h"
@@ -28,6 +28,7 @@ class cwSGPolygonNode;
 class cwScrapItem : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(ScrapItem)
 
     Q_PROPERTY(cwScrap* scrap READ scrap WRITE setScrap NOTIFY scrapChanged)
     Q_PROPERTY(bool selected READ isSelected WRITE setSelected NOTIFY selectedChanged)
