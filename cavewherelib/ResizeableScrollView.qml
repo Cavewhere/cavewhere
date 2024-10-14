@@ -1,4 +1,4 @@
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Controls 2.5
 
 QQ.Item {

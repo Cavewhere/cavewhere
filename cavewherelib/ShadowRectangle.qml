@@ -45,7 +45,7 @@
 **
 ****************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 
 QQ.Item {
     property alias color : rectangle.color

@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Controls
 import QtQuick.Layouts
 import cavewherelib
@@ -70,7 +70,7 @@ import cavewherelib
 // //    }
 // }
 
-// import QtQuick 2.0 as QQ
+// import QtQuick as QQ
 // import QtQuick.Controls 2.0
 // import QtQuick.Layouts 1.1
 // import cavewherelib

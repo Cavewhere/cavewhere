@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import cavewherelib 1.0
+import cavewherelib
 
 BaseTurnTableInteraction {
     id: interactionId

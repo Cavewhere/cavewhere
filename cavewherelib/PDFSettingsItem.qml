@@ -1,4 +1,4 @@
-import QtQuick 2.0
+import QtQuick
 import QtQuick.Controls 2.12 as QC
 import QtQuick.Layouts 1.12
 import cavewherelib

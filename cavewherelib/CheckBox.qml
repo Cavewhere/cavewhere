@@ -1,5 +1,5 @@
 import QtQuick.Controls 2.12 as QC
-import QtQuick 2.12 as QQ
+import QtQuick as QQ
 
 QC.CheckBox {
     id: control

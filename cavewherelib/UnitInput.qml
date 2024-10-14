@@ -6,8 +6,8 @@
 **************************************************************************/
 pragma ComponentBehavior: Bound
 
-import QtQml 2.2
-import QtQuick 2.2 as QQ
+import QtQml
+import QtQuick as QQ
 import QtQuick.Controls 2.0 as Controls
 
 UnitBaseItem {

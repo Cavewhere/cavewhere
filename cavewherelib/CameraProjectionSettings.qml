@@ -1,4 +1,4 @@
-import QtQuick 2.1 as QQ
+import QtQuick as QQ
 import QtQuick.Layouts 1.1
 import cavewherelib
 

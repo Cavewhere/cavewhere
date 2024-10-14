@@ -1,4 +1,4 @@
-import QtQuick 2.10 as QQ
+import QtQuick as QQ
 import QtQuick.Window
 import QtCore
 // import Qt.labs.settings 1.0

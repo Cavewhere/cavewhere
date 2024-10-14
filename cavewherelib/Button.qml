@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Layouts 1.1
-// import QtGraphicalEffects 1.0
+// import QtGraphicalEffects
 
 QQ.Rectangle {
     id: button

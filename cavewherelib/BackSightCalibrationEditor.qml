@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
+// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
 import QtQuick as QQ
 // import QtQuick.Controls 2.0 as QC
 import cavewherelib

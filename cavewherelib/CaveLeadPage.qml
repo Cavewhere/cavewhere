@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import QtQml 2.2
+import QtQml
 // import QtQuick.Controls as QC1
 import QtQuick.Controls as QC
 import QtQuick.Layouts 1.1

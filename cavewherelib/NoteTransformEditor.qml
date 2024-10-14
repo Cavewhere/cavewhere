@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
-import QtQml 2.2
+import QtQuick as QQ
+import QtQml
 import QtQuick.Controls as Controls
 import QtQuick.Layouts 1.0
 import cavewherelib

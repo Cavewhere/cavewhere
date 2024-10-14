@@ -5,7 +5,7 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 
 QQ.Item {
     property alias text: groupText.text

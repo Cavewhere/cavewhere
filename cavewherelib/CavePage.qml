@@ -7,7 +7,7 @@
 
 import QtQuick as QQ
 import cavewherelib
-import QtQml 2.2
+import QtQml
 import QtQuick.Layouts 1.1
 
 StandardPage {

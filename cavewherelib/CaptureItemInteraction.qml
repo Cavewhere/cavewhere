@@ -1,4 +1,4 @@
-import QtQuick 2.0 as QQ
+import QtQuick as QQ
 import QtQuick.Window 2.12
 import cavewherelib
 import "Utils.js" as Utils

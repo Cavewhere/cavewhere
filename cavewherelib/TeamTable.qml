@@ -7,8 +7,8 @@
 
 pragma ComponentBehavior: Bound
 
-// import QtQuick 2.0 as QQ // to target S60 5th Edition or Maemo 5
-import QtQuick 2.0 as QQ
+// import QtQuick as QQ // to target S60 5th Edition or Maemo 5
+import QtQuick as QQ
 import cavewherelib
 
 QQ.Item {

@@ -5,8 +5,8 @@
 **
 **************************************************************************/
 
-import QtQuick 2.0 as QQ
-// import QtGraphicalEffects 1.0
+import QtQuick as QQ
+// import QtGraphicalEffects
 import "Theme.js" as Theme
 
 QQ.Item {
