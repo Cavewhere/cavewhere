@@ -1,4 +1,4 @@
-import QtQuick.Layouts 1.12
+import QtQuick.Layouts
 import cavewherelib
 
 StandardPage {

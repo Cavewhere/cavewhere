@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Layouts 1.0
+import QtQuick.Layouts
 
 QQ.Item {
     Layout.fillWidth: true

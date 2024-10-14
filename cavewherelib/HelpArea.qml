@@ -6,7 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 
 QQ.Rectangle {
     id: helpArea

@@ -71,8 +71,8 @@ import cavewherelib
 // }
 
 // import QtQuick as QQ
-// import QtQuick.Controls 2.0
-// import QtQuick.Layouts 1.1
+// import QtQuick.Controls
+// import QtQuick.Layouts
 // import cavewherelib
 
 ColumnLayout {

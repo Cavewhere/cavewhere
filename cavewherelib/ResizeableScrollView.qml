@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import QtQuick.Controls 2.5
+import QtQuick.Controls
 
 QQ.Item {
     id: rootItem

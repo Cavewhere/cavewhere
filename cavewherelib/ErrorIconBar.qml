@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import QtQuick.Layouts 1.0
+import QtQuick.Layouts
 import cavewherelib
 
 QQ.Item {

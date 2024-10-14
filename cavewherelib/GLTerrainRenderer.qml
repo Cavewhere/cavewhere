@@ -7,7 +7,7 @@
 
 import QtQuick
 import cavewherelib
-import QtQuick.Window 2.14
+import QtQuick.Window
 
 RegionViewer {
     id: renderer

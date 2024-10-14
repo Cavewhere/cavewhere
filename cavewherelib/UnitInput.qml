@@ -8,7 +8,7 @@ pragma ComponentBehavior: Bound
 
 import QtQml
 import QtQuick as QQ
-import QtQuick.Controls 2.0 as Controls
+import QtQuick.Controls as Controls
 
 UnitBaseItem {
     id: unitInput

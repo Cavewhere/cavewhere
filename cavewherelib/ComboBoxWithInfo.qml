@@ -1,5 +1,5 @@
-import QtQuick.Controls 2.12 as QC
-import QtQuick.Layouts 1.12
+import QtQuick.Controls as QC
+import QtQuick.Layouts
 
 ColumnLayout {
     id: rootId

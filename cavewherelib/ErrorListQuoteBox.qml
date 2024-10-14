@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Layouts
-// import QtQuick.Controls 2.12 as QC
+// import QtQuick.Controls as QC
 
 QQ.Loader {
     id: loaderId

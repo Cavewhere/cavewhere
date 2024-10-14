@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQuick.Controls as Controls
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 import "Utils.js" as Utils
 
 QQ.Item {

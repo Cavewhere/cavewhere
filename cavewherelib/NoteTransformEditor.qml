@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import QtQml
 import QtQuick.Controls as Controls
-import QtQuick.Layouts 1.0
+import QtQuick.Layouts
 import cavewherelib
 import "Theme.js" as Theme
 

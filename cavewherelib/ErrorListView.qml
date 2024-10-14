@@ -1,6 +1,6 @@
 import QtQuick as QQ
-import QtQuick.Layouts 1.0
-import QtQuick.Controls 2.5
+import QtQuick.Layouts
+import QtQuick.Controls
 import cavewherelib
 
 QQ.ListView {

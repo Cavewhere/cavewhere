@@ -1,4 +1,4 @@
-import QtQuick.Controls 2.12 as QC
+import QtQuick.Controls as QC
 import QtQuick as QQ
 
 QC.CheckBox {

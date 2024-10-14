@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
-import QtQuick.Controls 2.12 as QC
+import QtQuick.Controls as QC
 
 QQ.ListView {
     id: listId

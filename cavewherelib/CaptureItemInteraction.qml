@@ -1,5 +1,5 @@
 import QtQuick as QQ
-import QtQuick.Window 2.12
+import QtQuick.Window
 import cavewherelib
 import "Utils.js" as Utils
 import "VectorMath.js" as VectorMath

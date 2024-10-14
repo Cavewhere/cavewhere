@@ -8,7 +8,7 @@
 import QtQuick as QQ
 import cavewherelib
 import QtQml
-import QtQuick.Layouts 1.1
+import QtQuick.Layouts
 
 StandardPage {
     id: cavePageArea
