@@ -12,16 +12,16 @@ RowLayout {
         address: RootData.pageSelectionModel.currentPageAddress
     }
 
-    Button {
-        iconSource: "qrc:/icons/leftCircleArrow-32x32.png"
+    Controls.Button {
+        icon.source: "qrc:/icons/leftCircleArrow-32x32.png"
         enabled: RootData.pageSelectionModel.hasBackward
         onClicked: {
             RootData.pageSelectionModel.back();
         }
     }
 
-    Button {
-        iconSource: "qrc:/icons/rightCircleArrow-32x32.png"
+    Controls.Button {
+        icon.source: "qrc:/icons/rightCircleArrow-32x32.png"
         enabled: RootData.pageSelectionModel.hasForward
         onClicked: {
             RootData.pageSelectionModel.forward();
@@ -82,7 +82,7 @@ RowLayout {
         }
     }
 
-    Button {
+    Controls.Button {
         id: textEnableButtonId
         text: "..."
         onClicked: {
