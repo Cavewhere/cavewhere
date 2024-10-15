@@ -12,12 +12,13 @@ class CAVEWHERE_LIB_EXPORT cwJobSettings : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(JobSettings)
+    QML_UNCREATABLE("JobSettings is a cavewhere singleton and can't be created directly")
 
     Q_PROPERTY(int threadCount READ threadCount WRITE setThreadCount NOTIFY threadCountChanged)
     Q_PROPERTY(int idleThreadCount READ idleThreadCount CONSTANT)
     Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
 
-public:
+public:    
     int threadCount() const;
     void setThreadCount(int threadCount);
 

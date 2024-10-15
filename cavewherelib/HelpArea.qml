@@ -48,8 +48,8 @@ QQ.Rectangle {
 
         QQ.Image {
             id: icon
-            implicitWidth: sourceSize.width
-            implicitHeight: sourceSize.height
+            // implicitWidth: sourceSize.width
+            // implicitHeight: sourceSize.height
 
         }
 

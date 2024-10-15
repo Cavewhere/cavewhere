@@ -23,6 +23,7 @@ class CAVEWHERE_LIB_EXPORT cwUnitValue : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(UnitValue)
+    QML_UNCREATABLE("UnitValue is an abstract class and can't be created directly")
 
     Q_PROPERTY(double value READ value WRITE setValue NOTIFY valueChanged)
     Q_PROPERTY(int unit READ unit WRITE setUnit NOTIFY unitChanged)

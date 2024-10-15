@@ -24,7 +24,8 @@
 #include "cwGlobals.h"
 #include "cwErrorListModel.h"
 #include "cwCaptureGroupModel.h"
-class cwCaptureViewport;
+#include "cwCaptureViewport.h"
+// class cwCaptureViewport;
 class cwCaptureItem;
 
 class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel

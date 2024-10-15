@@ -14,6 +14,7 @@ class CAVEWHERE_LIB_EXPORT cwOpenGLSettings : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(OpenGLSettings)
+    QML_UNCREATABLE("OpenGLSettings is a cavewhere singleton and can't be created directly")
 
     //For texture maps
     Q_PROPERTY(bool dxt1Supported READ dxt1Supported CONSTANT)

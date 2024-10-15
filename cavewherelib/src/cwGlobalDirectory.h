@@ -22,7 +22,7 @@ public:
 
     static void setupBaseDirectory();
     static QString resourceDirectory();
-    static QString qmlMainFilePath() { return "qml/CavewhereMainWindow.qml"; }
+    static QString qmlMainFilePath() { return QStringLiteral("qrc:/qt/qml/CavewhereMainWindow.qml"); }
     static QUrl mainWindowSourcePath();
 
 private:

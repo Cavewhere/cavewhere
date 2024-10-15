@@ -159,7 +159,7 @@ QQ.Rectangle {
         }
     }
 
-    Component {
+    QQ.Component {
         id: listDelegate
         ListDelegate {}
     }

@@ -12,6 +12,7 @@
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
 
 //Qt includes
 #include <QDebug>

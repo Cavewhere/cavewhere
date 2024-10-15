@@ -10,7 +10,7 @@ QQ.Loader {
     id: loaderId
 
     required property SaveAsDialog saveAsDialog
-    // required property var afterSaveFunc
+    property var afterSaveFunc: function() {}
     required property string taskName
 
     signal afterSave;

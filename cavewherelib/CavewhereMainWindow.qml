@@ -152,7 +152,7 @@ ApplicationWindow {
 
     QQ.Component.onCompleted: {
         screenSizeSaverId.resize();
-        GlobalShadowTextInput.parent = applicationWindowId;
+        GlobalShadowTextInput.parent = applicationWindowId.contentItem;
     }
 }
 

@@ -15,6 +15,7 @@ class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(Settings)
+    QML_UNCREATABLE("Settings is a cavewhere singleton and can't be created directly")
 
     Q_PROPERTY(cwOpenGLSettings* renderingSettings READ renderingSettings CONSTANT)
     Q_PROPERTY(cwJobSettings* jobSettings READ jobSettings CONSTANT)

@@ -65,9 +65,9 @@ public:
     bool hasTrips() const { return tripCount() > 0; }
     QList<cwTrip*> trips() const;
 
-    Q_INVOKABLE void addTrip(cwTrip* trip = nullptr);
     void insertTrip(int i, cwTrip* trip);
     Q_INVOKABLE void removeTrip(int i);
+    void addTrip(cwTrip* trip = nullptr);
     int indexOf(cwTrip* trip) const;
 
     cwCavingRegion* parentRegion() const;
@@ -165,7 +165,13 @@ private:
 
 };
 
-Q_DECLARE_OPAQUE_POINTER(cwTrip*)
+//We need to used the forwarded declared version of cwTrip in cwCave because
+//cwTrip and cwCave are circularly dependent. moc needs cwTrip fully declared
+//with it's include of cwTrip. So we need to include cwTrip after cwCave is fully
+//declared. Q_DECLARE_OPAQUE_POINTER(cwTrip*) causes QML types to abort.
+#include "cwTrip.h"
+
+// Q_DECLARE_OPAQUE_POINTER(cwTrip*)
 // Q_DECLARE_METATYPE(cwCave*)
 // Q_DECLARE_METATYPE(QList<cwCave*>)
 

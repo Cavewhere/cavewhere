@@ -28,6 +28,7 @@ MenuBar {
 
         Action {
             id: newActionId
+            text: "&New"
             shortcut: "Ctrl+N"
             onTriggered: {
                 menuBarId.askToSaveDialog.taskName = "creating a new file"
@@ -40,13 +41,9 @@ MenuBar {
             }
         }
 
-        MenuItem {
-            text: "&New"
-            action: newActionId
-        }
-
         Action {
             id: openActionId
+            text: "&Open"
             shortcut: "Ctrl+O"
             onTriggered: {
                 menuBarId.askToSaveDialog.taskName = "opening";
@@ -57,15 +54,11 @@ MenuBar {
             }
         }
 
-        MenuItem {
-            text: "&Open"
-            action: openActionId
-        }
-
         MenuSeparator {}
 
         Action {
             id: saveActionId
+            text: "&Save"
             shortcut: "Ctrl+S"
             onTriggered: {
                 if (RootData.project.canSaveDirectly) {
@@ -74,11 +67,6 @@ MenuBar {
                     menuBarId.saveAsFileDialog.open();
                 }
             }
-        }
-
-        MenuItem {
-            text: "&Save"
-            action: saveActionId
         }
 
         MenuItem {
@@ -106,15 +94,11 @@ MenuBar {
         }
         Action {
             id: quitActionId
+            text: "Quit"
             shortcut: "Ctrl+Q"
             onTriggered: {
                 menuBarId.applicationWindow.close(); // or Qt.quit();
             }
-        }
-
-        MenuItem {
-            text: "Quit"
-            action: quitActionId
         }
     }
 

@@ -42,7 +42,8 @@ QQ.Item {
 
     QQ.Component {
         id: captureViewComponentId
-        CaptureViewport { }
+        QQ.Rectangle {}
+        // CaptureViewport { }
     }
 
     SelectExportAreaInteraction {

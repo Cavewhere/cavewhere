@@ -14,6 +14,7 @@
 #include <QQmlEngine>
 
 //Our includes
+#include "cwCaptureViewport.h"
 class cwCaptureViewport;
 class cwCaptureGroup;
 
@@ -50,8 +51,6 @@ private:
     QList<cwCaptureGroup*> Groups;
 
 };
-
-Q_DECLARE_OPAQUE_POINTER(cwCaptureViewport*)
 
 /**
  * @brief cwCaptureGroupModel::columnCount

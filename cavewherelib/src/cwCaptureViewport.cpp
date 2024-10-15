@@ -18,7 +18,6 @@
 #include "cwScreenCaptureCommand.h"
 #include "cwGraphicsImageItem.h"
 #include "cwDebug.h"
-#include "cwLength.h"
 #include "cwGlobals.h"
 
 //undef these because micrsoft is fucking retarded...

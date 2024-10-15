@@ -130,6 +130,7 @@ qt_add_qml_module(cavewherelib
     URI cavewherelib
     VERSION 1.0
     # RESOURCE_PREFIX /cavewherelib
+    NO_CACHEGEN
     DEPENDENCIES
         QtQuick
     SOURCES

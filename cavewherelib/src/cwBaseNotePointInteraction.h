@@ -24,6 +24,7 @@ class cwBaseNotePointInteraction : public cwInteraction
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(BaseNotePointInteraction)
+    QML_UNCREATABLE("Abstract base class")
 
     Q_PROPERTY(cwScrapView* scrapView READ scrapView WRITE setScrapView NOTIFY scrapViewChanged)
 

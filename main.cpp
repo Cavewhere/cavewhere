@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     //https://stackoverflow.com/questions/29733711/blurred-qt-quick-text
     QQuickWindow::setTextRenderType(cwOpenGLSettings::instance()->useNativeTextRendering() ? QQuickWindow::NativeTextRendering : QQuickWindow::QtTextRendering);
 
-    cwGlobalDirectory::setupBaseDirectory();
+    // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
@@ -78,8 +78,8 @@ int main(int argc, char *argv[])
 
     QQmlContext* context = applicationEnigine->rootContext();
 
-    context->setContextObject(rootData);
-    context->setContextProperty("rootData", rootData);
+    // context->setContextObject(rootData);
+    // context->setContextProperty("rootData", rootData);
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();
@@ -99,7 +99,9 @@ int main(int argc, char *argv[])
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
     if(!mainWindowPath.isEmpty()) {
-        applicationEnigine->load(mainWindowPath);
+        // applicationEnigine->load(mainWindowPath);
+        applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
+                                           QStringLiteral("CavewhereMainWindow"));
     } else {
         QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
                                               "CaveWhere Failed to Load Main Window",

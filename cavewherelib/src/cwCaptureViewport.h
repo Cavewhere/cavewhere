@@ -88,8 +88,6 @@ signals:
     void cameraAzimuthChanged();
     void positionAfterScaleChanged();
 
-public slots:
-
 private:
     //Properties
     QPointer<cw3dRegionViewer> View; //!<

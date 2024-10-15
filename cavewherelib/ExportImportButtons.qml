@@ -41,8 +41,7 @@ QQ.Item {
                     fileDialog {
                         title: "Export " + exportManager.currentTripName + " to survex"
                         nameFilters: ["Survex (*.svx)"]
-                        selectExisting: false
-                        selectMultiple: false
+                        fileMode: FileDialog.SaveFile
                         onAccepted: {
                             RootData.lastDirectory = fileUrl
                             exportManager.exportSurvexTrip(fileUrl);
@@ -56,8 +55,7 @@ QQ.Item {
                     fileDialog {
                         title: "Export " + exportManager.currentCaveName + " to survex"
                         nameFilters: ["Survex (*.svx)"]
-                        selectExisting: false
-                        selectMultiple: false
+                        fileMode: FileDialog.SaveFile
                         onAccepted: {
                             RootData.lastDirectory = fileUrl
                             exportManager.exportSurvexCave(fileUrl);
@@ -71,8 +69,7 @@ QQ.Item {
                     fileDialog {
                         title: "Export All Caves to survex"
                         nameFilters: ["Survex (*.svx)"]
-                        selectExisting: false
-                        selectMultiple: false
+                        fileMode: FileDialog.SaveFile
                         onAccepted: {
                             RootData.lastDirectory = fileUrl
                             exportManager.exportSurvexRegion(fileUrl);
@@ -86,8 +83,7 @@ QQ.Item {
                     fileDialog {
                         title: "Export " + exportManager.currentCaveName + " to compass"
                         nameFilters: ["Compass (*.dat)"]
-                        selectExisting: false
-                        selectMultiple: false
+                        fileMode: FileDialog.SaveFile
                         onAccepted: {
                             RootData.lastDirectory = fileUrl
                             exportManager.exportCaveToCompass(fileUrl);
@@ -101,8 +97,7 @@ QQ.Item {
                     fileDialog {
                         title: "Export " + exportManager.currentCaveName + " to chipdata"
                         nameFilters: ["Chipdata (*.*)"]
-                        selectExisting: false
-                        selectMultiple: false
+                        fileMode: FileDialog.SaveFile
                         onAccepted: {
                             exportManager.exportCaveToChipdata(fileUrl);
                         }
@@ -115,8 +110,7 @@ QQ.Item {
                     fileDialog {
                         title: "Import from Compass"
                         nameFilters: ["Compass (*.dat)"]
-                        selectExisting: true
-                        selectMultiple: true
+                        fileMode: FileDialog.OpenFile
                         onAccepted: {
                             RootData.lastDirectory = fileUrl
                             RootData.surveyImportManager.importCompassDataFile(fileUrls);

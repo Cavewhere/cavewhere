@@ -34,7 +34,6 @@ class CaveListRegistration
 
 class cwGraphicsScene : public QGraphicsScene {
     Q_OBJECT
-    QML_NAMED_ELEMENT(QGraphicsScene)
     QML_FOREIGN(QGraphicsScene)
     QML_ANONYMOUS
 };
