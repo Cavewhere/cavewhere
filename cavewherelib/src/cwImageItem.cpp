@@ -164,10 +164,10 @@ void cwImageItem::initializeGL() {
 void cwImageItem::initializeShaders() {
     if(ImageProgram == nullptr) {
         cwGLShader* imageVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-        imageVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/NoteItem.vert");
+        imageVertexShader->setSourceFile(":/shaders/NoteItem.vert");
 
         cwGLShader* imageFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-        imageFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/NoteItem.frag");
+        imageFragmentShader->setSourceFile(":/shaders/NoteItem.frag");
 
         ImageProgram = new QOpenGLShaderProgram();
         ImageProgram->addShader(imageVertexShader);

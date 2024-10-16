@@ -31,14 +31,15 @@ public:
         QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
         cwRootData* rootData = new cwRootData(applicationEnigine);
 
-        rootData->qmlReloader()->setApplicationEngine(applicationEnigine);
+        // rootData->qmlReloader()->setApplicationEngine(applicationEnigine);
 
-        QQmlContext* context =  applicationEnigine->rootContext();
+        // QQmlContext* context =  applicationEnigine->rootContext();
 
-        context->setContextObject(rootData);
-        context->setContextProperty("rootData", rootData);
+        // context->setContextObject(rootData);
+        // context->setContextProperty("rootData", rootData);
 
-        applicationEnigine->load(cwGlobalDirectory::mainWindowSourcePath());
+        applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
+                                           QStringLiteral("CavewhereMainWindow"));
         return applicationEnigine;
     }
 
@@ -53,7 +54,7 @@ public:
 
 TEST_CASE("Test that the cavewhere main window remember size and position", "[CavewhereMainWindow]") {
 
-    cwGlobalDirectory::setupBaseDirectory();
+    // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
@@ -115,7 +116,7 @@ TEST_CASE("Test that the cavewhere main window remember size and position", "[Ca
 
 //This testcase is mostly here for checking memory leaks and close crashing
 TEST_CASE("Main window should load file and close the window", "[CavewhereMainWindow]") {
-    cwGlobalDirectory::setupBaseDirectory();
+    // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
@@ -142,7 +143,7 @@ TEST_CASE("Main window should load file and close the window", "[CavewhereMainWi
 }
 
 TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
-    cwGlobalDirectory::setupBaseDirectory();
+    // cwGlobalDirectory::setupBaseDirectory();
 
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();

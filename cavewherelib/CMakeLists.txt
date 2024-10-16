@@ -59,6 +59,7 @@ endif()
 qt_add_resources(QT_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/fonts/fonts.qrc
+    ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.qrc
 )
 target_sources(cavewherelib PRIVATE ${QT_RESOURCES})
 
@@ -158,6 +159,7 @@ qt_wrap_ui(UI_HEADERS
     cwImportTreeDataDialog.ui
     cwTaskProgressDialog.ui
 )
+
 
 target_compile_definitions(cavewherelib PRIVATE "CAVEWHERE_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\"")
 

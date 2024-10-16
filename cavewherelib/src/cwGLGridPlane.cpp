@@ -113,10 +113,10 @@ void cwGLGridPlane::initializeGeometry() {
   */
 void cwGLGridPlane::initializeShaders() {
     cwGLShader* vertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    vertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/grid.vert");
+    vertexShader->setSourceFile(":/shaders/grid.vert");
 
     cwGLShader* fragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    fragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/grid.frag");
+    fragmentShader->setSourceFile(":/shaders/grid.frag");
 
     Program = new QOpenGLShaderProgram();
     Program->addShader(vertexShader);

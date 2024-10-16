@@ -71,15 +71,9 @@ int main(int argc, char *argv[])
     //Register all of the cavewhere types
     cwQMLRegister::registerQML();
 
-    QUrl mainWindowPath = cwGlobalDirectory::mainWindowSourcePath();
     QQmlApplicationEngine* applicationEnigine = new QQmlApplicationEngine();
 
-    rootData->qmlReloader()->setApplicationEngine(applicationEnigine);
-
     QQmlContext* context = applicationEnigine->rootContext();
-
-    // context->setContextObject(rootData);
-    // context->setContextProperty("rootData", rootData);
 
     //This allow to extra image data from the project's image database
     cwImageProvider* imageProvider = new cwImageProvider();
@@ -98,18 +92,8 @@ int main(int argc, char *argv[])
     //Allow the engine to quit the application
     QObject::connect(context->engine(), &QQmlEngine::quit, &a, quit, Qt::QueuedConnection);
 
-    if(!mainWindowPath.isEmpty()) {
-        // applicationEnigine->load(mainWindowPath);
-        applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
-                                           QStringLiteral("CavewhereMainWindow"));
-    } else {
-        QMessageBox mainWindowNotFoundMessage(QMessageBox::Critical,
-                                              "CaveWhere Failed to Load Main Window",
-                                              "ಠ_ರೃ CaveWhere has failed to load its main window... <br><b>This is a bug!</b>",
-                                              QMessageBox::Close);
-        mainWindowNotFoundMessage.exec();
-        return 1;
-    }
+    applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
+                                       QStringLiteral("CavewhereMainWindow"));
 
     return a.exec();
 }

@@ -11,7 +11,6 @@
 #include "cwDistanceValidator.h"
 #include "cwClinoValidator.h"
 #include "cwCompassValidator.h"
-#include "cwGlobalDirectory.h"
 #include "cwDebug.h"
 
 //Qt includes
@@ -25,13 +24,13 @@ cwSurveyChunkViewComponents::cwSurveyChunkViewComponents(QQmlContext* context, Q
 {
     QQmlEngine* engine = context->engine();
 
-    DataBoxDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/DataBox.qml", this);
-    StationDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/StationBox.qml", this);
-    TitleDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/TitleLabel.qml", this);
-    FrontSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/FrontSightReadingBox.qml", this);
-    BackSiteDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/BackSightReadingBox.qml", this);
-    ShotDistanceDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/ShotDistanceDataBox.qml", this);
-    ErrorDelegate = new QQmlComponent(engine, cwGlobalDirectory::resourceDirectory() + "qml/SurveyChunkErrorDelegate.qml", this);
+    DataBoxDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/DataBox.qml", this);
+    StationDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/StationBox.qml", this);
+    TitleDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/TitleLabel.qml", this);
+    FrontSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/FrontSightReadingBox.qml", this);
+    BackSiteDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/BackSightReadingBox.qml", this);
+    ShotDistanceDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/ShotDistanceDataBox.qml", this);
+    ErrorDelegate = new QQmlComponent(engine, "qrc:/cavewherelib/SurveyChunkErrorDelegate.qml", this);
 
     //Print error if there are any
     cwDebug::printErrors(DataBoxDelegate);

@@ -1,0 +1,27 @@
+<RCC>
+    <qresource prefix="/shaders">
+        <file>grid.frag</file>
+        <file>grid.frag.orig</file>
+        <file>grid.vert</file>
+        <file>LinePlot.frag</file>
+        <file>LinePlot.vert</file>
+        <file>NoteItem.frag</file>
+        <file>NoteItem.vert</file>
+        <file>scrap.frag</file>
+        <file>scrap.geom</file>
+        <file>scrap.vert</file>
+        <file>simple.frag</file>
+        <file>simple.vert</file>
+        <file>tileVertex.frag</file>
+        <file>tileVertex.geom</file>
+        <file>tileVertex.vert</file>
+        <file>tileVertexLines.geom</file>
+        <file>compass/compass.fsh</file>
+        <file>compass/compass.vsh</file>
+        <file>compass/compassShadow.fsh</file>
+        <file>compass/compassShadowOutput.fsh</file>
+        <file>compass/compassShadowOutput.vsh</file>
+        <file>compass/compassShadowX.vsh</file>
+        <file>compass/compassShadowY.vsh</file>
+    </qresource>
+</RCC>

@@ -20,17 +20,17 @@ class CAVEWHERE_LIB_EXPORT cwGlobalDirectory
 public:
     cwGlobalDirectory();
 
-    static void setupBaseDirectory();
-    static QString resourceDirectory();
-    static QString qmlMainFilePath() { return QStringLiteral("qrc:/qt/qml/CavewhereMainWindow.qml"); }
-    static QUrl mainWindowSourcePath();
+    // static void setupBaseDirectory();
+    // static QString resourceDirectory();
+    // static QString qmlMainFilePath() { return QStringLiteral("qrc:/qt/qml/CavewhereMainWindow.qml"); }
+    // static QUrl mainWindowSourcePath();
 
 private:
     static QString ResourceDirectory;
 };
 
-inline QString cwGlobalDirectory::resourceDirectory() {
-    return ResourceDirectory + "/";
-}
+// inline QString cwGlobalDirectory::resourceDirectory() {
+//     return ResourceDirectory + "/";
+// }
 
 #endif // CWGLOBALDIRECTORY_H

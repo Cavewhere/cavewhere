@@ -79,7 +79,7 @@ protected:
  */
 inline QUrl cwScrapStationView::qmlSource() const
 {
-    return QUrl::fromLocalFile(cwGlobalDirectory::resourceDirectory() + "qml/NoteStation.qml");
+    return QUrl(QStringLiteral("qrc:/cavewherLib/NoteStation.qml"));
 }
 
 

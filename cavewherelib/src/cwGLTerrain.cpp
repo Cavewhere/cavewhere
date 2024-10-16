@@ -38,10 +38,10 @@ cwGLTerrain::~cwGLTerrain()
 void cwGLTerrain::initialize() {
 
     cwGLShader* tileVertexShader = new cwGLShader(QOpenGLShader::Vertex);
-    tileVertexShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/tileVertex.vert");
+    tileVertexShader->setSourceFile(":/shaders/tileVertex.vert");
 
     cwGLShader* tileFragmentShader = new cwGLShader(QOpenGLShader::Fragment);
-    tileFragmentShader->setSourceFile(cwGlobalDirectory::resourceDirectory() + "shaders/tileVertex.frag");
+    tileFragmentShader->setSourceFile(":/shaders/tileVertex.frag");
 
 //    cwGLShader* tileGeometryShader = new cwGLShader(QOpenGLShader::Geometry);
 //    tileGeometryShader->setSourceFile(cwGlobalDirectory::baseDirectory() + "shaders/tileVertex.geom");
