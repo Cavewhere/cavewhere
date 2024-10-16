@@ -75,7 +75,7 @@ RowLayout {
             anchors.right: parent.right
             anchors.margins: 3
             anchors.verticalCenter: parent.verticalCenter
-            visible: textEnableButtonId.troggled
+            visible: textEnableButtonId.checked
             focus: false
             text: RootData.pageSelectionModel.currentPageAddress
             onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
@@ -87,7 +87,7 @@ RowLayout {
         text: "..."
         onClicked: {
             textFieldId.forceActiveFocus()
-            troggled = !troggled;
+            checked = !checked;
         }
     }
 }
